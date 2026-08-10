@@ -8,7 +8,7 @@ const archivo = Archivo({
 })
 
 export const metadata: Metadata = {
-  title: 'Padel Championship',
+  title: 'Padel Liga',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

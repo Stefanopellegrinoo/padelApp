@@ -1,19 +1,12 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Award, EntryId, MatchdayHistory, SeasonConfig } from '@/core'
 import type { Database, Json } from './database.types'
 import { EdgeError } from './errors'
 import { assertValidConfig } from './validate'
 
-/**
- * The Supabase client, typed against the generated schema.
- *
- * The plan puts this export in `db/client.ts`. It lives here instead for
- * Task 10: another task is mid-flight on `db/client.ts` this session (auth
- * screens + a new migration), and that file is off the table while it is.
- * This is a deviation from the plan's file list, not a design choice — see
- * the Task 10 report.
- */
-export type Client = SupabaseClient<Database>
+// Vive en `db/client.ts`, que es donde el plan lo pone. Se re-exporta para no
+// romper a quien ya lo importa de acá.
+import type { Client } from './client'
+export type { Client }
 
 /** `SeasonConfig` from the `jsonb` column. The cast is a bet `assertValidConfig` backs up. */
 export async function seasonConfig(supabase: Client, seasonId: string): Promise<SeasonConfig> {

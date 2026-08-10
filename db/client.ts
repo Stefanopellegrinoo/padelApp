@@ -1,6 +1,15 @@
 import { createBrowserClient, createServerClient, type CookieOptions } from '@supabase/ssr'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import type { Database } from './database.types'
+
+/**
+ * Cualquier cliente de Supabase tipado contra el schema generado: el del
+ * browser, el del servidor, o el de los tests. Las funciones de `db/` piden
+ * esto y no un cliente concreto, así que la misma función corre en los tres
+ * lados sin saber cuál le tocó.
+ */
+export type Client = SupabaseClient<Database>
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY

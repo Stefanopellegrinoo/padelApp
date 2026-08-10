@@ -45,6 +45,12 @@ export type { PairingInput } from './pairing'
 export { buildPairs, samePair } from './pairing'
 export { buildFixture } from './fixture'
 
+// ── El contexto que hereda una fecha de las anteriores ───────────────────────
+// Quién defiende no se guarda nunca (spec 3.3): se deriva de las dos fechas
+// previas, acá adentro y no en la capa de datos.
+export type { MatchdayHistory, PreviousContext } from './history'
+export { previousContext } from './history'
+
 // ── Scoring a matchday ───────────────────────────────────────────────────────
 export { computeStandings } from './standings'
 export { computeAwards } from './awards'

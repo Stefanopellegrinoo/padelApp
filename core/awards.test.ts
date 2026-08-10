@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { computeAwards } from './awards'
-import type { PairStanding, SeasonConfig } from './types'
+import { defaultConfig } from './config'
+import type { Pair, PairStanding, SeasonConfig } from './types'
 
 const CONFIG: SeasonConfig = {
   squadSize: 12,
@@ -17,7 +18,7 @@ function standing(a: string, b: string, position: number): PairStanding {
 
 describe('computeAwards', () => {
   it('gives both members of a pair exactly the same points', () => {
-    const awards = computeAwards([standing('a1', 'a2', 1)], CONFIG, null)
+    const awards = computeAwards([standing('a1', 'a2', 1)], CONFIG, [])
     expect(awards).toHaveLength(2)
     expect(awards[0]?.points).toBe(10)
     expect(awards[1]?.points).toBe(10)
@@ -30,7 +31,7 @@ describe('computeAwards', () => {
       standing('c1', 'c2', 3),
       standing('d1', 'd2', 4),
     ]
-    const byEntry = new Map(computeAwards(standings, CONFIG, null).map((a) => [a.entryId, a.points]))
+    const byEntry = new Map(computeAwards(standings, CONFIG, []).map((a) => [a.entryId, a.points]))
     expect(byEntry.get('a1')).toBe(10)
     expect(byEntry.get('b1')).toBe(7)
     expect(byEntry.get('c1')).toBe(5)
@@ -46,17 +47,17 @@ describe('computeAwards', () => {
       standing('e1', 'e2', 5),
       standing('f1', 'f2', 6),
     ]
-    const byEntry = new Map(computeAwards(standings, CONFIG, null).map((a) => [a.entryId, a.points]))
+    const byEntry = new Map(computeAwards(standings, CONFIG, []).map((a) => [a.entryId, a.points]))
     expect(byEntry.get('a1')).toBe(10)
     expect(byEntry.get('f1')).toBe(1)
   })
 
   it('pays ten for the win whether the standings list has one row or two', () => {
-    const four = computeAwards([standing('a1', 'a2', 1)], CONFIG, null)
+    const four = computeAwards([standing('a1', 'a2', 1)], CONFIG, [])
     const six = computeAwards(
       [standing('a1', 'a2', 1), standing('b1', 'b2', 2)],
       CONFIG,
-      null,
+      [],
     )
     expect(four[0]?.points).toBe(10)
     expect(six[0]?.points).toBe(10)
@@ -64,29 +65,97 @@ describe('computeAwards', () => {
 
   it('never awards zero, so turning up always beats staying home', () => {
     const standings = Array.from({ length: 6 }, (_, i) => standing(`p${i}a`, `p${i}b`, i + 1))
-    for (const award of computeAwards(standings, CONFIG, null)) {
+    for (const award of computeAwards(standings, CONFIG, [])) {
       expect(award.points).toBeGreaterThan(0)
     }
   })
 
   it('skips the guest, who is not in the championship', () => {
-    const awards = computeAwards([standing('a1', 'guest', 1)], CONFIG, 'guest')
+    const awards = computeAwards([standing('a1', 'guest', 1)], CONFIG, ['guest'])
     expect(awards).toHaveLength(1)
     expect(awards[0]?.entryId).toBe('a1')
   })
 
   it('still pays the guest partner in full', () => {
-    const awards = computeAwards([standing('a1', 'guest', 1)], CONFIG, 'guest')
+    const awards = computeAwards([standing('a1', 'guest', 1)], CONFIG, ['guest'])
     expect(awards[0]?.points).toBe(10)
   })
 
-  it('records the position alongside the points', () => {
-    const awards = computeAwards([standing('a1', 'a2', 3)], CONFIG, null)
-    expect(awards[0]?.position).toBe(3)
+  it('records the championship position, compacted from the table', () => {
+    const awards = computeAwards(
+      [standing('a1', 'a2', 1), standing('b1', 'b2', 2), standing('c1', 'c2', 3)],
+      CONFIG,
+      [],
+    )
+    expect(awards.find((award) => award.entryId === 'c1')?.position).toBe(3)
   })
 
   it('throws when the standings are longer than the points list', () => {
     const tooMany = Array.from({ length: 7 }, (_, i) => standing(`p${i}a`, `p${i}b`, i + 1))
-    expect(() => computeAwards(tooMany, CONFIG, null)).toThrow(/puntos/)
+    expect(() => computeAwards(tooMany, CONFIG, [])).toThrow(/puntos/)
+  })
+})
+
+const pair = (a: string, b: string): Pair => ({ a, b })
+
+const table = (pairs: Pair[]): PairStanding[] =>
+  pairs.map((p, index) => ({
+    pair: p,
+    played: 0,
+    won: 0,
+    setsDiff: 0,
+    gamesDiff: 0,
+    position: index + 1,
+  }))
+
+describe('computeAwards — invitados', () => {
+  it('paga completo al compañero de un invitado', () => {
+    const standings = table([pair('p1', 'g1'), pair('p2', 'p3')])
+    const awards = computeAwards(standings, CONFIG, ['g1'])
+    expect(awards.find((award) => award.entryId === 'p1')?.points).toBe(CONFIG.points[0])
+    expect(awards.find((award) => award.entryId === 'g1')).toBeUndefined()
+  })
+
+  it('saltea a todos los invitados, no sólo al primero', () => {
+    const standings = table([pair('p1', 'g1'), pair('p2', 'g2')])
+    const awards = computeAwards(standings, CONFIG, ['g1', 'g2'])
+    expect(awards.map((award) => award.entryId).sort()).toEqual(['p1', 'p2'])
+  })
+
+  it('no le da puesto a una pareja hecha sólo de invitados', () => {
+    // La pareja invitada gana la fecha; los 10 puntos son igual del torneo.
+    const standings = table([pair('g1', 'g2'), pair('p1', 'p2'), pair('p3', 'p4')])
+    const awards = computeAwards(standings, CONFIG, ['g1', 'g2'])
+    expect(awards).toHaveLength(4)
+    expect(awards.find((award) => award.entryId === 'p1')?.points).toBe(CONFIG.points[0])
+    expect(awards.find((award) => award.entryId === 'p1')?.position).toBe(1)
+    expect(awards.find((award) => award.entryId === 'p3')?.points).toBe(CONFIG.points[1])
+  })
+
+  it('deja todo igual cuando la pareja invitada sale última', () => {
+    const standings = table([pair('p1', 'p2'), pair('p3', 'p4'), pair('g1', 'g2')])
+    const awards = computeAwards(standings, CONFIG, ['g1', 'g2'])
+    expect(awards.find((award) => award.entryId === 'p1')?.position).toBe(1)
+    expect(awards.find((award) => award.entryId === 'p3')?.position).toBe(2)
+  })
+
+  it('no depende del orden en que le pasen la tabla', () => {
+    const standings = table([pair('p1', 'p2'), pair('p3', 'p4')])
+    const reversed = [...standings].reverse()
+    expect(computeAwards(reversed, CONFIG, [])).toEqual(computeAwards(standings, CONFIG, []))
+  })
+
+  it('falla cuando las parejas del torneo superan la lista de puntos', () => {
+    const config = defaultConfig(8) // cuatro valores de puntos
+    const standings = table([
+      pair('p1', 'p2'),
+      pair('p3', 'p4'),
+      pair('p5', 'p6'),
+      pair('p7', 'p8'),
+      pair('p9', 'g1'),
+    ])
+    expect(() => computeAwards(standings, config, ['g1'])).toThrow(
+      /5 parejas del torneo .* sólo tiene 4 valores/,
+    )
   })
 })

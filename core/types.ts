@@ -48,6 +48,11 @@ export interface PairStanding {
 
 export interface Award {
   entryId: EntryId
+  /**
+   * Position in the championship, not in the matchday table. A pair made only
+   * of guests is skipped, so the two can differ: with a guest pair second, the
+   * championship pair that came third is award position two.
+   */
   position: number
   points: number
 }

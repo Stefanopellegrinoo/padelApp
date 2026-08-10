@@ -52,7 +52,7 @@ function playMatchday(
   }
 
   const standings = computeStandings(pairs, matches, config, snapshot)
-  const awards = computeAwards(standings, config, null)
+  const awards = computeAwards(standings, config, [])
   const winner = standings[0]
   if (winner === undefined) throw new Error('la fecha no produjo tabla')
   return { pairs, awards, champion: winner.pair }
@@ -86,14 +86,14 @@ describe('a full matchday, end to end', () => {
 
   it('keeps the champions together for exactly two matchdays', () => {
     const first = playMatchday(SQUAD, new Map(), SQUAD, [], null, false, CONFIG)
-    const pointsAfterFirst = tally([first.awards])
+    const pointsAfterFirst = pointsFrom([first.awards], CONFIG)
 
     const second = playMatchday(
       SQUAD, pointsAfterFirst, SQUAD, first.pairs, first.champion, false, CONFIG,
     )
     expect(second.pairs.some((pair) => sameAs(pair, first.champion))).toBe(true)
 
-    const pointsAfterSecond = tally([first.awards, second.awards])
+    const pointsAfterSecond = pointsFrom([first.awards, second.awards], CONFIG)
     const third = playMatchday(
       SQUAD, pointsAfterSecond, SQUAD, second.pairs, first.champion, true, CONFIG,
     )
@@ -131,7 +131,7 @@ describe('a full matchday, end to end', () => {
       }
       previousPairs = result.pairs
       everyAward.push(result.awards)
-      points = tally(everyAward)
+      points = pointsFrom(everyAward, CONFIG)
     }
   })
 
@@ -147,7 +147,7 @@ describe('a full matchday, end to end', () => {
       const result = playMatchday(SQUAD, points, snapshot, previousPairs, null, false, CONFIG)
       previousPairs = result.pairs
       everyAward.push(result.awards)
-      points = tally(everyAward)
+      points = pointsFrom(everyAward, CONFIG)
     }
 
     const awardsByMatchday = new Map(everyAward.map((awards, i) => [i + 1, awards]))
@@ -180,7 +180,7 @@ describe('a full matchday, end to end', () => {
         const result = playMatchday(SQUAD, points, snapshot, previousPairs, null, false, CONFIG)
         previousPairs = result.pairs
         everyAward.push(result.awards)
-        points = tally(everyAward)
+        points = pointsFrom(everyAward, CONFIG)
       }
       return everyAward
     }
@@ -188,14 +188,12 @@ describe('a full matchday, end to end', () => {
   })
 })
 
-function tally(rounds: Award[][]): Map<string, number> {
-  const totals = new Map<string, number>()
-  for (const awards of rounds) {
-    for (const award of awards) {
-      totals.set(award.entryId, (totals.get(award.entryId) ?? 0) + award.points)
-    }
-  }
-  return totals
+function pointsFrom(everyAward: Award[][], config: SeasonConfig): Map<string, number> {
+  const awardsByMatchday = new Map(everyAward.map((awards, index) => [index + 1, awards]))
+  // El snapshot sólo decide el ORDEN de las filas, y de acá salen los valores:
+  // cualquier permutación da el mismo Map. Va SQUAD porque es determinista.
+  const ranking = computeRanking(awardsByMatchday, SQUAD, config, SQUAD)
+  return new Map(ranking.map((row) => [row.entryId, row.points]))
 }
 
 function sameAs(left: Pair, right: Pair): boolean {

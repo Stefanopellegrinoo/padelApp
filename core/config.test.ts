@@ -8,7 +8,6 @@ const valid: SeasonConfig = {
   points: [10, 7, 5, 3, 2, 1],
   regularMatchdays: 10,
   countBestOf: 8,
-  mastersSize: 4,
   tiebreakSnapshotEvery: 3,
 }
 
@@ -50,6 +49,26 @@ describe('validateConfig', () => {
   it('rejects countBestOf above regularMatchdays', () => {
     const errors = validateConfig({ ...valid, countBestOf: 12 })
     expect(errors).toContain('No pueden contar 12 fechas si el torneo tiene 10.')
+  })
+
+  it('rejects a match format with zero sets to win', () => {
+    const errors = validateConfig({
+      ...valid,
+      matchFormat: { ...valid.matchFormat, setsToWin: 0 },
+    })
+    expect(errors).toContain(
+      'Los sets para ganar un partido tienen que ser al menos 1: con 0, ningún partido podría terminar.',
+    )
+  })
+
+  it('rejects a match format with zero games per set', () => {
+    const errors = validateConfig({
+      ...valid,
+      matchFormat: { ...valid.matchFormat, gamesPerSet: 0 },
+    })
+    expect(errors).toContain(
+      'Los games por set tienen que ser al menos 1: con 0, la página de reglas describiría un set que no existe.',
+    )
   })
 
   it('rejects a tiebreak interval below one', () => {

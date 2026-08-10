@@ -19,14 +19,14 @@ export function defaultConfig(squadSize: number): SeasonConfig {
     points: DEFAULT_POINTS[pairCount] ?? [],
     regularMatchdays: 10,
     countBestOf: 8,
-    mastersSize: 4,
     tiebreakSnapshotEvery: 3,
   }
 }
 
 export function validateConfig(config: SeasonConfig): string[] {
   const errors: string[] = []
-  const { squadSize, points, regularMatchdays, countBestOf, tiebreakSnapshotEvery } = config
+  const { squadSize, matchFormat, points, regularMatchdays, countBestOf, tiebreakSnapshotEvery } =
+    config
 
   if (squadSize % 2 !== 0) {
     errors.push('El plantel tiene que ser un número par.')
@@ -51,6 +51,17 @@ export function validateConfig(config: SeasonConfig): string[] {
   }
   if (!isStrictlyDescending(points)) {
     errors.push('Los puntos tienen que ir de mayor a menor, sin repetir.')
+  }
+
+  if (matchFormat.setsToWin < 1) {
+    errors.push(
+      'Los sets para ganar un partido tienen que ser al menos 1: con 0, ningún partido podría terminar.',
+    )
+  }
+  if (matchFormat.gamesPerSet < 1) {
+    errors.push(
+      'Los games por set tienen que ser al menos 1: con 0, la página de reglas describiría un set que no existe.',
+    )
   }
 
   if (regularMatchdays < 1) {

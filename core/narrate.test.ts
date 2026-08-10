@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { narrateRules } from './narrate'
+import { MASTERS_MATCHES, MASTERS_SIZE } from './constants'
 import type { SeasonConfig } from './types'
 
 const CONFIG: SeasonConfig = {
@@ -8,7 +9,6 @@ const CONFIG: SeasonConfig = {
   points: [10, 7, 5, 3, 2, 1],
   regularMatchdays: 10,
   countBestOf: 8,
-  mastersSize: 4,
   tiebreakSnapshotEvery: 3,
 }
 
@@ -103,11 +103,9 @@ describe('narrateRules', () => {
     expect(body).toContain('corta la diferencia de games')
   })
 
-  it('uses the masters constant, not the config field, even when mismatched', () => {
-    const wrongConfig = { ...CONFIG, mastersSize: 6 }
-    const body = bodyOf(wrongConfig, 'El Masters')
-    expect(body).toContain('4 mejores')
-    expect(body).toContain('3 partidos')
-    expect(body).not.toContain('6 mejores')
+  it('names the masters size and match count from the constants, not a config value', () => {
+    const body = bodyOf(CONFIG, 'El Masters')
+    expect(body).toContain(`${MASTERS_SIZE} mejores`)
+    expect(body).toContain(`${MASTERS_MATCHES} partidos`)
   })
 })

@@ -15,7 +15,6 @@ export interface SeasonConfig {
   points: number[]
   regularMatchdays: number
   countBestOf: number
-  mastersSize: number
   tiebreakSnapshotEvery: number
 }
 

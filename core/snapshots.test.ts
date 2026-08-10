@@ -10,7 +10,6 @@ const CONFIG: SeasonConfig = {
   points: [10, 6, 3, 1],
   regularMatchdays: 10,
   countBestOf: 10,
-  mastersSize: 4,
   tiebreakSnapshotEvery: 3,
 }
 

@@ -1092,7 +1092,7 @@ function imbalance(matching: Pair[], position: Map<EntryId, number>, idealSum: n
 - [ ] **Step 4: Correr los tests y verificar que pasan**
 
 Run: `npm test core/pairing.test.ts`
-Expected: PASS — 18 tests.
+Expected: PASS — 20 tests.
 
 - [ ] **Step 5: Commit**
 

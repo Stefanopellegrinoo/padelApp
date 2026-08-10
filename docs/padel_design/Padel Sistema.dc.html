@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><meta name="design_doc_mode" content="canvas"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>body{margin:0;background:#f0eee9;font-family:Archivo,system-ui,sans-serif}a{color:#0e5c3f}a:hover{color:#0a4530}</style></helmet>
+
+<section style="padding:40px 44px 48px;display:flex;flex-direction:column;gap:30px">
+
+  <div style="display:flex;flex-direction:column;gap:6px;max-width:700px">
+    <span style="font-size:10.5px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:#7b8a80">Sistema base · dirección 1a Cancha</span>
+    <span style="font-size:34px;font-weight:800;letter-spacing:-.03em;line-height:1;color:#10231a">Fundaciones</span>
+    <span style="font-size:14px;line-height:1.5;color:#5f6f66;text-wrap:pretty">Archivo en todo, verde cancha como único acento, un solo nivel de superficie sobre el fondo y bordes de 1px en lugar de sombras. Todo lo que se construya después sale de acá.</span>
+  </div>
+
+  <div style="display:flex;flex-wrap:wrap;gap:34px;align-items:flex-start">
+
+    <div style="background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:10px;padding:22px;display:flex;flex-direction:column;gap:18px;width:430px">
+      <span style="font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#7b8a80">Color</span>
+
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <span style="font-size:11px;font-weight:750;color:#5f6f66">Light</span>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
+          <div style="display:flex;flex-direction:column;gap:5px"><span style="height:44px;border-radius:8px;background:#ffffff;border:1px solid #e4e9e5"></span><span style="font-size:9.5px;font-weight:700;color:#10231a">bg</span><span style="font-size:9px;font-family:ui-monospace,Menlo,monospace;color:#8b9a91">#FFFFFF</span></div>
+          <div style="display:flex;flex-direction:column;gap:5px"><span style="height:44px;border-radius:8px;background:#f4f6f3;border:1px solid #e4e9e5"></span><span style="font-size:9.5px;font-weight:700;color:#10231a">surface</span><span style="font-size:9px;font-family:ui-monospace,Menlo,monospace;color:#8b9a91">#F4F6F3</span></div>
+          <div style="display:flex;flex-direction:column;gap:5px"><span style="height:44px;border-radius:8px;background:#eaefea"></span><span style="font-size:9.5px;font-weight:700;color:#10231a">chip</span><span style="font-size:9px;font-family:ui-monospace,Menlo,monospace;color:#8b9a91">#EAEFEA</span></div>
+          <div style="display:flex;flex-direction:column;gap:5px"><span style="height:44px;border-radius:8px;background:#e4e9e5"></span><span style="font-size:9.5px;font-weight:700;color:#10231a">line</span><span style="font-size:9px;font-family:ui-monospace,Menlo,monospace;color:#8b9a91">#E4E9E5</span></div>
+          <div style="display:flex;flex-direction:column;gap:5px"><span style="height:44px;border-radius:8px;background:#0e5c3f"></span><span style="font-size:9.5px;font-weight:700;color:#10231a">accent</span><span style="font-size:9px;font-family:ui-monospace,Menlo,monospace;color:#8b9a91">#0E5C3F</span></div>
+          <div style="display:flex;flex-direction:column;gap:5px"><span style="height:44px;border-radius:8px;background:#10231a"></span><span style="font-size:9.5px;font-weight:700;color:#10231a">text</span><span style="font-size:9px;font-family:ui-monospace,Menlo,monospace;color:#8b9a91">#10231A</span></div>
+          <div style="display:flex;flex-direction:column;gap:5px"><span style="height:44px;border-radius:8px;background:#6b7a72"></span><span style="font-size:9.5px;font-weight:700;color:#10231a">muted</span><span style="font-size:9px;font-family:ui-monospace,Menlo,monospace;color:#8b9a91">#6B7A72</span></div>
+          <div style="display:flex;flex-direction:column;gap:5px"><span style="height:44px;border-radius:8px;background:#d1462f"></span><span style="font-size:9.5px;font-weight:700;color:#10231a">alerta</span><span style="font-size:9px;font-family:ui-monospace,Menlo,monospace;color:#8b9a91">#D1462F</span></div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <span style="font-size:11px;font-weight:750;color:#5f6f66">Dark</span>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
+          <div style="display:flex;flex-direction:column;gap:5px"><span style="height:44px;border-radius:8px;background:#0d1512"></span><span style="font-size:9.5px;font-weight:700;color:#10231a">bg</span><span style="font-size:9px;font-family:ui-monospace,Menlo,monospace;color:#8b9a91">#0D1512</span></div>
+          <div style="display:flex;flex-direction:column;gap:5px"><span style="height:44px;border-radius:8px;background:#16201c"></span><span style="font-size:9.5px;font-weight:700;color:#10231a">surface</span><span style="font-size:9px;font-family:ui-monospace,Menlo,monospace;color:#8b9a91">#16201C</span></div>
+          <div style="display:flex;flex-direction:column;gap:5px"><span style="height:44px;border-radius:8px;background:#1b2823"></span><span style="font-size:9.5px;font-weight:700;color:#10231a">chip</span><span style="font-size:9px;font-family:ui-monospace,Menlo,monospace;color:#8b9a91">#1B2823</span></div>
+          <div style="display:flex;flex-direction:column;gap:5px"><span style="height:44px;border-radius:8px;background:#21302a"></span><span style="font-size:9.5px;font-weight:700;color:#10231a">line</span><span style="font-size:9px;font-family:ui-monospace,Menlo,monospace;color:#8b9a91">#21302A</span></div>
+          <div style="display:flex;flex-direction:column;gap:5px"><span style="height:44px;border-radius:8px;background:#0f6b48"></span><span style="font-size:9.5px;font-weight:700;color:#10231a">accent</span><span style="font-size:9px;font-family:ui-monospace,Menlo,monospace;color:#8b9a91">#0F6B48</span></div>
+          <div style="display:flex;flex-direction:column;gap:5px"><span style="height:44px;border-radius:8px;background:#34c08a"></span><span style="font-size:9.5px;font-weight:700;color:#10231a">accent-on-dark</span><span style="font-size:9px;font-family:ui-monospace,Menlo,monospace;color:#8b9a91">#34C08A</span></div>
+          <div style="display:flex;flex-direction:column;gap:5px"><span style="height:44px;border-radius:8px;background:#eaf2ee;border:1px solid #e4e9e5"></span><span style="font-size:9.5px;font-weight:700;color:#10231a">text</span><span style="font-size:9px;font-family:ui-monospace,Menlo,monospace;color:#8b9a91">#EAF2EE</span></div>
+          <div style="display:flex;flex-direction:column;gap:5px"><span style="height:44px;border-radius:8px;background:#ff6b4a"></span><span style="font-size:9.5px;font-weight:700;color:#10231a">alerta</span><span style="font-size:9px;font-family:ui-monospace,Menlo,monospace;color:#8b9a91">#FF6B4A</span></div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:8px;padding-top:4px;border-top:1px solid #eceee9">
+        <span style="font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#7b8a80">Tipografía · Archivo</span>
+        <div style="display:flex;align-items:baseline;gap:12px"><span style="font-size:27px;font-weight:800;letter-spacing:-.03em;color:#10231a">Los Jueves 2026</span><span style="font-size:9.5px;font-family:ui-monospace,Menlo,monospace;color:#8b9a91">27 / 800 / -3%</span></div>
+        <div style="display:flex;align-items:baseline;gap:12px"><span style="font-size:20px;font-weight:700;letter-spacing:-.02em;color:#10231a">Fecha 6 · jue 20 ago</span><span style="font-size:9.5px;font-family:ui-monospace,Menlo,monospace;color:#8b9a91">20 / 700</span></div>
+        <div style="display:flex;align-items:baseline;gap:12px"><span style="font-size:15px;font-weight:700;color:#10231a">Título de sección</span><span style="font-size:9.5px;font-family:ui-monospace,Menlo,monospace;color:#8b9a91">15 / 700</span></div>
+        <div style="display:flex;align-items:baseline;gap:12px"><span style="font-size:14.5px;font-weight:650;color:#10231a">Nombre de jugador</span><span style="font-size:9.5px;font-family:ui-monospace,Menlo,monospace;color:#8b9a91">14.5 / 650</span></div>
+        <div style="display:flex;align-items:baseline;gap:12px"><span style="font-size:13px;font-weight:500;color:#5f6f66">Texto de apoyo y descripciones</span><span style="font-size:9.5px;font-family:ui-monospace,Menlo,monospace;color:#8b9a91">13 / 500</span></div>
+        <div style="display:flex;align-items:baseline;gap:12px"><span style="font-size:10.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#6b7a72">Etiqueta de dato</span><span style="font-size:9.5px;font-family:ui-monospace,Menlo,monospace;color:#8b9a91">10.5 / 800 / +14%</span></div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:8px;padding-top:12px;border-top:1px solid #eceee9">
+        <span style="font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#7b8a80">Forma y espacio</span>
+        <div style="display:flex;gap:8px;align-items:flex-end">
+          <div style="display:flex;flex-direction:column;gap:5px;align-items:center"><span style="width:52px;height:36px;border-radius:16px;background:#eaefea"></span><span style="font-size:9px;font-family:ui-monospace,Menlo,monospace;color:#8b9a91">16 tarjeta</span></div>
+          <div style="display:flex;flex-direction:column;gap:5px;align-items:center"><span style="width:52px;height:36px;border-radius:12px;background:#eaefea"></span><span style="font-size:9px;font-family:ui-monospace,Menlo,monospace;color:#8b9a91">12 botón</span></div>
+          <div style="display:flex;flex-direction:column;gap:5px;align-items:center"><span style="width:52px;height:36px;border-radius:8px;background:#eaefea"></span><span style="font-size:9px;font-family:ui-monospace,Menlo,monospace;color:#8b9a91">8 games</span></div>
+          <div style="display:flex;flex-direction:column;gap:5px;align-items:center"><span style="width:52px;height:36px;border-radius:99px;background:#eaefea"></span><span style="font-size:9px;font-family:ui-monospace,Menlo,monospace;color:#8b9a91">99 chip</span></div>
+        </div>
+        <span style="font-size:12px;line-height:1.5;color:#5f6f66;text-wrap:pretty">Escala de 4: padding lateral 20, entre bloques 12–14, dentro de tarjeta 13–16. Altura mínima táctil 44.</span>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:22px;align-items:flex-start">
+      <div style="width:430px;border-radius:10px;overflow:hidden;border:1px solid rgba(0,0,0,.08)">
+        <dc-import name="PadelKit" hint-size="430px,900px" label="Light"></dc-import>
+      </div>
+      <div style="width:430px;border-radius:10px;overflow:hidden;border:1px solid rgba(0,0,0,.14)">
+        <dc-import name="PadelKit" hint-size="430px,900px" label="Dark" bg="#0d1512" surface="#16201c" text="#eaf2ee" muted="#8ea298" accent="#0f6b48" accent-text="#dbf5e8" line="#21302a" chip-bg="#1b2823" live="#ff6b4a" live-bg="#2a1a15" up="#34c08a" ok-bg="#12291f" down="#ff9a6b" warn-bg="#2a2016" danger="#ff8a6b"></dc-import>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:22px;align-items:flex-start">
+      <div style="width:340px;height:700px;border-radius:26px;overflow:hidden;border:1px solid #e4e9e5;background:#fff">
+        <dc-import name="PadelScreen" hint-size="340px,700px" bg="#ffffff" surface="#f4f6f3" text="#10231a" muted="#6b7a72" accent="#0e5c3f" accent-text="#ffffff" accent-link="#0e5c3f" line="#e4e9e5" chip-bg="#eaefea" nav-bg="#ffffff" live="#d1462f" up="#2f8a5b" down="#c0553a" font="Archivo, sans-serif" head-font="Archivo, sans-serif" head-weight="{{ w800 }}" head-tracking="-0.03em" radius="16px" btn-radius="12px" pill="99px"></dc-import>
+      </div>
+      <div style="width:340px;height:700px;border-radius:26px;overflow:hidden;border:1px solid #21302a;background:#0d1512">
+        <dc-import name="PadelScreen" hint-size="340px,700px" bg="#0d1512" surface="#16201c" text="#eaf2ee" muted="#8ea298" accent="#0f6b48" accent-text="#dbf5e8" accent-link="#34c08a" line="#21302a" chip-bg="#1b2823" nav-bg="#0d1512" live="#ff6b4a" up="#34c08a" down="#ff9a6b" font="Archivo, sans-serif" head-font="Archivo, sans-serif" head-weight="{{ w800 }}" head-tracking="-0.03em" radius="16px" btn-radius="12px" pill="99px"></dc-import>
+      </div>
+    </div>
+
+  </div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() { return { w800: 800 }; }
+}
+</script>
+</body>
+</html>

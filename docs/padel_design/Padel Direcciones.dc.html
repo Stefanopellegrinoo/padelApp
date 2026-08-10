@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><meta name="design_doc_mode" content="canvas"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet"><style>body{margin:0;background:#f0eee9;font-family:system-ui,sans-serif}a{color:#2a78d6}a:hover{color:#1b5ea9}.dv-turn{padding:40px 44px 32px;border-bottom:1px solid rgba(0,0,0,.08);scroll-margin-top:16px}.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 20px}.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}.dv-tname{font:600 13px/1.2 system-ui,sans-serif;color:#1a1a1a}.dv-opts{display:flex;flex-wrap:wrap;gap:36px;align-items:flex-start}.dv-opt{flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px}.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 system-ui,sans-serif;color:rgba(0,0,0,.55)}.dv-card{max-width:100%;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden}.dv-opt:target .dv-oid{background:#2a78d6;color:#fff}.dv-next{margin:22px 0 0;font:12px/1.5 system-ui,sans-serif;color:rgba(0,0,0,.5)}</style></helmet>
+
+<section class="dv-turn" id="t1">
+  <div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">Direcciones visuales — paleta, tipografía y la Tabla (#7) en light + dark</span></div>
+  <div class="dv-opts">
+
+    <div class="dv-opt" id="1a">
+      <div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>Cancha — verde profundo, Archivo, sobrio y deportivo</div>
+      <div class="dv-card" style="padding:22px;display:flex;flex-direction:column;gap:20px;width:772px">
+        <div style="display:flex;gap:26px;align-items:flex-start">
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <span style="font:600 9.5px/1 ui-monospace,Menlo,monospace;letter-spacing:.12em;color:#8b8b85">PALETA</span>
+            <div style="display:flex;gap:6px">
+              <span style="width:34px;height:34px;border-radius:8px;background:#0e5c3f"></span>
+              <span style="width:34px;height:34px;border-radius:8px;background:#34c08a"></span>
+              <span style="width:34px;height:34px;border-radius:8px;background:#0d1512"></span>
+              <span style="width:34px;height:34px;border-radius:8px;background:#eaefea"></span>
+              <span style="width:34px;height:34px;border-radius:8px;background:#ffffff;border:1px solid #e0e0da"></span>
+              <span style="width:34px;height:34px;border-radius:8px;background:#d1462f"></span>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px;font-family:Archivo,sans-serif">
+            <span style="font:600 9.5px/1 ui-monospace,Menlo,monospace;letter-spacing:.12em;color:#8b8b85">ARCHIVO</span>
+            <span style="font-size:26px;font-weight:700;letter-spacing:-.03em;color:#10231a">Copa Verano 6–3</span>
+            <span style="font-size:12.5px;color:#6b7a72">Cuerpo de texto: inscripciones, cuadros y resultados en la misma familia.</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:18px">
+          <div style="width:340px;height:700px;border-radius:26px;overflow:hidden;border:1px solid #e4e9e5">
+            <dc-import name="PadelScreen" hint-size="340px,700px" bg="#ffffff" surface="#f4f6f3" text="#10231a" muted="#6b7a72" accent="#0e5c3f" accent-text="#ffffff" accent-link="#0e5c3f" line="#e4e9e5" chip-bg="#eaefea" nav-bg="#ffffff" live="#d1462f" up="#2f8a5b" down="#c0553a" font="Archivo, sans-serif" head-font="Archivo, sans-serif" head-weight="{{ w700 }}" head-tracking="-0.03em" radius="16px" btn-radius="12px" pill="99px"></dc-import>
+          </div>
+          <div style="width:340px;height:700px;border-radius:26px;overflow:hidden;border:1px solid #21302a">
+            <dc-import name="PadelScreen" hint-size="340px,700px" bg="#0d1512" surface="#16201c" text="#eaf2ee" muted="#8ea298" accent="#0f6b48" accent-text="#dbf5e8" accent-link="#34c08a" line="#21302a" chip-bg="#1b2823" nav-bg="#0d1512" live="#ff6b4a" up="#34c08a" down="#ff8a6b" font="Archivo, sans-serif" head-font="Archivo, sans-serif" head-weight="{{ w700 }}" head-tracking="-0.03em" radius="16px" btn-radius="12px" pill="99px"></dc-import>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dv-opt" id="1b">
+      <div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>Volt — negro y lima, Space Grotesk, alto contraste y nocturno</div>
+      <div class="dv-card" style="padding:22px;display:flex;flex-direction:column;gap:20px;width:772px">
+        <div style="display:flex;gap:26px;align-items:flex-start">
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <span style="font:600 9.5px/1 ui-monospace,Menlo,monospace;letter-spacing:.12em;color:#8b8b85">PALETA</span>
+            <div style="display:flex;gap:6px">
+              <span style="width:34px;height:34px;border-radius:10px;background:#0b0b0d"></span>
+              <span style="width:34px;height:34px;border-radius:10px;background:#d8f24b"></span>
+              <span style="width:34px;height:34px;border-radius:10px;background:#1c1c22"></span>
+              <span style="width:34px;height:34px;border-radius:10px;background:#efefec"></span>
+              <span style="width:34px;height:34px;border-radius:10px;background:#ffffff;border:1px solid #e0e0da"></span>
+              <span style="width:34px;height:34px;border-radius:10px;background:#ff5c4d"></span>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px;font-family:'Space Grotesk',sans-serif">
+            <span style="font:600 9.5px/1 ui-monospace,Menlo,monospace;letter-spacing:.12em;color:#8b8b85">SPACE GROTESK</span>
+            <span style="font-size:26px;font-weight:700;letter-spacing:-.02em;color:#101012">Copa Verano 6–3</span>
+            <span style="font-size:12.5px;color:#6d6d76">Números marcados y geometría abierta: los resultados se leen de un vistazo.</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:18px">
+          <div style="width:340px;height:700px;border-radius:26px;overflow:hidden;border:1px solid #e8e8e4">
+            <dc-import name="PadelScreen" hint-size="340px,700px" bg="#ffffff" surface="#f7f7f5" text="#101012" muted="#6d6d76" accent="#16161c" accent-text="#d8f24b" accent-link="#16161c" line="#e8e8e4" chip-bg="#efefec" nav-bg="#ffffff" live="#e2483d" up="#2f8a5b" down="#c0553a" font="'Space Grotesk', sans-serif" head-font="'Space Grotesk', sans-serif" head-weight="{{ w700 }}" head-tracking="-0.02em" radius="20px" btn-radius="14px" pill="99px"></dc-import>
+          </div>
+          <div style="width:340px;height:700px;border-radius:26px;overflow:hidden;border:1px solid #23232a">
+            <dc-import name="PadelScreen" hint-size="340px,700px" bg="#0b0b0d" surface="#141418" text="#f2f2ef" muted="#8c8c94" accent="#d8f24b" accent-text="#12140a" accent-link="#d8f24b" line="#23232a" chip-bg="#1c1c22" nav-bg="#0b0b0d" live="#ff5c4d" up="#d8f24b" down="#ff8b7f" font="'Space Grotesk', sans-serif" head-font="'Space Grotesk', sans-serif" head-weight="{{ w700 }}" head-tracking="-0.02em" radius="20px" btn-radius="14px" pill="99px"></dc-import>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dv-opt" id="1c">
+      <div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a>Club — arena y terracota, Instrument Serif + Manrope, editorial</div>
+      <div class="dv-card" style="padding:22px;display:flex;flex-direction:column;gap:20px;width:772px">
+        <div style="display:flex;gap:26px;align-items:flex-start">
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <span style="font:600 9.5px/1 ui-monospace,Menlo,monospace;letter-spacing:.12em;color:#8b8b85">PALETA</span>
+            <div style="display:flex;gap:6px">
+              <span style="width:34px;height:34px;border-radius:6px;background:#a34c2e"></span>
+              <span style="width:34px;height:34px;border-radius:6px;background:#e0794c"></span>
+              <span style="width:34px;height:34px;border-radius:6px;background:#221c16"></span>
+              <span style="width:34px;height:34px;border-radius:6px;background:#f0e7dc"></span>
+              <span style="width:34px;height:34px;border-radius:6px;background:#faf6f0;border:1px solid #e0d6c8"></span>
+              <span style="width:34px;height:34px;border-radius:6px;background:#3f6b4f"></span>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <span style="font:600 9.5px/1 ui-monospace,Menlo,monospace;letter-spacing:.12em;color:#8b8b85">INSTRUMENT SERIF + MANROPE</span>
+            <span style="font-family:'Instrument Serif',serif;font-size:30px;line-height:1;color:#221c16">Copa Verano 6–3</span>
+            <span style="font-family:Manrope,sans-serif;font-size:12.5px;color:#7d6f62">Titulares con serif de club; datos y tablas en Manrope, neutra y muy legible.</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:18px">
+          <div style="width:340px;height:700px;border-radius:26px;overflow:hidden;border:1px solid #e9ded1">
+            <dc-import name="PadelScreen" hint-size="340px,700px" bg="#faf6f0" surface="#ffffff" text="#221c16" muted="#7d6f62" accent="#a34c2e" accent-text="#fdf3e9" accent-link="#a34c2e" line="#e9ded1" chip-bg="#f0e7dc" nav-bg="#faf6f0" live="#c2571f" up="#3f6b4f" down="#a34c2e" font="Manrope, sans-serif" head-font="'Instrument Serif', serif" head-weight="{{ w400 }}" head-tracking="0em" radius="12px" btn-radius="8px" pill="7px"></dc-import>
+          </div>
+          <div style="width:340px;height:700px;border-radius:26px;overflow:hidden;border:1px solid #2e2620">
+            <dc-import name="PadelScreen" hint-size="340px,700px" bg="#161210" surface="#1f1a16" text="#f2e9de" muted="#a3927f" accent="#b25735" accent-text="#fbe9dc" accent-link="#e0794c" line="#2e2620" chip-bg="#251f1a" nav-bg="#161210" live="#e0794c" up="#7fae8c" down="#e0794c" font="Manrope, sans-serif" head-font="'Instrument Serif', serif" head-weight="{{ w400 }}" head-tracking="0em" radius="12px" btn-radius="8px" pill="7px"></dc-import>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+  <p class="dv-next">Probá: "vamos con <a class="dv-oid" href="#1b">1b</a> pero el acento más suave" · "mezclá el verde de <a class="dv-oid" href="#1a">1a</a> con la tipografía de <a class="dv-oid" href="#1b">1b</a>" · "más opciones, algo más colorido"</p>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() { return { w700: 700, w400: 400 }; }
+}
+</script>
+</body>
+</html>

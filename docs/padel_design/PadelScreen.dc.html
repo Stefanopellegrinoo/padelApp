@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<div style="width:100%;height:100%;display:flex;flex-direction:column;overflow:hidden;font-family:{{ font }};background:{{ bg }};color:{{ text }}">
+
+  <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 20px 2px;font-size:12px;font-weight:600;opacity:.85">
+    <span>21:04</span>
+    <div style="display:flex;gap:5px;align-items:center">
+      <span style="display:block;width:16px;height:8px;border-radius:2px;background:currentColor;opacity:.5"></span>
+      <span style="display:block;width:20px;height:9px;border-radius:3px;border:1.5px solid currentColor;opacity:.7"></span>
+    </div>
+  </div>
+
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:14px 20px 14px;gap:12px">
+    <div style="display:flex;flex-direction:column;gap:4px;min-width:0">
+      <span style="font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:{{ muted }};font-weight:700">Fecha 5 de 12 · en curso</span>
+      <span style="font-family:{{ headFont }};font-size:27px;line-height:1;letter-spacing:{{ headTracking }};font-weight:{{ headWeight }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Los Jueves 2026</span>
+    </div>
+    <span style="width:36px;height:36px;flex:none;border-radius:{{ pill }};background:{{ chipBg }};display:flex;align-items:center;justify-content:center;font-size:15px;color:{{ muted }}">⚙</span>
+  </div>
+
+  <div style="margin:0 20px 12px;padding:16px;border-radius:{{ radius }};background:{{ accent }};color:{{ accentText }};display:flex;flex-direction:column;gap:13px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <span style="font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;opacity:.75">Próxima fecha</span>
+        <span style="font-family:{{ headFont }};font-size:20px;line-height:1.1;font-weight:{{ headWeight }};letter-spacing:{{ headTracking }}">Fecha 6 · jue 20 ago</span>
+      </div>
+      <span style="font-size:12px;font-weight:700;padding:7px 11px;border-radius:{{ pill }};background:{{ accentText }};color:{{ accent }};white-space:nowrap">21:00</span>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <span style="flex:1;text-align:center;padding:11px;border-radius:{{ btnRadius }};background:{{ accentText }};color:{{ accent }};font-size:13.5px;font-weight:700">Voy</span>
+      <span style="flex:1;text-align:center;padding:11px;border-radius:{{ btnRadius }};border:1.5px solid rgba(255,255,255,.38);font-size:13.5px;font-weight:650">No voy</span>
+    </div>
+  </div>
+
+  <div style="margin:0 20px 14px;padding:13px 15px;border-radius:{{ radius }};background:{{ surface }};border:1px solid {{ line }};display:flex;align-items:center;justify-content:space-between;gap:12px">
+    <div style="display:flex;flex-direction:column;gap:3px;min-width:0">
+      <span style="font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:{{ muted }};font-weight:700">Campeones defensores</span>
+      <span style="font-size:14.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Marce &amp; Tincho</span>
+    </div>
+    <span style="flex:none;padding:6px 10px;border-radius:{{ pill }};background:{{ chipBg }};color:{{ live }};font-size:11px;font-weight:700">Repiten</span>
+  </div>
+
+  <div style="display:flex;justify-content:space-between;align-items:center;padding:0 20px 10px">
+    <span style="font-family:{{ headFont }};font-size:15px;font-weight:{{ headWeight }};letter-spacing:{{ headTracking }}">Tabla</span>
+    <span style="padding:7px 12px;border-radius:{{ pill }};border:1px solid {{ line }};background:{{ surface }};font-size:11.5px;font-weight:700;color:{{ muted }}">Orden de desempate ⇅</span>
+  </div>
+
+  <div style="padding:0 20px;display:flex;flex-direction:column">
+    <div style="display:flex;align-items:center;gap:11px;padding:11px 12px;border-radius:{{ btnRadius }};background:{{ chipBg }}">
+      <span style="font-family:{{ headFont }};font-size:14px;font-weight:700;width:16px;text-align:center">1</span>
+      <span style="flex:1;font-size:14.5px;font-weight:700;display:flex;align-items:center;gap:7px">Marce<span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:{{ pill }};border:1px solid {{ line }};color:{{ muted }}">ⓘ</span></span>
+      <span style="font-size:11.5px;font-weight:700;color:{{ muted }};width:26px;text-align:right">—</span>
+      <span style="font-family:{{ headFont }};font-size:15px;font-weight:700;width:32px;text-align:right">47</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:11px;padding:11px 12px">
+      <span style="font-family:{{ headFont }};font-size:14px;font-weight:700;width:16px;text-align:center">2</span>
+      <span style="flex:1;font-size:14.5px;font-weight:650;display:flex;align-items:center;gap:7px">Nico<span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:{{ pill }};border:1px solid {{ line }};color:{{ muted }}">ⓘ</span></span>
+      <span style="font-size:11.5px;font-weight:700;color:{{ up }};width:26px;text-align:right">▲2</span>
+      <span style="font-family:{{ headFont }};font-size:15px;font-weight:700;width:32px;text-align:right">47</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:11px;padding:11px 12px">
+      <span style="font-family:{{ headFont }};font-size:14px;font-weight:700;width:16px;text-align:center">3</span>
+      <span style="flex:1;font-size:14.5px;font-weight:650">Fede</span>
+      <span style="font-size:11.5px;font-weight:700;color:{{ down }};width:26px;text-align:right">▼1</span>
+      <span style="font-family:{{ headFont }};font-size:15px;font-weight:700;width:32px;text-align:right">43</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:11px;padding:11px 12px">
+      <span style="font-family:{{ headFont }};font-size:14px;font-weight:700;width:16px;text-align:center">4</span>
+      <span style="flex:1;font-size:14.5px;font-weight:650">Juanma</span>
+      <span style="font-size:11.5px;font-weight:700;color:{{ muted }};width:26px;text-align:right">—</span>
+      <span style="font-family:{{ headFont }};font-size:15px;font-weight:700;width:32px;text-align:right">38</span>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:9px;padding:7px 2px 6px">
+      <span style="height:1px;flex:none;width:14px;background:{{ line }}"></span>
+      <span style="font-size:9.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:{{ muted }};white-space:nowrap">Clasifican al Masters</span>
+      <span style="height:1px;flex:1;background:{{ line }}"></span>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:11px;padding:11px 12px;color:{{ muted }}">
+      <span style="font-family:{{ headFont }};font-size:14px;font-weight:700;width:16px;text-align:center">5</span>
+      <span style="flex:1;font-size:14.5px;font-weight:650;color:{{ text }}">Seba</span>
+      <span style="font-size:11.5px;font-weight:700;color:{{ up }};width:26px;text-align:right">▲1</span>
+      <span style="font-family:{{ headFont }};font-size:15px;font-weight:700;width:32px;text-align:right;color:{{ text }}">35</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:11px;padding:11px 12px;color:{{ muted }}">
+      <span style="font-family:{{ headFont }};font-size:14px;font-weight:700;width:16px;text-align:center">6</span>
+      <span style="flex:1;font-size:14.5px;font-weight:650;color:{{ text }}">Tincho</span>
+      <span style="font-size:11.5px;font-weight:700;color:{{ down }};width:26px;text-align:right">▼2</span>
+      <span style="font-family:{{ headFont }};font-size:15px;font-weight:700;width:32px;text-align:right;color:{{ text }}">31</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:11px;padding:11px 12px;color:{{ muted }}">
+      <span style="font-family:{{ headFont }};font-size:14px;font-weight:700;width:16px;text-align:center">7</span>
+      <span style="flex:1;font-size:14.5px;font-weight:650;color:{{ text }}">Lucho</span>
+      <span style="font-size:11.5px;font-weight:700;width:26px;text-align:right">—</span>
+      <span style="font-family:{{ headFont }};font-size:15px;font-weight:700;width:32px;text-align:right;color:{{ text }}">24</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:11px;padding:11px 12px;color:{{ muted }}">
+      <span style="font-family:{{ headFont }};font-size:14px;font-weight:700;width:16px;text-align:center">8</span>
+      <span style="flex:1;font-size:14.5px;font-weight:650;color:{{ text }}">Gastón</span>
+      <span style="font-size:11.5px;font-weight:700;width:26px;text-align:right">—</span>
+      <span style="font-family:{{ headFont }};font-size:15px;font-weight:700;width:32px;text-align:right;color:{{ text }}">19</span>
+    </div>
+  </div>
+
+  <div style="margin-top:auto;display:flex;justify-content:space-between;padding:13px 24px 20px;border-top:1px solid {{ line }};background:{{ navBg }}">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:5px;color:{{ accentLink }}">
+      <span style="width:18px;height:18px;border-radius:4px;background:currentColor;display:block"></span>
+      <span style="font-size:9.5px;font-weight:700">Tabla</span>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:5px;color:{{ muted }}">
+      <span style="width:18px;height:18px;border-radius:4px;border:2px solid currentColor;display:block"></span>
+      <span style="font-size:9.5px;font-weight:600">Fechas</span>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:5px;color:{{ muted }}">
+      <span style="width:18px;height:18px;border-radius:50%;border:2px solid currentColor;display:block"></span>
+      <span style="font-size:9.5px;font-weight:600">Stats</span>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:5px;color:{{ muted }}">
+      <span style="width:18px;height:18px;border-radius:2px;border:2px solid currentColor;display:block;opacity:.8"></span>
+      <span style="font-size:9.5px;font-weight:600">Reglas</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:340,&quot;height&quot;:700},&quot;bg&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#ffffff&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;surface&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#f6f6f4&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;text&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#12140f&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;muted&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#6f7268&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;accent&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#1f5c3d&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;accentText&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#ffffff&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;accentLink&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#1f5c3d&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;line&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#e6e6e1&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;chipBg&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#eeeeea&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;navBg&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#ffffff&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;live&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#d64a2f&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;up&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#2f8a5b&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;down&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#c0553a&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;font&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;system-ui, sans-serif&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;headFont&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;system-ui, sans-serif&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;headWeight&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:700,&quot;tsType&quot;:&quot;number&quot;},&quot;headTracking&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;-0.02em&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;radius&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;16px&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;btnRadius&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;12px&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;pill&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;99px&quot;,&quot;tsType&quot;:&quot;string&quot;}}"></script>
+</body>
+</html>

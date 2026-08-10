@@ -37,36 +37,49 @@ export type Database = {
       attendances: {
         Row: {
           entry_id: string
+          entry_kind: string
           id: string
           matchday_id: string
+          season_id: string
           status: string
         }
         Insert: {
           entry_id: string
+          entry_kind?: string
           id?: string
           matchday_id: string
+          season_id: string
           status: string
         }
         Update: {
           entry_id?: string
+          entry_kind?: string
           id?: string
           matchday_id?: string
+          season_id?: string
           status?: string
         }
         Relationships: [
           {
-            foreignKeyName: "attendances_entry_id_fkey"
-            columns: ["entry_id"]
+            foreignKeyName: "attendances_entry_id_entry_kind_fkey"
+            columns: ["entry_id", "entry_kind"]
             isOneToOne: false
             referencedRelation: "entries"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "kind"]
           },
           {
-            foreignKeyName: "attendances_matchday_id_fkey"
-            columns: ["matchday_id"]
+            foreignKeyName: "attendances_entry_id_season_id_fkey"
+            columns: ["entry_id", "season_id"]
+            isOneToOne: false
+            referencedRelation: "entries"
+            referencedColumns: ["id", "season_id"]
+          },
+          {
+            foreignKeyName: "attendances_matchday_id_season_id_fkey"
+            columns: ["matchday_id", "season_id"]
             isOneToOne: false
             referencedRelation: "matchdays"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "season_id"]
           },
         ]
       }
@@ -77,6 +90,7 @@ export type Database = {
           matchday_id: string
           points: number
           position: number
+          season_id: string
         }
         Insert: {
           entry_id: string
@@ -84,6 +98,7 @@ export type Database = {
           matchday_id: string
           points: number
           position: number
+          season_id: string
         }
         Update: {
           entry_id?: string
@@ -91,21 +106,22 @@ export type Database = {
           matchday_id?: string
           points?: number
           position?: number
+          season_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "awards_entry_id_fkey"
-            columns: ["entry_id"]
+            foreignKeyName: "awards_entry_id_season_id_fkey"
+            columns: ["entry_id", "season_id"]
             isOneToOne: false
             referencedRelation: "entries"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "season_id"]
           },
           {
-            foreignKeyName: "awards_matchday_id_fkey"
-            columns: ["matchday_id"]
+            foreignKeyName: "awards_matchday_id_season_id_fkey"
+            columns: ["matchday_id", "season_id"]
             isOneToOne: false
             referencedRelation: "matchdays"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "season_id"]
           },
         ]
       }
@@ -286,40 +302,43 @@ export type Database = {
           entry_b: string
           id: string
           matchday_id: string
+          season_id: string
         }
         Insert: {
           entry_a: string
           entry_b: string
           id?: string
           matchday_id: string
+          season_id: string
         }
         Update: {
           entry_a?: string
           entry_b?: string
           id?: string
           matchday_id?: string
+          season_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "pair_locks_entry_a_fkey"
-            columns: ["entry_a"]
+            foreignKeyName: "pair_locks_entry_a_season_id_fkey"
+            columns: ["entry_a", "season_id"]
             isOneToOne: false
             referencedRelation: "entries"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "season_id"]
           },
           {
-            foreignKeyName: "pair_locks_entry_b_fkey"
-            columns: ["entry_b"]
+            foreignKeyName: "pair_locks_entry_b_season_id_fkey"
+            columns: ["entry_b", "season_id"]
             isOneToOne: false
             referencedRelation: "entries"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "season_id"]
           },
           {
-            foreignKeyName: "pair_locks_matchday_id_fkey"
-            columns: ["matchday_id"]
+            foreignKeyName: "pair_locks_matchday_id_season_id_fkey"
+            columns: ["matchday_id", "season_id"]
             isOneToOne: false
             referencedRelation: "matchdays"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "season_id"]
           },
         ]
       }
@@ -329,40 +348,43 @@ export type Database = {
           entry_b: string
           id: string
           matchday_id: string
+          season_id: string
         }
         Insert: {
           entry_a: string
           entry_b: string
           id?: string
           matchday_id: string
+          season_id: string
         }
         Update: {
           entry_a?: string
           entry_b?: string
           id?: string
           matchday_id?: string
+          season_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "pairs_entry_a_fkey"
-            columns: ["entry_a"]
+            foreignKeyName: "pairs_entry_a_season_id_fkey"
+            columns: ["entry_a", "season_id"]
             isOneToOne: false
             referencedRelation: "entries"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "season_id"]
           },
           {
-            foreignKeyName: "pairs_entry_b_fkey"
-            columns: ["entry_b"]
+            foreignKeyName: "pairs_entry_b_season_id_fkey"
+            columns: ["entry_b", "season_id"]
             isOneToOne: false
             referencedRelation: "entries"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "season_id"]
           },
           {
-            foreignKeyName: "pairs_matchday_id_fkey"
-            columns: ["matchday_id"]
+            foreignKeyName: "pairs_matchday_id_season_id_fkey"
+            columns: ["matchday_id", "season_id"]
             isOneToOne: false
             referencedRelation: "matchdays"
-            referencedColumns: ["id"]
+            referencedColumns: ["id", "season_id"]
           },
         ]
       }

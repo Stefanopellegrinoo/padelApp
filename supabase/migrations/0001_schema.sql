@@ -72,7 +72,15 @@ create table public.entries (
   -- fecha no se abre así (spec 2.6), pero eso lo controla el borde.
   constraint entries_squad_named check (kind = 'GUEST' or length(trim(display_name)) > 0),
   constraint entries_guest_matchday
-    foreign key (matchday_id, season_id) references public.matchdays (id, season_id) on delete cascade
+    foreign key (matchday_id, season_id) references public.matchdays (id, season_id) on delete cascade,
+  -- Ancla para que pairs, attendances, pair_locks y awards puedan atar cada
+  -- asiento a SU temporada con una FK compuesta, en vez de una simple que
+  -- deja mezclar entries de temporadas distintas en la misma fila.
+  unique (id, season_id),
+  -- Ancla para que attendances pueda exigir SQUAD con una FK en vez de un
+  -- check: `kind` no es constante en la fila referenciante, así que sólo una
+  -- referencia a esta columna lo puede fijar.
+  unique (id, kind)
 );
 
 create unique index entries_seed        on public.entries (season_id, seed_position)   where kind = 'SQUAD';
@@ -85,10 +93,24 @@ create index entries_by_season on public.entries (season_id);
 -- como entry de esa fecha ya dice que juega.
 create table public.attendances (
   id          uuid primary key default gen_random_uuid(),
-  matchday_id uuid not null references public.matchdays on delete cascade,
-  entry_id    uuid not null references public.entries   on delete cascade,
+  matchday_id uuid not null,
+  entry_id    uuid not null,
+  season_id   uuid not null,
+  -- Existe como columna (no sólo como check) porque hace falta del lado
+  -- "muchos" de una FK: es la mitad fija que, contra entries (id, kind),
+  -- rechaza cualquier entry_id que sea GUEST.
+  entry_kind  text not null default 'SQUAD' check (entry_kind = 'SQUAD'),
   status      text not null check (status in ('PLAYING', 'ABSENT')),
-  unique (matchday_id, entry_id)
+  unique (matchday_id, entry_id),
+  -- La fecha de la asistencia tiene que ser de la MISMA temporada que la
+  -- asistencia: sin esto, una fecha puede recibir presentismo de un asiento
+  -- que ni siquiera existe en su temporada.
+  foreign key (matchday_id, season_id) references public.matchdays (id, season_id) on delete cascade,
+  foreign key (entry_id, season_id) references public.entries (id, season_id) on delete cascade,
+  -- Esto —no el comentario de arriba de la tabla— es lo que de verdad hace
+  -- que attendances sea SQUAD-only: un GUEST nunca tiene una fila de entries
+  -- con kind = 'SQUAD', así que el insert lo rechaza en el borde de la base.
+  foreign key (entry_id, entry_kind) references public.entries (id, kind)
 );
 
 -- ── pair_locks ───────────────────────────────────────────────────────────────
@@ -103,14 +125,22 @@ create table public.attendances (
 -- es el corazón del formato.
 create table public.pair_locks (
   id          uuid primary key default gen_random_uuid(),
-  matchday_id uuid not null references public.matchdays on delete cascade,
-  entry_a     uuid not null references public.entries on delete cascade,
-  entry_b     uuid not null references public.entries on delete cascade,
+  matchday_id uuid not null,
+  entry_a     uuid not null,
+  entry_b     uuid not null,
+  season_id   uuid not null,
   check (entry_a <> entry_b),
   -- Cubren la mitad de "nadie en dos parejas trabadas": alguien podría estar
   -- como entry_a de una y entry_b de otra. Esa mitad la valida el borde.
   unique (matchday_id, entry_a),
-  unique (matchday_id, entry_b)
+  unique (matchday_id, entry_b),
+  -- La fecha del lock tiene que ser de la MISMA temporada que el lock.
+  foreign key (matchday_id, season_id) references public.matchdays (id, season_id) on delete cascade,
+  -- Cada mitad del lock tiene que ser un asiento de ESA temporada: sin esto
+  -- se puede trabar a un invitado de esta fecha contra un asiento que vive
+  -- en otra temporada.
+  foreign key (entry_a, season_id) references public.entries (id, season_id) on delete cascade,
+  foreign key (entry_b, season_id) references public.entries (id, season_id) on delete cascade
 );
 
 create index pair_locks_by_matchday on public.pair_locks (matchday_id);
@@ -118,16 +148,27 @@ create index pair_locks_by_matchday on public.pair_locks (matchday_id);
 -- ── pairs ────────────────────────────────────────────────────────────────────
 create table public.pairs (
   id          uuid primary key default gen_random_uuid(),
-  matchday_id uuid not null references public.matchdays on delete cascade,
+  matchday_id uuid not null,
+  season_id   uuid not null,
   -- NO cascade: dar de baja a un jugador no puede borrar las parejas de las
   -- fechas que ya se jugaron. `no action` y no `restrict` a propósito: se
   -- verifica al final de la sentencia, así que borrar la temporada entera
   -- —que arrastra fechas y asientos juntos— sigue funcionando.
-  entry_a     uuid not null references public.entries on delete no action,
-  entry_b     uuid not null references public.entries on delete no action,
+  entry_a     uuid not null,
+  entry_b     uuid not null,
   check (entry_a <> entry_b),
   -- Habilita la FK compuesta de matches.
-  unique (id, matchday_id)
+  unique (id, matchday_id),
+  -- La fecha de la pareja tiene que ser de la MISMA temporada que la pareja:
+  -- sin esto, season_id es un campo suelto que un insert puede desalinear
+  -- del matchday_id real.
+  foreign key (matchday_id, season_id) references public.matchdays (id, season_id) on delete cascade,
+  -- Cada mitad de la pareja tiene que ser un asiento de ESA temporada. Sin
+  -- esto, una pareja puede nacer con un entry prestado de otra temporada, y
+  -- esa fila vuelve indestructible a la temporada ajena: la FK la sigue
+  -- necesitando viva aunque se la quiera borrar entera.
+  foreign key (entry_a, season_id) references public.entries (id, season_id) on delete no action,
+  foreign key (entry_b, season_id) references public.entries (id, season_id) on delete no action
 );
 
 create index pairs_by_matchday on public.pairs (matchday_id);
@@ -167,15 +208,21 @@ create table public.match_sets (
 -- cambian la tabla de puntos, el histórico no se mueve.
 create table public.awards (
   id          uuid primary key default gen_random_uuid(),
-  matchday_id uuid not null references public.matchdays on delete cascade,
+  matchday_id uuid not null,
   -- Mismo motivo que en pairs: el histórico no se borra por dar de baja a
   -- alguien. Spec 2.9: las fechas cerradas no se alteran nunca.
-  entry_id    uuid not null references public.entries   on delete no action,
+  entry_id    uuid not null,
+  season_id   uuid not null,
   -- Posición del CAMPEONATO: una pareja hecha sólo de invitados no ocupa
   -- puesto, así que puede no coincidir con el lugar en la tabla de la fecha.
   position    int not null check (position >= 1),
   points      int not null check (points > 0),
-  unique (matchday_id, entry_id)
+  unique (matchday_id, entry_id),
+  -- La fecha del premio tiene que ser de la MISMA temporada que el premio.
+  foreign key (matchday_id, season_id) references public.matchdays (id, season_id) on delete cascade,
+  -- Mismo motivo que en pairs: preservar el histórico no puede volver
+  -- indestructible a una temporada ajena que sólo prestó el entry.
+  foreign key (entry_id, season_id) references public.entries (id, season_id) on delete no action
 );
 
 create index awards_by_matchday on public.awards (matchday_id);

@@ -78,12 +78,19 @@ describe('narrateRules', () => {
     }
   })
 
-  it('includes sets-difference tiebreaker when the format is multi-set', () => {
+  it('orders tiebreakers as sets-difference then games-difference when multi-set', () => {
     const bestOfThree = {
       ...CONFIG,
       matchFormat: { setsToWin: 2, gamesPerSet: 6, tieBreak: true },
     }
-    expect(bodyOf(bestOfThree, 'Los desempates')).toContain('después la diferencia de sets')
+    const body = bodyOf(bestOfThree, 'Los desempates')
+    const setsPhrase = 'corta la diferencia de sets'
+    const gamesPhrase = 'corta la diferencia de games'
+    const setsAt = body.indexOf(setsPhrase)
+    const gamesAt = body.indexOf(gamesPhrase)
+    expect(setsAt).toBeGreaterThan(-1)
+    expect(gamesAt).toBeGreaterThan(-1)
+    expect(setsAt).toBeLessThan(gamesAt)
   })
 
   it('omits sets-difference tiebreaker when the format is single-set', () => {

@@ -69,10 +69,10 @@ export function narrateRules(config: SeasonConfig): RulesSection[] {
 }
 
 function describeTiebreak(format: SeasonConfig['matchFormat'], snapshotEvery: number): string {
-  const setStep = format.setsToWin > 1 ? `, después la diferencia de sets` : ''
+  const setStep = format.setsToWin > 1 ? `corta la diferencia de sets, después ` : ''
   return (
-    `En la tabla de la fecha, si dos parejas ganan la misma cantidad de partidos, corta la ` +
-    `diferencia de games${setStep}. Si empatan dos, el partido entre ellas lo decide; si empatan ` +
+    `En la tabla de la fecha, si dos parejas ganan la misma cantidad de partidos, ${setStep}` +
+    `corta la diferencia de games. Si empatan dos, el partido entre ellas lo decide; si empatan ` +
     `tres o más, el partido entre ellas no alcanza porque se ganan en círculo, y corta el orden de ` +
     `desempate. En la tabla del campeonato, si dos jugadores tienen los mismos puntos corta el orden ` +
     `de desempate: una lista del mejor al peor que arranca en el orden que consensuó el ` +

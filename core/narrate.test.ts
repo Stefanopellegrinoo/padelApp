@@ -98,7 +98,9 @@ describe('narrateRules', () => {
       ...CONFIG,
       matchFormat: { setsToWin: 1, gamesPerSet: 4, tieBreak: true },
     }
-    expect(bodyOf(singleSet, 'Los desempates')).not.toContain('después la diferencia de sets')
+    const body = bodyOf(singleSet, 'Los desempates')
+    expect(body).not.toContain('corta la diferencia de sets')
+    expect(body).toContain('corta la diferencia de games')
   })
 
   it('uses the masters constant, not the config field, even when mismatched', () => {

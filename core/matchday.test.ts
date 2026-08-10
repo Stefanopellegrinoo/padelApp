@@ -28,7 +28,8 @@ function playMatchday(
     defenders,
     defendersAlreadyRepeated,
     previousPairs,
-    guestId: null,
+    guestIds: [],
+    fixedPairs: [],
   })
 
   const fixture = buildFixture(pairs.length)
@@ -111,7 +112,8 @@ describe('a full matchday, end to end', () => {
       defenders: first.champion,
       defendersAlreadyRepeated: true,
       previousPairs: [],
-      guestId: null,
+      guestIds: [],
+      fixedPairs: [],
     })
     expect(isolated.some((pair) => sameAs(pair, first.champion))).toBe(false)
   })

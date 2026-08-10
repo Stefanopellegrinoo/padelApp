@@ -4,13 +4,13 @@ import type { EntryId, Pair } from './types'
 
 export interface PairingInput {
   /**
-   * Everyone playing this matchday, guest included. Must be even.
+   * Everyone playing this matchday, guests included. Must be even.
    *
-   * Caller invariant: every present player except the guest is expected to
-   * appear in `snapshot`. When two or more are missing from it, their
-   * relative order falls back to the order they appear in here — so the
-   * caller must supply a stable order for `present` or the pairing among
-   * those players can change between calls with the same "who's here" set.
+   * Caller invariant: every present player except the guests is expected to
+   * appear in `snapshot`. When two or more are missing from it, their relative
+   * order falls back to the order they appear in here — so the caller must
+   * supply a stable order for `present` or the pairing among those players can
+   * change between calls with the same "who's here" set.
    */
   present: EntryId[]
   points: Map<EntryId, number>
@@ -20,7 +20,22 @@ export interface PairingInput {
   /** True when the defenders already played their one repeat. */
   defendersAlreadyRepeated: boolean
   previousPairs: Pair[]
-  guestId: EntryId | null
+  /**
+   * This matchday's guests, in the order the admin wants them. They all sit at
+   * the tail of the pool, keeping that order among themselves.
+   *
+   * Careful with what that means for more than one: the balanced draw sends the
+   * bottom of the order to the top of the table, so it is the LAST guest in this
+   * list who lands on the table leader, not the first. Earlier in the list means
+   * ranked higher, exactly like everywhere else in the order.
+   */
+  guestIds: EntryId[]
+  /**
+   * Pairs settled before the draw — a visiting team that came to play
+   * together. The defenders are NOT listed here: they have their own rule,
+   * which can dissolve them.
+   */
+  fixedPairs: Pair[]
 }
 
 export function samePair(left: Pair, right: Pair): boolean {
@@ -30,8 +45,16 @@ export function samePair(left: Pair, right: Pair): boolean {
 }
 
 export function buildPairs(input: PairingInput): Pair[] {
-  const { present, points, snapshot, defenders, defendersAlreadyRepeated, previousPairs, guestId } =
-    input
+  const {
+    present,
+    points,
+    snapshot,
+    defenders,
+    defendersAlreadyRepeated,
+    previousPairs,
+    guestIds,
+    fixedPairs,
+  } = input
 
   if (present.length === 0) {
     throw new Error('No se puede armar una fecha sin jugadores.')
@@ -40,13 +63,12 @@ export function buildPairs(input: PairingInput): Pair[] {
     throw new Error(`Hacen falta jugadores en número par: hay ${present.length}.`)
   }
 
-  const fixed = resolveDefenders(present, defenders, defendersAlreadyRepeated)
-  const pool = fixed
-    ? present.filter((id) => id !== fixed.a && id !== fixed.b)
-    : [...present]
+  const settled = resolveSettled(present, defenders, defendersAlreadyRepeated, fixedPairs)
+  const taken = new Set(settled.flatMap((pair) => [pair.a, pair.b]))
+  const pool = present.filter((entryId) => !taken.has(entryId))
 
-  const ordered = orderPool(pool, points, snapshot, guestId)
-  const position = new Map(ordered.map((id, index) => [id, index + 1]))
+  const ordered = orderPool(pool, points, snapshot, guestIds)
+  const position = new Map(ordered.map((entryId, index) => [entryId, index + 1]))
   const idealSum = ordered.length + 1
 
   const candidates = allMatchings(ordered)
@@ -74,7 +96,42 @@ export function buildPairs(input: PairingInput): Pair[] {
     }
   }
 
-  return fixed ? [fixed, ...best] : best
+  return [...settled, ...best]
+}
+
+/**
+ * The pairs that are decided before the draw: the defending champions, when
+ * their rule holds, and whatever the admin fixed by hand. Anything wrong here
+ * is an invariant violation and fails loudly (spec 4.5) rather than quietly
+ * pairing somebody twice.
+ */
+function resolveSettled(
+  present: EntryId[],
+  defenders: Pair | null,
+  alreadyRepeated: boolean,
+  fixedPairs: Pair[],
+): Pair[] {
+  const settled: Pair[] = []
+  const taken = new Set<EntryId>()
+
+  const take = (pair: Pair, what: string): void => {
+    for (const entryId of [pair.a, pair.b]) {
+      if (!present.includes(entryId)) {
+        throw new Error(`${what} incluye a ${entryId}, que no juega esta fecha.`)
+      }
+      if (taken.has(entryId)) {
+        throw new Error(`${entryId} está en más de una pareja fija.`)
+      }
+      taken.add(entryId)
+    }
+    settled.push(pair)
+  }
+
+  const defending = resolveDefenders(present, defenders, alreadyRepeated)
+  if (defending !== null) take(defending, 'La pareja defensora')
+  for (const pair of fixedPairs) take(pair, 'Una pareja fija')
+
+  return settled
 }
 
 /**
@@ -93,18 +150,29 @@ function resolveDefenders(
   return bothPresent ? defenders : null
 }
 
-/** The guest always sits last: nobody knows how they play, so the tail is the neutral spot. */
+/**
+ * Guests always sit at the tail, in the order they were given: nobody knows how
+ * they play, so the bottom is the neutral spot. Reordering `guestIds` is how the
+ * admin moves one of them (spec 2.6).
+ *
+ * With a single guest that is exactly what the spec asks for — the tail draws the
+ * table leader. With several, the leader draws the LAST of them, because the tail
+ * is the bottom of the order and the draw pairs the bottom with the top.
+ */
 function orderPool(
   pool: EntryId[],
   points: Map<EntryId, number>,
   snapshot: EntryId[],
-  guestId: EntryId | null,
+  guestIds: EntryId[],
 ): EntryId[] {
-  if (guestId === null || !pool.includes(guestId)) {
+  const inPool = new Set(pool)
+  const guests = [...new Set(guestIds)].filter((entryId) => inPool.has(entryId))
+  if (guests.length === 0) {
     return orderByPoints(pool, points, snapshot)
   }
-  const withoutGuest = pool.filter((id) => id !== guestId)
-  return [...orderByPoints(withoutGuest, points, snapshot), guestId]
+  const isGuest = new Set(guests)
+  const squad = pool.filter((entryId) => !isGuest.has(entryId))
+  return [...orderByPoints(squad, points, snapshot), ...guests]
 }
 
 /**

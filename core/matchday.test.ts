@@ -39,7 +39,13 @@ function playMatchday(
       const pairA = pairs[left]
       const pairB = pairs[right]
       if (pairA === undefined || pairB === undefined) continue
-      // Lower index wins, so results are deterministic and the table is spread out.
+      // pairA always wins (gamesA is fixed at 4); the left < right ternary only
+      // varies the loser's margin, so the table spreads out on games difference.
+      // This is fixed rather than random so a season can be replayed and compared.
+      // Consequence: buildFixture's circle method always keeps pair 0 in the home
+      // slot, and buildPairs always puts the table leader in pair 0, so pair 0 wins
+      // every match of every matchday. The simulated season is deliberately
+      // lopsided — fine for what these tests check, not a realistic season.
       matches.push({ round, pairA, pairB, sets: [{ gamesA: 4, gamesB: left < right ? 1 : 2 }] })
     }
     round++
@@ -92,6 +98,22 @@ describe('a full matchday, end to end', () => {
       SQUAD, pointsAfterSecond, SQUAD, second.pairs, first.champion, true, CONFIG,
     )
     expect(third.pairs.some((pair) => sameAs(pair, first.champion))).toBe(false)
+
+    // The assertion above is not isolated: previousPairs (second.pairs) already
+    // contains the champion pair, so the ordinary no-repeat-vs-previous-matchday
+    // rule would exclude it regardless of what defendersAlreadyRepeated does. This
+    // call removes that confound: previousPairs is empty, so only resolveDefenders
+    // honoring defendersAlreadyRepeated can keep the pair apart.
+    const isolated = buildPairs({
+      present: SQUAD,
+      points: pointsAfterSecond,
+      snapshot: SQUAD,
+      defenders: first.champion,
+      defendersAlreadyRepeated: true,
+      previousPairs: [],
+      guestId: null,
+    })
+    expect(isolated.some((pair) => sameAs(pair, first.champion))).toBe(false)
   })
 
   it('never repeats a pair from the immediately previous matchday', () => {

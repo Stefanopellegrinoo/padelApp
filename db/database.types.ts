@@ -459,6 +459,7 @@ export type Database = {
       match_is_open: { Args: { p_match: string }; Returns: boolean }
       match_season: { Args: { p_match: string }; Returns: string }
       matchday_season: { Args: { p_matchday: string }; Returns: string }
+      open_matchday: { Args: { p_matchday: string }; Returns: undefined }
       season_invite: {
         Args: { p_token: string }
         Returns: {

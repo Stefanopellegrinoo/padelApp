@@ -22,7 +22,9 @@ describe('snapshotForMatchday', () => {
   it('uses the seed order for the first k matchdays', () => {
     const awards = new Map([[1, [award('p4', 10)]]])
     for (const matchday of [1, 2, 3]) {
-      expect(snapshotForMatchday(matchday, SEED, awards, CONFIG)).toEqual(SEED)
+      const result = snapshotForMatchday(matchday, SEED, awards, CONFIG)
+      expect(result).toEqual(SEED)
+      expect(result).not.toBe(SEED)
     }
   })
 
@@ -88,13 +90,25 @@ describe('snapshotForMatchday', () => {
       [1, [award('p4', 10)]], [2, [award('p4', 10)]], [3, [award('p4', 10)]],
       [4, [award('p3', 10)]], [5, [award('p3', 10)]], [6, [award('p3', 10)]],
     ])
-    expect(snapshotForMatchday(7, SEED, awards, CONFIG)[0]).toBe('p4') // 30 vs 30, seed cuts
-    expect(snapshotForMatchday(7, SEED, awards, CONFIG)).toHaveLength(4)
+    expect(snapshotForMatchday(7, SEED, awards, CONFIG)[0]).toBe('p4') // 30 vs 30 — snapshot(1) cuts, and it cuts the opposite way from the seed
+    expect(snapshotForMatchday(7, SEED, awards, CONFIG)).toEqual(['p4', 'p3', 'p1', 'p2'])
   })
 
   it('handles a refresh interval of one', () => {
     const everyMatchday = { ...CONFIG, tiebreakSnapshotEvery: 1 }
     const awards = new Map([[1, [award('p4', 10)]]])
     expect(snapshotForMatchday(2, SEED, awards, everyMatchday)[0]).toBe('p4')
+  })
+
+  it('applies best-N inside a snapshot link, not the raw total', () => {
+    const bestOfTwo = { ...CONFIG, countBestOf: 2 }
+    const awards = new Map([
+      [1, [award('p4', 10), award('p3', 17)]],
+      [2, [award('p4', 6)]],
+      [3, [award('p4', 2)]],
+    ])
+    // p4's best two of [10, 6, 2] total 16; p3's single award is 17, so p3 leads.
+    // If countBestOf were ignored, p4's raw total (18) would lead instead.
+    expect(snapshotForMatchday(4, SEED, awards, bestOfTwo)[0]).toBe('p3')
   })
 })

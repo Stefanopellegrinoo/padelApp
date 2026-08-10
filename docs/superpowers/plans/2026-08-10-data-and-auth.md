@@ -1170,8 +1170,10 @@ export interface PreviousContext {
  * not decided here — `buildPairs` decides that, since it is the one that knows
  * who turned up.
  *
- * `last` and `beforeLast` are the CLOSED matchdays immediately before, in that
- * order, or null when the season has not played that many.
+ * `last` and `beforeLast` are the two matchdays immediately before, in that
+ * order, or null when the season has not played that many — closed or not; a
+ * matchday that never closed simply carries no awards, so it yields no
+ * defenders while still contributing its pairs.
  */
 export function previousContext(
   last: MatchdayHistory | null,
@@ -1197,7 +1199,16 @@ function championsOf(matchday: MatchdayHistory): Pair | null {
   const winners = new Set(
     matchday.awards.filter((award) => award.position === 1).map((award) => award.entryId),
   )
-  if (winners.size === 0) return null
+  // Corregido en la ronda de fix de la Task 4: devolver null acá tragaba en
+  // silencio una fecha con awards rotos. `computeAwards` nunca emite awards sin
+  // una posición 1, así que ese estado es dato corrupto y el spec §4.5 pide
+  // fallar ruidosamente. Cuatro líneas más abajo el invariante hermano ya tiraba.
+  if (winners.size === 0) {
+    if (matchday.awards.length > 0) {
+      throw new Error('La fecha anterior tiene awards pero ninguno en la posición 1.')
+    }
+    return null
+  }
 
   const champions = matchday.pairs.filter(
     (pair) => winners.has(pair.a) || winners.has(pair.b),
@@ -1211,7 +1222,9 @@ function championsOf(matchday: MatchdayHistory): Pair | null {
 }
 ```
 
-**Por qué `defendersAlreadyRepeated` es una comparación tan simple.** Basta preguntar si esa misma pareja existía en la fecha `n-2`, sin averiguar si allá también fue campeona. La regla de no repetir garantiza que una pareja sólo puede aparecer dos fechas seguidas si fue defensora; si están en las dos, repitieron. La comprobación corta es la comprobación completa.
+**Por qué `defendersAlreadyRepeated` es una comparación tan simple.** Basta preguntar si esa misma pareja existía en la fecha `n-2`, sin averiguar si allá también fue campeona. Eso es literalmente lo que pide el spec §2.5 paso 2 —"no estuvieron juntos también en la fecha anterior a esa"—, así que la comprobación corta es la comprobación completa.
+
+**Ojo con la versión anterior de este párrafo,** que justificaba lo mismo diciendo que "una pareja sólo puede aparecer dos fechas seguidas si fue defensora". Eso es **falso** a nivel del contrato de `core/`: `resolveSettled` antepone las parejas fijas sin pasarlas por el filtro de `previousPairs`, así que un `fixedPairs` puede repetir una pareja que nunca defendió. El código igual da bien, porque la condición implementada nunca menciona "fue campeona" —pregunta por identidad de pareja, que es lo que manda el spec—. Queda anotado porque esa premisa falsa habilitaba una "optimización" futura a `fue campeona en n-2`, que **sí** estaría mal.
 
 - [ ] **Step 3: `core/index.ts`**
 
@@ -3341,7 +3354,11 @@ git commit -m "test: play a full season against the database"
 
 Cosas que salieron durante la implementación y **no** se hicieron, para no ensanchar las tareas. Anotalas acá con una línea y seguí.
 
-- _(vacío al empezar)_
+- **Task 1, el encabezado se contradice con el Step 7.** *Files* dice `Create: db/client.ts`, pero el Step 7 prohíbe crearlo hasta la Task 5 (necesita `database.types`, que nace con las tablas). El implementador siguió el step, que es lo correcto. Falta sacarlo de la lista de *Files* para que nadie lo lea al revés.
+- **Task 4, `previousPairs` arrastra ids de invitado muertos.** Las parejas de la fecha anterior pueden contener ids de entrada de invitados, que nunca van a volver a aparecer en `present`. Son entradas inertes en el filtro de no-repetición. Inofensivo; merece un comentario, no código.
+- **Task 4, el mensaje del "ganador que no está en ninguna pareja" es terso.** Con `awards: [{p9, 1}]` y `pairs: [A]` tira "0 parejas en la posición 1", que es cierto pero no dice la causa real: `p9` cobró y no está en ninguna pareja. A diferencia de `9394843`, acá el mensaje no miente, sólo es escueto — por eso no se tocó.
+- **Task 4, el helper `history()` de los tests no modela awards reales.** Reparte `index + 2` a los no campeones, así que `history([A,B,C], B)` produce posiciones 2, 1, 4 y la 3 no existe nunca. `computeAwards` siempre emite `1..n` contiguo. Inofensivo, porque sólo se lee la posición 1.
+- **Task 4, los tests del bloque venían en español.** El repo se estandarizó en nombres de test en inglés — `fcad18d` es un commit dedicado a eso. Se tradujeron sólo los nombres; aserciones, fixtures y mensajes de error quedaron idénticos al bloque, y los mensajes siguen en español. Los bloques de tests de las tareas 5 a 14 arrastran el mismo problema.
 
 ---
 

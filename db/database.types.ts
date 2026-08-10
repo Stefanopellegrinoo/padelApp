@@ -450,7 +450,11 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      is_participant: { Args: { p_season: string }; Returns: boolean }
+      is_season_admin: { Args: { p_season: string }; Returns: boolean }
+      match_is_open: { Args: { p_match: string }; Returns: boolean }
+      match_season: { Args: { p_match: string }; Returns: string }
+      matchday_season: { Args: { p_matchday: string }; Returns: string }
     }
     Enums: {
       [_ in never]: never

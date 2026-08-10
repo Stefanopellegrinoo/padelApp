@@ -1,6 +1,6 @@
 # Estado del proyecto
 
-**Última actualización:** 10 de agosto de 2026, al cerrar el Plan 1.
+**Última actualización:** 10 de agosto de 2026, al escribir el Plan 2.
 
 Este documento es el punto de entrada. Dice qué está hecho, qué falta, y qué hay
 que decidir antes de seguir. Los detalles viven en los documentos que se enlazan.
@@ -12,7 +12,7 @@ que decidir antes de seguir. Los detalles viven en los documentos que se enlazan
 | Plan | Qué produce | Estado |
 |---|---|---|
 | **1. `core/`** | Toda la lógica del campeonato, funciones puras | ✅ **Terminado y en `main`** |
-| **2. Datos y auth** | Schema Supabase, migraciones, RLS, login + Google | ⬜ Siguiente |
+| **2. Datos y auth** | Schema Supabase, migraciones, RLS, login + Google | 📝 **Plan escrito y revisado, sin ejecutar** |
 | **3. Pantallas de lectura** | Tabla, Fechas, Estadísticas, Reglas, Perfil | ⬜ |
 | **4. Pantallas de escritura** | Crear torneo, abrir fecha, cargar resultados, Ajustes | ⬜ |
 
@@ -38,53 +38,52 @@ adentro a propósito: `allMatchings` (sólo la usa `buildPairs`) y `orderByPoint
 | [`ui-screens.md`](ui-screens.md) | **La app.** Las 13 pantallas con su contenido, roles y estados. La navegación y por qué es como es. |
 | [`padel_design/README.md`](padel_design/README.md) | **El handoff visual** de Google Stitch, ya adaptado al formato de 8 a 12. Colores, tipografía, medidas, copys. Los `.dc.html` muestran el caso de 8 y no se pueden regenerar. |
 | [`superpowers/plans/2026-08-10-core-championship-logic.md`](superpowers/plans/2026-08-10-core-championship-logic.md) | **El plan 1**, ya ejecutado. Su tabla final —"Qué queda afuera de este plan, a propósito"— es la lista de requisitos que hereda el plan 2. |
+| [`superpowers/plans/2026-08-10-data-and-auth.md`](superpowers/plans/2026-08-10-data-and-auth.md) | **El plan 2**, escrito y revisado, sin ejecutar. 14 tareas. Sus secciones "Las tres decisiones" y "Decisiones registradas" son las que mandan sobre cualquier cosa que diga este documento. |
 | `.superpowers/sdd/2026-08-10-core-championship-logic/progress.md` | **El ledger de ejecución.** Cada fix round, cada minor diferido, cada decisión tomada y por qué. No está versionado (es scratch), pero es donde está el detalle de cada hallazgo. |
 
 ---
 
-## Lo que hay que DECIDIR antes de escribir el plan 2
+## Las tres decisiones que estaban abiertas, resueltas
 
-Tres cosas. Ninguna es un bug: son decisiones de arquitectura cuyo costo sube
-apenas exista el schema.
+Las tres se cerraron al escribir el plan 2. El detalle completo, con lo que cada
+una arrastra, está en ese plan; acá va el resultado.
 
-### 1. ¿Quién deriva el contexto de la fecha anterior?
+### 1. El contexto de la fecha anterior se deriva en `core/`
 
-El spec (§3.3) dice que quién es la pareja campeona defensora **se deriva
-siempre, nunca se guarda**. Pero hoy `buildPairs` lo recibe por parámetro:
-`defenders`, `defendersAlreadyRepeated` y `previousPairs`. **Nadie en `core/` los
-calcula.**
+Módulo nuevo `core/history.ts`, no una query en la capa de Supabase. Recibe las
+filas crudas de las dos fechas anteriores y devuelve `defenders`,
+`defendersAlreadyRepeated` y `previousPairs`.
 
-`defendersAlreadyRepeated` significa "¿estos dos también jugaron juntos en la
-fecha *n-2*?". Esa es la regla del campeón defensor, que es el diferencial del
-formato. Si termina implementada en la capa de Supabase, queda fuera del núcleo
-probado y es mucho más difícil de testear.
+**No hace falta recomputar la tabla de la fecha anterior:** `awards` congela
+`position`, así que el campeón es la pareja que contiene un asiento con
+`position: 1`. Eso resuelve gratis el caso de la pareja mixta, porque el
+compañero del torneo sí cobra.
 
-**Recomendación:** una función pura en `core/` que reciba las dos fechas
-anteriores y devuelva el contexto. Se decide al escribir el plan 2, se
-implementa ahí, pero vive en `core/`.
+### 2. Varios invitados por fecha, y el admin decide si juegan juntos
 
-### 2. ¿Uno o varios invitados por fecha?
+Se descartó "uno solo con un unique en el schema". Puede sumarse un equipo de
+invitados a una fecha: juegan, no suman puntos, es un amistoso adentro de la
+fecha. **Como máximo un invitado juega con alguien del torneo; el resto entra de
+a dos.**
 
-`core/` toma un `guestId` único (`PairingInput.guestId`, `computeAwards`). El
-schema del spec (§3.2) modela invitados como filas `entries` con
-`kind = 'GUEST'` y **no limita la cantidad**.
+Lo que casi se nos pasa: el armado **no** los deja juntos solo. `orderPool` los
+manda al fondo y `buildPairs` empareja primero-con-último, así que dos invitados
+sueltos salen en dos parejas mixtas. Que jueguen juntos es una regla nueva
+—parejas fijas, como los defensores—, no un efecto automático.
 
-Hoy la regla "un solo asiento extra" vive únicamente en una firma de TypeScript.
-O el schema la impone con un unique, o las firmas pasan a tomar un conjunto.
+De ahí salen: `guestIds` en vez de `guestId`, `fixedPairs` en `PairingInput`,
+`computeAwards` compactando posiciones sobre las parejas del torneo, y
+`Award.position` pasando a significar posición del campeonato.
 
-**Decidirlo ahora que es un cambio de firma y no una migración.**
+### 3. La tabla que arma las parejas es el ranking, mejores N de M
 
-### 3. ¿Qué tabla arma las parejas?
+Nunca una suma cruda. La razón que decide: `snapshots.ts:31` ya construye la
+cadena de desempate con `computeRanking`, así que emparejar por suma cruda
+mezclaría dos bases. Además, la tabla que ves en pantalla tiene que ser la que
+te empareja.
 
-El spec (§2.5 paso 4) dice "ordenar el pool por la tabla de puntos", y la tabla
-aplica mejores N de M (§2.1). **Hay dos versiones de esto en el repo:**
-`snapshots.ts` lo hace bien (pasa por `computeRanking`), pero el harness de
-integración usa una suma cruda acumulada.
-
-Con `countBestOf: 8` de 10 fechas, desde la fecha 9 divergen. El plan 2 va a
-copiar el que lea primero.
-
-**Es el ranking.** Hay que dejarlo escrito antes de que alguien copie el otro.
+`matchday.test.ts:191` (`tally`) es la suma cruda y queda arreglado en la Task 2
+del plan 2.
 
 ---
 
@@ -92,7 +91,8 @@ copiar el que lea primero.
 
 ### Plan 2 — datos y auth
 
-De la tabla del plan 1, más lo que salió de las revisiones:
+Todo esto está desarrollado tarea por tarea en el plan. Acá queda la lista para
+saber qué cubre:
 
 - Schema de Supabase, migraciones y RLS
 - Auth: email y contraseña, más Google. **No hay magic link** (teniendo
@@ -100,15 +100,26 @@ De la tabla del plan 1, más lo que salió de las revisiones:
 - Reclamo de asiento por link de invitación
 - Cerrar una fecha en una transacción atómica, y poder reabrirla
 - **Validar resultados contra `matchFormat`** al guardar
-- **Rechazar un set con games iguales** (un `4-4`). `SetScore` sólo guarda
-  `gamesA`/`gamesB`, así que un set empatado no le suma a nadie: la pareja
-  juega, no gana, y el head-to-head devuelve 0. Es un empate silencioso en un
-  deporte que no tiene empates. `core/standings.ts` hace bien en no inventar un
-  ganador; **el borde tiene que impedir que ese dato entre**
-- **Llamar a `validateConfig` siempre.** Devuelve errores, no los tira, así que
-  sólo protege a quien los mira. Con `tiebreakSnapshotEvery: 0` la cadena de
-  snapshots entra en **loop infinito**
-- Las tres decisiones de arriba
+- **Rechazar un set con games iguales** (un `4-4`), en la base y en el borde
+- **Llamar a `validateConfig` siempre.** Con `tiebreakSnapshotEvery: 0` la
+  cadena de snapshots entra en **loop infinito**
+- Los tres cambios de `core/` que arrastran las decisiones de arriba
+
+**No queda ninguna decisión de modelo abierta.** Las tres que faltaban se
+cerraron antes de arrancar:
+
+- **El Masters es una fecha más**, con `matchdays.kind`. Reusa `pairs`,
+  `matches` y `match_sets`; no escribe `awards`, porque define al campeón del
+  año y no reparte puntos. Al cerrarlo, la temporada pasa a `FINISHED`. El
+  flujo lo construye el plan 3, ya sin migración.
+- **`pair_locks` reemplaza a `guest_team`.** Una tabla de parejas trabadas antes
+  del sorteo cubre las dos cosas con un mecanismo: el equipo invitado que juega
+  junto, y el invitado puesto con alguien en concreto — que es la regla del
+  spec §2.6 que el modelo anterior dejaba sin implementar. Con un límite: toda
+  pareja trabada tiene que incluir a un invitado, o el admin podría saltearse la
+  regla de no repetir.
+- **Reabrir borra la fecha siguiente si está vacía.** Si ya tiene asistencias,
+  invitados o parejas, no la toca y hay que borrarla a mano.
 
 ### Plan 3 — pantallas de lectura
 

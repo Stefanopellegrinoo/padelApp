@@ -1,7 +1,8 @@
 'use server'
 
 import { redirect } from 'next/navigation'
-import { serverClient } from '@/db/client'
+import { serverClient } from '@/db/server'
+import { safeNextPath } from './next-path'
 
 export interface FormState {
   error: string | null
@@ -27,7 +28,9 @@ export async function signUp(_state: FormState, form: FormData): Promise<FormSta
   })
   if (error !== null) return { error: 'No pudimos crear la cuenta. Probá de nuevo.' }
 
-  redirect('/')
+  // Quien llega por un link de invitación tiene que volver a la invitación, no
+  // a la home: si no, se registra y queda varado sin haber reclamado su lugar.
+  redirect(safeNextPath(String(form.get('next') ?? '')))
 }
 
 export async function signIn(_state: FormState, form: FormData): Promise<FormState> {
@@ -41,7 +44,7 @@ export async function signIn(_state: FormState, form: FormData): Promise<FormSta
   // mal" le confirma a cualquiera qué mails están registrados. Uno solo.
   if (error !== null) return { error: 'Mail o contraseña incorrectos.' }
 
-  redirect('/')
+  redirect(safeNextPath(String(form.get('next') ?? '')))
 }
 
 export async function signOut(): Promise<void> {

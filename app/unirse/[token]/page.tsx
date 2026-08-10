@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { serverClient } from '@/db/client'
+import { serverClient } from '@/db/server'
 import { claimSeat } from './actions'
 
 interface PageProps {

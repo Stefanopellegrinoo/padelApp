@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { serverClient } from '@/db/client'
+import { serverClient } from '@/db/server'
+import { safeNextPath } from '../next-path'
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
@@ -16,8 +17,5 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${origin}/login?error=google`)
   }
 
-  // `next` viene de la query, así que sólo se acepta una ruta relativa: un
-  // `next=https://otro-sitio` lo convertiría en un redirector abierto.
-  const target = next.startsWith('/') && !next.startsWith('//') ? next : '/'
-  return NextResponse.redirect(`${origin}${target}`)
+  return NextResponse.redirect(`${origin}${safeNextPath(next)}`)
 }

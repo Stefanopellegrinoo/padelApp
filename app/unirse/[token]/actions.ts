@@ -1,7 +1,7 @@
 'use server'
 
 import { redirect } from 'next/navigation'
-import { serverClient } from '@/db/client'
+import { serverClient } from '@/db/server'
 
 // Server Action llana, sin useActionState: la pantalla entera es un Server
 // Component (Step 3), así que no hay estado de cliente donde volcar un error.

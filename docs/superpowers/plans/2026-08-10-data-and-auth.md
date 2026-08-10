@@ -299,7 +299,7 @@ Queda escrito acá porque es la única inversión de dependencias del plan y es 
 <summary>Adelanto del bloque, para saber qué va a existir (no lo escribas todavía)</summary>
 
 ```typescript
-import { createBrowserClient, createServerClient } from '@supabase/ssr'
+import { createBrowserClient, createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import type { Database } from './database.types'
 
@@ -326,7 +326,11 @@ export async function serverClient() {
       getAll() {
         return store.getAll()
       },
-      setAll(toSet) {
+      // El tipo va escrito a mano: `createServerClient` tiene dos overloads —el
+      // viejo `get/set/remove` y este `getAll/setAll`— y TypeScript no puede
+      // propagar el tipo contextual del callback a través de firmas que no
+      // coinciden. Sin la anotación, `toSet` queda `any` implícito y `tsc` corta.
+      setAll(toSet: { name: string; value: string; options: CookieOptions }[]) {
         try {
           for (const { name, value, options } of toSet) store.set(name, value, options)
         } catch {
@@ -346,7 +350,7 @@ Las credenciales se leen y se validan **al llamar**, no al importar el módulo: 
 - [ ] **Step 8: `middleware.ts`**
 
 ```typescript
-import { createServerClient } from '@supabase/ssr'
+import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
@@ -360,7 +364,7 @@ export async function middleware(request: NextRequest) {
         getAll() {
           return request.cookies.getAll()
         },
-        setAll(toSet) {
+        setAll(toSet: { name: string; value: string; options: CookieOptions }[]) {
           for (const { name, value } of toSet) request.cookies.set(name, value)
           response = NextResponse.next({ request })
           for (const { name, value, options } of toSet) response.cookies.set(name, value, options)
@@ -3355,6 +3359,7 @@ git commit -m "test: play a full season against the database"
 Cosas que salieron durante la implementación y **no** se hicieron, para no ensanchar las tareas. Anotalas acá con una línea y seguí.
 
 - **Task 1, el encabezado se contradice con el Step 7.** *Files* dice `Create: db/client.ts`, pero el Step 7 prohíbe crearlo hasta la Task 5 (necesita `database.types`, que nace con las tablas). El implementador siguió el step, que es lo correcto. Falta sacarlo de la lista de *Files* para que nadie lo lea al revés.
+- **Tasks 1 y 5, los dos bloques de `@supabase/ssr` no compilaban.** `createServerClient` tiene dos overloads (`get/set/remove` y `getAll/setAll`) y TypeScript no puede tipar el callback `setAll` a través de firmas que no coinciden: `toSet` sale `any` implícito y `tsc --noEmit` corta. La Task 1 ya lo había arreglado en `middleware.ts` sin que el plan se enterara; la Task 5 chocó con lo mismo al copiar `db/client.ts` "tal cual". Los dos bloques del plan quedaron anotados. **No hace falta subir la dependencia.**
 - **Task 4, `previousPairs` arrastra ids de invitado muertos.** Las parejas de la fecha anterior pueden contener ids de entrada de invitados, que nunca van a volver a aparecer en `present`. Son entradas inertes en el filtro de no-repetición. Inofensivo; merece un comentario, no código.
 - **Task 4, el mensaje del "ganador que no está en ninguna pareja" es terso.** Con `awards: [{p9, 1}]` y `pairs: [A]` tira "0 parejas en la posición 1", que es cierto pero no dice la causa real: `p9` cobró y no está en ninguna pareja. A diferencia de `9394843`, acá el mensaje no miente, sólo es escueto — por eso no se tocó.
 - **Task 4, el helper `history()` de los tests no modela awards reales.** Reparte `index + 2` a los no campeones, así que `history([A,B,C], B)` produce posiciones 2, 1, 4 y la 3 no existe nunca. `computeAwards` siempre emite `1..n` contiguo. Inofensivo, porque sólo se lee la posición 1.

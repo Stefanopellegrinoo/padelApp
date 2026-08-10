@@ -21,11 +21,16 @@ export function allMatchings(pool: EntryId[]): Pair[][] {
   if (pool.length === 0) return [[]]
 
   const [first, ...rest] = pool
+  // Unreachable: pool.length is even and not 0 at this point (checked
+  // above), so pool has at least two elements and `first` is always set.
+  // Only here to satisfy noUncheckedIndexedAccess.
   if (first === undefined) return [[]]
 
   const result: Pair[][] = []
   for (let i = 0; i < rest.length; i++) {
     const partner = rest[i]
+    // Unreachable: i stays within rest's own bounds (0..rest.length-1), so
+    // rest[i] is always set. Only here to satisfy noUncheckedIndexedAccess.
     if (partner === undefined) continue
     const remaining = rest.filter((_, index) => index !== i)
     for (const sub of allMatchings(remaining)) {

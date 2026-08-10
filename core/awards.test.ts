@@ -51,7 +51,7 @@ describe('computeAwards', () => {
     expect(byEntry.get('f1')).toBe(1)
   })
 
-  it('pays ten for the win regardless of how many pairs played', () => {
+  it('pays ten for the win whether the standings list has one row or two', () => {
     const four = computeAwards([standing('a1', 'a2', 1)], CONFIG, null)
     const six = computeAwards(
       [standing('a1', 'a2', 1), standing('b1', 'b2', 2)],

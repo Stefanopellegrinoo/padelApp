@@ -93,10 +93,12 @@ describe('computeStandings', () => {
   })
 
   it('always produces a total order: no two pairs share a position', () => {
+    // Reuses the circular three-way-tie fixture from the test above: a
+    // fixture with no ties at all (3-2-1-0) would pass this trivially even
+    // if the implementation let duplicate positions through.
     const matches = [
-      match(0, 1, 4, 3), match(0, 2, 4, 3), match(0, 3, 4, 3),
-      match(1, 2, 4, 3), match(1, 3, 4, 3),
-      match(2, 3, 4, 3),
+      match(0, 1, 4, 3), match(1, 2, 4, 3), match(0, 2, 3, 4),
+      match(0, 3, 4, 3), match(1, 3, 4, 3), match(2, 3, 4, 3),
     ]
     const standings = computeStandings(PAIRS, matches, CONFIG, SNAPSHOT)
     expect(new Set(standings.map((row) => row.position)).size).toBe(PAIRS.length)
@@ -161,8 +163,17 @@ describe('computeStandings', () => {
   })
 
   it('does not mutate the pairs it receives', () => {
+    // Uses real match results, so the internal sort actually reorders tallies
+    // (won: 3-2-1-0) — with zero matches every tally ties and a stable sort
+    // is a no-op, which would pass even if the implementation sorted `pairs`
+    // itself in place.
+    const matches = [
+      match(0, 1, 4, 2), match(0, 2, 4, 1), match(0, 3, 4, 0),
+      match(1, 2, 4, 2), match(1, 3, 4, 1),
+      match(2, 3, 4, 3),
+    ]
     const input = [...PAIRS]
-    computeStandings(input, [], CONFIG, SNAPSHOT)
+    computeStandings(input, matches, CONFIG, SNAPSHOT)
     expect(input).toEqual(PAIRS)
   })
 })

@@ -29,7 +29,7 @@ describe('mastersQualifiers', () => {
 
   it('trusts the ranking order, which already resolved its own ties', () => {
     const tied = [row('p2', 40), row('p1', 40), row('p3', 30), row('p4', 20)]
-    expect(mastersQualifiers(tied)[0]).toBe('p2')
+    expect(mastersQualifiers(tied)).toEqual(['p2', 'p1', 'p3', 'p4'])
   })
 })
 

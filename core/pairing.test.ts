@@ -54,6 +54,9 @@ describe('buildPairs — the balanced default', () => {
   })
 
   it('gives the same result for the same input', () => {
+    // Compares order-erased sorted keys, so this only catches nondeterminism
+    // (e.g. a stray Math.random or Date creeping into the algorithm) — it
+    // does not guarantee the pairs array itself comes back in the same order.
     expect(keys(buildPairs(input()))).toEqual(keys(buildPairs(input())))
   })
 
@@ -126,6 +129,13 @@ describe('buildPairs — no repeating last matchday', () => {
     const pairs = buildPairs(input({ previousPairs }))
     expect(keys(pairs)).not.toContain('p1-p8')
     expect(pairs).toHaveLength(4)
+    // Several legal matchings tie on imbalance once the ideal one (p1-p8,
+    // p2-p7, p3-p6, p4-p5) is excluded. Pinned to whichever one allMatchings
+    // enumerates first among the tied candidates, so a refactor of that
+    // recursion — or loosening the `<` in buildPairs to `<=` — cannot
+    // silently change who plays with whom while every other assertion here
+    // still passes.
+    expect(keys(pairs)).toEqual(['p1-p7', 'p2-p8', 'p3-p6', 'p4-p5'])
   })
 
   it('still finds a legal set when the table is identical to last matchday', () => {

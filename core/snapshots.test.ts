@@ -31,9 +31,13 @@ describe('snapshotForMatchday', () => {
     const awards = new Map([
       [1, [award('p4', 10)]],
       [2, [award('p4', 10)]],
-      [3, [award('p4', 10)]],
+      // p1's award lands on matchday 3, the cut matchday itself. p4 leads on
+      // matchdays 1-2 alone (20 to 0), so if the cut filter excluded
+      // matchday 3 (`<` instead of `<=`), this would still read p4 first —
+      // only including it flips the leader to p1 (50 to 30).
+      [3, [award('p4', 10), award('p1', 50)]],
     ])
-    expect(snapshotForMatchday(4, SEED, awards, CONFIG)[0]).toBe('p4')
+    expect(snapshotForMatchday(4, SEED, awards, CONFIG)[0]).toBe('p1')
   })
 
   it('keeps the same snapshot across a whole block of k matchdays', () => {
@@ -77,7 +81,7 @@ describe('snapshotForMatchday', () => {
     expect([...snapshot].sort()).toEqual([...SEED].sort())
   })
 
-  it('reproduces the same snapshot when an old matchday is recalculated', () => {
+  it('is deterministic: the same arguments produce the same snapshot on a second call', () => {
     const awards = new Map([[1, [award('p4', 10)]], [2, [award('p4', 10)]], [3, [award('p4', 10)]]])
     const first = snapshotForMatchday(4, SEED, awards, CONFIG)
     const again = snapshotForMatchday(4, SEED, awards, CONFIG)

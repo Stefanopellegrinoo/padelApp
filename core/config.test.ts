@@ -51,6 +51,16 @@ describe('validateConfig', () => {
     expect(errors).toContain('No pueden contar 12 fechas si el torneo tiene 10.')
   })
 
+  it('rejects a tournament with fewer than one matchday', () => {
+    const errors = validateConfig({ ...valid, regularMatchdays: 0 })
+    expect(errors).toContain('El torneo tiene que tener al menos 1 fecha.')
+  })
+
+  it('rejects a countBestOf below one', () => {
+    const errors = validateConfig({ ...valid, countBestOf: 0 })
+    expect(errors).toContain('Tiene que contar al menos 1 fecha por jugador.')
+  })
+
   it('rejects a match format with zero sets to win', () => {
     const errors = validateConfig({
       ...valid,
@@ -78,7 +88,8 @@ describe('validateConfig', () => {
 
   it('reports every problem at once, not just the first', () => {
     const errors = validateConfig({ ...valid, squadSize: 7, countBestOf: 99 })
-    expect(errors.length).toBeGreaterThan(1)
+    expect(errors).toContain('El plantel tiene que ser un número par.')
+    expect(errors).toContain('No pueden contar 99 fechas si el torneo tiene 10.')
   })
 })
 

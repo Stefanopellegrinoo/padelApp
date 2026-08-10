@@ -12,12 +12,12 @@ const PASSWORD = 'test-password-not-for-humans'
 
 let counter = 0
 
-// Crea un usuario real (Admin API) y su player, y devuelve un cliente logueado
-// como esa persona — con la key `anon`, así que sujeto a RLS de punta a punta.
+// Crea un usuario real (Admin API) y devuelve un cliente logueado como esa
+// persona — con la key `anon`, así que sujeto a RLS de punta a punta.
 //
-// El trigger de alta que crea el player solo (Task 7) todavía no existe en
-// este punto del plan, así que el player se inserta acá a mano con la llave
-// de service_role.
+// El player lo crea el trigger de alta (Task 7, `on_auth_user_created`), no
+// este helper: insertarlo acá también chocaría con el unique de
+// `players.user_id`.
 export async function createTestUser(email?: string): Promise<TestUser> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -39,11 +39,11 @@ export async function createTestUser(email?: string): Promise<TestUser> {
 
   const { data: player, error: playerError } = await admin
     .from('players')
-    .insert({ display_name: userEmail, user_id: created.user.id })
     .select('id')
+    .eq('user_id', created.user.id)
     .single()
   if (playerError || player === null) {
-    throw new Error(`No se pudo crear el player de test: ${playerError?.message}`)
+    throw new Error(`No se pudo leer el player creado por el trigger: ${playerError?.message}`)
   }
 
   const client = createClient<Database>(url, anonKey)

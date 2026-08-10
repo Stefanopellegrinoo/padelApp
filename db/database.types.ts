@@ -454,6 +454,10 @@ export type Database = {
         Args: { p_entry: string; p_token: string }
         Returns: string
       }
+      close_matchday: {
+        Args: { p_awards: Json; p_matchday: string }
+        Returns: undefined
+      }
       is_participant: { Args: { p_season: string }; Returns: boolean }
       is_season_admin: { Args: { p_season: string }; Returns: boolean }
       match_is_open: { Args: { p_match: string }; Returns: boolean }

@@ -1,16 +1,21 @@
 import {
   buildFixture,
   buildPairs,
+  computeAwards,
   computeRanking,
+  computeStandings,
   previousContext,
   snapshotForMatchday,
   type Award,
   type EntryId,
+  type MatchFormat,
+  type MatchResult,
   type Pair,
   type PairingInput,
   type SeasonConfig,
+  type SetScore,
 } from '@/core'
-import type { Database } from './database.types'
+import type { Database, Json } from './database.types'
 import { EdgeError } from './errors'
 import { awardsBefore, closedHistory, seasonConfig, squadSeedOrder, type Client } from './season'
 import {
@@ -19,6 +24,7 @@ import {
   assertMatchdaySize,
   assertPointsCoverMatchday,
   assertValidConfig,
+  matchError,
   type GuestSeat,
   type PairLock,
 } from './validate'
@@ -298,6 +304,63 @@ export async function openMatchday(supabase: Client, matchdayId: string): Promis
   if (error !== null) throw new EdgeError(error.message)
 }
 
+/**
+ * Freezes the points and shuts the matchday. The table itself is never stored:
+ * it is recomputed from match_sets every time, which is what lets an old
+ * matchday be replayed and come out the same.
+ */
+export async function closeMatchday(supabase: Client, matchdayId: string): Promise<void> {
+  // matchdayContextFor, NO pairingContextFor: cerrar no es sortear. Pasar por
+  // el contexto del sorteo correría las validaciones de asistencia y de tamaño
+  // sobre quién viene HOY en vez de sobre quiénes jugaron, y previousContext
+  // podría tirar por un problema de la fecha anterior mientras cerrás ésta.
+  const { config, guests, snapshot } = await matchdayContextFor(supabase, matchdayId)
+  const { pairs, matches } = await resultsOf(supabase, matchdayId)
+
+  for (const match of matches) {
+    const problem = matchError(match.sets, config.matchFormat)
+    if (problem !== null) throw new EdgeError(problem)
+  }
+
+  const standings = computeStandings(pairs, matches, config, snapshot)
+  const awards = computeAwards(standings, config, guests.map((guest) => guest.entryId))
+
+  const { error } = await supabase.rpc('close_matchday', {
+    p_matchday: matchdayId,
+    p_awards: awards as unknown as Json,
+  })
+  if (error !== null) throw new EdgeError(error.message)
+}
+
+/** Guarda el resultado de un partido. Reemplaza cualquier set anterior en vez de acumularlo. */
+export async function saveResult(
+  supabase: Client,
+  matchId: string,
+  sets: SetScore[],
+): Promise<void> {
+  const format = await matchFormatOf(supabase, matchId)
+  const problem = matchError(sets, format)
+  if (problem !== null) throw new EdgeError(problem)
+
+  // La política match_sets_write ya exige que la fecha esté OPEN: acá alcanza
+  // con traducir el error de RLS a un mensaje que se pueda leer.
+  const { error: deleteError } = await supabase.from('match_sets').delete().eq('match_id', matchId)
+  if (deleteError !== null) {
+    throw new EdgeError(`No se pudo guardar el resultado: ${deleteError.message}`)
+  }
+
+  const rows = sets.map((set, index) => ({
+    match_id: matchId,
+    set_number: index + 1,
+    games_a: set.gamesA,
+    games_b: set.gamesB,
+  }))
+  const { error: insertError } = await supabase.from('match_sets').insert(rows)
+  if (insertError !== null) {
+    throw new EdgeError(`No se pudo guardar el resultado: ${insertError.message}`)
+  }
+}
+
 async function requireMatchday(supabase: Client, matchdayId: string): Promise<MatchdayRow> {
   const { data, error } = await supabase
     .from('matchdays')
@@ -415,4 +478,74 @@ async function pairEntryIds(supabase: Client, matchdayId: string): Promise<strin
     .eq('matchday_id', matchdayId)
   if (error) throw new EdgeError(`No se pudieron leer las parejas: ${error.message}`)
   return (data ?? []).map((row) => [row.entry_a, row.entry_b])
+}
+
+/** Las parejas y los partidos de la fecha, con los sets de cada partido ordenados por `set_number`. */
+async function resultsOf(
+  supabase: Client,
+  matchdayId: string,
+): Promise<{ pairs: Pair[]; matches: MatchResult[] }> {
+  const { data: pairRows, error: pairsError } = await supabase
+    .from('pairs')
+    .select('id, entry_a, entry_b')
+    .eq('matchday_id', matchdayId)
+  if (pairsError) throw new EdgeError(`No se pudieron leer las parejas: ${pairsError.message}`)
+
+  const pairById = new Map(
+    (pairRows ?? []).map((row) => [row.id, { a: row.entry_a, b: row.entry_b }]),
+  )
+
+  const { data: matchRows, error: matchesError } = await supabase
+    .from('matches')
+    .select('id, round, pair_a, pair_b')
+    .eq('matchday_id', matchdayId)
+    .order('round', { ascending: true })
+  if (matchesError) throw new EdgeError(`No se pudieron leer los partidos: ${matchesError.message}`)
+
+  const matchIds = (matchRows ?? []).map((row) => row.id)
+  const { data: setRows, error: setsError } =
+    matchIds.length === 0
+      ? { data: [], error: null }
+      : await supabase
+          .from('match_sets')
+          .select('match_id, set_number, games_a, games_b')
+          .in('match_id', matchIds)
+          .order('set_number', { ascending: true })
+  if (setsError) throw new EdgeError(`No se pudieron leer los sets: ${setsError.message}`)
+
+  const setsByMatch = new Map<string, SetScore[]>()
+  for (const row of setRows ?? []) {
+    const set = { gamesA: row.games_a, gamesB: row.games_b }
+    const bucket = setsByMatch.get(row.match_id)
+    if (bucket === undefined) setsByMatch.set(row.match_id, [set])
+    else bucket.push(set)
+  }
+
+  const matches: MatchResult[] = (matchRows ?? []).map((row) => {
+    const pairA = pairById.get(row.pair_a)
+    const pairB = pairById.get(row.pair_b)
+    if (pairA === undefined || pairB === undefined) {
+      throw new Error(
+        `El partido ${row.id} referencia una pareja que no está en la fecha. Esto es un bug.`,
+      )
+    }
+    return { round: row.round, pairA, pairB, sets: setsByMatch.get(row.id) ?? [] }
+  })
+
+  return { pairs: [...pairById.values()], matches }
+}
+
+/** El `matchFormat` de la configuración de la temporada dueña de este partido. */
+async function matchFormatOf(supabase: Client, matchId: string): Promise<MatchFormat> {
+  const { data: match, error: fetchError } = await supabase
+    .from('matches')
+    .select('matchday_id')
+    .eq('id', matchId)
+    .maybeSingle()
+  if (fetchError) throw new EdgeError(`No se pudo leer el partido: ${fetchError.message}`)
+  if (match === null) throw new EdgeError('El partido no existe.')
+
+  const matchday = await requireMatchday(supabase, match.matchday_id)
+  const config = await seasonConfig(supabase, matchday.season_id)
+  return config.matchFormat
 }

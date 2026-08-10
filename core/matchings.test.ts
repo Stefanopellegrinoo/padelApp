@@ -48,4 +48,9 @@ describe('allMatchings', () => {
   it('throws on an odd pool, which cannot be paired', () => {
     expect(() => allMatchings(['a', 'b', 'c'])).toThrow(/par/)
   })
+
+  it('throws on a pool larger than MAX_PLAYERS instead of hanging', () => {
+    const pool = Array.from({ length: 14 }, (_, i) => `p${i}`)
+    expect(() => allMatchings(pool)).toThrow()
+  })
 })

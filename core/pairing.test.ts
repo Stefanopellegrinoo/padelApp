@@ -62,6 +62,17 @@ describe('buildPairs — the balanced default', () => {
     const shuffled = buildPairs(input({ present: ['p5', 'p1', 'p8', 'p3', 'p7', 'p2', 'p6', 'p4'] }))
     expect(keys(shuffled)).toEqual(keys(straight))
   })
+
+  it('pins the known boundary: with two players outside the snapshot, their pairing depends on arrival order in `present`', () => {
+    // out1/out2 are absent from SNAPSHOT and untracked in `points`, so both the
+    // points tie-break and the snapshot-rank tie-break land equal for them —
+    // the sort falls back to arrival order, which orderByPoints takes from the
+    // pool array, and pool preserves whatever order `present` arrived in.
+    const orderingA = buildPairs(input({ present: ['out1', 'out2', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6'] }))
+    const orderingB = buildPairs(input({ present: ['out2', 'out1', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6'] }))
+    expect(keys(orderingA)).toEqual(['out1-p2', 'out2-p1', 'p3-p6', 'p4-p5'])
+    expect(keys(orderingB)).toEqual(['out1-p1', 'out2-p2', 'p3-p6', 'p4-p5'])
+  })
 })
 
 describe('buildPairs — the defending champions', () => {
@@ -88,6 +99,11 @@ describe('buildPairs — the defending champions', () => {
   it('builds every pair from scratch when there are no defenders', () => {
     const pairs = buildPairs(input({ defenders: null }))
     expect(pairs).toHaveLength(4)
+  })
+
+  it('keeps the defenders even when their own pair is in previousPairs — the one sanctioned repeat', () => {
+    const pairs = buildPairs(input({ defenders, previousPairs: [defenders] }))
+    expect(keys(pairs)).toContain('p3-p4')
   })
 })
 

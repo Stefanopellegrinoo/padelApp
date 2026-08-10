@@ -3,7 +3,15 @@ import { orderByPoints } from './order'
 import type { EntryId, Pair } from './types'
 
 export interface PairingInput {
-  /** Everyone playing this matchday, guest included. Must be even. */
+  /**
+   * Everyone playing this matchday, guest included. Must be even.
+   *
+   * Caller invariant: every present player except the guest is expected to
+   * appear in `snapshot`. When two or more are missing from it, their
+   * relative order falls back to the order they appear in here — so the
+   * caller must supply a stable order for `present` or the pairing among
+   * those players can change between calls with the same "who's here" set.
+   */
   present: EntryId[]
   points: Map<EntryId, number>
   snapshot: EntryId[]

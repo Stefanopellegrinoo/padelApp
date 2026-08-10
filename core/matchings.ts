@@ -1,3 +1,4 @@
+import { MAX_PLAYERS } from './constants'
 import type { EntryId, Pair } from './types'
 
 /**
@@ -11,6 +12,11 @@ import type { EntryId, Pair } from './types'
 export function allMatchings(pool: EntryId[]): Pair[][] {
   if (pool.length % 2 !== 0) {
     throw new Error(`No se puede emparejar un pool impar: son ${pool.length} jugadores.`)
+  }
+  if (pool.length > MAX_PLAYERS) {
+    throw new Error(
+      `El pool es demasiado grande para emparejar: son ${pool.length}, el máximo es ${MAX_PLAYERS}.`,
+    )
   }
   if (pool.length === 0) return [[]]
 

@@ -450,11 +450,28 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      claim_seat: {
+        Args: { p_entry: string; p_token: string }
+        Returns: string
+      }
       is_participant: { Args: { p_season: string }; Returns: boolean }
       is_season_admin: { Args: { p_season: string }; Returns: boolean }
       match_is_open: { Args: { p_match: string }; Returns: boolean }
       match_season: { Args: { p_match: string }; Returns: string }
       matchday_season: { Args: { p_matchday: string }; Returns: string }
+      season_invite: {
+        Args: { p_token: string }
+        Returns: {
+          admin_name: string
+          claimed: boolean
+          display_name: string
+          entry_id: string
+          season_id: string
+          season_name: string
+          seed_position: number
+          squad_size: number
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

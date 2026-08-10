@@ -26,10 +26,17 @@ export function browserClient() {
   return createBrowserClient<Database>(url, anonKey)
 }
 
-export async function serverClient() {
+export async function serverClient(): Promise<Client> {
   const { url, anonKey } = credentials()
   const store = await cookies()
-  return createServerClient<Database>(url, anonKey, {
+  // El tipo de retorno se anota a mano contra `Client`: los genéricos de
+  // `createServerClient` de `@supabase/ssr@0.5.2` quedaron pensados para una
+  // forma vieja de `SupabaseClient` (3 parámetros posicionales) y ya no calzan
+  // con la de `@supabase/supabase-js@2.112.2` instalada — no lo grita acá por
+  // `skipLibCheck`, pero deja `Functions`/`rpc()` rotos para quien consuma
+  // este cliente. Es el mismo objeto en tiempo de ejecución; sólo se corrige
+  // el tipo con el que TypeScript lo ve.
+  const client = createServerClient<Database>(url, anonKey, {
     cookies: {
       getAll() {
         return store.getAll()
@@ -48,4 +55,8 @@ export async function serverClient() {
       },
     },
   })
+  // `as unknown as`: la forma que devuelve `createServerClient` y `Client` no
+  // son estructuralmente asignables una a la otra por el desfasaje de arriba,
+  // aunque en tiempo de ejecución sean el mismo objeto.
+  return client as unknown as Client
 }

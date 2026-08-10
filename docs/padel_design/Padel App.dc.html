@@ -1,0 +1,1391 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap" rel="stylesheet"><style>
+body{margin:0;font-family:Archivo,system-ui,sans-serif;background:#e6eae6;
+--bg:#ffffff;--surface:#f4f6f3;--text:#10231a;--muted:#6b7a72;--accent:#0e5c3f;--accent-text:#ffffff;--accent-link:#0e5c3f;--line:#e4e9e5;--chip:#eaefea;--live:#d1462f;--live-bg:#fbeae6;--up:#2f8a5b;--ok-bg:#e6f2ea;--down:#c0553a;--warn-bg:#f8ece4;--scrim:rgba(10,25,18,.45)}
+a{color:#0e5c3f}a:hover{color:#0a4530}
+*::-webkit-scrollbar{width:0;height:0}
+</style></helmet>
+
+<div style="min-height:100vh;box-sizing:border-box;padding:26px 20px 40px;display:flex;flex-direction:column;align-items:center;gap:18px">
+
+  <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:center">
+    <div style="display:flex;gap:3px;padding:3px;border-radius:99px;background:#d7ded8">
+      <span onClick="{{ setLight }}" style="padding:7px 14px;border-radius:99px;font-size:12px;font-weight:700;cursor:pointer;background:{{ lightBtnBg }};color:{{ lightBtnFg }}">Light</span>
+      <span onClick="{{ setDark }}" style="padding:7px 14px;border-radius:99px;font-size:12px;font-weight:700;cursor:pointer;background:{{ darkBtnBg }};color:{{ darkBtnFg }}">Dark</span>
+    </div>
+    <div style="display:flex;gap:3px;padding:3px;border-radius:99px;background:#d7ded8">
+      <span onClick="{{ goMis }}" style="padding:7px 14px;border-radius:99px;font-size:12px;font-weight:700;cursor:pointer;background:{{ misBtnBg }};color:{{ misBtnFg }}">Mis torneos</span>
+      <span onClick="{{ goMisVacio }}" style="padding:7px 14px;border-radius:99px;font-size:12px;font-weight:700;cursor:pointer;background:{{ vacBtnBg }};color:{{ vacBtnFg }}">Vacío</span>
+      <span onClick="{{ goLanding }}" style="padding:7px 14px;border-radius:99px;font-size:12px;font-weight:700;cursor:pointer;background:{{ lanBtnBg }};color:{{ lanBtnFg }}">Landing</span>
+      <span onClick="{{ goRegistro }}" style="padding:7px 14px;border-radius:99px;font-size:12px;font-weight:700;cursor:pointer;background:{{ regBtnBg }};color:{{ regBtnFg }}">Registro</span>
+      <span onClick="{{ goUnirse }}" style="padding:7px 14px;border-radius:99px;font-size:12px;font-weight:700;cursor:pointer;background:{{ uniBtnBg }};color:{{ uniBtnFg }}">Unirse</span>
+      <span onClick="{{ goAjustes }}" style="padding:7px 14px;border-radius:99px;font-size:12px;font-weight:700;cursor:pointer;background:{{ ajuBtnBg }};color:{{ ajuBtnFg }}">Ajustes</span>
+      <span onClick="{{ goTorneo }}" style="padding:7px 14px;border-radius:99px;font-size:12px;font-weight:700;cursor:pointer;background:{{ torBtnBg }};color:{{ torBtnFg }}">Torneo</span>
+    </div>
+    <div style="display:flex;gap:3px;padding:3px;border-radius:99px;background:#d7ded8">
+      <span onClick="{{ setJugador }}" style="padding:7px 14px;border-radius:99px;font-size:12px;font-weight:700;cursor:pointer;background:{{ jugBtnBg }};color:{{ jugBtnFg }}">Jugador</span>
+      <span onClick="{{ setAdmin }}" style="padding:7px 14px;border-radius:99px;font-size:12px;font-weight:700;cursor:pointer;background:{{ admBtnBg }};color:{{ admBtnFg }}">Admin</span>
+    </div>
+    <div style="display:flex;gap:3px;padding:3px;border-radius:99px;background:#d7ded8">
+      <span onClick="{{ setDraft }}" style="padding:7px 14px;border-radius:99px;font-size:12px;font-weight:700;cursor:pointer;background:{{ draftBtnBg }};color:{{ draftBtnFg }}">Fecha draft</span>
+      <span onClick="{{ setOpen }}" style="padding:7px 14px;border-radius:99px;font-size:12px;font-weight:700;cursor:pointer;background:{{ openBtnBg }};color:{{ openBtnFg }}">open</span>
+      <span onClick="{{ setClosed }}" style="padding:7px 14px;border-radius:99px;font-size:12px;font-weight:700;cursor:pointer;background:{{ closedBtnBg }};color:{{ closedBtnFg }}">closed</span>
+    </div>
+  </div>
+
+  <div style="{{ themeVars }}">
+  <div style="width:390px;height:844px;border-radius:44px;overflow:hidden;position:relative;background:var(--bg);color:var(--text);display:flex;flex-direction:column;box-shadow:0 18px 50px rgba(12,30,22,.22);border:1px solid var(--line)">
+
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 26px 4px;font-size:12.5px;font-weight:700;flex:none">
+      <span>21:04</span>
+      <div style="display:flex;gap:5px;align-items:center;opacity:.6">
+        <span style="display:block;width:17px;height:9px;border-radius:2px;background:currentColor"></span>
+        <span style="display:block;width:22px;height:10px;border-radius:3px;border:1.5px solid currentColor"></span>
+      </div>
+    </div>
+
+    <sc-if value="{{ showHeader }}" hint-placeholder-val="{{ true }}">
+    <div style="flex:none;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:12px 20px 12px">
+      <div style="display:flex;flex-direction:column;gap:3px;min-width:0">
+        <span style="font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:800">{{ headerKicker }}</span>
+        <span style="font-size:26px;line-height:1.05;letter-spacing:-.03em;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ headerTitle }}</span>
+      </div>
+      <div style="display:flex;gap:8px;flex:none;align-items:center">
+        <sc-if value="{{ showBack }}" hint-placeholder-val="{{ false }}">
+          <span onClick="{{ goBack }}" style="height:36px;padding:0 14px;border-radius:99px;background:var(--chip);display:flex;align-items:center;font-size:12.5px;font-weight:750;cursor:pointer;color:var(--text)">← Volver</span>
+        </sc-if>
+        <sc-if value="{{ showGear }}" hint-placeholder-val="{{ false }}">
+          <span style="width:36px;height:36px;border-radius:99px;background:var(--chip);display:flex;align-items:center;justify-content:center;font-size:15px;color:var(--muted);cursor:pointer">⚙</span>
+        </sc-if>
+      </div>
+    </div>
+    </sc-if>
+
+    <div style="flex:1;overflow-y:auto;overflow-x:hidden">
+
+      <sc-if value="{{ isLanding }}" hint-placeholder-val="{{ false }}">
+        <div style="min-height:100%;box-sizing:border-box;display:flex;flex-direction:column;padding:0 24px 26px">
+
+          <div style="flex:none;display:flex;align-items:center;gap:9px;padding:16px 0 0">
+            <span style="width:26px;height:26px;border-radius:7px;background:var(--accent)"></span>
+            <span style="font-size:14.5px;font-weight:800;letter-spacing:-.01em">Padel Liga</span>
+          </div>
+
+          <div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:16px;padding:36px 0">
+            <span style="font-size:40px;line-height:1.02;letter-spacing:-.035em;font-weight:800;text-wrap:pretty">El campeonato del grupo, sin planillas.</span>
+            <span style="font-size:15.5px;font-weight:500;line-height:1.5;color:var(--muted);text-wrap:pretty">Ocho jugadores, parejas nuevas cada fecha y una tabla que se actualiza sola. Vos cargás quién ganó, la app hace el resto.</span>
+
+            <div style="display:flex;flex-direction:column;gap:9px;padding-top:10px">
+              <sc-for list="{{ landingBullets }}" as="b" hint-placeholder-count="3">
+                <div style="display:flex;align-items:flex-start;gap:11px">
+                  <span style="flex:none;width:22px;height:22px;border-radius:99px;background:var(--ok-bg);color:var(--up);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;margin-top:1px">✓</span>
+                  <span style="font-size:14px;font-weight:600;line-height:1.45;text-wrap:pretty">{{ b }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="flex:none;display:flex;flex-direction:column;gap:10px">
+            <span onClick="{{ goRegistro }}" style="text-align:center;padding:16px;border-radius:12px;background:var(--accent);color:var(--accent-text);font-size:15px;font-weight:800;cursor:pointer">Crear mi torneo</span>
+            <span onClick="{{ goLogin }}" style="text-align:center;padding:16px;border-radius:12px;border:1.5px solid var(--line);font-size:15px;font-weight:750;cursor:pointer">Ya tengo cuenta</span>
+            <span style="text-align:center;font-size:12.5px;font-weight:550;line-height:1.5;color:var(--muted);padding-top:2px;text-wrap:pretty">¿Te pasaron un link de invitación? Abrilo y elegí tu nombre.</span>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isAuth }}" hint-placeholder-val="{{ false }}">
+        <div style="min-height:100%;box-sizing:border-box;display:flex;flex-direction:column;padding:16px 24px 26px">
+
+          <div style="flex:none;display:flex;align-items:center;justify-content:space-between;gap:12px">
+            <span onClick="{{ goLanding }}" style="height:36px;padding:0 14px;border-radius:99px;background:var(--chip);display:flex;align-items:center;font-size:12.5px;font-weight:750;cursor:pointer">← Volver</span>
+            <span onClick="{{ swapAuth }}" style="font-size:12.5px;font-weight:750;color:var(--accent-link);cursor:pointer">{{ authSwap }}</span>
+          </div>
+
+          <div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:18px;padding:28px 0">
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <span style="font-size:30px;line-height:1.08;letter-spacing:-.03em;font-weight:800">{{ authTitle }}</span>
+              <span style="font-size:14px;font-weight:550;line-height:1.5;color:var(--muted);text-wrap:pretty">{{ authSub }}</span>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:11px">
+              <sc-for list="{{ authFields }}" as="f" hint-placeholder-count="3">
+                <div style="display:flex;flex-direction:column;gap:7px">
+                  <span style="font-size:11.5px;font-weight:800;color:var(--muted)">{{ f.label }}</span>
+                  <div onClick="{{ f.focus }}" style="display:flex;align-items:center;gap:10px;padding:15px 15px;border-radius:12px;border:1.5px solid {{ f.border }};background:var(--surface);cursor:text">
+                    <span style="flex:1;font-size:15.5px;font-weight:{{ f.w }};color:{{ f.color }};min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ f.value }}</span>
+                    <sc-if value="{{ f.isPass }}" hint-placeholder-val="{{ false }}">
+                      <span onClick="{{ f.toggle }}" style="flex:none;font-size:11.5px;font-weight:800;color:var(--muted);cursor:pointer">{{ f.eye }}</span>
+                    </sc-if>
+                  </div>
+                  <sc-if value="{{ f.hasError }}" hint-placeholder-val="{{ false }}">
+                    <span style="font-size:12px;font-weight:700;color:var(--live);line-height:1.4">{{ f.error }}</span>
+                  </sc-if>
+                </div>
+              </sc-for>
+            </div>
+
+            <sc-if value="{{ isLogin }}" hint-placeholder-val="{{ false }}">
+              <span style="align-self:flex-start;font-size:12.5px;font-weight:750;color:var(--accent-link);cursor:pointer">Olvidé mi contraseña</span>
+            </sc-if>
+          </div>
+
+          <div style="flex:none;display:flex;flex-direction:column;gap:11px">
+            <span onClick="{{ authSubmit }}" style="text-align:center;padding:16px;border-radius:12px;background:{{ authBg }};color:{{ authFg }};font-size:15px;font-weight:800;cursor:pointer">{{ authCta }}</span>
+            <sc-if value="{{ isRegistro }}" hint-placeholder-val="{{ true }}">
+              <span style="text-align:center;font-size:11.5px;font-weight:550;line-height:1.5;color:var(--muted);text-wrap:pretty">Al crear la cuenta aceptás los términos y la política de privacidad.</span>
+            </sc-if>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isTabla }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;flex-direction:column;gap:12px;padding:0 20px 24px">
+
+          <div style="padding:16px;border-radius:16px;background:var(--accent);color:var(--accent-text);display:flex;flex-direction:column;gap:13px">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+              <div style="display:flex;flex-direction:column;gap:4px">
+                <span style="font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;font-weight:800;opacity:.75">Próxima fecha</span>
+                <span style="font-size:21px;line-height:1.1;font-weight:800;letter-spacing:-.02em">Fecha 7 · jue 27 ago</span>
+              </div>
+              <span style="font-size:12.5px;font-weight:800;padding:7px 11px;border-radius:99px;background:var(--accent-text);color:var(--accent);white-space:nowrap">21:00</span>
+            </div>
+            <sc-if value="{{ going }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;gap:9px;align-items:center">
+                <span style="flex:1;text-align:center;padding:12px;border-radius:12px;background:rgba(255,255,255,.16);font-size:13.5px;font-weight:750">Estás anotado</span>
+                <span onClick="{{ toggleGoing }}" style="padding:12px 16px;border-radius:12px;border:1.5px solid rgba(255,255,255,.4);font-size:13.5px;font-weight:750;cursor:pointer">No voy</span>
+              </div>
+            </sc-if>
+            <sc-if value="{{ notGoing }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;flex-direction:column;gap:9px">
+                <div style="display:flex;align-items:center;gap:9px;padding:11px 12px;border-radius:12px;background:rgba(255,255,255,.14);font-size:12.5px;font-weight:650;line-height:1.4">Avisaste que no vas. Te reemplaza <strong style="font-weight:800">Pablo (invitado)</strong>.</div>
+                <span onClick="{{ toggleGoing }}" style="text-align:center;padding:12px;border-radius:12px;background:var(--accent-text);color:var(--accent);font-size:13.5px;font-weight:800;cursor:pointer">Sí voy</span>
+              </div>
+            </sc-if>
+          </div>
+
+          <div style="padding:14px 15px;border-radius:16px;background:var(--surface);border:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:12px">
+            <div style="display:flex;flex-direction:column;gap:3px;min-width:0">
+              <span style="font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);font-weight:800">Campeones defensores</span>
+              <span style="font-size:15px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Marce &amp; Tincho</span>
+              <span style="font-size:12px;font-weight:550;color:var(--muted)">Ganaron la fecha 6 · les queda 1 defensa</span>
+            </div>
+            <span style="flex:none;padding:7px 11px;border-radius:99px;background:var(--ok-bg);color:var(--up);font-size:11.5px;font-weight:800">Repiten</span>
+          </div>
+
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0 2px">
+            <span style="font-size:15px;font-weight:800;letter-spacing:-.02em">Tabla general</span>
+            <span onClick="{{ openSheetBtn }}" style="padding:8px 12px;border-radius:99px;border:1px solid var(--line);background:var(--surface);font-size:11.5px;font-weight:800;color:var(--muted);cursor:pointer">Orden de desempate ⇅</span>
+          </div>
+
+          <div style="display:flex;flex-direction:column">
+            <sc-for list="{{ standings }}" as="p" hint-placeholder-count="8">
+              <div onClick="{{ p.open }}" style="display:flex;align-items:center;gap:11px;padding:12px;border-radius:12px;cursor:pointer;background:{{ p.rowBg }}">
+                <span style="font-size:14px;font-weight:800;width:16px;text-align:center;color:var(--muted)">{{ p.pos }}</span>
+                <span style="width:30px;height:30px;border-radius:99px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;background:{{ p.avBg }};color:{{ p.avFg }}">{{ p.ini }}</span>
+                <span style="flex:1;font-size:15px;font-weight:700;display:flex;align-items:center;gap:7px;min-width:0">{{ p.name }}
+                  <sc-if value="{{ p.tied }}" hint-placeholder-val="{{ false }}">
+                    <span onClick="{{ p.info }}" style="font-size:10px;font-weight:800;padding:2px 7px;border-radius:99px;border:1px solid var(--line);color:var(--muted)">ⓘ</span>
+                  </sc-if>
+                </span>
+                <span style="font-size:11.5px;font-weight:800;width:28px;text-align:right;color:{{ p.moveColor }}">{{ p.move }}</span>
+                <span style="font-size:17px;font-weight:800;width:34px;text-align:right">{{ p.pts }}</span>
+              </div>
+              <sc-if value="{{ p.cut }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;align-items:center;gap:9px;padding:8px 2px">
+                  <span style="height:1px;width:14px;background:var(--line);flex:none"></span>
+                  <span style="font-size:9.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);white-space:nowrap">Clasifican al Masters</span>
+                  <span style="height:1px;flex:1;background:var(--line)"></span>
+                </div>
+              </sc-if>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isFechas }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:10px;padding:0 20px 24px">
+          <sc-if value="{{ admin }}" hint-placeholder-val="{{ false }}">
+            <span onClick="{{ goDraft }}" style="text-align:center;padding:14px;border-radius:12px;background:var(--accent);color:var(--accent-text);font-size:14px;font-weight:800;cursor:pointer">Abrir fecha 7</span>
+          </sc-if>
+
+          <sc-for list="{{ fechas }}" as="f" hint-placeholder-count="7">
+            <div onClick="{{ f.open }}" style="padding:14px;border-radius:14px;border:1px solid var(--line);background:{{ f.bg }};display:flex;flex-direction:column;gap:9px;cursor:pointer;opacity:{{ f.op }}">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+                <span style="font-size:10.5px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--muted)">{{ f.label }}</span>
+                <span style="font-size:10.5px;font-weight:800;padding:5px 10px;border-radius:99px;background:{{ f.tagBg }};color:{{ f.tagFg }}">{{ f.tag }}</span>
+              </div>
+              <sc-if value="{{ f.hasWinner }}" hint-placeholder-val="{{ true }}">
+                <div style="display:flex;align-items:center;gap:9px">
+                  <span style="font-size:15px;font-weight:800">{{ f.winner }}</span>
+                  <span style="font-size:11.5px;font-weight:700;color:var(--muted)">{{ f.detail }}</span>
+                </div>
+              </sc-if>
+              <sc-if value="{{ f.hasPairs }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;flex-wrap:wrap;gap:6px">
+                  <sc-for list="{{ f.pairs }}" as="pr" hint-placeholder-count="4">
+                    <span style="font-size:11.5px;font-weight:700;padding:5px 9px;border-radius:8px;background:var(--chip);color:var(--text)">{{ pr }}</span>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </div>
+          </sc-for>
+
+          <div style="margin-top:8px;padding:20px 18px;border-radius:18px;border:1.5px dashed var(--line);background:var(--surface);display:flex;flex-direction:column;gap:8px">
+            <span style="font-size:10.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)">Cierre del año</span>
+            <span style="font-size:24px;font-weight:800;letter-spacing:-.03em">Masters</span>
+            <span style="font-size:13px;font-weight:550;line-height:1.5;color:var(--muted);text-wrap:pretty">Se juega con los 4 primeros de la tabla al terminar las 12 fechas. Faltan 6.</span>
+            <span style="margin-top:4px;align-self:flex-start;padding:9px 14px;border-radius:99px;background:var(--chip);color:var(--muted);font-size:12px;font-weight:800">Bloqueado</span>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isFecha }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:12px;padding:0 20px 24px">
+
+          <sc-if value="{{ isDraft }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:12px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="font-size:10.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:var(--muted)">Paso 1 · Asistencias</span>
+                <span style="height:1px;flex:1;background:var(--line)"></span>
+                <span style="font-size:11.5px;font-weight:800;color:var(--muted)">{{ seatSummary }}</span>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:7px">
+                <sc-for list="{{ seats }}" as="s" hint-placeholder-count="8">
+                  <div onClick="{{ s.cycle }}" style="display:flex;align-items:center;gap:11px;padding:12px 13px;border-radius:12px;border:1px solid {{ s.border }};background:var(--surface);cursor:pointer">
+                    <span style="width:30px;height:30px;border-radius:99px;background:var(--chip);color:var(--muted);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800">{{ s.ini }}</span>
+                    <div style="flex:1;display:flex;flex-direction:column;gap:2px;min-width:0">
+                      <span style="font-size:14.5px;font-weight:700">{{ s.name }}</span>
+                      <span style="font-size:11.5px;font-weight:600;color:var(--muted)">{{ s.sub }}</span>
+                    </div>
+                    <span style="flex:none;padding:7px 11px;border-radius:99px;font-size:11.5px;font-weight:800;background:{{ s.tagBg }};color:{{ s.tagFg }}">{{ s.tag }}</span>
+                  </div>
+                </sc-for>
+              </div>
+
+              <sc-if value="{{ blocked }}" hint-placeholder-val="{{ true }}">
+                <div style="padding:14px;border-radius:12px;background:var(--live-bg);display:flex;flex-direction:column;gap:5px">
+                  <span style="font-size:12.5px;font-weight:800;color:var(--live)">Falta {{ missingName }} y no tiene reemplazo</span>
+                  <span style="font-size:12.5px;font-weight:550;line-height:1.5;color:var(--live);opacity:.85;text-wrap:pretty">Tocá su fila para marcar que viene o para poner un invitado. Sin los 8 no se pueden armar las 4 parejas.</span>
+                </div>
+                <span style="text-align:center;padding:15px;border-radius:12px;background:var(--chip);color:var(--muted);font-size:14px;font-weight:800;opacity:.6">Generar parejas</span>
+              </sc-if>
+
+              <sc-if value="{{ canGenerate }}" hint-placeholder-val="{{ false }}">
+                <span onClick="{{ generate }}" style="text-align:center;padding:15px;border-radius:12px;background:var(--accent);color:var(--accent-text);font-size:14px;font-weight:800;cursor:pointer">Generar parejas</span>
+              </sc-if>
+
+              <sc-if value="{{ generated }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;flex-direction:column;gap:10px;padding-top:4px">
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <span style="font-size:10.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:var(--muted)">Paso 2 · Parejas</span>
+                    <span style="height:1px;flex:1;background:var(--line)"></span>
+                  </div>
+                  <sc-for list="{{ pairsDraft }}" as="pr" hint-placeholder-count="4">
+                    <div style="display:flex;align-items:center;gap:11px;padding:13px;border-radius:12px;border:1px solid {{ pr.border }};background:var(--surface)">
+                      <span style="font-size:11.5px;font-weight:800;width:18px;color:var(--muted)">{{ pr.n }}</span>
+                      <span style="flex:1;font-size:14.5px;font-weight:750">{{ pr.names }}</span>
+                      <sc-if value="{{ pr.isDef }}" hint-placeholder-val="{{ false }}">
+                        <span style="padding:6px 10px;border-radius:99px;background:var(--ok-bg);color:var(--up);font-size:10.5px;font-weight:800">Defensora</span>
+                      </sc-if>
+                    </div>
+                  </sc-for>
+                  <span style="font-size:12.5px;font-weight:550;line-height:1.5;color:var(--muted);text-wrap:pretty">Los defensores quedan fijos. El resto se arma cruzando el orden de desempate: 1° con 8°, 2° con 7°, y así.</span>
+                  <div style="display:flex;gap:9px">
+                    <span onClick="{{ generate }}" style="padding:14px 16px;border-radius:12px;border:1.5px solid var(--line);font-size:13.5px;font-weight:750;cursor:pointer">Regenerar</span>
+                    <span onClick="{{ setOpen }}" style="flex:1;text-align:center;padding:14px;border-radius:12px;background:var(--accent);color:var(--accent-text);font-size:13.5px;font-weight:800;cursor:pointer">Confirmar fecha</span>
+                  </div>
+                </div>
+              </sc-if>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isPlayable }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;flex-direction:column;gap:12px">
+
+              <div style="display:flex;flex-wrap:wrap;gap:6px">
+                <sc-for list="{{ pairsDraft }}" as="pr" hint-placeholder-count="4">
+                  <span style="font-size:11.5px;font-weight:750;padding:7px 11px;border-radius:99px;background:{{ pr.chipBg }};color:{{ pr.chipFg }}">{{ pr.names }}</span>
+                </sc-for>
+              </div>
+
+              <sc-for list="{{ rondas }}" as="r" hint-placeholder-count="3">
+                <div style="display:flex;flex-direction:column;gap:7px">
+                  <span style="font-size:10.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:var(--muted)">{{ r.label }}</span>
+                  <sc-for list="{{ r.ms }}" as="m" hint-placeholder-count="2">
+                    <div style="padding:13px;border-radius:14px;border:1px solid var(--line);background:var(--surface);display:flex;flex-direction:column;gap:10px">
+                      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+                        <span style="font-size:14.5px;font-weight:{{ m.wA }};color:{{ m.cA }}">{{ m.a }}</span>
+                        <span style="font-size:16px;font-weight:800;min-width:32px;text-align:center;padding:5px 0;border-radius:8px;background:var(--chip);color:{{ m.cA }}">{{ m.sa }}</span>
+                      </div>
+                      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+                        <span style="font-size:14.5px;font-weight:{{ m.wB }};color:{{ m.cB }}">{{ m.b }}</span>
+                        <span style="font-size:16px;font-weight:800;min-width:32px;text-align:center;padding:5px 0;border-radius:8px;background:var(--chip);color:{{ m.cB }}">{{ m.sb }}</span>
+                      </div>
+                      <sc-if value="{{ m.showLoad }}" hint-placeholder-val="{{ false }}">
+                        <span onClick="{{ m.startLoad }}" style="text-align:center;padding:11px;border-radius:10px;background:var(--chip);color:var(--text);font-size:12.5px;font-weight:800;cursor:pointer">Cargar resultado</span>
+                      </sc-if>
+                      <sc-if value="{{ m.pickWinner }}" hint-placeholder-val="{{ false }}">
+                        <div style="display:flex;flex-direction:column;gap:8px">
+                          <span style="font-size:11px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--muted)">¿Quién ganó?</span>
+                          <div style="display:flex;gap:8px">
+                            <span onClick="{{ m.winA }}" style="flex:1;text-align:center;padding:13px 8px;border-radius:10px;border:1.5px solid var(--line);font-size:13px;font-weight:750;cursor:pointer">{{ m.a }}</span>
+                            <span onClick="{{ m.winB }}" style="flex:1;text-align:center;padding:13px 8px;border-radius:10px;border:1.5px solid var(--line);font-size:13px;font-weight:750;cursor:pointer">{{ m.b }}</span>
+                          </div>
+                        </div>
+                      </sc-if>
+                      <sc-if value="{{ m.pickGames }}" hint-placeholder-val="{{ false }}">
+                        <div style="display:flex;flex-direction:column;gap:8px">
+                          <span style="font-size:11px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--muted)">Games del perdedor</span>
+                          <div style="display:flex;gap:8px">
+                            <sc-for list="{{ m.games }}" as="g" hint-placeholder-count="4">
+                              <span onClick="{{ g.set }}" style="flex:1;text-align:center;padding:14px 0;border-radius:10px;border:1.5px solid var(--line);font-size:15px;font-weight:800;cursor:pointer">{{ g.n }}</span>
+                            </sc-for>
+                          </div>
+                        </div>
+                      </sc-if>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-for>
+
+              <div style="display:flex;flex-direction:column;gap:8px;padding-top:4px">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <span style="font-size:10.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:var(--muted)">Tabla de la fecha</span>
+                  <span style="height:1px;flex:1;background:var(--line)"></span>
+                </div>
+                <div style="border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--surface)">
+                  <div style="display:flex;align-items:center;gap:8px;padding:9px 13px;background:var(--chip);font-size:9.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">
+                    <span style="width:14px"></span><span style="flex:1">Pareja</span><span style="width:26px;text-align:right">PG</span><span style="width:34px;text-align:right">Dif</span><span style="width:30px;text-align:right">Pts</span>
+                  </div>
+                  <sc-for list="{{ fechaTable }}" as="t" hint-placeholder-count="4">
+                    <div style="display:flex;align-items:center;gap:8px;padding:12px 13px;border-top:1px solid var(--line)">
+                      <span style="width:14px;font-size:13px;font-weight:800;color:var(--muted)">{{ t.pos }}</span>
+                      <span style="flex:1;font-size:13.5px;font-weight:700;min-width:0">{{ t.pair }}</span>
+                      <span style="width:26px;text-align:right;font-size:13.5px;font-weight:700;color:var(--muted)">{{ t.pg }}</span>
+                      <span style="width:34px;text-align:right;font-size:13.5px;font-weight:700;color:var(--muted)">{{ t.dif }}</span>
+                      <span style="width:30px;text-align:right;font-size:15px;font-weight:800">{{ t.pts }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+                <span style="font-size:12px;font-weight:550;line-height:1.5;color:var(--muted);text-wrap:pretty">{{ tableNote }}</span>
+              </div>
+
+              <sc-if value="{{ showClose }}" hint-placeholder-val="{{ false }}">
+                <span style="text-align:center;padding:15px;border-radius:12px;background:{{ closeBg }};color:{{ closeFg }};font-size:14px;font-weight:800;cursor:pointer">{{ closeLabel }}</span>
+              </sc-if>
+              <sc-if value="{{ showReopen }}" hint-placeholder-val="{{ false }}">
+                <span style="text-align:center;padding:15px;border-radius:12px;border:1.5px solid var(--line);color:var(--muted);font-size:13.5px;font-weight:750;cursor:pointer">Reabrir fecha</span>
+              </sc-if>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isMis }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:12px;padding:0 20px 24px">
+
+          <sc-if value="{{ misEmpty }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:14px;padding:34px 4px 0;align-items:flex-start">
+              <span style="font-size:22px;font-weight:800;letter-spacing:-.025em;line-height:1.2">Todavía no estás en ningún torneo</span>
+              <span style="font-size:14px;font-weight:550;line-height:1.55;color:var(--muted);text-wrap:pretty">Creá el tuyo y compartí el link con el grupo. Si alguien ya te pasó un link de invitación, abrilo y elegí tu nombre de la lista.</span>
+              <span onClick="{{ goCrear }}" style="align-self:stretch;text-align:center;padding:15px;border-radius:12px;background:var(--accent);color:var(--accent-text);font-size:14.5px;font-weight:800;cursor:pointer">Crear torneo</span>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ misFull }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <sc-for list="{{ torneos }}" as="t" hint-placeholder-count="2">
+                <div onClick="{{ t.open }}" style="padding:16px;border-radius:16px;border:1px solid var(--line);background:var(--surface);display:flex;flex-direction:column;gap:12px;cursor:pointer">
+                  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+                    <span style="font-size:18px;font-weight:800;letter-spacing:-.02em;min-width:0">{{ t.name }}</span>
+                    <span style="flex:none;font-size:10.5px;font-weight:800;padding:6px 10px;border-radius:99px;background:{{ t.tagBg }};color:{{ t.tagFg }}">{{ t.tag }}</span>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:14px">
+                    <div style="display:flex;flex-direction:column;gap:2px">
+                      <span style="font-size:9.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:var(--muted)">Mi posición</span>
+                      <span style="font-size:15px;font-weight:800">{{ t.pos }}</span>
+                    </div>
+                    <span style="width:1px;height:26px;background:var(--line)"></span>
+                    <div style="display:flex;flex-direction:column;gap:2px;min-width:0">
+                      <span style="font-size:9.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:var(--muted)">{{ t.nextLabel }}</span>
+                      <span style="font-size:15px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.next }}</span>
+                    </div>
+                  </div>
+                </div>
+              </sc-for>
+
+              <span onClick="{{ goCrear }}" style="margin-top:4px;text-align:center;padding:15px;border-radius:12px;background:var(--accent);color:var(--accent-text);font-size:14.5px;font-weight:800;cursor:pointer">Crear torneo</span>
+
+              <div style="display:flex;align-items:center;gap:9px;padding:14px 2px 4px">
+                <span style="font-size:9.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);white-space:nowrap">Terminados</span>
+                <span style="height:1px;flex:1;background:var(--line)"></span>
+              </div>
+              <sc-for list="{{ torneosViejos }}" as="t" hint-placeholder-count="1">
+                <div style="padding:14px 16px;border-radius:14px;border:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:10px;opacity:.6">
+                  <div style="display:flex;flex-direction:column;gap:3px;min-width:0">
+                    <span style="font-size:15px;font-weight:750">{{ t.name }}</span>
+                    <span style="font-size:12px;font-weight:600;color:var(--muted)">{{ t.detail }}</span>
+                  </div>
+                  <span style="flex:none;font-size:15px;font-weight:800;color:var(--muted)">{{ t.pos }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isCrear }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:16px;padding:0 20px 24px">
+
+          <div style="display:flex;gap:5px">
+            <sc-for list="{{ stepDots }}" as="d" hint-placeholder-count="5">
+              <span style="flex:1;height:4px;border-radius:99px;background:{{ d.bg }}"></span>
+            </sc-for>
+          </div>
+
+          <span style="font-size:13.5px;font-weight:550;line-height:1.55;color:var(--muted);text-wrap:pretty">{{ stepHelp }}</span>
+
+          <sc-if value="{{ step1 }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <span style="font-size:11.5px;font-weight:800;color:var(--muted)">Nombre del torneo</span>
+              <span style="padding:16px;border-radius:12px;border:1.5px solid var(--accent);background:var(--surface);font-size:17px;font-weight:750">Los Jueves 2026</span>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ step2 }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <sc-for list="{{ playerFields }}" as="p" hint-placeholder-count="8">
+                <div onClick="{{ p.fill }}" style="display:flex;align-items:center;gap:11px;padding:13px 14px;border-radius:12px;border:1.5px solid {{ p.border }};background:var(--surface)">
+                  <span style="font-size:12px;font-weight:800;color:var(--muted);width:14px">{{ p.n }}</span>
+                  <span style="flex:1;font-size:15px;font-weight:{{ p.w }};color:{{ p.color }}">{{ p.name }}</span>
+                </div>
+              </sc-for>
+              <sc-if value="{{ seatsMissing }}" hint-placeholder-val="{{ true }}">
+                <span style="padding:12px 13px;border-radius:10px;background:var(--live-bg);color:var(--live);font-size:12.5px;font-weight:700;line-height:1.45;text-wrap:pretty">Falta 1 nombre. Tienen que ser 8 para que cada fecha arme 4 parejas.</span>
+              </sc-if>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ step3 }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:7px">
+              <sc-for list="{{ orderFields }}" as="o" hint-placeholder-count="8">
+                <div style="display:flex;align-items:center;gap:11px;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--surface)">
+                  <span style="font-size:14px;color:var(--muted);cursor:grab">⠿</span>
+                  <span style="font-size:12.5px;font-weight:800;color:var(--muted);width:14px">{{ o.n }}</span>
+                  <span style="flex:1;font-size:15px;font-weight:700">{{ o.name }}</span>
+                  <span onClick="{{ o.up }}" style="width:34px;height:34px;border-radius:9px;background:var(--chip);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:var(--muted);cursor:pointer">↑</span>
+                  <span onClick="{{ o.down }}" style="width:34px;height:34px;border-radius:9px;background:var(--chip);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:var(--muted);cursor:pointer">↓</span>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ step4 }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:18px">
+              <div style="display:flex;flex-direction:column;gap:9px">
+                <span style="font-size:10.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:var(--muted)">Puntos por posición</span>
+                <div style="display:flex;gap:8px">
+                  <sc-for list="{{ pointFields }}" as="p" hint-placeholder-count="4">
+                    <div style="flex:1;display:flex;flex-direction:column;gap:6px;align-items:center;padding:11px 0;border-radius:12px;border:1.5px solid {{ p.border }};background:var(--surface)">
+                      <span style="font-size:9.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)">{{ p.label }}</span>
+                      <span style="font-size:20px;font-weight:800">{{ p.value }}</span>
+                      <div style="display:flex;gap:5px">
+                        <span onClick="{{ p.dec }}" style="width:28px;height:28px;border-radius:8px;background:var(--chip);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:var(--muted);cursor:pointer">−</span>
+                        <span onClick="{{ p.inc }}" style="width:28px;height:28px;border-radius:8px;background:var(--chip);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:var(--muted);cursor:pointer">+</span>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+                <sc-if value="{{ pointsError }}" hint-placeholder-val="{{ false }}">
+                  <span style="padding:12px 13px;border-radius:10px;background:var(--live-bg);color:var(--live);font-size:12.5px;font-weight:700;line-height:1.45;text-wrap:pretty">Los puntos tienen que ir de mayor a menor y ninguno puede quedar en cero.</span>
+                </sc-if>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:9px">
+                <sc-for list="{{ configFields }}" as="c" hint-placeholder-count="5">
+                  <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;border:1px solid {{ c.border }};background:var(--surface)">
+                    <div style="flex:1;display:flex;flex-direction:column;gap:2px;min-width:0">
+                      <span style="font-size:14px;font-weight:700">{{ c.label }}</span>
+                      <span style="font-size:11.5px;font-weight:550;color:var(--muted);line-height:1.4">{{ c.hint }}</span>
+                    </div>
+                    <div style="flex:none;display:flex;align-items:center;gap:7px">
+                      <span onClick="{{ c.dec }}" style="width:34px;height:34px;border-radius:9px;background:var(--chip);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:var(--muted);cursor:pointer">−</span>
+                      <span style="min-width:26px;text-align:center;font-size:18px;font-weight:800">{{ c.value }}</span>
+                      <span onClick="{{ c.inc }}" style="width:34px;height:34px;border-radius:9px;background:var(--chip);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:var(--muted);cursor:pointer">+</span>
+                    </div>
+                  </div>
+                </sc-for>
+                <sc-if value="{{ countError }}" hint-placeholder-val="{{ false }}">
+                  <span style="padding:12px 13px;border-radius:10px;background:var(--live-bg);color:var(--live);font-size:12.5px;font-weight:700;line-height:1.45;text-wrap:pretty">No pueden contar más fechas de las que se juegan.</span>
+                </sc-if>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ step5 }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:14px">
+              <div style="padding:16px;border-radius:16px;background:var(--accent);color:var(--accent-text);display:flex;flex-direction:column;gap:11px">
+                <span style="font-size:10.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;opacity:.75">Link de invitación</span>
+                <span style="font-size:13.5px;font-weight:700;word-break:break-all;line-height:1.4">padel.app/unirse/9fk2-los-jueves</span>
+                <span onClick="{{ copy }}" style="text-align:center;padding:13px;border-radius:12px;background:var(--accent-text);color:var(--accent);font-size:13.5px;font-weight:800;cursor:pointer">{{ copyLabel }}</span>
+                <span style="font-size:12px;font-weight:550;line-height:1.5;opacity:.8;text-wrap:pretty">Pegalo en el grupo. Cada uno elige su nombre de la lista al entrar.</span>
+              </div>
+              <div style="border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--surface)">
+                <sc-for list="{{ resumen }}" as="r" hint-placeholder-count="5">
+                  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:13px 14px;border-top:1px solid {{ r.top }}">
+                    <span style="font-size:13px;font-weight:600;color:var(--muted)">{{ r.k }}</span>
+                    <span style="font-size:13.5px;font-weight:750;text-align:right">{{ r.v }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+
+          <div style="display:flex;gap:9px;padding-top:4px">
+            <sc-if value="{{ canSkip }}" hint-placeholder-val="{{ false }}">
+              <span onClick="{{ skipStep }}" style="padding:15px 16px;border-radius:12px;border:1.5px solid var(--line);font-size:13.5px;font-weight:750;cursor:pointer;color:var(--muted)">Usar los defaults</span>
+            </sc-if>
+            <span onClick="{{ nextStep }}" style="flex:1;text-align:center;padding:15px;border-radius:12px;background:{{ nextBg }};color:{{ nextFg }};font-size:14.5px;font-weight:800;cursor:pointer">{{ nextLabel }}</span>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isUnirse }}" hint-placeholder-val="{{ false }}">
+        <div style="min-height:100%;box-sizing:border-box;display:flex;flex-direction:column;padding:16px 24px 26px;gap:20px">
+          <div style="display:flex;flex-direction:column;gap:7px;padding-top:14px">
+            <span style="font-size:10.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)">Te invitaron a</span>
+            <span style="font-size:32px;line-height:1.05;letter-spacing:-.03em;font-weight:800">Los Jueves 2026</span>
+            <span style="font-size:14px;font-weight:550;line-height:1.5;color:var(--muted);text-wrap:pretty">8 jugadores · 12 fechas · organiza Marce</span>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <span style="font-size:11.5px;font-weight:800;color:var(--muted)">¿Cuál sos vos?</span>
+            <div style="display:flex;flex-direction:column;gap:7px">
+              <sc-for list="{{ joinSeats }}" as="j" hint-placeholder-count="8">
+                <div onClick="{{ j.pick }}" style="display:flex;align-items:center;gap:11px;padding:13px 14px;border-radius:12px;border:1.5px solid {{ j.border }};background:{{ j.bg }};cursor:{{ j.cursor }};opacity:{{ j.op }}">
+                  <span style="width:30px;height:30px;border-radius:99px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;background:{{ j.avBg }};color:{{ j.avFg }}">{{ j.ini }}</span>
+                  <span style="flex:1;font-size:15px;font-weight:{{ j.w }}">{{ j.name }}</span>
+                  <span style="flex:none;font-size:11.5px;font-weight:800;color:{{ j.tagFg }}">{{ j.tag }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="margin-top:auto;display:flex;flex-direction:column;gap:10px">
+            <span onClick="{{ joinConfirm }}" style="text-align:center;padding:16px;border-radius:12px;background:{{ joinBg }};color:{{ joinFg }};font-size:15px;font-weight:800;cursor:pointer">{{ joinCta }}</span>
+            <span style="text-align:center;font-size:12px;font-weight:550;line-height:1.5;color:var(--muted);text-wrap:pretty">Si tu nombre no está o ya lo tomó otro, avisale a Marce.</span>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isStats }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:16px;padding:0 20px 24px">
+          <div style="display:flex;gap:8px">
+            <sc-for list="{{ statTabs }}" as="t" hint-placeholder-count="2">
+              <span onClick="{{ t.go }}" style="padding:9px 15px;border-radius:99px;font-size:12.5px;font-weight:750;cursor:pointer;background:{{ t.bg }};color:{{ t.fg }}">{{ t.label }}</span>
+            </sc-for>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">
+            <sc-for list="{{ statCards }}" as="c" hint-placeholder-count="4">
+              <div style="padding:14px;border-radius:14px;border:1px solid var(--line);background:var(--surface);display:flex;flex-direction:column;gap:5px">
+                <span style="font-size:9.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:var(--muted)">{{ c.label }}</span>
+                <span style="font-size:22px;font-weight:800;letter-spacing:-.02em">{{ c.value }}</span>
+                <span style="font-size:11.5px;font-weight:600;color:var(--muted);line-height:1.35">{{ c.sub }}</span>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:9px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-size:10.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:var(--muted)">{{ rankTitle }}</span>
+              <span style="height:1px;flex:1;background:var(--line)"></span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:9px">
+              <sc-for list="{{ statBars }}" as="b" hint-placeholder-count="6">
+                <div style="display:flex;flex-direction:column;gap:5px">
+                  <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">
+                    <span style="font-size:13.5px;font-weight:700;min-width:0">{{ b.name }}</span>
+                    <span style="font-size:12.5px;font-weight:800;color:var(--muted);flex:none">{{ b.value }}</span>
+                  </div>
+                  <div style="height:7px;border-radius:99px;background:var(--chip);overflow:hidden">
+                    <div style="height:100%;border-radius:99px;background:{{ b.color }};width:{{ b.pct }}"></div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:9px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-size:10.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:var(--muted)">Duplas</span>
+              <span style="height:1px;flex:1;background:var(--line)"></span>
+            </div>
+            <div style="border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--surface)">
+              <sc-for list="{{ duplas }}" as="d" hint-placeholder-count="4">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 14px;border-top:1px solid {{ d.top }}">
+                  <div style="display:flex;flex-direction:column;gap:2px;min-width:0">
+                    <span style="font-size:14px;font-weight:700">{{ d.pair }}</span>
+                    <span style="font-size:11.5px;font-weight:600;color:var(--muted)">{{ d.played }}</span>
+                  </div>
+                  <span style="flex:none;font-size:12px;font-weight:800;padding:6px 10px;border-radius:99px;background:{{ d.bg }};color:{{ d.fg }}">{{ d.pct }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isPerfil }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:16px;padding:0 20px 24px">
+          <div style="display:flex;align-items:center;gap:14px;padding:16px;border-radius:16px;background:var(--surface);border:1px solid var(--line)">
+            <span style="width:52px;height:52px;flex:none;border-radius:99px;background:var(--accent);color:var(--accent-text);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800">NI</span>
+            <div style="display:flex;flex-direction:column;gap:3px;min-width:0">
+              <span style="font-size:19px;font-weight:800;letter-spacing:-.02em">Nico</span>
+              <span style="font-size:12.5px;font-weight:600;color:var(--muted)">2° de 8 · 47 puntos · 6 fechas jugadas</span>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px">
+            <sc-for list="{{ perfilCards }}" as="c" hint-placeholder-count="3">
+              <div style="padding:13px 12px;border-radius:14px;border:1px solid var(--line);display:flex;flex-direction:column;gap:4px">
+                <span style="font-size:9.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)">{{ c.label }}</span>
+                <span style="font-size:20px;font-weight:800;letter-spacing:-.02em">{{ c.value }}</span>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:9px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-size:10.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:var(--muted)">Últimas fechas</span>
+              <span style="height:1px;flex:1;background:var(--line)"></span>
+            </div>
+            <div style="display:flex;gap:6px">
+              <sc-for list="{{ racha }}" as="r" hint-placeholder-count="6">
+                <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px">
+                  <span style="width:100%;height:38px;border-radius:9px;background:{{ r.bg }};color:{{ r.fg }};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800">{{ r.pos }}</span>
+                  <span style="font-size:9.5px;font-weight:700;color:var(--muted)">{{ r.label }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:9px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-size:10.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:var(--muted)">Con quién le va mejor</span>
+              <span style="height:1px;flex:1;background:var(--line)"></span>
+            </div>
+            <div style="border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--surface)">
+              <sc-for list="{{ companeros }}" as="c" hint-placeholder-count="4">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 14px;border-top:1px solid {{ c.top }}">
+                  <div style="display:flex;align-items:center;gap:10px;min-width:0">
+                    <span style="width:28px;height:28px;flex:none;border-radius:99px;background:var(--chip);color:var(--muted);display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:800">{{ c.ini }}</span>
+                    <span style="font-size:14px;font-weight:700">{{ c.name }}</span>
+                  </div>
+                  <span style="flex:none;font-size:12.5px;font-weight:800;color:{{ c.fg }}">{{ c.record }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isReglas }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:10px;padding:0 20px 24px">
+          <span style="font-size:13.5px;font-weight:550;line-height:1.55;color:var(--muted);text-wrap:pretty">Las reglas de este torneo, como quedaron cuando Marce lo creó.</span>
+          <sc-for list="{{ reglas }}" as="r" hint-placeholder-count="6">
+            <div onClick="{{ r.toggle }}" style="border:1px solid var(--line);border-radius:14px;background:var(--surface);overflow:hidden;cursor:pointer">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:15px 15px">
+                <div style="display:flex;flex-direction:column;gap:2px;min-width:0">
+                  <span style="font-size:14.5px;font-weight:750">{{ r.title }}</span>
+                  <span style="font-size:12.5px;font-weight:700;color:var(--accent-link)">{{ r.value }}</span>
+                </div>
+                <span style="flex:none;font-size:13px;font-weight:800;color:var(--muted)">{{ r.chev }}</span>
+              </div>
+              <sc-if value="{{ r.open }}" hint-placeholder-val="{{ false }}">
+                <div style="padding:0 15px 15px">
+                  <span style="display:block;font-size:13px;font-weight:550;line-height:1.55;color:var(--muted);text-wrap:pretty">{{ r.body }}</span>
+                </div>
+              </sc-if>
+            </div>
+          </sc-for>
+          <sc-if value="{{ admin }}" hint-placeholder-val="{{ true }}">
+            <span onClick="{{ goAjustes }}" style="margin-top:6px;text-align:center;padding:14px;border-radius:12px;border:1.5px solid var(--line);font-size:13.5px;font-weight:750;cursor:pointer">Editar reglas</span>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isAjustes }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:18px;padding:0 20px 24px">
+
+          <div style="display:flex;flex-direction:column;gap:9px">
+            <span style="font-size:10.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:var(--muted)">Torneo</span>
+            <div style="border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--surface)">
+              <sc-for list="{{ ajustesTorneo }}" as="r" hint-placeholder-count="4">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 15px;border-top:1px solid {{ r.top }};cursor:pointer">
+                  <div style="display:flex;flex-direction:column;gap:2px;min-width:0">
+                    <span style="font-size:14px;font-weight:700">{{ r.label }}</span>
+                    <span style="font-size:11.5px;font-weight:600;color:var(--muted);line-height:1.4">{{ r.hint }}</span>
+                  </div>
+                  <span style="flex:none;font-size:13px;font-weight:750;color:var(--muted)">{{ r.value }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <span style="font-size:12px;font-weight:550;line-height:1.5;color:var(--muted);text-wrap:pretty">Cambiar el formato con fechas ya jugadas no recalcula la tabla vieja.</span>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:9px">
+            <span style="font-size:10.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:var(--muted)">Notificaciones</span>
+            <div style="border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--surface)">
+              <sc-for list="{{ toggles }}" as="t" hint-placeholder-count="3">
+                <div onClick="{{ t.toggle }}" style="display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 15px;border-top:1px solid {{ t.top }};cursor:pointer">
+                  <div style="display:flex;flex-direction:column;gap:2px;min-width:0">
+                    <span style="font-size:14px;font-weight:700">{{ t.label }}</span>
+                    <span style="font-size:11.5px;font-weight:600;color:var(--muted);line-height:1.4">{{ t.hint }}</span>
+                  </div>
+                  <span style="flex:none;width:46px;height:27px;border-radius:99px;background:{{ t.trackBg }};display:flex;align-items:center;padding:3px;box-sizing:border-box;justify-content:{{ t.justify }}">
+                    <span style="width:21px;height:21px;border-radius:99px;background:{{ t.knob }};display:block"></span>
+                  </span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:9px">
+            <span style="font-size:10.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:var(--muted)">Apariencia</span>
+            <div style="display:flex;gap:7px">
+              <sc-for list="{{ themeOpts }}" as="t" hint-placeholder-count="3">
+                <span onClick="{{ t.go }}" style="flex:1;text-align:center;padding:13px 0;border-radius:12px;border:1.5px solid {{ t.border }};background:{{ t.bg }};color:{{ t.fg }};font-size:13px;font-weight:750;cursor:pointer">{{ t.label }}</span>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:9px">
+            <span style="font-size:10.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;color:var(--muted)">Cuenta</span>
+            <div style="border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--surface)">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 15px">
+                <span style="font-size:14px;font-weight:700">Mail</span>
+                <span style="font-size:13px;font-weight:600;color:var(--muted)">marce@gmail.com</span>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 15px;border-top:1px solid var(--line);cursor:pointer">
+                <span style="font-size:14px;font-weight:700">Cambiar contraseña</span>
+                <span style="font-size:13px;font-weight:750;color:var(--muted)">›</span>
+              </div>
+              <div onClick="{{ goLanding }}" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 15px;border-top:1px solid var(--line);cursor:pointer">
+                <span style="font-size:14px;font-weight:750;color:var(--live)">Cerrar sesión</span>
+              </div>
+            </div>
+            <span style="align-self:flex-start;font-size:12.5px;font-weight:700;color:var(--muted);cursor:pointer;padding-top:2px">Salir del torneo</span>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+
+    <sc-if value="{{ showNav }}" hint-placeholder-val="{{ true }}">
+    <div style="flex:none;display:flex;justify-content:space-between;padding:12px 22px 24px;border-top:1px solid var(--line);background:var(--bg)">
+      <sc-for list="{{ nav }}" as="n" hint-placeholder-count="4">
+        <div onClick="{{ n.go }}" style="display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;padding:2px 10px;color:{{ n.color }}">
+          <span style="width:19px;height:19px;border-radius:{{ n.r }};border:2px solid currentColor;background:{{ n.fill }};display:block"></span>
+          <span style="font-size:9.5px;font-weight:800">{{ n.label }}</span>
+        </div>
+      </sc-for>
+    </div>
+    </sc-if>
+
+    <sc-if value="{{ sheetOpen }}" hint-placeholder-val="{{ false }}">
+      <div onClick="{{ closeSheet }}" style="position:absolute;inset:0;background:var(--scrim);display:flex;align-items:flex-end"></div>
+      <div style="position:absolute;left:0;right:0;bottom:0;background:var(--bg);border-radius:22px 22px 0 0;padding:10px 20px 26px;display:flex;flex-direction:column;gap:14px;border-top:1px solid var(--line)">
+        <span style="width:38px;height:4px;border-radius:99px;background:var(--line);align-self:center"></span>
+        <div style="display:flex;flex-direction:column;gap:3px">
+          <span style="font-size:10.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)">Orden de desempate</span>
+          <span style="font-size:20px;font-weight:800;letter-spacing:-.02em">Quién va antes</span>
+        </div>
+        <sc-if value="{{ sheetHasAnswer }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:14px;border-radius:12px;background:var(--ok-bg);font-size:13.5px;font-weight:650;line-height:1.5;color:var(--text);text-wrap:pretty">{{ sheetAnswer }}</div>
+        </sc-if>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
+          <sc-for list="{{ tiebreak }}" as="t" hint-placeholder-count="8">
+            <div style="display:flex;align-items:center;gap:9px;padding:10px 11px;border-radius:10px;background:{{ t.bg }}">
+              <span style="font-size:12.5px;font-weight:800;color:var(--muted);width:12px">{{ t.n }}</span>
+              <span style="font-size:14px;font-weight:{{ t.w }}">{{ t.name }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <span style="font-size:12.5px;font-weight:550;line-height:1.55;color:var(--muted);text-wrap:pretty">Es la tabla al cierre de la fecha 3. Se actualiza cada 3 fechas: el próximo refresco es al cerrar la fecha 9. Corta los empates de puntos y de ahí salen las parejas de cada fecha.</span>
+        <span onClick="{{ closeSheet }}" style="text-align:center;padding:14px;border-radius:12px;background:var(--chip);color:var(--text);font-size:13.5px;font-weight:800;cursor:pointer">Entendido</span>
+      </div>
+    </sc-if>
+
+  </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:460,&quot;height&quot;:1000}}">
+const DARK = {
+  '--bg':'#0d1512','--surface':'#16201c','--text':'#eaf2ee','--muted':'#8ea298','--accent':'#0f6b48',
+  '--accent-text':'#dbf5e8','--accent-link':'#34c08a','--line':'#21302a','--chip':'#1b2823',
+  '--live':'#ff8368','--live-bg':'#2a1a15','--up':'#34c08a','--ok-bg':'#12291f','--down':'#ff9a6b',
+  '--warn-bg':'#2a2016','--scrim':'rgba(0,0,0,.6)'
+};
+const NAMES = ['Marce','Nico','Fede','Juanma','Seba','Tincho','Lucho','Gastón'];
+const PTS = [47,47,43,38,35,31,24,19];
+const MOVE = [['—',0],['▲2',1],['▼1',-1],['—',0],['▲1',1],['▼2',-1],['—',0],['—',0]];
+const TIEBREAK = ['Marce','Nico','Fede','Seba','Juanma','Tincho','Lucho','Gastón'];
+const PAIRS = [
+  {n:'1', names:'Marce & Tincho', isDef:true},
+  {n:'2', names:'Nico & Gastón', isDef:false},
+  {n:'3', names:'Fede & Lucho', isDef:false},
+  {n:'4', names:'Juanma & Seba', isDef:false}
+];
+const FIXTURE = [
+  {label:'Ronda 1', ms:[['m1',0,1],['m2',2,3]]},
+  {label:'Ronda 2', ms:[['m3',0,2],['m4',1,3]]},
+  {label:'Ronda 3', ms:[['m5',0,3],['m6',1,2]]}
+];
+const OPEN_SCORES = {m1:[4,2], m2:[3,4]};
+const CLOSED_SCORES = {m1:[4,2], m2:[3,4], m3:[4,1], m4:[2,4], m5:[4,3], m6:[4,0]};
+
+class Component extends DCLogic {
+  state = {
+    theme:'light', admin:true, screen:'tabla', fechaState:'open', sheet:null, going:true,
+    seats:[
+      {name:'Marce', status:'viene'}, {name:'Nico', status:'viene'}, {name:'Fede', status:'viene'},
+      {name:'Juanma', status:'viene'}, {name:'Seba', status:'viene'}, {name:'Tincho', status:'viene'},
+      {name:'Lucho', status:'invitado', guest:'Pablo'}, {name:'Gastón', status:'falta'}
+    ],
+    generated:false, scores:null, loading:null,
+    empty:false, step:1, copied:false, p8:'',
+    auth:{nombre:'Marce', email:'marce@', pass:'123', show:false, touched:true},
+    joinPick:null, statTab:'torneo', ruleOpen:'puntos',
+    notif:{fecha:true, resultado:true, tabla:false},
+    order:['Marce','Nico','Fede','Juanma','Seba','Tincho','Lucho','Gastón'],
+    points:[10,7,4,2],
+    cfg:{sets:1, games:4, fechas:12, cuentan:9, refresco:3}
+  };
+
+  move = (i, d) => this.setState(s => {
+    const j = i + d;
+    if (j < 0 || j >= s.order.length) return null;
+    const order = s.order.slice();
+    const tmp = order[i]; order[i] = order[j]; order[j] = tmp;
+    return {order};
+  });
+  bumpPoint = (i, d) => this.setState(s => {
+    const points = s.points.slice();
+    points[i] = Math.max(0, points[i] + d);
+    return {points};
+  });
+  bumpCfg = (k, d, min, max) => this.setState(s => {
+    const cfg = {...s.cfg};
+    cfg[k] = Math.min(max, Math.max(min, cfg[k] + d));
+    return {cfg};
+  });
+
+  ini(n){ return n.slice(0,2).toUpperCase(); }
+  scores(){
+    if (this.state.scores) return this.state.scores;
+    return this.state.fechaState === 'closed' ? CLOSED_SCORES : OPEN_SCORES;
+  }
+
+  cycleSeat = (i) => this.setState(s => {
+    const seats = s.seats.map((x,j) => {
+      if (j !== i) return x;
+      if (x.status === 'viene') return {...x, status:'invitado', guest:'Pablo'};
+      if (x.status === 'invitado') return {...x, status:'falta', guest:null};
+      return {...x, status:'viene', guest:null};
+    });
+    return {seats, generated:false};
+  });
+
+  setScore = (id, win, loserGames) => this.setState(s => {
+    const cur = {...this.scores()};
+    cur[id] = win === 'a' ? [4, loserGames] : [loserGames, 4];
+    return {scores:cur, loading:null};
+  });
+
+  renderVals(){
+    const st = this.state;
+    const dark = st.theme === 'dark';
+    const T = (l,d) => dark ? d : l;
+    const seg = (on) => ({bg: on ? '#10231a' : 'transparent', fg: on ? '#ffffff' : '#4d5b53'});
+    const light = seg(!dark), dk = seg(dark), jug = seg(!st.admin), adm = seg(st.admin);
+    const dr = seg(st.fechaState==='draft'), op = seg(st.fechaState==='open'), cl = seg(st.fechaState==='closed');
+
+    const standings = NAMES.map((name,i) => {
+      const tied = PTS[i] === PTS[i-1] || PTS[i] === PTS[i+1];
+      const [move,dir] = MOVE[i];
+      return {
+        pos:i+1, name, ini:this.ini(name), pts:PTS[i], move, tied,
+        moveColor: dir > 0 ? 'var(--up)' : dir < 0 ? 'var(--down)' : 'var(--muted)',
+        rowBg: i === 0 ? 'var(--chip)' : 'transparent',
+        avBg: i === 0 ? 'var(--accent)' : 'var(--chip)',
+        avFg: i === 0 ? 'var(--accent-text)' : 'var(--muted)',
+        cut: i === 3,
+        open: () => this.setState({screen:'perfil'}),
+        info: (e) => { if(e) e.stopPropagation(); this.setState({sheet:name}); }
+      };
+    });
+
+    const fechas = [
+      {n:6, day:'jue 13 ago', tag:'Jugada', state:'closed', winner:'Marce & Tincho', detail:'3–0 · +9 games'},
+      {n:5, day:'jue 6 ago', tag:'Jugada', state:'closed', winner:'Nico & Seba', detail:'2–1 · +4 games'},
+      {n:4, day:'jue 30 jul', tag:'Jugada', state:'closed', winner:'Marce & Tincho', detail:'3–0 · +7 games'},
+      {n:3, day:'jue 23 jul', tag:'Jugada', state:'closed', winner:'Fede & Juanma', detail:'2–1 · +3 games'},
+      {n:7, day:'jue 27 ago', tag:'Por jugarse', state:'todo'},
+      {n:8, day:'jue 3 sep', tag:'Por jugarse', state:'todo'},
+      {n:9, day:'jue 10 sep', tag:'Por jugarse', state:'todo'}
+    ].map(f => ({
+      label:`Fecha ${f.n} · ${f.day}`,
+      tag:f.tag,
+      tagBg: f.state==='closed' ? 'var(--chip)' : 'transparent',
+      tagFg: 'var(--muted)',
+      bg: 'var(--surface)',
+      op: f.state==='todo' ? 0.62 : 1,
+      hasWinner: !!f.winner, winner:f.winner || '', detail:f.detail || '',
+      hasPairs:false, pairs:[],
+      open: () => this.setState({screen:'fecha'})
+    }));
+
+    const scores = this.scores();
+    const canLoad = st.admin && st.fechaState === 'open';
+    const rondas = FIXTURE.map(r => ({
+      label:r.label,
+      ms:r.ms.map(([id,ai,bi]) => {
+        const sc = scores[id];
+        const a = PAIRS[ai].names, b = PAIRS[bi].names;
+        const loadingThis = st.loading && st.loading.id === id;
+        return {
+          id, a, b,
+          sa: sc ? String(sc[0]) : '–', sb: sc ? String(sc[1]) : '–',
+          wA: sc && sc[0] > sc[1] ? 800 : 650, wB: sc && sc[1] > sc[0] ? 800 : 650,
+          cA: sc && sc[0] < sc[1] ? 'var(--muted)' : 'var(--text)',
+          cB: sc && sc[1] < sc[0] ? 'var(--muted)' : 'var(--text)',
+          showLoad: !sc && canLoad && !loadingThis,
+          pickWinner: !!loadingThis && !st.loading.winner,
+          pickGames: !!loadingThis && !!st.loading.winner,
+          startLoad: () => this.setState({loading:{id, winner:null}}),
+          winA: () => this.setState({loading:{id, winner:'a'}}),
+          winB: () => this.setState({loading:{id, winner:'b'}}),
+          games: [0,1,2,3].map(n => ({n:String(n), set: () => this.setScore(id, st.loading && st.loading.winner, n)}))
+        };
+      })
+    }));
+
+    const played = Object.keys(scores).length;
+    const missing = 6 - played;
+    const closedNow = st.fechaState === 'closed';
+
+    const fechaTable = closedNow
+      ? [{pos:1,pair:'Marce & Tincho',pg:'3',dif:'+9',pts:'10'},
+         {pos:2,pair:'Nico & Gastón',pg:'2',dif:'+2',pts:'7'},
+         {pos:3,pair:'Juanma & Seba',pg:'1',dif:'−3',pts:'4'},
+         {pos:4,pair:'Fede & Lucho',pg:'0',dif:'−8',pts:'2'}]
+      : [{pos:1,pair:'Marce & Tincho',pg:'1',dif:'+2',pts:'—'},
+         {pos:2,pair:'Juanma & Seba',pg:'1',dif:'+1',pts:'—'},
+         {pos:3,pair:'Nico & Gastón',pg:'0',dif:'−2',pts:'—'},
+         {pos:4,pair:'Fede & Lucho',pg:'0',dif:'−1',pts:'—'}];
+
+    const seats = st.seats.map((s,i) => {
+      const map = {
+        viene:{tag:'Viene', tagBg:'var(--ok-bg)', tagFg:'var(--up)', border:'var(--line)', sub:'Asiento titular'},
+        invitado:{tag:'Invitado', tagBg:'var(--chip)', tagFg:'var(--muted)', border:'var(--line)', sub:`Lo reemplaza ${s.guest || ''}`},
+        falta:{tag:'Falta', tagBg:'var(--live-bg)', tagFg:'var(--live)', border:'var(--live)', sub:'Sin reemplazo'}
+      }[s.status];
+      return {name:s.name, ini:this.ini(s.name), cycle:() => this.cycleSeat(i), ...map};
+    });
+    const faltan = st.seats.filter(s => s.status === 'falta');
+    const blocked = faltan.length > 0;
+    const vienen = st.seats.filter(s => s.status !== 'falta').length;
+
+    const isFecha = st.screen === 'fecha';
+    const isDraft = isFecha && st.fechaState === 'draft';
+
+    const navDef = [
+      {key:'tabla', label:'Tabla', r:'4px'},
+      {key:'fechas', label:'Fechas', r:'4px'},
+      {key:'stats', label:'Stats', r:'99px'},
+      {key:'reglas', label:'Reglas', r:'2px'}
+    ];
+    const activeTab = isFecha ? 'fechas' : st.screen === 'perfil' ? 'tabla' : st.screen;
+
+    const titles = {
+      tabla:['Fecha 6 de 12 · en curso','Los Jueves 2026'],
+      fechas:['12 fechas · 6 jugadas','Fechas'],
+      stats:['Los Jueves 2026','Estadísticas'],
+      reglas:['Los Jueves 2026','Reglas'],
+      perfil:['2° · 47 puntos','Nico'],
+      mistorneos:['Marce','Mis torneos'],
+      ajustes:['Los Jueves 2026','Ajustes'],
+      crear:[`Paso ${st.step} de 5`, {1:'Nombre', 2:'Los 8 jugadores', 3:'Orden inicial', 4:'Formato', 5:'Listo'}[st.step]],
+      fecha:[{draft:'Armando · sólo vos la ves', open:'En juego · jueves 27 ago', closed:'Cerrada · jueves 13 ago'}[st.fechaState], st.fechaState === 'closed' ? 'Fecha 6' : 'Fecha 7']
+    };
+    const [kicker, title] = titles[st.screen] || titles.tabla;
+
+    const cfgBad = st.points.some((v,i) => v <= 0 || (i > 0 && v >= st.points[i-1])) || st.cfg.cuentan > st.cfg.fechas;
+    const stepBlocked = (st.step === 2 && !st.p8) || (st.step === 4 && cfgBad);
+
+    const isAuth = st.screen === 'registro' || st.screen === 'login';
+    const a = st.auth;
+    const emailBad = a.touched && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(a.email);
+    const passBad = a.touched && a.pass.length < 6;
+    const setAuth = (k, v) => this.setState(s => ({auth:{...s.auth, [k]:v}}));
+    const rawFields = st.screen === 'login'
+      ? [
+          {k:'email', label:'Mail', value:a.email || 'tu@mail.com', empty:!a.email, bad:emailBad, error:'Escribí un mail válido, con @ y dominio.'},
+          {k:'pass', label:'Contraseña', value:a.show ? a.pass : '•'.repeat(a.pass.length) || 'Tu contraseña', empty:!a.pass, bad:false, isPass:true}
+        ]
+      : [
+          {k:'nombre', label:'Tu nombre', value:a.nombre || 'Como te dicen en el grupo', empty:!a.nombre, bad:false},
+          {k:'email', label:'Mail', value:a.email || 'tu@mail.com', empty:!a.email, bad:emailBad, error:'Escribí un mail válido, con @ y dominio.'},
+          {k:'pass', label:'Contraseña', value:a.show ? a.pass : '•'.repeat(a.pass.length) || 'Mínimo 6 caracteres', empty:!a.pass, bad:passBad, isPass:true, error:'Mínimo 6 caracteres.'}
+        ];
+    const authFields = rawFields.map(f => ({
+      label:f.label, value:f.value,
+      w: f.empty ? 500 : 700,
+      color: f.empty ? 'var(--muted)' : 'var(--text)',
+      border: f.bad ? 'var(--live)' : 'var(--line)',
+      hasError: !!f.bad, error: f.error || '',
+      isPass: !!f.isPass, eye: a.show ? 'Ocultar' : 'Ver',
+      toggle: (e) => { if (e) e.stopPropagation(); setAuth('show', !a.show); },
+      focus: () => { if (f.k === 'email') setAuth('email', 'marce@gmail.com'); if (f.k === 'pass') setAuth('pass', 'padel2026'); }
+    }));
+    const authBad = emailBad || (st.screen === 'registro' && passBad);
+
+    const sheetName = st.sheet;
+    const byName = {};
+    NAMES.forEach((n,i) => { byName[n] = PTS[i]; });
+    let tiedPair = null;
+    if (sheetName && sheetName !== '__all__') {
+      const other = NAMES.find(n => n !== sheetName && byName[n] === byName[sheetName]);
+      if (other) {
+        tiedPair = [sheetName, other].sort((a,b) => TIEBREAK.indexOf(a) - TIEBREAK.indexOf(b));
+      }
+    }
+
+    return {
+      themeVars: dark ? DARK : {},
+      lightBtnBg:light.bg, lightBtnFg:light.fg, darkBtnBg:dk.bg, darkBtnFg:dk.fg,
+      jugBtnBg:jug.bg, jugBtnFg:jug.fg, admBtnBg:adm.bg, admBtnFg:adm.fg,
+      draftBtnBg:dr.bg, draftBtnFg:dr.fg, openBtnBg:op.bg, openBtnFg:op.fg, closedBtnBg:cl.bg, closedBtnFg:cl.fg,
+      setLight: () => this.setState({theme:'light'}),
+      setDark: () => this.setState({theme:'dark'}),
+      setJugador: () => this.setState({admin:false, loading:null}),
+      setAdmin: () => this.setState({admin:true}),
+      setDraft: () => this.setState({screen:'fecha', fechaState:'draft', admin:true, scores:null, generated:false}),
+      setOpen: () => this.setState({screen:'fecha', fechaState:'open', scores:null, loading:null}),
+      setClosed: () => this.setState({screen:'fecha', fechaState:'closed', scores:null, loading:null}),
+      goDraft: () => this.setState({screen:'fecha', fechaState:'draft'}),
+
+      headerKicker:kicker, headerTitle:title,
+      showGear: st.admin && st.screen === 'tabla',
+      showBack: ['fecha','perfil','crear','ajustes'].indexOf(st.screen) !== -1,
+      goBack: () => this.setState(s => {
+        if (s.screen === 'crear') return s.step > 1 ? {step: s.step - 1} : {screen:'mistorneos'};
+        if (s.screen === 'ajustes') return {screen:'reglas'};
+        return {screen: s.screen === 'perfil' ? 'tabla' : 'fechas'};
+      }),
+
+      lanBtnBg: seg(st.screen==='landing').bg, lanBtnFg: seg(st.screen==='landing').fg,
+      regBtnBg: seg(isAuth).bg, regBtnFg: seg(isAuth).fg,
+      goLanding: () => this.setState({screen:'landing', sheet:null}),
+      goRegistro: () => this.setState({screen:'registro', sheet:null}),
+      goLogin: () => this.setState({screen:'login', sheet:null}),
+      swapAuth: () => this.setState({screen: st.screen === 'login' ? 'registro' : 'login'}),
+
+      isLanding: st.screen === 'landing',
+      landingBullets: [
+        'Las parejas se arman solas cruzando la tabla, sin discusiones.',
+        'Cargás el resultado en dos toques, sin teclado.',
+        'Cada uno ve su posición, su racha y con quién le va mejor.'
+      ],
+
+      isAuth, isRegistro: st.screen === 'registro', isLogin: st.screen === 'login',
+      authTitle: st.screen === 'login' ? 'Entrá a tu cuenta' : 'Creá tu cuenta',
+      authSub: st.screen === 'login'
+        ? 'Con el mail que usaste cuando entraste al torneo.'
+        : 'Sólo para poder volver a entrar desde otro teléfono. Nada más.',
+      authSwap: st.screen === 'login' ? 'Crear cuenta' : 'Iniciar sesión',
+      authCta: st.screen === 'login' ? 'Entrar' : 'Crear cuenta',
+      authFields: authFields,
+      authBg: authBad ? 'var(--chip)' : 'var(--accent)',
+      authFg: authBad ? 'var(--muted)' : 'var(--accent-text)',
+      authSubmit: () => { if (!authBad) this.setState({screen:'mistorneos', empty:true}); },
+
+      misBtnBg: seg(st.screen==='mistorneos' && !st.empty).bg, misBtnFg: seg(st.screen==='mistorneos' && !st.empty).fg,
+      vacBtnBg: seg(st.screen==='mistorneos' && st.empty).bg, vacBtnFg: seg(st.screen==='mistorneos' && st.empty).fg,
+      torBtnBg: seg(st.screen!=='mistorneos' && st.screen!=='crear').bg, torBtnFg: seg(st.screen!=='mistorneos' && st.screen!=='crear').fg,
+      goMis: () => this.setState({screen:'mistorneos', empty:false, sheet:null}),
+      goMisVacio: () => this.setState({screen:'mistorneos', empty:true, sheet:null}),
+      goTorneo: () => this.setState({screen:'tabla', sheet:null}),
+      goCrear: () => this.setState({screen:'crear', step:1, copied:false}),
+
+      isMis: st.screen === 'mistorneos',
+      misEmpty: st.screen === 'mistorneos' && st.empty,
+      misFull: st.screen === 'mistorneos' && !st.empty,
+      torneos: [
+        {name:'Los Jueves 2026', tag:'En curso', pos:'2°', nextLabel:'Próxima fecha', next:'jue 27 ago'},
+        {name:'Interclubes Norte', tag:'En curso', pos:'5°', nextLabel:'Próxima fecha', next:'dom 30 ago'}
+      ].map(t => ({...t, tagBg:'var(--ok-bg)', tagFg:'var(--up)', open: () => this.setState({screen:'tabla'})})),
+      torneosViejos: [{name:'Los Jueves 2025', detail:'12 fechas · terminó en dic', pos:'4°'}],
+
+      isCrear: st.screen === 'crear',
+      step1: st.step === 1, step2: st.step === 2, step3: st.step === 3, step4: st.step === 4, step5: st.step === 5,
+      stepDots: [1,2,3,4,5].map(n => ({bg: n <= st.step ? 'var(--accent)' : 'var(--line)'})),
+      stepHelp: {
+        1:'Como lo llaman en el grupo. Se puede cambiar después.',
+        2:'Tipeá los 8 nombres. Después compartís un link y cada uno elige el suyo.',
+        3:'Ordenalos del mejor al peor. Es el criterio que corta los empates hasta que haya fechas jugadas, y de ahí salen las primeras parejas.',
+        4:'Todos tienen un valor que ya funciona. Si no te importa, seguí de largo.',
+        5:'Ya está. Compartí el link y arrancá cuando quieras.'
+      }[st.step],
+      playerFields: NAMES.map((n,i) => {
+        const filled = i < 7 || !!st.p8;
+        return {
+          n:i+1, name: i < 7 ? n : (st.p8 || 'Nombre del jugador 8'),
+          w: filled ? 700 : 500,
+          color: filled ? 'var(--text)' : 'var(--muted)',
+          border: filled ? 'var(--line)' : 'var(--accent)',
+          fill: i === 7 ? () => this.setState({p8:'Gastón'}) : null
+        };
+      }),
+      seatsMissing: !st.p8,
+      orderFields: st.order.map((n,i) => ({
+        n:i+1, name:n, up: () => this.move(i,-1), down: () => this.move(i,1)
+      })),
+      pointFields: st.points.map((v,i) => ({
+        label:`${i+1}°`, value:v,
+        border: (i > 0 && v >= st.points[i-1]) || v <= 0 ? 'var(--live)' : 'var(--line)',
+        dec: () => this.bumpPoint(i,-1), inc: () => this.bumpPoint(i,1)
+      })),
+      pointsError: st.points.some((v,i) => v <= 0 || (i > 0 && v >= st.points[i-1])),
+      configFields: [
+        {k:'sets', label:'Sets por partido', hint:'Un set único hace la carga de dos taps', value:st.cfg.sets, min:1, max:3},
+        {k:'games', label:'Games por set', hint:'Con 4 games hay sólo 4 resultados posibles', value:st.cfg.games, min:3, max:9},
+        {k:'fechas', label:'Fechas del año', hint:'Sin contar el Masters', value:st.cfg.fechas, min:4, max:24},
+        {k:'cuentan', label:'Cuentan las mejores', hint:'Las peores se descartan de la tabla', value:st.cfg.cuentan, min:1, max:24},
+        {k:'refresco', label:'Refresco del orden', hint:'Cada cuántas fechas se recalcula el desempate', value:st.cfg.refresco, min:1, max:6}
+      ].map(f => ({
+        label:f.label, hint:f.hint, value:f.value,
+        border: f.k === 'cuentan' && st.cfg.cuentan > st.cfg.fechas ? 'var(--live)' : 'var(--line)',
+        dec: () => this.bumpCfg(f.k,-1,f.min,f.max), inc: () => this.bumpCfg(f.k,1,f.min,f.max)
+      })),
+      countError: st.cfg.cuentan > st.cfg.fechas,
+      resumen: [
+        {k:'Nombre', v:'Los Jueves 2026'},
+        {k:'Jugadores', v:'8'},
+        {k:'Formato', v:`${st.cfg.sets} set a ${st.cfg.games} games`},
+        {k:'Puntos', v:st.points.join(' · ')},
+        {k:'Fechas', v:`${st.cfg.fechas}, cuentan las mejores ${st.cfg.cuentan}`},
+        {k:'Desempate', v:`Se refresca cada ${st.cfg.refresco} fechas`}
+      ].map((r,i) => ({...r, top: i === 0 ? 'transparent' : 'var(--line)'})),
+      canSkip: st.step === 4,
+      skipStep: () => this.setState({step:5, points:[10,7,4,2], cfg:{sets:1, games:4, fechas:12, cuentan:9, refresco:3}}),
+      nextLabel: st.step === 5 ? 'Ir al torneo' : 'Continuar',
+      nextBg: stepBlocked ? 'var(--chip)' : 'var(--accent)',
+      nextFg: stepBlocked ? 'var(--muted)' : 'var(--accent-text)',
+      nextStep: () => this.setState(s => {
+        if (s.step === 5) return {screen:'tabla'};
+        if (s.step === 2 && !s.p8) return null;
+        if (s.step === 4 && (s.points.some((v,i) => v <= 0 || (i > 0 && v >= s.points[i-1])) || s.cfg.cuentan > s.cfg.fechas)) return null;
+        return {step: s.step + 1};
+      }),
+      copied: st.copied,
+      copyLabel: st.copied ? 'Copiado ✓' : 'Copiar link',
+      copy: () => this.setState({copied:true}),
+      showNav: ['mistorneos','crear','landing','unirse'].indexOf(st.screen) === -1 && !isAuth,
+      showHeader: st.screen !== 'landing' && st.screen !== 'unirse' && !isAuth,
+
+      uniBtnBg: seg(st.screen==='unirse').bg, uniBtnFg: seg(st.screen==='unirse').fg,
+      ajuBtnBg: seg(st.screen==='ajustes').bg, ajuBtnFg: seg(st.screen==='ajustes').fg,
+      goUnirse: () => this.setState({screen:'unirse', joinPick:null, sheet:null}),
+      goAjustes: () => this.setState({screen:'ajustes', sheet:null}),
+
+      isUnirse: st.screen === 'unirse',
+      joinSeats: NAMES.map((n,i) => {
+        const taken = i < 3;
+        const picked = st.joinPick === n;
+        return {
+          name:n, ini:this.ini(n), tag: taken ? 'Ya entró' : picked ? 'Sos vos' : '',
+          tagFg: picked ? 'var(--up)' : 'var(--muted)',
+          border: picked ? 'var(--accent)' : 'var(--line)',
+          bg: picked ? 'var(--ok-bg)' : 'var(--surface)',
+          avBg: picked ? 'var(--accent)' : 'var(--chip)',
+          avFg: picked ? 'var(--accent-text)' : 'var(--muted)',
+          w: picked ? 800 : 650, op: taken ? 0.45 : 1,
+          cursor: taken ? 'default' : 'pointer',
+          pick: taken ? null : () => this.setState({joinPick:n})
+        };
+      }),
+      joinCta: st.joinPick ? `Entrar como ${st.joinPick}` : 'Elegí tu nombre',
+      joinBg: st.joinPick ? 'var(--accent)' : 'var(--chip)',
+      joinFg: st.joinPick ? 'var(--accent-text)' : 'var(--muted)',
+      joinConfirm: () => { if (st.joinPick) this.setState({screen:'tabla'}); },
+
+      isStats: st.screen === 'stats',
+      statTabs: [{k:'torneo', label:'Del torneo'}, {k:'mias', label:'Mías'}].map(t => ({
+        label:t.label,
+        bg: st.statTab === t.k ? 'var(--accent)' : 'var(--chip)',
+        fg: st.statTab === t.k ? 'var(--accent-text)' : 'var(--muted)',
+        go: () => this.setState({statTab:t.k})
+      })),
+      statCards: st.statTab === 'torneo'
+        ? [{label:'Partidos jugados', value:'36', sub:'en 6 fechas'},
+           {label:'Games totales', value:'241', sub:'promedio 6.7 por partido'},
+           {label:'Fecha más pareja', value:'Fecha 5', sub:'3 partidos 4–3'},
+           {label:'Racha más larga', value:'Marce · 7', sub:'partidos seguidos ganados'}]
+        : [{label:'Partidos', value:'18', sub:'11 ganados · 7 perdidos'},
+           {label:'Efectividad', value:'61%', sub:'4° del torneo'},
+           {label:'Games a favor', value:'+14', sub:'63 a favor · 49 en contra'},
+           {label:'Mejor fecha', value:'Fecha 4', sub:'3–0, campeón'}],
+      rankTitle: st.statTab === 'torneo' ? 'Efectividad · partidos ganados' : 'Efectividad por fecha',
+      statBars: (st.statTab === 'torneo'
+        ? [['Marce',78],['Nico',61],['Fede',56],['Juanma',50],['Seba',44],['Tincho',39]]
+        : [['Fecha 6',100],['Fecha 5',67],['Fecha 4',100],['Fecha 3',33],['Fecha 2',33],['Fecha 1',67]]
+      ).map(([name,v],i) => ({
+        name, value:`${v}%`, pct:`${v}%`,
+        color: i === 0 ? 'var(--accent)' : 'var(--muted)'
+      })),
+      duplas: [
+        {pair:'Marce & Tincho', played:'jugaron 3 fechas', pct:'89%', good:true},
+        {pair:'Nico & Seba', played:'jugaron 2 fechas', pct:'67%', good:true},
+        {pair:'Fede & Lucho', played:'jugaron 2 fechas', pct:'33%', good:false},
+        {pair:'Juanma & Gastón', played:'jugaron 1 fecha', pct:'0%', good:false}
+      ].map((d,i) => ({...d,
+        top: i === 0 ? 'transparent' : 'var(--line)',
+        bg: d.good ? 'var(--ok-bg)' : 'var(--chip)',
+        fg: d.good ? 'var(--up)' : 'var(--muted)'
+      })),
+
+      isPerfil: st.screen === 'perfil',
+      perfilCards: [
+        {label:'Efectividad', value:'61%'},
+        {label:'Fechas ganadas', value:'1'},
+        {label:'Dif. games', value:'+14'}
+      ],
+      racha: [
+        {pos:'2°', label:'F1', good:true}, {pos:'4°', label:'F2', good:false},
+        {pos:'3°', label:'F3', good:false}, {pos:'1°', label:'F4', good:true},
+        {pos:'2°', label:'F5', good:true}, {pos:'3°', label:'F6', good:false}
+      ].map(r => ({...r,
+        bg: r.good ? 'var(--accent)' : 'var(--chip)',
+        fg: r.good ? 'var(--accent-text)' : 'var(--muted)'
+      })),
+      companeros: [
+        {name:'Seba', record:'4–1', good:true},
+        {name:'Tincho', record:'3–2', good:true},
+        {name:'Gastón', record:'2–2', good:false},
+        {name:'Lucho', record:'1–3', good:false}
+      ].map((c,i) => ({...c, ini:this.ini(c.name),
+        top: i === 0 ? 'transparent' : 'var(--line)',
+        fg: c.good ? 'var(--up)' : 'var(--muted)'
+      })),
+
+      isReglas: st.screen === 'reglas',
+      reglas: [
+        {k:'formato', title:'Formato de partido', value:'1 set a 4 games', body:'Cada partido es un set único a 4 games. Si se llega a 3–3 se define con un game más, sin ventajas.'},
+        {k:'parejas', title:'Cómo se arman las parejas', value:'Cruzando el orden de desempate', body:'Los campeones de la fecha anterior repiten pareja mientras sigan ganando. El resto se cruza: el mejor ubicado con el peor, el segundo con el anteúltimo, y así.'},
+        {k:'puntos', title:'Puntos por posición', value:'10 · 7 · 4 · 2', body:'Se reparten al cerrar la fecha según la tabla de esa noche. Los dos jugadores de una pareja se llevan los mismos puntos.'},
+        {k:'desempate', title:'Orden de desempate', value:'Se refresca cada 3 fechas', body:'Es una lista fija que corta los empates de puntos. Se recalcula cada 3 fechas con la tabla de ese momento, y de ahí salen las parejas.'},
+        {k:'descarte', title:'Fechas que cuentan', value:'Las mejores 9 de 12', body:'Las 3 peores fechas de cada jugador se descartan de la tabla general. Faltar no te hunde el año.'},
+        {k:'masters', title:'Masters', value:'Los 4 primeros', body:'Al terminar las 12 fechas, los 4 primeros de la tabla juegan el Masters. Se define ahí el campeón del año.'}
+      ].map(r => ({
+        title:r.title, value:r.value, body:r.body,
+        open: st.ruleOpen === r.k,
+        chev: st.ruleOpen === r.k ? '−' : '+',
+        toggle: () => this.setState(s => ({ruleOpen: s.ruleOpen === r.k ? null : r.k}))
+      })),
+
+      isAjustes: st.screen === 'ajustes',
+      ajustesTorneo: [
+        {label:'Nombre', hint:'Como aparece en la lista', value:'Los Jueves 2026'},
+        {label:'Jugadores', hint:'Cambiar o reemplazar a alguien', value:'8 ›'},
+        {label:'Formato', hint:'Sets, games y puntos por posición', value:'1 set a 4 ›'},
+        {label:'Link de invitación', hint:'Para los que todavía no entraron', value:'Copiar ›'}
+      ].map((r,i) => ({...r, top: i === 0 ? 'transparent' : 'var(--line)'})),
+      toggles: [
+        {k:'fecha', label:'Aviso de próxima fecha', hint:'El martes anterior, para confirmar'},
+        {k:'resultado', label:'Resultados cargados', hint:'Cuando alguien carga un partido'},
+        {k:'tabla', label:'Cambios en la tabla', hint:'Si subís o bajás de posición'}
+      ].map((t,i) => {
+        const on = st.notif[t.k];
+        return {label:t.label, hint:t.hint,
+          top: i === 0 ? 'transparent' : 'var(--line)',
+          trackBg: on ? 'var(--accent)' : 'var(--chip)',
+          knob: on ? 'var(--accent-text)' : 'var(--muted)',
+          justify: on ? 'flex-end' : 'flex-start',
+          toggle: () => this.setState(s => ({notif:{...s.notif, [t.k]: !s.notif[t.k]}}))
+        };
+      }),
+      themeOpts: [{k:'light', label:'Claro'}, {k:'dark', label:'Oscuro'}, {k:'auto', label:'Automático'}].map(t => {
+        const on = st.theme === t.k;
+        return {label:t.label,
+          border: on ? 'var(--accent)' : 'var(--line)',
+          bg: on ? 'var(--accent)' : 'transparent',
+          fg: on ? 'var(--accent-text)' : 'var(--text)',
+          go: () => this.setState({theme: t.k === 'auto' ? 'light' : t.k})
+        };
+      }),
+
+      isTabla: st.screen === 'tabla',
+      isFechas: st.screen === 'fechas',
+      isFecha,
+      isOther: false,
+
+      going: st.going, notGoing: !st.going,
+      toggleGoing: () => this.setState(s => ({going:!s.going})),
+      standings, fechas, admin: st.admin,
+
+      isDraft, seats, blocked, canGenerate: !blocked && !st.generated, generated: st.generated && !blocked,
+      missingName: faltan.length ? faltan[0].name : '',
+      seatSummary: `${vienen} de 8`,
+      generate: () => this.setState({generated:true}),
+      pairsDraft: PAIRS.map(p => ({...p,
+        border: p.isDef ? 'var(--up)' : 'var(--line)',
+        chipBg: p.isDef ? 'var(--ok-bg)' : 'var(--chip)',
+        chipFg: p.isDef ? 'var(--up)' : 'var(--text)'
+      })),
+
+      isPlayable: isFecha && !isDraft,
+      rondas, fechaTable,
+      tableNote: closedNow
+        ? 'Nico & Gastón quedaron 2° por diferencia de games: empataron en partidos ganados con Juanma & Seba.'
+        : 'Se actualiza a medida que se cargan los resultados. Los puntos se reparten al cerrar la fecha.',
+      showClose: st.admin && st.fechaState === 'open',
+      closeLabel: missing > 0 ? `Cerrar fecha · faltan ${missing} partidos` : 'Cerrar fecha',
+      closeBg: missing > 0 ? 'var(--chip)' : 'var(--accent)',
+      closeFg: missing > 0 ? 'var(--muted)' : 'var(--accent-text)',
+      showReopen: st.admin && closedNow,
+
+      nav: navDef.map(n => ({
+        label:n.label, r:n.r,
+        color: activeTab === n.key ? 'var(--accent-link)' : 'var(--muted)',
+        fill: activeTab === n.key ? 'currentColor' : 'transparent',
+        go: () => this.setState({screen:n.key, sheet:null})
+      })),
+
+      sheetOpen: !!sheetName || st.sheet === '__all__',
+      sheetHasAnswer: !!tiedPair,
+      sheetAnswer: tiedPair
+        ? `${tiedPair[0]} va antes que ${tiedPair[1]}. Están ${byName[tiedPair[0]]} a ${byName[tiedPair[1]]} y corta el orden del cierre de la fecha 3.`
+        : '',
+      openSheetBtn: () => this.setState({sheet:'__all__'}),
+      closeSheet: () => this.setState({sheet:null}),
+      tiebreak: TIEBREAK.map((name,i) => ({
+        n:i+1, name,
+        bg: tiedPair && tiedPair.indexOf(name) !== -1 ? 'var(--ok-bg)' : 'var(--surface)',
+        w: tiedPair && tiedPair.indexOf(name) !== -1 ? 800 : 650
+      }))
+    };
+  }
+}
+</script>
+</body>
+</html>

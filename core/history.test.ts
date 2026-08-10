@@ -7,7 +7,7 @@ function history(pairs: Pair[], champion: Pair | null): MatchdayHistory {
   pairs.forEach((pair, index) => {
     const position = champion !== null && pair === champion ? 1 : index + 2
     for (const entryId of [pair.a, pair.b]) {
-      if (entryId.startsWith('g')) continue // los invitados no cobran
+      if (entryId.startsWith('g')) continue // guests don't collect points
       awards.push({ entryId, position, points: 10 - position })
     }
   })
@@ -48,6 +48,17 @@ describe('previousContext', () => {
     expect(context.defendersAlreadyRepeated).toBe(true)
   })
 
+  it('is not already repeated when the pair before last is a different one', () => {
+    const context = previousContext(history([A, B, C], A), history([B, C], null))
+    expect(context.defendersAlreadyRepeated).toBe(false)
+  })
+
+  it('never returns a guest-only pair, even when it topped the table', () => {
+    const guests: Pair = { a: 'g1', b: 'g2' }
+    const context = previousContext(history([guests, A, B], A), null)
+    expect(context.defenders).toEqual(A)
+  })
+
   it('finds a mixed champion pair by its tournament teammate', () => {
     const mixed: Pair = { a: 'p1', b: 'g1' }
     const context = previousContext(history([mixed, B], mixed), null)
@@ -77,5 +88,13 @@ describe('previousContext', () => {
       awards: [{ entryId: 'p9', position: 1, points: 10 }],
     }
     expect(() => previousContext(broken, null)).toThrow(/0 parejas en la posición 1/)
+  })
+
+  it('fails when the awards exist but none is in position 1', () => {
+    const broken: MatchdayHistory = {
+      pairs: [A, B],
+      awards: [{ entryId: 'p1', position: 2, points: 8 }],
+    }
+    expect(() => previousContext(broken, null)).toThrow(/awards pero ninguno en la posición 1/)
   })
 })

@@ -15,7 +15,12 @@ export interface PairingInput {
   present: EntryId[]
   points: Map<EntryId, number>
   snapshot: EntryId[]
-  /** Winners of the previous matchday, or null when there was none. */
+  /**
+   * The pair that took championship position 1 in the previous matchday,
+   * which is not necessarily the pair that topped the table, since a
+   * guest-only pair takes no championship position. Null when there was
+   * none.
+   */
   defenders: Pair | null
   /** True when the defenders already played their one repeat. */
   defendersAlreadyRepeated: boolean

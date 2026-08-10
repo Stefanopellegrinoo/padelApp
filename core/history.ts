@@ -24,8 +24,10 @@ export interface PreviousContext {
  * not decided here — `buildPairs` decides that, since it is the one that knows
  * who turned up.
  *
- * `last` and `beforeLast` are the CLOSED matchdays immediately before, in that
- * order, or null when the season has not played that many.
+ * `last` and `beforeLast` are the two matchdays immediately before, in that
+ * order, or null when the season has not played that many — closed or not; a
+ * matchday that never closed simply carries no awards, so it yields no
+ * defenders while still contributing its pairs.
  */
 export function previousContext(
   last: MatchdayHistory | null,
@@ -51,7 +53,12 @@ function championsOf(matchday: MatchdayHistory): Pair | null {
   const winners = new Set(
     matchday.awards.filter((award) => award.position === 1).map((award) => award.entryId),
   )
-  if (winners.size === 0) return null
+  if (winners.size === 0) {
+    if (matchday.awards.length > 0) {
+      throw new Error('La fecha anterior tiene awards pero ninguno en la posición 1.')
+    }
+    return null
+  }
 
   const champions = matchday.pairs.filter(
     (pair) => winners.has(pair.a) || winners.has(pair.b),

@@ -325,12 +325,15 @@ awards                                     -- congelado al cerrar la fecha
   "points": [10, 7, 5, 3, 2, 1],
   "regularMatchdays": 10,
   "countBestOf": 8,
-  "mastersSize": 4,
   "tiebreakSnapshotEvery": 3
 }
 ```
 
-Se valida con un esquema en el borde, tanto al crear la temporada como al editarla. Las restricciones están en 2.9. `mastersSize` y los límites de 8 a 12 viven en el código como constantes del formato, no como config: no hay nada que configurar ahí.
+Se valida con un esquema en el borde, tanto al crear la temporada como al editarla. Las restricciones están en 2.9.
+
+`mastersSize` y los límites de 8 a 12 **no aparecen en este JSON**: viven en el código como constantes del formato. No hay nada que configurar ahí, y un campo que sólo admite un valor legal es una trampa — alguien lo edita, la validación lo deja pasar porque nadie lo mira, y la app sigue jugando con el número de siempre mientras la config dice otra cosa.
+
+> Una versión anterior de este documento listaba `mastersSize` dentro del JSON dos líneas antes de decir que no era configurable. Esa contradicción se propagó al plan y de ahí al tipo `SeasonConfig`, y la encontró la revisión final de `core/`. Queda anotado porque el error no estuvo en implementarlo mal: estuvo acá.
 
 ---
 

@@ -21,6 +21,16 @@
 
 **Fuente de verdad de las reglas:** `docs/superpowers/specs/2026-08-09-padel-championship-design.md`. Ante cualquier duda de comportamiento, manda ese documento.
 
+## Sobre los conteos de tests
+
+Cada tarea dice "Expected: PASS — N tests". **Ese número es orientativo: el bloque de
+código es la verdad.** Los conteos los escribí a mano y un `it.each` de tres casos cuenta
+como tres tests, no como uno — ya me equivoqué dos veces por eso.
+
+Si el conteo no coincide con lo que corre: **no toques los tests**. Reportá la
+discrepancia y seguí. Borrar un test para que cuadre un número es la peor forma posible
+de resolverlo.
+
 ## Regla anti-scope-creep
 
 Cada tarea lista explícitamente **qué NO hace**. Si mientras implementás una tarea aparece algo que no está en sus pasos:
@@ -1252,7 +1262,7 @@ export function buildFixture(pairCount: number): Array<Array<[number, number]>> 
 - [ ] **Step 4: Correr los tests y verificar que pasan**
 
 Run: `npm test core/fixture.test.ts`
-Expected: PASS — 18 tests.
+Expected: PASS — 15 tests.
 
 - [ ] **Step 5: Commit**
 
@@ -2932,6 +2942,13 @@ Todo esto está en el spec y **no** se implementa acá. Va en los planes 2 a 4.
 | Schema de Supabase, migraciones, RLS | Plan 2 |
 | Auth: email y contraseña, Google, reclamo de asiento | Plan 2 |
 | Validar resultados contra `matchFormat` al guardar | Plan 2 (es validación de borde, no de dominio) |
+| **Derivar el contexto de la fecha anterior** (quiénes son los defensores, si ya repitieron, qué parejas hubo) | Plan 2 — **hueco encontrado en la revisión final.** El spec 3.3 dice que quién es la pareja defensora se **deriva siempre, nunca se guarda**. Pero `buildPairs` los recibe por parámetro y nada en `core/` los calcula. Si eso termina implementado en la capa de Supabase, la regla del campeón defensor —el diferencial del formato— queda fuera del núcleo probado. Va como función pura en `core/`, no en el acceso a datos. |
+| **La tabla de puntos que arma las parejas es el ranking (mejores N), no la suma cruda** | Plan 2 — **ambigüedad encontrada en la revisión final.** El spec 2.5 paso 4 dice "ordenar el pool por la tabla de puntos", y la tabla aplica mejores N de M (2.1). `snapshots.ts` lo hace bien (pasa por `computeRanking`); el harness de integración usa una suma cruda. Con `countBestOf: 8` de 10 fechas, desde la fecha 9 divergen. Plan 2 tiene que usar el ranking. |
+| **¿Uno o varios invitados por fecha?** | Plan 2 — **decisión pendiente.** `core/` toma un `guestId` único; el schema de 3.2 modela invitados como filas `entries` con `kind = GUEST` y no limita la cantidad. O el schema lo restringe con un unique, o las firmas pasan a tomar un conjunto. Decidirlo ahora que es un cambio de firma y no una migración. |
+| **Racha de defensas como estadística** | Plan 3 — el spec 2.4 dice que la racha se guarda como estadística, no como puntos. Ningún módulo la calcula y no estaba deferida. Va con la pantalla de Estadísticas. |
+| **Mover al invitado en el orden** | Plan 4 — el spec 2.6 dice que el admin puede moverlo si conoce al tipo. `core/` lo pone último y acepta el orden que le den; la UI tiene que ofrecer el arrastre. |
+| **Llamar a `validateConfig` en el borde, siempre** | Plan 2 — **requisito descubierto revisando la Task 11.** `validateConfig` **devuelve** errores, no los tira, así que sólo protege a quien los mira. Con `tiebreakSnapshotEvery = 0`, `Math.floor((f-1)/0)` da `Infinity` y `snapshotForMatchday` **entra en un loop infinito** en vez de fallar. No se agrega un guard dentro de `core/` — el contrato es que la config se valida antes de entrar. Pero ese contrato tiene que ser una decisión explícita del borde, no un supuesto. |
+| **Rechazar un set con games iguales** (ej. `4-4`) | Plan 2 — **requisito descubierto revisando la Task 8.** `SetScore` sólo guarda `gamesA`/`gamesB`, así que un set empatado no suma para nadie: la pareja juega, no gana, y el head-to-head devuelve 0. Es un empate silencioso en un deporte que no tiene empates. `core/standings.ts` hace lo correcto al no inventar un ganador; **el borde tiene que impedir que ese dato entre.** |
 | Cerrar la fecha en una transacción | Plan 2 |
 | Reabrir una fecha cerrada | Plan 2 |
 | Sanitizar el markdown del admin | Plan 3 |

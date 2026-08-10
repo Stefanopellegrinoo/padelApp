@@ -108,22 +108,22 @@ const table = (pairs: Pair[]): PairStanding[] =>
     position: index + 1,
   }))
 
-describe('computeAwards — invitados', () => {
-  it('paga completo al compañero de un invitado', () => {
+describe('computeAwards — guests', () => {
+  it("pays the guest's partner in full", () => {
     const standings = table([pair('p1', 'g1'), pair('p2', 'p3')])
     const awards = computeAwards(standings, CONFIG, ['g1'])
     expect(awards.find((award) => award.entryId === 'p1')?.points).toBe(CONFIG.points[0])
     expect(awards.find((award) => award.entryId === 'g1')).toBeUndefined()
   })
 
-  it('saltea a todos los invitados, no sólo al primero', () => {
+  it('skips every guest, not just the first', () => {
     const standings = table([pair('p1', 'g1'), pair('p2', 'g2')])
     const awards = computeAwards(standings, CONFIG, ['g1', 'g2'])
     expect(awards.map((award) => award.entryId).sort()).toEqual(['p1', 'p2'])
   })
 
-  it('no le da puesto a una pareja hecha sólo de invitados', () => {
-    // La pareja invitada gana la fecha; los 10 puntos son igual del torneo.
+  it('gives no paying position to a guest-only pair', () => {
+    // The guest pair wins the matchday; the 10 points still belong to the championship.
     const standings = table([pair('g1', 'g2'), pair('p1', 'p2'), pair('p3', 'p4')])
     const awards = computeAwards(standings, CONFIG, ['g1', 'g2'])
     expect(awards).toHaveLength(4)
@@ -132,21 +132,24 @@ describe('computeAwards — invitados', () => {
     expect(awards.find((award) => award.entryId === 'p3')?.points).toBe(CONFIG.points[1])
   })
 
-  it('deja todo igual cuando la pareja invitada sale última', () => {
+  it('changes nothing when the guest pair finishes last', () => {
     const standings = table([pair('p1', 'p2'), pair('p3', 'p4'), pair('g1', 'g2')])
     const awards = computeAwards(standings, CONFIG, ['g1', 'g2'])
     expect(awards.find((award) => award.entryId === 'p1')?.position).toBe(1)
     expect(awards.find((award) => award.entryId === 'p3')?.position).toBe(2)
+    expect(awards.find((award) => award.entryId === 'g1')).toBeUndefined()
+    expect(awards.find((award) => award.entryId === 'g2')).toBeUndefined()
+    expect(awards).toHaveLength(4)
   })
 
-  it('no depende del orden en que le pasen la tabla', () => {
+  it('does not depend on the order the table arrives in', () => {
     const standings = table([pair('p1', 'p2'), pair('p3', 'p4')])
     const reversed = [...standings].reverse()
     expect(computeAwards(reversed, CONFIG, [])).toEqual(computeAwards(standings, CONFIG, []))
   })
 
-  it('falla cuando las parejas del torneo superan la lista de puntos', () => {
-    const config = defaultConfig(8) // cuatro valores de puntos
+  it('throws when championship pairs outnumber the points list', () => {
+    const config = defaultConfig(8) // four point values
     const standings = table([
       pair('p1', 'p2'),
       pair('p3', 'p4'),

@@ -190,8 +190,9 @@ describe('a full matchday, end to end', () => {
 
 function pointsFrom(everyAward: Award[][], config: SeasonConfig): Map<string, number> {
   const awardsByMatchday = new Map(everyAward.map((awards, index) => [index + 1, awards]))
-  // El snapshot sólo decide el ORDEN de las filas, y de acá salen los valores:
-  // cualquier permutación da el mismo Map. Va SQUAD porque es determinista.
+  // The snapshot only decides the ORDER of the rows; the values come from
+  // here either way, so any permutation yields the same Map. SQUAD works
+  // because it is deterministic.
   const ranking = computeRanking(awardsByMatchday, SQUAD, config, SQUAD)
   return new Map(ranking.map((row) => [row.entryId, row.points]))
 }

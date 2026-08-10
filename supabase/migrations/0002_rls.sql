@@ -236,3 +236,11 @@ create policy match_sets_write on public.match_sets
 revoke insert, update on public.matchdays from authenticated, anon;
 grant  insert (season_id, number, played_on) on public.matchdays to authenticated;
 grant  update (played_on)                    on public.matchdays to authenticated;
+
+-- `matchdays_write` es FOR ALL, y nunca se le sacó DELETE: sin este revoke un
+-- season admin puede `DELETE /matchdays?id=eq.<cerrada>` y borrar una fecha ya
+-- jugada. `awards` cuelga de `matchday_id` on delete cascade, así que el
+-- award ya pagado se va con ella — la misma corrupción que el revoke de
+-- arriba evita para `status`. Reabrir una fecha cerrada tiene su propio
+-- camino controlado (sólo la última); borrarla no tiene ninguno.
+revoke delete on public.matchdays from authenticated;

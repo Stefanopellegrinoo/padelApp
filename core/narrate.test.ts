@@ -77,4 +77,28 @@ describe('narrateRules', () => {
       expect(section.body.length).toBeGreaterThan(0)
     }
   })
+
+  it('includes sets-difference tiebreaker when the format is multi-set', () => {
+    const bestOfThree = {
+      ...CONFIG,
+      matchFormat: { setsToWin: 2, gamesPerSet: 6, tieBreak: true },
+    }
+    expect(bodyOf(bestOfThree, 'Los desempates')).toContain('después la diferencia de sets')
+  })
+
+  it('omits sets-difference tiebreaker when the format is single-set', () => {
+    const singleSet = {
+      ...CONFIG,
+      matchFormat: { setsToWin: 1, gamesPerSet: 4, tieBreak: true },
+    }
+    expect(bodyOf(singleSet, 'Los desempates')).not.toContain('después la diferencia de sets')
+  })
+
+  it('uses the masters constant, not the config field, even when mismatched', () => {
+    const wrongConfig = { ...CONFIG, mastersSize: 6 }
+    const body = bodyOf(wrongConfig, 'El Masters')
+    expect(body).toContain('4 mejores')
+    expect(body).toContain('3 partidos')
+    expect(body).not.toContain('6 mejores')
+  })
 })

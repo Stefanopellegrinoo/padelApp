@@ -1,4 +1,4 @@
-import { MAX_PLAYERS, MIN_PLAYERS } from './constants'
+import { MASTERS_MATCHES, MASTERS_SIZE, MAX_PLAYERS, MIN_PLAYERS } from './constants'
 import type { SeasonConfig } from './types'
 
 export interface RulesSection {
@@ -16,8 +16,7 @@ export interface RulesSection {
  * The output is in Spanish because the group reads it.
  */
 export function narrateRules(config: SeasonConfig): RulesSection[] {
-  const { points, matchFormat, regularMatchdays, countBestOf, tiebreakSnapshotEvery, mastersSize } =
-    config
+  const { points, matchFormat, regularMatchdays, countBestOf, tiebreakSnapshotEvery } = config
 
   return [
     {
@@ -25,7 +24,7 @@ export function narrateRules(config: SeasonConfig): RulesSection[] {
       body:
         `El campeonato son ${regularMatchdays} fechas. Para cada jugador cuentan sus ` +
         `${countBestOf} mejores resultados, así que se puede faltar alguna vez sin quedar ` +
-        `afuera de la pelea. El año cierra con un Masters entre los ${mastersSize} mejores.`,
+        `afuera de la pelea. El año cierra con un Masters entre los ${MASTERS_SIZE} mejores.`,
     },
     {
       title: 'La fecha',
@@ -56,22 +55,29 @@ export function narrateRules(config: SeasonConfig): RulesSection[] {
     },
     {
       title: 'Los desempates',
-      body:
-        `En la tabla de la fecha, si dos parejas ganan la misma cantidad de partidos, corta la ` +
-        `diferencia de games, después el partido entre ellas. ` +
-        `En la tabla del campeonato, si dos jugadores tienen los mismos puntos corta el orden ` +
-        `de desempate: una lista del mejor al peor que arranca en el orden que consensuó el ` +
-        `grupo y se actualiza cada ${tiebreakSnapshotEvery} fechas con la tabla de ese momento.`,
+      body: describeTiebreak(matchFormat, tiebreakSnapshotEvery),
     },
     {
       title: 'El Masters',
       body:
-        `Los ${mastersSize} mejores del año juegan una jornada final de 3 partidos con ` +
+        `Los ${MASTERS_SIZE} mejores del año juegan una jornada final de ${MASTERS_MATCHES} partidos con ` +
         `compañeros rotativos: cada uno juega una vez con cada uno. Se cuentan los partidos ` +
         `ganados de forma individual. Si hay empate, gana el que llegó mejor posicionado en el ` +
         `ranking anual.`,
     },
   ]
+}
+
+function describeTiebreak(format: SeasonConfig['matchFormat'], snapshotEvery: number): string {
+  const setStep = format.setsToWin > 1 ? `, después la diferencia de sets` : ''
+  return (
+    `En la tabla de la fecha, si dos parejas ganan la misma cantidad de partidos, corta la ` +
+    `diferencia de games${setStep}. Si empatan dos, el partido entre ellas lo decide; si empatan ` +
+    `tres o más, el partido entre ellas no alcanza porque se ganan en círculo, y corta el orden de ` +
+    `desempate. En la tabla del campeonato, si dos jugadores tienen los mismos puntos corta el orden ` +
+    `de desempate: una lista del mejor al peor que arranca en el orden que consensuó el ` +
+    `grupo y se actualiza cada ${snapshotEvery} fechas con la tabla de ese momento.`
+  )
 }
 
 function describeFormat(format: SeasonConfig['matchFormat']): string {

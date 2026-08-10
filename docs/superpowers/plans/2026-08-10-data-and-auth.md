@@ -1694,6 +1694,23 @@ grant execute on function
     public.match_is_open(uuid)
   to authenticated;
 
+-- ── el permiso de base, sin el cual nada de lo de abajo existe ───────────────
+-- Verificado contra la base: esta versión del CLI de Supabase NO le da DML a los
+-- roles de la API. El ACL de las diez tablas nace en `Dxtm` —TRUNCATE,
+-- REFERENCES, TRIGGER, MAINTAIN— sin una letra de select/insert/update/delete,
+-- así que `anon`, `authenticated` y `service_role` recibían 42501 en todas.
+--
+-- Y una política NUNCA ensancha un privilegio que no existe: RLS filtra filas
+-- sobre un permiso ya otorgado. Sin este grant, cada policy de este archivo es
+-- decorativa y todo el Plan 2 de la Task 7 en adelante falla en la primera query.
+--
+-- `service_role` va incluido porque los andamios de `db/test/` escriben con esa
+-- llave: saltea RLS, pero no saltea los privilegios de tabla.
+-- `anon` queda AFUERA a propósito: el modelo de esta tarea es que no ve ni una
+-- fila, y no hay razón para darle superficie que después haya que tapar.
+grant select, insert, update, delete on all tables in schema public
+  to authenticated, service_role;
+
 -- ── prender RLS en todo ──────────────────────────────────────────────────────
 alter table public.players     enable row level security;
 alter table public.seasons     enable row level security;

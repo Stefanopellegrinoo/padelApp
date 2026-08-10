@@ -113,6 +113,10 @@ function resolveSettled(
 ): Pair[] {
   const settled: Pair[] = []
   const taken = new Set<EntryId>()
+  // Entries already claimed by the defenders specifically — tracked apart from
+  // `taken` so a clash with them gets its own, accurate message: the admin
+  // never typed a second fixed pair, the other claimant is the defenders.
+  const defendingEntries = new Set<EntryId>()
 
   const take = (pair: Pair, what: string): void => {
     for (const entryId of [pair.a, pair.b]) {
@@ -120,6 +124,9 @@ function resolveSettled(
         throw new Error(`${what} incluye a ${entryId}, que no juega esta fecha.`)
       }
       if (taken.has(entryId)) {
+        if (defendingEntries.has(entryId)) {
+          throw new Error(`${entryId} ya está en la pareja defensora.`)
+        }
         throw new Error(`${entryId} está en más de una pareja fija.`)
       }
       taken.add(entryId)
@@ -128,7 +135,11 @@ function resolveSettled(
   }
 
   const defending = resolveDefenders(present, defenders, alreadyRepeated)
-  if (defending !== null) take(defending, 'La pareja defensora')
+  if (defending !== null) {
+    take(defending, 'La pareja defensora')
+    defendingEntries.add(defending.a)
+    defendingEntries.add(defending.b)
+  }
   for (const pair of fixedPairs) take(pair, 'Una pareja fija')
 
   return settled

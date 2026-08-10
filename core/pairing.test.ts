@@ -184,7 +184,7 @@ describe('buildPairs — the guest', () => {
 })
 
 describe('buildPairs — several guests', () => {
-  it('splits two loose guests into two mixed pairs', () => {
+  it('two loose guests come out in two mixed pairs, not paired with each other', () => {
     // Ordered pool [p1..p6, g1, g2] → positions 1..8, idealSum 9. The only
     // matching with zero imbalance is 1-8, 2-7, 3-6, 4-5: p1 with g2 and p2 with g1.
     const pairs = buildPairs(
@@ -277,7 +277,7 @@ describe('buildPairs — fixed pairs', () => {
   it('fails if a fixed pair overlaps with the defenders', () => {
     expect(() =>
       buildPairs(input({ defenders: { a: 'p1', b: 'p2' }, fixedPairs: [{ a: 'p2', b: 'p3' }] })),
-    ).toThrow(/p2 está en más de una pareja fija/)
+    ).toThrow(/p2 ya está en la pareja defensora/)
   })
 })
 

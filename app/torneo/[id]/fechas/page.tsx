@@ -138,7 +138,12 @@ export default async function FechasPage({ params }: PageProps) {
           const played = matchday.status === 'CLOSED'
           const inProgress = matchday.status === 'OPEN'
           const champion = played ? championOf(matchday) : null
-          const tagClass = played ? 'bg-chip text-muted' : inProgress ? 'bg-live-bg text-live' : 'text-muted'
+          // `ok-bg`/`up` y no `live-bg`/`live`: en el handoff `live` es el color de
+          // error —borde de input inválido, bloques que impiden continuar, cerrar
+          // sesión— y una fecha jugándose no es un problema. El par afirmativo es el
+          // que usan todos los chips activos del diseño: "Repiten", "Viene",
+          // "Defensora", "Sos vos".
+          const tagClass = played ? 'bg-chip text-muted' : inProgress ? 'bg-ok-bg text-up' : 'text-muted'
           const tagLabel = played ? 'Jugada' : inProgress ? 'En juego' : 'Por jugarse'
 
           return (

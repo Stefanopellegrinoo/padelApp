@@ -48,6 +48,37 @@ export async function addSquadSeat(
   return data.id
 }
 
+/**
+ * Reclama un asiento para quien llama, desde adentro del torneo.
+ *
+ * Es el mismo `claim_seat` que usa Unirse y no un update propio: ahí vive la
+ * atomicidad (el `player_id is null` adentro del where), la regla de un asiento
+ * por persona y los mensajes. Un update desde acá sería una segunda forma de
+ * reclamar, y la que no se probó es la que se rompe.
+ *
+ * Existe porque el que crea el torneo no pasa por Unirse: no tiene por qué
+ * pegarse su propio link de invitación para jugar el torneo que armó.
+ */
+export async function claimOwnSeat(
+  supabase: Client,
+  seasonId: string,
+  entryId: string,
+): Promise<void> {
+  const { data: season, error: seasonError } = await supabase
+    .from('seasons')
+    .select('invite_token')
+    .eq('id', seasonId)
+    .maybeSingle()
+  if (seasonError) throw new EdgeError(`No se pudo leer el torneo: ${seasonError.message}`)
+  if (season === null) throw new EdgeError('El torneo no existe.')
+
+  const { error } = await supabase.rpc('claim_seat', {
+    p_token: season.invite_token,
+    p_entry: entryId,
+  })
+  if (error !== null) throw new EdgeError(error.message)
+}
+
 /** Cambia el nombre del asiento. No toca `player_id`: renombrar no desvincula. */
 export async function renameSeat(
   supabase: Client,

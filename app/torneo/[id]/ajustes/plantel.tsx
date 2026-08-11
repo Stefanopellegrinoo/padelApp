@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { initials } from '@/app/format'
-import { addSeat, dropSeat, editSeatName, unlinkSeatOwner, type WriteResult } from './actions'
+import { addSeat, dropSeat, editSeatName, takeSeat, unlinkSeatOwner, type WriteResult } from './actions'
 
 export interface SeatVM {
   entryId: string
@@ -15,13 +15,26 @@ const ACTION = 'rounded-field bg-chip px-2.5 py-1.5 text-[11.5px] font-extrabold
 
 /**
  * El plantel desde Ajustes: renombrar un asiento, soltar el reclamo de quien lo
- * tomó, sacarlo, y agregar uno nuevo.
+ * tomó, sacarlo, agregar uno nuevo, y quedarse con uno.
  *
  * No toca `squadSize` ni `points` (decisión registrada 3): eso vive en Formato,
  * y mientras las dos cosas no coincidan la pantalla lo dice con `validateConfig`
  * en vez de arreglarlo por su cuenta.
+ *
+ * `canTakeSeat` es "quien organiza todavía no tiene asiento". Se pasa desde la
+ * página, que es la que puede preguntarlo (`myEntryId`), y apaga el botón entero
+ * en vez de dejarlo fallar: `claim_seat` rebota el segundo reclamo, pero ofrecer
+ * un botón que siempre rebota es el defecto que ya apareció en "Reabrir fecha".
  */
-export function Plantel({ seasonId, seats }: { seasonId: string; seats: SeatVM[] }) {
+export function Plantel({
+  seasonId,
+  seats,
+  canTakeSeat,
+}: {
+  seasonId: string
+  seats: SeatVM[]
+  canTakeSeat: boolean
+}) {
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
@@ -79,6 +92,16 @@ export function Plantel({ seasonId, seats }: { seasonId: string; seats: SeatVM[]
                 <button type="button" className={ACTION} onClick={() => setEditing(seat.entryId)}>
                   Editar nombre
                 </button>
+                {canTakeSeat && seat.ownerName === null && (
+                  <button
+                    type="button"
+                    className={ACTION}
+                    disabled={pending}
+                    onClick={() => run(() => takeSeat(seasonId, seat.entryId))}
+                  >
+                    Este soy yo
+                  </button>
+                )}
                 {seat.ownerName !== null && (
                   <button
                     type="button"

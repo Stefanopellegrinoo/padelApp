@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import type { SeasonConfig } from '@/core'
-import { addSquadSeat, removeSeat, renameSeat, unlinkSeat } from '@/db/entries'
+import { addSquadSeat, claimOwnSeat, removeSeat, renameSeat, unlinkSeat } from '@/db/entries'
 import { EdgeError } from '@/db/errors'
 import { renameSeason, updateSeasonConfig, updateSeasonRules } from '@/db/season'
 import { serverClient } from '@/db/server'
@@ -73,6 +73,20 @@ export async function editSeatName(
 ): Promise<WriteResult> {
   return onSeason(seasonId, async (supabase) => {
     await renameSeat(supabase, entryId, displayName)
+  })
+}
+
+/**
+ * Quien organiza toma uno de los asientos del plantel y pasa a jugar el torneo.
+ *
+ * Organizar y jugar son cosas distintas: el admin sigue siendo admin, lo único
+ * que cambia es que ahora tiene un asiento. Nada más que hacer acá — todo lo
+ * que pregunta "¿cuál es mi jugador?" ya sale de `myEntryId`, que mira
+ * `player_id` y nunca miró quién creó el torneo.
+ */
+export async function takeSeat(seasonId: string, entryId: string): Promise<WriteResult> {
+  return onSeason(seasonId, async (supabase) => {
+    await claimOwnSeat(supabase, seasonId, entryId)
   })
 }
 

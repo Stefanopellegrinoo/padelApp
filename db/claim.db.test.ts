@@ -99,6 +99,33 @@ describe('claim_seat', () => {
     expect(entry?.player_id).toBe(claimer.playerId)
   })
 
+  // El que arma el torneo también lo juega. `claim_seat` nunca lo prohibió,
+  // pero durante todo el Plan 4 no hubo forma de llegar: la pantalla de Unirse
+  // daba por sentado que ver el plantel era tener asiento, y quien organiza ve
+  // el plantel entero por ser admin. Este test fija la regla del lado que no se
+  // puede saltear, para que no vuelva a depender de una pantalla.
+  it('lets the season admin claim a seat too', async () => {
+    const admin = await createTestUser()
+    const { seasonId, token, entryIds } = await createOpenSeason(admin, ['Fulano', 'Mengano'])
+    const [entryId] = entryIds
+    if (entryId === undefined) throw new Error('Falta el asiento de test.')
+
+    const { data, error } = await admin.client.rpc('claim_seat', {
+      p_token: token,
+      p_entry: entryId,
+    })
+
+    expect(error).toBeNull()
+    expect(data).toBe(seasonId)
+
+    const { data: entry } = await adminClient()
+      .from('entries')
+      .select('player_id')
+      .eq('id', entryId)
+      .single()
+    expect(entry?.player_id).toBe(admin.playerId)
+  })
+
   it('rejects a token that does not exist', async () => {
     const claimer = await createTestUser()
 

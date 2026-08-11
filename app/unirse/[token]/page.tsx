@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
+import { myEntryId } from '@/db/read'
 import { serverClient } from '@/db/server'
 import { claimSeat } from './actions'
 import { initials } from '@/app/format'
@@ -39,21 +40,19 @@ export default async function UnirsePage({ params, searchParams }: PageProps) {
   const first = seats[0]
   if (first === undefined) throw new Error('unreachable: seats.length ya se verificó arriba')
 
-  // Ya tiene lugar en este torneo: is_participant lo confirma solo, vía RLS —
-  // si `entries` le devuelve una fila de esta temporada es porque ya es
-  // participante (admin o asiento reclamado), y si no, RLS le filtra todo.
-  const { data: myEntries } = await supabase
-    .from('entries')
-    .select('id')
-    .eq('season_id', first.season_id)
-    .limit(1)
-  if (myEntries !== null && myEntries.length > 0) {
-    // Al torneo, NO a la landing. El link de invitación se pega una vez en el
-    // grupo y se toca muchas: todo el que ya reclamó su asiento vuelve a caer
-    // acá, y quien organiza cae SIEMPRE, porque nunca tuvo asiento que
-    // reclamar. Mandarlos a la página de marketing es el mismo defecto que el
-    // Plan 3 arregló en `signIn` — "entrabas y volvías a la landing, igual que
-    // deslogueado"— sobreviviendo en el camino que nadie recorrió.
+  // Tener asiento es tener un `entries.player_id` propio, y nada más.
+  //
+  // Antes esto preguntaba si `entries` le devolvía ALGUNA fila de la temporada,
+  // apoyándose en RLS para filtrar. Pero quien organiza ve el plantel entero
+  // por ser admin, así que la pregunta le daba que sí sin haber reclamado nada
+  // y este redirect lo sacaba de la única pantalla donde podía reclamar: el que
+  // creaba el torneo no podía jugarlo. `claim_seat` nunca lo prohibió — sólo
+  // pide que no tengas ya un asiento— era esta pantalla la que no lo dejaba
+  // llegar.
+  //
+  // Al torneo, NO a la landing: el link se pega una vez en el grupo y se toca
+  // muchas, así que todo el que ya reclamó vuelve a caer acá.
+  if ((await myEntryId(supabase, first.season_id)) !== null) {
     redirect(`/torneo/${first.season_id}`)
   }
 

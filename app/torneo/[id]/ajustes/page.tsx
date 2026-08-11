@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { validateConfig } from '@/core'
-import { entriesOf, playerNames, seasonHeader, seasonRules } from '@/db/read'
+import { entriesOf, myEntryId, playerNames, seasonHeader, seasonRules } from '@/db/read'
 import { serverClient } from '@/db/server'
 import { signOut } from '@/app/auth/actions'
 import { renameTournament } from './actions'
@@ -34,10 +34,11 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
   const { error: renameError } = await searchParams
   const supabase = await serverClient()
 
-  const [header, entries, rules] = await Promise.all([
+  const [header, entries, rules, myEntry] = await Promise.all([
     seasonHeader(supabase, seasonId),
     entriesOf(supabase, seasonId),
     seasonRules(supabase, seasonId),
+    myEntryId(supabase, seasonId),
   ])
   if (!header.isAdmin) redirect(`/torneo/${seasonId}`)
 
@@ -131,7 +132,7 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
         </p>
       ))}
 
-      <Plantel seasonId={seasonId} seats={seats} />
+      <Plantel seasonId={seasonId} seats={seats} canTakeSeat={myEntry === null} />
       <Formato seasonId={seasonId} config={header.config} />
       <Reglas seasonId={seasonId} text={rules.text} />
 

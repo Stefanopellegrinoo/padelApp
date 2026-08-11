@@ -18,6 +18,7 @@ import { EdgeError } from '@/db/errors'
 import { matchdayFull } from '@/app/format'
 import { Rondas, type RoundMatchVM, type RoundVM } from './rondas'
 import { Armado, type DraftPairVM, type SeatVM } from './armado'
+import { CierreFecha } from './carga'
 
 interface PageProps {
   params: Promise<{ id: string; n: string }>
@@ -232,6 +233,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
         const winner = matchWinner(match)
         return {
           key: `${roundNumber}-${index}`,
+          matchId: match.id,
           pairAName: pairName(match.pairA),
           pairBName: pairName(match.pairB),
           scoreA: match.sets.length === 0 ? '–' : String(gamesA),
@@ -249,6 +251,29 @@ export default async function FechaDetailPage({ params }: PageProps) {
         matches,
       }
     })
+
+    // Cargar, cerrar y reabrir son de quien organiza. La fecha cerrada no se
+    // carga más —el handoff §9c: "sin botones de carga"—, y sólo se reabre la
+    // última cerrada: las parejas de las que siguen salieron de esta tabla.
+    // `reopen_matchday` lo vuelve a verificar y su mensaje es el que se muestra.
+    const cargaContext =
+      header.isAdmin && status === 'OPEN'
+        ? { seasonId, matchdayId: matchday.id, matchdayNumber: matchday.number, format: config.matchFormat }
+        : null
+    const remainingMatches = detail.matches.filter((match) => match.sets.length === 0).length
+    // "Reabrir fecha" aparece sólo donde `reopen_matchday` va a decir que sí, y
+    // eso son DOS de sus guardas, no una:
+    //   · no hay una fecha CLOSED posterior (0005_matchday_moves.sql:180-185)
+    //   · no hay otra fecha EN JUEGO (0005:174-179) — una fecha OPEN nunca se
+    //     borra sola, así que ahí el botón falla siempre, y "cerré la 2, abrí
+    //     la 3, vuelvo a mirar la 2" es el camino normal, no un borde.
+    // La tercera guarda —la fecha siguiente en DRAFT— se deja pasar a propósito:
+    // si está vacía, `reopen_matchday` la borra y sigue, que es exactamente el
+    // caso para el que se escribió; si tiene datos, su mensaje es el correcto.
+    const isLastClosed =
+      !matchdays.some(
+        (candidate) => candidate.status === 'CLOSED' && candidate.number > matchday.number,
+      ) && !matchdays.some((candidate) => candidate.status === 'OPEN' && candidate.id !== matchday.id)
 
     const hasGuest = (pair: Pair) => detail.guestIds.includes(pair.a) || detail.guestIds.includes(pair.b)
     const anyGuestInTable = status === 'CLOSED' && standings.some((row) => hasGuest(row.pair))
@@ -273,7 +298,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
           })}
         </div>
 
-        {totalRounds > 0 && <Rondas rounds={rounds} totalRounds={totalRounds} />}
+        {totalRounds > 0 && <Rondas rounds={rounds} totalRounds={totalRounds} carga={cargaContext} />}
 
         <div className="flex flex-col gap-2">
           <p className="text-[15px] font-extrabold tracking-[-.02em]">Tabla de la fecha</p>
@@ -333,6 +358,20 @@ export default async function FechaDetailPage({ params }: PageProps) {
 
           {note !== null && <p className="text-[12.5px] font-[550] text-muted">{note}</p>}
         </div>
+
+        {header.isAdmin && (
+          <CierreFecha
+            context={{
+              seasonId,
+              matchdayId: matchday.id,
+              matchdayNumber: matchday.number,
+              format: config.matchFormat,
+            }}
+            status={status}
+            remaining={remainingMatches}
+            canReopen={isLastClosed}
+          />
+        )}
       </div>
     )
   }

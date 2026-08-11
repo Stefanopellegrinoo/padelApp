@@ -1,9 +1,12 @@
 'use client'
 
 import { useState } from 'react'
+import { Carga, type CargaContext } from './carga'
 
 export interface RoundMatchVM {
   key: string
+  /** El id de la fila de `matches`, que es lo que `saveResult` necesita para cargarlo. */
+  matchId: string
   pairAName: string
   pairBName: string
   scoreA: string
@@ -35,11 +38,21 @@ function MatchRow({ name, score, isWinner, isLoser }: { name: string; score: str
   )
 }
 
-function MatchCard({ match }: { match: RoundMatchVM }) {
+function MatchCard({ match, carga }: { match: RoundMatchVM; carga: CargaContext | null }) {
   return (
     <div className="rounded-[14px] border border-line bg-surface p-[13px]">
       <MatchRow name={match.pairAName} score={match.scoreA} isWinner={match.winner === 'A'} isLoser={match.winner === 'B'} />
       <MatchRow name={match.pairBName} score={match.scoreB} isWinner={match.winner === 'B'} isLoser={match.winner === 'A'} />
+      {/* El botón queda también sobre los partidos ya cargados: `saveResult`
+          reemplaza, y un score tipeado mal de noche no tendría otro arreglo. */}
+      {carga !== null && (
+        <Carga
+          context={carga}
+          matchId={match.matchId}
+          pairAName={match.pairAName}
+          pairBName={match.pairBName}
+        />
+      )}
     </div>
   )
 }
@@ -47,10 +60,21 @@ function MatchCard({ match }: { match: RoundMatchVM }) {
 /**
  * Acordeón de rondas — Task 8, la parte del punto de la tarea. Cada ronda es su
  * propia sección; las que ya cargaron todos los resultados arrancan colapsadas
- * a una fila resumen tocable, las demás arrancan abiertas. Sólo lectura: no hay
- * botón de carga de resultado en ningún lado (eso es Plan 4).
+ * a una fila resumen tocable, las demás arrancan abiertas.
+ *
+ * La Task 10 del Plan 4 le enchufó la carga encima sin rehacerlo: con `carga`
+ * en `null` —cualquiera que no sea quien organiza, o la fecha ya cerrada— el
+ * acordeón es exactamente el de sólo lectura que era.
  */
-export function Rondas({ rounds, totalRounds }: { rounds: RoundVM[]; totalRounds: number }) {
+export function Rondas({
+  rounds,
+  totalRounds,
+  carga = null,
+}: {
+  rounds: RoundVM[]
+  totalRounds: number
+  carga?: CargaContext | null
+}) {
   const [expanded, setExpanded] = useState<Set<number>>(
     () => new Set(rounds.filter((round) => !round.complete).map((round) => round.number)),
   )
@@ -73,7 +97,7 @@ export function Rondas({ rounds, totalRounds }: { rounds: RoundVM[]; totalRounds
             {isOpen ? (
               <div className="flex flex-col gap-2">
                 {round.matches.map((match) => (
-                  <MatchCard key={match.key} match={match} />
+                  <MatchCard key={match.key} match={match} carga={carga} />
                 ))}
                 {round.restingPairName !== null && (
                   <p className="rounded-field bg-chip px-3 py-2 text-[11.5px] font-bold text-muted">

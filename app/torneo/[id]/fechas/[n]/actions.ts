@@ -1,13 +1,17 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import type { SetScore } from '@/core'
 import { EdgeError } from '@/db/errors'
 import {
   clearPairs,
+  closeMatchday,
   generatePairs,
   lockPair,
   nameGuest,
   openMatchday,
+  reopenMatchday,
+  saveResult,
   seedAttendances,
   setAttendance,
   syncGuestSeat,
@@ -110,6 +114,64 @@ export async function setGuestPartner(
       await lockPair(supabase, matchdayId, guestEntryId, partnerEntryId)
     }
     await clearPairs(supabase, matchdayId)
+  })
+}
+
+/**
+ * Lo mismo que `inDraft` pero sin sembrar asistencias: la fecha ya no está en
+ * armado y `seedAttendances` rebotaría con "El presentismo sólo se toca con la
+ * fecha en armado".
+ */
+async function onMatchday(
+  seasonId: string,
+  matchdayNumber: number,
+  work: (supabase: Awaited<ReturnType<typeof serverClient>>) => Promise<void>,
+): Promise<WriteResult> {
+  try {
+    const supabase = await serverClient()
+    await work(supabase)
+    revalidatePath(`/torneo/${seasonId}/fechas/${matchdayNumber}`)
+    revalidatePath(`/torneo/${seasonId}/fechas`)
+    // Cerrar y reabrir mueven la tabla y los puntos de la temporada entera.
+    revalidatePath(`/torneo/${seasonId}`)
+    return { ok: true }
+  } catch (error) {
+    if (error instanceof EdgeError) return { ok: false, error: error.message }
+    throw error
+  }
+}
+
+/** El resultado de un partido, entero. `saveResult` reemplaza los sets: nunca se llama de a un set. */
+export async function saveMatchResult(
+  seasonId: string,
+  matchdayNumber: number,
+  matchId: string,
+  sets: SetScore[],
+): Promise<WriteResult> {
+  return onMatchday(seasonId, matchdayNumber, async (supabase) => {
+    await saveResult(supabase, matchId, sets)
+  })
+}
+
+/** `OPEN → CLOSED`, con los puntos congelados. Es lo que escribe la historia. */
+export async function closeTheMatchday(
+  seasonId: string,
+  matchdayId: string,
+  matchdayNumber: number,
+): Promise<WriteResult> {
+  return onMatchday(seasonId, matchdayNumber, async (supabase) => {
+    await closeMatchday(supabase, matchdayId)
+  })
+}
+
+/** `CLOSED → OPEN`, borrando los awards. Sólo la última cerrada, y eso lo decide `reopen_matchday`. */
+export async function reopenTheMatchday(
+  seasonId: string,
+  matchdayId: string,
+  matchdayNumber: number,
+): Promise<WriteResult> {
+  return onMatchday(seasonId, matchdayNumber, async (supabase) => {
+    await reopenMatchday(supabase, matchdayId)
   })
 }
 

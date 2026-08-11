@@ -46,7 +46,13 @@ export default async function UnirsePage({ params, searchParams }: PageProps) {
     .eq('season_id', first.season_id)
     .limit(1)
   if (myEntries !== null && myEntries.length > 0) {
-    redirect('/')
+    // Al torneo, NO a la landing. El link de invitación se pega una vez en el
+    // grupo y se toca muchas: todo el que ya reclamó su asiento vuelve a caer
+    // acá, y quien organiza cae SIEMPRE, porque nunca tuvo asiento que
+    // reclamar. Mandarlos a la página de marketing es el mismo defecto que el
+    // Plan 3 arregló en `signIn` — "entrabas y volvías a la landing, igual que
+    // deslogueado"— sobreviviendo en el camino que nadie recorrió.
+    redirect(`/torneo/${first.season_id}`)
   }
 
   const selectedSeat = seats.find((seat) => seat.entry_id === selected && !seat.claimed) ?? null

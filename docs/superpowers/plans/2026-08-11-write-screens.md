@@ -2043,6 +2043,47 @@ sorteo (`1° con último`: el invitado sale con Jugador 1), la carga en dos toqu
 con los botones `0/1/2/3` de `gamesPerSet`, el acordeón colapsando la ronda
 completa, el pie con "Reabrir fecha", y las cuatro pestañas en claro y en oscuro.
 
+### Lo que encontró el barrido de botones, pantalla por pantalla
+
+Después de la Task 14 se recorrieron **las 13 pantallas de `ui-screens.md`
+tocando cada botón y cada link**, con una temporada de tres fechas jugadas por la
+UI. Cero errores de JS, cero 500, y todas responden 200 salvo Ajustes.
+
+- **`/unirse/[token]` te tiraba a la landing de marketing si ya tenías asiento.**
+  `page.tsx:48` hacía `redirect('/')`. El link de invitación se pega una vez en
+  el grupo y se toca muchas: todo el que ya reclamó su lugar volvía a caer en la
+  página de venta, logueado —y **quien organiza caía siempre**, porque nunca tuvo
+  asiento que reclamar—. Es el mismo defecto que el Plan 3 arregló en `signIn`,
+  sobreviviendo en el camino que nadie recorrió: la Task 5 arregló el destino de
+  `claimSeat` (`actions.ts`) y este `redirect` de `page.tsx` no estaba en su
+  alcance. **Arreglado**: va a `/torneo/{seasonId}`.
+- **Dos botones vivos apuntan a una pantalla que no existe.** El ⚙ de la Tabla
+  (`app/torneo/[id]/page.tsx:134`) y "Editar reglas"
+  (`app/torneo/[id]/reglas/page.tsx:117`) linkean a `/torneo/[id]/ajustes`, que
+  da **404**. Los ve sólo quien organiza, y el ⚙ está arriba a la derecha de la
+  primera pantalla del torneo. Los arregla la Task 11; mientras no exista, son
+  dos links muertos.
+- **"Mejor dupla del torneo" lista once duplas, no una.** `ui-screens.md` §10
+  pide "la pareja con mejor récord, con su marca". La pantalla pone la mejor
+  primera y después **todas las demás ordenadas por fechas jugadas juntas, no por
+  récord**, así que la segunda fila puede decir 0%. Es pantalla del Plan 3; no se
+  tocó.
+- **Plurales en singular:** `"jugaron 1 fechas"` (stats) y
+  `"faltan 1 partidos"` (cierre). Los dos vienen de copys con `{n}` que no traen
+  variante singular.
+
+Lo que se verificó **calculando contra la base**, no mirando: las ocho filas de
+movimiento de la tabla (J1 de 7° a 4° = ▲3, J7 y J8 ▼2, los tres de arriba
+quietos), los puntos por fecha del perfil (F1 1 · F2 3 · F3 10), la efectividad
+33% = 3 de 9 partidos, y los 18 partidos de tres fechas. El sorteo es
+determinista: "Regenerar" devuelve las mismas parejas.
+
+Y se tocaron sin encontrar nada: el sheet de desempate y sus ⓘ, las seis
+secciones de Reglas, el acordeón de rondas, Reabrir → Cancelar y Reabrir → sí,
+"+ Agregar jugador", "Sacar", las flechas de orden (la del primero está
+correctamente deshabilitada), los steppers, "Usar los defaults", y el alta de un
+jugador nuevo por el link de invitación de punta a punta.
+
 ### Deuda que heredan las tareas que faltan
 
 - ✅ **La Task 8 tenía que CREAR `app/torneo/[id]/actions.ts`, no modificarlo.**

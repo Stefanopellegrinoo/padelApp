@@ -13,7 +13,7 @@ que decidir antes de seguir. Los detalles viven en los documentos que se enlazan
 |---|---|---|
 | **1. `core/`** | Toda la lógica del campeonato, funciones puras | ✅ **Terminado y en `main`** |
 | **2. Datos y auth** | Schema Supabase, migraciones, RLS, login + Google | ✅ **Terminado**, rama `plan-2-data-and-auth` |
-| **3. Pantallas de lectura** | Tabla, Fechas, Estadísticas, Reglas, Perfil | ⬜ |
+| **3. Pantallas de lectura** | Tabla, Fechas, Estadísticas, Reglas, Perfil | ✅ **Terminado**, rama `plan-3-read-screens` |
 | **4. Pantallas de escritura** | Crear torneo, abrir fecha, cargar resultados, Ajustes | ⬜ |
 
 **`core/` en números:** 13 módulos, 145 tests, cero dependencias de producción.
@@ -143,12 +143,37 @@ cerraron antes de arrancar:
 - **Reabrir borra la fecha siguiente si está vacía.** Si ya tiene asistencias,
   invitados o parejas, no la toca y hay que borrarla a mano.
 
-### Plan 3 — pantallas de lectura
+### Plan 3 — pantallas de lectura ✅
 
-- Tabla, Fechas, Estadísticas, Reglas, Perfil de jugador
-- **Sanitizar el markdown** que escribe el admin en la página de reglas
-- **Racha de defensas como estadística** (spec §2.4). Ningún módulo la calcula y
-  no estaba deferida en ningún lado — salió en la revisión final
+Las 11 tareas están hechas. Quedaron construidas las seis pantallas (Tabla con su
+sheet de desempate, Fechas, Fecha `[n]` con el acordeón de rondas, Estadísticas,
+Reglas y Perfil), más tres funciones puras nuevas en `core/` —racha de títulos,
+posición con movimiento, agregados por jugador— y `db/read.ts`, la capa de
+lectura, que **no existía**: `db/` sólo tenía escrituras.
+
+**Números:** 243 tests unitarios, 103 contra la base, `npm run build` compila.
+
+**Lo que falta es a mano:** recorrer las cuatro pestañas en un torneo con datos y
+en uno recién creado, en claro y en oscuro.
+
+**Dos cosas quedaron decididas y anotadas, no olvidadas:**
+
+- **La página de Reglas quedó detrás del login**, aunque el diseño la pensó como
+  el link que se pega en el grupo. El layout del torneo es la guardia de acceso y
+  envuelve también a esa pantalla. Hacerla pública necesita que `anon` pueda leer
+  las reglas de una temporada: política de RLS nueva o RPC, o sea migración. El
+  sanitizado del markdown está hecho y probado igual.
+- **La racha se cuenta por jugador, no por pareja.** El spec §2.4 dice que existe
+  pero no cómo se cuenta, y no puede ser de la pareja: la regla del tope hace que
+  una pareja defienda como máximo una vez. La decisión, con su alternativa, está
+  en el plan.
+
+**La lección que dejó, y sirve para el Plan 4:** los tres huecos que aparecieron
+son de la misma familia. La capa de lectura se especificó desde el schema y no
+desde las pantallas, así que le faltaron justo las cosas que no son tablas sino
+preguntas sobre quien mira: "¿estoy anotado?" y "¿cuál asiento soy yo?". Antes de
+escribir el Plan 4, **trazar qué dato necesita cada pantalla y recién ahí definir
+las funciones de datos.**
 
 ### Plan 4 — pantallas de escritura
 

@@ -1,6 +1,6 @@
 # Estado del proyecto
 
-**Última actualización:** 10 de agosto de 2026, al escribir el Plan 2.
+**Última actualización:** 10 de agosto de 2026, al terminar el Plan 2.
 
 Este documento es el punto de entrada. Dice qué está hecho, qué falta, y qué hay
 que decidir antes de seguir. Los detalles viven en los documentos que se enlazan.
@@ -12,7 +12,7 @@ que decidir antes de seguir. Los detalles viven en los documentos que se enlazan
 | Plan | Qué produce | Estado |
 |---|---|---|
 | **1. `core/`** | Toda la lógica del campeonato, funciones puras | ✅ **Terminado y en `main`** |
-| **2. Datos y auth** | Schema Supabase, migraciones, RLS, login + Google | 📝 **Plan escrito y revisado, sin ejecutar** |
+| **2. Datos y auth** | Schema Supabase, migraciones, RLS, login + Google | ✅ **Terminado**, rama `plan-2-data-and-auth` |
 | **3. Pantallas de lectura** | Tabla, Fechas, Estadísticas, Reglas, Perfil | ⬜ |
 | **4. Pantallas de escritura** | Crear torneo, abrir fecha, cargar resultados, Ajustes | ⬜ |
 
@@ -21,6 +21,9 @@ Verificado de forma independiente: ningún archivo usa `Date`, `Math.random`,
 `fetch` ni `process`; nada importa fuera de `core/`; el grafo de dependencias es
 acíclico. Eso es lo que permite recalcular una fecha vieja y obtener exactamente
 lo mismo que salió la noche que se jugó.
+
+**El Plan 2 en números:** 5 migraciones, 10 tablas con RLS, 4 funciones `security
+definer`, **215 tests unitarios y 92 contra la base**. `npm run build` compila.
 
 **La superficie pública es `core/index.ts`.** Importar de una ruta profunda
 funciona igual —TypeScript no lo puede impedir— pero lo que no está en el index
@@ -89,21 +92,40 @@ del plan 2.
 
 ## Lo que falta implementar, por plan
 
-### Plan 2 — datos y auth
+### Plan 2 — datos y auth ✅
 
-Todo esto está desarrollado tarea por tarea en el plan. Acá queda la lista para
-saber qué cubre:
+Las 14 tareas están hechas. Lo que quedó construido: schema y migraciones, RLS
+sobre las diez tablas, auth con mail y contraseña más Google, reclamo de asiento
+por link, y las tres operaciones que mueven una fecha —abrir, cerrar, reabrir—
+cada una en una función `security definer` con chequeo de admin propio.
 
-- Schema de Supabase, migraciones y RLS
-- Auth: email y contraseña, más Google. **No hay magic link** (teniendo
-  contraseña sería un tercer camino sin aporte)
-- Reclamo de asiento por link de invitación
-- Cerrar una fecha en una transacción atómica, y poder reabrirla
-- **Validar resultados contra `matchFormat`** al guardar
-- **Rechazar un set con games iguales** (un `4-4`), en la base y en el borde
-- **Llamar a `validateConfig` siempre.** Con `tiebreakSnapshotEvery: 0` la
-  cadena de snapshots entra en **loop infinito**
-- Los tres cambios de `core/` que arrastran las decisiones de arriba
+**Lo único que falta es a mano, y necesita a una persona:**
+
+- **Google OAuth no está configurado.** Necesita credenciales reales de Google
+  Cloud y un bloque `[auth.external.google]` en `supabase/config.toml`. El plan
+  lo dejó como checklist manual a propósito; el botón está en pantalla y el
+  callback funciona.
+- **El recorrido a mano del criterio de terminado:** registrarse, salir, entrar,
+  entrar con Google, reclamar un asiento por el link.
+
+**Tres cosas que aprendimos ejecutándolo y conviene no volver a aprender:**
+
+1. **El plan no corría `npm run build` en ninguna de sus 14 tareas**, sólo
+   `typecheck` y `test`. Dos roturas reales de producción pasaron desapercibidas
+   con las dos suites en verde: un componente `'use client'` arrastrando
+   `next/headers`, y un `useSearchParams()` sin límite de Suspense. Ahora
+   `db/client.ts` tiene sólo la mitad del browser y `db/server.ts` la del
+   servidor. **Correr `build` en cada tarea de los planes 3 y 4.**
+2. **Esta versión del CLI de Supabase no le da DML a los roles de la API.** Las
+   diez tablas nacen con ACL `Dxtm` y sin select/insert/update/delete, así que
+   `anon`, `authenticated` y `service_role` reciben `42501`. Y una política
+   nunca ensancha un privilegio que no existe: sin el `grant` de base, toda la
+   RLS es decorativa. Está en `0002_rls.sql`.
+3. **Un test de permisos en verde no prueba nada hasta que lo ves fallar.** La
+   suite de RLS pasaba sus 13 tests y aun así se podía apagar RLS entera en 7 de
+   las 10 tablas sin que nada se pusiera rojo — cubría 3. Dos tests manejados por
+   tabla cerraron ~40 de 47 mutaciones. **Para cualquier cosa de permisos:
+   rompela a propósito y mirá si la suite se entera.**
 
 **No queda ninguna decisión de modelo abierta.** Las tres que faltaban se
 cerraron antes de arrancar:

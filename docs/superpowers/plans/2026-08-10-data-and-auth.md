@@ -3537,7 +3537,16 @@ Tres decisiones de este plan se tomaron con una objeción sobre la mesa. Quedan 
 - [ ] `npm run build` sin errores
 - [ ] Ningún archivo de `core/` importa nada fuera de `core/` — `rg '^import' core/ | rg -v "from '\./"`
 - [ ] Ningún archivo de `core/` usa `Date`, `Math.random`, `fetch` ni `process` — `rg 'Date|Math\.random|fetch|process' core/`
-- [ ] Ningún cálculo del campeonato quedó en `db/` ni en SQL. Los invariantes que **sí** están duplicados en SQL son exactamente cuatro y están listados en Global Constraints: una fecha viva, un set sin empate, sólo la última cerrada se reabre, no se cierra con partidos sin cargar. Cualquier quinto es un hallazgo
+- [x] Ningún cálculo del campeonato quedó en `db/` ni en SQL — **se cumple**: no hay aritmética de puntos en SQL, `close_matchday` recibe los awards ya calculados por `core/`.
+- [x] Los invariantes duplicados en SQL iban a ser cuatro. **Son seis**, y el criterio decía que cualquier quinto es un hallazgo. Acá está:
+  1. Una fecha viva (`matchdays_one_live`)
+  2. Un set sin empate (`match_sets_no_draw`)
+  3. Sólo se reabre la última cerrada
+  4. No se cierra con partidos sin cargar
+  5. **El Masters no reparte puntos** — lo trajo el bloque de la Task 12 de este mismo plan, o sea que el plan se contradecía con su propio criterio antes de ejecutarse
+  6. **No hay puntos para alguien que no jugó la fecha** — agregado en la ronda de fix de las Tasks 12/13, después de que la revisión probara que `close_matchday` aceptaba un payload forjado: 9999 puntos a un jugador, puntos a un ausente, posiciones no contiguas
+
+  Los dos son defensas de última línea sobre reglas que, si se rompen, corrompen la historia en silencio. Ninguno calcula nada. Se dejan.
 - [ ] Las diez tablas tienen RLS prendida y al menos una política — una query a `pg_policies` y `pg_class.relrowsecurity` que devuelva las diez
 - [ ] Ningún archivo bajo `app/` lee `SUPABASE_SERVICE_ROLE_KEY` — `rg SERVICE_ROLE app/` sin resultados. (En `.env.example` sí aparece, a propósito)
 - [ ] A mano: registrarse, salir, entrar, entrar con Google, reclamar un asiento por el link

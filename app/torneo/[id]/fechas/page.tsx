@@ -10,6 +10,7 @@ import {
 } from '@/db/read'
 import { serverClient } from '@/db/server'
 import { matchdayDay } from '@/app/format'
+import { AbrirFecha } from './abrir'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -107,8 +108,22 @@ export default async function FechasPage({ params }: PageProps) {
 
   const remainingForMasters = Math.max(0, header.regularMatchdays - closedMatchdays.length)
 
+  // El CTA de abrir aparece sólo si soy admin Y no hay ninguna fecha sin cerrar.
+  // La segunda condición no es cosmética: `matchdays_one_live`
+  // (0001_schema.sql:48) es un índice único sobre `season_id where status <>
+  // 'CLOSED'`, así que el insert rebota con un 23505 y `createMatchday` lo
+  // traduce a "Ya hay una fecha sin cerrar en esta temporada.". Un botón que
+  // siempre falla es peor que no tener botón. Cuenta sobre `allMatchdays` y no
+  // sobre las regulares, porque el índice tampoco distingue el Masters.
+  const hasLiveMatchday = allMatchdays.some((matchday) => matchday.status !== 'CLOSED')
+  // El mismo `coalesce(max(number), 0) + 1` que hace `createMatchday`: si el
+  // botón dice "Abrir fecha 7" y la base crea la 8, la app queda mintiendo.
+  const nextNumber = Math.max(0, ...allMatchdays.map((matchday) => matchday.number)) + 1
+
   return (
     <div className="flex flex-col gap-3 pt-3">
+      {header.isAdmin && !hasLiveMatchday && <AbrirFecha seasonId={seasonId} number={nextNumber} />}
+
       <header className="flex flex-col gap-[3px]">
         <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
           {header.regularMatchdays} fechas · {closedMatchdays.length} jugadas

@@ -1846,6 +1846,24 @@ plan agrega catorce pantallas que además **escriben**.
 
 - `npm run build` con el dev server vivo **corrompe `.next`** y tira 500 que
   parecen bugs de código. Buildeá con el server apagado.
+
+  **Y la trampa es peor de lo que dice esa línea, medida tres veces en un día:**
+  el build sale bien; **el que queda roto es el dev server**, y de una forma que
+  no parece un problema de build. Sigue sirviendo el HTML, pero **todos los
+  chunks de JS pasan a dar 404** (`main-app.js`, `app-pages-internals.js`,
+  `app/login/page.js`). Sin JS React no hidrata, `canSubmit` se queda en `false`
+  y **el botón "Entrar" nunca se habilita** — se lee como "el login está roto",
+  no como "el server está en mal estado". Las otras dos direcciones del mismo
+  problema: arrancar `npm run dev` sobre un `.next` de producción tira
+  `MODULE_NOT_FOUND`, y editar archivos con el dev server vivo tira
+  `UnrecognizedActionError: Server Action ... was not found on the server`.
+
+  **La regla, entonces:** antes de cualquier `npm run build`, mirar qué hay
+  levantado con `ss -ltnp | rg :300` — en esta máquina los puertos 3000 a 3003
+  son de otros proyectos y el dev server de padelApp puede estar en cualquiera.
+  Y después de buildear, `rm -rf .next` antes de volver a `npm run dev`.
+  **Matar el server por el PID que tiene el puerto**, no por el nombre: `kill` al
+  wrapper de `npm`/`sh` deja `next-server` vivo con el puerto tomado.
 - `npm run test:db` deja ~80 temporadas basura. **Corré `npm run db:reset` antes
   de cualquier verificación visual.**
 - El seed **no fija el UUID de la temporada demo**: cambia en cada reset.

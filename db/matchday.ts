@@ -332,6 +332,16 @@ export async function closeMatchday(supabase: Client, matchdayId: string): Promi
   if (error !== null) throw new EdgeError(error.message)
 }
 
+/**
+ * Reabre la última fecha cerrada: borra sus awards y la vuelve a OPEN. Las
+ * parejas quedan como estaban — no se rearman. `reopen_matchday` valida todo
+ * (admin, que esté CLOSED, que sea la última) del lado de la base.
+ */
+export async function reopenMatchday(supabase: Client, matchdayId: string): Promise<void> {
+  const { error } = await supabase.rpc('reopen_matchday', { p_matchday: matchdayId })
+  if (error !== null) throw new EdgeError(error.message)
+}
+
 /** Guarda el resultado de un partido. Reemplaza cualquier set anterior en vez de acumularlo. */
 export async function saveResult(
   supabase: Client,

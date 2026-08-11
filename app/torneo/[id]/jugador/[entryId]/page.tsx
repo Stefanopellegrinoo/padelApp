@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import {
+  computeRanking,
   partnerRecords,
   rankingWithMovement,
   snapshotForMatchday,
@@ -8,6 +9,7 @@ import {
   titleStreaks,
   type Award,
   type EntryId,
+  type SeasonConfig,
 } from '@/core'
 import { awardsOf, closedHistoryAll, entriesOf, seasonHeader } from '@/db/read'
 import { serverClient } from '@/db/server'
@@ -15,6 +17,118 @@ import { initials } from '@/app/format'
 
 interface PageProps {
   params: Promise<{ id: string; entryId: string }>
+}
+
+/**
+ * La trayectoria del año, dibujada.
+ *
+ * SVG en línea y no una librería de gráficos: son cuatro cuentas y el proyecto
+ * no admite dependencias nuevas. **El eje va al revés** —el 1° arriba— porque un
+ * puesto más chico es mejor, y una línea que baja cuando mejorás se lee al
+ * revés de lo que pasó.
+ *
+ * `viewBox` con `preserveAspectRatio="none"` y ancho 100%: se estira al ancho
+ * del teléfono sin que haya que medir nada del lado del cliente.
+ */
+function Trayectoria({
+  trail,
+  squadSize,
+}: {
+  trail: Array<{ number: number; position: number }>
+  squadSize: number
+}) {
+  const width = 100
+  const height = 34
+  const last = trail[trail.length - 1]
+  const first = trail[0]
+  if (last === undefined || first === undefined) return null
+
+  // De 1 a `squadSize` repartido en la altura, con un margen para que el punto
+  // del 1° y el del último no queden cortados por el borde.
+  const y = (position: number) =>
+    squadSize <= 1 ? height / 2 : 3 + ((position - 1) / (squadSize - 1)) * (height - 6)
+  const x = (index: number) =>
+    trail.length <= 1 ? width / 2 : (index / (trail.length - 1)) * width
+
+  const points = trail.map((step, index) => `${x(index)},${y(step.position)}`).join(' ')
+  const climbed = last.position < first.position
+  const stroke = climbed ? 'var(--color-up)' : last.position > first.position ? 'var(--color-down)' : 'var(--color-muted)'
+
+  return (
+    <div className="flex flex-col gap-2 rounded-[14px] border border-line bg-surface p-[14px]">
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="text-[9.5px] font-extrabold uppercase tracking-[.13em] text-muted">
+          Cómo viene
+        </p>
+        <p className="text-[11.5px] font-[600] text-muted">
+          Arrancó {first.position}° · va {last.position}°
+        </p>
+      </div>
+
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        preserveAspectRatio="none"
+        className="h-[34px] w-full"
+        role="img"
+        aria-label={`Puesto por fecha: ${trail.map((step) => `fecha ${step.number}, ${step.position}°`).join('; ')}`}
+      >
+        <polyline
+          points={points}
+          fill="none"
+          stroke={stroke}
+          strokeWidth="1.5"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+          vectorEffect="non-scaling-stroke"
+        />
+        <circle cx={x(trail.length - 1)} cy={y(last.position)} r="2.5" fill={stroke} vectorEffect="non-scaling-stroke" />
+      </svg>
+
+      <div className="flex justify-between">
+        {trail.map((step) => (
+          <span key={step.number} className="text-[9.5px] font-bold text-muted">
+            F{step.number}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * En qué puesto de la tabla general estaba este jugador al cerrar cada fecha.
+ *
+ * No hay nada guardado que responda esto: `awards.position` congela el puesto
+ * DE ESA FECHA —1° a 4° del día—, no el del año. La única fuente honesta es
+ * recomputar el ranking con las fechas de las que se disponía en cada momento,
+ * que es barato porque `computeRanking` es puro y son doce fechas como mucho.
+ *
+ * Y es la misma función que dibuja la tabla de hoy: la trayectoria termina
+ * exactamente en el puesto que el jugador ve arriba, en vez de en un número
+ * parecido calculado de otra manera.
+ */
+function positionsByMatchday(
+  numbers: readonly number[],
+  awardsByMatchday: Map<number, Award[]>,
+  squad: readonly EntryId[],
+  config: SeasonConfig,
+  entryId: EntryId,
+): Array<{ number: number; position: number }> {
+  const trail: Array<{ number: number; position: number }> = []
+
+  for (const [index, number] of numbers.entries()) {
+    const upToHere = new Map(
+      [...awardsByMatchday].filter(([played]) => numbers.slice(0, index + 1).includes(played)),
+    )
+    // El snapshot vigente en ese momento: el de la fecha siguiente a la última
+    // cerrada, igual que en la Tabla.
+    const snapshot = snapshotForMatchday(index + 2, [...squad], upToHere, config)
+    const ranking = computeRanking(upToHere, [...squad], config, [...snapshot])
+    const at = ranking.findIndex((candidate) => candidate.entryId === entryId)
+    if (at >= 0) trail.push({ number, position: at + 1 })
+  }
+
+  return trail
 }
 
 interface MatchdayMark {
@@ -122,6 +236,14 @@ export default async function JugadorPage({ params }: PageProps) {
     row.discarded,
   )
 
+  const trail = positionsByMatchday(
+    history.map((matchday) => matchday.number),
+    awardsByMatchday,
+    seedOrder,
+    header.config,
+    entryId,
+  )
+
   const myRecords = partnerRecords(history)
     .filter((record) => record.entryId === entryId)
     .sort((a, b) => b.won - b.lost - (a.won - a.lost) || b.together - a.together)
@@ -195,6 +317,8 @@ export default async function JugadorPage({ params }: PageProps) {
           ))}
         </div>
       )}
+
+      {trail.length >= 2 && <Trayectoria trail={trail} squadSize={seedOrder.length} />}
 
       {myRecords.length > 0 && (
         <div className="flex flex-col gap-2">

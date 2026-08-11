@@ -78,7 +78,14 @@ describe('the config the wizard builds', () => {
 describe('formatErrors', () => {
   it('catches points that do not go down', () => {
     const config = { ...configFor(8), points: [10, 10, 5, 3] }
-    expect(formatErrors(config)).toEqual(['Los puntos tienen que ir de mayor a menor, sin repetir.'])
+    expect(formatErrors(config)).toEqual([
+      'Los puntos tienen que ir de mayor a menor. El único que se puede repetir es el 0.',
+    ])
+  })
+
+  // Lo que el usuario quiere poder escribir: que sólo puntúen los primeros.
+  it('accepts a tail of zeros, so only the first places score', () => {
+    expect(formatErrors({ ...configFor(12), points: [10, 6, 3, 1, 0, 0] })).toEqual([])
   })
 
   // Este test decía lo contrario y era el que quedaba de la regla vieja. El 0
@@ -90,14 +97,16 @@ describe('formatErrors', () => {
     expect(formatErrors(config)).toEqual([])
   })
 
-  // La causa de fondo: el paso 4 tiene su propia copia de las reglas de puntos
-  // y `core` tiene la de verdad, la que corre antes de escribir. Cuando se
-  // separan, la pantalla te frena por algo que la base acepta —o peor, te deja
-  // pasar algo que va a explotar al guardar. Esto las mantiene atadas.
+  // El paso 4 ya NO tiene su propia copia de las reglas: las dos llaman a
+  // `pointsErrors`. Esta prueba queda igual, como red contra que alguien vuelva
+  // a duplicarlas — que es exactamente cómo se rompió la primera vez.
   it('agrees with core on every points list the stepper can produce', () => {
     const lists = [
       [10, 6, 3, 1],
       [10, 6, 3, 0],
+      [10, 6, 0, 0],
+      [0, 0, 0, 0],
+      [10, 0, 3, 1],
       [10, 10, 5, 3],
       [1, 2, 3, 4],
       [99, 50, 2, 0],

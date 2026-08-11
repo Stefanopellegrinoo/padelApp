@@ -44,19 +44,7 @@ export function validateConfig(config: SeasonConfig): string[] {
       `Con un plantel de ${squadSize} hacen falta ${expectedPoints} valores de puntos, no ${points.length}.`,
     )
   }
-  // El 0 vale. La versión anterior lo prohibía con este argumento: "si salir
-  // último diera 0, sería lo mismo que faltar". Es cierto —con `countBestOf`,
-  // una fecha jugada que pagó 0 puntúa igual que una a la que no fuiste— pero es
-  // una decisión del torneo, no una regla del formato, y hay grupos que quieren
-  // exactamente eso: que el último no sume. Lo que sigue prohibido es el
-  // negativo, que no significa nada, y repetir un valor, que lo frena
-  // `isStrictlyDescending` de abajo.
-  if (points.some((value) => value < 0)) {
-    errors.push('Los puntos no pueden ser negativos.')
-  }
-  if (!isStrictlyDescending(points)) {
-    errors.push('Los puntos tienen que ir de mayor a menor, sin repetir.')
-  }
+  errors.push(...pointsErrors(points))
 
   if (matchFormat.setsToWin < 1) {
     errors.push(
@@ -85,12 +73,46 @@ export function validateConfig(config: SeasonConfig): string[] {
   return errors
 }
 
-function isStrictlyDescending(values: number[]): boolean {
+/**
+ * Las reglas de la lista de puntos, en UN solo lugar.
+ *
+ * Está exportada porque el paso 4 del wizard tenía su propia copia y se
+ * separaron: cuando el 0 pasó a ser legal, la pantalla siguió rechazándolo y te
+ * dejaba elegir un valor que después te trababa el "Continuar". Dos copias de
+ * una regla son una regla y media.
+ *
+ * Las tres reglas:
+ * - **Nada negativo.** Un puesto que resta no significa nada.
+ * - **Ganar suma.** Con el primero en 0 la lista entera es 0 —es de mayor a
+ *   menor y no hay negativos— y la temporada no podría producir una tabla.
+ * - **De mayor a menor, y el 0 puede repetirse.** Repetir un valor que paga
+ *   sería un empate declarado de antemano y lo decide el desempate, no la
+ *   config. El 0 es otra cosa: es "de acá para abajo no se suma", que es como
+ *   un grupo dice "sólo puntúan los primeros cuatro". Al no haber negativos,
+ *   un 0 obliga a que todo lo que sigue también sea 0.
+ */
+export function pointsErrors(points: number[]): string[] {
+  const errors: string[] = []
+
+  if (points.some((value) => value < 0)) {
+    errors.push('Los puntos no pueden ser negativos.')
+  }
+  if (points.length > 0 && points[0] === 0) {
+    errors.push('Ganar tiene que sumar: el primer puesto no puede quedar en 0.')
+  }
+  if (!isDescendingWithZeroTail(points)) {
+    errors.push('Los puntos tienen que ir de mayor a menor. El único que se puede repetir es el 0.')
+  }
+  return errors
+}
+
+function isDescendingWithZeroTail(values: number[]): boolean {
   for (let i = 1; i < values.length; i++) {
     const previous = values[i - 1]
     const current = values[i]
     if (previous === undefined || current === undefined) return false
-    if (current >= previous) return false
+    // Después de un 0 sólo puede venir otro 0; antes, cada valor baja de verdad.
+    if (previous === 0 ? current !== 0 : current >= previous) return false
   }
   return true
 }

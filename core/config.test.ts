@@ -36,9 +36,11 @@ describe('validateConfig', () => {
     expect(errors).toContain('Con un plantel de 12 hacen falta 6 valores de puntos, no 4.')
   })
 
-  it('rejects points that are not strictly descending', () => {
+  const ORDER = 'Los puntos tienen que ir de mayor a menor. El único que se puede repetir es el 0.'
+
+  it('rejects a repeated value that pays', () => {
     const errors = validateConfig({ ...valid, points: [10, 7, 7, 3, 2, 1] })
-    expect(errors).toContain('Los puntos tienen que ir de mayor a menor, sin repetir.')
+    expect(errors).toContain(ORDER)
   })
 
   // El último puede no sumar nada: es una decisión del torneo, no una regla del
@@ -52,10 +54,25 @@ describe('validateConfig', () => {
     expect(errors).toContain('Los puntos no pueden ser negativos.')
   })
 
-  // El 0 no aflojó la regla de al lado: dos ceros siguen siendo un empate.
-  it('still rejects two zeros, because they repeat', () => {
-    const errors = validateConfig({ ...valid, points: [10, 7, 5, 3, 0, 0] })
-    expect(errors).toContain('Los puntos tienen que ir de mayor a menor, sin repetir.')
+  // Este test decía lo contrario: prohibía dos ceros por "repetidos". Con un
+  // plantel de 12 son 6 valores, así que "sólo puntúan los primeros cuatro" NO
+  // se podía escribir — bajar el quinto a 0 obligaba al sexto a ser negativo.
+  // Repetir un valor que PAGA sigue prohibido; el 0 no paga.
+  it('accepts as many trailing zeros as the tournament wants', () => {
+    expect(validateConfig({ ...valid, points: [10, 6, 3, 1, 0, 0] })).toEqual([])
+    expect(validateConfig({ ...valid, points: [10, 0, 0, 0, 0, 0] })).toEqual([])
+  })
+
+  it('rejects a zero with something after it', () => {
+    const errors = validateConfig({ ...valid, points: [10, 7, 5, 0, 2, 1] })
+    expect(errors).toContain(ORDER)
+  })
+
+  // Sin esto, [0,0,0,0,0,0] pasaría: es de mayor a menor y no tiene negativos.
+  // Una temporada donde ganar no suma no produce tabla.
+  it('rejects a list where winning pays nothing', () => {
+    const errors = validateConfig({ ...valid, points: [0, 0, 0, 0, 0, 0] })
+    expect(errors).toContain('Ganar tiene que sumar: el primer puesto no puede quedar en 0.')
   })
 
   it('rejects countBestOf above regularMatchdays', () => {

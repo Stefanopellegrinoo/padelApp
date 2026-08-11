@@ -55,6 +55,26 @@ describe('narrateRules', () => {
     expect(body).not.toContain('el 1º, 10')
   })
 
+  // La página de reglas es la que leen los jugadores para saber cómo funciona
+  // el campeonato. Afirmaba SIEMPRE "Nadie suma 0 por presentarse", que dejó de
+  // ser cierto cuando el 0 se volvió legal: un torneo donde sólo puntúan los
+  // primeros cuatro leía una regla que él mismo no cumple.
+  it('does not promise that everybody scores when some places pay nothing', () => {
+    const soloCuatro = { ...CONFIG, points: [10, 7, 5, 3, 0, 0] }
+    const body = bodyOf(soloCuatro, 'Los puntos')
+    expect(body).not.toContain('Nadie suma 0 por presentarse')
+    expect(body).toContain('sólo puntúan los primeros 4 puestos')
+  })
+
+  it('keeps the old promise when every place pays', () => {
+    expect(bodyOf(CONFIG, 'Los puntos')).toContain('Nadie suma 0 por presentarse')
+  })
+
+  it('says it in singular when only the winner scores', () => {
+    const soloElPrimero = { ...CONFIG, points: [10, 0, 0, 0, 0, 0] }
+    expect(bodyOf(soloElPrimero, 'Los puntos')).toContain('sólo puntúa el que gana la fecha')
+  })
+
   it('states the snapshot refresh interval', () => {
     expect(bodyOf(CONFIG, 'Los desempates')).toContain('3 fechas')
   })

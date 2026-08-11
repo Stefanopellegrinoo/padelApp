@@ -41,8 +41,8 @@ export function narrateRules(config: SeasonConfig): RulesSection[] {
         `Los dos integrantes de una pareja suman siempre lo mismo, según dónde terminó la pareja: ` +
         points.map((value, index) => `${ordinal(index + 1)}, ${value}`).join('; ') +
         `. Cuando juegan menos parejas se usan los primeros valores, así ganar la fecha ` +
-        `siempre suma ${points[0] ?? 0}. Nadie suma 0 por presentarse: si salir último diera ` +
-        `lo mismo que faltar, convendría faltar.`,
+        `siempre suma ${points[0] ?? 0}. ` +
+        zeroTail(points),
     },
     {
       title: 'Cómo se arman las parejas',
@@ -84,6 +84,26 @@ function describeFormat(format: SeasonConfig['matchFormat']): string {
   const setWord = format.setsToWin === 1 ? 'un set' : `${format.setsToWin} sets ganados`
   const tie = format.tieBreak ? ' con tie-break' : ''
   return `Cada partido se define a ${setWord} de ${format.gamesPerSet} games${tie}.`
+}
+
+/**
+ * La frase de cierre de "Los puntos", que depende de si el torneo paga todos
+ * los puestos o no.
+ *
+ * La versión anterior afirmaba siempre "Nadie suma 0 por presentarse", y desde
+ * que el 0 es legal eso puede ser mentira. Esta página es la que leen los
+ * jugadores para saber cómo funciona el campeonato: una regla que la config ya
+ * no cumple es peor que no decir nada.
+ */
+function zeroTail(points: number[]): string {
+  const paying = points.filter((value) => value > 0).length
+  if (paying === points.length) {
+    return 'Nadie suma 0 por presentarse: si salir último diera lo mismo que faltar, convendría faltar.'
+  }
+  if (paying === 1) {
+    return 'De ahí para abajo no se suma nada: en esta temporada sólo puntúa el que gana la fecha.'
+  }
+  return `De ahí para abajo no se suma nada: en esta temporada sólo puntúan los primeros ${paying} puestos.`
 }
 
 function ordinal(position: number): string {

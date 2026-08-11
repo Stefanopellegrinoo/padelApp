@@ -5,7 +5,7 @@
  * DOM y sin base. Es la única parte del paso a paso donde se puede equivocar
  * algo: el resto es dibujar.
  */
-import { MAX_PLAYERS, MIN_PLAYERS, defaultConfig, type SeasonConfig } from '@/core'
+import { MAX_PLAYERS, MIN_PLAYERS, defaultConfig, pointsErrors, type SeasonConfig } from '@/core'
 
 /** Los rangos son medidas del handoff (§6 paso 4), no decisiones de este código. */
 export interface Stepper {
@@ -180,28 +180,20 @@ export function resizeConfig(config: SeasonConfig, squadSize: number): SeasonCon
 }
 
 /**
- * Los errores del paso 4, con las frases del handoff.
+ * Los errores del paso 4.
  *
- * La frase de los puntos ya no es la del handoff, y tiene que no serlo: decía
- * "…y ninguno puede quedar en cero", que dejó de ser cierto en `141bbcf`
- * (`core/validateConfig` sólo rechaza negativos, y la migración 0010 le sacó a
- * `awards.points` el `check (points > 0)`). El stepper baja hasta 0 desde
- * entonces, así que la pantalla te dejaba poner el 0 y después te trababa el
- * "Continuar" con un motivo que ya no existía.
+ * Los de puntos NO se escriben acá: salen de `pointsErrors`, la misma función
+ * que corre `validateConfig` antes de escribir. Esta pantalla tenía su propia
+ * copia y se separaron — cuando el 0 pasó a ser legal, el paso 4 siguió
+ * rechazándolo y trababa el "Continuar" sobre un valor que el stepper te
+ * dejaba elegir. Con una sola implementación eso no puede volver a pasar.
  *
- * Lo único que queda de la regla es el orden estricto, que es también lo único
- * que puede fallar acá: el stepper no baja de 0, así que un negativo —lo otro
- * que `validateConfig` rechaza— no se puede tipear.
+ * La de `countBestOf` sí es propia, y a propósito: es la frase corta del
+ * handoff, que en el wizard entra al lado del stepper que la causó.
  */
 export function formatErrors(config: SeasonConfig): string[] {
-  const errors: string[] = []
+  const errors = pointsErrors(config.points)
 
-  const descending = config.points.every(
-    (value, index) => index === 0 || value < (config.points[index - 1] ?? Infinity),
-  )
-  if (!descending) {
-    errors.push('Los puntos tienen que ir de mayor a menor, sin repetir.')
-  }
   if (config.countBestOf > config.regularMatchdays) {
     errors.push('No pueden contar más fechas de las que se juegan.')
   }

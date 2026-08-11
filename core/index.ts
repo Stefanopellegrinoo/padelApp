@@ -38,7 +38,7 @@ export type {
 // only protects callers who actually read the result. Call it at every edge.
 // Skipping it is not merely untidy: `tiebreakSnapshotEvery: 0` makes the
 // snapshot chain loop forever.
-export { validateConfig, defaultConfig } from './config'
+export { validateConfig, defaultConfig, pointsErrors } from './config'
 
 // ── Building a matchday ──────────────────────────────────────────────────────
 export type { PairingInput } from './pairing'

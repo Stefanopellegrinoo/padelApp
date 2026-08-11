@@ -20,6 +20,8 @@ export interface SeasonHeader {
   status: string
   regularMatchdays: number
   isAdmin: boolean
+  /** The full config, for screens that need more than `regularMatchdays` — e.g. `narrateRules`. */
+  config: SeasonConfig
 }
 
 export interface EntryRow {
@@ -76,6 +78,7 @@ function toSeasonHeader(row: SeasonRow, userId: string | null): SeasonHeader {
     status: row.status,
     regularMatchdays: config.regularMatchdays,
     isAdmin: row.created_by === userId,
+    config,
   }
 }
 

@@ -8,6 +8,6 @@ export default defineConfig({
     alias: { '@': fileURLToPath(new URL('.', import.meta.url)) },
   },
   test: {
-    include: ['core/**/*.test.ts', 'db/**/*.unit.test.ts'],
+    include: ['core/**/*.test.ts', 'db/**/*.unit.test.ts', 'app/**/*.unit.test.ts'],
   },
 })

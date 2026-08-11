@@ -2161,7 +2161,51 @@ jugador nuevo por el link de invitación de punta a punta.
   justo cuando entrás a corregir un resultado. Es un toque de más, no un
   bloqueo.
 
-### El equipo invitado, y por qué la pantalla se queda corta
+### El equipo invitado, construido (`bda924d`)
+
+Lo que faltaba de la sección de abajo ya está, y probado jugando una fecha
+entera con la pareja adentro: se suma desde la pantalla, sortea con los dos
+**juntos**, la fecha abre, se carga, cierra, **el equipo no cobra un punto y los
+8 del plantel sí**.
+
+**La pieza que lo bloqueaba estaba en `db/`, no en la pantalla.**
+`syncGuestSeat` contaba **todos** los invitados para decidir si faltaba uno, y
+una pareja invitada suma dos sin cambiar la paridad: una fecha de 7 + pareja
+quedaba en 9 y no se podía generar. Ahora cuenta sólo los **sueltos** — los que
+van a jugar con alguien del torneo. Dos tests nuevos lo cubren y se verificó por
+mutación que se ponen rojos sin el arreglo.
+
+**La pareja nace trabada, y no es un detalle:** `orderPool` manda a los invitados
+al fondo del pool y `buildPairs` empareja primero-con-último, así que dos
+invitados sueltos salen en DOS parejas mixtas — y ahí
+`assertPointsCoverMatchday` rebota la fecha, porque quedan más parejas del
+torneo que valores de puntos.
+
+**Dos arreglos de UI que salieron de usarla:**
+
+- **La fecha viva ahora va en `accent`.** Antes la fecha en armado salía con
+  `opacity: .62`: la que había que tocar era la más apagada de la lista. Y como
+  el CTA "Abrir fecha N" desaparece justo cuando se abre una, **no quedaba un
+  solo elemento en acento en toda la pantalla** y no se sabía a dónde ir.
+- **La cruz para sacar la pareja, en vez de un botón "Sacar".** Aparece cuando
+  los campos pierden el foco. **Tuvo un bug que vale anotar:** con la cruz
+  adentro del `div` que escucha el foco, al apretarla **recibía el foco, eso la
+  ocultaba a sí misma y el click no llegaba a dispararse nunca** — se veía, se
+  podía tocar, y no hacía nada. Se arregló sacándola de esa región.
+
+**Strings nuevos, que los decide este trabajo y no el handoff:** `"Parejas
+invitadas"`, `"+ Agregar pareja invitada"`, `"Juegan juntos y no suman puntos
+para el campeonato: es un amistoso adentro de la fecha."` y el tag `"Armando"`
+—derivado del kicker contractual "Armando · sólo vos la ves", que ya distinguía
+ese estado—. El `"Son {n} y sólo se juega de a pares. Falta uno."` del panel
+**no** es nuevo: es el mensaje textual de `assertMatchdaySize`.
+
+**Y una trampa de entorno que costó media hora:** **dos dev servers del mismo
+proyecto corriendo a la vez** comparten `.next` y se pisan los manifests. El
+síntoma no dice eso: chunks en 404, `Failed to find Server Action`, y un login
+que no responde. Antes de culpar al código, `ss -ltnp` y contar servers.
+
+### El equipo invitado, la medición original que lo pedía
 
 Es lo único que falta del producto, y está medido, no supuesto. Se cargaron dos
 invitados a mano en la base, trabados como pareja, y **se jugó la fecha entera

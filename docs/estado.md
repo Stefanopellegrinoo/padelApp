@@ -1,6 +1,6 @@
 # Estado del proyecto
 
-**Última actualización:** 11 de agosto de 2026, con el Plan 4 terminado salvo el equipo invitado en pantalla.
+**Última actualización:** 11 de agosto de 2026, con el Plan 4 terminado.
 
 Este documento es el punto de entrada. Dice qué está hecho, qué falta, y qué hay
 que decidir antes de seguir. Los detalles viven en los documentos que se enlazan.
@@ -14,9 +14,9 @@ que decidir antes de seguir. Los detalles viven en los documentos que se enlazan
 | **1. `core/`** | Toda la lógica del campeonato, funciones puras | ✅ **Terminado y en `main`** |
 | **2. Datos y auth** | Schema Supabase, migraciones, RLS, login + Google | ✅ **Terminado**, rama `plan-2-data-and-auth` |
 | **3. Pantallas de lectura** | Tabla, Fechas, Estadísticas, Reglas, Perfil | ✅ **Terminado**, rama `plan-3-read-screens` |
-| **4. Pantallas de escritura** | Crear torneo, abrir fecha, cargar resultados, Ajustes, Masters | 🚧 **13 de 14 tareas** (la 7 descartada), rama `plan-4-write-screens` |
+| **4. Pantallas de escritura** | Crear torneo, abrir fecha, cargar resultados, Ajustes, Masters | ✅ **Terminado** (13 de 14 tareas; la 7 se descartó), rama `plan-4-write-screens` |
 
-> **Si estás retomando: lo único que falta es el equipo invitado en pantalla.** El estado exacto —qué está
+> **Si estás retomando: el Plan 4 está terminado.** Lo que queda es deuda chica de copys. El estado exacto —qué está
 > hecho, qué falta, en qué orden y qué desvíos ya ocurrieron— está en la sección
 > "Dónde quedó la ejecución" y en "Aparecidos" del
 > [plan 4](superpowers/plans/2026-08-11-write-screens.md). Esta página resume;
@@ -243,11 +243,15 @@ castellano, sin filtrar el mensaje crudo. Reglas sigue pública, con barra final
 sin ella. Los seis `redirect()` de la app se recorrieron contra `npm start` para
 confirmar que el error boundary no se los come.
 
-**Falta una sola cosa de producto: el equipo invitado desde la pantalla.** Las
-reglas están construidas y probadas —se jugó una fecha con dos invitados
-trabados como pareja: quedan juntos, no cobran un punto, y los 8 del plantel
-sí—, pero la pantalla del armado sólo administra el invitado automático que
-aparece cuando el número da impar. El detalle está en `Aparecidos` del plan 4.
+**El equipo invitado ya se administra desde la pantalla.** Se suma una pareja
+invitada, se le ponen los nombres, el sorteo los deja **juntos**, y al cerrar la
+fecha **no cobran un punto** mientras los del plantel sí — jugado de punta a
+punta para probarlo. El bloqueante estaba en `db/` y no en la UI:
+`syncGuestSeat` contaba **todos** los invitados para decidir si faltaba uno, y
+una pareja suma dos sin cambiar la paridad, así que una fecha de 7 + pareja
+quedaba en 9 y no se podía generar.
+
+**Con eso, el Plan 4 no tiene nada de producto pendiente.**
 
 **Y la lista corta de deuda visible**, toda anotada en el plan: los plurales
 ("faltan 1 partidos", "jugaron 1 fechas"), "Mejor dupla del torneo" que lista

@@ -83,6 +83,79 @@ export function squadWarning(names: readonly string[]): string | null {
 }
 
 /**
+ * El asiento del que arma el torneo, mientras el wizard lo mueve de lugar.
+ *
+ * El plantel es un `string[]` sin identidad: el asiento propio se sigue por
+ * índice, y cualquier cosa que corra la lista lo tiene que correr también. Por
+ * eso las tres operaciones que la tocan viven acá y devuelven las dos cosas
+ * juntas — separarlas es exactamente cómo se pierde de vista cuál era el tuyo.
+ *
+ * `mySeat` es un índice, NO un nombre: si te renombrás el asiento seguís siendo
+ * vos. En el grupo te dicen "Colo", no "Rodrigo", y ése es el nombre que tiene
+ * que ver el resto.
+ */
+export interface Squad {
+  names: string[]
+  mySeat: number | null
+}
+
+/** Saca la fila `index`. Si era la propia, el organizador queda afuera del plantel. */
+export function removeSeatAt({ names, mySeat }: Squad, index: number): Squad {
+  return {
+    names: names.filter((_, at) => at !== index),
+    mySeat: mySeat === null || mySeat === index ? null : mySeat > index ? mySeat - 1 : mySeat,
+  }
+}
+
+/**
+ * Vuelve a meter al organizador en el plantel, al final, exactamente como
+ * "+ Agregar jugador".
+ *
+ * Agrega una fila y no reusa un casillero vacío. La versión que los reusaba
+ * perdía una fila en la ida y vuelta —sacarse ya achica la lista, así que
+ * volver reusando un vacío deja el plantel un lugar más corto que al empezar—
+ * y quedaba en un plantel de siete que el aviso reclamaba sin explicar por qué.
+ *
+ * Que caiga último y no primero es correcto: el orden es el desempate inicial,
+ * y el paso 3 existe para acomodarlo.
+ */
+export function addMySeat({ names }: Squad, myName: string): Squad {
+  return { names: [...names, myName], mySeat: names.length }
+}
+
+/** Sube o baja una fila del orden inicial, arrastrando el asiento propio si es una de las dos. */
+export function moveSeat({ names, mySeat }: Squad, from: number, to: number): Squad {
+  if (to < 0 || to >= names.length) return { names, mySeat }
+  const next = [...names]
+  next[from] = names[to]!
+  next[to] = names[from]!
+  return { names: next, mySeat: mySeat === from ? to : mySeat === to ? from : mySeat }
+}
+
+/**
+ * Lo que se manda a crear: los nombres cargados, y en qué posición de ESA lista
+ * quedó el asiento propio.
+ *
+ * El índice se recalcula contra la lista filtrada y no se manda el del wizard:
+ * los casilleros vacíos de arriba lo corren, y mandar el crudo ataría al
+ * organizador al asiento de otro. Un asiento sin nombre no es un asiento, así
+ * que si la fila propia quedó en blanco el organizador no juega.
+ */
+export function submitSeats({ names, mySeat }: Squad): {
+  squadNames: string[]
+  mySeatIndex: number | null
+} {
+  const filled = names
+    .map((name, at) => ({ name: name.trim(), at }))
+    .filter((seat) => seat.name.length > 0)
+  const index = mySeat === null ? -1 : filled.findIndex((seat) => seat.at === mySeat)
+  return {
+    squadNames: filled.map((seat) => seat.name),
+    mySeatIndex: index < 0 ? null : index,
+  }
+}
+
+/**
  * La config por defecto para un plantel de este tamaño.
  *
  * Sale de `defaultConfig` y no de la lista del handoff (§6 paso 4, "Defaults

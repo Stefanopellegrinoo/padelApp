@@ -105,6 +105,78 @@ describe('createSeason', () => {
     expect(seats.every((seat) => seat.playerId === null)).toBe(true)
   })
 
+  // El que arma el torneo casi siempre lo juega. El asiento propio se reclama
+  // en el mismo insert del plantel, así que lo que hay que probar es que cae en
+  // el asiento QUE ELIGIÓ y en ninguno más — errarle por uno lo ata al lugar de
+  // otra persona, y eso recién se nota cuando el torneo ya está armado.
+  it('seats the creator on the seat they picked', async () => {
+    const admin = await createTestUser()
+    const names = ['Marce', 'Nico', 'Gastón', 'Juanma', 'Seba', 'Pablo', 'Fede', 'Diego']
+
+    const { seasonId } = await createSeason(admin.client, {
+      name: 'Los Jueves 2026',
+      squadNames: names,
+      config: defaultConfig(8),
+      mySeatIndex: 3,
+    })
+
+    const seats = (await entriesOf(admin.client, seasonId))
+      .filter((entry) => entry.kind === 'SQUAD')
+      .sort((left, right) => left.seedPosition - right.seedPosition)
+
+    expect(seats[3]?.displayName).toBe('Juanma')
+    expect(seats[3]?.playerId).toBe(admin.playerId)
+    expect(seats.filter((seat) => seat.playerId !== null)).toHaveLength(1)
+  })
+
+  it('leaves every seat free when the creator only organises', async () => {
+    const admin = await createTestUser()
+
+    const { seasonId } = await createSeason(admin.client, {
+      name: 'Los Jueves 2026',
+      squadNames: squadNames(8),
+      config: defaultConfig(8),
+      mySeatIndex: null,
+    })
+
+    const seats = await entriesOf(admin.client, seasonId)
+    expect(seats.every((seat) => seat.playerId === null)).toBe(true)
+  })
+
+  // Quien organiza y juega ya ocupó su asiento, así que el resto lo tiene que
+  // ver tomado: si `season_invite` lo ofreciera, dos personas terminarían
+  // peleándose un lugar que ya tiene dueño.
+  it('shows the creator seat as taken on the join screen', async () => {
+    const admin = await createTestUser()
+    const other = await createTestUser()
+
+    const { inviteToken } = await createSeason(admin.client, {
+      name: 'Los Jueves 2026',
+      squadNames: squadNames(8),
+      config: defaultConfig(8),
+      mySeatIndex: 0,
+    })
+
+    const { data } = await other.client.rpc('season_invite', { p_token: inviteToken })
+    expect(data?.filter((seat) => seat.claimed)).toHaveLength(1)
+    expect(data?.find((seat) => seat.seed_position === 0)?.claimed).toBe(true)
+  })
+
+  it('refuses a seat that is not in the squad, without writing anything', async () => {
+    const admin = await createTestUser()
+
+    await expect(
+      createSeason(admin.client, {
+        name: 'Los Jueves 2026',
+        squadNames: squadNames(8),
+        config: defaultConfig(8),
+        mySeatIndex: 8,
+      }),
+    ).rejects.toThrow(/no está en el plantel/)
+
+    expect(await seasonCountOf(admin.userId)).toBe(0)
+  })
+
   it('returns an invite token the join screen can resolve', async () => {
     const admin = await createTestUser()
     const { inviteToken } = await createSeason(admin.client, {

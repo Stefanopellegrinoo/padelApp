@@ -7,11 +7,16 @@ import { MAX_PLAYERS, MIN_PLAYERS, type SeasonConfig } from '@/core'
 import { createTournament } from './actions'
 import {
   STEPPERS,
+  type Squad,
+  addMySeat,
   configFor,
   filledCount,
   formatErrors,
+  moveSeat,
+  removeSeatAt,
   resizeConfig,
   squadWarning,
+  submitSeats,
   summaryOf,
 } from './wizard-state'
 
@@ -45,6 +50,53 @@ function Aviso({ children }: { children: string }) {
   )
 }
 
+/** La marca del asiento propio. Es lo único que distingue una fila de la otra. */
+function Vos() {
+  return (
+    <span className="shrink-0 rounded-full bg-accent px-2 py-[3px] text-[10px] font-extrabold text-accent-text">
+      vos
+    </span>
+  )
+}
+
+/**
+ * La única confirmación de todo el wizard, y no está para evitar un accidente:
+ * está para explicar qué significa la cruz de la fila propia.
+ *
+ * Sacarse del plantel no es borrar una fila, es decidir que organizás sin
+ * jugar — una distinción que ningún gesto puede contar solo. El resto de las
+ * cruces sacan a otro y no preguntan nada: eso sí se entiende sin ayuda.
+ */
+function SalirDelPlantel({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/55 px-6 pb-[26px]">
+      <div className="w-full max-w-lg rounded-card border border-line bg-surface p-5">
+        <h2 className="text-[19px] font-extrabold tracking-[-.02em]">¿No jugás el torneo?</h2>
+        <p className="mt-2 text-pretty text-[13.5px] font-[550] leading-[1.5] text-muted">
+          Te saco del plantel. Vas a seguir organizando —abrís las fechas, armás las parejas y
+          cargás los resultados— pero no vas a estar en la tabla.
+        </p>
+        <div className="mt-4 flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="rounded-field bg-chip p-3.5 text-center text-[14.5px] font-extrabold"
+          >
+            Sacame del plantel
+          </button>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded-field bg-accent p-3.5 text-center text-[14.5px] font-extrabold text-accent-text"
+          >
+            Me quedo
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function Stepper({
   value,
   min,
@@ -75,40 +127,45 @@ function Stepper({
  * solo submit: es un formulario que se usa una vez por año, y partirlo en cinco
  * rutas con estado compartido es pagar routing por nada.
  */
-export function Wizard() {
+export function Wizard({ myName }: { myName: string }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
 
   const [step, setStep] = useState(0)
   const [name, setName] = useState('')
-  const [names, setNames] = useState<string[]>(() => Array(MIN_PLAYERS).fill(''))
+  // El que arma el torneo arranca ADENTRO del plantel, con su nombre ya puesto
+  // en el primer asiento. Es el caso de casi todos —el que organiza los jueves
+  // juega los jueves— y así no hay nada que descubrir para participar: mirás la
+  // lista y ya estás. El que sólo organiza se saca, que es el caso raro.
+  const [squad, setSquadState] = useState<Squad>(() => ({
+    names: [myName, ...Array<string>(MIN_PLAYERS - 1).fill('')],
+    mySeat: myName.trim().length === 0 ? null : 0,
+  }))
   const [config, setConfig] = useState<SeasonConfig>(() => configFor(MIN_PLAYERS))
   const [error, setError] = useState<string | null>(null)
+  const [leaving, setLeaving] = useState(false)
   const [created, setCreated] = useState<{ seasonId: string; inviteToken: string } | null>(null)
   const [copied, setCopied] = useState(false)
 
+  const { names, mySeat } = squad
   const filled = filledCount(names)
   const warning = squadWarning(names)
   const errors = formatErrors(config)
 
-  const setSquadSize = (next: string[]) => {
-    setNames(next)
-    setConfig((current) => resizeConfig(current, filledCount(next)))
-  }
-
-  const move = (from: number, to: number) => {
-    if (to < 0 || to >= names.length) return
-    const next = [...names]
-    const moved = next[from]!
-    next[from] = next[to]!
-    next[to] = moved
-    setNames(next)
+  const setSquad = (next: Squad) => {
+    setSquadState(next)
+    setConfig((current) => resizeConfig(current, filledCount(next.names)))
   }
 
   const blocked =
     (step === 0 && name.trim().length === 0) ||
     (step === 1 && warning !== null) ||
     (step === 3 && errors.length > 0)
+
+  const help =
+    step === 1 && mySeat !== null
+      ? 'Ya estás anotado en el plantel: agregá al resto del grupo, hasta 12 en total. Después compartís un link y cada uno elige el suyo.'
+      : (HELP[step] ?? '')
 
   const inviteUrl =
     created === null
@@ -120,7 +177,7 @@ export function Wizard() {
     startTransition(async () => {
       const result = await createTournament({
         name,
-        squadNames: names.filter((seat) => seat.trim().length > 0),
+        ...submitSeats(squad),
         config: { ...config, squadSize: filled },
       })
       if (!result.ok) {
@@ -195,18 +252,26 @@ export function Wizard() {
                   onChange={(event) => {
                     const next = [...names]
                     next[index] = event.target.value
-                    setSquadSize(next)
+                    setSquad({ ...squad, names: next })
                   }}
                   placeholder="Nombre"
                   className={`min-w-0 flex-1 rounded-field border-[1.5px] bg-surface p-[15px] text-[15.5px] font-[700] outline-none placeholder:font-medium placeholder:text-muted ${
                     seat.trim().length === 0 ? 'border-accent' : 'border-line'
                   }`}
                 />
-                {names.length > MIN_PLAYERS && (
+                {index === mySeat && <Vos />}
+                {/* La cruz propia está SIEMPRE, aunque el plantel esté en el
+                    mínimo: sacarse no es achicar el plantel, es dejar el lugar
+                    para otro. El aviso pide el que falta y eso está bien. */}
+                {(index === mySeat || names.length > MIN_PLAYERS) && (
                   <button
                     type="button"
-                    aria-label={`Sacar al jugador ${index + 1}`}
-                    onClick={() => setSquadSize(names.filter((_, at) => at !== index))}
+                    aria-label={
+                      index === mySeat ? 'Sacarme del plantel' : `Sacar al jugador ${index + 1}`
+                    }
+                    onClick={() =>
+                      index === mySeat ? setLeaving(true) : setSquad(removeSeatAt(squad, index))
+                    }
                     className="h-7 w-7 shrink-0 rounded-full bg-chip text-[13px] font-extrabold text-muted"
                   >
                     ✕
@@ -217,10 +282,21 @@ export function Wizard() {
             {names.length < MAX_PLAYERS && (
               <button
                 type="button"
-                onClick={() => setSquadSize([...names, ''])}
+                onClick={() => setSquad({ ...squad, names: [...names, ''] })}
                 className="rounded-field border-[1.5px] border-line p-[13px] text-[14px] font-[750] text-muted"
               >
                 + Agregar jugador
+              </button>
+            )}
+            {/* Sólo existe estando afuera: el camino de vuelta tiene que estar a
+                la vista, y mientras jugás no es más que ruido. */}
+            {mySeat === null && myName.trim().length > 0 && (
+              <button
+                type="button"
+                onClick={() => setSquad(addMySeat(squad, myName))}
+                className="rounded-field border-[1.5px] border-accent p-[13px] text-[14px] font-extrabold text-accent-link"
+              >
+                Participar en el torneo
               </button>
             )}
             {warning !== null && <Aviso>{warning}</Aviso>}
@@ -237,11 +313,12 @@ export function Wizard() {
                 <span className="text-[13px] text-muted">⠿</span>
                 <span className="w-5 shrink-0 text-[13px] font-extrabold text-muted">{index + 1}</span>
                 <span className="min-w-0 flex-1 truncate text-[15px] font-bold">{seat}</span>
+                {index === mySeat && <Vos />}
                 <button
                   type="button"
                   aria-label={`Subir a ${seat}`}
                   disabled={index === 0}
-                  onClick={() => move(index, index - 1)}
+                  onClick={() => setSquad(moveSeat(squad, index, index - 1))}
                   className="h-[34px] w-[34px] shrink-0 rounded-[9px] bg-chip font-extrabold disabled:opacity-40"
                 >
                   ↑
@@ -250,7 +327,7 @@ export function Wizard() {
                   type="button"
                   aria-label={`Bajar a ${seat}`}
                   disabled={index === names.length - 1}
-                  onClick={() => move(index, index + 1)}
+                  onClick={() => setSquad(moveSeat(squad, index, index + 1))}
                   className="h-[34px] w-[34px] shrink-0 rounded-[9px] bg-chip font-extrabold disabled:opacity-40"
                 >
                   ↓
@@ -366,14 +443,24 @@ export function Wizard() {
           </>
         )}
 
-        {HELP[step] !== '' && (
-          <p className="text-pretty text-[13.5px] font-[550] leading-[1.5] text-muted">
-            {HELP[step]}
-          </p>
+        {/* Estando adentro del plantel, la ayuda del paso 2 lo dice en palabras:
+            el cartelito "vos" marca cuál sos, pero no cuenta que ya estás. */}
+        {help !== '' && (
+          <p className="text-pretty text-[13.5px] font-[550] leading-[1.5] text-muted">{help}</p>
         )}
 
         {error !== null && <Aviso>{error}</Aviso>}
       </div>
+
+      {leaving && (
+        <SalirDelPlantel
+          onCancel={() => setLeaving(false)}
+          onConfirm={() => {
+            if (mySeat !== null) setSquad(removeSeatAt(squad, mySeat))
+            setLeaving(false)
+          }}
+        />
+      )}
 
       <div className="flex gap-2">
         {step === 3 && (

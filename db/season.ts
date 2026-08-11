@@ -115,6 +115,11 @@ export interface NewSeason {
   /** Un nombre por asiento, en el orden que va a ser el orden inicial de desempate. */
   squadNames: string[]
   config: SeasonConfig
+  /**
+   * Cuál de esos asientos es el de quien está creando el torneo, o `null` si
+   * organiza sin jugar. Es un índice sobre `squadNames`, no un nombre.
+   */
+  mySeatIndex?: number | null
 }
 
 /**
@@ -136,7 +141,7 @@ export interface NewSeason {
  */
 export async function createSeason(
   supabase: Client,
-  { name, squadNames, config }: NewSeason,
+  { name, squadNames, config, mySeatIndex = null }: NewSeason,
 ): Promise<{ seasonId: string; inviteToken: string }> {
   assertValidConfig(config)
 
@@ -147,10 +152,26 @@ export async function createSeason(
       `El plantel tiene ${squadNames.length} nombres y la configuración dice ${config.squadSize}.`,
     )
   }
+  if (mySeatIndex !== null && (mySeatIndex < 0 || mySeatIndex >= squadNames.length)) {
+    throw new EdgeError('El asiento que elegiste no está en el plantel.')
+  }
 
   const { data: auth } = await supabase.auth.getUser()
   const userId = auth.user?.id
   if (userId === undefined) throw new EdgeError('Hay que entrar antes de crear un torneo.')
+
+  // El asiento propio se reclama en el MISMO insert del plantel, no con un
+  // `claim_seat` después: acá no hay carrera que ganar —los asientos todavía no
+  // existen para nadie más, el link de invitación se reparte recién en el paso
+  // 5— y una segunda escritura es una segunda forma de quedar a medias.
+  let myPlayerId: string | null = null
+  if (mySeatIndex !== null) {
+    const { data, error } = await supabase.rpc('my_player_id')
+    if (error !== null || data === null) {
+      throw new EdgeError('No se pudo encontrar tu jugador para anotarte en el plantel.')
+    }
+    myPlayerId = data
+  }
 
   const { data: season, error: seasonError } = await supabase
     .from('seasons')
@@ -167,6 +188,7 @@ export async function createSeason(
       display_name: seat.trim(),
       kind: 'SQUAD' as const,
       seed_position: index,
+      player_id: index === mySeatIndex ? myPlayerId : null,
     })),
   )
   if (entriesError !== null) {

@@ -23,6 +23,8 @@ export async function createTournament(input: {
   name: string
   squadNames: string[]
   config: SeasonConfig
+  /** El asiento del que crea, o `null` si organiza sin jugar. Índice sobre `squadNames`. */
+  mySeatIndex: number | null
 }): Promise<CreateResult> {
   try {
     const supabase = await serverClient()

@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import { defaultConfig, validateConfig } from '@/core'
 import {
+  type Squad,
+  addMySeat,
   configFor,
   filledCount,
   formatErrors,
+  moveSeat,
+  removeSeatAt,
   resizeConfig,
   squadWarning,
+  submitSeats,
   summaryOf,
 } from './wizard-state'
 
@@ -109,5 +114,94 @@ describe('summaryOf', () => {
     ])
     expect(rows[1]?.value).toBe('8')
     expect(rows[2]?.value).toBe('1 set a 4 games')
+  })
+})
+
+// El asiento propio se sigue por índice sobre una lista que se reordena, se
+// achica y se agranda. Cada operación que corre la lista tiene que correrlo, y
+// el que no lo hace no rompe nada visible: deja al organizador atado al asiento
+// de otro, y eso recién se ve cuando el torneo ya está creado.
+describe('removeSeatAt', () => {
+  it('leaves the organizer out when the removed seat is theirs', () => {
+    const squad = { names: ['Colo', 'Nacho', 'Fede'], mySeat: 0 }
+    expect(removeSeatAt(squad, 0)).toEqual({ names: ['Nacho', 'Fede'], mySeat: null })
+  })
+
+  it('shifts the organizer down when an earlier seat goes', () => {
+    const squad = { names: ['Nacho', 'Fede', 'Colo'], mySeat: 2 }
+    expect(removeSeatAt(squad, 0)).toEqual({ names: ['Fede', 'Colo'], mySeat: 1 })
+  })
+
+  it('does not move the organizer when a later seat goes', () => {
+    const squad = { names: ['Colo', 'Nacho', 'Fede'], mySeat: 0 }
+    expect(removeSeatAt(squad, 2)).toEqual({ names: ['Colo', 'Nacho'], mySeat: 0 })
+  })
+
+  it('does nothing to an organizer who is already out', () => {
+    const squad = { names: ['Nacho', 'Fede'], mySeat: null }
+    expect(removeSeatAt(squad, 0)).toEqual({ names: ['Fede'], mySeat: null })
+  })
+})
+
+describe('addMySeat', () => {
+  it('appends at the end, like any other added player', () => {
+    const squad = { names: ['Nacho', 'Fede'], mySeat: null }
+    expect(addMySeat(squad, 'Colo')).toEqual({ names: ['Nacho', 'Fede', 'Colo'], mySeat: 2 })
+  })
+
+  // Este es el caso que el navegador encontró y que la versión anterior de esta
+  // función rompía: reusaba un casillero vacío en vez de agregar uno, y el
+  // plantel volvía con una fila MENOS de las que tenía antes de sacarse.
+  it('restores the row that removing yourself took away', () => {
+    const start: Squad = { names: ['Colo', '', '', ''], mySeat: 0 }
+    const out = removeSeatAt(start, 0)
+    expect(out.names).toHaveLength(3)
+
+    const back = addMySeat(out, 'Colo')
+    expect(back.names).toHaveLength(start.names.length)
+    expect(back.names[back.mySeat!]).toBe('Colo')
+    expect(filledCount(back.names)).toBe(1)
+  })
+})
+
+describe('moveSeat', () => {
+  it('follows the organizer when their seat moves up', () => {
+    const squad = { names: ['Nacho', 'Colo'], mySeat: 1 }
+    expect(moveSeat(squad, 1, 0)).toEqual({ names: ['Colo', 'Nacho'], mySeat: 0 })
+  })
+
+  it('follows the organizer when another seat swaps into theirs', () => {
+    const squad = { names: ['Nacho', 'Colo'], mySeat: 1 }
+    expect(moveSeat(squad, 0, 1)).toEqual({ names: ['Colo', 'Nacho'], mySeat: 0 })
+  })
+
+  it('refuses to move past either end', () => {
+    const squad = { names: ['Colo', 'Nacho'], mySeat: 0 }
+    expect(moveSeat(squad, 0, -1)).toEqual(squad)
+    expect(moveSeat(squad, 1, 2)).toEqual(squad)
+  })
+})
+
+describe('submitSeats', () => {
+  it('reindexes the organizer against the filled names, not the raw rows', () => {
+    // Dos casilleros vacíos ARRIBA del asiento propio: mandar el índice crudo
+    // ataría al organizador al asiento de otra persona.
+    const squad = { names: ['', '', 'Colo', 'Nacho'], mySeat: 2 }
+    expect(submitSeats(squad)).toEqual({ squadNames: ['Colo', 'Nacho'], mySeatIndex: 0 })
+  })
+
+  it('drops an organizer whose own row was left blank', () => {
+    const squad = { names: ['Nacho', ''], mySeat: 1 }
+    expect(submitSeats(squad)).toEqual({ squadNames: ['Nacho'], mySeatIndex: null })
+  })
+
+  it('carries a null through', () => {
+    const squad = { names: ['Nacho', 'Fede'], mySeat: null }
+    expect(submitSeats(squad)).toEqual({ squadNames: ['Nacho', 'Fede'], mySeatIndex: null })
+  })
+
+  it('trims the names it sends', () => {
+    const squad = { names: ['  Colo  ', ' Nacho '], mySeat: 0 }
+    expect(submitSeats(squad).squadNames).toEqual(['Colo', 'Nacho'])
   })
 })

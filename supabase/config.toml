@@ -327,8 +327,13 @@ max_frequency = "5s"
 # `enabled = true` y corré `npm run db:start` de nuevo — la config se lee al
 # arrancar, no en caliente.
 #
-# **El secret NO va en este archivo.** Va en la variable de entorno, y por eso
-# la línea de abajo usa `env(...)`: este archivo está versionado.
+# **El secret NO va en este archivo**, que está versionado: cuando prendas el
+# proveedor, poné `secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"` y
+# exportá esa variable.
+#
+# Mientras esté apagado queda en `""` y no en `env(...)`: un placeholder que
+# obliga al CLI a resolver una variable para un proveedor que no se usa es
+# superficie de falla al pedo.
 #
 # En Google Cloud, la URL de callback autorizada para LOCAL es
 # `http://localhost:54321/auth/v1/callback` — la del stack local de Supabase, no
@@ -336,7 +341,7 @@ max_frequency = "5s"
 [auth.external.google]
 enabled = false
 client_id = ""
-secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
+secret = ""
 redirect_uri = ""
 url = ""
 # Google en local devuelve un nonce que no valida contra el stack de desarrollo.

@@ -26,12 +26,16 @@ en una sola línea de defensa. Lo cierra `0009_anon_surface.sql`, aplicada **en
 local y en producción**. Después: `anon` con cero permisos de tabla y una sola
 función, `season_public_rules`.
 
-**Lo que falta para que esté online:** subir el repo a GitHub (no tiene remoto),
-deployarlo —Vercel alcanza, sólo necesita `NEXT_PUBLIC_SUPABASE_URL` y
-`NEXT_PUBLIC_SUPABASE_ANON_KEY`; la service-role key no va, y de hecho sólo
-aparece en archivos de test—, cargar las URLs de redirect de Auth con el dominio
-real, y decidir qué hacer con la confirmación de mail y con Google OAuth, que
-sigue sin configurar.
+**El código está en GitHub:**
+[`Stefanopellegrinoo/padelApp`](https://github.com/Stefanopellegrinoo/padelApp),
+privado, con `main` y las tres ramas de plan.
+
+**Lo que falta para que esté online está todo en
+[`despliegue.md`](despliegue.md)**, con las credenciales y los pasos exactos:
+Vercel con dos variables, las URLs de Auth apenas exista el dominio, apagar la
+confirmación de mail —está prendida, medido contra producción— y las
+credenciales de Google. **Ese documento manda para todo lo de producción**; acá
+sólo se resume.
 
 ---
 
@@ -44,10 +48,17 @@ sigue sin configurar.
 | **3. Pantallas de lectura** | Tabla, Fechas, Estadísticas, Reglas, Perfil | ✅ **Terminado**, rama `plan-3-read-screens` |
 | **4. Pantallas de escritura** | Crear torneo, abrir fecha, cargar resultados, Ajustes, Masters | ✅ **Terminado** (13 de 14 tareas; la 7 se descartó), rama `plan-4-write-screens` |
 
-> **Si estás retomando: el Plan 4 está terminado.** Lo que queda es deuda chica de copys. El estado exacto —qué está
-> hecho, qué falta, en qué orden y qué desvíos ya ocurrieron— está en la sección
-> "Dónde quedó la ejecución" y en "Aparecidos" del
-> [plan 4](superpowers/plans/2026-08-11-write-screens.md). Esta página resume;
+> **Si estás retomando, el producto está terminado y en `main`.** No queda una
+> sola pantalla por construir: se juega una temporada entera, de crear el torneo
+> a coronar al campeón del año, y está recorrido con navegador, no deducido.
+>
+> **Lo próximo es ponerlo online, y eso está en [`despliegue.md`](despliegue.md)**
+> — son cuatro pasos y ninguno es de código.
+>
+> Si en cambio venís a tocar código, lo que queda es la deuda chica del final de
+> esta página. El detalle de cada decisión y cada desvío vive en "Dónde quedó la
+> ejecución" y "Aparecidos" del
+> [plan 4](superpowers/plans/2026-08-11-write-screens.md); esta página resume,
 > ese documento manda.
 
 **`core/` en números:** 13 módulos, 145 tests, cero dependencias de producción.
@@ -72,6 +83,7 @@ adentro a propósito: `allMatchings` (sólo la usa `buildPairs`) y `orderByPoint
 | Documento | Qué es |
 |---|---|
 | [`superpowers/specs/2026-08-09-padel-championship-design.md`](superpowers/specs/2026-08-09-padel-championship-design.md) | **Las reglas del juego.** Fuente de verdad de todo lo que es el campeonato: formato, puntos, armado de parejas, desempates, Masters. Ante cualquier duda de comportamiento, manda este. |
+| [`despliegue.md`](despliegue.md) | **Producción.** Las credenciales, qué está hecho y qué falta para estar online: Vercel, las URLs de Auth, la confirmación de mail y Google. Manda sobre cualquier cosa de despliegue. |
 | [`ui-screens.md`](ui-screens.md) | **La app.** Las 13 pantallas con su contenido, roles y estados. La navegación y por qué es como es. |
 | [`padel_design/README.md`](padel_design/README.md) | **El handoff visual** de Google Stitch, ya adaptado al formato de 8 a 12. Colores, tipografía, medidas, copys. Los `.dc.html` muestran el caso de 8 y no se pueden regenerar. |
 | [`superpowers/plans/2026-08-10-core-championship-logic.md`](superpowers/plans/2026-08-10-core-championship-logic.md) | **El plan 1**, ya ejecutado. Su tabla final —"Qué queda afuera de este plan, a propósito"— es la lista de requisitos que hereda el plan 2. |
@@ -314,11 +326,24 @@ estaba ordenado por siembra, salía en el orden que devolvía la base.
 así que el desempate era **no determinista**: la misma temporada podía dar dos
 tablas distintas.
 
-**Y la lista corta de deuda visible**, toda anotada en el plan: los plurales
-("faltan 1 partidos", "jugaron 1 fechas"), "Mejor dupla del torneo" que lista
-once duplas en vez de una, el botón de Google que no puede andar hasta que
-alguien lo configure, y el mensaje de reabrir que pide borrar una fecha cuando
-no hay forma de borrarla.
+**Y la lista corta de deuda visible.** Ninguna impide jugar; las cuatro están
+medidas y anotadas en `Aparecidos` del plan 4. Si la próxima sesión viene a
+tocar código, esto es lo que hay:
+
+1. **Plurales en singular:** `"faltan 1 partidos"` (cerrar la fecha) y
+   `"jugaron 1 fechas"` (Estadísticas). Los dos salen de copys con `{n}` que el
+   handoff no trae en singular — **es un string nuevo que hay que decidir**, por
+   eso quedó sin inventar.
+2. **"Mejor dupla del torneo" lista once duplas, no una.** `ui-screens.md` §10
+   pide "la pareja con mejor récord". La pantalla pone la mejor primera y el
+   resto **ordenado por fechas jugadas juntas, no por récord**, así que la
+   segunda fila puede decir 0%.
+3. **El mensaje de `reopen_matchday` pide algo imposible.** Dice "Borrala vos
+   antes de reabrir ésta" y **no existe ninguna forma de borrar una fecha** en
+   todo el producto — ni pantalla ni función en `db/`. Con la guarda de la
+   pantalla arreglada ya no se llega ahí desde la UI, pero el mensaje sigue.
+4. **El botón de Google falla hasta que se configure** — ver
+   [`despliegue.md`](despliegue.md). O se configura, o se esconde.
 
 #### Dos cosas rotas que nadie sabía, y ya están arregladas
 

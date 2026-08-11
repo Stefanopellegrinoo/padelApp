@@ -14,7 +14,7 @@ que decidir antes de seguir. Los detalles viven en los documentos que se enlazan
 | **1. `core/`** | Toda la lógica del campeonato, funciones puras | ✅ **Terminado y en `main`** |
 | **2. Datos y auth** | Schema Supabase, migraciones, RLS, login + Google | ✅ **Terminado**, rama `plan-2-data-and-auth` |
 | **3. Pantallas de lectura** | Tabla, Fechas, Estadísticas, Reglas, Perfil | ✅ **Terminado**, rama `plan-3-read-screens` |
-| **4. Pantallas de escritura** | Crear torneo, abrir fecha, cargar resultados, Ajustes | ⬜ |
+| **4. Pantallas de escritura** | Crear torneo, abrir fecha, cargar resultados, Ajustes | 📝 **Plan escrito**, sin ejecutar |
 
 **`core/` en números:** 13 módulos, 145 tests, cero dependencias de producción.
 Verificado de forma independiente: ningún archivo usa `Date`, `Math.random`,
@@ -43,6 +43,7 @@ adentro a propósito: `allMatchings` (sólo la usa `buildPairs`) y `orderByPoint
 | [`superpowers/plans/2026-08-10-core-championship-logic.md`](superpowers/plans/2026-08-10-core-championship-logic.md) | **El plan 1**, ya ejecutado. Su tabla final —"Qué queda afuera de este plan, a propósito"— es la lista de requisitos que hereda el plan 2. |
 | [`superpowers/plans/2026-08-10-data-and-auth.md`](superpowers/plans/2026-08-10-data-and-auth.md) | **El plan 2**, ejecutado. 14 tareas. Sus secciones "Las tres decisiones" y "Decisiones registradas" son las que mandan sobre cualquier cosa que diga este documento. Su "Aparecidos" tiene lo que quedó sin hacer. |
 | [`superpowers/plans/2026-08-10-read-screens.md`](superpowers/plans/2026-08-10-read-screens.md) | **El plan 3**, ejecutado. 11 tareas, formato liviano: interfaces y "qué NO hace", con bloques de código completos sólo donde había lógica nueva. Su "Aparecidos" es la deuda conocida de las pantallas. |
+| [`superpowers/plans/2026-08-11-write-screens.md`](superpowers/plans/2026-08-11-write-screens.md) | **El plan 4**, escrito y sin ejecutar. 14 tareas. Su tabla "El trazado" dice qué dato necesita cada pantalla y de ahí salen las primeras cuatro tareas; sus "Decisiones registradas" mandan sobre lo que dice este documento —una de ellas corrige el alcance de acá abajo—. |
 | `.superpowers/sdd/2026-08-10-core-championship-logic/progress.md` | **El ledger de ejecución.** Cada fix round, cada minor diferido, cada decisión tomada y por qué. No está versionado (es scratch), pero es donde está el detalle de cada hallazgo. |
 
 ---
@@ -206,8 +207,13 @@ las funciones de datos.**
 - Crear torneo (wizard de 5 pasos), abrir fecha, cargar resultados, Ajustes
 - **Decidir el tamaño de la fecha desde las asistencias** y agregar el asiento de
   invitado cuando el número da impar
-- **Que el admin pueda mover al invitado** en el orden (spec §2.6). `core/` lo
-  pone último y respeta el orden que le den; la UI tiene que ofrecer el arrastre
+- ~~**Que el admin pueda mover al invitado** en el orden (spec §2.6). `core/` lo
+  pone último y respeta el orden que le den; la UI tiene que ofrecer el
+  arrastre~~ — **esta línea está mal y el plan 4 la corrige** (decisión
+  registrada 2). `orderPool` (`core/pairing.ts:178`) manda a los invitados al
+  final del pool *siempre*, y sólo respeta el orden *entre ellos*: con un solo
+  invitado —el caso normal— el arrastre no cambia nada. Lo que sí implementa el
+  spec §2.6 es elegir con quién juega, o sea `pair_locks`
 
 **Lo que el Plan 3 le dejó, y hay que meter en su alcance:**
 

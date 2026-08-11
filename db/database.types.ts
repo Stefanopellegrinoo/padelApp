@@ -458,6 +458,10 @@ export type Database = {
         Args: { p_awards: Json; p_matchday: string }
         Returns: undefined
       }
+      create_masters: {
+        Args: { p_played_on: string; p_season: string }
+        Returns: string
+      }
       is_participant: { Args: { p_season: string }; Returns: boolean }
       is_season_admin: { Args: { p_season: string }; Returns: boolean }
       match_is_open: { Args: { p_match: string }; Returns: boolean }
@@ -478,6 +482,20 @@ export type Database = {
           seed_position: number
           squad_size: number
         }[]
+      }
+      season_public_rules: {
+        Args: { p_season: string }
+        Returns: {
+          admin_name: string
+          config: Json
+          name: string
+          rules_text: string
+          rules_updated_at: string
+        }[]
+      }
+      set_my_attendance: {
+        Args: { p_matchday: string; p_status: string }
+        Returns: undefined
       }
     }
     Enums: {

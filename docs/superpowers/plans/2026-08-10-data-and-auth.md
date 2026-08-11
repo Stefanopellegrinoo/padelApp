@@ -3074,7 +3074,12 @@ describe('closeMatchday', () => {
 })
 ```
 
-El último es el test de la atomicidad, y es el único que la prueba. Sin él, "es atómico" es una afirmación sobre un `begin` que nadie vio.
+El último es el test de la atomicidad. Sirve, pero **prueba menos de lo que este párrafo decía originalmente** ("es el único que la prueba"), y conviene tenerlo claro:
+
+- Adentro de una función plpgsql la atomicidad **la garantiza Postgres**, no este código. No existe una variante que le tire error al cliente y aun así deje el `status` commiteado: un `raise` revierte la función entera. Reordenar las dos sentencias no cambia nada observable. Verificado por mutación: envolver el insert de awards en `exception when others then null` —que es la única forma real de romperla— sí pone el test en rojo, pero por la aserción de "volvió un error", no por la de "quedó OPEN".
+- La forma verdaderamente peligrosa es otra: que `closeMatchday()` haga insert y update como **dos llamadas separadas** de PostgREST. Eso lo impide el `revoke update (status) on public.matchdays`, no este test — que llama a la RPC directo y ni se enteraría de semejante refactor de TypeScript.
+
+O sea: el test vale porque prueba que la falla **sale a la superficie en vez de tragarse**, y el `revoke` es lo que sostiene la atomicidad de punta a punta.
 
 **Expected: FAIL**
 
@@ -3423,6 +3428,10 @@ git commit -m "test: play a full season against the database"
 Cosas que salieron durante la implementación y **no** se hicieron, para no ensanchar las tareas. Anotalas acá con una línea y seguí.
 
 - **Task 1, el encabezado se contradice con el Step 7.** *Files* dice `Create: db/client.ts`, pero el Step 7 prohíbe crearlo hasta la Task 5 (necesita `database.types`, que nace con las tablas). El implementador siguió el step, que es lo correcto. Falta sacarlo de la lista de *Files* para que nadie lo lea al revés.
+- **El plan nunca corre `npm run build`.** En las 14 tareas verifica con `typecheck` y `test`, y `npm run dev` una sola vez en la Task 1. Con eso no se ven dos roturas reales que sí tuvo la rama: un `'use client'` arrastrando `next/headers` por importar de `db/client.ts`, y un `useSearchParams()` sin límite de Suspense. Las dos pasan typecheck y tests en verde. Agregado a la verificación de las tareas 12 en adelante; las anteriores conviene revisarlas si se retoma el plan como referencia.
+- **Task 12, el nombre `cerrar dos veces no duplica awards` le da el crédito al mecanismo equivocado.** Aflojando el guard de estado los awards **no** se duplicaron igual: los frena el `unique (matchday_id, entry_id)`. El guard de estado protege el *mensaje*; el índice único protege el *dato*. Los dos existen, pero conviene saber cuál es el que carga el peso.
+- **Tasks 12 y 13 no ejercitan una fecha MASTERS.** Ni `close_matchday`'s `El Masters no reparte puntos.` ni el restore de `status = 'ACTIVE'` de `reopen_matchday` tienen test. No se mutaron, así que es observación y no agujero probado. El flujo del Masters lo construye el Plan 3.
+- **`saveResult` borra los sets y después inserta.** Hoy no pierde nada porque la validación de borde (`setError`/`matchError`) rechaza lo inválido *antes* de tocar la base, pero es un read-modify-write sin transacción: cualquier fallo del insert que no haya sido filtrado en el borde deja el resultado anterior borrado. Si alguna vez se saca la validación de borde, esto se vuelve un bug de pérdida de datos.
 - **Tasks 1 y 5, los dos bloques de `@supabase/ssr` no compilaban.** `createServerClient` tiene dos overloads (`get/set/remove` y `getAll/setAll`) y TypeScript no puede tipar el callback `setAll` a través de firmas que no coinciden: `toSet` sale `any` implícito y `tsc --noEmit` corta. La Task 1 ya lo había arreglado en `middleware.ts` sin que el plan se enterara; la Task 5 chocó con lo mismo al copiar `db/client.ts` "tal cual". Los dos bloques del plan quedaron anotados. **No hace falta subir la dependencia.**
 - **Task 4, `previousPairs` arrastra ids de invitado muertos.** Las parejas de la fecha anterior pueden contener ids de entrada de invitados, que nunca van a volver a aparecer en `present`. Son entradas inertes en el filtro de no-repetición. Inofensivo; merece un comentario, no código.
 - **Task 4, el mensaje del "ganador que no está en ninguna pareja" es terso.** Con `awards: [{p9, 1}]` y `pairs: [A]` tira "0 parejas en la posición 1", que es cierto pero no dice la causa real: `p9` cobró y no está en ninguna pareja. A diferencia de `9394843`, acá el mensaje no miente, sólo es escueto — por eso no se tocó.

@@ -210,16 +210,22 @@ las funciones de datos.**
 
 ### Plan 4 — pantallas de escritura 🚧
 
-**Hecho (Tasks 1 a 6, rama `plan-4-write-screens`):** toda la capa de datos que
-faltaba —tres funciones SQL nuevas, la lectura de asistencias y de ids de
-partido, crear temporada, editar el plantel, el Masters de punta a punta— más
-"Mis torneos" y el wizard de crear torneo. **262 tests unitarios, 153 contra la
-base, `build` compilando.**
+**Hecho (Tasks 1 a 6, 8, 9 y 10, rama `plan-4-write-screens`):** toda la capa de
+datos que faltaba —tres funciones SQL nuevas, la lectura de asistencias y de ids
+de partido, crear temporada, editar el plantel, el Masters de punta a punta—,
+"Mis torneos", el wizard de crear torneo, y **el flujo entero de jugar una
+fecha**: abrirla, tildar quién viene, el invitado con su compañero, el sorteo de
+parejas, confirmar, cargar los resultados en dos toques, cerrar y reabrir.
+**273 tests unitarios, 153 contra la base, `build` compilando.**
 
-**Falta para que se pueda jugar:** abrir una fecha (Task 8), el armado en `DRAFT`
-(Task 9), la carga de resultados y el cierre (Task 10), y el recorrido con
-navegador (Task 14). Después, la tanda B: el toggle "No voy", Ajustes, Reglas sin
-login y las pantallas del Masters.
+**Y el recorrido con navegador ya corrió** (`scripts/smoke.mjs`, Task 14): pasa
+entero, de crear el torneo a cerrar la fecha con su tabla. Encontró un defecto
+real que ningún test podía ver —la pareja campeona mostraba **0 puntos** cuando
+jugaba con el invitado, contradiciendo la nota que tiene dos líneas más abajo—,
+arreglado y anotado.
+
+**Falta la tanda B:** el toggle "No voy" (Task 7), Ajustes (11), Reglas sin login
+(12) y las pantallas del Masters (13). Ninguna bloquea jugar una temporada.
 
 #### Dos cosas rotas que nadie sabía, y ya están arregladas
 

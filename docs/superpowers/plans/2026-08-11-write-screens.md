@@ -23,8 +23,8 @@ Supabase con RLS ya puesta.
 
 ## Dónde quedó la ejecución
 
-**Rama:** `plan-4-write-screens`, 6 commits, árbol limpio.
-**Números al cortar:** 262 tests unitarios, 153 contra la base, `npm run typecheck`
+**Rama:** `plan-4-write-screens`, 11 commits, árbol limpio.
+**Números al cortar:** 272 tests unitarios, 153 contra la base, `npm run typecheck`
 limpio, `npm run build` compilando.
 
 | Task | Qué produce | Estado |
@@ -35,20 +35,27 @@ limpio, `npm run build` compilando.
 | 4 | `db/matchday.ts`: asistencia propia, invitado, Masters | ✅ `6086958` |
 | 5 | Mis torneos y los cuatro redirects | ✅ `7c8ae8e` |
 | 6 | Crear torneo — el wizard de 5 pasos | ✅ `53e7f2c` |
-| **8** | **Fechas — "Abrir fecha N"** | ⬜ **acá se sigue** |
-| 9 | Fecha `DRAFT` — quién viene, el invitado, las parejas | ⬜ |
-| 10 | Fecha `OPEN` y `CLOSED` — cargar, cerrar, reabrir | ⬜ |
-| 14 | El recorrido con navegador | ⬜ |
-| 7 · 11 · 12 · 13 | Tanda B: toggle "No voy", Ajustes, Reglas sin login, Masters | ⬜ |
+| 8 | Fechas — "Abrir fecha N" | ✅ `03e2e11` |
+| 9 | Fecha `DRAFT` — quién viene, el invitado, las parejas | ✅ `1b0fcb6` |
+| 10 | Fecha `OPEN` y `CLOSED` — cargar, cerrar, reabrir | ✅ `34073c4` |
+| 14 | El recorrido con navegador | ✅ `bac6451` |
+| **7 · 11 · 12 · 13** | **Tanda B: toggle "No voy", Ajustes, Reglas sin login, Masters** | ⬜ **acá se sigue** |
 
 **Lo que la app ya hace:** crear una cuenta, crear un torneo con su plantel y su
 formato, compartir el link de invitación, reclamar un asiento, elegir torneo en
-Mis torneos, y leer las cinco pantallas del Plan 3.
+Mis torneos, leer las cinco pantallas del Plan 3, y **jugar**: abrir una fecha,
+tildar quién viene, sumar el invitado, sortear las parejas, confirmar, cargar
+los resultados en dos toques, cerrar la fecha y reabrirla.
 
-**Lo que todavía no hace:** jugar. No hay forma de abrir una fecha desde la
-pantalla, ni de tildar quién viene, ni de cargar un resultado. Todo eso está
-construido y probado en `db/` — lo que falta son las tres pantallas de las Tasks
-8, 9 y 10.
+**Lo que todavía no hace:** nada del recorrido regular. Falta la tanda B: el
+toggle "No voy" del jugador (Task 7), Ajustes (11), Reglas sin login (12) y las
+pantallas del Masters (13). Ninguna bloquea jugar una temporada.
+
+**El recorrido con navegador ya corrió** (`scripts/smoke.mjs`, Task 14) y pasa
+entero: crear el torneo, abrir la fecha, tildar, el invitado, el sorteo, los seis
+resultados, el cierre y la tabla. Encontró un defecto real —la pareja campeona
+mostraba 0 puntos— que está arreglado. Los pasos de Ajustes y Reglas sin login
+quedaron salteados porque son tanda B.
 
 **Lo primero que conviene hacer al retomar** es leer la sección `Aparecidos` del
 final: tiene los tres desvíos del plan que ya ocurrieron y las dos cosas que las
@@ -1918,10 +1925,133 @@ las dos últimas son deuda que hereda quien siga.
   existiera. Quedó `expect(error?.code).toBe('23505')`. Es exactamente la lección
   que `docs/estado.md` ya tenía anotada del Plan 2, y volvió a aparecer.
 
+### Lo que apareció ejecutando las Tasks 8, 9 y 10
+
+- **La Task 9 necesitó una lectura que no existía: `pairLocksOf` en
+  `db/read.ts`.** El selector 🆕 "Juega con" escribe con `lockPair` y tiene que
+  poder cambiar de opinión, o sea llamar a `unlockPair(lockId)` — y el id de la
+  fila no lo devuelve nadie. `locksOf` vive privada en `db/matchday.ts` y tira el
+  id a propósito, porque una `Pair` de `core/` es `{ a, b }` y nada más. Son doce
+  líneas y **es un archivo fuera de la lista de la Task 9** (`db/read.ts` es de la
+  Task 2). Sin eso el selector se puede poner una vez y nunca más.
+- **Un caso que dejaba la fecha trabada, y lo destraba `saveGuestName`.** Con
+  número par y un invitado YA NOMBRADO, `syncGuestSeat` lo conserva a propósito
+  ("alguien lo puso"), así que la fecha queda de 9 y no se puede generar. La
+  única salida es borrarle el nombre, y por eso `saveGuestName` termina llamando
+  a `syncGuestSeat` — sin eso el asiento no se iba hasta el próximo tilde de
+  asistencia. El panel de conteo sigue midiendo la paridad sobre el **plantel**:
+  contando al invitado, el número daría siempre par y la línea "Son impares" —la
+  que explica por qué apareció la tarjeta— no se vería nunca.
+- **"Avisó que no va" se muestra en toda fila ausente.** `attendances` no guarda
+  quién escribió la fila, así que distinguir al que avisó del que sacó el admin
+  es una columna nueva. Está anotado con un `ponytail:` en `armado.tsx`.
+- **La Task 10 partió la máquina de la carga en `carga-state.ts`**, con su test
+  `carga-state.unit.test.ts`, y no en el `carga.unit.test.ts` que pedía el plan.
+  Es exactamente el mismo motivo y la misma forma que `wizard-state.ts` de la
+  Task 6: adentro de un componente `'use client'` esa lógica no se testea
+  cómodamente. `CierreFecha` quedó en `carga.tsx` por lo contrario — para no
+  agregar un quinto archivo que la tarea no lista.
+- **Cancelar la carga a mitad de camino no tiene copy en ningún lado.** El plan
+  lo pide como comportamiento ("cancelar a mitad de camino no deja sets a medio
+  armar") pero ni el handoff ni la tabla de copys traen la palabra. Se resolvió
+  sin inventar ninguna: **"Cargar resultado" es su propio cancelar**, volver a
+  tocarlo cierra el panel y tira el set a medio armar.
+- **La revisión adversarial de la Task 10 encontró un defecto real, y estaba en
+  el reintento.** Si `saveResult` fallaba, `tapGames` hacía `return` dejando el
+  partido completo en el estado y el panel abierto en "¿Quién ganó?": dos toques
+  más apilaban un **tercer set fantasma** que `matchError` acepta —2-1 es legal
+  a dos sets— y que `saveResult` escribía **encima del bueno**, porque reemplaza.
+  La fecha pasaba de 2-0 / 12-7 a 2-1 / 14-13, y eso mueve la tabla por
+  `setsDiff` y por games. Arreglado en los dos lados: `chooseLoserGames` no hace
+  crecer un partido ya cerrado —la guarda está en el único punto por donde pasan
+  todos los llamadores— y el panel se cierra cuando el guardado falla. El test
+  que lo cubre se verificó por mutación: sin la guarda se pone rojo.
+  Con `setsToWin: 1` el bug no escribía nada, sólo trababa el panel; **sólo
+  mordía en formato multi-set.**
+- **La segunda revisión encontró otro: "Reabrir fecha" se ofrecía en el camino
+  normal, y ahí falla siempre.** `isLastClosed` replicaba **una** de las dos
+  guardas de `reopen_matchday` —"no hay una CLOSED posterior" (`0005:180-185`)—
+  y se olvidaba de la otra: "no hay ninguna fecha sin cerrar aparte de ésta"
+  (`0005:174-179`). Con la 2 cerrada y la 3 en juego —o sea, después de cada
+  cierre— el admin veía el botón, abría el panel que promete "Se borran los
+  puntos de esta fecha y la tabla se recalcula", y recién al confirmar chocaba
+  contra el error. Arreglado sumando la fecha `OPEN` a la cuenta. **La fecha
+  siguiente en `DRAFT` se deja pasar a propósito**: si está vacía,
+  `reopen_matchday` la borra y sigue, que es exactamente el caso para el que se
+  escribió.
+- **Dos cosas del SQL que quedaron anotadas y NO se tocaron, porque son
+  `0005_matchday_moves.sql` y este plan no toca migraciones aplicadas:**
+  1. El mensaje de `0005:178` es falso cuando el bloqueante es una fecha **en
+     juego**: dice "La fecha siguiente ya tiene datos cargados" y puede ser una
+     fecha `OPEN`, no un borrador. Con el arreglo de arriba ya no se llega desde
+     la pantalla, así que quedó de red de abajo.
+  2. Ese mismo mensaje pide "Borrala vos", y **no existe ninguna forma de borrar
+     una fecha en todo el producto** — ni pantalla, ni función en `db/`. Se sale
+     por la base o no se sale.
+- **`"Cerrar fecha · faltan 1 partidos"`, y el copy es así.** El handoff y la
+  tabla de copys de la Task 10 dan la frase con `{n}` y no traen la versión en
+  singular. **Es un hueco del plan: se reporta, no se inventa.** Arreglarlo pide
+  un string nuevo ("falta 1 partido") que tiene que decidir alguien.
+- **Un test de `close.db.test.ts` no protege lo que parece.** `'no cierra con
+  partidos sin cargar'` (línea 338) usa `rejects.toThrow(/resultado/)`, y ese
+  regex matchea **las dos capas**: el mensaje SQL (`Faltan resultados por
+  cargar.`) y el de TypeScript (`Falta cargar el resultado de este partido.`).
+  Como el chequeo de TS atrapa primero, ese test sobrevive intacto si se borra el
+  guard de la base. El que sí protege es el de la línea 428, que llama a la RPC
+  directa — verificado por mutación: sacando el guard de `close_matchday`, ése es
+  **el único** de los 153 que se pone rojo.
+- **Latente, y anotado para Ajustes (Task 11): con `tieBreak: false` la máquina
+  no puede cargar un set que se fue a ventaja.** Siempre pone al ganador en
+  `gamesPerSet` exacto, así que 10 de los 16 resultados legales entre 0 y 9
+  —`5-3`, `6-4`, `7-5`…— no se pueden registrar. Hoy no muerde: el wizard no
+  expone `tieBreak` y `defaultConfig` lo fija en `true`, así que toda temporada
+  nace con tie-break. **Si Ajustes llega a exponerlo, la carga miente.**
+- **`loserGamesOptions` no es `0..gamesPerSet - 1` siempre.** Con `tieBreak:
+  false` hay que ganar por dos, así que el 4-3 de un set a 4 no cierra nada y
+  `setError` lo rebota. La regla del plan vale para la config con tie-break, que
+  es la única que hoy sabe producir la app (`defaultConfig` la fija en `true` y
+  el wizard no la expone). La máquina se quedó con las dos ramas: todo lo que
+  produce pasa `setError` en las dos configs.
+
+### Lo que encontró el recorrido con navegador (Task 14)
+
+El script recorre 1 a 9 y 12 y pasa entero. **Los pasos 10 y 11 —Ajustes y
+Reglas sin login— no se pudieron correr: son las Tasks 11 y 12, que están en la
+tanda B.** Quedaron adentro del script, salteados y anunciados en la salida.
+
+Y encontró **un defecto real, del tipo que ningún test de este repo podía ver**:
+
+- **La pareja que ganaba la fecha mostraba 0 puntos.** En la Tabla de la fecha
+  cerrada, toda fila que contuviera al invitado imprimía `'0'` fijo. Con el
+  invitado jugando con el primero de la tabla —que es lo que hace `orderPool`
+  siempre—, la pareja campeona salía **3 ganados, +10 de games, 0 puntos**,
+  abajo de otra con un partido ganado y 6. Y contradecía la nota que está dos
+  líneas más abajo: *"El invitado no suma para el campeonato; su compañero sí."*
+  Arreglado: la columna es "los puntos que se llevó cada jugador"
+  (`ui-screens.md` §9), y el `??` que ya estaba resuelve el caso solo, porque
+  `computeAwards` no le escribe award al invitado.
+  **Los dos documentos no coinciden y esto es una decisión, no un olvido:** el
+  handoff (§9c) dice literal "su fila lleva el chip Invitado y **0 puntos**".
+  Manda `ui-screens.md`, porque el handoff manda sobre color, tipografía y
+  copys, y acá lo que está en juego es **qué significa el número**. Además la
+  lectura del handoff se contradice a sí misma dos líneas después.
+  Es una pantalla del Plan 3, y estuvo rota desde entonces: **hasta este plan no
+  había forma de jugar una fecha con invitado.**
+
+Lo que se miró y estaba bien: el armado con sus tres pasos y todos sus copys, el
+sorteo (`1° con último`: el invitado sale con Jugador 1), la carga en dos toques
+con los botones `0/1/2/3` de `gamesPerSet`, el acordeón colapsando la ronda
+completa, el pie con "Reabrir fecha", y las cuatro pestañas en claro y en oscuro.
+
 ### Deuda que heredan las tareas que faltan
 
-- **La Task 8 tiene que CREAR `app/torneo/[id]/actions.ts`, no modificarlo.** El
-  plan se lo asigna a la Task 7, que quedó en la tanda B.
+- ✅ **La Task 8 tenía que CREAR `app/torneo/[id]/actions.ts`, no modificarlo.**
+  Ocurrió tal cual: el archivo lo creó la Task 8 y la Task 7 lo va a encontrar
+  hecho.
+- **La fecha `CLOSED` deja el botón de carga afuera, pero la `OPEN` lo pone
+  también sobre los partidos ya cargados.** `saveResult` reemplaza, y un score
+  tipeado mal de noche no tendría otro arreglo. El handoff no dice ni que sí ni
+  que no.
 - **`db/entries.ts` no tiene pantalla todavía.** Sus cuatro funciones están
   implementadas y probadas, y las consume Ajustes (Task 11, tanda B). Hasta
   entonces, un plantel cargado mal en el wizard **sólo se arregla por la base**.

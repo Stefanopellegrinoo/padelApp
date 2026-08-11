@@ -78,16 +78,37 @@ describe('the config the wizard builds', () => {
 describe('formatErrors', () => {
   it('catches points that do not go down', () => {
     const config = { ...configFor(8), points: [10, 10, 5, 3] }
-    expect(formatErrors(config)).toEqual([
-      'Los puntos tienen que ir de mayor a menor y ninguno puede quedar en cero.',
-    ])
+    expect(formatErrors(config)).toEqual(['Los puntos tienen que ir de mayor a menor, sin repetir.'])
   })
 
-  it('catches a zero, which would make coming last the same as not showing up', () => {
+  // Este test decía lo contrario y era el que quedaba de la regla vieja. El 0
+  // pasó a ser legal en `141bbcf` —hay grupos que quieren que el último no
+  // sume— y el stepper baja hasta 0 desde entonces, pero ESTA pantalla siguió
+  // trabando el "Continuar". Se podía elegir un 0 y no se podía avanzar.
+  it('accepts a zero as the last value, which the stepper can reach', () => {
     const config = { ...configFor(8), points: [10, 6, 3, 0] }
-    expect(formatErrors(config)).toContain(
-      'Los puntos tienen que ir de mayor a menor y ninguno puede quedar en cero.',
-    )
+    expect(formatErrors(config)).toEqual([])
+  })
+
+  // La causa de fondo: el paso 4 tiene su propia copia de las reglas de puntos
+  // y `core` tiene la de verdad, la que corre antes de escribir. Cuando se
+  // separan, la pantalla te frena por algo que la base acepta —o peor, te deja
+  // pasar algo que va a explotar al guardar. Esto las mantiene atadas.
+  it('agrees with core on every points list the stepper can produce', () => {
+    const lists = [
+      [10, 6, 3, 1],
+      [10, 6, 3, 0],
+      [10, 10, 5, 3],
+      [1, 2, 3, 4],
+      [99, 50, 2, 0],
+      [4, 3, 2, 2],
+    ]
+    for (const points of lists) {
+      const config = { ...configFor(8), points }
+      const coreRejects = validateConfig(config).length > 0
+      const wizardRejects = formatErrors(config).length > 0
+      expect(wizardRejects, `puntos ${points.join('·')}`).toBe(coreRejects)
+    }
   })
 
   it('catches counting more matchdays than the season has', () => {

@@ -179,15 +179,28 @@ export function resizeConfig(config: SeasonConfig, squadSize: number): SeasonCon
   return { ...config, squadSize, points: configFor(squadSize).points }
 }
 
-/** Los errores del paso 4, con las frases del handoff. */
+/**
+ * Los errores del paso 4, con las frases del handoff.
+ *
+ * La frase de los puntos ya no es la del handoff, y tiene que no serlo: decía
+ * "…y ninguno puede quedar en cero", que dejó de ser cierto en `141bbcf`
+ * (`core/validateConfig` sólo rechaza negativos, y la migración 0010 le sacó a
+ * `awards.points` el `check (points > 0)`). El stepper baja hasta 0 desde
+ * entonces, así que la pantalla te dejaba poner el 0 y después te trababa el
+ * "Continuar" con un motivo que ya no existía.
+ *
+ * Lo único que queda de la regla es el orden estricto, que es también lo único
+ * que puede fallar acá: el stepper no baja de 0, así que un negativo —lo otro
+ * que `validateConfig` rechaza— no se puede tipear.
+ */
 export function formatErrors(config: SeasonConfig): string[] {
   const errors: string[] = []
 
   const descending = config.points.every(
     (value, index) => index === 0 || value < (config.points[index - 1] ?? Infinity),
   )
-  if (!descending || config.points.some((value) => value <= 0)) {
-    errors.push('Los puntos tienen que ir de mayor a menor y ninguno puede quedar en cero.')
+  if (!descending) {
+    errors.push('Los puntos tienen que ir de mayor a menor, sin repetir.')
   }
   if (config.countBestOf > config.regularMatchdays) {
     errors.push('No pueden contar más fechas de las que se juegan.')

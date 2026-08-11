@@ -14,9 +14,9 @@ que decidir antes de seguir. Los detalles viven en los documentos que se enlazan
 | **1. `core/`** | Toda la lógica del campeonato, funciones puras | ✅ **Terminado y en `main`** |
 | **2. Datos y auth** | Schema Supabase, migraciones, RLS, login + Google | ✅ **Terminado**, rama `plan-2-data-and-auth` |
 | **3. Pantallas de lectura** | Tabla, Fechas, Estadísticas, Reglas, Perfil | ✅ **Terminado**, rama `plan-3-read-screens` |
-| **4. Pantallas de escritura** | Crear torneo, abrir fecha, cargar resultados, Ajustes | 🚧 **6 de 14 tareas**, rama `plan-4-write-screens` |
+| **4. Pantallas de escritura** | Crear torneo, abrir fecha, cargar resultados, Ajustes, Masters | 🚧 **12 de 14 tareas**, rama `plan-4-write-screens` |
 
-> **Si estás retomando: arrancá por la Task 8.** El estado exacto —qué está
+> **Si estás retomando: arrancá por la Task 7.** El estado exacto —qué está
 > hecho, qué falta, en qué orden y qué desvíos ya ocurrieron— está en la sección
 > "Dónde quedó la ejecución" y en "Aparecidos" del
 > [plan 4](superpowers/plans/2026-08-11-write-screens.md). Esta página resume;
@@ -210,13 +210,17 @@ las funciones de datos.**
 
 ### Plan 4 — pantallas de escritura 🚧
 
-**Hecho (Tasks 1 a 6, 8, 9 y 10, rama `plan-4-write-screens`):** toda la capa de
-datos que faltaba —tres funciones SQL nuevas, la lectura de asistencias y de ids
-de partido, crear temporada, editar el plantel, el Masters de punta a punta—,
-"Mis torneos", el wizard de crear torneo, y **el flujo entero de jugar una
-fecha**: abrirla, tildar quién viene, el invitado con su compañero, el sorteo de
-parejas, confirmar, cargar los resultados en dos toques, cerrar y reabrir.
-**273 tests unitarios, 153 contra la base, `build` compilando.**
+**Hecho: 12 de las 14 tareas** (falta la 7 y la 12), rama `plan-4-write-screens`.
+Toda la capa de datos, "Mis torneos", el wizard de crear torneo, **el flujo
+entero de jugar una fecha** —abrirla, tildar quién viene, el invitado con su
+compañero, el sorteo, confirmar, cargar los resultados en dos toques, cerrar y
+reabrir—, **Ajustes** (plantel, formato y reglas) y **el Masters** de punta a
+punta. **273 tests unitarios, 153 contra la base, `build` compilando.**
+
+**Una temporada entera se juega desde el navegador, de crear el torneo a coronar
+al campeón del año.** Está probado recorriéndolo, no deducido: `scripts/smoke.mjs`
+más un recorrido que juega tres fechas y otro que llega al Masters con sus dos
+desenlaces posibles.
 
 **Y el recorrido con navegador ya corrió** (`scripts/smoke.mjs`, Task 14): pasa
 entero, de crear el torneo a cerrar la fecha con su tabla. Encontró un defecto
@@ -224,8 +228,15 @@ real que ningún test podía ver —la pareja campeona mostraba **0 puntos** cua
 jugaba con el invitado, contradiciendo la nota que tiene dos líneas más abajo—,
 arreglado y anotado.
 
-**Falta la tanda B:** el toggle "No voy" (Task 7), Ajustes (11), Reglas sin login
-(12) y las pantallas del Masters (13). Ninguna bloquea jugar una temporada.
+**Falta, y ninguna de las dos bloquea jugar:** el toggle "No voy" (Task 7) —hoy
+**el jugador no tiene ninguna acción de escritura en toda la app**, el admin
+tilda a todos— y la página de Reglas sin login (Task 12).
+
+**Y la lista corta de deuda visible**, toda anotada en el plan: los plurales
+("faltan 1 partidos", "jugaron 1 fechas"), "Mejor dupla del torneo" que lista
+once duplas en vez de una, el botón de Google que no puede andar hasta que
+alguien lo configure, y el mensaje de reabrir que pide borrar una fecha cuando
+no hay forma de borrarla.
 
 #### Dos cosas rotas que nadie sabía, y ya están arregladas
 

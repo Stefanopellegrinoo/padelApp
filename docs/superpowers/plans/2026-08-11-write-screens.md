@@ -23,9 +23,12 @@ Supabase con RLS ya puesta.
 
 ## Dónde quedó la ejecución
 
-**Rama:** `plan-4-write-screens`, 11 commits, árbol limpio.
-**Números al cortar:** 272 tests unitarios, 153 contra la base, `npm run typecheck`
+**Rama:** `plan-4-write-screens`, 14 commits, árbol limpio.
+**Números al cortar:** 273 tests unitarios, 153 contra la base, `npm run typecheck`
 limpio, `npm run build` compilando.
+
+**Una temporada entera se juega desde el navegador**, de crear el torneo a
+coronar al campeón del año — probado de punta a punta, no deducido.
 
 | Task | Qué produce | Estado |
 |---|---|---|
@@ -39,7 +42,10 @@ limpio, `npm run build` compilando.
 | 9 | Fecha `DRAFT` — quién viene, el invitado, las parejas | ✅ `1b0fcb6` |
 | 10 | Fecha `OPEN` y `CLOSED` — cargar, cerrar, reabrir | ✅ `34073c4` |
 | 14 | El recorrido con navegador | ✅ `bac6451` |
-| **7 · 11 · 12 · 13** | **Tanda B: toggle "No voy", Ajustes, Reglas sin login, Masters** | ⬜ **acá se sigue** |
+| 11 | Ajustes — plantel, formato, reglas | ✅ `205b20f` |
+| 13 | El Masters — armarlo, jugarlo, coronar al campeón | ✅ `a06d863` |
+| **7** | **Tabla — "No voy" y "Sí voy"** | ⬜ **acá se sigue** |
+| 12 | Reglas, sin login | ⬜ |
 
 **Lo que la app ya hace:** crear una cuenta, crear un torneo con su plantel y su
 formato, compartir el link de invitación, reclamar un asiento, elegir torneo en
@@ -47,9 +53,9 @@ Mis torneos, leer las cinco pantallas del Plan 3, y **jugar**: abrir una fecha,
 tildar quién viene, sumar el invitado, sortear las parejas, confirmar, cargar
 los resultados en dos toques, cerrar la fecha y reabrirla.
 
-**Lo que todavía no hace:** nada del recorrido regular. Falta la tanda B: el
-toggle "No voy" del jugador (Task 7), Ajustes (11), Reglas sin login (12) y las
-pantallas del Masters (13). Ninguna bloquea jugar una temporada.
+**Lo que todavía no hace:** dos cosas, y ninguna bloquea jugar. **El jugador no
+tiene ninguna acción de escritura en toda la app** —el toggle "No voy" es la
+Task 7—, y **la página de Reglas sigue detrás del login** (Task 12).
 
 **El recorrido con navegador ya corrió** (`scripts/smoke.mjs`, Task 14) y pasa
 entero: crear el torneo, abrir la fecha, tildar, el invitado, el sorteo, los seis
@@ -2083,6 +2089,51 @@ secciones de Reglas, el acordeón de rondas, Reabrir → Cancelar y Reabrir → 
 "+ Agregar jugador", "Sacar", las flechas de orden (la del primero está
 correctamente deshabilitada), los steppers, "Usar los defaults", y el alta de un
 jugador nuevo por el link de invitación de punta a punta.
+
+### Lo que apareció ejecutando las Tasks 11 y 13
+
+- **El Masters se armaba y no se podía abrir.** La Task 13 describe el `DRAFT`
+  como "los 4 clasificados y un botón para generar", y ahí termina: `MastersDraft`
+  no tenía "Confirmar fecha", así que la jornada se sorteaba y **el estado
+  `OPEN` que la misma tarea pide construir era inalcanzable**. Apareció jugando
+  una temporada entera por el navegador, no compilando. Se cerró con el copy que
+  ya existe —"Confirmar fecha", de la Task 9— y con la acción que ya existe:
+  `openMatchday` sabe desde la Task 4 que el Masters no tiene asistencias.
+- **El Masters decía "Descansa esta ronda" y no descansa nadie.** El acordeón de
+  rondas nombra la pareja libre, que es real en una fecha de 5 parejas. En el
+  Masters las 6 "parejas" son las tres combinaciones de los mismos 4 jugadores y
+  cada ronda juega una sola: las que no juegan son cuatro, y nombrar una es
+  mentir. Se apaga esa línea cuando `kind === 'MASTERS'`.
+- **El campeón del año no cuenta los partidos por su cuenta.** Los ganados por
+  jugador salen de `computeStandings` —cada pareja del Masters juega una vez, así
+  que sumar las tres parejas de alguien es su marca—, no de un segundo tally. Dos
+  formas de decidir quién ganó un partido es el bug que ningún test agarra.
+  **Los dos desenlaces del spec 2.7 se probaron en el navegador**: campeón limpio
+  con 3 ganados (sin línea de desempate) y triple empate en 2 con uno en 0, donde
+  aparece "Corta el ranking del año".
+- **La Task 11 agregó `ajustes/copiar.tsx`**, que no está en su lista de
+  archivos. "Copiar ›" necesita el portapapeles, o sea un componente cliente, y
+  las otras tres piezas de la lista (`plantel`, `formato`, `reglas`) no son su
+  casa. El nombre del torneo, en cambio, **no** necesitó componente: es un
+  `<form>` con Server Action y el error vuelve por la query, igual que en
+  `unirse/[token]`.
+- **Ajustes no tiene copy de "Guardar", y no se inventó ninguna.** El plan no la
+  trae. Se resolvió guardando solo: el formato a cada toque de `−`/`+` —
+  `updateSeasonConfig` corre `assertValidConfig` antes de escribir, así que un
+  intermedio inválido vuelve como error en línea y no se guarda— y las reglas al
+  salir del campo, igual que el nombre del invitado.
+- **`STEPPERS` se importa del wizard, el layout se duplica.** El plan prohíbe
+  extraer el componente compartido y eso se respetó; pero los labels, las ayudas
+  y los topes tienen que decir lo mismo en las dos pantallas, así que la
+  constante se reusa en vez de copiarse.
+- **La frase del desempate del Masters encadena "y".** El copy es
+  `"{nombre} y {otros} ganaron {n} partidos cada uno."` y con el triple empate
+  —el único caso posible— sale "A y B y C". Es el template textual; cambiarlo a
+  "A, B y C" es un string nuevo que decide alguien.
+- **Al reabrir una fecha, todas sus rondas arrancan colapsadas.** El acordeón
+  colapsa la ronda completa, y una fecha reabierta las tiene todas completas —
+  justo cuando entrás a corregir un resultado. Es un toque de más, no un
+  bloqueo.
 
 ### Deuda que heredan las tareas que faltan
 

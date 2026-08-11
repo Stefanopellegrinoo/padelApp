@@ -11,12 +11,13 @@ import {
   type PairStanding,
   type SeasonConfig,
 } from '@/core'
-import { entriesOf, matchdayDetail, matchdaysOf, seasonHeader } from '@/db/read'
+import { attendancesOf, entriesOf, matchdayDetail, matchdaysOf, pairLocksOf, seasonHeader } from '@/db/read'
 import { awardsBefore, closedHistory } from '@/db/season'
 import { serverClient } from '@/db/server'
 import { EdgeError } from '@/db/errors'
 import { matchdayFull } from '@/app/format'
 import { Rondas, type RoundMatchVM, type RoundVM } from './rondas'
+import { Armado, type DraftPairVM, type SeatVM } from './armado'
 
 interface PageProps {
   params: Promise<{ id: string; n: string }>
@@ -116,6 +117,76 @@ export default async function FechaDetailPage({ params }: PageProps) {
       Se está armando. Todavía no hay parejas ni partidos para mostrar.
     </div>
   )
+
+  // El armado es del admin y de nadie más: el kicker dice "sólo vos la ves" y
+  // `attendances_write` no deja tildar a nadie que no sea admin. Un jugador que
+  // llegue a esta URL ve la tarjeta de arriba, que es la verdad para él.
+  if (matchday.status === 'DRAFT' && header.isAdmin) {
+    const [attendances, detail, locks, lastHistory, beforeLastHistory] = await Promise.all([
+      attendancesOf(supabase, matchday.id),
+      matchdayDetail(supabase, matchday.id),
+      pairLocksOf(supabase, matchday.id),
+      closedHistory(supabase, seasonId, matchdayNumber - 1),
+      closedHistory(supabase, seasonId, matchdayNumber - 2),
+    ])
+
+    const { defenders, defendersAlreadyRepeated } = previousContext(lastHistory, beforeLastHistory)
+    const effectiveDefenders = defenders !== null && !defendersAlreadyRepeated ? defenders : null
+
+    // Sin fila de asistencia es "viene": el admin arma la fecha con todos y
+    // descuenta a los que avisaron. `seedAttendances` —que corre en cada action,
+    // nunca al dibujar— hace que la base opine lo mismo.
+    const seats: SeatVM[] = entries
+      .filter((entry) => entry.kind === 'SQUAD')
+      .sort((a, b) => a.seedPosition - b.seedPosition)
+      .map((entry) => ({
+        entryId: entry.id,
+        name: entry.displayName,
+        playing: attendances.get(entry.id) !== 'ABSENT',
+      }))
+
+    // `entriesOf` trae los invitados de TODAS las fechas de la temporada, por
+    // eso el filtro por `matchdayId`. Uno solo: el equipo invitado completo
+    // queda fuera de este plan.
+    const guestEntry = entries.find(
+      (entry) => entry.kind === 'GUEST' && entry.matchdayId === matchday.id,
+    )
+    const guestLock =
+      guestEntry === undefined
+        ? undefined
+        : locks.find((lock) => lock.a === guestEntry.id || lock.b === guestEntry.id)
+
+    const draftPairs: DraftPairVM[] = detail.pairs.map((pair) => ({
+      key: pairKey(pair),
+      names: pairName(pair),
+      defending: effectiveDefenders !== null && samePair(pair, effectiveDefenders),
+      withGuest: detail.guestIds.includes(pair.a) || detail.guestIds.includes(pair.b),
+    }))
+
+    body = (
+      <Armado
+        seasonId={seasonId}
+        matchdayId={matchday.id}
+        matchdayNumber={matchday.number}
+        seats={seats}
+        guest={
+          guestEntry === undefined
+            ? null
+            : {
+                entryId: guestEntry.id,
+                name: guestEntry.displayName,
+                partnerId:
+                  guestLock === undefined
+                    ? null
+                    : guestLock.a === guestEntry.id
+                      ? guestLock.b
+                      : guestLock.a,
+              }
+        }
+        pairs={draftPairs}
+      />
+    )
+  }
 
   if (matchday.status !== 'DRAFT') {
     const status = matchday.status

@@ -57,6 +57,13 @@ export interface PublicRules {
   adminName: string
 }
 
+/** A row of `pair_locks`: the same `{ a, b }` the draw uses, plus the id `unlockPair` deletes by. */
+export interface PairLockRow {
+  id: string
+  a: EntryId
+  b: EntryId
+}
+
 export interface MatchdaySummary {
   id: string
   number: number
@@ -211,6 +218,24 @@ export async function attendancesOf(
     .eq('matchday_id', matchdayId)
   if (error) throw new EdgeError(`No se pudo leer el presentismo: ${error.message}`)
   return new Map((data ?? []).map((row) => [row.entry_id, row.status as 'PLAYING' | 'ABSENT']))
+}
+
+/**
+ * The pairs the admin settled by hand on one matchday, WITH their row id.
+ *
+ * `locksOf` in `db/matchday.ts` answers the same question for the draw and
+ * drops the id on purpose: a `core/` pair is `{ a, b }` and nothing else. The
+ * DRAFT screen does need it, because `unlockPair` deletes by id and the
+ * guest's partner selector has to be able to change its mind.
+ */
+export async function pairLocksOf(supabase: Client, matchdayId: string): Promise<PairLockRow[]> {
+  const { data, error } = await supabase
+    .from('pair_locks')
+    .select('id, entry_a, entry_b')
+    .eq('matchday_id', matchdayId)
+    .order('id', { ascending: true })
+  if (error) throw new EdgeError(`No se pudieron leer las parejas fijas: ${error.message}`)
+  return (data ?? []).map((row) => ({ id: row.id, a: row.entry_a, b: row.entry_b }))
 }
 
 /**

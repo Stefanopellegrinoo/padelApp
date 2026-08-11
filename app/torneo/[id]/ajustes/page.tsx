@@ -1,0 +1,150 @@
+import { redirect } from 'next/navigation'
+import { validateConfig } from '@/core'
+import { entriesOf, playerNames, seasonHeader, seasonRules } from '@/db/read'
+import { serverClient } from '@/db/server'
+import { signOut } from '@/app/auth/actions'
+import { renameTournament } from './actions'
+import { CopiarLink } from './copiar'
+import { Formato } from './formato'
+import { Plantel, type SeatVM } from './plantel'
+import { Reglas } from './reglas'
+
+interface PageProps {
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ error?: string }>
+}
+
+const ROW = 'flex items-center justify-between gap-3 px-3 py-3'
+const LABEL = 'text-[14px] font-bold'
+const VALUE = 'shrink-0 text-[13px] font-[750] text-muted'
+
+/**
+ * Ajustes — la única pantalla de administración pura de la app.
+ *
+ * La guarda de la pantalla es `isAdmin`, pero la guarda de verdad es RLS: todas
+ * las escrituras de acá pasan por políticas que piden `is_season_admin`. Ésta
+ * es cortesía, para no dibujarle a un jugador botones que le van a rebotar.
+ *
+ * Lo que NO está, y es a propósito (decisión registrada 6): Notificaciones,
+ * Apariencia, "Cambiar contraseña" y "Salir del torneo" — las dos primeras no
+ * son del torneo y las dos últimas no tienen backend.
+ */
+export default async function AjustesPage({ params, searchParams }: PageProps) {
+  const { id: seasonId } = await params
+  const { error: renameError } = await searchParams
+  const supabase = await serverClient()
+
+  const [header, entries, rules] = await Promise.all([
+    seasonHeader(supabase, seasonId),
+    entriesOf(supabase, seasonId),
+    seasonRules(supabase, seasonId),
+  ])
+  if (!header.isAdmin) redirect(`/torneo/${seasonId}`)
+
+  const squad = entries
+    .filter((entry) => entry.kind === 'SQUAD')
+    .sort((a, b) => a.seedPosition - b.seedPosition)
+  const owners = await playerNames(
+    supabase,
+    squad.map((entry) => entry.playerId).filter((playerId): playerId is string => playerId !== null),
+  )
+  const seats: SeatVM[] = squad.map((entry) => ({
+    entryId: entry.id,
+    name: entry.displayName,
+    ownerName: entry.playerId === null ? null : (owners.get(entry.playerId) ?? null),
+  }))
+
+  // El desajuste entre los asientos que hay y los que dice la config se reporta
+  // con `validateConfig`, no con un copy nuevo: agregar o sacar un asiento no
+  // toca `squadSize` ni `points` (decisión registrada 3), así que las dos cosas
+  // pueden quedar en desacuerdo y hay que decirlo con la voz que ya existe.
+  const mismatch =
+    seats.length === header.config.squadSize
+      ? []
+      : validateConfig({ ...header.config, squadSize: seats.length })
+
+  const { setsToWin, gamesPerSet } = header.config.matchFormat
+
+  return (
+    <div className="flex flex-col gap-4 pt-3">
+      <header className="flex flex-col gap-[3px]">
+        <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
+          {header.name}
+        </p>
+        <h1 className="text-[26px] font-extrabold tracking-[-.03em]">Ajustes</h1>
+      </header>
+
+      <section className="flex flex-col gap-2">
+        <h2 className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">Torneo</h2>
+
+        <div className="overflow-hidden rounded-[14px] border border-line bg-surface">
+          {/* El nombre se manda con un form y sin JavaScript: es un campo y un
+              Enter. El error vuelve por la query. */}
+          <form action={renameTournament} className={ROW}>
+            <input type="hidden" name="seasonId" value={seasonId} />
+            <label className={LABEL} htmlFor="nombre">
+              Nombre
+            </label>
+            <input
+              id="nombre"
+              name="name"
+              defaultValue={header.name}
+              required
+              className={`min-w-0 flex-1 rounded-field border bg-surface px-3 py-2 text-right text-[13px] font-[750] outline-none ${
+                renameError === undefined ? 'border-line' : 'border-live'
+              }`}
+            />
+          </form>
+
+          <a href="#plantel" className={`${ROW} border-t border-line`}>
+            <span className={LABEL}>Plantel</span>
+            <span className={VALUE}>{seats.length} ›</span>
+          </a>
+
+          <a href="#formato" className={`${ROW} border-t border-line`}>
+            <span className={LABEL}>Formato</span>
+            <span className={VALUE}>
+              {setsToWin} set a {gamesPerSet} ›
+            </span>
+          </a>
+
+          <div className={`${ROW} border-t border-line`}>
+            <span className={LABEL}>Link de invitación</span>
+            <CopiarLink token={header.inviteToken} />
+          </div>
+        </div>
+
+        {renameError !== undefined && (
+          <p className="rounded-field bg-live-bg px-3 py-2.5 text-[12.5px] font-bold text-live">
+            {renameError}
+          </p>
+        )}
+
+        <p className="text-[11.5px] font-[600] text-muted">
+          Cambiar el formato con fechas ya jugadas no recalcula la tabla vieja.
+        </p>
+      </section>
+
+      {mismatch.map((message) => (
+        <p key={message} className="rounded-field bg-live-bg px-3 py-2.5 text-[12.5px] font-bold text-live">
+          {message}
+        </p>
+      ))}
+
+      <Plantel seasonId={seasonId} seats={seats} />
+      <Formato seasonId={seasonId} config={header.config} />
+      <Reglas seasonId={seasonId} text={rules.text} />
+
+      <section className="flex flex-col gap-2">
+        <h2 className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">Cuenta</h2>
+        <div className="overflow-hidden rounded-[14px] border border-line bg-surface">
+          <form action={signOut}>
+            <button type="submit" className={`${ROW} w-full text-[14px] font-[750] text-live`}>
+              Cerrar sesión
+            </button>
+          </form>
+        </div>
+      </section>
+    </div>
+  )
+}

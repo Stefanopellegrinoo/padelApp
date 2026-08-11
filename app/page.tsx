@@ -1,4 +1,6 @@
 import Link from 'next/link'
+import { signOut } from '@/app/auth/actions'
+import { serverClient } from '@/db/server'
 
 const BULLETS = [
   'Las parejas se arman solas cruzando la tabla, sin discusiones.',
@@ -6,7 +8,20 @@ const BULLETS = [
   'Cada uno ve su posición, su racha y con quién le va mejor.',
 ]
 
-export default function HomePage() {
+/**
+ * Quien cae acá logueado ya pasó por `signIn`/`signUp`: sólo llega con más de
+ * una temporada (no hay pantalla propia para elegir — Plan 4) o con ninguna.
+ * En los dos casos sigue siendo cierto que puede querer crear un torneo, así
+ * que ese CTA no cambia. Lo único que se vuelve falso es "Ya tengo cuenta": ya
+ * entró, ofrecerle loguearse de nuevo no tiene sentido. Se cambia por
+ * "Cerrar sesión", la única copy del handoff para esa acción.
+ */
+export default async function HomePage() {
+  const supabase = await serverClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
   return (
     <main className="flex min-h-screen flex-col bg-bg px-6 pb-[26px] text-text">
       <div className="flex items-center gap-[9px] pt-4">
@@ -42,12 +57,23 @@ export default function HomePage() {
         >
           Crear mi torneo
         </Link>
-        <Link
-          href="/login"
-          className="rounded-field border border-line p-4 text-center font-extrabold text-text"
-        >
-          Ya tengo cuenta
-        </Link>
+        {user === null ? (
+          <Link
+            href="/login"
+            className="rounded-field border border-line p-4 text-center font-extrabold text-text"
+          >
+            Ya tengo cuenta
+          </Link>
+        ) : (
+          <form action={signOut}>
+            <button
+              type="submit"
+              className="w-full rounded-field border border-line p-4 text-center font-extrabold text-text"
+            >
+              Cerrar sesión
+            </button>
+          </form>
+        )}
         <p className="text-pretty pt-[2px] text-center text-[12.5px] font-medium text-muted">
           ¿Te pasaron un link de invitación? Abrilo y elegí tu nombre.
         </p>

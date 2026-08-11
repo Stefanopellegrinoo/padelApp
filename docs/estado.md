@@ -1,6 +1,6 @@
 # Estado del proyecto
 
-**Última actualización:** 11 de agosto de 2026, con el Plan 4 a mitad de camino.
+**Última actualización:** 11 de agosto de 2026, con el Plan 4 terminado salvo el equipo invitado en pantalla.
 
 Este documento es el punto de entrada. Dice qué está hecho, qué falta, y qué hay
 que decidir antes de seguir. Los detalles viven en los documentos que se enlazan.
@@ -14,9 +14,9 @@ que decidir antes de seguir. Los detalles viven en los documentos que se enlazan
 | **1. `core/`** | Toda la lógica del campeonato, funciones puras | ✅ **Terminado y en `main`** |
 | **2. Datos y auth** | Schema Supabase, migraciones, RLS, login + Google | ✅ **Terminado**, rama `plan-2-data-and-auth` |
 | **3. Pantallas de lectura** | Tabla, Fechas, Estadísticas, Reglas, Perfil | ✅ **Terminado**, rama `plan-3-read-screens` |
-| **4. Pantallas de escritura** | Crear torneo, abrir fecha, cargar resultados, Ajustes, Masters | 🚧 **12 de 14 tareas**, rama `plan-4-write-screens` |
+| **4. Pantallas de escritura** | Crear torneo, abrir fecha, cargar resultados, Ajustes, Masters | 🚧 **13 de 14 tareas** (la 7 descartada), rama `plan-4-write-screens` |
 
-> **Si estás retomando: arrancá por la Task 7.** El estado exacto —qué está
+> **Si estás retomando: lo único que falta es el equipo invitado en pantalla.** El estado exacto —qué está
 > hecho, qué falta, en qué orden y qué desvíos ya ocurrieron— está en la sección
 > "Dónde quedó la ejecución" y en "Aparecidos" del
 > [plan 4](superpowers/plans/2026-08-11-write-screens.md). Esta página resume;
@@ -49,7 +49,7 @@ adentro a propósito: `allMatchings` (sólo la usa `buildPairs`) y `orderByPoint
 | [`superpowers/plans/2026-08-10-core-championship-logic.md`](superpowers/plans/2026-08-10-core-championship-logic.md) | **El plan 1**, ya ejecutado. Su tabla final —"Qué queda afuera de este plan, a propósito"— es la lista de requisitos que hereda el plan 2. |
 | [`superpowers/plans/2026-08-10-data-and-auth.md`](superpowers/plans/2026-08-10-data-and-auth.md) | **El plan 2**, ejecutado. 14 tareas. Sus secciones "Las tres decisiones" y "Decisiones registradas" son las que mandan sobre cualquier cosa que diga este documento. Su "Aparecidos" tiene lo que quedó sin hacer. |
 | [`superpowers/plans/2026-08-10-read-screens.md`](superpowers/plans/2026-08-10-read-screens.md) | **El plan 3**, ejecutado. 11 tareas, formato liviano: interfaces y "qué NO hace", con bloques de código completos sólo donde había lógica nueva. Su "Aparecidos" es la deuda conocida de las pantallas. |
-| [`superpowers/plans/2026-08-11-write-screens.md`](superpowers/plans/2026-08-11-write-screens.md) | **El plan 4**, escrito y sin ejecutar. 14 tareas. Su tabla "El trazado" dice qué dato necesita cada pantalla y de ahí salen las primeras cuatro tareas; sus "Decisiones registradas" mandan sobre lo que dice este documento —una de ellas corrige el alcance de acá abajo—. |
+| [`superpowers/plans/2026-08-11-write-screens.md`](superpowers/plans/2026-08-11-write-screens.md) | **El plan 4**, ejecutado: 13 de 14 tareas (la 7 se descartó). Su tabla "El trazado" dice qué dato necesita cada pantalla y de ahí salen las primeras cuatro tareas; sus "Decisiones registradas" mandan sobre lo que dice este documento —una de ellas corrige el alcance de acá abajo—. |
 | `.superpowers/sdd/2026-08-10-core-championship-logic/progress.md` | **El ledger de ejecución.** Cada fix round, cada minor diferido, cada decisión tomada y por qué. No está versionado (es scratch), pero es donde está el detalle de cada hallazgo. |
 
 ---
@@ -210,7 +210,7 @@ las funciones de datos.**
 
 ### Plan 4 — pantallas de escritura 🚧
 
-**Hecho: 12 de las 14 tareas** (falta la 7 y la 12), rama `plan-4-write-screens`.
+**Hecho: 13 de las 14 tareas** (la 7 se descartó), rama `plan-4-write-screens`.
 Toda la capa de datos, "Mis torneos", el wizard de crear torneo, **el flujo
 entero de jugar una fecha** —abrirla, tildar quién viene, el invitado con su
 compañero, el sorteo, confirmar, cargar los resultados en dos toques, cerrar y
@@ -228,9 +228,16 @@ real que ningún test podía ver —la pareja campeona mostraba **0 puntos** cua
 jugaba con el invitado, contradiciendo la nota que tiene dos líneas más abajo—,
 arreglado y anotado.
 
-**Falta, y ninguna de las dos bloquea jugar:** el toggle "No voy" (Task 7) —hoy
-**el jugador no tiene ninguna acción de escritura en toda la app**, el admin
-tilda a todos— y la página de Reglas sin login (Task 12).
+**Reglas sin login está hecha** (Task 12): se abre en una ventana privada, el
+`<script>` del admin sale escapado, y las otras cuatro pantallas del torneo no le
+muestran nada a un anónimo. **La Task 7 se descartó** por decisión de producto:
+el jugador no marca su propia asistencia, la marca el admin en el armado.
+
+**Falta una sola cosa de producto: el equipo invitado desde la pantalla.** Las
+reglas están construidas y probadas —se jugó una fecha con dos invitados
+trabados como pareja: quedan juntos, no cobran un punto, y los 8 del plantel
+sí—, pero la pantalla del armado sólo administra el invitado automático que
+aparece cuando el número da impar. El detalle está en `Aparecidos` del plan 4.
 
 **Y la lista corta de deuda visible**, toda anotada en el plan: los plurales
 ("faltan 1 partidos", "jugaron 1 fechas"), "Mejor dupla del torneo" que lista

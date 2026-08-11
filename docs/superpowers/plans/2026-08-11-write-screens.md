@@ -44,8 +44,16 @@ coronar al campeón del año — probado de punta a punta, no deducido.
 | 14 | El recorrido con navegador | ✅ `bac6451` |
 | 11 | Ajustes — plantel, formato, reglas | ✅ `205b20f` |
 | 13 | El Masters — armarlo, jugarlo, coronar al campeón | ✅ `a06d863` |
-| **7** | **Tabla — "No voy" y "Sí voy"** | ⬜ **acá se sigue** |
-| 12 | Reglas, sin login | ⬜ |
+| 12 | Reglas, sin login | ✅ `7a3bf24` |
+| 7 | Tabla — "No voy" y "Sí voy" | 🚫 **descartada** |
+
+**La Task 7 no se hace.** Decisión del dueño del producto, tomada con la tanda B
+a la vista: el jugador no marca su propia asistencia. **El admin marca quién
+juega**, que es lo que ya hace el armado de la Task 9, y de ahí sale todo lo
+demás. `set_my_attendance` (0007) queda construida y probada, sin pantalla.
+
+**Lo que sí queda pendiente, y es lo próximo:** el **equipo invitado** desde la
+pantalla. Ver "El equipo invitado, y por qué la pantalla se queda corta" abajo.
 
 **Lo que la app ya hace:** crear una cuenta, crear un torneo con su plantel y su
 formato, compartir el link de invitación, reclamar un asiento, elegir torneo en
@@ -2135,6 +2143,57 @@ jugador nuevo por el link de invitación de punta a punta.
   justo cuando entrás a corregir un resultado. Es un toque de más, no un
   bloqueo.
 
+### El equipo invitado, y por qué la pantalla se queda corta
+
+Es lo único que falta del producto, y está medido, no supuesto. Se cargaron dos
+invitados a mano en la base, trabados como pareja, y **se jugó la fecha entera
+desde la pantalla**:
+
+| | |
+|---|---|
+| Sortea 5 parejas y **los dos invitados quedan juntos** | ✅ |
+| La fecha abre, se cargan los 10 partidos y cierra | ✅ |
+| **El equipo invitado no cobra un solo punto**, y los 8 del plantel sí | ✅ |
+
+O sea: `core/` y `db/` hacen exactamente lo que hay que hacer —`computeAwards`
+saltea la pareja que es toda de invitados y `assertPointsCoverMatchday` la
+descuenta—. **Lo que falta es pantalla, y son cuatro cosas:**
+
+1. **No hay forma de agregar un invitado ni un equipo.** Los únicos botones del
+   armado son los del plantel y "Generar parejas". El invitado aparece **sólo**
+   cuando el número da impar, y "unos amigos que vienen a jugar" es justamente
+   el caso de número par.
+2. **Con dos invitados, la pantalla dibuja uno.** `fechas/[n]/page.tsx` usa
+   `.find()` sobre los `GUEST` de la fecha: el segundo no existe para la UI.
+3. **El panel de conteo es ciego a los invitados.** Con dos adentro dice
+   `"8 confirmados · La fecha es de 8 · 4 parejas"` y la fecha es de 10 con 5
+   parejas. Es la misma raíz que el caso ya anotado de "par + invitado ya
+   nombrado".
+4. **"Juega con" no puede decir "con el otro invitado".** Sus opciones son sólo
+   asientos del plantel, así que con la pareja trabada de verdad el selector
+   muestra "El que toque" — miente sobre un dato que existe.
+
+Backend: cero. `addGuest`, `removeGuest`, `nameGuest`, `lockPair` y `unlockPair`
+ya están y ya están probadas contra la base.
+
+### Lo que apareció ejecutando la Task 12
+
+- **Era un defecto, no una función, y el diagnóstico del plan era exacto.** La
+  rama sin sesión de Reglas ya estaba construida desde el Plan 3 y era
+  inalcanzable porque el layout llamaba a `seasonHeader()` sin condición.
+- **Lo importante era lo que NO se rompía.** Sacar esa guarda deja a las otras
+  pantallas del torneo frenadas sólo por RLS. Probado desde un contexto sin una
+  cookie: Tabla, Fechas, Stats y Ajustes no le muestran **nada** a un anónimo.
+  Lo único que cambió es quién frena, como decía el plan.
+- **El criterio de terminado se cumplió con un `<script>` de verdad.** Guardado
+  en `rules_text` por psql, la página pública lo dibuja **como texto literal** y
+  no dispara un solo error de JS.
+- **Un anónimo que abre la Tabla ve un 500, no un login.** No es una regresión
+  —antes tiraba igual, desde el layout— y el plan lo bendice ("son privadas"),
+  pero un link de la Tabla pegado en el grupo le muestra una página de error a
+  quien todavía no entró. El arreglo es mandarlo a `/login?next=…`, y es una
+  decisión de producto, no de esta tarea.
+
 ### Deuda que heredan las tareas que faltan
 
 - ✅ **La Task 8 tenía que CREAR `app/torneo/[id]/actions.ts`, no modificarlo.**
@@ -2191,26 +2250,35 @@ jugador nuevo por el link de invitación de punta a punta.
 
 ## Criterio de terminado
 
-- [ ] `npm test` en verde, sin tests saltados
-- [ ] `npm run test:db` en verde contra Supabase local, sin tests saltados
-- [ ] `npm run typecheck` sin errores
-- [ ] `npm run build` sin errores, **con el dev server apagado**
-- [ ] `core/` sigue puro: nada de `Date`, `Math.random`, `fetch` ni `process`, y
-      ningún import fuera de `core/` — `rg '^import' core/ | rg -v "from '\./"`
-      (los `vitest` de los tests son la única excepción esperada)
-- [ ] **`core/` no se tocó en todo el plan** — `git diff main --stat core/` vacío
-- [ ] Ningún componente `'use client'` importa de `db/server.ts` —
-      `rg -l "'use client'" app/ | xargs rg -l 'db/server'` sin resultados
-- [ ] Ninguna pantalla escribe sin pasar por `db/` —
-      `rg -n "\.insert\(|\.update\(|\.delete\(|\.upsert\(" app/` sin resultados
-- [ ] Ningún copy inventado: cada string visible sale del handoff, de
-      `narrateRules`, de `validateConfig`, o está marcado 🆕 en su tarea
-- [ ] La página de Reglas se abre **sin sesión** en una ventana privada, y el
-      markdown del admin sale escapado — probado con un `<script>` de verdad
-      guardado en `rules_text`
-- [ ] Una temporada completa de punta a punta: crearla, jugar sus fechas,
-      cerrarlas, jugar el Masters, coronar al campeón del año
-- [ ] El recorrido de la Task 14 pasa entero, en claro y en oscuro
-- [ ] Las cuatro revisiones adversariales (Tasks 1, 3, 4 y 10) están hechas, y
-      **cada mutación que se probó dejó al menos un test en rojo**
-- [ ] La sección "Aparecidos" está revisada
+- [x] `npm test` en verde, sin tests saltados — **273**
+- [x] `npm run test:db` en verde contra Supabase local, sin tests saltados — **153**
+- [x] `npm run typecheck` sin errores
+- [x] `npm run build` sin errores, **con el dev server apagado** y `.next` borrado
+- [x] `core/` sigue puro: nada de `Date`, `Math.random`, `fetch` ni `process`, y
+      ningún import fuera de `core/` — los únicos aciertos del `rg` son el
+      docstring de `index.ts` que nombra esas palabras para prohibirlas
+- [x] **`core/` no se tocó en todo el plan** — `git diff main --stat core/` vacío
+- [x] Ningún componente `'use client'` importa de `db/server.ts`
+- [x] Ninguna pantalla escribe sin pasar por `db/`
+- [x] Ningún copy inventado. Los que este plan tuvo que decidir están marcados
+      🆕 en su tarea; los que faltaban y **no** se inventaron están reportados en
+      `Aparecidos`: el singular de `"faltan {n} partidos"` y el de
+      `"jugaron {n} fechas"`, y el cancelar de la carga —resuelto haciendo que
+      "Cargar resultado" sea su propio cancelar—
+- [x] La página de Reglas se abre **sin sesión** en una ventana privada, y el
+      markdown del admin sale escapado — probado con un `<script>alert(1)</script>`
+      de verdad guardado en `rules_text`: sale como texto literal y no dispara un
+      solo error de JS. Y las otras cuatro pantallas del torneo no le muestran
+      **nada** a un anónimo
+- [x] Una temporada completa de punta a punta: crearla, jugar sus fechas,
+      cerrarlas, jugar el Masters, coronar al campeón del año — **recorrida con
+      navegador, no deducida**, y con los dos desenlaces del spec 2.7
+- [x] El recorrido de la Task 14 pasa entero, en claro y en oscuro
+- [x] Las cuatro revisiones adversariales (Tasks 1, 3, 4 y 10) están hechas, y
+      **cada mutación que se probó dejó al menos un test en rojo**. La de la
+      Task 10 encontró dos defectos reales, los dos arreglados
+- [x] La sección "Aparecidos" está revisada
+
+**Lo que queda fuera de este criterio, a sabiendas:** el equipo invitado desde la
+pantalla (arriba, con su medición), la Task 7 descartada por decisión de
+producto, y la deuda chica de copys. Nada de eso impide jugar una temporada.

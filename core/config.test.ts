@@ -41,9 +41,21 @@ describe('validateConfig', () => {
     expect(errors).toContain('Los puntos tienen que ir de mayor a menor, sin repetir.')
   })
 
-  it('rejects a zero in the points list', () => {
-    const errors = validateConfig({ ...valid, points: [10, 7, 5, 3, 1, 0] })
-    expect(errors).toContain('Todos los puntos tienen que ser mayores que 0: si salir último diera 0, sería lo mismo que faltar.')
+  // El último puede no sumar nada: es una decisión del torneo, no una regla del
+  // formato. Lo que no puede es ser negativo.
+  it('accepts a zero as the last value', () => {
+    expect(validateConfig({ ...valid, points: [10, 7, 5, 3, 1, 0] })).toEqual([])
+  })
+
+  it('rejects a negative in the points list', () => {
+    const errors = validateConfig({ ...valid, points: [10, 7, 5, 3, 1, -1] })
+    expect(errors).toContain('Los puntos no pueden ser negativos.')
+  })
+
+  // El 0 no aflojó la regla de al lado: dos ceros siguen siendo un empate.
+  it('still rejects two zeros, because they repeat', () => {
+    const errors = validateConfig({ ...valid, points: [10, 7, 5, 3, 0, 0] })
+    expect(errors).toContain('Los puntos tienen que ir de mayor a menor, sin repetir.')
   })
 
   it('rejects countBestOf above regularMatchdays', () => {

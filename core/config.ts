@@ -44,10 +44,15 @@ export function validateConfig(config: SeasonConfig): string[] {
       `Con un plantel de ${squadSize} hacen falta ${expectedPoints} valores de puntos, no ${points.length}.`,
     )
   }
-  if (points.some((value) => value <= 0)) {
-    errors.push(
-      'Todos los puntos tienen que ser mayores que 0: si salir último diera 0, sería lo mismo que faltar.',
-    )
+  // El 0 vale. La versión anterior lo prohibía con este argumento: "si salir
+  // último diera 0, sería lo mismo que faltar". Es cierto —con `countBestOf`,
+  // una fecha jugada que pagó 0 puntúa igual que una a la que no fuiste— pero es
+  // una decisión del torneo, no una regla del formato, y hay grupos que quieren
+  // exactamente eso: que el último no sume. Lo que sigue prohibido es el
+  // negativo, que no significa nada, y repetir un valor, que lo frena
+  // `isStrictlyDescending` de abajo.
+  if (points.some((value) => value < 0)) {
+    errors.push('Los puntos no pueden ser negativos.')
   }
   if (!isStrictlyDescending(points)) {
     errors.push('Los puntos tienen que ir de mayor a menor, sin repetir.')

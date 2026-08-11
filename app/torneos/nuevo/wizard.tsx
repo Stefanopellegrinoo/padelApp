@@ -277,9 +277,10 @@ export function Wizard() {
                   <span className="w-7 shrink-0 text-[13px] font-extrabold text-muted">
                     {index + 1}°
                   </span>
+                  {/* Desde 0: el torneo puede decidir que el último no sume. */}
                   <Stepper
                     value={value}
-                    min={1}
+                    min={0}
                     max={99}
                     onChange={(next) => {
                       const points = [...config.points]

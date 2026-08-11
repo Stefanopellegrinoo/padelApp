@@ -238,6 +238,27 @@ describe('closeMatchday', () => {
     expect(totalPoints).toBe(2 * config.points.reduce((sum, points) => sum + points, 0))
   })
 
+  // El torneo puede decidir que el último no sume. Antes, `awards_points_check`
+  // lo rebotaba recién ACÁ —con los resultados ya cargados y la fecha a medio
+  // cerrar—, que es el peor momento para enterarse.
+  it('cierra una fecha donde el último no suma nada', async () => {
+    const sinPuntosElUltimo: SeasonConfig = { ...defaultConfig(8), points: [10, 6, 3, 0] }
+    const { admin, seasonId, squad } = await buildSeasonWithSquad(sinPuntosElUltimo, 8)
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
+    await markAllPlaying(admin, matchdayId, squad)
+    await generatePairs(admin.client, matchdayId)
+    await openMatchday(admin.client, matchdayId)
+    await playAllMatches(admin, matchdayId, (pairA) => pairA)
+
+    await closeMatchday(admin.client, matchdayId)
+
+    expect(await matchdayStatus(matchdayId)).toBe('CLOSED')
+    const awards = await awardsOf(matchdayId)
+    // Los 8 cobran fila, incluidos los dos del último que cobran 0.
+    expect(awards).toHaveLength(8)
+    expect(awards.filter((award) => award.points === 0)).toHaveLength(2)
+  })
+
   it('los dos de la pareja cobran lo mismo', async () => {
     const { admin, seasonId, squad } = await buildSeasonWithSquad(defaultConfig(8), 8)
     const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
@@ -369,8 +390,14 @@ describe('closeMatchday', () => {
   })
 
   it('si el insert de awards falla, la fecha sigue OPEN', async () => {
-    // Se fuerza pasando un award con points 0, que el check de la tabla
+    // Se fuerza pasando un award con points NEGATIVO, que el check de la tabla
     // rechaza. Es la prueba de que la transacción existe.
+    //
+    // Antes la palanca era un 0, y dejó de servir cuando el torneo pasó a poder
+    // decidir que el último no sume (0010_points_can_be_zero.sql): el insert
+    // entraba, la fecha cerraba, y este test se ponía rojo avisando que su
+    // propia palanca ya no rompía nada. El negativo sigue sin significar nada y
+    // sigue prohibido.
     const { admin, seasonId, squad } = await buildSeasonWithSquad(defaultConfig(8), 8)
     const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
     await markAllPlaying(admin, matchdayId, squad)
@@ -382,7 +409,7 @@ describe('closeMatchday', () => {
 
     const { error } = await admin.client.rpc('close_matchday', {
       p_matchday: matchdayId,
-      p_awards: [{ entryId, position: 1, points: 0 }],
+      p_awards: [{ entryId, position: 1, points: -1 }],
     })
 
     expect(error).not.toBeNull()

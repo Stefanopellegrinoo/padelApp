@@ -58,7 +58,8 @@ export function Formato({ seasonId, config }: { seasonId: string; config: Season
             className={`flex h-[56px] items-center justify-between gap-2 px-3 ${index > 0 ? 'border-t border-line' : ''}`}
           >
             <span className="w-7 shrink-0 text-[13px] font-extrabold text-muted">{index + 1}°</span>
-            {stepper(value, 1, 99, (next) => {
+            {/* Desde 0: el torneo puede decidir que el último no sume. */}
+            {stepper(value, 0, 99, (next) => {
               const points = [...config.points]
               points[index] = next
               save({ ...config, points })

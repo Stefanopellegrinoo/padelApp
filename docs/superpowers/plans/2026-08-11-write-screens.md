@@ -2213,6 +2213,45 @@ ya están y ya están probadas contra la base.
   reclamado, renombrar por Server Action, y el wizard sin sesión. Ninguno cae en
   el boundary. Probado contra `npm start`, no contra el dev server.
 
+### La auditoría de diseño contra el handoff
+
+Se auditó la app entera contra `docs/padel_design/README.md`, regla por regla.
+
+**Estaba exacto:** los **34 tokens de color** (17 claro + 17 oscuro), hex por hex;
+la tipografía Archivo; **cero sombras**; el tracking del kicker —en todo el
+código existen **sólo** `.14em` y `.13em`, ningún otro valor—; los radios; y ni
+un `alert`, `confirm` o toast.
+
+**No estaba, y era el modo de falla que este plan tenía anotado:** las cuatro
+pantallas de entrada del Plan 2 (`login`, `registro`, `unirse`, `recuperar`)
+usaban **la escala redondeada de Tailwind** en vez de los valores del handoff —
+`text-xs` (12px) donde pide 11.5, `text-sm` (14px) donde pide 12.5, `border`
+(1px) donde pide 1.5, `p-4` (16px) donde pide 15. El Global Constraint decía
+textual que *"una auditoría ya encontró"* esto en el Plan 2: se encontró, se
+escribió la regla para que no se propagara —**y no se propagó, todas las
+pantallas de los Planes 3 y 4 usan valores exactos**— pero esas cuatro nunca se
+corrigieron. **Ahora sí: en toda la app no queda una sola medida de la escala
+redondeada.**
+
+Dos cosas que se dejaron como están, con motivo:
+
+- **`wizard.tsx:345` usa `text-accent`**, que el handoff prohíbe como color de
+  texto en oscuro. Su fondo es `accent-text` (claro), así que el verde oscuro
+  encima es el contraste correcto: rompe la letra de la regla y no su motivo, que
+  es la legibilidad sobre fondo oscuro.
+- **Los `font-semibold` que quedan son peso 600**, que el handoff pide para
+  meta/hint (11.5–12.5px). No son redondeos.
+
+**Lo que NO se auditó:** no se comparó pixel a pixel contra los `.dc.html`. Se
+verificaron las reglas que el handoff enuncia —tokens, tipografía, radios,
+bordes, sombras, tracking, patrones de estado— y el texto de cada sección.
+
+**Y un falso positivo que costó tiempo, para no volver a caer:** medir el borde
+con `getComputedStyle` devuelve **`1px` para un `border-width: 1.5px`**, aun con
+`deviceScaleFactor: 2`. Lo redondea el navegador al reportar, no la hoja de
+estilos: un `div` con 1.5px **inline** reporta lo mismo. El CSS tiene la regla y
+el elemento tiene la clase.
+
 ### Deuda que heredan las tareas que faltan
 
 - ✅ **La Task 8 tenía que CREAR `app/torneo/[id]/actions.ts`, no modificarlo.**

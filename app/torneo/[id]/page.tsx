@@ -133,7 +133,8 @@ export default async function TablaPage({ params }: PageProps) {
           <Link
             href={`/torneo/${seasonId}/ajustes`}
             aria-label="Ajustes"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-chip text-lg"
+            // 36px: el botón circular del header del marco común del handoff.
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-chip text-[18px]"
           >
             ⚙
           </Link>

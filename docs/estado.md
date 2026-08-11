@@ -233,6 +233,8 @@ arreglado y anotado.
 muestran nada a un anónimo. **La Task 7 se descartó** por decisión de producto:
 el jugador no marca su propia asistencia, la marca el admin en el armado.
 
+**El diseño está auditado contra el handoff.** Los 34 tokens de color, la tipografía, los radios, el tracking del kicker y la regla de "sin sombras" estaban exactos. Lo que no estaba eran las cuatro pantallas de entrada del Plan 2, que usaban la escala redondeada de Tailwind en vez de los valores del handoff — corregidas: **en toda la app no queda una sola medida redondeada**.
+
 **Y la guardia de acceso quedó bien puesta.** Antes, abrir el link de un torneo
 sin sesión mostraba la página blanca de Next en inglés. Ahora `middleware.ts`
 manda a `/login?next={ruta}` y después de entrar caés en el link que abriste; y

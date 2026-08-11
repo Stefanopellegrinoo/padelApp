@@ -25,9 +25,11 @@ export default async function UnirsePage({ params, searchParams }: PageProps) {
   if (error !== null || seats === null || seats.length === 0) {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center gap-3 bg-bg px-6 text-center text-text">
-        <h1 className="text-2xl font-extrabold">Este link no es válido</h1>
-        <p className="text-muted">Pedile al organizador que te pase el link de nuevo.</p>
-        <Link href="/" className="mt-4 font-semibold text-accent-link">
+        <h1 className="text-[26px] font-extrabold tracking-[-.03em]">Este link no es válido</h1>
+        <p className="text-[14px] font-[550] text-muted">
+          Pedile al organizador que te pase el link de nuevo.
+        </p>
+        <Link href="/" className="mt-4 text-[12.5px] font-[750] text-accent-link">
           Volver al inicio
         </Link>
       </main>
@@ -58,16 +60,16 @@ export default async function UnirsePage({ params, searchParams }: PageProps) {
   const selectedSeat = seats.find((seat) => seat.entry_id === selected && !seat.claimed) ?? null
 
   return (
-    <main className="flex min-h-screen flex-col gap-5 bg-bg px-6 pt-4 pb-6 text-text">
+    <main className="flex min-h-screen flex-col gap-5 bg-bg px-6 pt-4 pb-[26px] text-text">
       <div className="flex flex-col gap-1">
-        <p className="text-xs font-extrabold text-muted">Te invitaron a</p>
-        <h1 className="text-3xl font-extrabold tracking-tight">{first.season_name}</h1>
-        <p className="text-sm text-muted">
+        <p className="text-[11.5px] font-extrabold text-muted">Te invitaron a</p>
+        <h1 className="text-[32px] font-extrabold tracking-[-.03em]">{first.season_name}</h1>
+        <p className="text-[14px] font-[550] text-muted">
           {seats.length} jugadores · organiza {first.admin_name}
         </p>
       </div>
 
-      <p className="text-xs font-extrabold text-muted">¿Cuál sos vos?</p>
+      <p className="text-[11.5px] font-extrabold text-muted">¿Cuál sos vos?</p>
 
       <div className="flex flex-col gap-2">
         {seats.map((seat) => {
@@ -80,7 +82,7 @@ export default async function UnirsePage({ params, searchParams }: PageProps) {
                 <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full bg-chip text-[11px] font-extrabold">
                   {initials(seat.display_name)}
                 </span>
-                <span className="flex-1 text-[15px] font-semibold">{seat.display_name}</span>
+                <span className="flex-1 text-[15px] font-[650]">{seat.display_name}</span>
                 <span className="text-[11.5px] font-extrabold text-muted">Ya entró</span>
               </div>
             )
@@ -102,7 +104,7 @@ export default async function UnirsePage({ params, searchParams }: PageProps) {
               >
                 {initials(seat.display_name)}
               </span>
-              <span className={`flex-1 text-[15px] ${isSelected ? 'font-extrabold' : 'font-semibold'}`}>
+              <span className={`flex-1 text-[15px] ${isSelected ? 'font-extrabold' : 'font-[650]'}`}>
                 {seat.display_name}
               </span>
               {isSelected && <span className="text-[11.5px] font-extrabold text-up">Sos vos</span>}
@@ -111,7 +113,7 @@ export default async function UnirsePage({ params, searchParams }: PageProps) {
         })}
       </div>
 
-      {claimError !== undefined && <p className="text-sm font-bold text-live">{claimError}</p>}
+      {claimError !== undefined && <p className="text-[12px] font-bold text-live">{claimError}</p>}
 
       <div className="mt-auto flex flex-col gap-3">
         {selectedSeat !== null ? (
@@ -120,7 +122,7 @@ export default async function UnirsePage({ params, searchParams }: PageProps) {
             <input type="hidden" name="entryId" value={selectedSeat.entry_id} />
             <button
               type="submit"
-              className="w-full rounded-field bg-accent p-4 text-center font-extrabold text-accent-text"
+              className="w-full rounded-field bg-accent p-4 text-center text-[15px] font-extrabold text-accent-text"
             >
               Entrar como {selectedSeat.display_name}
             </button>
@@ -129,12 +131,12 @@ export default async function UnirsePage({ params, searchParams }: PageProps) {
           <button
             type="button"
             disabled
-            className="w-full rounded-field bg-chip p-4 text-center font-extrabold text-muted"
+            className="w-full rounded-field bg-chip p-4 text-center text-[15px] font-extrabold text-muted"
           >
             Elegí tu nombre
           </button>
         )}
-        <p className="text-center text-xs text-muted">
+        <p className="text-center text-[12px] font-[550] text-muted">
           Si tu nombre no está o ya lo tomó otro, avisale a {first.admin_name}.
         </p>
       </div>

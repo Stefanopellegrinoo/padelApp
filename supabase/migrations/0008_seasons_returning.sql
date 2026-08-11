@@ -1,0 +1,23 @@
+-- Crear una temporada y leer su id de vuelta era imposible.
+--
+-- `seasons_read` (0002_rls.sql) es `is_participant(id)`, e `is_participant`
+-- resuelve la pregunta con un SELECT sobre `public.seasons` adentro de una
+-- función `security definer`. Ese select corre con el snapshot de la sentencia,
+-- que NO incluye la fila que esa misma sentencia está insertando — así que el
+-- RETURNING de un `insert ... returning` se rechaza con 42501 aunque el WITH
+-- CHECK de `seasons_insert` haya pasado sin problema.
+--
+-- Verificado a mano contra la base: el mismo insert SIN `returning` entra, y con
+-- `returning` no. PostgREST siempre pide returning cuando el cliente hace
+-- `.select()` después de un insert, que es la única forma de saber qué id le
+-- tocó a la temporada recién creada.
+--
+-- No lo agarró nadie hasta ahora porque ningún camino creaba una temporada bajo
+-- RLS: los andamios de `db/test/` las arman con `service_role`, que la saltea, y
+-- hasta el Plan 4 no había pantalla que creara un torneo.
+--
+-- El arreglo es preguntar primero por la columna de la fila nueva —que sí está a
+-- la vista del chequeo— y recién después ir a buscarla a la tabla. No ensancha
+-- nada: `is_participant` ya devolvía true para quien creó la temporada.
+alter policy seasons_read on public.seasons
+  using (created_by = (select auth.uid()) or public.is_participant(id));

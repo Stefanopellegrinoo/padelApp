@@ -1,0 +1,32 @@
+-- La superficie de `anon`, cerrada de verdad.
+--
+-- `0002_rls.sql` le da DML a `authenticated` y `service_role` y deja a `anon`
+-- afuera **a propósito**: el modelo es que quien no tiene cuenta no ve ni una
+-- fila. Eso alcanzaba en local, donde el CLI de Supabase no le otorga nada a
+-- nadie y las tablas nacen sin un solo privilegio de DML.
+--
+-- **En Supabase Cloud es al revés.** El proyecto trae default privileges que le
+-- dan a `anon` select/insert/update/delete sobre cada tabla nueva del schema
+-- `public`, así que las diez nacieron con esos permisos puestos. Medido sobre el
+-- proyecto de producción recién creado, antes de esta migración: `anon` tenía
+-- SELECT sobre `seasons`, `entries`, `matchdays`, `pairs`, `matches`,
+-- `match_sets`, `attendances`, `pair_locks` y `awards`, y además INSERT, UPDATE
+-- y DELETE sobre casi todas.
+--
+-- Hoy no se puede explotar: RLS está prendida en las diez y **ninguna política
+-- nombra a `anon`**, así que sin política la fila se niega por default. Pero eso
+-- deja el modelo entero apoyado en una sola línea de defensa: el día que alguien
+-- escriba una política `to public`, o apague RLS en una tabla para depurar,
+-- `anon` pasa a leer y escribir el campeonato completo. La superficie no debería
+-- existir, y por eso se saca.
+--
+-- La única cosa que `anon` necesita seguir pudiendo hacer es la página de
+-- Reglas, y ésa va por `season_public_rules`, que es `security definer`: corre
+-- con los privilegios de su dueño y no toca los de quien llama.
+revoke all on all tables in schema public from anon;
+
+-- `handle_new_user` es la función del trigger de alta, y PostgREST la expone
+-- como `/rest/v1/rpc/handle_new_user`. Llamarla suelta falla —una función que
+-- devuelve `trigger` no se puede invocar de otra forma— pero no hay una sola
+-- razón para que figure en la API pública. Lo marcó el linter de Supabase.
+revoke execute on function public.handle_new_user() from public, anon, authenticated;

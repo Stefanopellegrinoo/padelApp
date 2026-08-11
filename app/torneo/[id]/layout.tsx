@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { seasonHeader } from '@/db/read'
 import { serverClient } from '@/db/server'
@@ -21,6 +22,12 @@ interface TorneoLayoutProps {
  * frena — antes el layout, ahora la query, que para un anónimo no devuelve nada
  * porque RLS no le otorgó un solo SELECT. La nav tampoco tendría sentido: quien
  * llega por el link no tiene a dónde ir.
+ *
+ * La vuelta a Mis torneos vive acá y no en cada `page.tsx`, aunque el header de
+ * cada pantalla sí sea de cada pantalla: no es contenido, es la salida del
+ * shell, el par de la nav de abajo. Entrando a un torneo no había forma de
+ * salir sin el botón del navegador, y las cuatro pestañas se mueven entre sí
+ * pero ninguna sube. Por eso está en las cuatro y no en una.
  */
 export default async function TorneoLayout({ children, params }: TorneoLayoutProps) {
   const { id } = await params
@@ -42,6 +49,14 @@ export default async function TorneoLayout({ children, params }: TorneoLayoutPro
 
   return (
     <div className="flex min-h-screen flex-col bg-bg text-text">
+      <div className="px-5 pt-4">
+        <Link
+          href="/torneos"
+          className="inline-flex rounded-full bg-chip px-[14px] py-2 text-[12.5px] font-bold"
+        >
+          ← Mis torneos
+        </Link>
+      </div>
       <main className="flex-1 px-5 pb-6">{children}</main>
       <TorneoNav seasonId={id} />
     </div>

@@ -13,7 +13,7 @@ que decidir antes de seguir. Los detalles viven en los documentos que se enlazan
 |---|---|---|
 | **1. `core/`** | Toda la lógica del campeonato, funciones puras | ✅ **Terminado y en `main`** |
 | **2. Datos y auth** | Schema Supabase, migraciones, RLS, login + Google | ✅ **Terminado**, rama `plan-2-data-and-auth` |
-| **3. Pantallas de lectura** | Tabla, Fechas, Estadísticas, Reglas, Perfil | ⬜ |
+| **3. Pantallas de lectura** | Tabla, Fechas, Estadísticas, Reglas, Perfil | ✅ **Terminado**, rama `plan-3-read-screens` |
 | **4. Pantallas de escritura** | Crear torneo, abrir fecha, cargar resultados, Ajustes | ⬜ |
 
 **`core/` en números:** 13 módulos, 145 tests, cero dependencias de producción.
@@ -41,7 +41,8 @@ adentro a propósito: `allMatchings` (sólo la usa `buildPairs`) y `orderByPoint
 | [`ui-screens.md`](ui-screens.md) | **La app.** Las 13 pantallas con su contenido, roles y estados. La navegación y por qué es como es. |
 | [`padel_design/README.md`](padel_design/README.md) | **El handoff visual** de Google Stitch, ya adaptado al formato de 8 a 12. Colores, tipografía, medidas, copys. Los `.dc.html` muestran el caso de 8 y no se pueden regenerar. |
 | [`superpowers/plans/2026-08-10-core-championship-logic.md`](superpowers/plans/2026-08-10-core-championship-logic.md) | **El plan 1**, ya ejecutado. Su tabla final —"Qué queda afuera de este plan, a propósito"— es la lista de requisitos que hereda el plan 2. |
-| [`superpowers/plans/2026-08-10-data-and-auth.md`](superpowers/plans/2026-08-10-data-and-auth.md) | **El plan 2**, escrito y revisado, sin ejecutar. 14 tareas. Sus secciones "Las tres decisiones" y "Decisiones registradas" son las que mandan sobre cualquier cosa que diga este documento. |
+| [`superpowers/plans/2026-08-10-data-and-auth.md`](superpowers/plans/2026-08-10-data-and-auth.md) | **El plan 2**, ejecutado. 14 tareas. Sus secciones "Las tres decisiones" y "Decisiones registradas" son las que mandan sobre cualquier cosa que diga este documento. Su "Aparecidos" tiene lo que quedó sin hacer. |
+| [`superpowers/plans/2026-08-10-read-screens.md`](superpowers/plans/2026-08-10-read-screens.md) | **El plan 3**, ejecutado. 11 tareas, formato liviano: interfaces y "qué NO hace", con bloques de código completos sólo donde había lógica nueva. Su "Aparecidos" es la deuda conocida de las pantallas. |
 | `.superpowers/sdd/2026-08-10-core-championship-logic/progress.md` | **El ledger de ejecución.** Cada fix round, cada minor diferido, cada decisión tomada y por qué. No está versionado (es scratch), pero es donde está el detalle de cada hallazgo. |
 
 ---
@@ -143,12 +144,62 @@ cerraron antes de arrancar:
 - **Reabrir borra la fecha siguiente si está vacía.** Si ya tiene asistencias,
   invitados o parejas, no la toca y hay que borrarla a mano.
 
-### Plan 3 — pantallas de lectura
+### Plan 3 — pantallas de lectura ✅
 
-- Tabla, Fechas, Estadísticas, Reglas, Perfil de jugador
-- **Sanitizar el markdown** que escribe el admin en la página de reglas
-- **Racha de defensas como estadística** (spec §2.4). Ningún módulo la calcula y
-  no estaba deferida en ningún lado — salió en la revisión final
+Las 11 tareas están hechas. Quedaron construidas las seis pantallas (Tabla con su
+sheet de desempate, Fechas, Fecha `[n]` con el acordeón de rondas, Estadísticas,
+Reglas y Perfil), más tres funciones puras nuevas en `core/` —racha de títulos,
+posición con movimiento, agregados por jugador— y `db/read.ts`, la capa de
+lectura, que **no existía**: `db/` sólo tenía escrituras.
+
+**Números:** 248 tests unitarios, 104 contra la base, `npm run build` compila.
+
+### Lo que encontró abrir el navegador, y por qué importa
+
+Con las dos suites en verde, el typecheck limpio y el build compilando, se
+recorrieron las pantallas a mano por primera vez. **Aparecieron cinco defectos
+reales en veinte minutos.** Ninguno era detectable por lo que había: el Plan 3 no
+tenía un solo test de pantalla.
+
+| Qué pasaba | Por qué |
+|---|---|
+| Entrabas y volvías a la landing, igual que deslogueado | `signIn` redirigía a `/` fijo, y no hay "Mis torneos" |
+| La primera pantalla podía tirar 500 | `JWT issued at future`, carrera de sub-segundo |
+| La Tabla decía "EN CURSO" con la temporada sin arrancar | `status` colapsaba `SETUP` con `ACTIVE` |
+| Fechas salía vacía | Dibujaba filas de la tabla, no de `regularMatchdays` |
+| Reglas decía "Marce lo creó" en todos los torneos | Nombre de ejemplo del handoff, hardcodeado |
+
+Los cinco están arreglados. **La lección para el Plan 4: una pantalla que tipa y
+compila puede estar mintiendo en cada línea.** Hace falta un smoke test de
+navegador que abra cada ruta, asierte 200 y compare lo que dice contra el estado
+real de los datos.
+
+**Sobre el arreglo del JWT, para que nadie lo dé por probado:** la carrera **no se
+pudo reproducir a pedido**. Diez logins seguidos pasan igual con y sin el
+arreglo; la falla apareció con tres agentes cargando la máquina y no vuelve con
+la máquina tranquila. Eso respalda el diagnóstico —contención de CPU, no relojes
+desfasados— pero es circunstancial. Lo que sí está probado es el helper en
+aislamiento (`db/client.unit.test.ts`): reintenta sólo ante `PGRST303`, deja
+pasar el `42501` de RLS, y se rinde después de un reintento.
+
+**Dos cosas quedaron decididas y anotadas, no olvidadas:**
+
+- **La página de Reglas quedó detrás del login**, aunque el diseño la pensó como
+  el link que se pega en el grupo. El layout del torneo es la guardia de acceso y
+  envuelve también a esa pantalla. Hacerla pública necesita que `anon` pueda leer
+  las reglas de una temporada: política de RLS nueva o RPC, o sea migración. El
+  sanitizado del markdown está hecho y probado igual.
+- **La racha se cuenta por jugador, no por pareja.** El spec §2.4 dice que existe
+  pero no cómo se cuenta, y no puede ser de la pareja: la regla del tope hace que
+  una pareja defienda como máximo una vez. La decisión, con su alternativa, está
+  en el plan.
+
+**La lección que dejó, y sirve para el Plan 4:** los tres huecos que aparecieron
+son de la misma familia. La capa de lectura se especificó desde el schema y no
+desde las pantallas, así que le faltaron justo las cosas que no son tablas sino
+preguntas sobre quien mira: "¿estoy anotado?" y "¿cuál asiento soy yo?". Antes de
+escribir el Plan 4, **trazar qué dato necesita cada pantalla y recién ahí definir
+las funciones de datos.**
 
 ### Plan 4 — pantallas de escritura
 
@@ -157,6 +208,32 @@ cerraron antes de arrancar:
   invitado cuando el número da impar
 - **Que el admin pueda mover al invitado** en el orden (spec §2.6). `core/` lo
   pone último y respeta el orden que le den; la UI tiene que ofrecer el arrastre
+
+**Lo que el Plan 3 le dejó, y hay que meter en su alcance:**
+
+- **"Mis torneos".** Hoy, si tenés más de una temporada, entrar te deja en la
+  landing porque no hay dónde elegir. Con una sola vas directo a su tabla.
+- **La lectura de asistencias**, que la Tabla necesita para el toggle "No voy" y
+  para dejar de callar si estás anotado.
+- **El flujo `DRAFT`** de la pantalla de Fecha —quién viene, el invitado, generar
+  parejas— y **la carga de resultados**, que el Plan 3 dejó afuera a propósito.
+- **Editar las reglas** desde Ajustes.
+- **El flujo del Masters.** Hoy se muestra bloqueado y nada más.
+- **La página de Reglas pública.** Está construida y es inalcanzable: el layout
+  del torneo es la guardia de acceso y la envuelve. Necesita que `anon` pueda
+  leer las reglas de una temporada, o sea una política de RLS o un RPC nuevo.
+
+**Cómo escribirlo, aprendido a los golpes en el Plan 3:**
+
+1. **Trazar qué dato necesita cada pantalla ANTES de definir las funciones de
+   datos.** La capa de lectura del Plan 3 se especificó desde el schema, y por eso
+   le faltaron justo las preguntas que no son tablas: "¿estoy anotado?" y "¿cuál
+   asiento soy yo?". Las dos tuvieron que resolverse a los parches.
+2. **Correr `npm run build` en cada tarea.** El Plan 2 no lo corría y se le
+   pasaron dos roturas de producción con las dos suites en verde.
+3. **Un smoke test de navegador**, aunque sea mínimo. Cinco defectos reales
+   salieron en veinte minutos de mirar la app, y cero de ellos era visible desde
+   los tests.
 
 ### Dos pantallas que cambiaron de layout y todavía nadie miró
 

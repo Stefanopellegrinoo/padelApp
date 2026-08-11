@@ -98,7 +98,7 @@ export default function RegistroForm() {
               type="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              className="rounded-field border p-4 text-text"
+              className="rounded-field border border-line bg-surface p-4 text-text"
               style={{ borderColor: emailError !== null ? 'var(--color-live)' : undefined }}
             />
             {emailError !== null && <p className="text-xs font-bold text-live">{emailError}</p>}
@@ -108,7 +108,10 @@ export default function RegistroForm() {
             <label htmlFor="password" className="text-xs font-extrabold text-muted">
               Contraseña
             </label>
-            <div className="flex items-center rounded-field border border-line bg-surface pr-4">
+            <div
+              className="flex items-center rounded-field border border-line bg-surface pr-4"
+              style={{ borderColor: passwordError !== null ? 'var(--color-live)' : undefined }}
+            >
               <input
                 id="password"
                 name="password"
@@ -116,7 +119,6 @@ export default function RegistroForm() {
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 className="flex-1 bg-transparent p-4 text-text"
-                style={{ borderColor: passwordError !== null ? 'var(--color-live)' : undefined }}
               />
               <button
                 type="button"

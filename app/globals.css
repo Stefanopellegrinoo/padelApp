@@ -18,6 +18,7 @@
   --color-ok-bg: #e6f2ea;
   --color-down: #c0553a;
   --color-warn-bg: #f8ece4;
+  --color-scrim: rgba(10, 25, 18, 0.45);
 
   --radius-field: 12px;
   --radius-card: 16px;
@@ -40,6 +41,7 @@
     --color-ok-bg: #12291f;
     --color-down: #ff9a6b;
     --color-warn-bg: #2a2016;
+    --color-scrim: rgba(0, 0, 0, 0.6);
   }
 }
 

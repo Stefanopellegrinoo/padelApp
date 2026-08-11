@@ -68,6 +68,26 @@ export { mastersQualifiers, mastersFixture, mastersChampion } from './masters'
 export type { RulesSection } from './narrate'
 export { narrateRules } from './narrate'
 
+// ── Reading the season back ──────────────────────────────────────────────────
+// What the read-only screens need on top of the ranking. All derived, nothing
+// stored: recomputing is cheap and deterministic, and a stored position would
+// drift the first time somebody reopens a matchday.
+
+// Per PLAYER, not per pair: a champion pair plays exactly two matchdays
+// together (spec 2.5), so its streak could only ever be 0 or 1.
+export type { Streak } from './streak'
+export { titleStreaks } from './streak'
+
+// `movement` is null when there is nothing to compare against and 0 when the
+// player did not move. The screen draws those two differently.
+export type { RankedRow } from './movement'
+export { rankingWithMovement } from './movement'
+
+// Counts only. The percentages are the screen's job, which also keeps the
+// divide-by-zero decision out of here.
+export type { PlayedMatchday, PartnerRecord, PlayerTally } from './playerstats'
+export { tallyPlayers, partnerRecords, bestPair } from './playerstats'
+
 /*
  * Deliberately NOT exported — internal to the modules above:
  *

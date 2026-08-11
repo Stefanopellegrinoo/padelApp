@@ -82,7 +82,7 @@ export default function LoginForm() {
               type="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              className="rounded-field border p-4 text-text"
+              className="rounded-field border border-line bg-surface p-4 text-text"
               style={{ borderColor: emailError !== null ? 'var(--color-live)' : undefined }}
             />
             {emailError !== null && <p className="text-xs font-bold text-live">{emailError}</p>}

@@ -3,6 +3,8 @@ import Link from 'next/link'
 import {
   bestPair,
   partnerRecords,
+  rankingWithMovement,
+  snapshotForMatchday,
   tallyPlayers,
   titleStreaks,
   type Award,
@@ -12,6 +14,7 @@ import {
   type PlayedMatchday,
 } from '@/core'
 import { awardsOf, closedHistoryAll, entriesOf, myEntryId } from '@/db/read'
+import { seasonConfig } from '@/db/season'
 import { serverClient } from '@/db/server'
 
 interface PageProps {
@@ -204,11 +207,12 @@ export default async function StatsPage({ params, searchParams }: PageProps) {
 
   const supabase = await serverClient()
 
-  const [entries, history, awardsByMatchday, viewerEntryId] = await Promise.all([
+  const [entries, history, awardsByMatchday, viewerEntryId, config] = await Promise.all([
     entriesOf(supabase, seasonId),
     closedHistoryAll(supabase, seasonId),
     awardsOf(supabase, seasonId),
     myEntryId(supabase, seasonId),
+    seasonConfig(supabase, seasonId),
   ])
 
   if (history.length < MIN_CLOSED_MATCHDAYS_FOR_STATS) {
@@ -216,7 +220,13 @@ export default async function StatsPage({ params, searchParams }: PageProps) {
   }
 
   const nameOf: NameOf = new Map(entries.map((entry) => [entry.id, entry.displayName]))
-  const squad: EntryId[] = entries.filter((entry) => entry.kind === 'SQUAD').map((entry) => entry.id)
+  // En orden de siembra, no en el que devuelva la base: `computeRanking` cae en
+  // este orden cuando dos jugadores no están en el snapshot, así que un plantel
+  // sin ordenar vuelve el desempate no determinista.
+  const squad: EntryId[] = entries
+    .filter((entry) => entry.kind === 'SQUAD')
+    .sort((a, b) => a.seedPosition - b.seedPosition)
+    .map((entry) => entry.id)
   const squadSet = new Set(squad)
 
   // ── Del torneo ──────────────────────────────────────────────────────────
@@ -249,6 +259,26 @@ export default async function StatsPage({ params, searchParams }: PageProps) {
 
   const streaks = titleStreaks(awardsByMatchday, squad)
   const longestStreak = streaks.reduce((top, streak) => (streak.longest > top.longest ? streak : top))
+
+  // Quién viene subiendo y quién bajando. Es la MISMA cuenta que la flecha de la
+  // Tabla —`rankingWithMovement`, con el mismo snapshot— y no una segunda
+  // opinión: dos formas de decidir quién subió es el bug que ningún test agarra.
+  // Lo que agrega esta pantalla es el extremo: en la Tabla tenés que recorrer
+  // doce filas para encontrar al que más se movió.
+  //
+  // El snapshot se arma para la fecha SIGUIENTE a la última cerrada, igual que
+  // en la Tabla: es el que está vigente ahora.
+  const snapshot = snapshotForMatchday(history.length + 1, squad, awardsByMatchday, config)
+  const ranked = rankingWithMovement(awardsByMatchday, squad, config, snapshot)
+  const moved = ranked.filter((row) => row.movement !== null && row.movement !== 0)
+  const climber = moved.reduce<(typeof moved)[number] | null>(
+    (top, row) => (top === null || (row.movement ?? 0) > (top.movement ?? 0) ? row : top),
+    null,
+  )
+  const faller = moved.reduce<(typeof moved)[number] | null>(
+    (bottom, row) => (bottom === null || (row.movement ?? 0) < (bottom.movement ?? 0) ? row : bottom),
+    null,
+  )
 
   const best = bestPair(history)
   const restPairs = dedupePairs(partnerRecords(history))
@@ -307,6 +337,36 @@ export default async function StatsPage({ params, searchParams }: PageProps) {
                   <PlayerLink base={base} entryId={longestStreak.entryId} nameOf={nameOf} />
                   {` · ${longestStreak.longest}`}
                 </>
+              }
+            />
+
+            {/* En alza y en baja: quién más se movió al cerrar la última fecha.
+                Si no se movió nadie —pasa, y más cuanto más avanzado el año—
+                las dos dicen "—" en vez de inventar un puesto. */}
+            <StatCard
+              label="En alza"
+              value={
+                climber === null ? (
+                  '—'
+                ) : (
+                  <span className="text-up">
+                    <PlayerLink base={base} entryId={climber.entryId} nameOf={nameOf} />
+                    {` ▲${climber.movement ?? 0}`}
+                  </span>
+                )
+              }
+            />
+            <StatCard
+              label="En baja"
+              value={
+                faller === null ? (
+                  '—'
+                ) : (
+                  <span className="text-down">
+                    <PlayerLink base={base} entryId={faller.entryId} nameOf={nameOf} />
+                    {` ▼${Math.abs(faller.movement ?? 0)}`}
+                  </span>
+                )
               }
             />
           </div>

@@ -260,9 +260,36 @@ async function main() {
     })(),
   )
 
-  // ── 10 y 11 · Ajustes y Reglas sin login ──────────────────────────────────
-  heading('Ajustes y Reglas sin login')
-  console.log('  – salteados: son las Tasks 11 y 12 y están en la tanda B, sin construir')
+  // ── 10. Ajustes ───────────────────────────────────────────────────────────
+  heading('Ajustes: cambiar el nombre y guardar texto de reglas')
+  await go(page, `/torneo/${seasonId}/ajustes`)
+  await page.fill('#nombre', 'Los Jueves 2026')
+  await page.press('#nombre', 'Enter')
+  await page.waitForTimeout(2500)
+  check(
+    'el nombre nuevo está en la base',
+    query(`select name from public.seasons where id = '${seasonId}'`) === 'Los Jueves 2026',
+    query(`select name from public.seasons where id = '${seasonId}'`),
+  )
+
+  await go(page, `/torneo/${seasonId}/ajustes`)
+  const rules = page.locator('textarea')
+  await rules.fill('Se juega **los jueves** a las 20. <script>alert(1)</script>')
+  await rules.blur()
+  await page.waitForTimeout(2500)
+  check(
+    'el texto de reglas quedó guardado',
+    query(`select rules_text like '%los jueves%' from public.seasons where id = '${seasonId}'`) === 't',
+  )
+  check(
+    'y la vista previa escapa el markdown del admin',
+    !(await page.content()).includes('<script>alert(1)</script>'),
+    'el script del admin llegó crudo al DOM',
+  )
+
+  // ── 11. Reglas sin sesión ─────────────────────────────────────────────────
+  heading('Reglas sin login')
+  console.log('  – salteado: es la Task 12 y está sin construir')
 
   // ── 12. Las cuatro pestañas, en claro y en oscuro ─────────────────────────
   heading('Las cuatro pestañas del torneo demo, en claro y en oscuro')

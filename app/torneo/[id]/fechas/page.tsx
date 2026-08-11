@@ -11,6 +11,7 @@ import {
 import { serverClient } from '@/db/server'
 import { matchdayDay } from '@/app/format'
 import { AbrirFecha } from './abrir'
+import { ArmarMasters } from './[n]/masters'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -81,6 +82,7 @@ export default async function FechasPage({ params }: PageProps) {
   // A la vez sólo puede haber una fecha regular sin cerrar (constraint de base),
   // así que "la que está en juego" es a lo sumo una.
   const openMatchday = regularMatchdays.find((matchday) => matchday.status === 'OPEN') ?? null
+  const mastersMatchday = allMatchdays.find((matchday) => matchday.kind === 'MASTERS') ?? null
 
   const [closedDetails, openDetail] = await Promise.all([
     Promise.all(closedMatchdays.map((matchday) => matchdayDetail(supabase, matchday.id))),
@@ -213,9 +215,24 @@ export default async function FechasPage({ params }: PageProps) {
           Se juega con los {MASTERS_SIZE} primeros de la tabla al terminar las {header.regularMatchdays}{' '}
           fechas. Faltan {remainingForMasters}.
         </p>
-        <span className="mt-3 inline-block rounded-full bg-chip px-[10px] py-[6px] text-[10.5px] font-extrabold text-muted">
-          Bloqueado
-        </span>
+
+        {/* Lo único que cambia del bloque: cuando ya no falta ninguna fecha
+            regular y soy admin, el chip "Bloqueado" deja lugar al CTA. Si el
+            Masters ya existe, la fila lo enlaza como cualquier otra fecha. */}
+        {mastersMatchday !== null ? (
+          <Link
+            href={`/torneo/${seasonId}/fechas/${mastersMatchday.number}`}
+            className="mt-3 inline-block rounded-full bg-ok-bg px-[10px] py-[6px] text-[10.5px] font-extrabold text-up"
+          >
+            {mastersMatchday.status === 'CLOSED' ? 'Jugado' : 'En juego'}
+          </Link>
+        ) : header.isAdmin && remainingForMasters === 0 && !hasLiveMatchday ? (
+          <ArmarMasters seasonId={seasonId} />
+        ) : (
+          <span className="mt-3 inline-block rounded-full bg-chip px-[10px] py-[6px] text-[10.5px] font-extrabold text-muted">
+            Bloqueado
+          </span>
+        )}
       </div>
     </div>
   )

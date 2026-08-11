@@ -2,7 +2,10 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 import {
   computeAwards,
+  computeRanking,
   computeStandings,
+  mastersChampion,
+  mastersQualifiers,
   previousContext,
   samePair,
   snapshotForMatchday,
@@ -19,6 +22,7 @@ import { matchdayFull } from '@/app/format'
 import { Rondas, type RoundMatchVM, type RoundVM } from './rondas'
 import { Armado, type DraftPairVM, type SeatVM } from './armado'
 import { CierreFecha } from './carga'
+import { MastersDraft, type QualifierVM } from './masters'
 
 interface PageProps {
   params: Promise<{ id: string; n: string }>
@@ -119,10 +123,45 @@ export default async function FechaDetailPage({ params }: PageProps) {
     </div>
   )
 
+  // El Masters es una fecha más y por eso no tiene ruta propia (decisión
+  // registrada 5): se juega acá. Lo que cambia son tres cosas y ninguna más —
+  // el título, el armado (4 clasificados en vez de asistencias), y la tabla de
+  // la fecha cerrada, que deja lugar al campeón del año.
+  const isMasters = matchday.kind === 'MASTERS'
+
+  if (isMasters && matchday.status === 'DRAFT' && header.isAdmin) {
+    const seedOrder = entries
+      .filter((entry) => entry.kind === 'SQUAD')
+      .sort((a, b) => a.seedPosition - b.seedPosition)
+      .map((entry) => entry.id)
+    const [awardsByMatchday, detail] = await Promise.all([
+      awardsBefore(supabase, seasonId, matchdayNumber),
+      matchdayDetail(supabase, matchday.id),
+    ])
+    const snapshot = snapshotForMatchday(matchdayNumber, seedOrder, awardsByMatchday, header.config)
+    const ranking = computeRanking(awardsByMatchday, seedOrder, header.config, snapshot)
+
+    const qualifiers: QualifierVM[] = mastersQualifiers(ranking).map((entryId) => ({
+      entryId,
+      name: nameOf.get(entryId) ?? '?',
+      points: ranking.find((row) => row.entryId === entryId)?.points ?? 0,
+    }))
+
+    body = (
+      <MastersDraft
+        seasonId={seasonId}
+        matchdayId={matchday.id}
+        matchdayNumber={matchday.number}
+        qualifiers={qualifiers}
+        generated={detail.matches.length > 0}
+      />
+    )
+  }
+
   // El armado es del admin y de nadie más: el kicker dice "sólo vos la ves" y
   // `attendances_write` no deja tildar a nadie que no sea admin. Un jugador que
   // llegue a esta URL ve la tarjeta de arriba, que es la verdad para él.
-  if (matchday.status === 'DRAFT' && header.isAdmin) {
+  if (!isMasters && matchday.status === 'DRAFT' && header.isAdmin) {
     const [attendances, detail, locks, lastHistory, beforeLastHistory] = await Promise.all([
       attendancesOf(supabase, matchday.id),
       matchdayDetail(supabase, matchday.id),
@@ -211,10 +250,42 @@ export default async function FechaDetailPage({ params }: PageProps) {
     const effectiveDefenders = defenders !== null && !defendersAlreadyRepeated ? defenders : null
     const isDefendingPair = (pair: Pair) => effectiveDefenders !== null && samePair(pair, effectiveDefenders)
 
+    // El Masters no reparte puntos, así que tampoco se calculan: `computeAwards`
+    // devolvería un reparto que no existe en `awards` y que nadie escribió.
     const pointsByEntry =
-      status === 'CLOSED'
+      status === 'CLOSED' && !isMasters
         ? new Map(computeAwards(standings, config, detail.guestIds).map((award) => [award.entryId, award.points]))
         : new Map<string, number>()
+
+    // El campeón del año. Los partidos ganados por jugador salen de `standings`
+    // —cada pareja del Masters juega una vez, así que sumar las tres parejas de
+    // alguien es su marca— y no de una segunda cuenta propia: dos formas de
+    // decidir quién ganó un partido es el bug que ningún test agarra.
+    let champion: { name: string; tiebreak: string | null } | null = null
+    if (isMasters && status === 'CLOSED') {
+      const ranking = computeRanking(awardsByMatchday, seedOrder, config, snapshot)
+      const four = mastersQualifiers(ranking)
+      const winsOf = (entryId: string) =>
+        standings
+          .filter((row) => row.pair.a === entryId || row.pair.b === entryId)
+          .reduce((total, row) => total + row.won, 0)
+
+      const championId = mastersChampion(four, detail.matches)
+      const wins = winsOf(championId)
+      // El formato sólo admite dos desenlaces (spec 2.7): campeón limpio con 3
+      // ganados, o triple empate en 2 con uno en 0 — y el empate pasa la mitad
+      // de las veces. Un campeón con 2 victorias igual que otros dos, sin una
+      // línea que diga por qué es él, se lee como un bug.
+      const tied = four.filter((entryId) => winsOf(entryId) === wins)
+      const others = tied.filter((entryId) => entryId !== championId).map((id) => nameOf.get(id) ?? '?')
+      champion = {
+        name: nameOf.get(championId) ?? '?',
+        tiebreak:
+          others.length === 0
+            ? null
+            : `${nameOf.get(championId) ?? '?'} y ${others.join(' y ')} ganaron ${wins} partidos cada uno. Corta el ranking del año.`,
+      }
+    }
 
     const roundNumbers = [...new Set(detail.matches.map((match) => match.round))].sort((a, b) => a - b)
     const totalRounds = roundNumbers.length
@@ -225,7 +296,13 @@ export default async function FechaDetailPage({ params }: PageProps) {
         playingKeys.add(pairKey(match.pairA))
         playingKeys.add(pairKey(match.pairB))
       }
-      const restingPair = detail.pairs.find((pair) => !playingKeys.has(pairKey(pair)))
+      // La pareja libre existe en una fecha de 5 parejas, donde una descansa por
+      // ronda. En el Masters no descansa nadie: son 6 "parejas" que son las tres
+      // combinaciones de los mismos 4 jugadores, y cada ronda juega una sola,
+      // así que "la que no juega" son cuatro y nombrar una es mentir.
+      const restingPair = isMasters
+        ? undefined
+        : detail.pairs.find((pair) => !playingKeys.has(pairKey(pair)))
       const loadedCount = roundMatches.filter((match) => match.sets.length > 0).length
 
       const matches: RoundMatchVM[] = roundMatches.map((match, index) => {
@@ -300,6 +377,19 @@ export default async function FechaDetailPage({ params }: PageProps) {
 
         {totalRounds > 0 && <Rondas rounds={rounds} totalRounds={totalRounds} carga={cargaContext} />}
 
+        {champion !== null ? (
+          <div className="flex flex-col gap-2">
+            <div className="rounded-card bg-accent p-5 text-center text-accent-text">
+              <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] opacity-75">
+                Campeón del año
+              </p>
+              <p className="mt-1 text-[26px] font-extrabold tracking-[-.03em]">{champion.name}</p>
+            </div>
+            {champion.tiebreak !== null && (
+              <p className="text-[12.5px] font-[550] text-muted">{champion.tiebreak}</p>
+            )}
+          </div>
+        ) : (
         <div className="flex flex-col gap-2">
           <p className="text-[15px] font-extrabold tracking-[-.02em]">Tabla de la fecha</p>
           <div className="overflow-hidden rounded-[14px] border border-line">
@@ -364,6 +454,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
 
           {note !== null && <p className="text-[12.5px] font-[550] text-muted">{note}</p>}
         </div>
+        )}
 
         {header.isAdmin && (
           <CierreFecha
@@ -389,7 +480,9 @@ export default async function FechaDetailPage({ params }: PageProps) {
           ← Volver
         </Link>
         <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">{kicker}</p>
-        <h1 className="text-[26px] font-extrabold tracking-[-.03em]">Fecha {matchday.number}</h1>
+        <h1 className="text-[26px] font-extrabold tracking-[-.03em]">
+          {isMasters ? 'Masters' : `Fecha ${matchday.number}`}
+        </h1>
       </header>
 
       {body}

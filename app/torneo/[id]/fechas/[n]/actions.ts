@@ -6,6 +6,8 @@ import { EdgeError } from '@/db/errors'
 import {
   clearPairs,
   closeMatchday,
+  createMasters,
+  generateMastersPairs,
   generatePairs,
   lockPair,
   nameGuest,
@@ -161,6 +163,36 @@ export async function closeTheMatchday(
 ): Promise<WriteResult> {
   return onMatchday(seasonId, matchdayNumber, async (supabase) => {
     await closeMatchday(supabase, matchdayId)
+  })
+}
+
+/**
+ * Crea la jornada del Masters. Es una fecha más —con `kind = 'MASTERS'`— y por
+ * eso no tiene ruta propia: se juega en `/fechas/{n}` como cualquier otra.
+ *
+ * El número lo decide `create_masters` con el mismo `max(number) + 1`, así que
+ * la pantalla no lo manda ni lo adivina.
+ */
+export async function buildMasters(seasonId: string, playedOn: string): Promise<WriteResult> {
+  try {
+    const supabase = await serverClient()
+    await createMasters(supabase, seasonId, playedOn)
+    revalidatePath(`/torneo/${seasonId}/fechas`)
+    return { ok: true }
+  } catch (error) {
+    if (error instanceof EdgeError) return { ok: false, error: error.message }
+    throw error
+  }
+}
+
+/** Los 3 partidos con compañeros rotativos. Los 4 salen del ranking, no de asistencias. */
+export async function drawMastersPairs(
+  seasonId: string,
+  matchdayId: string,
+  matchdayNumber: number,
+): Promise<WriteResult> {
+  return onMatchday(seasonId, matchdayNumber, async (supabase) => {
+    await generateMastersPairs(supabase, matchdayId)
   })
 }
 

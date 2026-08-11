@@ -77,6 +77,22 @@ begin
     raise exception 'La lista de puntos llegó mal formada.';
   end if;
 
+  -- El payload lo arma quien llama, y `p_awards` puede nombrar a cualquiera:
+  -- sin este control, un admin paga puntos a un jugador que ni jugó esta
+  -- fecha (o a cualquier uuid inventado). Sólo entra quien está en alguna
+  -- pareja de la fecha que se está cerrando.
+  if exists (
+    select 1
+      from jsonb_array_elements(p_awards) as award
+     where (award ->> 'entryId')::uuid not in (
+       select entry_a from public.pairs where matchday_id = p_matchday
+       union
+       select entry_b from public.pairs where matchday_id = p_matchday
+     )
+  ) then
+    raise exception 'Hay puntos para alguien que no jugó esta fecha.';
+  end if;
+
   -- El Masters no paga puntos: define al campeón del año (spec 2.7). Se cierra
   -- con la lista vacía y el campeón se deriva de los partidos, como todo.
   if v_kind = 'MASTERS' and jsonb_array_length(p_awards) > 0 then

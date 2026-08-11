@@ -202,8 +202,20 @@ describe('saveResult', () => {
     await closeMatchday(admin.client, matchdayId)
     const [match] = await matchesOf(matchdayId)
     if (match === undefined) throw new Error('No se generó ningún partido.')
+    const setsBefore = await setsOf(match.id)
 
     await expect(saveResult(admin.client, match.id, [{ gamesA: 4, gamesB: 0 }])).rejects.toThrow()
+
+    // saveResult wraps the Postgres error and drops its code, so hit the RLS
+    // policy directly: "refused" and "destroyed, then refused" look the same
+    // to a plain .rejects.toThrow() if the surviving rows are never checked.
+    await admin.client.from('match_sets').delete().eq('match_id', match.id)
+    const { error } = await admin.client
+      .from('match_sets')
+      .insert({ match_id: match.id, set_number: 1, games_a: 4, games_b: 0 })
+
+    expect(error?.code).toBe('42501')
+    expect(await setsOf(match.id)).toEqual(setsBefore)
   })
 })
 
@@ -375,5 +387,71 @@ describe('closeMatchday', () => {
 
     expect(error).not.toBeNull()
     expect(await matchdayStatus(matchdayId)).toBe('OPEN')
+  })
+
+  it('a stranger calling the RPC directly gets "sólo quien organiza"', async () => {
+    const { admin, seasonId } = await buildSeasonWithSquad(defaultConfig(8), 8)
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
+    const stranger = await createTestUser()
+
+    const { error } = await stranger.client.rpc('close_matchday', {
+      p_matchday: matchdayId,
+      p_awards: [],
+    })
+
+    expect(error?.message).toMatch(/Sólo quien organiza/)
+  })
+
+  it('rejects a direct RPC call with an award for a player who did not play this matchday', async () => {
+    const { admin, seasonId, squad } = await buildSeasonWithSquad(defaultConfig(8), 8)
+    const playing = squad.slice(0, 7)
+    const benched = squad[7]
+    const partner = playing[0]
+    if (benched === undefined || partner === undefined) throw new Error('Falta un jugador para el test.')
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
+    await markAllPlaying(admin, matchdayId, playing)
+    const guest = await addGuest(admin.client, matchdayId, { displayName: 'Invitado' })
+    await addLock(seasonId, matchdayId, guest, partner)
+    await generatePairs(admin.client, matchdayId)
+    await openMatchday(admin.client, matchdayId)
+    await playAllMatches(admin, matchdayId, (pairA) => pairA)
+
+    const { error } = await admin.client.rpc('close_matchday', {
+      p_matchday: matchdayId,
+      p_awards: [{ entryId: benched, position: 1, points: 100 }],
+    })
+
+    expect(error?.message).toBe('Hay puntos para alguien que no jugó esta fecha.')
+    expect(await matchdayStatus(matchdayId)).toBe('OPEN')
+  })
+
+  it('rejects a direct RPC call when a match still has no result loaded', async () => {
+    const { admin, seasonId, squad } = await buildSeasonWithSquad(defaultConfig(8), 8)
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
+    await markAllPlaying(admin, matchdayId, squad)
+    await generatePairs(admin.client, matchdayId)
+    await openMatchday(admin.client, matchdayId)
+
+    const { error } = await admin.client.rpc('close_matchday', {
+      p_matchday: matchdayId,
+      p_awards: [],
+    })
+
+    expect(error?.message).toBe('Faltan resultados por cargar.')
+  })
+
+  it('rejects a direct RPC call with a malformed (null) awards payload', async () => {
+    const { admin, seasonId, squad } = await buildSeasonWithSquad(defaultConfig(8), 8)
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
+    await markAllPlaying(admin, matchdayId, squad)
+    await generatePairs(admin.client, matchdayId)
+    await openMatchday(admin.client, matchdayId)
+
+    const { error } = await admin.client.rpc('close_matchday', {
+      p_matchday: matchdayId,
+      p_awards: null,
+    })
+
+    expect(error?.message).toBe('La lista de puntos llegó mal formada.')
   })
 })

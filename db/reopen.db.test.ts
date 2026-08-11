@@ -165,7 +165,15 @@ describe('reopenMatchday', () => {
 
     await reopenMatchday(admin.client, matchdayId)
 
-    expect(await matchdayStatus(matchdayId)).toBe('OPEN')
+    const db = adminClient()
+    const { data, error } = await db
+      .from('matchdays')
+      .select('status, closed_at')
+      .eq('id', matchdayId)
+      .single()
+    if (error || data === null) throw new Error(error?.message)
+    expect(data.status).toBe('OPEN')
+    expect(data.closed_at).toBeNull()
     expect(await awardsOf(matchdayId)).toHaveLength(0)
   })
 

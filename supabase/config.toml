@@ -319,6 +319,29 @@ max_frequency = "5s"
 # Use an external OAuth provider. The full list of providers are: `apple`, `azure`, `bitbucket`,
 # `discord`, `facebook`, `github`, `gitlab`, `google`, `keycloak`, `linkedin_oidc`, `notion`, `twitch`,
 # `twitter`, `x`, `slack`, `spotify`, `workos`, `zoom`.
+# Google, para poder probar el botón "Continuar con Google" en local.
+#
+# `enabled = false` a propósito: sin credenciales, prenderlo sólo cambia el
+# error por uno peor. Para probarlo en local, poné el client_id de Google acá,
+# exportá SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET con el secret, poné
+# `enabled = true` y corré `npm run db:start` de nuevo — la config se lee al
+# arrancar, no en caliente.
+#
+# **El secret NO va en este archivo.** Va en la variable de entorno, y por eso
+# la línea de abajo usa `env(...)`: este archivo está versionado.
+#
+# En Google Cloud, la URL de callback autorizada para LOCAL es
+# `http://localhost:54321/auth/v1/callback` — la del stack local de Supabase, no
+# la del Next. Es distinta de la de producción.
+[auth.external.google]
+enabled = false
+client_id = ""
+secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
+redirect_uri = ""
+url = ""
+# Google en local devuelve un nonce que no valida contra el stack de desarrollo.
+skip_nonce_check = true
+
 [auth.external.apple]
 enabled = false
 client_id = ""

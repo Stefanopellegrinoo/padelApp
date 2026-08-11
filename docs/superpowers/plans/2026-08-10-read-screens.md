@@ -774,6 +774,34 @@ git commit -m "feat: show a player's season, matchday by matchday"
 Cosas que salgan durante la implementación y **no** se hagan, para no ensanchar
 las tareas. Una línea y seguí.
 
+- **La Task 4 se escribió sin "quién soy yo" ni lectura de asistencias.** Dos
+  pantallas chocaron contra el mismo hueco. La Tabla no puede saber si el que
+  mira está anotado en la próxima fecha, así que la tarjeta afirmaba
+  `"Estás anotado"` a todo el mundo —información falsa, corregida en la ronda de
+  fix quitando la afirmación—. Y Estadísticas no podía resolver qué asiento es el
+  del caller para su pestaña "Mías": `players.user_id` no tiene SELECT otorgado a
+  `authenticated` (a propósito, para que nadie correlacione `auth.uid()` con un
+  jugador por consulta directa), así que la Task 9 tuvo que agregar
+  `0006_my_player_id.sql`, una `security definer` fuera de su alcance declarado.
+  **La lectura real de asistencias queda para el Plan 4**, que es donde vive el
+  toggle "No voy" y donde de todos modos hace falta.
+- **La Task 7 se escribió con dos estados y son tres.** `ui-screens.md` §8 lista
+  *Jugada*, *En curso* y *Por jugarse*; la tabla de copys del handoff sólo trae
+  dos, y al escribir la tarea copié esa tabla y perdí el del medio. Una fecha
+  `OPEN` no cae en ninguno de los dos dibujados — y es el estado que se mira
+  mientras se juega. **El string va del handoff: `"En juego"`**, que es el que usa
+  el kicker de la pantalla de Fecha, no el `"En curso"` de `ui-screens.md`.
+  Arreglado en la ronda de fix de la tanda A.
+- **La página de Reglas no puede ser pública, y el plan decía que sí.**
+  `ui-screens.md` la diseñó como el link que se pega en el grupo sin login, pero
+  el layout de la Task 5 llama a `seasonHeader()` sin condición y tira para
+  cualquiera que no participe, así que la rama "sin sesión" —construida y
+  correcta— es inalcanzable. Es un error estructural mío: puse la guardia de
+  acceso en el layout, que envuelve también a la pantalla pública. **Decisión para
+  el MVP: queda detrás del login.** Hacerla pública de verdad necesita que `anon`
+  pueda leer las reglas de una temporada, o sea una política de RLS nueva o un
+  RPC — migración, territorio del Plan 2. El sanitizado se queda igual: sigue
+  siendo la única entrada de texto libre que se renderiza.
 - **La línea meta de Unirse se come un dato.** El handoff pide
   `"{n} jugadores · {regularMatchdays} fechas · organiza {admin}"` y la pantalla
   muestra sólo `"{n} jugadores · organiza {admin}"`. No es la pantalla: la función

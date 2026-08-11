@@ -12,7 +12,8 @@ function input(overrides: Partial<PairingInput> = {}): PairingInput {
     defenders: null,
     defendersAlreadyRepeated: false,
     previousPairs: [],
-    guestId: null,
+    guestIds: [],
+    fixedPairs: [],
     ...overrides,
   }
 }
@@ -172,13 +173,111 @@ describe('buildPairs — the guest', () => {
     const present = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'guest']
     const points = new Map(present.map((id, i) => [id, 100 - i]))
     points.set('guest', 999) // points must not lift the guest out of last place
-    const pairs = buildPairs(input({ present, points, guestId: 'guest' }))
+    const pairs = buildPairs(input({ present, points, guestIds: ['guest'] }))
     expect(keys(pairs)).toContain('guest-p1')
   })
 
   it('pairs the guest normally when they are not flagged as one', () => {
     const present = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8']
-    expect(buildPairs(input({ present, guestId: null }))).toHaveLength(4)
+    expect(buildPairs(input({ present, guestIds: [] }))).toHaveLength(4)
+  })
+})
+
+describe('buildPairs — several guests', () => {
+  it('two loose guests come out in two mixed pairs, not paired with each other', () => {
+    // Ordered pool [p1..p6, g1, g2] → positions 1..8, idealSum 9. The only
+    // matching with zero imbalance is 1-8, 2-7, 3-6, 4-5: p1 with g2 and p2 with g1.
+    const pairs = buildPairs(
+      input({ present: ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'g1', 'g2'], guestIds: ['g1', 'g2'] }),
+    )
+    expect(keys(pairs)).toEqual(['g1-p2', 'g2-p1', 'p3-p6', 'p4-p5'])
+  })
+
+  it('reversing the guest order reverses who each one is paired with', () => {
+    const pairs = buildPairs(
+      input({ present: ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'g1', 'g2'], guestIds: ['g2', 'g1'] }),
+    )
+    expect(keys(pairs)).toEqual(['g1-p1', 'g2-p2', 'p3-p6', 'p4-p5'])
+  })
+})
+
+describe('buildPairs — fixed pairs', () => {
+  it('keeps the fixed pair together and takes it out of the pool', () => {
+    const pairs = buildPairs(
+      input({
+        present: ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'g1', 'g2'],
+        guestIds: ['g1', 'g2'],
+        fixedPairs: [{ a: 'g1', b: 'g2' }],
+      }),
+    )
+    expect(keys(pairs)).toEqual(['g1-g2', 'p1-p6', 'p2-p5', 'p3-p4'])
+  })
+
+  it('coexists with the defenders', () => {
+    const pairs = buildPairs(
+      input({
+        present: ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'g1', 'g2'],
+        defenders: { a: 'p1', b: 'p2' },
+        guestIds: ['g1', 'g2'],
+        fixedPairs: [{ a: 'g1', b: 'g2' }],
+      }),
+    )
+    expect(keys(pairs)).toContain('p1-p2')
+    expect(keys(pairs)).toContain('g1-g2')
+    expect(pairs).toHaveLength(4)
+  })
+
+  it('returns exactly the fixed pairs when no pool is left', () => {
+    const pairs = buildPairs(
+      input({
+        present: ['g1', 'g2', 'g3', 'g4'],
+        guestIds: ['g1', 'g2', 'g3', 'g4'],
+        fixedPairs: [
+          { a: 'g1', b: 'g2' },
+          { a: 'g3', b: 'g4' },
+        ],
+      }),
+    )
+    expect(keys(pairs)).toEqual(['g1-g2', 'g3-g4'])
+  })
+
+  it('a fixed pair is not subject to the no-repeat rule', () => {
+    // Repeating is a championship rule. A pair the admin fixed by hand does
+    // not violate it: he chose it.
+    const pairs = buildPairs(
+      input({
+        present: ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'g1', 'g2'],
+        guestIds: ['g1', 'g2'],
+        fixedPairs: [{ a: 'g1', b: 'g2' }],
+        previousPairs: [{ a: 'g1', b: 'g2' }],
+      }),
+    )
+    expect(keys(pairs)).toContain('g1-g2')
+  })
+
+  it('fails if a fixed pair includes someone who is not playing', () => {
+    expect(() => buildPairs(input({ fixedPairs: [{ a: 'p1', b: 'p99' }] }))).toThrow(
+      /p99, que no juega esta fecha/,
+    )
+  })
+
+  it('fails if someone is in two fixed pairs', () => {
+    expect(() =>
+      buildPairs(
+        input({
+          fixedPairs: [
+            { a: 'p1', b: 'p2' },
+            { a: 'p2', b: 'p3' },
+          ],
+        }),
+      ),
+    ).toThrow(/p2 está en más de una pareja fija/)
+  })
+
+  it('fails if a fixed pair overlaps with the defenders', () => {
+    expect(() =>
+      buildPairs(input({ defenders: { a: 'p1', b: 'p2' }, fixedPairs: [{ a: 'p2', b: 'p3' }] })),
+    ).toThrow(/p2 ya está en la pareja defensora/)
   })
 })
 

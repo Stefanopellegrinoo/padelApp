@@ -140,11 +140,16 @@ vuelve acá.
 - Nombre del torneo y quién lo creó
 - **Los lugares sin dueño**: los nombres del plantel que tipeó el admin y todavía nadie
   reclamó, como lista seleccionable
-- "No estoy en la lista" → pide el nombre y crea un asiento nuevo
+- Nota al pie: "Si tu nombre no está o ya lo tomó otro, avisale al organizador."
 - Confirmar
 
-**Estados:** hay asientos libres · todos reclamados (y no está en la lista) · el usuario ya
-tiene asiento en este torneo (se lo manda al torneo) · token inválido o vencido.
+**Estados:** hay asientos libres · todos reclamados (la pantalla muestra la nota al pie y no
+ofrece ninguna acción) · el usuario ya tiene asiento en este torneo (se lo manda al torneo) ·
+token inválido o vencido.
+
+No hay botón para crear un asiento nuevo: eso cambiaría `squadSize`, y `points` tiene que
+tener exactamente `squadSize / 2` valores (spec 2.9) — un jugador entrando por un link
+dejaría la configuración inválida sin enterarse. Agregar gente es del admin, desde Ajustes.
 
 ---
 

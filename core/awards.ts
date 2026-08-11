@@ -5,29 +5,45 @@ import type { Award, EntryId, PairStanding, SeasonConfig } from './types'
  * amount, and a shorter matchday simply uses the leading values of the list,
  * so winning pays ten whether eight or twelve turned up.
  *
- * The guest gets nothing: they are not in the championship. Their partner is
- * paid in full — they played and earned it.
+ * Guests get nothing: they are not in the championship. Their partner is paid
+ * in full — they played and earned it.
+ *
+ * A pair made only of guests is outside the championship altogether. It keeps
+ * its place in the matchday table but consumes no paying position, so visitors
+ * can never walk off with the ten points of a championship they are not in.
  */
 export function computeAwards(
   standings: PairStanding[],
   config: SeasonConfig,
-  guestId: EntryId | null,
+  guestIds: readonly EntryId[],
 ): Award[] {
-  if (standings.length > config.points.length) {
+  const guests = new Set(guestIds)
+  const championshipMembers = (row: PairStanding): EntryId[] =>
+    [row.pair.a, row.pair.b].filter((entryId) => !guests.has(entryId))
+
+  // computeStandings already hands these over in order; sorting a copy by
+  // position keeps the result honest for any other caller.
+  const paying = [...standings]
+    .sort((left, right) => left.position - right.position)
+    .filter((row) => championshipMembers(row).length > 0)
+
+  if (paying.length > config.points.length) {
     throw new Error(
-      `La fecha tiene ${standings.length} parejas pero la lista de puntos sólo tiene ${config.points.length} valores.`,
+      `La fecha tiene ${paying.length} parejas del torneo pero la lista de puntos sólo tiene ${config.points.length} valores.`,
     )
   }
 
   const awards: Award[] = []
-  for (const row of standings) {
-    const points = config.points[row.position - 1]
+  for (const [index, row] of paying.entries()) {
+    const points = config.points[index]
+    // Unreachable: paying.length is checked against points.length above, so
+    // every index here is inside the list. Only to satisfy
+    // noUncheckedIndexedAccess.
     if (points === undefined) {
-      throw new Error(`No hay puntos definidos para la posición ${row.position}.`)
+      throw new Error(`No hay puntos definidos para la posición ${index + 1}.`)
     }
-    for (const entryId of [row.pair.a, row.pair.b]) {
-      if (entryId === guestId) continue
-      awards.push({ entryId, position: row.position, points })
+    for (const entryId of championshipMembers(row)) {
+      awards.push({ entryId, position: index + 1, points })
     }
   }
   return awards

@@ -8,6 +8,10 @@ export default defineConfig({
     alias: { '@': fileURLToPath(new URL('.', import.meta.url)) },
   },
   test: {
-    include: ['core/**/*.test.ts', 'db/**/*.unit.test.ts'],
+    include: ['db/**/*.db.test.ts'],
+    setupFiles: ['db/test/env.ts'],
+    // Los tests comparten una base. Aislan por temporada, no por proceso.
+    fileParallelism: false,
+    testTimeout: 30_000,
   },
 })

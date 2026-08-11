@@ -74,6 +74,10 @@ export default async function TablaPage({ params }: PageProps) {
   const snapshot = snapshotForMatchday(activeMatchdayNumber, seedOrder, awardsByMatchday, config)
   const ranking = rankingWithMovement(awardsByMatchday, seedOrder, config, snapshot)
 
+  // Antes de cerrar la primera fecha todos están en cero: es un empate que no
+  // dice nada, así que el chip ⓘ no tiene sentido hasta que haya una fecha jugada.
+  const hasClosedMatchday = closedRegular.length > 0
+
   const rows: StandingsRow[] = ranking.map((row, index) => {
     const previous = ranking[index - 1]
     const next = ranking[index + 1]
@@ -89,7 +93,7 @@ export default async function TablaPage({ params }: PageProps) {
       position: row.position,
       points: row.points,
       movement: row.movement,
-      tiedWithEntryId,
+      tiedWithEntryId: hasClosedMatchday ? tiedWithEntryId : null,
     }
   })
 
@@ -165,9 +169,6 @@ export default async function TablaPage({ params }: PageProps) {
           <p className="text-[21px] font-extrabold">
             Fecha {liveMatchday.number}
             {liveMatchday.playedOn !== null ? ` · ${formatMatchdayDay(liveMatchday.playedOn)}` : ''}
-          </p>
-          <p className="mt-3 rounded-field bg-[rgba(255,255,255,.16)] px-3 py-2 text-[13px] font-bold">
-            Estás anotado
           </p>
         </div>
       )}

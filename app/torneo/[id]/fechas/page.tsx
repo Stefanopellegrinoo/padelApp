@@ -94,10 +94,14 @@ export default async function FechasPage({ params }: PageProps) {
   // y muestra el Masters como el bloque bloqueado del final (Task 7, Plan 3).
   const regularMatchdays = allMatchdays.filter((matchday) => matchday.kind === 'REGULAR')
   const closedMatchdays = regularMatchdays.filter((matchday) => matchday.status === 'CLOSED')
+  // A la vez sólo puede haber una fecha regular sin cerrar (constraint de base),
+  // así que "la que está en juego" es a lo sumo una.
+  const openMatchday = regularMatchdays.find((matchday) => matchday.status === 'OPEN') ?? null
 
-  const closedDetails = await Promise.all(
-    closedMatchdays.map((matchday) => matchdayDetail(supabase, matchday.id)),
-  )
+  const [closedDetails, openDetail] = await Promise.all([
+    Promise.all(closedMatchdays.map((matchday) => matchdayDetail(supabase, matchday.id))),
+    openMatchday !== null ? matchdayDetail(supabase, openMatchday.id) : Promise.resolve(null),
+  ])
   const detailByMatchdayId = new Map(
     closedMatchdays.map((matchday, index) => [matchday.id, closedDetails[index]]),
   )
@@ -132,23 +136,24 @@ export default async function FechasPage({ params }: PageProps) {
       <div className="flex flex-col gap-3">
         {regularMatchdays.map((matchday) => {
           const played = matchday.status === 'CLOSED'
+          const inProgress = matchday.status === 'OPEN'
           const champion = played ? championOf(matchday) : null
+          const tagClass = played ? 'bg-chip text-muted' : inProgress ? 'bg-live-bg text-live' : 'text-muted'
+          const tagLabel = played ? 'Jugada' : inProgress ? 'En juego' : 'Por jugarse'
 
           return (
             <Link
               key={matchday.id}
               href={`/torneo/${seasonId}/fechas/${matchday.number}`}
-              className={`block rounded-[14px] border border-line bg-surface p-[14px] ${played ? '' : 'opacity-[0.62]'}`}
+              className={`block rounded-[14px] border border-line bg-surface p-[14px] ${matchday.status === 'DRAFT' ? 'opacity-[0.62]' : ''}`}
             >
               <div className="flex items-center justify-between gap-2">
                 <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
                   Fecha {matchday.number}
                   {matchday.playedOn !== null ? ` · ${formatMatchdayDate(matchday.playedOn)}` : ''}
                 </p>
-                <span
-                  className={`shrink-0 rounded-full px-[10px] py-[6px] text-[10.5px] font-extrabold text-muted ${played ? 'bg-chip' : ''}`}
-                >
-                  {played ? 'Jugada' : 'Por jugarse'}
+                <span className={`shrink-0 rounded-full px-[10px] py-[6px] text-[10.5px] font-extrabold ${tagClass}`}>
+                  {tagLabel}
                 </span>
               </div>
 
@@ -156,6 +161,16 @@ export default async function FechasPage({ params }: PageProps) {
                 <div className="mt-2 flex flex-col gap-1">
                   <p className="text-[15px] font-extrabold">{champion.names}</p>
                   <p className="text-[11.5px] font-bold text-muted">{champion.record}</p>
+                </div>
+              )}
+
+              {inProgress && openDetail !== null && (
+                <div className="mt-2 flex flex-col gap-1">
+                  {openDetail.pairs.map((pair) => (
+                    <p key={`${pair.a}-${pair.b}`} className="text-[13.5px] font-bold">
+                      {nameById.get(pair.a) ?? '?'} & {nameById.get(pair.b) ?? '?'}
+                    </p>
+                  ))}
                 </div>
               )}
             </Link>

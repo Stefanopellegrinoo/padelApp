@@ -21,6 +21,41 @@ Supabase con RLS ya puesta.
 
 ---
 
+## Dónde quedó la ejecución
+
+**Rama:** `plan-4-write-screens`, 6 commits, árbol limpio.
+**Números al cortar:** 262 tests unitarios, 153 contra la base, `npm run typecheck`
+limpio, `npm run build` compilando.
+
+| Task | Qué produce | Estado |
+|---|---|---|
+| 1 | Migración `0007`: `set_my_attendance` · `create_masters` · `season_public_rules` | ✅ `843ecb0` |
+| 2 | `db/read.ts`: los huecos del trazado | ✅ `e78c508` |
+| 3 | `db/season.ts` + `db/entries.ts`: crear temporada y editar plantel | ✅ `8119942` |
+| 4 | `db/matchday.ts`: asistencia propia, invitado, Masters | ✅ `6086958` |
+| 5 | Mis torneos y los cuatro redirects | ✅ `7c8ae8e` |
+| 6 | Crear torneo — el wizard de 5 pasos | ✅ `53e7f2c` |
+| **8** | **Fechas — "Abrir fecha N"** | ⬜ **acá se sigue** |
+| 9 | Fecha `DRAFT` — quién viene, el invitado, las parejas | ⬜ |
+| 10 | Fecha `OPEN` y `CLOSED` — cargar, cerrar, reabrir | ⬜ |
+| 14 | El recorrido con navegador | ⬜ |
+| 7 · 11 · 12 · 13 | Tanda B: toggle "No voy", Ajustes, Reglas sin login, Masters | ⬜ |
+
+**Lo que la app ya hace:** crear una cuenta, crear un torneo con su plantel y su
+formato, compartir el link de invitación, reclamar un asiento, elegir torneo en
+Mis torneos, y leer las cinco pantallas del Plan 3.
+
+**Lo que todavía no hace:** jugar. No hay forma de abrir una fecha desde la
+pantalla, ni de tildar quién viene, ni de cargar un resultado. Todo eso está
+construido y probado en `db/` — lo que falta son las tres pantallas de las Tasks
+8, 9 y 10.
+
+**Lo primero que conviene hacer al retomar** es leer la sección `Aparecidos` del
+final: tiene los tres desvíos del plan que ya ocurrieron y las dos cosas que las
+Tasks 8 y 9 heredan.
+
+---
+
 ## Este plan es liviano, a propósito
 
 Igual que el Plan 3. Los planes 1 y 2 llevaban la implementación completa de cada
@@ -1841,10 +1876,69 @@ git commit -m "test: walk the whole app in a browser and fix what it found"
 
 ## Aparecidos
 
-Cosas que salgan durante la implementación y **no** se hagan, para no ensanchar
-las tareas. Una línea y seguí.
+Cosas que salieron durante la implementación. Las primeras cinco ya ocurrieron;
+las dos últimas son deuda que hereda quien siga.
 
-_(vacío al empezar — se llena ejecutando)_
+### Lo que apareció ejecutando las Tasks 1 a 6
+
+- **Crear una temporada bajo RLS era imposible, y no lo sabía nadie.**
+  `seasons_read` es `is_participant(id)`, e `is_participant` responde con un
+  SELECT sobre `public.seasons` adentro de una función `security definer`. Ese
+  subselect corre con el snapshot de la sentencia, que **no contiene la fila que
+  esa misma sentencia está insertando**, así que el `returning` —que PostgREST
+  siempre emite cuando el cliente hace `.select()` después de un insert— se
+  rechaza con `42501` aunque el `WITH CHECK` de `seasons_insert` pase perfecto.
+  Verificado a mano en psql: el mismo insert **sin** `returning` entra, **con**
+  `returning` no. Nunca lo agarró nadie porque los andamios de `db/test/` arman
+  las temporadas con `service_role`, que saltea RLS, y hasta este plan no había
+  pantalla que creara un torneo. Arreglado en `supabase/migrations/0008_seasons_returning.sql`:
+  la policy pregunta primero por la columna de la fila nueva. **Es una migración
+  fuera de la lista de archivos de la Task 3**, y se agregó porque sin ella la
+  Task 6 entera es imposible. Mutación verificada: revertir la policy pone 7
+  tests en rojo.
+- **La Task 4 agregó dos funciones que no estaban en su contrato**, las dos por
+  el mismo motivo: `playingEntryIds` cuenta filas `PLAYING` **existentes**, así
+  que un plantel sin filas da `present` vacío. `seedAttendances` hace que la base
+  opine lo mismo que la pantalla ("sin fila = viene"), y `clearPairs` borra el
+  sorteo cuando cambia quién viene — sin eso, sacar el invitado automático falla
+  con un `23503` ilegible y `openMatchday` rebota con "Cambió quién viene desde
+  que armaste las parejas".
+- **La Task 6 agregó `app/torneos/nuevo/wizard-state.ts`**, que no estaba en la
+  lista de archivos del plan. El plan pedía un `wizard.unit.test.ts` sobre "las
+  funciones puras del wizard" sin decir dónde viven, y adentro de un componente
+  `'use client'` no se pueden testear cómodamente. El test quedó como
+  `wizard-state.unit.test.ts` por el mismo motivo.
+- **Se extrajo `app/format.ts`.** Había **tres** copias del formateador de fecha
+  de una jornada y **tres** de `initials()`, y la Task 5 iba a agregar la cuarta
+  de cada una. Es refactor que el plan no pedía; se hizo porque el disparador ya
+  estaba cumplido de sobra y costó veinte líneas.
+- **Un test pasó por vacuidad y se apretó.** El de "create_masters con otra fecha
+  abierta" asertaba `expect(error).not.toBeNull()`, y eso se cumplía con "la
+  función no existe" — o sea que pasaba en verde **antes** de que la función
+  existiera. Quedó `expect(error?.code).toBe('23505')`. Es exactamente la lección
+  que `docs/estado.md` ya tenía anotada del Plan 2, y volvió a aparecer.
+
+### Deuda que heredan las tareas que faltan
+
+- **La Task 8 tiene que CREAR `app/torneo/[id]/actions.ts`, no modificarlo.** El
+  plan se lo asigna a la Task 7, que quedó en la tanda B.
+- **`db/entries.ts` no tiene pantalla todavía.** Sus cuatro funciones están
+  implementadas y probadas, y las consume Ajustes (Task 11, tanda B). Hasta
+  entonces, un plantel cargado mal en el wizard **sólo se arregla por la base**.
+
+### Cosas que se decidieron NO hacer
+
+- **`createSeason` no valida los nombres vacíos del plantel en TypeScript.** Los
+  rebota `entries_squad_named`, que es la misma regla escrita una sola vez y del
+  lado que no se puede saltear; el borde sólo traduce ese error a
+  `"Falta un nombre del plantel."`. Hacer las dos cosas dejaba el camino del
+  rollback sin ninguna forma de ejercitarlo.
+- **`mySeasons` no creció.** "Mi posición" y "próxima fecha" se componen en
+  `app/torneos/page.tsx` con cuatro lecturas que ya existían. Son cuatro consultas
+  por temporada, y está anotado con un `ponytail:` en el archivo: con las 1 a 3
+  temporadas que tiene cualquiera de este grupo es gratis, con veinte hay que
+  mirar. Una función de `db/` con forma de pantalla es lo que el Plan 3 aprendió
+  a no hacer.
 
 ---
 

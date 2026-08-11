@@ -1,6 +1,6 @@
 # Estado del proyecto
 
-**Última actualización:** 10 de agosto de 2026, al terminar el Plan 2.
+**Última actualización:** 11 de agosto de 2026, con el Plan 4 a mitad de camino.
 
 Este documento es el punto de entrada. Dice qué está hecho, qué falta, y qué hay
 que decidir antes de seguir. Los detalles viven en los documentos que se enlazan.
@@ -14,7 +14,13 @@ que decidir antes de seguir. Los detalles viven en los documentos que se enlazan
 | **1. `core/`** | Toda la lógica del campeonato, funciones puras | ✅ **Terminado y en `main`** |
 | **2. Datos y auth** | Schema Supabase, migraciones, RLS, login + Google | ✅ **Terminado**, rama `plan-2-data-and-auth` |
 | **3. Pantallas de lectura** | Tabla, Fechas, Estadísticas, Reglas, Perfil | ✅ **Terminado**, rama `plan-3-read-screens` |
-| **4. Pantallas de escritura** | Crear torneo, abrir fecha, cargar resultados, Ajustes | 📝 **Plan escrito**, sin ejecutar |
+| **4. Pantallas de escritura** | Crear torneo, abrir fecha, cargar resultados, Ajustes | 🚧 **6 de 14 tareas**, rama `plan-4-write-screens` |
+
+> **Si estás retomando: arrancá por la Task 8.** El estado exacto —qué está
+> hecho, qué falta, en qué orden y qué desvíos ya ocurrieron— está en la sección
+> "Dónde quedó la ejecución" y en "Aparecidos" del
+> [plan 4](superpowers/plans/2026-08-11-write-screens.md). Esta página resume;
+> ese documento manda.
 
 **`core/` en números:** 13 módulos, 145 tests, cero dependencias de producción.
 Verificado de forma independiente: ningún archivo usa `Date`, `Math.random`,
@@ -202,7 +208,39 @@ preguntas sobre quien mira: "¿estoy anotado?" y "¿cuál asiento soy yo?". Ante
 escribir el Plan 4, **trazar qué dato necesita cada pantalla y recién ahí definir
 las funciones de datos.**
 
-### Plan 4 — pantallas de escritura
+### Plan 4 — pantallas de escritura 🚧
+
+**Hecho (Tasks 1 a 6, rama `plan-4-write-screens`):** toda la capa de datos que
+faltaba —tres funciones SQL nuevas, la lectura de asistencias y de ids de
+partido, crear temporada, editar el plantel, el Masters de punta a punta— más
+"Mis torneos" y el wizard de crear torneo. **262 tests unitarios, 153 contra la
+base, `build` compilando.**
+
+**Falta para que se pueda jugar:** abrir una fecha (Task 8), el armado en `DRAFT`
+(Task 9), la carga de resultados y el cierre (Task 10), y el recorrido con
+navegador (Task 14). Después, la tanda B: el toggle "No voy", Ajustes, Reglas sin
+login y las pantallas del Masters.
+
+#### Dos cosas rotas que nadie sabía, y ya están arregladas
+
+Las dos aparecieron ejecutando, con las dos suites en verde, y ninguna era
+detectable por lo que había:
+
+| Qué estaba roto | Por qué no lo agarró nadie |
+|---|---|
+| **Crear una temporada desde la app tiraba `42501`** | `is_participant` responde con un SELECT adentro de una función `security definer`, y ese subselect no ve la fila que la propia sentencia está insertando — así que el `returning` se rechaza aunque el `WITH CHECK` pase. Los tests arman temporadas con `service_role`, que saltea RLS, y hasta el Plan 4 no había pantalla que creara un torneo. Arreglado en `0008_seasons_returning.sql` |
+| **El Masters no se podía ni abrir ni cerrar** | `openMatchday` corría `assertMatchdaySize` sobre un `present` vacío (el Masters tiene 4 clasificados, no asistencias) y `closeMatchday` mandaba awards que `close_matchday` rebota. Ninguna prueba llegaba nunca al Masters |
+
+**La lección, y es la misma de siempre:** una capa entera puede estar en verde y
+tener un camino que nunca corrió nadie. Los dos agujeros estaban exactamente en
+el borde entre dos piezas que cada una probaba sola.
+
+**Y una que vale repetir:** en la primera tanda de tests, uno pasaba **por
+vacuidad** — `expect(error).not.toBeNull()` se conformaba con "la función no
+existe", así que estaba en verde antes de que existiera nada. Es el mismo modo de
+falla que este documento ya tenía anotado del Plan 2.
+
+#### El alcance original, para referencia
 
 - Crear torneo (wizard de 5 pasos), abrir fecha, cargar resultados, Ajustes
 - **Decidir el tamaño de la fecha desde las asistencias** y agregar el asiento de
@@ -215,19 +253,23 @@ las funciones de datos.**
   invitado —el caso normal— el arrastre no cambia nada. Lo que sí implementa el
   spec §2.6 es elegir con quién juega, o sea `pair_locks`
 
-**Lo que el Plan 3 le dejó, y hay que meter en su alcance:**
+**Lo que el Plan 3 le dejó, con lo que ya se resolvió:**
 
-- **"Mis torneos".** Hoy, si tenés más de una temporada, entrar te deja en la
-  landing porque no hay dónde elegir. Con una sola vas directo a su tabla.
-- **La lectura de asistencias**, que la Tabla necesita para el toggle "No voy" y
-  para dejar de callar si estás anotado.
-- **El flujo `DRAFT`** de la pantalla de Fecha —quién viene, el invitado, generar
-  parejas— y **la carga de resultados**, que el Plan 3 dejó afuera a propósito.
-- **Editar las reglas** desde Ajustes.
-- **El flujo del Masters.** Hoy se muestra bloqueado y nada más.
-- **La página de Reglas pública.** Está construida y es inalcanzable: el layout
-  del torneo es la guardia de acceso y la envuelve. Necesita que `anon` pueda
-  leer las reglas de una temporada, o sea una política de RLS o un RPC nuevo.
+- ✅ **"Mis torneos".** Construida (`/torneos`). Después de entrar van todos ahí:
+  el caso especial de "una sola temporada, directo a su tabla" se borró, porque
+  un camino distinto para el mismo destino es una rama más que puede quedar mal.
+- ✅ **La lectura de asistencias** (`attendancesOf`), y el permiso para que un
+  jugador escriba la suya (`set_my_attendance`). **Falta el toggle en la Tabla**,
+  que es la Task 7 y está en la tanda B.
+- ⬜ **El flujo `DRAFT`** y **la carga de resultados**: son las Tasks 9 y 10, lo
+  próximo que hay que hacer. Todo lo que necesitan de `db/` ya está.
+- ⬜ **Editar las reglas** desde Ajustes: `updateSeasonRules` está hecha y
+  probada; falta la pantalla (Task 11, tanda B).
+- ⬜ **El flujo del Masters.** La base ya lo puede crear, armar, abrir y cerrar
+  —lo prueba `db/masters.db.test.ts` de punta a punta—; falta la pantalla
+  (Task 13, tanda B).
+- ⬜ **La página de Reglas pública.** `season_public_rules` está hecha y `anon` ya
+  la puede llamar; falta aflojar la guardia del layout (Task 12, tanda B).
 
 **Cómo escribirlo, aprendido a los golpes en el Plan 3:**
 
@@ -246,14 +288,17 @@ las funciones de datos.**
 Al adaptar el diseño de Stitch al formato de 8 a 12, dos pantallas necesitaron
 un layout nuevo, no sólo otro copy. Están marcadas con 🔁 en el handoff:
 
-- **Wizard paso 4:** los puntos eran 4 columnas. Con 12 jugadores son 6 valores
-  y no entran a lo ancho de un teléfono. Pasaron a filas
-- **Fecha en juego:** eran 3 rondas × 2 partidos fijas. Con 6 parejas son 15
+- ✅ **Wizard paso 4:** los puntos eran 4 columnas. Con 12 jugadores son 6 valores
+  y no entran a lo ancho de un teléfono. Pasaron a filas — construido en la Task
+  6 del Plan 4, una fila por posición con `−`/`+` de 34px.
+- ✅ **Fecha en juego:** eran 3 rondas × 2 partidos fijas. Con 6 parejas son 15
   partidos, así que las rondas pasaron a acordeón, con la ronda en curso abierta
-  y las completas colapsadas
+  y las completas colapsadas — construido en la Task 8 del Plan 3
+  (`fechas/[n]/rondas.tsx`). **La Task 10 del Plan 4 le enchufa la carga de
+  resultados encima, sin rehacer el acordeón.**
 
-**Conviene mirarlas antes de que el plan 3 las implemente.** Discutir un layout
-es barato; rehacerlo después de construido, no.
+Los dos layouts están construidos y ninguno se discutió después de escrito, que
+era el riesgo.
 
 ---
 

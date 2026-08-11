@@ -4,8 +4,10 @@ import { useState, useTransition } from 'react'
 import { MAX_PLAYERS, MIN_PLAYERS } from '@/core'
 import { initials } from '@/app/format'
 import {
+  addGuestPair,
   confirmMatchday,
   drawPairs,
+  removeGuestPair,
   saveGuestName,
   setGuestPartner,
   toggleAttendance,
@@ -19,11 +21,19 @@ export interface SeatVM {
   playing: boolean
 }
 
+/** Un invitado SUELTO: juega con alguien del torneo, y ese compañero sí cobra. */
 export interface GuestVM {
   entryId: string
   name: string
   /** El asiento con el que está trabado, o `null` si juega con el que toque. */
   partnerId: string | null
+}
+
+/** Una pareja invitada: los dos juegan juntos y ninguno de los dos cobra. */
+export interface GuestPairVM {
+  lockId: string
+  a: { entryId: string; name: string }
+  b: { entryId: string; name: string }
 }
 
 export interface DraftPairVM {
@@ -39,7 +49,9 @@ interface ArmadoProps {
   matchdayNumber: number
   /** El plantel en orden de siembra. Los invitados van aparte: son un asiento de esta fecha, no del torneo. */
   seats: SeatVM[]
-  guest: GuestVM | null
+  /** Como máximo uno: el que aparece cuando el plantel da impar. */
+  looseGuests: GuestVM[]
+  guestPairs: GuestPairVM[]
   pairs: DraftPairVM[]
 }
 
@@ -52,7 +64,15 @@ const STEP_TITLE = 'text-[15px] font-extrabold tracking-[-.02em]'
  * asiento del invitado aparece y desaparece según la paridad, así que adivinar
  * el resultado de un tilde es adivinar mal.
  */
-export function Armado({ seasonId, matchdayId, matchdayNumber, seats, guest, pairs }: ArmadoProps) {
+export function Armado({
+  seasonId,
+  matchdayId,
+  matchdayNumber,
+  seats,
+  looseGuests,
+  guestPairs,
+  pairs,
+}: ArmadoProps) {
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
 
@@ -65,26 +85,32 @@ export function Armado({ seasonId, matchdayId, matchdayNumber, seats, guest, pai
   }
 
   const confirmed = seats.filter((seat) => seat.playing).length
-  // La paridad se mide sobre el PLANTEL, no sobre el total con invitado: para
-  // cuando esta pantalla se dibuja, `syncGuestSeat` ya agregó el asiento, y
-  // contarlo dejaría el número siempre par y la línea de "son impares" no se
-  // vería nunca — que es justo la que explica por qué apareció la tarjeta.
-  //
-  // ponytail: queda un caso que esto no dibuja — número par con un invitado ya
-  // nombrado, que `syncGuestSeat` conserva a propósito. Ahí el panel dice un
-  // número y la fecha tiene otro; lo agarra `assertMatchdaySize` al generar,
-  // con su mensaje, y se sale borrándole el nombre al invitado.
-  const isOdd = confirmed % 2 !== 0
-  // El invitado es el que empareja el número, así que el tamaño de la fecha no
-  // es la cuenta de tildes: es esa cuenta redondeada para arriba al par.
-  const size = isOdd ? confirmed + 1 : confirmed
+  const guestCount = looseGuests.length + guestPairs.length * 2
+  // El tamaño de la fecha es el plantel confirmado MÁS los invitados: una pareja
+  // invitada suma dos jugadores de verdad y el panel tiene que decirlo, o dice
+  // "la fecha es de 8" con diez personas adentro.
+  const size = confirmed + guestCount
 
-  // El bloqueo de "pocos" arranca en 7 y no en 8: con 7 confirmados la app suma
-  // el invitado y la fecha queda de 8, que es el mínimo. La frase habla del
-  // tamaño de la fecha, no de cuántos tildaste.
-  const tooFew = confirmed < MIN_PLAYERS - 1
-  const tooMany = confirmed > MAX_PLAYERS
-  const guestUnnamed = guest !== null && guest.name.trim().length === 0
+  // La línea de "son impares" describe al invitado suelto que `syncGuestSeat`
+  // agrega, y ése se decide por la paridad del PLANTEL: la pareja invitada suma
+  // dos y no la cambia. Se muestra sólo cuando todavía no hay ningún suelto, que
+  // es exactamente el momento que la frase explica.
+  //
+  // ponytail: queda un caso que esto no dibuja — plantel par con un invitado
+  // suelto YA NOMBRADO, que `syncGuestSeat` conserva a propósito. Ahí la fecha
+  // es impar; lo agarra `assertMatchdaySize` al generar, con su mensaje, y se
+  // sale borrándole el nombre al invitado o sumándole una pareja.
+  const needsLooseGuest = confirmed % 2 !== 0 && looseGuests.length === 0
+
+  // Los bloqueos se miden sobre el tamaño que la fecha VA a tener, contando el
+  // suelto que todavía no está. Por eso 7 confirmados no bloquea: van a ser 8.
+  const eventualSize = size + (needsLooseGuest ? 1 : 0)
+  const tooFew = eventualSize < MIN_PLAYERS
+  const tooMany = eventualSize > MAX_PLAYERS
+  const guestUnnamed = [
+    ...looseGuests.map((guest) => guest.name),
+    ...guestPairs.flatMap((pair) => [pair.a.name, pair.b.name]),
+  ].some((name) => name.trim().length === 0)
 
   const canDraw = !tooFew && !tooMany && !pending
   const canConfirm = canDraw && pairs.length > 0 && !guestUnnamed
@@ -93,13 +119,17 @@ export function Armado({ seasonId, matchdayId, matchdayNumber, seats, guest, pai
     <div className="flex flex-col gap-4">
       <section className="rounded-card border border-line bg-surface p-4">
         <p className="text-center text-[32px] font-extrabold leading-none">{confirmed} confirmados</p>
-        {isOdd ? (
+        {needsLooseGuest ? (
           <p className="mt-2 rounded-field bg-warn-bg px-3 py-2 text-center text-[12.5px] font-bold">
-            Son impares. Se suma 1 invitado y la fecha queda de {confirmed + 1}.
+            Son impares. Se suma 1 invitado y la fecha queda de {eventualSize}.
           </p>
-        ) : (
+        ) : size % 2 === 0 ? (
           <p className="mt-2 text-center text-[12.5px] font-[600] text-muted">
             La fecha es de {size} · {size / 2} parejas
+          </p>
+        ) : (
+          <p className="mt-2 rounded-field bg-warn-bg px-3 py-2 text-center text-[12.5px] font-bold">
+            Son {size} y sólo se juega de a pares. Falta uno.
           </p>
         )}
       </section>
@@ -153,7 +183,7 @@ export function Armado({ seasonId, matchdayId, matchdayNumber, seats, guest, pai
         ))}
       </section>
 
-      {guest !== null && (
+      {looseGuests.map((guest) => (
         <GuestCard
           key={guest.entryId}
           guest={guest}
@@ -166,7 +196,46 @@ export function Armado({ seasonId, matchdayId, matchdayNumber, seats, guest, pai
             run(() => setGuestPartner(seasonId, matchdayId, matchdayNumber, guest.entryId, partnerId))
           }
         />
-      )}
+      ))}
+
+      <section className="flex flex-col gap-2">
+        <h2 className={`${STEP_TITLE} border-b border-line pb-2`}>Parejas invitadas</h2>
+
+        {guestPairs.map((pair) => (
+          <ParejaInvitada
+            key={pair.lockId}
+            pair={pair}
+            pending={pending}
+            onName={(entryId, name) =>
+              run(() => saveGuestName(seasonId, matchdayId, matchdayNumber, entryId, name))
+            }
+            onRemove={() =>
+              run(() =>
+                removeGuestPair(
+                  seasonId,
+                  matchdayId,
+                  matchdayNumber,
+                  pair.a.entryId,
+                  pair.b.entryId,
+                ),
+              )
+            }
+          />
+        ))}
+
+        <p className="text-[11.5px] font-[600] text-muted">
+          Juegan juntos y no suman puntos para el campeonato: es un amistoso adentro de la fecha.
+        </p>
+
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() => run(() => addGuestPair(seasonId, matchdayId, matchdayNumber))}
+          className="rounded-field border-[1.5px] border-line p-3 text-[13.5px] font-extrabold"
+        >
+          + Agregar pareja invitada
+        </button>
+      </section>
 
       {pairs.length > 0 && (
         <section className="flex flex-col gap-2">
@@ -243,6 +312,75 @@ export function Armado({ seasonId, matchdayId, matchdayNumber, seats, guest, pai
           </button>
         )}
       </div>
+    </div>
+  )
+}
+
+/**
+ * Una pareja invitada: dos nombres y la cruz para sacarla.
+ *
+ * La cruz aparece **cuando la tarjeta pierde el foco**, no mientras se escribe:
+ * mientras estás tipeando los nombres, un botón de borrar al lado del campo es
+ * lo último que querés tocar sin querer. El salto de un campo al otro no cuenta
+ * como perder el foco — `relatedTarget` dice a dónde se fue, y si sigue adentro
+ * de la tarjeta la cruz no aparece y no parpadea.
+ */
+function ParejaInvitada({
+  pair,
+  pending,
+  onName,
+  onRemove,
+}: {
+  pair: GuestPairVM
+  pending: boolean
+  onName: (entryId: string, name: string) => void
+  onRemove: () => void
+}) {
+  const [focused, setFocused] = useState(false)
+
+  return (
+    <div className="relative rounded-card border-[1.5px] border-dashed border-line bg-surface p-4">
+      {/* El foco se escucha SÓLO sobre los campos. La cruz queda afuera de esta
+          región a propósito: adentro, al apretarla recibía el foco, eso la
+          ocultaba a sí misma y el click no llegaba a dispararse nunca. */}
+      <div
+        className="flex flex-col gap-2"
+        onFocus={() => setFocused(true)}
+        onBlur={(event) => {
+          // Saltar de un campo al otro no es perder el foco: si el destino
+          // sigue adentro, la cruz no tiene que parpadear.
+          if (event.currentTarget.contains(event.relatedTarget)) return
+          setFocused(false)
+        }}
+      >
+        {[pair.a, pair.b].map((guest) => (
+          <input
+            key={guest.entryId}
+            defaultValue={guest.name}
+            placeholder="Nombre"
+            disabled={pending}
+            onBlur={(event) => {
+              if (event.target.value.trim() === guest.name.trim()) return
+              onName(guest.entryId, event.target.value)
+            }}
+            className={`rounded-field border-[1.5px] bg-surface p-[15px] text-[15px] font-[750] outline-none placeholder:font-medium placeholder:text-muted ${
+              guest.name.trim().length === 0 ? 'border-accent' : 'border-line'
+            }`}
+          />
+        ))}
+      </div>
+
+      {!focused && (
+        <button
+          type="button"
+          disabled={pending}
+          onClick={onRemove}
+          aria-label="Sacar la pareja invitada"
+          className="absolute top-2 right-2 flex h-7 w-7 items-center justify-center rounded-full bg-chip text-[15px] font-extrabold text-muted"
+        >
+          ×
+        </button>
+      )}
     </div>
   )
 }

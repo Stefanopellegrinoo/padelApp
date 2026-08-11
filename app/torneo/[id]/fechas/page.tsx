@@ -163,22 +163,40 @@ export default async function FechasPage({ params }: PageProps) {
           const played = matchday.status === 'CLOSED'
           const inProgress = matchday.status === 'OPEN'
           const champion = played ? championOf(matchday) : null
+
+          // La fecha viva —armándose o en juego— es la única sobre la que hay
+          // algo que hacer, así que va en `accent`, que es el fondo de bloque
+          // del handoff. Antes la de armado salía con `opacity: .62`: la que
+          // había que tocar era la más apagada de la lista, y después de abrir
+          // una fecha el CTA de arriba desaparece, así que no quedaba UN solo
+          // elemento en acento y no se sabía a dónde ir.
+          const live = !played
           // `ok-bg`/`up` y no `live-bg`/`live`: en el handoff `live` es el color de
           // error —borde de input inválido, bloques que impiden continuar, cerrar
           // sesión— y una fecha jugándose no es un problema. El par afirmativo es el
           // que usan todos los chips activos del diseño: "Repiten", "Viene",
           // "Defensora", "Sos vos".
-          const tagClass = played ? 'bg-chip text-muted' : inProgress ? 'bg-ok-bg text-up' : 'text-muted'
-          const tagLabel = played ? 'Jugada' : inProgress ? 'En juego' : 'Por jugarse'
+          const tagClass = live
+            ? 'bg-accent-text text-accent'
+            : played
+              ? 'bg-chip text-muted'
+              : 'text-muted'
+          const tagLabel = played ? 'Jugada' : inProgress ? 'En juego' : 'Armando'
 
           return (
             <Link
               key={matchday.id}
               href={`/torneo/${seasonId}/fechas/${matchday.number}`}
-              className={`block rounded-[14px] border border-line bg-surface p-[14px] ${matchday.status === 'DRAFT' ? 'opacity-[0.62]' : ''}`}
+              className={`block rounded-[14px] p-[14px] ${
+                live ? 'bg-accent text-accent-text' : 'border border-line bg-surface'
+              }`}
             >
               <div className="flex items-center justify-between gap-2">
-                <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
+                <p
+                  className={`text-[10.5px] font-extrabold uppercase tracking-[.14em] ${
+                    live ? 'opacity-75' : 'text-muted'
+                  }`}
+                >
                   Fecha {matchday.number}
                   {matchday.playedOn !== null ? ` · ${matchdayDay(matchday.playedOn)}` : ''}
                 </p>

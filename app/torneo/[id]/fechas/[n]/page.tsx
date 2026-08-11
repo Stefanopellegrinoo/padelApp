@@ -20,7 +20,7 @@ import { serverClient } from '@/db/server'
 import { EdgeError } from '@/db/errors'
 import { matchdayFull } from '@/app/format'
 import { Rondas, type RoundMatchVM, type RoundVM } from './rondas'
-import { Armado, type DraftPairVM, type SeatVM } from './armado'
+import { Armado, type DraftPairVM, type GuestPairVM, type GuestVM, type SeatVM } from './armado'
 import { CierreFecha } from './carga'
 import { MastersDraft, type QualifierVM } from './masters'
 
@@ -186,15 +186,43 @@ export default async function FechaDetailPage({ params }: PageProps) {
       }))
 
     // `entriesOf` trae los invitados de TODAS las fechas de la temporada, por
-    // eso el filtro por `matchdayId`. Uno solo: el equipo invitado completo
-    // queda fuera de este plan.
-    const guestEntry = entries.find(
-      (entry) => entry.kind === 'GUEST' && entry.matchdayId === matchday.id,
-    )
-    const guestLock =
-      guestEntry === undefined
-        ? undefined
-        : locks.find((lock) => lock.a === guestEntry.id || lock.b === guestEntry.id)
+    // eso el filtro por `matchdayId`.
+    //
+    // Los invitados de una fecha son de dos clases, y la pantalla las trata
+    // distinto porque el campeonato las trata distinto: los que están trabados
+    // con otro invitado son una **pareja invitada** —juegan de amistoso y no
+    // cobran ninguno de los dos— y el resto son **sueltos**, que juegan con
+    // alguien del torneo y le hacen cobrar a su compañero. Como máximo hay un
+    // suelto: es el que aparece cuando el plantel da impar.
+    const guestEntries = entries
+      .filter((entry) => entry.kind === 'GUEST' && entry.matchdayId === matchday.id)
+      .sort((a, b) => a.seedPosition - b.seedPosition)
+    const guestById = new Map(guestEntries.map((entry) => [entry.id, entry]))
+
+    const guestPairs: GuestPairVM[] = []
+    const inGuestPair = new Set<string>()
+    for (const lock of locks) {
+      const a = guestById.get(lock.a)
+      const b = guestById.get(lock.b)
+      if (a === undefined || b === undefined) continue
+      guestPairs.push({
+        lockId: lock.id,
+        a: { entryId: a.id, name: a.displayName },
+        b: { entryId: b.id, name: b.displayName },
+      })
+      inGuestPair.add(a.id).add(b.id)
+    }
+
+    const looseGuests: GuestVM[] = guestEntries
+      .filter((entry) => !inGuestPair.has(entry.id))
+      .map((entry) => {
+        const lock = locks.find((candidate) => candidate.a === entry.id || candidate.b === entry.id)
+        return {
+          entryId: entry.id,
+          name: entry.displayName,
+          partnerId: lock === undefined ? null : lock.a === entry.id ? lock.b : lock.a,
+        }
+      })
 
     const draftPairs: DraftPairVM[] = detail.pairs.map((pair) => ({
       key: pairKey(pair),
@@ -209,20 +237,8 @@ export default async function FechaDetailPage({ params }: PageProps) {
         matchdayId={matchday.id}
         matchdayNumber={matchday.number}
         seats={seats}
-        guest={
-          guestEntry === undefined
-            ? null
-            : {
-                entryId: guestEntry.id,
-                name: guestEntry.displayName,
-                partnerId:
-                  guestLock === undefined
-                    ? null
-                    : guestLock.a === guestEntry.id
-                      ? guestLock.b
-                      : guestLock.a,
-              }
-        }
+        looseGuests={looseGuests}
+        guestPairs={guestPairs}
         pairs={draftPairs}
       />
     )

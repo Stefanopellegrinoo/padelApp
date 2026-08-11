@@ -11,12 +11,14 @@ import {
   type SeasonConfig,
 } from '@/core'
 import {
+  addGuest,
   clearPairs,
   closeMatchday,
   createMasters,
   createMatchday,
   generateMastersPairs,
   generatePairs,
+  lockPair,
   openMatchday,
   saveResult,
   seedAttendances,
@@ -311,6 +313,46 @@ describe('syncGuestSeat', () => {
     )
     expect(guests).toHaveLength(1)
     expect(guests[0]?.displayName).toBe('Pablo')
+  })
+
+  // Una pareja invitada suma DOS y no cambia la paridad, así que no cuenta para
+  // decidir si falta uno. Contándola, una fecha de 7 + pareja quedaba en 9.
+  it('still adds the nameless guest when an invited pair is already on the matchday', async () => {
+    const { admin, seasonId, squad } = await buildScene()
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-03-05')
+    await seedAttendances(admin.client, matchdayId)
+    await setAttendance(admin.client, matchdayId, squad[7]!, 'ABSENT')
+
+    const one = await addGuest(admin.client, matchdayId, { displayName: 'Rulo' })
+    const two = await addGuest(admin.client, matchdayId, { displayName: 'Tincho' })
+    await lockPair(admin.client, matchdayId, one, two)
+
+    await syncGuestSeat(admin.client, matchdayId)
+
+    const guests = (await entriesOf(admin.client, seasonId)).filter(
+      (entry) => entry.kind === 'GUEST' && entry.matchdayId === matchdayId,
+    )
+    // Los 7 del plantel + la pareja + el relleno = 10, que es par y se puede armar.
+    expect(guests).toHaveLength(3)
+    expect(guests.filter((guest) => guest.displayName === '')).toHaveLength(1)
+  })
+
+  it('leaves an invited pair alone when the squad count is even', async () => {
+    const { admin, seasonId } = await buildScene()
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-03-05')
+    await seedAttendances(admin.client, matchdayId)
+
+    const one = await addGuest(admin.client, matchdayId, { displayName: 'Rulo' })
+    const two = await addGuest(admin.client, matchdayId, { displayName: 'Tincho' })
+    await lockPair(admin.client, matchdayId, one, two)
+
+    await syncGuestSeat(admin.client, matchdayId)
+
+    const guests = (await entriesOf(admin.client, seasonId)).filter(
+      (entry) => entry.kind === 'GUEST' && entry.matchdayId === matchdayId,
+    )
+    // 8 + 2 = 10: no falta ni sobra nadie.
+    expect(guests).toHaveLength(2)
   })
 })
 

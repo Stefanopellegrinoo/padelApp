@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import type { SetScore } from '@/core'
 import { EdgeError } from '@/db/errors'
 import {
+  addGuest,
   clearPairs,
   closeMatchday,
   createMasters,
@@ -12,6 +13,7 @@ import {
   lockPair,
   nameGuest,
   openMatchday,
+  removeGuest,
   reopenMatchday,
   saveResult,
   seedAttendances,
@@ -204,6 +206,50 @@ export async function reopenTheMatchday(
 ): Promise<WriteResult> {
   return onMatchday(seasonId, matchdayNumber, async (supabase) => {
     await reopenMatchday(supabase, matchdayId)
+  })
+}
+
+/**
+ * Suma una pareja invitada: dos asientos que juegan juntos y **no cobran
+ * ninguno de los dos**. Es el equipo que viene de visita a la fecha.
+ *
+ * Van trabados desde el momento cero, y no es un detalle: `orderPool` manda a
+ * los invitados al fondo del pool y `buildPairs` empareja primero-con-último,
+ * así que dos invitados sueltos salen en DOS parejas mixtas. Que jueguen juntos
+ * es una pareja fija, como los defensores, no un efecto automático — y sin el
+ * lock `assertPointsCoverMatchday` rebota la fecha, porque quedarían más
+ * parejas del torneo que valores de puntos.
+ *
+ * Suman dos, así que no cambian la paridad: el invitado suelto que aparece
+ * cuando el plantel da impar sigue siendo cosa de `syncGuestSeat`.
+ */
+export async function addGuestPair(
+  seasonId: string,
+  matchdayId: string,
+  matchdayNumber: number,
+): Promise<WriteResult> {
+  return inDraft(seasonId, matchdayId, matchdayNumber, async (supabase) => {
+    await clearPairs(supabase, matchdayId)
+    const one = await addGuest(supabase, matchdayId, { displayName: '' })
+    const two = await addGuest(supabase, matchdayId, { displayName: '' })
+    await lockPair(supabase, matchdayId, one, two)
+    await syncGuestSeat(supabase, matchdayId)
+  })
+}
+
+/** Saca la pareja invitada entera. El lock se va solo: `pair_locks` cae en cascada con el asiento. */
+export async function removeGuestPair(
+  seasonId: string,
+  matchdayId: string,
+  matchdayNumber: number,
+  entryA: string,
+  entryB: string,
+): Promise<WriteResult> {
+  return inDraft(seasonId, matchdayId, matchdayNumber, async (supabase) => {
+    await clearPairs(supabase, matchdayId)
+    await removeGuest(supabase, entryA)
+    await removeGuest(supabase, entryB)
+    await syncGuestSeat(supabase, matchdayId)
   })
 }
 

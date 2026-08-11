@@ -305,16 +305,31 @@ export async function removeGuest(supabase: Client, entryId: string): Promise<vo
 export async function syncGuestSeat(supabase: Client, matchdayId: string): Promise<void> {
   const playing = await playingEntryIds(supabase, matchdayId)
   const guests = await guestsOf(supabase, matchdayId)
+  const locks = await locksOf(supabase, matchdayId)
   const isOdd = playing.length % 2 !== 0
 
-  if (isOdd && guests.length === 0) {
+  // Sólo cuentan los invitados SUELTOS —los que van a jugar con alguien del
+  // torneo—, no los que ya están en una pareja invitada. Una pareja suma dos y
+  // no cambia la paridad, así que no tiene nada que ver con que falte uno:
+  // contarla dejaba una fecha de 7 + pareja en 9 y sin poder generarse.
+  const inGuestPair = new Set<string>()
+  const isGuest = new Set(guests.map((guest) => guest.entryId))
+  for (const lock of locks) {
+    if (isGuest.has(lock.a) && isGuest.has(lock.b)) {
+      inGuestPair.add(lock.a)
+      inGuestPair.add(lock.b)
+    }
+  }
+  const loose = guests.filter((guest) => !inGuestPair.has(guest.entryId))
+
+  if (isOdd && loose.length === 0) {
     await clearPairs(supabase, matchdayId)
     await addGuest(supabase, matchdayId, { displayName: '' })
     return
   }
 
-  const only = guests[0]
-  if (!isOdd && guests.length === 1 && only !== undefined && only.displayName.trim().length === 0) {
+  const only = loose[0]
+  if (!isOdd && loose.length === 1 && only !== undefined && only.displayName.trim().length === 0) {
     await clearPairs(supabase, matchdayId)
     await removeGuest(supabase, only.entryId)
   }

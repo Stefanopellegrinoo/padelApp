@@ -11,11 +11,16 @@ export async function claimSeat(form: FormData): Promise<void> {
   const entryId = String(form.get('entryId') ?? '')
 
   const supabase = await serverClient()
-  const { error } = await supabase.rpc('claim_seat', { p_token: token, p_entry: entryId })
+  const { data: seasonId, error } = await supabase.rpc('claim_seat', {
+    p_token: token,
+    p_entry: entryId,
+  })
   if (error !== null) {
     redirect(`/unirse/${token}?selected=${entryId}&error=${encodeURIComponent(error.message)}`)
   }
 
-  // "Mis torneos" es del Plan 3: por ahora, a la landing.
-  redirect('/')
+  // `claim_seat` devuelve el uuid de la temporada, así que se va derecho a su
+  // tabla — "Unirse OK → Tabla" en el handoff. Si por lo que sea no vino, Mis
+  // torneos también lo deja adentro.
+  redirect(seasonId === null ? '/torneos' : `/torneo/${seasonId}`)
 }

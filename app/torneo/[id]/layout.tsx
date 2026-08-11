@@ -9,15 +9,35 @@ interface TorneoLayoutProps {
 }
 
 /**
- * El shell de todas las pantallas del torneo (Tasks 6 a 11): guarda de acceso
- * vía RLS —`seasonHeader` tira `EdgeError` si la temporada no existe o el
- * caller no tiene lugar en ella—, contenedor con el padding común y la nav
- * fija de 4. El header de cada pantalla (kicker, título, botón) es contenido
- * de cada `page.tsx`, no de este layout.
+ * El shell de todas las pantallas del torneo: guarda de acceso vía RLS
+ * —`seasonHeader` tira `EdgeError` si la temporada no existe o el caller no
+ * tiene lugar en ella—, contenedor con el padding común y la nav fija de 4. El
+ * header de cada pantalla (kicker, título, botón) es contenido de cada
+ * `page.tsx`, no de este layout.
+ *
+ * **Sin sesión el layout no pregunta nada y no dibuja la nav.** Reglas es
+ * pública y este layout la estaba frenando antes de que se montara. Las demás
+ * pantallas del torneo siguen siendo privadas: lo único que cambia es QUIÉN las
+ * frena — antes el layout, ahora la query, que para un anónimo no devuelve nada
+ * porque RLS no le otorgó un solo SELECT. La nav tampoco tendría sentido: quien
+ * llega por el link no tiene a dónde ir.
  */
 export default async function TorneoLayout({ children, params }: TorneoLayoutProps) {
   const { id } = await params
   const supabase = await serverClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (user === null) {
+    return (
+      <div className="flex min-h-screen flex-col bg-bg text-text">
+        <main className="flex-1 px-5 pb-6">{children}</main>
+      </div>
+    )
+  }
+
   await seasonHeader(supabase, id)
 
   return (

@@ -17,27 +17,22 @@ const MIN_PASSWORD = 6
  * A dónde mandar a alguien que recién entró.
  *
  * Un `next` explícito —el link de invitación— gana siempre, así que se
- * revisa antes de tocar la base. `LoginForm`/`RegistroForm` mandan el campo
- * `next` SIEMPRE con algo, nunca vacío: cuando no hay `?next=` en la URL,
- * ellos mismos lo normalizan con este mismo `safeNextPath` antes de ponerlo
- * en el input oculto, y esa normalización cae en `'/'`. Por eso no alcanza
- * con mirar si `next` vino vacío — acá SIEMPRE llega algo — hay que mirar si,
- * ya sanitizado, es distinto de `'/'`: un link de invitación real nunca
- * apunta a la raíz, así que esta distinción no le saca nada al caso que tiene
- * que ganar siempre.
+ * revisa antes que nada. `LoginForm`/`RegistroForm` mandan el campo `next`
+ * SIEMPRE con algo, nunca vacío: cuando no hay `?next=` en la URL, ellos
+ * mismos lo normalizan con este mismo `safeNextPath` antes de ponerlo en el
+ * input oculto, y esa normalización cae en `'/'`. Por eso no alcanza con
+ * mirar si `next` vino vacío —acá SIEMPRE llega algo— hay que mirar si, ya
+ * sanitizado, es distinto de `'/'`: un link de invitación real nunca apunta a
+ * la raíz.
  *
- * Sin next real, el caso común de este MVP es una sola temporada: se va
- * directo a su tabla. Con más de una no hay todavía una pantalla propia para
- * elegir —"Mis torneos" es Plan 4—, así que se queda en la landing, que ahora
- * sabe mostrarse distinta a alguien logueado. Sin ninguna temporada, también
- * a la landing: no tiene torneo al que ir.
+ * Sin next real, todos van a Mis torneos. El Plan 3 tenía acá un caso especial
+ * —con una sola temporada, directo a su tabla— porque no existía una pantalla
+ * donde elegir. Ahora existe, y un camino distinto para el mismo destino sólo
+ * es una rama más que puede quedar mal.
  */
-async function loginDestination(supabase: Client, next: string): Promise<string> {
+async function loginDestination(_supabase: Client, next: string): Promise<string> {
   const safeNext = safeNextPath(next)
-  if (safeNext !== '/') return safeNext
-  const seasons = await mySeasons(supabase)
-  const [only, ...rest] = seasons
-  return only !== undefined && rest.length === 0 ? `/torneo/${only.id}` : '/'
+  return safeNext !== '/' ? safeNext : '/torneos'
 }
 
 export async function signUp(_state: FormState, form: FormData): Promise<FormState> {

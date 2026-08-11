@@ -1,6 +1,6 @@
 # Estado del proyecto
 
-**Última actualización:** 10 de agosto de 2026, al terminar el Plan 2.
+**Última actualización:** 11 de agosto de 2026, con el Plan 4 terminado.
 
 Este documento es el punto de entrada. Dice qué está hecho, qué falta, y qué hay
 que decidir antes de seguir. Los detalles viven en los documentos que se enlazan.
@@ -14,7 +14,13 @@ que decidir antes de seguir. Los detalles viven en los documentos que se enlazan
 | **1. `core/`** | Toda la lógica del campeonato, funciones puras | ✅ **Terminado y en `main`** |
 | **2. Datos y auth** | Schema Supabase, migraciones, RLS, login + Google | ✅ **Terminado**, rama `plan-2-data-and-auth` |
 | **3. Pantallas de lectura** | Tabla, Fechas, Estadísticas, Reglas, Perfil | ✅ **Terminado**, rama `plan-3-read-screens` |
-| **4. Pantallas de escritura** | Crear torneo, abrir fecha, cargar resultados, Ajustes | ⬜ |
+| **4. Pantallas de escritura** | Crear torneo, abrir fecha, cargar resultados, Ajustes, Masters | ✅ **Terminado** (13 de 14 tareas; la 7 se descartó), rama `plan-4-write-screens` |
+
+> **Si estás retomando: el Plan 4 está terminado.** Lo que queda es deuda chica de copys. El estado exacto —qué está
+> hecho, qué falta, en qué orden y qué desvíos ya ocurrieron— está en la sección
+> "Dónde quedó la ejecución" y en "Aparecidos" del
+> [plan 4](superpowers/plans/2026-08-11-write-screens.md). Esta página resume;
+> ese documento manda.
 
 **`core/` en números:** 13 módulos, 145 tests, cero dependencias de producción.
 Verificado de forma independiente: ningún archivo usa `Date`, `Math.random`,
@@ -43,6 +49,7 @@ adentro a propósito: `allMatchings` (sólo la usa `buildPairs`) y `orderByPoint
 | [`superpowers/plans/2026-08-10-core-championship-logic.md`](superpowers/plans/2026-08-10-core-championship-logic.md) | **El plan 1**, ya ejecutado. Su tabla final —"Qué queda afuera de este plan, a propósito"— es la lista de requisitos que hereda el plan 2. |
 | [`superpowers/plans/2026-08-10-data-and-auth.md`](superpowers/plans/2026-08-10-data-and-auth.md) | **El plan 2**, ejecutado. 14 tareas. Sus secciones "Las tres decisiones" y "Decisiones registradas" son las que mandan sobre cualquier cosa que diga este documento. Su "Aparecidos" tiene lo que quedó sin hacer. |
 | [`superpowers/plans/2026-08-10-read-screens.md`](superpowers/plans/2026-08-10-read-screens.md) | **El plan 3**, ejecutado. 11 tareas, formato liviano: interfaces y "qué NO hace", con bloques de código completos sólo donde había lógica nueva. Su "Aparecidos" es la deuda conocida de las pantallas. |
+| [`superpowers/plans/2026-08-11-write-screens.md`](superpowers/plans/2026-08-11-write-screens.md) | **El plan 4**, ejecutado: 13 de 14 tareas (la 7 se descartó). Su tabla "El trazado" dice qué dato necesita cada pantalla y de ahí salen las primeras cuatro tareas; sus "Decisiones registradas" mandan sobre lo que dice este documento —una de ellas corrige el alcance de acá abajo—. |
 | `.superpowers/sdd/2026-08-10-core-championship-logic/progress.md` | **El ledger de ejecución.** Cada fix round, cada minor diferido, cada decisión tomada y por qué. No está versionado (es scratch), pero es donde está el detalle de cada hallazgo. |
 
 ---
@@ -201,27 +208,106 @@ preguntas sobre quien mira: "¿estoy anotado?" y "¿cuál asiento soy yo?". Ante
 escribir el Plan 4, **trazar qué dato necesita cada pantalla y recién ahí definir
 las funciones de datos.**
 
-### Plan 4 — pantallas de escritura
+### Plan 4 — pantallas de escritura 🚧
+
+**Hecho: 13 de las 14 tareas** (la 7 se descartó), rama `plan-4-write-screens`.
+Toda la capa de datos, "Mis torneos", el wizard de crear torneo, **el flujo
+entero de jugar una fecha** —abrirla, tildar quién viene, el invitado con su
+compañero, el sorteo, confirmar, cargar los resultados en dos toques, cerrar y
+reabrir—, **Ajustes** (plantel, formato y reglas) y **el Masters** de punta a
+punta. **273 tests unitarios, 153 contra la base, `build` compilando.**
+
+**Una temporada entera se juega desde el navegador, de crear el torneo a coronar
+al campeón del año.** Está probado recorriéndolo, no deducido: `scripts/smoke.mjs`
+más un recorrido que juega tres fechas y otro que llega al Masters con sus dos
+desenlaces posibles.
+
+**Y el recorrido con navegador ya corrió** (`scripts/smoke.mjs`, Task 14): pasa
+entero, de crear el torneo a cerrar la fecha con su tabla. Encontró un defecto
+real que ningún test podía ver —la pareja campeona mostraba **0 puntos** cuando
+jugaba con el invitado, contradiciendo la nota que tiene dos líneas más abajo—,
+arreglado y anotado.
+
+**Reglas sin login está hecha** (Task 12): se abre en una ventana privada, el
+`<script>` del admin sale escapado, y las otras cuatro pantallas del torneo no le
+muestran nada a un anónimo. **La Task 7 se descartó** por decisión de producto:
+el jugador no marca su propia asistencia, la marca el admin en el armado.
+
+**El diseño está auditado contra el handoff.** Los 34 tokens de color, la tipografía, los radios, el tracking del kicker y la regla de "sin sombras" estaban exactos. Lo que no estaba eran las cuatro pantallas de entrada del Plan 2, que usaban la escala redondeada de Tailwind en vez de los valores del handoff — corregidas: **en toda la app no queda una sola medida redondeada**.
+
+**Y la guardia de acceso quedó bien puesta.** Antes, abrir el link de un torneo
+sin sesión mostraba la página blanca de Next en inglés. Ahora `middleware.ts`
+manda a `/login?next={ruta}` y después de entrar caés en el link que abriste; y
+`app/error.tsx` —que no existía— muestra cualquier otro error como la app y en
+castellano, sin filtrar el mensaje crudo. Reglas sigue pública, con barra final o
+sin ella. Los seis `redirect()` de la app se recorrieron contra `npm start` para
+confirmar que el error boundary no se los come.
+
+**El equipo invitado ya se administra desde la pantalla.** Se suma una pareja
+invitada, se le ponen los nombres, el sorteo los deja **juntos**, y al cerrar la
+fecha **no cobran un punto** mientras los del plantel sí — jugado de punta a
+punta para probarlo. El bloqueante estaba en `db/` y no en la UI:
+`syncGuestSeat` contaba **todos** los invitados para decidir si faltaba uno, y
+una pareja suma dos sin cambiar la paridad, así que una fecha de 7 + pareja
+quedaba en 9 y no se podía generar.
+
+**Con eso, el Plan 4 no tiene nada de producto pendiente.**
+
+**Y la lista corta de deuda visible**, toda anotada en el plan: los plurales
+("faltan 1 partidos", "jugaron 1 fechas"), "Mejor dupla del torneo" que lista
+once duplas en vez de una, el botón de Google que no puede andar hasta que
+alguien lo configure, y el mensaje de reabrir que pide borrar una fecha cuando
+no hay forma de borrarla.
+
+#### Dos cosas rotas que nadie sabía, y ya están arregladas
+
+Las dos aparecieron ejecutando, con las dos suites en verde, y ninguna era
+detectable por lo que había:
+
+| Qué estaba roto | Por qué no lo agarró nadie |
+|---|---|
+| **Crear una temporada desde la app tiraba `42501`** | `is_participant` responde con un SELECT adentro de una función `security definer`, y ese subselect no ve la fila que la propia sentencia está insertando — así que el `returning` se rechaza aunque el `WITH CHECK` pase. Los tests arman temporadas con `service_role`, que saltea RLS, y hasta el Plan 4 no había pantalla que creara un torneo. Arreglado en `0008_seasons_returning.sql` |
+| **El Masters no se podía ni abrir ni cerrar** | `openMatchday` corría `assertMatchdaySize` sobre un `present` vacío (el Masters tiene 4 clasificados, no asistencias) y `closeMatchday` mandaba awards que `close_matchday` rebota. Ninguna prueba llegaba nunca al Masters |
+
+**La lección, y es la misma de siempre:** una capa entera puede estar en verde y
+tener un camino que nunca corrió nadie. Los dos agujeros estaban exactamente en
+el borde entre dos piezas que cada una probaba sola.
+
+**Y una que vale repetir:** en la primera tanda de tests, uno pasaba **por
+vacuidad** — `expect(error).not.toBeNull()` se conformaba con "la función no
+existe", así que estaba en verde antes de que existiera nada. Es el mismo modo de
+falla que este documento ya tenía anotado del Plan 2.
+
+#### El alcance original, para referencia
 
 - Crear torneo (wizard de 5 pasos), abrir fecha, cargar resultados, Ajustes
 - **Decidir el tamaño de la fecha desde las asistencias** y agregar el asiento de
   invitado cuando el número da impar
-- **Que el admin pueda mover al invitado** en el orden (spec §2.6). `core/` lo
-  pone último y respeta el orden que le den; la UI tiene que ofrecer el arrastre
+- ~~**Que el admin pueda mover al invitado** en el orden (spec §2.6). `core/` lo
+  pone último y respeta el orden que le den; la UI tiene que ofrecer el
+  arrastre~~ — **esta línea está mal y el plan 4 la corrige** (decisión
+  registrada 2). `orderPool` (`core/pairing.ts:178`) manda a los invitados al
+  final del pool *siempre*, y sólo respeta el orden *entre ellos*: con un solo
+  invitado —el caso normal— el arrastre no cambia nada. Lo que sí implementa el
+  spec §2.6 es elegir con quién juega, o sea `pair_locks`
 
-**Lo que el Plan 3 le dejó, y hay que meter en su alcance:**
+**Lo que el Plan 3 le dejó, con lo que ya se resolvió:**
 
-- **"Mis torneos".** Hoy, si tenés más de una temporada, entrar te deja en la
-  landing porque no hay dónde elegir. Con una sola vas directo a su tabla.
-- **La lectura de asistencias**, que la Tabla necesita para el toggle "No voy" y
-  para dejar de callar si estás anotado.
-- **El flujo `DRAFT`** de la pantalla de Fecha —quién viene, el invitado, generar
-  parejas— y **la carga de resultados**, que el Plan 3 dejó afuera a propósito.
-- **Editar las reglas** desde Ajustes.
-- **El flujo del Masters.** Hoy se muestra bloqueado y nada más.
-- **La página de Reglas pública.** Está construida y es inalcanzable: el layout
-  del torneo es la guardia de acceso y la envuelve. Necesita que `anon` pueda
-  leer las reglas de una temporada, o sea una política de RLS o un RPC nuevo.
+- ✅ **"Mis torneos".** Construida (`/torneos`). Después de entrar van todos ahí:
+  el caso especial de "una sola temporada, directo a su tabla" se borró, porque
+  un camino distinto para el mismo destino es una rama más que puede quedar mal.
+- ✅ **La lectura de asistencias** (`attendancesOf`), y el permiso para que un
+  jugador escriba la suya (`set_my_attendance`). **Falta el toggle en la Tabla**,
+  que es la Task 7 y está en la tanda B.
+- ⬜ **El flujo `DRAFT`** y **la carga de resultados**: son las Tasks 9 y 10, lo
+  próximo que hay que hacer. Todo lo que necesitan de `db/` ya está.
+- ⬜ **Editar las reglas** desde Ajustes: `updateSeasonRules` está hecha y
+  probada; falta la pantalla (Task 11, tanda B).
+- ⬜ **El flujo del Masters.** La base ya lo puede crear, armar, abrir y cerrar
+  —lo prueba `db/masters.db.test.ts` de punta a punta—; falta la pantalla
+  (Task 13, tanda B).
+- ⬜ **La página de Reglas pública.** `season_public_rules` está hecha y `anon` ya
+  la puede llamar; falta aflojar la guardia del layout (Task 12, tanda B).
 
 **Cómo escribirlo, aprendido a los golpes en el Plan 3:**
 
@@ -240,14 +326,17 @@ las funciones de datos.**
 Al adaptar el diseño de Stitch al formato de 8 a 12, dos pantallas necesitaron
 un layout nuevo, no sólo otro copy. Están marcadas con 🔁 en el handoff:
 
-- **Wizard paso 4:** los puntos eran 4 columnas. Con 12 jugadores son 6 valores
-  y no entran a lo ancho de un teléfono. Pasaron a filas
-- **Fecha en juego:** eran 3 rondas × 2 partidos fijas. Con 6 parejas son 15
+- ✅ **Wizard paso 4:** los puntos eran 4 columnas. Con 12 jugadores son 6 valores
+  y no entran a lo ancho de un teléfono. Pasaron a filas — construido en la Task
+  6 del Plan 4, una fila por posición con `−`/`+` de 34px.
+- ✅ **Fecha en juego:** eran 3 rondas × 2 partidos fijas. Con 6 parejas son 15
   partidos, así que las rondas pasaron a acordeón, con la ronda en curso abierta
-  y las completas colapsadas
+  y las completas colapsadas — construido en la Task 8 del Plan 3
+  (`fechas/[n]/rondas.tsx`). **La Task 10 del Plan 4 le enchufa la carga de
+  resultados encima, sin rehacer el acordeón.**
 
-**Conviene mirarlas antes de que el plan 3 las implemente.** Discutir un layout
-es barato; rehacerlo después de construido, no.
+Los dos layouts están construidos y ninguno se discutió después de escrito, que
+era el riesgo.
 
 ---
 

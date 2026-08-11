@@ -1,21 +1,28 @@
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { defaultConfig } from '@/core'
+import type { Database } from './database.types'
 import {
   addGuest,
   closeMatchday,
   createMatchday,
   generatePairs,
   openMatchday,
+  reopenMatchday,
   saveResult,
   setAttendance,
 } from './matchday'
 import {
+  attendancesOf,
   awardsOf,
   closedHistoryAll,
   entriesOf,
   matchdayDetail,
   matchdaysOf,
+  myEntryId,
   mySeasons,
+  playerNames,
+  publicRules,
   seasonAdminName,
   seasonHeader,
   seasonRules,
@@ -40,6 +47,16 @@ async function fillerPlayers(count: number): Promise<string[]> {
     ids.push(data.id)
   }
   return ids
+}
+
+/** Sin sesión y con la llave `anon`: el cliente de quien abre el link del grupo. */
+function anonReadClient(): SupabaseClient<Database> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (url === undefined || anonKey === undefined) {
+    throw new Error('Faltan NEXT_PUBLIC_SUPABASE_URL o NEXT_PUBLIC_SUPABASE_ANON_KEY.')
+  }
+  return createClient<Database>(url, anonKey)
 }
 
 /** Carga un 4-0 en cada partido de la fecha para poder cerrarla. */
@@ -217,6 +234,99 @@ describe('db/read', () => {
       const awards = await awardsOf(member.client, seasonId)
       expect(awards.has(1)).toBe(true)
       expect(awards.get(1)).toHaveLength(8)
+    })
+  })
+
+  // ── lo que el Plan 4 necesita y el Plan 3 no había leído ──────────────────
+
+  describe('attendancesOf', () => {
+    it('returns only the rows of that matchday, with their status', async () => {
+      const first = await attendancesOf(member.client, matchday1Id)
+      expect(first.size).toBe(8)
+      expect(first.get(squad[0]!)).toBe('PLAYING')
+
+      await setAttendance(admin.client, matchday2Id, squad[0]!, 'ABSENT')
+      const second = await attendancesOf(member.client, matchday2Id)
+      expect(second.get(squad[0]!)).toBe('ABSENT')
+      expect(second.size).toBe(1)
+    })
+
+    it('returns an empty map for a matchday nobody ticked, instead of throwing', async () => {
+      const empty = await attendancesOf(member.client, mastersMatchdayId)
+      expect(empty).toEqual(new Map())
+    })
+  })
+
+  describe('entriesOf', () => {
+    // Con un solo invitado el error de lado no se ve: los dos tienen que traer
+    // SU fecha, no la misma.
+    it('tells which matchday each guest belongs to, and leaves the squad null', async () => {
+      const otherGuestId = await addGuest(admin.client, mastersMatchdayId, {
+        displayName: 'Invitado del Masters',
+      })
+      const entries = await entriesOf(member.client, seasonId)
+
+      const squadRow = entries.find((entry) => entry.id === squad[0])
+      expect(squadRow?.matchdayId).toBeNull()
+      expect(entries.find((entry) => entry.id === guestEntryId)?.matchdayId).toBe(matchday2Id)
+      expect(entries.find((entry) => entry.id === otherGuestId)?.matchdayId).toBe(mastersMatchdayId)
+    })
+  })
+
+  describe('matchdayDetail', () => {
+    // Es el id de `matches`, que es lo que toma saveResult — y no el de `pairs`
+    // ni un índice, que es el error que se ve igual de bien en pantalla.
+    it('carries the match id that saveResult needs', async () => {
+      const detail = await matchdayDetail(member.client, matchday1Id)
+      const db = adminClient()
+      const { data } = await db.from('matches').select('id').eq('matchday_id', matchday1Id)
+
+      const fromDetail = detail.matches.map((match) => match.id).sort()
+      const fromDatabase = (data ?? []).map((row) => row.id).sort()
+      expect(fromDetail).toHaveLength(6)
+      expect(fromDetail).toEqual(fromDatabase)
+    })
+  })
+
+  describe('seasonHeader', () => {
+    it('carries the invite token the wizard and the settings screen show', async () => {
+      const header = await seasonHeader(admin.client, seasonId)
+      expect(header.inviteToken).toBeTruthy()
+
+      const { data } = await admin.client.rpc('season_invite', { p_token: header.inviteToken })
+      expect(data?.length).toBeGreaterThan(0)
+    })
+  })
+
+  describe('myEntryId', () => {
+    it('resolves the caller\'s own seat, and null for somebody without one', async () => {
+      expect(await myEntryId(member.client, seasonId)).toBe(squad[0])
+      expect(await myEntryId(stranger.client, seasonId)).toBeNull()
+    })
+  })
+
+  describe('playerNames', () => {
+    it('maps player ids to their display name', async () => {
+      const names = await playerNames(admin.client, [member.playerId])
+      expect(names.get(member.playerId)).toBeTruthy()
+    })
+
+    it('does not go to the database for an empty list', async () => {
+      expect(await playerNames(admin.client, [])).toEqual(new Map())
+    })
+  })
+
+  describe('publicRules', () => {
+    it('reads the rules with no session at all', async () => {
+      const rules = await publicRules(anonReadClient(), seasonId)
+      expect(rules?.name).toBeTruthy()
+      expect(rules?.config.squadSize).toBe(8)
+      expect(rules?.adminName).not.toBe('')
+    })
+
+    it('returns null for a link that leads nowhere', async () => {
+      const rules = await publicRules(anonReadClient(), '00000000-0000-0000-0000-000000000000')
+      expect(rules).toBeNull()
     })
   })
 

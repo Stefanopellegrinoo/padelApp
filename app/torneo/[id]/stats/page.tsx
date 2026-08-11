@@ -11,7 +11,7 @@ import {
   type PartnerRecord,
   type PlayedMatchday,
 } from '@/core'
-import { awardsOf, closedHistoryAll, entriesOf } from '@/db/read'
+import { awardsOf, closedHistoryAll, entriesOf, myEntryId } from '@/db/read'
 import { serverClient } from '@/db/server'
 
 interface PageProps {
@@ -204,11 +204,11 @@ export default async function StatsPage({ params, searchParams }: PageProps) {
 
   const supabase = await serverClient()
 
-  const [entries, history, awardsByMatchday, myPlayerIdResult] = await Promise.all([
+  const [entries, history, awardsByMatchday, viewerEntryId] = await Promise.all([
     entriesOf(supabase, seasonId),
     closedHistoryAll(supabase, seasonId),
     awardsOf(supabase, seasonId),
-    supabase.rpc('my_player_id'),
+    myEntryId(supabase, seasonId),
   ])
 
   if (history.length < MIN_CLOSED_MATCHDAYS_FOR_STATS) {
@@ -218,10 +218,6 @@ export default async function StatsPage({ params, searchParams }: PageProps) {
   const nameOf: NameOf = new Map(entries.map((entry) => [entry.id, entry.displayName]))
   const squad: EntryId[] = entries.filter((entry) => entry.kind === 'SQUAD').map((entry) => entry.id)
   const squadSet = new Set(squad)
-
-  const myPlayerId = myPlayerIdResult.data ?? null
-  const viewerEntryId =
-    myPlayerId === null ? null : (entries.find((entry) => entry.playerId === myPlayerId)?.id ?? null)
 
   // ── Del torneo ──────────────────────────────────────────────────────────
   const totalMatches = history.reduce(

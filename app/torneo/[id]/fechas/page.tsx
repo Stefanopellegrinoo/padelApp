@@ -9,6 +9,9 @@ import {
   type MatchdaySummary,
 } from '@/db/read'
 import { serverClient } from '@/db/server'
+import { matchdayDay } from '@/app/format'
+import { AbrirFecha } from './abrir'
+import { ArmarMasters } from './[n]/masters'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -17,24 +20,6 @@ interface PageProps {
 interface ChampionInfo {
   names: string
   record: string
-}
-
-/**
- * "jue 13 ago", sin punto tras el día de semana ni el mes. `playedOn` es una
- * columna `date` sin hora: arma el `Date` con componentes locales en vez de
- * parsear el ISO directo, porque `new Date('2026-08-13')` es medianoche UTC y
- * en un server en huso horario negativo formatea el día anterior.
- */
-function formatMatchdayDate(iso: string): string {
-  const [year, month, day] = iso.split('-').map(Number)
-  const date = new Date(year ?? 0, (month ?? 1) - 1, day ?? 1)
-  const parts = new Intl.DateTimeFormat('es-AR', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-  }).formatToParts(date)
-  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? ''
-  return `${get('weekday')} ${get('day')} ${get('month')}`
 }
 
 /**
@@ -97,6 +82,7 @@ export default async function FechasPage({ params }: PageProps) {
   // A la vez sólo puede haber una fecha regular sin cerrar (constraint de base),
   // así que "la que está en juego" es a lo sumo una.
   const openMatchday = regularMatchdays.find((matchday) => matchday.status === 'OPEN') ?? null
+  const mastersMatchday = allMatchdays.find((matchday) => matchday.kind === 'MASTERS') ?? null
 
   const [closedDetails, openDetail] = await Promise.all([
     Promise.all(closedMatchdays.map((matchday) => matchdayDetail(supabase, matchday.id))),
@@ -124,8 +110,22 @@ export default async function FechasPage({ params }: PageProps) {
 
   const remainingForMasters = Math.max(0, header.regularMatchdays - closedMatchdays.length)
 
+  // El CTA de abrir aparece sólo si soy admin Y no hay ninguna fecha sin cerrar.
+  // La segunda condición no es cosmética: `matchdays_one_live`
+  // (0001_schema.sql:48) es un índice único sobre `season_id where status <>
+  // 'CLOSED'`, así que el insert rebota con un 23505 y `createMatchday` lo
+  // traduce a "Ya hay una fecha sin cerrar en esta temporada.". Un botón que
+  // siempre falla es peor que no tener botón. Cuenta sobre `allMatchdays` y no
+  // sobre las regulares, porque el índice tampoco distingue el Masters.
+  const hasLiveMatchday = allMatchdays.some((matchday) => matchday.status !== 'CLOSED')
+  // El mismo `coalesce(max(number), 0) + 1` que hace `createMatchday`: si el
+  // botón dice "Abrir fecha 7" y la base crea la 8, la app queda mintiendo.
+  const nextNumber = Math.max(0, ...allMatchdays.map((matchday) => matchday.number)) + 1
+
   return (
     <div className="flex flex-col gap-3 pt-3">
+      {header.isAdmin && !hasLiveMatchday && <AbrirFecha seasonId={seasonId} number={nextNumber} />}
+
       <header className="flex flex-col gap-[3px]">
         <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
           {header.regularMatchdays} fechas · {closedMatchdays.length} jugadas
@@ -163,24 +163,42 @@ export default async function FechasPage({ params }: PageProps) {
           const played = matchday.status === 'CLOSED'
           const inProgress = matchday.status === 'OPEN'
           const champion = played ? championOf(matchday) : null
+
+          // La fecha viva —armándose o en juego— es la única sobre la que hay
+          // algo que hacer, así que va en `accent`, que es el fondo de bloque
+          // del handoff. Antes la de armado salía con `opacity: .62`: la que
+          // había que tocar era la más apagada de la lista, y después de abrir
+          // una fecha el CTA de arriba desaparece, así que no quedaba UN solo
+          // elemento en acento y no se sabía a dónde ir.
+          const live = !played
           // `ok-bg`/`up` y no `live-bg`/`live`: en el handoff `live` es el color de
           // error —borde de input inválido, bloques que impiden continuar, cerrar
           // sesión— y una fecha jugándose no es un problema. El par afirmativo es el
           // que usan todos los chips activos del diseño: "Repiten", "Viene",
           // "Defensora", "Sos vos".
-          const tagClass = played ? 'bg-chip text-muted' : inProgress ? 'bg-ok-bg text-up' : 'text-muted'
-          const tagLabel = played ? 'Jugada' : inProgress ? 'En juego' : 'Por jugarse'
+          const tagClass = live
+            ? 'bg-accent-text text-accent'
+            : played
+              ? 'bg-chip text-muted'
+              : 'text-muted'
+          const tagLabel = played ? 'Jugada' : inProgress ? 'En juego' : 'Armando'
 
           return (
             <Link
               key={matchday.id}
               href={`/torneo/${seasonId}/fechas/${matchday.number}`}
-              className={`block rounded-[14px] border border-line bg-surface p-[14px] ${matchday.status === 'DRAFT' ? 'opacity-[0.62]' : ''}`}
+              className={`block rounded-[14px] p-[14px] ${
+                live ? 'bg-accent text-accent-text' : 'border border-line bg-surface'
+              }`}
             >
               <div className="flex items-center justify-between gap-2">
-                <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
+                <p
+                  className={`text-[10.5px] font-extrabold uppercase tracking-[.14em] ${
+                    live ? 'opacity-75' : 'text-muted'
+                  }`}
+                >
                   Fecha {matchday.number}
-                  {matchday.playedOn !== null ? ` · ${formatMatchdayDate(matchday.playedOn)}` : ''}
+                  {matchday.playedOn !== null ? ` · ${matchdayDay(matchday.playedOn)}` : ''}
                 </p>
                 <span className={`shrink-0 rounded-full px-[10px] py-[6px] text-[10.5px] font-extrabold ${tagClass}`}>
                   {tagLabel}
@@ -215,9 +233,24 @@ export default async function FechasPage({ params }: PageProps) {
           Se juega con los {MASTERS_SIZE} primeros de la tabla al terminar las {header.regularMatchdays}{' '}
           fechas. Faltan {remainingForMasters}.
         </p>
-        <span className="mt-3 inline-block rounded-full bg-chip px-[10px] py-[6px] text-[10.5px] font-extrabold text-muted">
-          Bloqueado
-        </span>
+
+        {/* Lo único que cambia del bloque: cuando ya no falta ninguna fecha
+            regular y soy admin, el chip "Bloqueado" deja lugar al CTA. Si el
+            Masters ya existe, la fila lo enlaza como cualquier otra fecha. */}
+        {mastersMatchday !== null ? (
+          <Link
+            href={`/torneo/${seasonId}/fechas/${mastersMatchday.number}`}
+            className="mt-3 inline-block rounded-full bg-ok-bg px-[10px] py-[6px] text-[10.5px] font-extrabold text-up"
+          >
+            {mastersMatchday.status === 'CLOSED' ? 'Jugado' : 'En juego'}
+          </Link>
+        ) : header.isAdmin && remainingForMasters === 0 && !hasLiveMatchday ? (
+          <ArmarMasters seasonId={seasonId} />
+        ) : (
+          <span className="mt-3 inline-block rounded-full bg-chip px-[10px] py-[6px] text-[10.5px] font-extrabold text-muted">
+            Bloqueado
+          </span>
+        )}
       </div>
     </div>
   )

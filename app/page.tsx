@@ -9,12 +9,11 @@ const BULLETS = [
 ]
 
 /**
- * Quien cae acá logueado ya pasó por `signIn`/`signUp`: sólo llega con más de
- * una temporada (no hay pantalla propia para elegir — Plan 4) o con ninguna.
- * En los dos casos sigue siendo cierto que puede querer crear un torneo, así
- * que ese CTA no cambia. Lo único que se vuelve falso es "Ya tengo cuenta": ya
- * entró, ofrecerle loguearse de nuevo no tiene sentido. Se cambia por
- * "Cerrar sesión", la única copy del handoff para esa acción.
+ * Quien cae acá logueado ya tiene a dónde ir —Mis torneos—, así que el CTA
+ * principal deja de ser "Crear mi torneo" y pasa a llevarlo ahí: crear uno es
+ * un botón de esa pantalla. Lo único que se vuelve falso es "Ya tengo cuenta":
+ * ya entró. Se cambia por "Cerrar sesión", la única copy del handoff para esa
+ * acción.
  */
 export default async function HomePage() {
   const supabase = await serverClient()
@@ -52,10 +51,10 @@ export default async function HomePage() {
 
       <div className="flex flex-col gap-[10px]">
         <Link
-          href="/registro"
+          href={user === null ? '/registro' : '/torneos'}
           className="rounded-field bg-accent p-4 text-center font-extrabold text-accent-text"
         >
-          Crear mi torneo
+          {user === null ? 'Crear mi torneo' : 'Mis torneos'}
         </Link>
         {user === null ? (
           <Link

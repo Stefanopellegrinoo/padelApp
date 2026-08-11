@@ -25,9 +25,48 @@ export async function middleware(request: NextRequest) {
 
   // Refresca el token vencido y reescribe la cookie. Sin esta llamada, la
   // sesión se muere sola en cuanto expira el access token.
-  await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (user === null && isPrivateTournamentPath(request.nextUrl.pathname)) {
+    const login = request.nextUrl.clone()
+    login.pathname = '/login'
+    login.search = ''
+    login.searchParams.set('next', request.nextUrl.pathname)
+
+    // Las cookies que `setAll` acaba de escribir viven en `response`, no en la
+    // request: si se devuelve un redirect nuevo y pelado, se pierden. Acá casi
+    // siempre no hay ninguna —sin usuario no hubo refresco— pero un refresh
+    // token vencido SÍ deja cookies de limpieza, y perderlas deja al navegador
+    // reintentando con una sesión muerta en cada navegación.
+    const redirect = NextResponse.redirect(login)
+    for (const cookie of response.cookies.getAll()) redirect.cookies.set(cookie)
+    return redirect
+  }
 
   return response
+}
+
+/**
+ * Las pantallas del torneo son privadas y las frena RLS, que sin sesión no
+ * devuelve una fila y deja a `seasonHeader` tirando `EdgeError`. Eso, sin nadie
+ * que lo agarre, es la página blanca de Next en inglés — y el link del torneo
+ * es justo el que alguien pega en el grupo.
+ *
+ * La excepción es Reglas, que es pública a propósito (`ui-screens.md` §11): se
+ * comparte por link y se lee sin cuenta. Va por `season_public_rules`, que no
+ * necesita sesión.
+ *
+ * `/torneos` NO entra acá: ya resuelve el caso sin sesión con su estado vacío y
+ * su link "Entrar".
+ */
+function isPrivateTournamentPath(pathname: string): boolean {
+  // Sin la barra final: un link pegado como `/torneo/{id}/reglas/` es el mismo
+  // link, y mandar al login una página pública por un caracter sería peor que
+  // no haber hecho nada.
+  const path = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname
+  return path.startsWith('/torneo/') && !path.endsWith('/reglas')
 }
 
 export const config = {

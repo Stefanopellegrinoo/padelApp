@@ -2,7 +2,10 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 import {
   computeAwards,
+  computeRanking,
   computeStandings,
+  mastersChampion,
+  mastersQualifiers,
   previousContext,
   samePair,
   snapshotForMatchday,
@@ -11,27 +14,18 @@ import {
   type PairStanding,
   type SeasonConfig,
 } from '@/core'
-import { entriesOf, matchdayDetail, matchdaysOf, seasonHeader } from '@/db/read'
+import { attendancesOf, entriesOf, matchdayDetail, matchdaysOf, pairLocksOf, seasonHeader } from '@/db/read'
 import { awardsBefore, closedHistory } from '@/db/season'
 import { serverClient } from '@/db/server'
 import { EdgeError } from '@/db/errors'
+import { matchdayFull } from '@/app/format'
 import { Rondas, type RoundMatchVM, type RoundVM } from './rondas'
+import { Armado, type DraftPairVM, type GuestPairVM, type GuestVM, type SeatVM } from './armado'
+import { CierreFecha } from './carga'
+import { MastersDraft, type QualifierVM } from './masters'
 
 interface PageProps {
   params: Promise<{ id: string; n: string }>
-}
-
-/** `playedOn` es `date` sin hora: se arma con componentes locales para no correrse un día. */
-function formatMatchdayFull(iso: string): string {
-  const [year, month, day] = iso.split('-').map(Number)
-  const date = new Date(year ?? 0, (month ?? 1) - 1, day ?? 1)
-  const parts = new Intl.DateTimeFormat('es-AR', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'short',
-  }).formatToParts(date)
-  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? ''
-  return `${get('weekday')} ${get('day')} ${get('month')}`
 }
 
 function pairKey(pair: Pair): string {
@@ -120,14 +114,135 @@ export default async function FechaDetailPage({ params }: PageProps) {
     matchday.status === 'DRAFT'
       ? 'Armando · sólo vos la ves'
       : matchday.status === 'OPEN'
-        ? `En juego${matchday.playedOn !== null ? ` · ${formatMatchdayFull(matchday.playedOn)}` : ''}`
-        : `Cerrada${matchday.playedOn !== null ? ` · ${formatMatchdayFull(matchday.playedOn)}` : ''}`
+        ? `En juego${matchday.playedOn !== null ? ` · ${matchdayFull(matchday.playedOn)}` : ''}`
+        : `Cerrada${matchday.playedOn !== null ? ` · ${matchdayFull(matchday.playedOn)}` : ''}`
 
   let body: ReactNode = (
     <div className="rounded-card bg-chip p-4 text-center text-[13px] font-[550] text-muted">
       Se está armando. Todavía no hay parejas ni partidos para mostrar.
     </div>
   )
+
+  // El Masters es una fecha más y por eso no tiene ruta propia (decisión
+  // registrada 5): se juega acá. Lo que cambia son tres cosas y ninguna más —
+  // el título, el armado (4 clasificados en vez de asistencias), y la tabla de
+  // la fecha cerrada, que deja lugar al campeón del año.
+  const isMasters = matchday.kind === 'MASTERS'
+
+  if (isMasters && matchday.status === 'DRAFT' && header.isAdmin) {
+    const seedOrder = entries
+      .filter((entry) => entry.kind === 'SQUAD')
+      .sort((a, b) => a.seedPosition - b.seedPosition)
+      .map((entry) => entry.id)
+    const [awardsByMatchday, detail] = await Promise.all([
+      awardsBefore(supabase, seasonId, matchdayNumber),
+      matchdayDetail(supabase, matchday.id),
+    ])
+    const snapshot = snapshotForMatchday(matchdayNumber, seedOrder, awardsByMatchday, header.config)
+    const ranking = computeRanking(awardsByMatchday, seedOrder, header.config, snapshot)
+
+    const qualifiers: QualifierVM[] = mastersQualifiers(ranking).map((entryId) => ({
+      entryId,
+      name: nameOf.get(entryId) ?? '?',
+      points: ranking.find((row) => row.entryId === entryId)?.points ?? 0,
+    }))
+
+    body = (
+      <MastersDraft
+        seasonId={seasonId}
+        matchdayId={matchday.id}
+        matchdayNumber={matchday.number}
+        qualifiers={qualifiers}
+        generated={detail.matches.length > 0}
+      />
+    )
+  }
+
+  // El armado es del admin y de nadie más: el kicker dice "sólo vos la ves" y
+  // `attendances_write` no deja tildar a nadie que no sea admin. Un jugador que
+  // llegue a esta URL ve la tarjeta de arriba, que es la verdad para él.
+  if (!isMasters && matchday.status === 'DRAFT' && header.isAdmin) {
+    const [attendances, detail, locks, lastHistory, beforeLastHistory] = await Promise.all([
+      attendancesOf(supabase, matchday.id),
+      matchdayDetail(supabase, matchday.id),
+      pairLocksOf(supabase, matchday.id),
+      closedHistory(supabase, seasonId, matchdayNumber - 1),
+      closedHistory(supabase, seasonId, matchdayNumber - 2),
+    ])
+
+    const { defenders, defendersAlreadyRepeated } = previousContext(lastHistory, beforeLastHistory)
+    const effectiveDefenders = defenders !== null && !defendersAlreadyRepeated ? defenders : null
+
+    // Sin fila de asistencia es "viene": el admin arma la fecha con todos y
+    // descuenta a los que avisaron. `seedAttendances` —que corre en cada action,
+    // nunca al dibujar— hace que la base opine lo mismo.
+    const seats: SeatVM[] = entries
+      .filter((entry) => entry.kind === 'SQUAD')
+      .sort((a, b) => a.seedPosition - b.seedPosition)
+      .map((entry) => ({
+        entryId: entry.id,
+        name: entry.displayName,
+        playing: attendances.get(entry.id) !== 'ABSENT',
+      }))
+
+    // `entriesOf` trae los invitados de TODAS las fechas de la temporada, por
+    // eso el filtro por `matchdayId`.
+    //
+    // Los invitados de una fecha son de dos clases, y la pantalla las trata
+    // distinto porque el campeonato las trata distinto: los que están trabados
+    // con otro invitado son una **pareja invitada** —juegan de amistoso y no
+    // cobran ninguno de los dos— y el resto son **sueltos**, que juegan con
+    // alguien del torneo y le hacen cobrar a su compañero. Como máximo hay un
+    // suelto: es el que aparece cuando el plantel da impar.
+    const guestEntries = entries
+      .filter((entry) => entry.kind === 'GUEST' && entry.matchdayId === matchday.id)
+      .sort((a, b) => a.seedPosition - b.seedPosition)
+    const guestById = new Map(guestEntries.map((entry) => [entry.id, entry]))
+
+    const guestPairs: GuestPairVM[] = []
+    const inGuestPair = new Set<string>()
+    for (const lock of locks) {
+      const a = guestById.get(lock.a)
+      const b = guestById.get(lock.b)
+      if (a === undefined || b === undefined) continue
+      guestPairs.push({
+        lockId: lock.id,
+        a: { entryId: a.id, name: a.displayName },
+        b: { entryId: b.id, name: b.displayName },
+      })
+      inGuestPair.add(a.id).add(b.id)
+    }
+
+    const looseGuests: GuestVM[] = guestEntries
+      .filter((entry) => !inGuestPair.has(entry.id))
+      .map((entry) => {
+        const lock = locks.find((candidate) => candidate.a === entry.id || candidate.b === entry.id)
+        return {
+          entryId: entry.id,
+          name: entry.displayName,
+          partnerId: lock === undefined ? null : lock.a === entry.id ? lock.b : lock.a,
+        }
+      })
+
+    const draftPairs: DraftPairVM[] = detail.pairs.map((pair) => ({
+      key: pairKey(pair),
+      names: pairName(pair),
+      defending: effectiveDefenders !== null && samePair(pair, effectiveDefenders),
+      withGuest: detail.guestIds.includes(pair.a) || detail.guestIds.includes(pair.b),
+    }))
+
+    body = (
+      <Armado
+        seasonId={seasonId}
+        matchdayId={matchday.id}
+        matchdayNumber={matchday.number}
+        seats={seats}
+        looseGuests={looseGuests}
+        guestPairs={guestPairs}
+        pairs={draftPairs}
+      />
+    )
+  }
 
   if (matchday.status !== 'DRAFT') {
     const status = matchday.status
@@ -151,10 +266,42 @@ export default async function FechaDetailPage({ params }: PageProps) {
     const effectiveDefenders = defenders !== null && !defendersAlreadyRepeated ? defenders : null
     const isDefendingPair = (pair: Pair) => effectiveDefenders !== null && samePair(pair, effectiveDefenders)
 
+    // El Masters no reparte puntos, así que tampoco se calculan: `computeAwards`
+    // devolvería un reparto que no existe en `awards` y que nadie escribió.
     const pointsByEntry =
-      status === 'CLOSED'
+      status === 'CLOSED' && !isMasters
         ? new Map(computeAwards(standings, config, detail.guestIds).map((award) => [award.entryId, award.points]))
         : new Map<string, number>()
+
+    // El campeón del año. Los partidos ganados por jugador salen de `standings`
+    // —cada pareja del Masters juega una vez, así que sumar las tres parejas de
+    // alguien es su marca— y no de una segunda cuenta propia: dos formas de
+    // decidir quién ganó un partido es el bug que ningún test agarra.
+    let champion: { name: string; tiebreak: string | null } | null = null
+    if (isMasters && status === 'CLOSED') {
+      const ranking = computeRanking(awardsByMatchday, seedOrder, config, snapshot)
+      const four = mastersQualifiers(ranking)
+      const winsOf = (entryId: string) =>
+        standings
+          .filter((row) => row.pair.a === entryId || row.pair.b === entryId)
+          .reduce((total, row) => total + row.won, 0)
+
+      const championId = mastersChampion(four, detail.matches)
+      const wins = winsOf(championId)
+      // El formato sólo admite dos desenlaces (spec 2.7): campeón limpio con 3
+      // ganados, o triple empate en 2 con uno en 0 — y el empate pasa la mitad
+      // de las veces. Un campeón con 2 victorias igual que otros dos, sin una
+      // línea que diga por qué es él, se lee como un bug.
+      const tied = four.filter((entryId) => winsOf(entryId) === wins)
+      const others = tied.filter((entryId) => entryId !== championId).map((id) => nameOf.get(id) ?? '?')
+      champion = {
+        name: nameOf.get(championId) ?? '?',
+        tiebreak:
+          others.length === 0
+            ? null
+            : `${nameOf.get(championId) ?? '?'} y ${others.join(' y ')} ganaron ${wins} partidos cada uno. Corta el ranking del año.`,
+      }
+    }
 
     const roundNumbers = [...new Set(detail.matches.map((match) => match.round))].sort((a, b) => a - b)
     const totalRounds = roundNumbers.length
@@ -165,7 +312,13 @@ export default async function FechaDetailPage({ params }: PageProps) {
         playingKeys.add(pairKey(match.pairA))
         playingKeys.add(pairKey(match.pairB))
       }
-      const restingPair = detail.pairs.find((pair) => !playingKeys.has(pairKey(pair)))
+      // La pareja libre existe en una fecha de 5 parejas, donde una descansa por
+      // ronda. En el Masters no descansa nadie: son 6 "parejas" que son las tres
+      // combinaciones de los mismos 4 jugadores, y cada ronda juega una sola,
+      // así que "la que no juega" son cuatro y nombrar una es mentir.
+      const restingPair = isMasters
+        ? undefined
+        : detail.pairs.find((pair) => !playingKeys.has(pairKey(pair)))
       const loadedCount = roundMatches.filter((match) => match.sets.length > 0).length
 
       const matches: RoundMatchVM[] = roundMatches.map((match, index) => {
@@ -173,6 +326,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
         const winner = matchWinner(match)
         return {
           key: `${roundNumber}-${index}`,
+          matchId: match.id,
           pairAName: pairName(match.pairA),
           pairBName: pairName(match.pairB),
           scoreA: match.sets.length === 0 ? '–' : String(gamesA),
@@ -190,6 +344,29 @@ export default async function FechaDetailPage({ params }: PageProps) {
         matches,
       }
     })
+
+    // Cargar, cerrar y reabrir son de quien organiza. La fecha cerrada no se
+    // carga más —el handoff §9c: "sin botones de carga"—, y sólo se reabre la
+    // última cerrada: las parejas de las que siguen salieron de esta tabla.
+    // `reopen_matchday` lo vuelve a verificar y su mensaje es el que se muestra.
+    const cargaContext =
+      header.isAdmin && status === 'OPEN'
+        ? { seasonId, matchdayId: matchday.id, matchdayNumber: matchday.number, format: config.matchFormat }
+        : null
+    const remainingMatches = detail.matches.filter((match) => match.sets.length === 0).length
+    // "Reabrir fecha" aparece sólo donde `reopen_matchday` va a decir que sí, y
+    // eso son DOS de sus guardas, no una:
+    //   · no hay una fecha CLOSED posterior (0005_matchday_moves.sql:180-185)
+    //   · no hay otra fecha EN JUEGO (0005:174-179) — una fecha OPEN nunca se
+    //     borra sola, así que ahí el botón falla siempre, y "cerré la 2, abrí
+    //     la 3, vuelvo a mirar la 2" es el camino normal, no un borde.
+    // La tercera guarda —la fecha siguiente en DRAFT— se deja pasar a propósito:
+    // si está vacía, `reopen_matchday` la borra y sigue, que es exactamente el
+    // caso para el que se escribió; si tiene datos, su mensaje es el correcto.
+    const isLastClosed =
+      !matchdays.some(
+        (candidate) => candidate.status === 'CLOSED' && candidate.number > matchday.number,
+      ) && !matchdays.some((candidate) => candidate.status === 'OPEN' && candidate.id !== matchday.id)
 
     const hasGuest = (pair: Pair) => detail.guestIds.includes(pair.a) || detail.guestIds.includes(pair.b)
     const anyGuestInTable = status === 'CLOSED' && standings.some((row) => hasGuest(row.pair))
@@ -214,8 +391,21 @@ export default async function FechaDetailPage({ params }: PageProps) {
           })}
         </div>
 
-        {totalRounds > 0 && <Rondas rounds={rounds} totalRounds={totalRounds} />}
+        {totalRounds > 0 && <Rondas rounds={rounds} totalRounds={totalRounds} carga={cargaContext} />}
 
+        {champion !== null ? (
+          <div className="flex flex-col gap-2">
+            <div className="rounded-card bg-accent p-5 text-center text-accent-text">
+              <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] opacity-75">
+                Campeón del año
+              </p>
+              <p className="mt-1 text-[26px] font-extrabold tracking-[-.03em]">{champion.name}</p>
+            </div>
+            {champion.tiebreak !== null && (
+              <p className="text-[12.5px] font-[550] text-muted">{champion.tiebreak}</p>
+            )}
+          </div>
+        ) : (
         <div className="flex flex-col gap-2">
           <p className="text-[15px] font-extrabold tracking-[-.02em]">Tabla de la fecha</p>
           <div className="overflow-hidden rounded-[14px] border border-line">
@@ -227,12 +417,18 @@ export default async function FechaDetailPage({ params }: PageProps) {
             </div>
             {standings.map((row, index) => {
               const guestInRow = status === 'CLOSED' && hasGuest(row.pair)
+              // La columna son "los puntos que se llevó cada jugador"
+              // (`ui-screens.md` §9), y en la pareja del invitado los dos no se
+              // llevan lo mismo: el invitado 0 y su compañero lo que le tocó.
+              // El `??` resuelve eso solo, porque `computeAwards` no le escribe
+              // award al invitado. Antes esta fila mostraba `0` fijo, y con eso
+              // la pareja que ganaba la fecha 3-0 aparecía sin puntos abajo de
+              // otra con un partido ganado — contradiciendo la nota que está dos
+              // líneas más abajo, "su compañero sí". Lo encontró la Task 14.
               const pts =
                 status === 'OPEN'
                   ? '—'
-                  : guestInRow
-                    ? '0'
-                    : String(pointsByEntry.get(row.pair.a) ?? pointsByEntry.get(row.pair.b) ?? 0)
+                  : String(pointsByEntry.get(row.pair.a) ?? pointsByEntry.get(row.pair.b) ?? 0)
               const diff = row.gamesDiff
               return (
                 <div
@@ -274,6 +470,21 @@ export default async function FechaDetailPage({ params }: PageProps) {
 
           {note !== null && <p className="text-[12.5px] font-[550] text-muted">{note}</p>}
         </div>
+        )}
+
+        {header.isAdmin && (
+          <CierreFecha
+            context={{
+              seasonId,
+              matchdayId: matchday.id,
+              matchdayNumber: matchday.number,
+              format: config.matchFormat,
+            }}
+            status={status}
+            remaining={remainingMatches}
+            canReopen={isLastClosed}
+          />
+        )}
       </div>
     )
   }
@@ -285,7 +496,9 @@ export default async function FechaDetailPage({ params }: PageProps) {
           ← Volver
         </Link>
         <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">{kicker}</p>
-        <h1 className="text-[26px] font-extrabold tracking-[-.03em]">Fecha {matchday.number}</h1>
+        <h1 className="text-[26px] font-extrabold tracking-[-.03em]">
+          {isMasters ? 'Masters' : `Fecha ${matchday.number}`}
+        </h1>
       </header>
 
       {body}

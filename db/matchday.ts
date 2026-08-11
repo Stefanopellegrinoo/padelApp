@@ -4,6 +4,8 @@ import {
   computeAwards,
   computeRanking,
   computeStandings,
+  mastersFixture,
+  mastersQualifiers,
   previousContext,
   snapshotForMatchday,
   type Award,
@@ -186,6 +188,153 @@ export async function setAttendance(
   if (error !== null) throw new EdgeError(`No se pudo guardar el presentismo: ${error.message}`)
 }
 
+/**
+ * El jugador marca su propia asistencia, desde la Tabla.
+ *
+ * No es `setAttendance` con otro nombre: aquélla la corre el admin y la deja
+ * pasar `attendances_write`, que pide `is_season_admin`. Un jugador no tiene ese
+ * permiso sobre ninguna fila, ni la suya, así que va por `set_my_attendance`
+ * (0007), que resuelve cuál es su asiento del lado de la base — nunca lo recibe
+ * de quien llama.
+ */
+export async function setMyAttendance(
+  supabase: Client,
+  matchdayId: string,
+  status: 'PLAYING' | 'ABSENT',
+): Promise<void> {
+  const { error } = await supabase.rpc('set_my_attendance', {
+    p_matchday: matchdayId,
+    p_status: status,
+  })
+  if (error !== null) throw new EdgeError(error.message)
+}
+
+/**
+ * Escribe PLAYING para todo asiento del plantel que todavía no tenga fila.
+ *
+ * Existe por una asimetría que muerde: `playingEntryIds` —lo que arma
+ * `present`— cuenta filas PLAYING EXISTENTES, así que un plantel sin filas da
+ * `present` vacío. La pantalla del armado dibuja "sin fila = viene", y ésta es
+ * la función que hace que la base opine lo mismo.
+ *
+ * Idempotente, y se llama al principio de cada acción del armado. Nunca al
+ * renderizar: un Server Component que escribe al dibujarse es un GET con
+ * efectos.
+ */
+export async function seedAttendances(supabase: Client, matchdayId: string): Promise<void> {
+  const matchday = await requireMatchday(supabase, matchdayId)
+  if (matchday.status !== 'DRAFT') {
+    throw new EdgeError('El presentismo sólo se toca con la fecha en armado.')
+  }
+
+  const { data: squad, error: squadError } = await supabase
+    .from('entries')
+    .select('id')
+    .eq('season_id', matchday.season_id)
+    .eq('kind', 'SQUAD')
+  if (squadError) throw new EdgeError(`No se pudo leer el plantel: ${squadError.message}`)
+
+  const { data: existing, error: existingError } = await supabase
+    .from('attendances')
+    .select('entry_id')
+    .eq('matchday_id', matchdayId)
+  if (existingError) {
+    throw new EdgeError(`No se pudo leer el presentismo: ${existingError.message}`)
+  }
+
+  const already = new Set((existing ?? []).map((row) => row.entry_id))
+  const missing = (squad ?? []).filter((entry) => !already.has(entry.id))
+  if (missing.length === 0) return
+
+  const { error } = await supabase.from('attendances').insert(
+    missing.map((entry) => ({
+      matchday_id: matchdayId,
+      entry_id: entry.id,
+      season_id: matchday.season_id,
+      status: 'PLAYING' as const,
+    })),
+  )
+  if (error !== null) throw new EdgeError(`No se pudo guardar el presentismo: ${error.message}`)
+}
+
+/**
+ * Borra las parejas sorteadas de una fecha en armado.
+ *
+ * Es el `generated: false` del handoff, escrito de verdad: cualquier cambio de
+ * quién viene invalida el sorteo. Sin esto, `openMatchday` rebota con "Cambió
+ * quién viene desde que armaste las parejas" y sacar un invitado que quedó
+ * adentro de una pareja falla con un 23503 que nadie puede leer.
+ */
+export async function clearPairs(supabase: Client, matchdayId: string): Promise<void> {
+  const matchday = await requireMatchday(supabase, matchdayId)
+  if (matchday.status !== 'DRAFT') {
+    throw new EdgeError('Las parejas sólo se rehacen con la fecha en armado.')
+  }
+  await deletePairs(supabase, matchdayId)
+}
+
+/** Le pone nombre al invitado. Sin esto la fecha no abre (spec 2.6). */
+export async function nameGuest(
+  supabase: Client,
+  entryId: string,
+  displayName: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from('entries')
+    .update({ display_name: displayName.trim() })
+    .eq('id', entryId)
+  if (error !== null) throw new EdgeError(`No se pudo guardar el nombre: ${error.message}`)
+}
+
+/** Saca un asiento de invitado. */
+export async function removeGuest(supabase: Client, entryId: string): Promise<void> {
+  const { error } = await supabase.from('entries').delete().eq('id', entryId)
+  if (error !== null) throw new EdgeError(`No se pudo sacar al invitado: ${error.message}`)
+}
+
+/**
+ * La regla del spec 2.6, escrita una sola vez: sólo se juega con número par, así
+ * que si los confirmados dan impar la app suma un lugar de invitado.
+ *
+ * Lo que NO hace, y es a propósito:
+ * - con dos o más invitados no toca nada. Eso es el equipo invitado que vino a
+ *   jugar junto, lo cargó alguien a mano y no es de esta función deshacerlo
+ * - con número par y un invitado YA NOMBRADO tampoco. Alguien lo puso a
+ *   propósito; sacarlo porque cambió un tilde es perder un dato cargado
+ */
+export async function syncGuestSeat(supabase: Client, matchdayId: string): Promise<void> {
+  const playing = await playingEntryIds(supabase, matchdayId)
+  const guests = await guestsOf(supabase, matchdayId)
+  const locks = await locksOf(supabase, matchdayId)
+  const isOdd = playing.length % 2 !== 0
+
+  // Sólo cuentan los invitados SUELTOS —los que van a jugar con alguien del
+  // torneo—, no los que ya están en una pareja invitada. Una pareja suma dos y
+  // no cambia la paridad, así que no tiene nada que ver con que falte uno:
+  // contarla dejaba una fecha de 7 + pareja en 9 y sin poder generarse.
+  const inGuestPair = new Set<string>()
+  const isGuest = new Set(guests.map((guest) => guest.entryId))
+  for (const lock of locks) {
+    if (isGuest.has(lock.a) && isGuest.has(lock.b)) {
+      inGuestPair.add(lock.a)
+      inGuestPair.add(lock.b)
+    }
+  }
+  const loose = guests.filter((guest) => !inGuestPair.has(guest.entryId))
+
+  if (isOdd && loose.length === 0) {
+    await clearPairs(supabase, matchdayId)
+    await addGuest(supabase, matchdayId, { displayName: '' })
+    return
+  }
+
+  const only = loose[0]
+  if (!isOdd && loose.length === 1 && only !== undefined && only.displayName.trim().length === 0) {
+    await clearPairs(supabase, matchdayId)
+    await removeGuest(supabase, only.entryId)
+  }
+}
+
 /** Agrega un asiento GUEST. `seed_position` correlativo entre los invitados de esta fecha; `displayName` puede ir vacío. */
 export async function addGuest(
   supabase: Client,
@@ -283,7 +432,83 @@ export async function generatePairs(supabase: Client, matchdayId: string): Promi
   await insertMatches(supabase, matches)
 }
 
+/**
+ * Arma la jornada del Masters: los 4 primeros del año, 6 parejas y 3 partidos.
+ *
+ * No pasa por `buildPairs` y no puede: el Masters tiene su propio fixture (spec
+ * 2.7), donde cada uno juega una vez con cada uno para separar a los dos que se
+ * pasaron el año ganando juntos y terminaron con los mismos puntos.
+ */
+export async function generateMastersPairs(supabase: Client, matchdayId: string): Promise<void> {
+  const matchday = await requireMatchday(supabase, matchdayId)
+  if (matchday.kind !== 'MASTERS') {
+    throw new EdgeError('Esta fecha no es el Masters.')
+  }
+  if (matchday.status !== 'DRAFT') {
+    throw new EdgeError('El Masters ya está armado.')
+  }
+
+  const config = await seasonConfig(supabase, matchday.season_id)
+  assertValidConfig(config)
+  const seedOrder = await squadSeedOrder(supabase, matchday.season_id)
+  const awardsByMatchday = await awardsBefore(supabase, matchday.season_id, matchday.number)
+  const snapshot = snapshotForMatchday(matchday.number, seedOrder, awardsByMatchday, config)
+
+  const ranking = computeRanking(awardsByMatchday, seedOrder, config, snapshot)
+  const fixture = mastersFixture(mastersQualifiers(ranking))
+
+  await deletePairs(supabase, matchdayId)
+
+  // Las 6 parejas van en el orden del fixture, y los partidos las nombran por
+  // índice: pareja 0 contra 1 en la ronda 1, 2 contra 3 en la 2, y así.
+  const pairs = fixture.flatMap((match) => [match.pairA, match.pairB])
+  const stored = await insertPairs(supabase, matchdayId, pairs)
+
+  const matches = fixture.map((_, index) => {
+    const pairA = stored[index * 2]
+    const pairB = stored[index * 2 + 1]
+    if (pairA === undefined || pairB === undefined) {
+      throw new Error(`Faltan parejas para el partido ${index + 1} del Masters. Esto es un bug.`)
+    }
+    return { matchday_id: matchdayId, round: index + 1, pair_a: pairA, pair_b: pairB }
+  })
+  await insertMatches(supabase, matches)
+}
+
+/** Crea la fecha del Masters. `kind` no está en el grant de columnas de `matchdays`, así que sólo la función de 0007 la puede crear. */
+export async function createMasters(
+  supabase: Client,
+  seasonId: string,
+  playedOn: string,
+): Promise<string> {
+  const { data, error } = await supabase.rpc('create_masters', {
+    p_season: seasonId,
+    p_played_on: playedOn,
+  })
+  if (error !== null) {
+    // `matchdays_one_masters` y `matchdays_one_live` levantan las dos un 23505,
+    // y el mensaje crudo de Postgres nombra un índice que nadie conoce.
+    if (error.code === '23505') {
+      throw new EdgeError('Ya hay un Masters, o una fecha sin cerrar en esta temporada.')
+    }
+    throw new EdgeError(error.message)
+  }
+  return data as unknown as string
+}
+
 export async function openMatchday(supabase: Client, matchdayId: string): Promise<void> {
+  // El Masters no tiene asistencias: son 4 clasificados, no de 8 a 12
+  // confirmados. `pairingContextFor` correría `assertMatchdaySize` sobre un
+  // `present` vacío y tiraría "Con 0 no hay fecha" en una jornada perfectamente
+  // armada. Lo único que hay que verificar acá ya lo verifica `open_matchday`:
+  // que existan parejas.
+  const masters = await requireMatchday(supabase, matchdayId)
+  if (masters.kind === 'MASTERS') {
+    const { error } = await supabase.rpc('open_matchday', { p_matchday: matchdayId })
+    if (error !== null) throw new EdgeError(error.message)
+    return
+  }
+
   const { input, guests } = await pairingContextFor(supabase, matchdayId)
   assertGuestsNamed(guests)
 
@@ -314,7 +539,7 @@ export async function closeMatchday(supabase: Client, matchdayId: string): Promi
   // el contexto del sorteo correría las validaciones de asistencia y de tamaño
   // sobre quién viene HOY en vez de sobre quiénes jugaron, y previousContext
   // podría tirar por un problema de la fecha anterior mientras cerrás ésta.
-  const { config, guests, snapshot } = await matchdayContextFor(supabase, matchdayId)
+  const { matchday, config, guests, snapshot } = await matchdayContextFor(supabase, matchdayId)
   const { pairs, matches } = await resultsOf(supabase, matchdayId)
 
   for (const match of matches) {
@@ -323,7 +548,14 @@ export async function closeMatchday(supabase: Client, matchdayId: string): Promi
   }
 
   const standings = computeStandings(pairs, matches, config, snapshot)
-  const awards = computeAwards(standings, config, guests.map((guest) => guest.entryId))
+  // El Masters define al campeón del año, no reparte puntos (spec 2.7), y
+  // `close_matchday` rechaza un `p_awards` no vacío cuando kind = 'MASTERS'.
+  // Sin esta rama el Masters no se puede cerrar: `computeAwards` devolvería seis
+  // premios y la función SQL los rebotaría.
+  const awards =
+    matchday.kind === 'MASTERS'
+      ? []
+      : computeAwards(standings, config, guests.map((guest) => guest.entryId))
 
   const { error } = await supabase.rpc('close_matchday', {
     p_matchday: matchdayId,

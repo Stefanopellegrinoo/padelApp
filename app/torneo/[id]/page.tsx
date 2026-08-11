@@ -3,41 +3,11 @@ import { MASTERS_SIZE, rankingWithMovement, snapshotForMatchday, type EntryId } 
 import { awardsOf, entriesOf, matchdaysOf, seasonHeader } from '@/db/read'
 import { seasonConfig } from '@/db/season'
 import { serverClient } from '@/db/server'
+import { initials, matchdayDay } from '@/app/format'
 import { Desempate, type StandingsRow, type TiebreakEntry } from './desempate'
 
 interface PageProps {
   params: Promise<{ id: string }>
-}
-
-const WEEKDAYS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb']
-const MONTHS = [
-  'ene',
-  'feb',
-  'mar',
-  'abr',
-  'may',
-  'jun',
-  'jul',
-  'ago',
-  'sep',
-  'oct',
-  'nov',
-  'dic',
-]
-
-/** `playedOn` es una fecha (`date`, sin hora) guardada `YYYY-MM-DD`: se arma en UTC para no correrse un día según el huso del servidor. */
-function formatMatchdayDay(playedOn: string): string {
-  const [year, month, day] = playedOn.split('-').map(Number)
-  if (year === undefined || month === undefined || day === undefined) return playedOn
-  const date = new Date(Date.UTC(year, month - 1, day))
-  return `${WEEKDAYS[date.getUTCDay()] ?? ''} ${day} ${MONTHS[month - 1] ?? ''}`
-}
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/)
-  const first = parts[0]?.[0] ?? ''
-  const last = parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? '') : ''
-  return (first + last).toUpperCase()
 }
 
 /**
@@ -163,7 +133,8 @@ export default async function TablaPage({ params }: PageProps) {
           <Link
             href={`/torneo/${seasonId}/ajustes`}
             aria-label="Ajustes"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-chip text-lg"
+            // 36px: el botón circular del header del marco común del handoff.
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-chip text-[18px]"
           >
             ⚙
           </Link>
@@ -177,7 +148,7 @@ export default async function TablaPage({ params }: PageProps) {
           </p>
           <p className="text-[21px] font-extrabold">
             Fecha {liveMatchday.number}
-            {liveMatchday.playedOn !== null ? ` · ${formatMatchdayDay(liveMatchday.playedOn)}` : ''}
+            {liveMatchday.playedOn !== null ? ` · ${matchdayDay(liveMatchday.playedOn)}` : ''}
           </p>
         </div>
       )}

@@ -11,6 +11,7 @@ import {
 } from '@/core'
 import { awardsOf, closedHistoryAll, entriesOf, seasonHeader } from '@/db/read'
 import { serverClient } from '@/db/server'
+import { initials } from '@/app/format'
 
 interface PageProps {
   params: Promise<{ id: string; entryId: string }>
@@ -20,13 +21,6 @@ interface MatchdayMark {
   number: number
   status: 'counted' | 'discarded' | 'absent'
   points: number | null
-}
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/)
-  const first = parts[0]?.[0] ?? ''
-  const last = parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? '') : ''
-  return (first + last).toUpperCase()
 }
 
 function formatSigned(value: number): string {

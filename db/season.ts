@@ -110,6 +110,103 @@ export async function closedHistory(
   }
 }
 
+export interface NewSeason {
+  name: string
+  /** Un nombre por asiento, en el orden que va a ser el orden inicial de desempate. */
+  squadNames: string[]
+  config: SeasonConfig
+}
+
+/**
+ * La temporada y su plantel, desde el wizard.
+ *
+ * Dos escrituras y no una transacción: PostgREST no las tiene, y una función
+ * SQL sólo para esto sería una migración para el camino feliz de una pantalla
+ * que se usa una vez por año. Si la segunda falla, se deshace la primera: una
+ * temporada sin asientos no se puede arreglar desde ninguna pantalla —Ajustes
+ * necesita al menos el plantel para dibujarse— y queda para siempre en la lista
+ * de Mis torneos.
+ *
+ * Los nombres vacíos NO se chequean acá: los rebota `entries_squad_named`, que
+ * es la misma regla escrita una sola vez y del lado que no se puede saltear. Lo
+ * único que hace este borde es traducir ese error a algo que se pueda leer.
+ *
+ * ponytail: el rollback es best-effort. Si el delete también falla, gana el
+ * error del insert, que es el que explica qué pasó.
+ */
+export async function createSeason(
+  supabase: Client,
+  { name, squadNames, config }: NewSeason,
+): Promise<{ seasonId: string; inviteToken: string }> {
+  assertValidConfig(config)
+
+  const trimmed = name.trim()
+  if (trimmed.length === 0) throw new EdgeError('El torneo necesita un nombre.')
+  if (squadNames.length !== config.squadSize) {
+    throw new EdgeError(
+      `El plantel tiene ${squadNames.length} nombres y la configuración dice ${config.squadSize}.`,
+    )
+  }
+
+  const { data: auth } = await supabase.auth.getUser()
+  const userId = auth.user?.id
+  if (userId === undefined) throw new EdgeError('Hay que entrar antes de crear un torneo.')
+
+  const { data: season, error: seasonError } = await supabase
+    .from('seasons')
+    .insert({ name: trimmed, config: config as unknown as Json, created_by: userId })
+    .select('id, invite_token')
+    .single()
+  if (seasonError !== null || season === null) {
+    throw new EdgeError(`No se pudo crear el torneo: ${seasonError?.message}`)
+  }
+
+  const { error: entriesError } = await supabase.from('entries').insert(
+    squadNames.map((seat, index) => ({
+      season_id: season.id,
+      display_name: seat.trim(),
+      kind: 'SQUAD' as const,
+      seed_position: index,
+    })),
+  )
+  if (entriesError !== null) {
+    await supabase.from('seasons').delete().eq('id', season.id)
+    throw new EdgeError(
+      entriesError.message.includes('entries_squad_named')
+        ? 'Falta un nombre del plantel.'
+        : `No se pudo cargar el plantel: ${entriesError.message}`,
+    )
+  }
+
+  return { seasonId: season.id, inviteToken: season.invite_token }
+}
+
+/** Cambia el nombre del torneo. Lo dice el paso 1 del wizard: "se puede cambiar después". */
+export async function renameSeason(
+  supabase: Client,
+  seasonId: string,
+  name: string,
+): Promise<void> {
+  const trimmed = name.trim()
+  if (trimmed.length === 0) throw new EdgeError('El torneo necesita un nombre.')
+
+  const { error } = await supabase.from('seasons').update({ name: trimmed }).eq('id', seasonId)
+  if (error !== null) throw new EdgeError(`No se pudo cambiar el nombre: ${error.message}`)
+}
+
+/** El texto libre del admin. Mueve el sello de última actualización, que la página de reglas muestra. */
+export async function updateSeasonRules(
+  supabase: Client,
+  seasonId: string,
+  text: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from('seasons')
+    .update({ rules_text: text, rules_updated_at: new Date().toISOString() })
+    .eq('id', seasonId)
+  if (error !== null) throw new EdgeError(`No se pudieron guardar las reglas: ${error.message}`)
+}
+
 /** The only writer in this plan: `assertValidConfig` runs before the update lands. */
 export async function updateSeasonConfig(
   supabase: Client,

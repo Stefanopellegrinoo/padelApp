@@ -22,6 +22,8 @@ export interface SeasonHeader {
   isAdmin: boolean
   /** The full config, for screens that need more than `regularMatchdays` — e.g. `narrateRules`. */
   config: SeasonConfig
+  /** The share link's token. Every participant can already read this column; the wizard and the settings screen show it. */
+  inviteToken: string
 }
 
 export interface EntryRow {
@@ -30,6 +32,36 @@ export interface EntryRow {
   kind: 'SQUAD' | 'GUEST'
   seedPosition: number
   playerId: string | null
+  /** Null for the squad. For a guest, the matchday they were invited to — without it there is no telling one matchday's guests from another's. */
+  matchdayId: string | null
+}
+
+/**
+ * A match as a screen that WRITES gets it: `MatchResult` plus the id.
+ *
+ * `saveResult` takes a match id and `core/` has no notion of one, so the read
+ * layer is where the two meet. It extends `MatchResult`, so everything that
+ * already consumes these as `MatchResult[]` — `computeStandings`,
+ * `mastersChampion`, the read-only screens — keeps working untouched.
+ */
+export interface MatchWithId extends MatchResult {
+  id: string
+}
+
+/** The five fields the rules page shows to somebody with no account. */
+export interface PublicRules {
+  name: string
+  config: SeasonConfig
+  text: string
+  updatedAt: string | null
+  adminName: string
+}
+
+/** A row of `pair_locks`: the same `{ a, b }` the draw uses, plus the id `unlockPair` deletes by. */
+export interface PairLockRow {
+  id: string
+  a: EntryId
+  b: EntryId
 }
 
 export interface MatchdaySummary {
@@ -43,7 +75,7 @@ export interface MatchdaySummary {
 export interface MatchdayDetail {
   matchday: MatchdaySummary
   pairs: Pair[]
-  matches: MatchResult[]
+  matches: MatchWithId[]
   guestIds: EntryId[]
 }
 
@@ -53,6 +85,7 @@ interface SeasonRow {
   status: string
   config: unknown
   created_by: string
+  invite_token: string
 }
 
 interface MatchdayRow {
@@ -79,6 +112,7 @@ function toSeasonHeader(row: SeasonRow, userId: string | null): SeasonHeader {
     regularMatchdays: config.regularMatchdays,
     isAdmin: row.created_by === userId,
     config,
+    inviteToken: row.invite_token,
   }
 }
 
@@ -92,7 +126,7 @@ function toMatchdaySummary(row: MatchdayRow): MatchdaySummary {
   }
 }
 
-const SEASON_HEADER_COLUMNS = 'id, name, status, config, created_by'
+const SEASON_HEADER_COLUMNS = 'id, name, status, config, created_by, invite_token'
 
 /** Every season where the caller has a seat — admin or squad. RLS does the filtering; this only shapes the rows. */
 export async function mySeasons(supabase: Client): Promise<SeasonHeader[]> {
@@ -160,7 +194,7 @@ export async function seasonRules(
 export async function entriesOf(supabase: Client, seasonId: string): Promise<EntryRow[]> {
   const { data, error } = await supabase
     .from('entries')
-    .select('id, display_name, kind, seed_position, player_id')
+    .select('id, display_name, kind, seed_position, player_id, matchday_id')
     .eq('season_id', seasonId)
   if (error) throw new EdgeError(`No se pudo leer el plantel: ${error.message}`)
   return (data ?? []).map((row) => ({
@@ -169,7 +203,102 @@ export async function entriesOf(supabase: Client, seasonId: string): Promise<Ent
     kind: row.kind as 'SQUAD' | 'GUEST',
     seedPosition: row.seed_position,
     playerId: row.player_id,
+    matchdayId: row.matchday_id,
   }))
+}
+
+/** Who ticked what on one matchday. A seat with no row is coming: the screens draw the default, and `seedAttendances` makes the database agree. */
+export async function attendancesOf(
+  supabase: Client,
+  matchdayId: string,
+): Promise<Map<EntryId, 'PLAYING' | 'ABSENT'>> {
+  const { data, error } = await supabase
+    .from('attendances')
+    .select('entry_id, status')
+    .eq('matchday_id', matchdayId)
+  if (error) throw new EdgeError(`No se pudo leer el presentismo: ${error.message}`)
+  return new Map((data ?? []).map((row) => [row.entry_id, row.status as 'PLAYING' | 'ABSENT']))
+}
+
+/**
+ * The pairs the admin settled by hand on one matchday, WITH their row id.
+ *
+ * `locksOf` in `db/matchday.ts` answers the same question for the draw and
+ * drops the id on purpose: a `core/` pair is `{ a, b }` and nothing else. The
+ * DRAFT screen does need it, because `unlockPair` deletes by id and the
+ * guest's partner selector has to be able to change its mind.
+ */
+export async function pairLocksOf(supabase: Client, matchdayId: string): Promise<PairLockRow[]> {
+  const { data, error } = await supabase
+    .from('pair_locks')
+    .select('id, entry_a, entry_b')
+    .eq('matchday_id', matchdayId)
+    .order('id', { ascending: true })
+  if (error) throw new EdgeError(`No se pudieron leer las parejas fijas: ${error.message}`)
+  return (data ?? []).map((row) => ({ id: row.id, a: row.entry_a, b: row.entry_b }))
+}
+
+/**
+ * Which seat of this season belongs to the caller, or null.
+ *
+ * It takes two round trips because it has to: `players.user_id` has no SELECT
+ * granted to `authenticated` (0002_rls.sql), on purpose, so that nobody can
+ * correlate `auth.uid()` with a player from the client. `my_player_id()`
+ * (0006) is the only way across, and it is a `security definer` that answers
+ * only about the caller.
+ */
+export async function myEntryId(supabase: Client, seasonId: string): Promise<EntryId | null> {
+  const { data: playerId, error: playerError } = await supabase.rpc('my_player_id')
+  if (playerError !== null || playerId === null) return null
+
+  const { data, error } = await supabase
+    .from('entries')
+    .select('id')
+    .eq('season_id', seasonId)
+    .eq('player_id', playerId)
+    .maybeSingle()
+  if (error) throw new EdgeError(`No se pudo leer tu asiento: ${error.message}`)
+  return data?.id ?? null
+}
+
+/** Display names by player id. `players` exposes only (id, display_name, created_at) to authenticated — that is all this needs. */
+export async function playerNames(
+  supabase: Client,
+  playerIds: readonly string[],
+): Promise<Map<string, string>> {
+  if (playerIds.length === 0) return new Map()
+  const { data, error } = await supabase
+    .from('players')
+    .select('id, display_name')
+    .in('id', [...playerIds])
+  if (error) throw new EdgeError(`No se pudieron leer los nombres: ${error.message}`)
+  return new Map((data ?? []).map((row) => [row.id, row.display_name]))
+}
+
+/**
+ * The rules, for somebody with no account.
+ *
+ * The ONLY read in this file that works without a session, and the only public
+ * surface of the whole app: `anon` has SELECT on no table at all, so this goes
+ * through `season_public_rules` (0007), a `security definer` that returns five
+ * fields and none of them says who plays.
+ *
+ * Returns null instead of throwing for a season that is not there: whoever
+ * opens a dead link does not need a stack trace.
+ */
+export async function publicRules(supabase: Client, seasonId: string): Promise<PublicRules | null> {
+  const { data, error } = await supabase.rpc('season_public_rules', { p_season: seasonId })
+  if (error !== null) throw new EdgeError(`No se pudieron leer las reglas: ${error.message}`)
+
+  const row = data?.[0]
+  if (row === undefined) return null
+  return {
+    name: row.name,
+    config: row.config as unknown as SeasonConfig,
+    text: row.rules_text,
+    updatedAt: row.rules_updated_at,
+    adminName: row.admin_name,
+  }
 }
 
 export async function matchdaysOf(supabase: Client, seasonId: string): Promise<MatchdaySummary[]> {
@@ -255,7 +384,7 @@ export async function awardsOf(supabase: Client, seasonId: string): Promise<Map<
 async function pairsAndMatchesOf(
   supabase: Client,
   matchdayId: string,
-): Promise<{ pairs: Pair[]; matches: MatchResult[] }> {
+): Promise<{ pairs: Pair[]; matches: MatchWithId[] }> {
   const { data: pairRows, error: pairsError } = await supabase
     .from('pairs')
     .select('id, entry_a, entry_b')
@@ -292,7 +421,7 @@ async function pairsAndMatchesOf(
     else bucket.push(set)
   }
 
-  const matches: MatchResult[] = (matchRows ?? []).map((row) => {
+  const matches: MatchWithId[] = (matchRows ?? []).map((row) => {
     const pairA = pairById.get(row.pair_a)
     const pairB = pairById.get(row.pair_b)
     if (pairA === undefined || pairB === undefined) {
@@ -300,7 +429,7 @@ async function pairsAndMatchesOf(
         `El partido ${row.id} referencia una pareja que no está en la fecha. Esto es un bug.`,
       )
     }
-    return { round: row.round, pairA, pairB, sets: setsByMatch.get(row.id) ?? [] }
+    return { id: row.id, round: row.round, pairA, pairB, sets: setsByMatch.get(row.id) ?? [] }
   })
 
   return { pairs: [...pairById.values()], matches }

@@ -35,14 +35,14 @@ export default function LoginForm() {
   }
 
   return (
-    <main className="flex min-h-screen flex-col bg-bg px-6 pt-4 pb-6 text-text">
-      <div className="flex items-center justify-between text-sm">
-        <Link href="/" className="text-muted">
+    <main className="flex min-h-screen flex-col bg-bg px-6 pt-4 pb-[26px] text-text">
+      <div className="flex items-center justify-between text-[12.5px]">
+        <Link href="/" className="font-[750] text-muted">
           ← Volver
         </Link>
         <Link
           href={next === '/' ? '/registro' : `/registro?next=${encodeURIComponent(next)}`}
-          className="font-semibold text-accent-link"
+          className="font-[750] text-accent-link"
         >
           Crear cuenta
         </Link>
@@ -50,21 +50,23 @@ export default function LoginForm() {
 
       <div className="flex flex-1 flex-col justify-center gap-6">
         <div className="flex flex-col gap-1">
-          <h1 className="text-3xl font-extrabold tracking-tight">Entrá a tu cuenta</h1>
-          <p className="text-muted">Con el mail que usaste cuando entraste al torneo.</p>
+          <h1 className="text-[30px] font-extrabold tracking-[-.03em]">Entrá a tu cuenta</h1>
+          <p className="text-[14px] font-[550] text-muted">
+            Con el mail que usaste cuando entraste al torneo.
+          </p>
         </div>
 
         <button
           type="button"
           onClick={handleGoogle}
-          className="rounded-field border border-line py-4 text-sm font-bold"
+          className="rounded-field border-[1.5px] border-line p-4 text-[15px] font-extrabold"
         >
           Continuar con Google
         </button>
         {googleError && (
-          <p className="text-sm font-bold text-live">No pudimos entrar con Google. Probá de nuevo.</p>
+          <p className="text-[12px] font-bold text-live">No pudimos entrar con Google. Probá de nuevo.</p>
         )}
-        <div className="flex items-center gap-3 text-xs text-muted">
+        <div className="flex items-center gap-3 text-[11.5px] font-[600] text-muted">
           <span className="h-px flex-1 bg-line" />
           o
           <span className="h-px flex-1 bg-line" />
@@ -73,7 +75,7 @@ export default function LoginForm() {
         <form action={formAction} className="flex flex-col gap-4">
           <input type="hidden" name="next" value={next} />
           <div className="flex flex-col gap-1">
-            <label htmlFor="email" className="text-xs font-extrabold text-muted">
+            <label htmlFor="email" className="text-[11.5px] font-extrabold text-muted">
               Mail
             </label>
             <input
@@ -82,45 +84,46 @@ export default function LoginForm() {
               type="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              className="rounded-field border border-line bg-surface p-4 text-text"
-              style={{ borderColor: emailError !== null ? 'var(--color-live)' : undefined }}
+              className={`rounded-field border-[1.5px] bg-surface p-[15px] text-[15.5px] font-bold text-text outline-none ${
+                emailError === null ? 'border-line' : 'border-live'
+              }`}
             />
-            {emailError !== null && <p className="text-xs font-bold text-live">{emailError}</p>}
+            {emailError !== null && <p className="text-[12px] font-bold text-live">{emailError}</p>}
           </div>
 
           <div className="flex flex-col gap-1">
-            <label htmlFor="password" className="text-xs font-extrabold text-muted">
+            <label htmlFor="password" className="text-[11.5px] font-extrabold text-muted">
               Contraseña
             </label>
-            <div className="flex items-center rounded-field border border-line bg-surface pr-4">
+            <div className="flex items-center rounded-field border-[1.5px] border-line bg-surface pr-[15px]">
               <input
                 id="password"
                 name="password"
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                className="flex-1 bg-transparent p-4 text-text"
+                className="flex-1 bg-transparent p-[15px] text-[15.5px] font-bold text-text outline-none"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword((value) => !value)}
-                className="text-xs font-extrabold text-muted"
+                className="text-[11.5px] font-extrabold text-muted"
               >
                 {showPassword ? 'Ocultar' : 'Ver'}
               </button>
             </div>
           </div>
 
-          <Link href="/login/recuperar" className="text-sm font-semibold text-accent-link">
+          <Link href="/login/recuperar" className="text-[12.5px] font-[750] text-accent-link">
             Olvidé mi contraseña
           </Link>
 
-          {state.error !== null && <p className="text-sm font-bold text-live">{state.error}</p>}
+          {state.error !== null && <p className="text-[12px] font-bold text-live">{state.error}</p>}
 
           <button
             type="submit"
             disabled={!canSubmit}
-            className="rounded-field bg-accent p-4 font-extrabold text-accent-text disabled:bg-chip disabled:text-muted"
+            className="rounded-field bg-accent p-4 text-[15px] font-extrabold text-accent-text disabled:bg-chip disabled:text-muted"
           >
             Entrar
           </button>

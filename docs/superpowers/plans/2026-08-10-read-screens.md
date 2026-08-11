@@ -765,7 +765,14 @@ git commit -m "feat: show a player's season, matchday by matchday"
 Cosas que salgan durante la implementación y **no** se hagan, para no ensanchar
 las tareas. Una línea y seguí.
 
-- _(vacío al empezar)_
+- **"Quién ganó el partido" está escrito cuatro veces.** Inline en
+  `computeStandings`, otra vez adentro de su `headToHead`, una tercera en
+  `core/masters.ts`, y ahora una cuarta en `core/playerstats.ts` (Task 3). Ninguna
+  está exportada, así que la Task 3 no pudo reusarla y la duplicó con un
+  comentario que lo dice. Las cuatro son correctas hoy y tienen tests encima, así
+  que extraerlas es refactor sin beneficio visible. **El disparador para hacerlo
+  es que aparezca una quinta copia, o que cambie `matchFormat`** —ahí hay que
+  tocar cuatro lugares y alcanza con olvidarse de uno.
 
 ---
 

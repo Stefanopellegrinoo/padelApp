@@ -311,12 +311,18 @@ export default async function FechaDetailPage({ params }: PageProps) {
             </div>
             {standings.map((row, index) => {
               const guestInRow = status === 'CLOSED' && hasGuest(row.pair)
+              // La columna son "los puntos que se llevó cada jugador"
+              // (`ui-screens.md` §9), y en la pareja del invitado los dos no se
+              // llevan lo mismo: el invitado 0 y su compañero lo que le tocó.
+              // El `??` resuelve eso solo, porque `computeAwards` no le escribe
+              // award al invitado. Antes esta fila mostraba `0` fijo, y con eso
+              // la pareja que ganaba la fecha 3-0 aparecía sin puntos abajo de
+              // otra con un partido ganado — contradiciendo la nota que está dos
+              // líneas más abajo, "su compañero sí". Lo encontró la Task 14.
               const pts =
                 status === 'OPEN'
                   ? '—'
-                  : guestInRow
-                    ? '0'
-                    : String(pointsByEntry.get(row.pair.a) ?? pointsByEntry.get(row.pair.b) ?? 0)
+                  : String(pointsByEntry.get(row.pair.a) ?? pointsByEntry.get(row.pair.b) ?? 0)
               const diff = row.gamesDiff
               return (
                 <div

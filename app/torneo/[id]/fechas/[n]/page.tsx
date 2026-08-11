@@ -15,23 +15,11 @@ import { entriesOf, matchdayDetail, matchdaysOf, seasonHeader } from '@/db/read'
 import { awardsBefore, closedHistory } from '@/db/season'
 import { serverClient } from '@/db/server'
 import { EdgeError } from '@/db/errors'
+import { matchdayFull } from '@/app/format'
 import { Rondas, type RoundMatchVM, type RoundVM } from './rondas'
 
 interface PageProps {
   params: Promise<{ id: string; n: string }>
-}
-
-/** `playedOn` es `date` sin hora: se arma con componentes locales para no correrse un día. */
-function formatMatchdayFull(iso: string): string {
-  const [year, month, day] = iso.split('-').map(Number)
-  const date = new Date(year ?? 0, (month ?? 1) - 1, day ?? 1)
-  const parts = new Intl.DateTimeFormat('es-AR', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'short',
-  }).formatToParts(date)
-  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? ''
-  return `${get('weekday')} ${get('day')} ${get('month')}`
 }
 
 function pairKey(pair: Pair): string {
@@ -120,8 +108,8 @@ export default async function FechaDetailPage({ params }: PageProps) {
     matchday.status === 'DRAFT'
       ? 'Armando · sólo vos la ves'
       : matchday.status === 'OPEN'
-        ? `En juego${matchday.playedOn !== null ? ` · ${formatMatchdayFull(matchday.playedOn)}` : ''}`
-        : `Cerrada${matchday.playedOn !== null ? ` · ${formatMatchdayFull(matchday.playedOn)}` : ''}`
+        ? `En juego${matchday.playedOn !== null ? ` · ${matchdayFull(matchday.playedOn)}` : ''}`
+        : `Cerrada${matchday.playedOn !== null ? ` · ${matchdayFull(matchday.playedOn)}` : ''}`
 
   let body: ReactNode = (
     <div className="rounded-card bg-chip p-4 text-center text-[13px] font-[550] text-muted">

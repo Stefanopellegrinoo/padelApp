@@ -9,6 +9,7 @@ import {
   type MatchdaySummary,
 } from '@/db/read'
 import { serverClient } from '@/db/server'
+import { matchdayDay } from '@/app/format'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -17,24 +18,6 @@ interface PageProps {
 interface ChampionInfo {
   names: string
   record: string
-}
-
-/**
- * "jue 13 ago", sin punto tras el día de semana ni el mes. `playedOn` es una
- * columna `date` sin hora: arma el `Date` con componentes locales en vez de
- * parsear el ISO directo, porque `new Date('2026-08-13')` es medianoche UTC y
- * en un server en huso horario negativo formatea el día anterior.
- */
-function formatMatchdayDate(iso: string): string {
-  const [year, month, day] = iso.split('-').map(Number)
-  const date = new Date(year ?? 0, (month ?? 1) - 1, day ?? 1)
-  const parts = new Intl.DateTimeFormat('es-AR', {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-  }).formatToParts(date)
-  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? ''
-  return `${get('weekday')} ${get('day')} ${get('month')}`
 }
 
 /**
@@ -180,7 +163,7 @@ export default async function FechasPage({ params }: PageProps) {
               <div className="flex items-center justify-between gap-2">
                 <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
                   Fecha {matchday.number}
-                  {matchday.playedOn !== null ? ` · ${formatMatchdayDate(matchday.playedOn)}` : ''}
+                  {matchday.playedOn !== null ? ` · ${matchdayDay(matchday.playedOn)}` : ''}
                 </p>
                 <span className={`shrink-0 rounded-full px-[10px] py-[6px] text-[10.5px] font-extrabold ${tagClass}`}>
                   {tagLabel}

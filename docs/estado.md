@@ -1,9 +1,37 @@
 # Estado del proyecto
 
-**Última actualización:** 11 de agosto de 2026, con el Plan 4 terminado.
+**Última actualización:** 11 de agosto de 2026. Plan 4 terminado, base de producción creada, y cuatro cambios de producto encima.
 
 Este documento es el punto de entrada. Dice qué está hecho, qué falta, y qué hay
 que decidir antes de seguir. Los detalles viven en los documentos que se enlazan.
+
+---
+
+## Producción
+
+La base de producción existe y está lista: proyecto **`padelApp`** en Supabase
+Cloud (`yttmhxcdnjknobiccvsp`, São Paulo), con las **10 migraciones aplicadas** y
+verificada con SQL, no asumida: 10 tablas, **las 10 con RLS**, 21 políticas, 15
+funciones `security definer`, **0 usuarios y 0 temporadas**, y sin rastro del
+usuario del seed.
+
+**Lo que encontró subirla, y sólo pasa en la nube:** Supabase Cloud le otorga a
+`anon` select/insert/update/delete sobre cada tabla nueva del schema `public`.
+`0002_rls.sql` se los da explícitamente a `authenticated` y `service_role` y deja
+a `anon` afuera *a propósito*, pero **nunca se los saca** — en local no hacía
+falta, porque ahí las tablas nacen sin un solo privilegio. Medido antes de
+arreglarlo: `anon` tenía SELECT sobre las nueve tablas del campeonato. No era
+explotable —RLS prendida y ninguna política lo nombra— pero dejaba todo apoyado
+en una sola línea de defensa. Lo cierra `0009_anon_surface.sql`, aplicada **en
+local y en producción**. Después: `anon` con cero permisos de tabla y una sola
+función, `season_public_rules`.
+
+**Lo que falta para que esté online:** subir el repo a GitHub (no tiene remoto),
+deployarlo —Vercel alcanza, sólo necesita `NEXT_PUBLIC_SUPABASE_URL` y
+`NEXT_PUBLIC_SUPABASE_ANON_KEY`; la service-role key no va, y de hecho sólo
+aparece en archivos de test—, cargar las URLs de redirect de Auth con el dominio
+real, y decidir qué hacer con la confirmación de mail y con Google OAuth, que
+sigue sin configurar.
 
 ---
 
@@ -252,6 +280,39 @@ una pareja suma dos sin cambiar la paridad, así que una fecha de 7 + pareja
 quedaba en 9 y no se podía generar.
 
 **Con eso, el Plan 4 no tiene nada de producto pendiente.**
+
+### Lo que se agregó después de cerrar el plan
+
+Cuatro cambios pedidos por el dueño del producto, cada uno con su verificación:
+
+- **Los puntos pueden ser 0** (`141bbcf`). Vivía prohibido en cuatro capas y las
+  cuatro se movieron: `validateConfig`, el `check` de `awards.points`
+  (migración `0010`), y los dos steppers. **La base era la que importaba**: sin
+  la migración, la config se guardaba con un 0 y la fecha reventaba recién al
+  cerrarla, con los resultados ya cargados. Lo que sigue prohibido es el
+  negativo y repetir un valor, así que el 0 aparece una sola vez y al final.
+- **"En alza" y "En baja" en Estadísticas** (`6f4a440`): quién más subió y quién
+  más bajó al cerrar la última fecha. Reusa `rankingWithMovement` —la misma
+  cuenta que la flecha de la Tabla, no una segunda opinión—; lo que agrega es el
+  extremo, que en la Tabla hay que buscarlo recorriendo doce filas.
+- **"Cómo viene": la trayectoria del año en el Perfil** (`3fbaeb4`). En qué
+  puesto de la tabla general estaba el jugador al cerrar cada fecha, dibujado
+  como una línea. **Nada guardado responde eso** —`awards.position` congela el
+  puesto DE ESA FECHA, no el del año— así que se recomputa el ranking con las
+  fechas disponibles en cada momento. **El eje va invertido, el 1° arriba**: un
+  puesto más chico es mejor, y una línea que baja cuando mejorás se lee al
+  revés. SVG en línea, sin librería.
+- **La guarda de los tests contra la base** (`09de9b9`): `db/test/env.ts` se
+  niega a correr si `NEXT_PUBLIC_SUPABASE_URL` no es local. Las suites borran y
+  crean con `service_role`; apuntarlas a producción por un descuido borra el
+  campeonato. Va en el `setupFiles` de vitest y no en un `pretest:db` para que
+  también corte un `npx vitest` directo.
+
+**Y un bug que apareció escribiendo lo anterior:** el plantel en Estadísticas no
+estaba ordenado por siembra, salía en el orden que devolvía la base.
+`computeRanking` cae en ese orden cuando dos jugadores no están en el snapshot,
+así que el desempate era **no determinista**: la misma temporada podía dar dos
+tablas distintas.
 
 **Y la lista corta de deuda visible**, toda anotada en el plan: los plurales
 ("faltan 1 partidos", "jugaron 1 fechas"), "Mejor dupla del torneo" que lista

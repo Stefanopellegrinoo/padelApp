@@ -44,6 +44,15 @@ Lo que **no** se aflojó: los copys son contractuales, la verificación incluye
 - **En oscuro `--color-accent` es fondo de bloque, nunca color de texto.** Para
   texto e íconos activos va `--color-accent-link`.
 - **Sin sombras en toda la UI.** Lo dice el handoff y no tiene excepción.
+- **Las medidas del handoff son valores exactos, no aproximaciones.** Si dice
+  `11.5px/800` va `text-[11.5px] font-extrabold`, no `text-xs font-semibold`. Una
+  auditoría de fidelidad sobre las pantallas del Plan 2 encontró que casi todas
+  redondean al valor más cercano de Tailwind (11.5→12, 12.5→14, peso 750→600),
+  **salvo la lista de asientos de Unirse, que le pega exacto** — o sea que se
+  puede, es cuestión de tomarse el trabajo. Usá valores arbitrarios de Tailwind.
+- **El kicker es `uppercase` con `letter-spacing: .14em`.** Ninguna pantalla del
+  Plan 2 usa `uppercase` ni una vez, así que los kickers se ven como texto normal.
+  Es la convención tipográfica más visible del handoff y la más fácil de perder.
 - **Nav de 4: `Tabla · Fechas · Stats · Reglas`.** El label es `"Stats"` (handoff);
   el título de esa pantalla es `"Estadísticas"` (`ui-screens.md`). Los dos docs
   difieren y así se resuelve.
@@ -765,7 +774,12 @@ git commit -m "feat: show a player's season, matchday by matchday"
 Cosas que salgan durante la implementación y **no** se hagan, para no ensanchar
 las tareas. Una línea y seguí.
 
-- **"Quién ganó el partido" está escrito cuatro veces.** Inline en
+- **La línea meta de Unirse se come un dato.** El handoff pide
+  `"{n} jugadores · {regularMatchdays} fechas · organiza {admin}"` y la pantalla
+  muestra sólo `"{n} jugadores · organiza {admin}"`. No es la pantalla: la función
+  `season_invite` de `0004_claim_seat.sql` no devuelve la cantidad de fechas.
+  Arreglarlo es agregar una columna al `returns table` de esa función, o sea una
+  migración nueva — cambio del Plan 2, no de éste. Inline en
   `computeStandings`, otra vez adentro de su `headToHead`, una tercera en
   `core/masters.ts`, y ahora una cuarta en `core/playerstats.ts` (Task 3). Ninguna
   está exportada, así que la Task 3 no pudo reusarla y la duplicó con un

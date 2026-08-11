@@ -134,7 +134,32 @@ export default async function FechasPage({ params }: PageProps) {
       </header>
 
       <div className="flex flex-col gap-3">
-        {regularMatchdays.map((matchday) => {
+        {/* Las fechas se crean de a una (docs/estado.md): no se insertan las
+            `regularMatchdays` filas al crear la temporada. Esta lista dibuja
+            las que faltan a partir de esa config — un número sin fila real en
+            `matchdays` sale como "Por jugarse", dimmed, sin link a una fecha
+            que todavía no existe. */}
+        {Array.from({ length: header.regularMatchdays }, (_, index) => index + 1).map((number) => {
+          const matchday = regularMatchdays.find((candidate) => candidate.number === number) ?? null
+
+          if (matchday === null) {
+            return (
+              <div
+                key={number}
+                className="block rounded-[14px] border border-line bg-surface p-[14px] opacity-[0.62]"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
+                    Fecha {number}
+                  </p>
+                  <span className="shrink-0 rounded-full px-[10px] py-[6px] text-[10.5px] font-extrabold text-muted">
+                    Por jugarse
+                  </span>
+                </div>
+              </div>
+            )
+          }
+
           const played = matchday.status === 'CLOSED'
           const inProgress = matchday.status === 'OPEN'
           const champion = played ? championOf(matchday) : null

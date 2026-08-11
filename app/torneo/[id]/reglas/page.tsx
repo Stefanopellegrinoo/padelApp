@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { MASTERS_SIZE, narrateRules, type SeasonConfig } from '@/core'
-import { seasonHeader, seasonRules } from '@/db/read'
+import { seasonAdminName, seasonHeader, seasonRules } from '@/db/read'
 import { serverClient } from '@/db/server'
 import { RulesAccordion, type RuleRow } from './accordion'
 import { renderAdminMarkdown } from './markdown'
@@ -9,7 +9,10 @@ interface ReglasPageProps {
   params: Promise<{ id: string }>
 }
 
-const INTRO = 'Las reglas de este torneo, como quedaron cuando Marce lo creó.'
+/** "Marce" en el handoff (README línea 341) es el ejemplo, no un nombre fijo: se sustituye por quien organiza. */
+function introOf(adminName: string): string {
+  return `Las reglas de este torneo, como quedaron cuando ${adminName} lo creó.`
+}
 
 /** Los seis títulos del acordeón son contractuales (handoff §12). El cuerpo de cada uno sale de
  * `narrateRules(config)` por título de sección — nunca se reescribe a mano. */
@@ -85,14 +88,18 @@ export default async function ReglasPage({ params }: ReglasPageProps) {
     )
   }
 
-  const [header, rules] = await Promise.all([seasonHeader(supabase, id), seasonRules(supabase, id)])
+  const [header, rules, adminName] = await Promise.all([
+    seasonHeader(supabase, id),
+    seasonRules(supabase, id),
+    seasonAdminName(supabase, id),
+  ])
   const rows = rulesRowsOf(header.config)
   const hasAdminText = rules.text.trim().length > 0
 
   return (
     <div className="flex flex-col gap-4 pt-4">
       <h1 className="text-[26px] font-extrabold tracking-[-.03em]">Reglas</h1>
-      <p className="text-pretty text-[13.5px] leading-[1.5] font-[550] text-muted">{INTRO}</p>
+      <p className="text-pretty text-[13.5px] leading-[1.5] font-[550] text-muted">{introOf(adminName)}</p>
 
       <RulesAccordion rows={rows} />
 

@@ -114,6 +114,34 @@ export async function seasonHeader(supabase: Client, seasonId: string): Promise<
   return toSeasonHeader(data, userId)
 }
 
+/**
+ * El nombre de quien organiza la temporada — el jugador cuyo `user_id`
+ * coincide con `seasons.created_by`. No hay forma de resolver eso con una
+ * consulta directa: `players.user_id` no tiene SELECT otorgado a
+ * `authenticated` a propósito (0002_rls.sql, 0006_my_player_id.sql), para no
+ * dejar correlacionar `auth.uid()` con un player desde el cliente. La única
+ * función que ya hace ese cruce es `season_invite` (0004_claim_seat.sql, la
+ * pantalla de Unirse) — se reusa acá en vez de sumar una migración nueva sólo
+ * para este campo.
+ */
+export async function seasonAdminName(supabase: Client, seasonId: string): Promise<string> {
+  const { data: season, error: seasonError } = await supabase
+    .from('seasons')
+    .select('invite_token')
+    .eq('id', seasonId)
+    .maybeSingle()
+  if (seasonError) throw new EdgeError(`No se pudo leer la temporada: ${seasonError.message}`)
+  if (season === null) throw new EdgeError('La temporada no existe.')
+
+  const { data: invite, error: inviteError } = await supabase
+    .rpc('season_invite', { p_token: season.invite_token })
+    .limit(1)
+  if (inviteError) throw new EdgeError(`No se pudo leer quién organiza: ${inviteError.message}`)
+  const adminName = invite?.[0]?.admin_name
+  if (adminName === undefined) throw new EdgeError('No se pudo leer quién organiza.')
+  return adminName
+}
+
 export async function seasonRules(
   supabase: Client,
   seasonId: string,

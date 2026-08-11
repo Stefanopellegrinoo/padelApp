@@ -16,6 +16,7 @@ import {
   matchdayDetail,
   matchdaysOf,
   mySeasons,
+  seasonAdminName,
   seasonHeader,
   seasonRules,
 } from './read'
@@ -142,6 +143,21 @@ describe('db/read', () => {
     })
   })
 
+  describe('seasonAdminName', () => {
+    it("resolves the display name of whoever created the season, not the caller's", async () => {
+      const db = adminClient()
+      const { data: adminPlayer, error } = await db
+        .from('players')
+        .select('display_name')
+        .eq('id', admin.playerId)
+        .single()
+      if (error || adminPlayer === null) throw new Error(error?.message)
+
+      const name = await seasonAdminName(member.client, seasonId)
+      expect(name).toBe(adminPlayer.display_name)
+    })
+  })
+
   describe('entriesOf', () => {
     it('brings the squad and the guests, with a null playerId for a seat nobody claimed', async () => {
       const entries = await entriesOf(member.client, seasonId)
@@ -205,12 +221,13 @@ describe('db/read', () => {
   })
 
   describe('a stranger who is not part of the season', () => {
-    it('reads nothing back from any of the eight functions', async () => {
+    it('reads nothing back from any of the nine functions', async () => {
       const seasons = await mySeasons(stranger.client)
       expect(seasons.map((season) => season.id)).not.toContain(seasonId)
 
       await expect(seasonHeader(stranger.client, seasonId)).rejects.toThrow()
       await expect(seasonRules(stranger.client, seasonId)).rejects.toThrow()
+      await expect(seasonAdminName(stranger.client, seasonId)).rejects.toThrow()
 
       expect(await entriesOf(stranger.client, seasonId)).toEqual([])
       expect(await matchdaysOf(stranger.client, seasonId)).toEqual([])

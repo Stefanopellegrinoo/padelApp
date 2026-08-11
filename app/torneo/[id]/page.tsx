@@ -69,7 +69,14 @@ export default async function TablaPage({ params }: PageProps) {
   const regularMatchdays = matchdays.filter((matchday) => matchday.kind === 'REGULAR')
   const closedRegular = regularMatchdays.filter((matchday) => matchday.status === 'CLOSED')
   const activeMatchdayNumber = Math.min(closedRegular.length + 1, header.regularMatchdays)
-  const estado = header.status === 'FINISHED' ? 'terminado' : 'en curso'
+  // SETUP: la temporada existe pero nadie abrió su primera fecha todavía
+  // (0005_matchday_moves.sql: "la temporada arranca cuando se abre su primera
+  // fecha"). El prototipo nunca mockeó ese estado —la lista de chips de
+  // estado del README (línea 42) no trae una Tabla vacía— así que no hay copy
+  // contractual para él: `estado` queda en `null` y el kicker no se dibuja,
+  // el mismo criterio que esta pantalla ya usa con "Próxima fecha" y
+  // "Campeones defensores".
+  const estado = header.status === 'FINISHED' ? 'terminado' : header.status === 'SETUP' ? null : 'en curso'
 
   const snapshot = snapshotForMatchday(activeMatchdayNumber, seedOrder, awardsByMatchday, config)
   const ranking = rankingWithMovement(awardsByMatchday, seedOrder, config, snapshot)
@@ -145,9 +152,11 @@ export default async function TablaPage({ params }: PageProps) {
     <div className="flex flex-col gap-3 pt-4">
       <header className="flex items-start justify-between">
         <div>
-          <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
-            Fecha {activeMatchdayNumber} de {header.regularMatchdays} · {estado}
-          </p>
+          {estado !== null && (
+            <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
+              Fecha {activeMatchdayNumber} de {header.regularMatchdays} · {estado}
+            </p>
+          )}
           <h1 className="text-[26px] font-extrabold tracking-[-.03em]">{header.name}</h1>
         </div>
         {header.isAdmin && (

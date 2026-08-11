@@ -2188,11 +2188,30 @@ ya están y ya están probadas contra la base.
 - **El criterio de terminado se cumplió con un `<script>` de verdad.** Guardado
   en `rules_text` por psql, la página pública lo dibuja **como texto literal** y
   no dispara un solo error de JS.
-- **Un anónimo que abre la Tabla ve un 500, no un login.** No es una regresión
-  —antes tiraba igual, desde el layout— y el plan lo bendice ("son privadas"),
-  pero un link de la Tabla pegado en el grupo le muestra una página de error a
-  quien todavía no entró. El arreglo es mandarlo a `/login?next=…`, y es una
-  decisión de producto, no de esta tarea.
+- **Un anónimo que abría la Tabla veía un 500, no un login. Arreglado después de
+  cerrar el plan** (fuera de las 14 tareas, decisión del dueño del producto).
+  Lo que se veía era la página blanca de Next en inglés —"Application error: a
+  server-side exception has occurred"— y el link de la Tabla es justo el que
+  alguien pega en el grupo. Dos piezas:
+  1. **`middleware.ts`**: sin sesión y en una ruta de torneo que no sea Reglas,
+     redirige a `/login?next={ruta}`. Va ahí porque el middleware ya corre en
+     todas las rutas y **ya tiene el usuario en la mano**; `loginDestination` ya
+     respetaba `next`, así que después de entrar caés en el link que abriste.
+     Dos cuidados que no se ven: **las cookies que `setAll` escribió viven en el
+     `response`**, así que se copian al redirect o una sesión vencida queda
+     reintentando sola; y el chequeo **ignora la barra final**, o un
+     `/reglas/` pegado con barra mandaría al login una página pública.
+  2. **`app/error.tsx`**, que no existía: cualquier error de cualquier pantalla
+     mostraba esa misma página blanca. Ahora muestra la app en castellano con
+     "Probar de nuevo" e "Ir al inicio". **No muestra `error.message`** —en
+     producción Next ya lo redacta, y en el cliente es una traza— pero sí el
+     `digest`, que es lo único con lo que se encuentra el error en los logs.
+  **El riesgo real de agregar un error boundary era otro:** `redirect()` de Next
+  tira una excepción interna, y un boundary que la agarre convierte cada
+  redirect de la app en "Algo se rompió". Se recorrieron **los seis**: alta de
+  cuenta, reclamo de asiento, no-admin en Ajustes, link de invitación ya
+  reclamado, renombrar por Server Action, y el wizard sin sesión. Ninguno cae en
+  el boundary. Probado contra `npm start`, no contra el dev server.
 
 ### Deuda que heredan las tareas que faltan
 

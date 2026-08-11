@@ -233,6 +233,14 @@ arreglado y anotado.
 muestran nada a un anónimo. **La Task 7 se descartó** por decisión de producto:
 el jugador no marca su propia asistencia, la marca el admin en el armado.
 
+**Y la guardia de acceso quedó bien puesta.** Antes, abrir el link de un torneo
+sin sesión mostraba la página blanca de Next en inglés. Ahora `middleware.ts`
+manda a `/login?next={ruta}` y después de entrar caés en el link que abriste; y
+`app/error.tsx` —que no existía— muestra cualquier otro error como la app y en
+castellano, sin filtrar el mensaje crudo. Reglas sigue pública, con barra final o
+sin ella. Los seis `redirect()` de la app se recorrieron contra `npm start` para
+confirmar que el error boundary no se los come.
+
 **Falta una sola cosa de producto: el equipo invitado desde la pantalla.** Las
 reglas están construidas y probadas —se jugó una fecha con dos invitados
 trabados como pareja: quedan juntos, no cobran un punto, y los 8 del plantel

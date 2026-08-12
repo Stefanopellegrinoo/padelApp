@@ -22,6 +22,7 @@ import { matchdayFull } from '@/app/format'
 import { Rondas, type RoundMatchVM, type RoundVM } from './rondas'
 import { Armado, type DraftPairVM, type GuestPairVM, type GuestVM, type SeatVM } from './armado'
 import { CierreFecha } from './carga'
+import { DiaDeLaFecha } from './dia'
 import { MastersDraft, type QualifierVM } from './masters'
 
 interface PageProps {
@@ -500,6 +501,17 @@ export default async function FechaDetailPage({ params }: PageProps) {
           {isMasters ? 'Masters' : `Fecha ${matchday.number}`}
         </h1>
       </header>
+
+      {/* El día se elegía una sola vez, al abrir la fecha, y quedaba para
+          siempre. Un toque de más y el error no se podía deshacer. */}
+      {header.isAdmin && (
+        <DiaDeLaFecha
+          seasonId={seasonId}
+          matchdayId={matchday.id}
+          matchdayNumber={matchday.number}
+          playedOn={matchday.playedOn}
+        />
+      )}
 
       {body}
     </div>

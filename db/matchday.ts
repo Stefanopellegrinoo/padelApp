@@ -135,6 +135,43 @@ export async function pairingContextFor(
   }
 }
 
+/**
+ * Corrige el día en que se juega —o se jugó— una fecha.
+ *
+ * La base ya lo permitía y nadie lo usaba: `0002_rls.sql` otorga
+ * `update (played_on)` a `authenticated`, y sólo esa columna. El grant está
+ * escrito por columna justamente para que corregir el día no pueda tocar
+ * `status` ni `number`, así que el peor error posible acá es poner mal una
+ * etiqueta.
+ *
+ * Se puede en cualquier estado, incluida una fecha cerrada: `played_on` no
+ * ordena nada ni entra en ningún cálculo —las fechas se ordenan por `number`—
+ * así que enterarse tarde de que la fecha real era otra no debería obligar a
+ * reabrir nada.
+ *
+ * `count: 'exact'` porque un update que no toca ninguna fila NO es un error en
+ * PostgREST: sin esto, a quien no es admin le diría que guardó y al recargar
+ * volvería el día viejo.
+ */
+export async function setMatchdayDate(
+  supabase: Client,
+  matchdayId: string,
+  playedOn: string,
+): Promise<void> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(playedOn)) {
+    throw new EdgeError('La fecha tiene que tener día, mes y año.')
+  }
+
+  const { error, count } = await supabase
+    .from('matchdays')
+    .update({ played_on: playedOn }, { count: 'exact' })
+    .eq('id', matchdayId)
+  if (error !== null) throw new EdgeError(`No se pudo cambiar el día: ${error.message}`)
+  if (count === 0) {
+    throw new EdgeError('No se pudo cambiar el día: sólo puede hacerlo quien organiza.')
+  }
+}
+
 /** La siguiente fecha por número. Escribe `played_on`: la columna existe y es el dato que muestran todas las pantallas. */
 export async function createMatchday(
   supabase: Client,

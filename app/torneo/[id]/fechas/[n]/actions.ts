@@ -18,6 +18,7 @@ import {
   saveResult,
   seedAttendances,
   setAttendance,
+  setMatchdayDate,
   syncGuestSeat,
   unlockPair,
 } from '@/db/matchday'
@@ -273,4 +274,35 @@ export async function confirmMatchday(
   return inDraft(seasonId, matchdayId, matchdayNumber, async (supabase) => {
     await openMatchday(supabase, matchdayId)
   })
+}
+
+/**
+ * Corrige el día de la fecha.
+ *
+ * No pasa por `inDraft`: ése siembra asistencias y sólo tiene sentido armando.
+ * El día se puede corregir en cualquier estado —es una etiqueta, no entra en
+ * ningún cálculo— y hasta ahora no se podía corregir en ninguno: se elegía una
+ * sola vez, al abrirla, y quedaba para siempre.
+ */
+export async function changeMatchdayDate(
+  seasonId: string,
+  matchdayId: string,
+  matchdayNumber: number,
+  playedOn: string,
+): Promise<WriteResult> {
+  try {
+    const supabase = await serverClient()
+    await setMatchdayDate(supabase, matchdayId, playedOn)
+  } catch (error) {
+    if (error instanceof EdgeError) return { ok: false, error: error.message }
+    throw error
+  }
+
+  // La lista de fechas y Mis torneos muestran este día ("próxima fecha"), así
+  // que revalidar sólo esta pantalla dejaría el día viejo en las otras dos.
+  revalidatePath(`/torneo/${seasonId}/fechas/${matchdayNumber}`)
+  revalidatePath(`/torneo/${seasonId}/fechas`)
+  revalidatePath(`/torneo/${seasonId}`)
+  revalidatePath('/torneos')
+  return { ok: true }
 }

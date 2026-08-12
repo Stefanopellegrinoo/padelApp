@@ -9,6 +9,7 @@ import {
   reopenMatchday,
   saveResult,
   setAttendance,
+  setMatchdayDate,
 } from './matchday'
 import { awardsBefore, squadSeedOrder } from './season'
 import { adminClient } from './test/admin'
@@ -314,5 +315,78 @@ describe('reopenMatchday', () => {
     const { error } = await stranger.client.rpc('reopen_matchday', { p_matchday: matchdayId })
 
     expect(error?.message).toMatch(/Sólo quien organiza/)
+  })
+})
+
+// El día de la fecha se escribía UNA vez, en el insert, y no había forma de
+// corregirlo. La base siempre lo permitió —`0002_rls.sql` otorga
+// `update (played_on)`, y sólo esa columna— pero la app nunca lo usó.
+describe('setMatchdayDate', () => {
+  async function aMatchday(): Promise<{ admin: TestUser; seasonId: string; matchdayId: string; squad: string[] }> {
+    const config = { ...defaultConfig(8), regularMatchdays: 2, countBestOf: 2 }
+    const { admin, seasonId, squad } = await buildSeasonWithSquad(config, 8)
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-03-05')
+    return { admin, seasonId, matchdayId, squad }
+  }
+
+  async function dayOf(matchdayId: string): Promise<string | null> {
+    const { data } = await adminClient()
+      .from('matchdays')
+      .select('played_on')
+      .eq('id', matchdayId)
+      .single()
+    return data?.played_on ?? null
+  }
+
+  it('corrects the day of a matchday still being drafted', async () => {
+    const { admin, matchdayId } = await aMatchday()
+
+    await setMatchdayDate(admin.client, matchdayId, '2026-04-16')
+
+    expect(await dayOf(matchdayId)).toBe('2026-04-16')
+  })
+
+  // Cerrada también: el día es una etiqueta, no ordena ni calcula nada, así que
+  // enterarse tarde no tiene por qué obligar a reabrir la fecha.
+  it('corrects the day of a matchday that is already closed', async () => {
+    const { admin, matchdayId, squad } = await aMatchday()
+    await markAllPlaying(admin, matchdayId, squad)
+    await generatePairs(admin.client, matchdayId)
+    await openMatchday(admin.client, matchdayId)
+    for (const match of await matchesOf(matchdayId)) {
+      await saveResult(admin.client, match.id, [{ gamesA: 4, gamesB: 1 }])
+    }
+    await closeMatchday(admin.client, matchdayId)
+
+    await setMatchdayDate(admin.client, matchdayId, '2026-04-16')
+
+    expect(await dayOf(matchdayId)).toBe('2026-04-16')
+    const { data } = await adminClient()
+      .from('matchdays')
+      .select('status')
+      .eq('id', matchdayId)
+      .single()
+    expect(data?.status, 'corregir el día no puede mover el estado').toBe('CLOSED')
+  })
+
+  // Sin el `count`, PostgREST contesta "todo bien" a un update que RLS filtró:
+  // el jugador vería el día nuevo en pantalla y volvería el viejo al recargar.
+  it('refuses somebody who is not the admin, and says so', async () => {
+    const { matchdayId } = await aMatchday()
+    const stranger = await createTestUser()
+
+    await expect(setMatchdayDate(stranger.client, matchdayId, '2026-04-16')).rejects.toThrow(
+      /sólo puede hacerlo quien organiza/,
+    )
+
+    expect(await dayOf(matchdayId)).toBe('2026-03-05')
+  })
+
+  it('refuses a day that is not a real date, without writing', async () => {
+    const { admin, matchdayId } = await aMatchday()
+
+    await expect(setMatchdayDate(admin.client, matchdayId, 'mañana')).rejects.toThrow(/día, mes y año/)
+
+    expect(await dayOf(matchdayId)).toBe('2026-03-05')
   })
 })

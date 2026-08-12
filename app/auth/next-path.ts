@@ -15,3 +15,22 @@ export function safeNextPath(value: string | null | undefined): string {
   if (typeof value !== 'string') return '/'
   return value.startsWith('/') && !value.startsWith('//') ? value : '/'
 }
+
+/**
+ * A dónde cae alguien que ACABA de entrar.
+ *
+ * Es `safeNextPath` más una regla: entrar sin un `next` no te deja en la
+ * landing, que es la página para el que todavía no tiene cuenta, sino en Mis
+ * torneos. Quien viene de un link de invitación conserva su destino.
+ *
+ * Vive acá, con `safeNextPath`, y no adentro de las server actions, porque esa
+ * regla YA se había arreglado una vez sólo para el login con contraseña: el
+ * callback de OAuth seguía usando `safeNextPath` pelado y dejaba en la landing
+ * a todo el que entraba con Google. Nadie lo vio porque hasta que hubo
+ * credenciales ese camino no se podía recorrer. Una regla en un solo lugar no
+ * se puede arreglar a medias.
+ */
+export function afterLogin(value: string | null | undefined): string {
+  const safe = safeNextPath(value)
+  return safe === '/' ? '/torneos' : safe
+}

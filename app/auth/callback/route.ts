@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { serverClient } from '@/db/server'
-import { safeNextPath } from '../next-path'
+import { afterLogin } from '../next-path'
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
@@ -17,5 +17,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${origin}/login?error=google`)
   }
 
-  return NextResponse.redirect(`${origin}${safeNextPath(next)}`)
+  // `afterLogin` y no `safeNextPath`: sin esto, entrar con Google desde
+  // `/login` te dejaba en la landing, que es la pantalla del que NO tiene
+  // cuenta. Es la misma regla que ya usaba el login con contraseña.
+  return NextResponse.redirect(`${origin}${afterLogin(next)}`)
 }

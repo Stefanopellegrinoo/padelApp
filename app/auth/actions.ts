@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation'
 import type { Client } from '@/db/client'
 import { mySeasons } from '@/db/read'
 import { serverClient } from '@/db/server'
-import { safeNextPath } from './next-path'
+import { afterLogin } from './next-path'
 
 export interface FormState {
   error: string | null
@@ -31,8 +31,7 @@ const MIN_PASSWORD = 6
  * es una rama más que puede quedar mal.
  */
 async function loginDestination(_supabase: Client, next: string): Promise<string> {
-  const safeNext = safeNextPath(next)
-  return safeNext !== '/' ? safeNext : '/torneos'
+  return afterLogin(next)
 }
 
 export async function signUp(_state: FormState, form: FormData): Promise<FormState> {

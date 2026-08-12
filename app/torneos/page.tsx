@@ -12,6 +12,7 @@ import {
 } from '@/db/read'
 import { serverClient } from '@/db/server'
 import { matchdayDay } from '../format'
+import { Cuenta } from './cuenta'
 
 /**
  * El chip de estado. El handoff (§5) dibuja el chip con su tipografía y su
@@ -120,13 +121,11 @@ export default async function MisTorneosPage() {
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-lg flex-col gap-3 bg-bg px-5 pb-6 text-text">
-      <header className="flex flex-col gap-[3px] pt-4">
-        {myName !== '' && (
-          <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
-            {myName}
-          </p>
-        )}
+      {/* El nombre dejó de ser un kicker y pasó a estar adentro del círculo:
+          era texto que no hacía nada, y ahora es el único acceso a la cuenta. */}
+      <header className="flex items-center justify-between gap-3 pt-4">
         <h1 className="text-[26px] font-extrabold tracking-[-.03em]">Mis torneos</h1>
+        <Cuenta name={myName} />
       </header>
 
       {cards.length === 0 ? (

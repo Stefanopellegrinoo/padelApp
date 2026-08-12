@@ -29,7 +29,7 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  if (user === null && isPrivateTournamentPath(request.nextUrl.pathname)) {
+  if (user === null && isPrivatePath(request.nextUrl.pathname)) {
     const login = request.nextUrl.clone()
     login.pathname = '/login'
     login.search = ''
@@ -58,14 +58,20 @@ export async function middleware(request: NextRequest) {
  * comparte por link y se lee sin cuenta. Va por `season_public_rules`, que no
  * necesita sesión.
  *
- * `/torneos` NO entra acá: ya resuelve el caso sin sesión con su estado vacío y
- * su link "Entrar".
+ * **`/torneos` también entra.** Acá decía que no, que "ya resuelve el caso sin
+ * sesión con su estado vacío", y era cierto cuando se escribió: sin sesión RLS
+ * devolvía cero filas y la pantalla dibujaba su estado vacío. Lo cambió
+ * `0009_anon_surface.sql` al revocarle a `anon` los privilegios sobre las
+ * tablas: ahora `mySeasons` no recibe una lista vacía, recibe `permission
+ * denied for table seasons` y tira. Se ve apretando "atrás" después de cerrar
+ * sesión, que es un gesto a un toque del menú de la cuenta.
  */
-function isPrivateTournamentPath(pathname: string): boolean {
+function isPrivatePath(pathname: string): boolean {
   // Sin la barra final: un link pegado como `/torneo/{id}/reglas/` es el mismo
   // link, y mandar al login una página pública por un caracter sería peor que
   // no haber hecho nada.
   const path = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname
+  if (path === '/torneos') return true
   return path.startsWith('/torneo/') && !path.endsWith('/reglas')
 }
 

@@ -10,7 +10,7 @@ import {
   setAttendance,
 } from './matchday'
 import { entriesOf, seasonHeader, seasonRules } from './read'
-import { createSeason, renameSeason, updateSeasonRules } from './season'
+import { createSeason, deleteSeason, renameSeason, updateSeasonRules } from './season'
 import { adminClient } from './test/admin'
 import { createSeason as buildSeasonScene } from './test/factories'
 import { createTestUser, type TestUser } from './test/users'
@@ -374,5 +374,56 @@ describe('the squad seats', () => {
     expect(seats.filter((e) => e.kind === 'SQUAD')).toHaveLength(8)
     expect(seats.find((e) => e.id === seatId)?.displayName).not.toBe('Robado')
     expect(seats.find((e) => e.id === entryIds[0])?.playerId).toBe(player.playerId)
+  })
+})
+
+// Borrar el torneo es lo más destructivo que hace la app: no hay papelera ni
+// forma de deshacerlo. Se prueba sobre una temporada JUGADA, que es el caso que
+// puede fallar — `awards.entry_id` y `pair_locks` referencian `entries` con
+// `on delete no action`, y a simple vista eso frenaría la cascada.
+describe('deleteSeason', () => {
+  it('takes the whole season with it, history included', async () => {
+    const { admin, seasonId } = await seasonWithHistory()
+    const db = adminClient()
+
+    const before = await db
+      .from('awards')
+      .select('id, matchdays!inner(season_id)', { count: 'exact', head: true })
+      .eq('matchdays.season_id', seasonId)
+    expect(before.count ?? 0).toBeGreaterThan(0)
+
+    await deleteSeason(admin.client, seasonId)
+
+    expect(await seasonExists(seasonId)).toBe(false)
+    for (const table of ['matchdays', 'entries', 'pair_locks'] as const) {
+      const { count } = await db
+        .from(table)
+        .select('*', { count: 'exact', head: true })
+        .eq('season_id', seasonId)
+      expect(count, `quedaron filas en ${table}`).toBe(0)
+    }
+  })
+
+  // Sin el `count`, PostgREST devuelve "todo bien" cuando RLS filtró la fila:
+  // el jugador vería su torneo desaparecer de la pantalla y volver al recargar.
+  it('refuses somebody who is in the season but did not create it', async () => {
+    const { seasonId, squad } = await seasonWithHistory()
+    const intruder = await createTestUser()
+    const [firstSeat] = squad
+    if (firstSeat === undefined) throw new Error('Falta el asiento de test.')
+    await adminClient().from('entries').update({ player_id: intruder.playerId }).eq('id', firstSeat)
+
+    await expect(deleteSeason(intruder.client, seasonId)).rejects.toThrow(/sólo puede hacerlo quien lo creó/)
+
+    expect(await seasonExists(seasonId)).toBe(true)
+  })
+
+  it('refuses a stranger with no seat at all', async () => {
+    const { seasonId } = await seasonWithHistory()
+    const stranger = await createTestUser()
+
+    await expect(deleteSeason(stranger.client, seasonId)).rejects.toThrow(/sólo puede hacerlo quien lo creó/)
+
+    expect(await seasonExists(seasonId)).toBe(true)
   })
 })

@@ -1,10 +1,10 @@
 import { redirect } from 'next/navigation'
 import { validateConfig } from '@/core'
-import { entriesOf, myEntryId, playerNames, seasonHeader, seasonRules } from '@/db/read'
+import { entriesOf, matchdaysOf, myEntryId, playerNames, seasonHeader, seasonRules } from '@/db/read'
 import { serverClient } from '@/db/server'
-import { signOut } from '@/app/auth/actions'
 import { renameTournament } from './actions'
 import { CopiarLink } from './copiar'
+import { EliminarTorneo } from './eliminar'
 import { Formato } from './formato'
 import { Plantel, type SeatVM } from './plantel'
 import { Reglas } from './reglas'
@@ -34,11 +34,12 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
   const { error: renameError } = await searchParams
   const supabase = await serverClient()
 
-  const [header, entries, rules, myEntry] = await Promise.all([
+  const [header, entries, rules, myEntry, matchdays] = await Promise.all([
     seasonHeader(supabase, seasonId),
     entriesOf(supabase, seasonId),
     seasonRules(supabase, seasonId),
     myEntryId(supabase, seasonId),
+    matchdaysOf(supabase, seasonId),
   ])
   if (!header.isAdmin) redirect(`/torneo/${seasonId}`)
 
@@ -65,6 +66,9 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
       : validateConfig({ ...header.config, squadSize: seats.length })
 
   const { setsToWin, gamesPerSet } = header.config.matchFormat
+  // CLOSED y no todas: lo que el modal tiene que poner en juego es lo que ya se
+  // jugó, no una fecha en DRAFT que no cuesta nada volver a abrir.
+  const playedCount = matchdays.filter((matchday) => matchday.status === 'CLOSED').length
 
   return (
     <div className="flex flex-col gap-4 pt-3">
@@ -136,16 +140,11 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
       <Formato seasonId={seasonId} config={header.config} />
       <Reglas seasonId={seasonId} text={rules.text} />
 
-      <section className="flex flex-col gap-2">
-        <h2 className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">Cuenta</h2>
-        <div className="overflow-hidden rounded-[14px] border border-line bg-surface">
-          <form action={signOut}>
-            <button type="submit" className={`${ROW} w-full text-[14px] font-[750] text-live`}>
-              Cerrar sesión
-            </button>
-          </form>
-        </div>
-      </section>
+      {/* Acá estaba "Cerrar sesión", que no es de esta pantalla: es de la
+          cuenta, no del torneo, y encima esta pantalla redirige a quien no es
+          admin — así que un jugador común no tenía dónde cerrar sesión. Se mudó
+          al círculo de Mis torneos. Lo que sí es de acá es eliminar el torneo. */}
+      <EliminarTorneo seasonId={seasonId} name={header.name} playedCount={playedCount} />
     </div>
   )
 }

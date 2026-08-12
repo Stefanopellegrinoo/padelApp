@@ -203,6 +203,34 @@ export async function createSeason(
   return { seasonId: season.id, inviteToken: season.invite_token }
 }
 
+/**
+ * Borra el torneo entero: fechas, parejas, partidos, sets, premios y asientos.
+ *
+ * No hay papelera ni borrado lógico y no se puede deshacer. La guardia real es
+ * RLS —`seasons_delete` (0002_rls.sql) pide `created_by = auth.uid()`, así que
+ * ni siquiera un participante puede— y la de la pantalla es escribir el nombre.
+ *
+ * Se apoya entero en las cascadas del schema, que ya estaban: `matchdays` y
+ * `entries` cuelgan de `seasons` con `on delete cascade`, y todo lo demás
+ * cuelga de esos dos. Los `on delete no action` de `awards.entry_id` y
+ * `pair_locks` NO lo frenan, aunque parezca: se chequean al final de la
+ * sentencia, y para entonces la cascada de `matchdays` ya se llevó esas filas.
+ * Verificado contra la base con una temporada de 79 premios.
+ *
+ * `delete` sin filas afectadas no es un error en PostgREST, así que se pide el
+ * conteo: si RLS lo filtró, esto tiene que decirlo y no quedarse callado.
+ */
+export async function deleteSeason(supabase: Client, seasonId: string): Promise<void> {
+  const { error, count } = await supabase
+    .from('seasons')
+    .delete({ count: 'exact' })
+    .eq('id', seasonId)
+  if (error !== null) throw new EdgeError(`No se pudo eliminar el torneo: ${error.message}`)
+  if (count === 0) {
+    throw new EdgeError('No se pudo eliminar el torneo: sólo puede hacerlo quien lo creó.')
+  }
+}
+
 /** Cambia el nombre del torneo. Lo dice el paso 1 del wizard: "se puede cambiar después". */
 export async function renameSeason(
   supabase: Client,

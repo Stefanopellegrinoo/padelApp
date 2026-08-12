@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation'
 import type { SeasonConfig } from '@/core'
 import { addSquadSeat, claimOwnSeat, removeSeat, renameSeat, unlinkSeat } from '@/db/entries'
 import { EdgeError } from '@/db/errors'
-import { renameSeason, updateSeasonConfig, updateSeasonRules } from '@/db/season'
+import { deleteSeason, renameSeason, updateSeasonConfig, updateSeasonRules } from '@/db/season'
 import { serverClient } from '@/db/server'
 
 export type WriteResult = { ok: true } | { ok: false; error: string }
@@ -120,4 +120,28 @@ export async function saveRules(seasonId: string, text: string): Promise<WriteRe
   return onSeason(seasonId, async (supabase) => {
     await updateSeasonRules(supabase, seasonId, text)
   })
+}
+
+/**
+ * Borra el torneo entero y vuelve a Mis torneos.
+ *
+ * No usa `onSeason`: ése revalida la temporada que acaba de dejar de existir, y
+ * el `redirect` tiene que quedar FUERA del try porque tira por dentro para
+ * cortar el render — adentro, el catch se lo comería y la pantalla se quedaría
+ * dibujando un torneo borrado.
+ *
+ * En el camino feliz esta función no vuelve. El `WriteResult` es sólo para el
+ * error, que la pantalla muestra en el modal.
+ */
+export async function removeTournament(seasonId: string): Promise<WriteResult> {
+  try {
+    const supabase = await serverClient()
+    await deleteSeason(supabase, seasonId)
+  } catch (error) {
+    if (error instanceof EdgeError) return { ok: false, error: error.message }
+    throw error
+  }
+
+  revalidatePath('/torneos')
+  redirect('/torneos')
 }

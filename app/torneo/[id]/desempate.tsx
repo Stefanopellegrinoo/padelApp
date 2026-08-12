@@ -91,7 +91,7 @@ export function Desempate({
         <button
           type="button"
           onClick={() => setOpenFor('all')}
-          className="rounded-full border border-line bg-surface px-3 py-2 text-[11.5px] font-extrabold text-muted"
+          className="flex min-h-[44px] items-center rounded-full border border-line bg-surface px-3.5 text-[11.5px] font-extrabold text-muted"
         >
           Orden de desempate ⇅
         </button>
@@ -123,7 +123,7 @@ export function Desempate({
                       event.stopPropagation()
                       setOpenFor(row.entryId)
                     }}
-                    className="rounded-full border border-line px-1.5 py-0.5 text-[10px] font-extrabold"
+                    className="flex h-11 min-w-11 items-center justify-center text-[10px] font-extrabold"
                   >
                     ⓘ
                   </button>

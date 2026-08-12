@@ -253,7 +253,7 @@ export default async function JugadorPage({ params }: PageProps) {
       <div className="flex justify-end">
         <Link
           href={`/torneo/${seasonId}`}
-          className="flex h-9 shrink-0 items-center rounded-full bg-chip px-[14px] text-[13px] font-bold"
+          className="flex h-11 shrink-0 items-center rounded-full bg-chip px-[14px] text-[13px] font-bold"
         >
           ← Volver
         </Link>

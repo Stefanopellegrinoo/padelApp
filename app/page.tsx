@@ -22,7 +22,7 @@ export default async function HomePage() {
   } = await supabase.auth.getUser()
 
   return (
-    <main className="flex min-h-screen flex-col bg-bg px-6 pb-[26px] text-text">
+    <main className="flex min-h-dvh flex-col bg-bg px-6 pb-[26px] text-text">
       <div className="flex items-center gap-[9px] pt-4">
         <span className="h-[26px] w-[26px] rounded-[7px] bg-accent" />
         <span className="text-[14.5px] font-extrabold tracking-[-.01em]">Padel Liga</span>

@@ -95,7 +95,7 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
               name="name"
               defaultValue={header.name}
               required
-              className={`min-w-0 flex-1 rounded-field border bg-surface px-3 py-2 text-right text-[13px] font-[750] outline-none ${
+              className={`min-w-0 flex-1 rounded-field border bg-surface px-3 py-2 text-right text-[16px] font-[750] outline-none ${
                 renameError === undefined ? 'border-line' : 'border-live'
               }`}
             />

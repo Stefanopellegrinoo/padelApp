@@ -29,14 +29,17 @@ export function TorneoNav({ seasonId }: { seasonId: string }) {
   ]
 
   return (
-    <nav className="sticky bottom-0 flex border-t border-line bg-bg px-[22px] pt-3 pb-6">
+    <nav className="sticky bottom-0 flex border-t border-line bg-bg px-[22px] pt-2 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
       {items.map((item) => {
         const active = item.isActive(pathname)
         return (
+          // `min-h-[44px]` y no un alto fijo: 44 es el mínimo de la guía de
+          // Apple y esto medía 37. Es lo que más se toca de la app, y errarle a
+          // una pestaña te manda a otra pantalla.
           <Link
             key={item.label}
             href={item.href}
-            className={`flex flex-1 flex-col items-center gap-1 ${active ? 'text-accent-link' : 'text-muted'}`}
+            className={`flex min-h-[44px] flex-1 flex-col items-center justify-center gap-1 ${active ? 'text-accent-link' : 'text-muted'}`}
           >
             <span className={`h-[19px] w-[19px] border-2 border-current ${active ? 'bg-current' : ''}`} />
             <span className="text-[9.5px] font-extrabold">{item.label}</span>

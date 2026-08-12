@@ -108,7 +108,7 @@ function Stepper({
   max: number
   onChange: (next: number) => void
 }) {
-  const button = 'h-[34px] w-[34px] shrink-0 rounded-[9px] bg-chip text-[16px] font-extrabold disabled:opacity-40'
+  const button = 'h-[44px] w-[44px] shrink-0 rounded-[9px] bg-chip text-[16px] font-extrabold disabled:opacity-40'
   return (
     <div className="flex shrink-0 items-center gap-2">
       <button type="button" className={button} disabled={value <= min} onClick={() => onChange(value - 1)}>
@@ -198,7 +198,7 @@ export function Wizard({ myName }: { myName: string }) {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-lg flex-col gap-4 bg-bg px-6 pt-4 pb-[26px] text-text">
+    <main className="mx-auto flex min-h-dvh w-full max-w-lg flex-col gap-4 bg-bg px-6 pt-4 pb-[26px] text-text">
       <div className="flex items-center justify-between">
         {step === 0 ? (
           <Link href="/torneos" className="rounded-full bg-chip px-[14px] py-2 text-[12.5px] font-bold">
@@ -255,7 +255,7 @@ export function Wizard({ myName }: { myName: string }) {
                     setSquad({ ...squad, names: next })
                   }}
                   placeholder="Nombre"
-                  className={`min-w-0 flex-1 rounded-field border-[1.5px] bg-surface p-[15px] text-[15.5px] font-[700] outline-none placeholder:font-medium placeholder:text-muted ${
+                  className={`min-w-0 flex-1 rounded-field border-[1.5px] bg-surface p-[15px] text-[16px] font-[700] outline-none placeholder:font-medium placeholder:text-muted ${
                     seat.trim().length === 0 ? 'border-accent' : 'border-line'
                   }`}
                 />
@@ -272,9 +272,14 @@ export function Wizard({ myName }: { myName: string }) {
                     onClick={() =>
                       index === mySeat ? setLeaving(true) : setSquad(removeSeatAt(squad, index))
                     }
-                    className="h-7 w-7 shrink-0 rounded-full bg-chip text-[13px] font-extrabold text-muted"
+                    // El botón mide 44 para el dedo; el círculo sigue midiendo
+                    // 28 a la vista. Agrandar el dibujo no hacía falta — lo que
+                    // faltaba era área para no errarle.
+                    className="flex h-11 w-11 shrink-0 items-center justify-center"
                   >
-                    ✕
+                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-chip text-[13px] font-extrabold text-muted">
+                      ✕
+                    </span>
                   </button>
                 )}
               </div>
@@ -319,7 +324,7 @@ export function Wizard({ myName }: { myName: string }) {
                   aria-label={`Subir a ${seat}`}
                   disabled={index === 0}
                   onClick={() => setSquad(moveSeat(squad, index, index - 1))}
-                  className="h-[34px] w-[34px] shrink-0 rounded-[9px] bg-chip font-extrabold disabled:opacity-40"
+                  className="h-[44px] w-[44px] shrink-0 rounded-[9px] bg-chip font-extrabold disabled:opacity-40"
                 >
                   ↑
                 </button>
@@ -328,7 +333,7 @@ export function Wizard({ myName }: { myName: string }) {
                   aria-label={`Bajar a ${seat}`}
                   disabled={index === names.length - 1}
                   onClick={() => setSquad(moveSeat(squad, index, index + 1))}
-                  className="h-[34px] w-[34px] shrink-0 rounded-[9px] bg-chip font-extrabold disabled:opacity-40"
+                  className="h-[44px] w-[44px] shrink-0 rounded-[9px] bg-chip font-extrabold disabled:opacity-40"
                 >
                   ↓
                 </button>

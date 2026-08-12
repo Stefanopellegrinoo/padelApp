@@ -35,7 +35,7 @@ export default function LoginForm() {
   }
 
   return (
-    <main className="flex min-h-screen flex-col bg-bg px-6 pt-4 pb-[26px] text-text">
+    <main className="flex min-h-dvh flex-col bg-bg px-6 pt-4 pb-[26px] text-text">
       <div className="flex items-center justify-between text-[12.5px]">
         <Link href="/" className="font-[750] text-muted">
           ← Volver
@@ -84,7 +84,7 @@ export default function LoginForm() {
               type="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              className={`rounded-field border-[1.5px] bg-surface p-[15px] text-[15.5px] font-bold text-text outline-none ${
+              className={`rounded-field border-[1.5px] bg-surface p-[15px] text-[16px] font-bold text-text outline-none ${
                 emailError === null ? 'border-line' : 'border-live'
               }`}
             />
@@ -102,7 +102,7 @@ export default function LoginForm() {
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                className="flex-1 bg-transparent p-[15px] text-[15.5px] font-bold text-text outline-none"
+                className="flex-1 bg-transparent p-[15px] text-[16px] font-bold text-text outline-none"
               />
               <button
                 type="button"

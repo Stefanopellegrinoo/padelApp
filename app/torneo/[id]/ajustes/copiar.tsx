@@ -19,7 +19,7 @@ export function CopiarLink({ token }: { token: string }) {
         void navigator.clipboard.writeText(`${origin}/unirse/${token}`)
         setCopied(true)
       }}
-      className="shrink-0 text-[13px] font-[750] text-muted"
+      className="-my-3 flex min-h-[44px] shrink-0 items-center pl-3 text-[13px] font-[750] text-muted"
     >
       {copied ? 'Copiado ✓' : 'Copiar ›'}
     </button>

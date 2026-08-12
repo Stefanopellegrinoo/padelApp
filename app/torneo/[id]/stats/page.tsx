@@ -106,7 +106,7 @@ function StatCard({ label, value }: { label: string; value: ReactNode }) {
 
 function PlayerLink({ base, entryId, nameOf }: { base: string; entryId: EntryId; nameOf: NameOf }) {
   return (
-    <Link href={`${base}/jugador/${entryId}`} className="hover:underline">
+    <Link href={`${base}/jugador/${entryId}`} className="inline-flex min-h-[44px] items-center hover:underline">
       {nameOf.get(entryId) ?? ''}
     </Link>
   )
@@ -119,7 +119,7 @@ function BarRanking({ title, rows, base, nameOf }: { title: string; rows: BarRow
       <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">{title}</p>
       <div className="flex flex-col gap-2.5">
         {rows.map((row, index) => (
-          <Link key={row.entryId} href={`${base}/jugador/${row.entryId}`} className="flex flex-col gap-1">
+          <Link key={row.entryId} href={`${base}/jugador/${row.entryId}`} className="flex min-h-[44px] flex-col justify-center gap-1">
             <div className="flex items-center justify-between">
               <span className="text-[13.5px] font-bold">{nameOf.get(row.entryId) ?? ''}</span>
               <span className="text-[12.5px] font-extrabold text-muted">{row.pct}%</span>
@@ -308,7 +308,7 @@ export default async function StatsPage({ params, searchParams }: PageProps) {
       <div className="flex gap-2">
         <Link
           href={base + '/stats'}
-          className={`rounded-full px-[15px] py-[9px] text-[11.5px] font-extrabold ${
+          className={`flex min-h-[44px] items-center rounded-full px-[15px] text-[11.5px] font-extrabold ${
             activeTab === 'torneo' ? 'bg-accent text-accent-text' : 'bg-chip text-muted'
           }`}
         >
@@ -316,7 +316,7 @@ export default async function StatsPage({ params, searchParams }: PageProps) {
         </Link>
         <Link
           href={base + '/stats?tab=mias'}
-          className={`rounded-full px-[15px] py-[9px] text-[11.5px] font-extrabold ${
+          className={`flex min-h-[44px] items-center rounded-full px-[15px] text-[11.5px] font-extrabold ${
             activeTab === 'mias' ? 'bg-accent text-accent-text' : 'bg-chip text-muted'
           }`}
         >

@@ -376,9 +376,11 @@ function ParejaInvitada({
           disabled={pending}
           onClick={onRemove}
           aria-label="Sacar la pareja invitada"
-          className="absolute top-2 right-2 flex h-7 w-7 items-center justify-center rounded-full bg-chip text-[15px] font-extrabold text-muted"
+          className="absolute top-0 right-0 flex h-11 w-11 items-center justify-center"
         >
-          ×
+          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-chip text-[15px] font-extrabold text-muted">
+            ×
+          </span>
         </button>
       )}
     </div>
@@ -420,7 +422,7 @@ function GuestCard({ guest, seats, pending, onName, onPartner }: GuestCardProps)
           if (name.trim() !== guest.name.trim()) onName(name)
         }}
         disabled={pending}
-        className={`rounded-field border-[1.5px] bg-surface p-[15px] text-[15px] font-[750] outline-none ${
+        className={`rounded-field border-[1.5px] bg-surface p-[15px] text-[16px] font-[750] outline-none ${
           name.trim().length === 0 ? 'border-accent' : 'border-line'
         }`}
       />

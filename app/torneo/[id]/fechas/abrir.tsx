@@ -48,7 +48,7 @@ export function AbrirFecha({ seasonId, number }: AbrirFechaProps) {
           type="date"
           value={playedOn}
           onChange={(event) => setPlayedOn(event.target.value)}
-          className="rounded-field border border-line bg-surface p-[13px] text-[14px] font-bold outline-none"
+          className="rounded-field border border-line bg-surface p-[13px] text-[16px] font-bold outline-none"
         />
         <button
           type="button"

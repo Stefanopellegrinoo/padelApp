@@ -38,7 +38,7 @@ export function Reglas({ seasonId, text }: { seasonId: string; text: string }) {
             if (!result.ok) setError(result.error)
           })
         }}
-        className="rounded-field border border-line bg-surface p-[15px] text-[14px] font-medium leading-[1.55] outline-none"
+        className="rounded-field border border-line bg-surface p-[15px] text-[16px] font-medium leading-[1.55] outline-none"
       />
 
       {draft.trim().length > 0 && (

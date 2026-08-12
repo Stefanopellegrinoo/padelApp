@@ -47,7 +47,7 @@ export function Cuenta({ name }: { name: string }) {
         aria-expanded={open}
         aria-label={name === '' ? 'Tu cuenta' : `Tu cuenta, ${name}`}
         onClick={() => setOpen(!open)}
-        className="flex h-[38px] w-[38px] items-center justify-center rounded-full bg-chip text-[13px] font-extrabold text-text"
+        className="flex h-11 w-11 items-center justify-center rounded-full bg-chip text-[13px] font-extrabold text-text"
       >
         {initials(name)}
       </button>

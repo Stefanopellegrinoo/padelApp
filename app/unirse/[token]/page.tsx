@@ -25,7 +25,7 @@ export default async function UnirsePage({ params, searchParams }: PageProps) {
   const { data: seats, error } = await supabase.rpc('season_invite', { p_token: token })
   if (error !== null || seats === null || seats.length === 0) {
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center gap-3 bg-bg px-6 text-center text-text">
+      <main className="flex min-h-dvh flex-col items-center justify-center gap-3 bg-bg px-6 text-center text-text">
         <h1 className="text-[26px] font-extrabold tracking-[-.03em]">Este link no es válido</h1>
         <p className="text-[14px] font-[550] text-muted">
           Pedile al organizador que te pase el link de nuevo.
@@ -59,7 +59,7 @@ export default async function UnirsePage({ params, searchParams }: PageProps) {
   const selectedSeat = seats.find((seat) => seat.entry_id === selected && !seat.claimed) ?? null
 
   return (
-    <main className="flex min-h-screen flex-col gap-5 bg-bg px-6 pt-4 pb-[26px] text-text">
+    <main className="flex min-h-dvh flex-col gap-5 bg-bg px-6 pt-4 pb-[26px] text-text">
       <div className="flex flex-col gap-1">
         <p className="text-[11.5px] font-extrabold text-muted">Te invitaron a</p>
         <h1 className="text-[32px] font-extrabold tracking-[-.03em]">{first.season_name}</h1>

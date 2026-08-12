@@ -78,7 +78,7 @@ export function EliminarTorneo({
               value={typed}
               disabled={pending}
               onChange={(event) => setTyped(event.target.value)}
-              className="mt-1.5 w-full rounded-field border-[1.5px] border-line bg-surface p-[13px] text-[15px] font-[750] outline-none"
+              className="mt-1.5 w-full rounded-field border-[1.5px] border-line bg-surface p-[13px] text-[16px] font-[750] outline-none"
             />
 
             {error !== null && (

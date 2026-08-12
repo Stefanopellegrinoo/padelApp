@@ -11,7 +11,10 @@ export interface SeatVM {
   ownerName: string | null
 }
 
-const ACTION = 'rounded-field bg-chip px-2.5 py-1.5 text-[11.5px] font-extrabold text-muted'
+// `min-h-[44px]`: medían 29 de alto, y entre ellos está "Sacar", que es
+// destructivo. 44 es el mínimo de la guía de Apple para tocar con el dedo.
+const ACTION =
+  'flex min-h-[44px] items-center rounded-field bg-chip px-3.5 text-[12.5px] font-extrabold text-muted'
 
 /**
  * El plantel desde Ajustes: renombrar un asiento, soltar el reclamo de quien lo
@@ -85,7 +88,7 @@ export function Plantel({
                   }
                   run(() => editSeatName(seasonId, seat.entryId, next))
                 }}
-                className="rounded-field border-[1.5px] border-accent bg-surface p-[10px] text-[14px] font-[750] outline-none"
+                className="rounded-field border-[1.5px] border-accent bg-surface p-[10px] text-[16px] font-[750] outline-none"
               />
             ) : (
               <div className="flex flex-wrap gap-2">
@@ -139,7 +142,7 @@ export function Plantel({
             }
             run(() => addSeat(seasonId, name))
           }}
-          className="rounded-field border-[1.5px] border-accent bg-surface p-[15px] text-[15px] font-[750] outline-none placeholder:font-medium placeholder:text-muted"
+          className="rounded-field border-[1.5px] border-accent bg-surface p-[15px] text-[16px] font-[750] outline-none placeholder:font-medium placeholder:text-muted"
         />
       ) : (
         <button

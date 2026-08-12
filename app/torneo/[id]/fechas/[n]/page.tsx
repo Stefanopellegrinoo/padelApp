@@ -492,7 +492,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
   return (
     <div className="flex flex-col gap-4 pt-3">
       <header className="flex flex-col gap-[3px]">
-        <Link href={`/torneo/${seasonId}/fechas`} className="mb-1 text-[12.5px] font-bold text-accent-link">
+        <Link href={`/torneo/${seasonId}/fechas`} className="-mt-2 mb-1 flex min-h-[44px] w-fit items-center text-[12.5px] font-bold text-accent-link">
           ← Volver
         </Link>
         <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">{kicker}</p>

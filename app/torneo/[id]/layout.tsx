@@ -39,7 +39,7 @@ export default async function TorneoLayout({ children, params }: TorneoLayoutPro
 
   if (user === null) {
     return (
-      <div className="flex min-h-screen flex-col bg-bg text-text">
+      <div className="flex min-h-dvh flex-col bg-bg text-text">
         <main className="flex-1 px-5 pb-6">{children}</main>
       </div>
     )
@@ -48,11 +48,11 @@ export default async function TorneoLayout({ children, params }: TorneoLayoutPro
   await seasonHeader(supabase, id)
 
   return (
-    <div className="flex min-h-screen flex-col bg-bg text-text">
+    <div className="flex min-h-dvh flex-col bg-bg text-text">
       <div className="px-5 pt-4">
         <Link
           href="/torneos"
-          className="inline-flex rounded-full bg-chip px-[14px] py-2 text-[12.5px] font-bold"
+          className="inline-flex min-h-[44px] items-center rounded-full bg-chip px-[14px] text-[12.5px] font-bold"
         >
           ← Mis torneos
         </Link>

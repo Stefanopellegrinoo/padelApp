@@ -120,7 +120,7 @@ export default async function MisTorneosPage() {
   const finished = cards.filter((card) => card.status === 'FINISHED')
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-lg flex-col gap-3 bg-bg px-5 pb-6 text-text">
+    <main className="mx-auto flex min-h-dvh w-full max-w-lg flex-col gap-3 bg-bg px-5 pb-6 text-text">
       {/* El nombre dejó de ser un kicker y pasó a estar adentro del círculo:
           era texto que no hacía nada, y ahora es el único acceso a la cuenta. */}
       <header className="flex items-center justify-between gap-3 pt-4">

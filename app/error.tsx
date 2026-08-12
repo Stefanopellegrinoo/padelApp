@@ -18,7 +18,7 @@ import Link from 'next/link'
  */
 export default function Error({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-lg flex-col justify-center gap-3 bg-bg px-6 text-text">
+    <main className="mx-auto flex min-h-dvh w-full max-w-lg flex-col justify-center gap-3 bg-bg px-6 text-text">
       <h1 className="text-pretty text-[22px] font-extrabold tracking-[-.02em]">Algo se rompió</h1>
       <p className="text-pretty text-[14px] font-[550] leading-[1.5] text-muted">
         No pudimos cargar esta pantalla. Si llegaste por el link de un torneo, puede que no tengas

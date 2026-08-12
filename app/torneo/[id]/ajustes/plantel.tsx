@@ -14,7 +14,7 @@ export interface SeatVM {
 // `min-h-[44px]`: medían 29 de alto, y entre ellos está "Sacar", que es
 // destructivo. 44 es el mínimo de la guía de Apple para tocar con el dedo.
 const ACTION =
-  'flex min-h-[44px] items-center rounded-field bg-chip px-3.5 text-[12.5px] font-extrabold text-muted'
+  'flex min-h-[44px] items-center rounded-field bg-chip px-3.5 text-[12.5px] font-extrabold text-muted transition-opacity disabled:opacity-45'
 
 /**
  * El plantel desde Ajustes: renombrar un asiento, soltar el reclamo de quien lo

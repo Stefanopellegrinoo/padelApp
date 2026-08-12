@@ -82,7 +82,7 @@ export function Carga({
           setError(null)
           setState(state === null ? startLoad() : null)
         }}
-        className="flex min-h-[44px] w-full items-center justify-center rounded-field bg-chip px-3 text-[12.5px] font-extrabold text-muted"
+        className="flex min-h-[44px] w-full items-center justify-center rounded-field bg-chip px-3 text-[12.5px] font-extrabold text-muted transition-opacity disabled:opacity-45"
       >
         Cargar resultado
       </button>

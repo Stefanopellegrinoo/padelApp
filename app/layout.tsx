@@ -9,6 +9,13 @@ const archivo = Archivo({
 
 export const metadata: Metadata = {
   title: 'Padel Liga',
+  // `appleWebApp` es lo que iOS mira, porque hasta hace poco ignoraba el
+  // manifest para esto. `statusBarStyle: 'default'` deja que iOS se ocupe de la
+  // barra de estado en vez de meter el contenido abajo: `black-translucent`
+  // daría el look a pantalla completa pero exige pagar `env(safe-area-inset-top)`
+  // a mano en cada pantalla, y una sola que se olvide queda con el título
+  // debajo de la isla dinámica.
+  appleWebApp: { capable: true, title: 'Padel', statusBarStyle: 'default' },
 }
 
 /**
@@ -28,6 +35,14 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
+  // Dos, uno por paleta: la app ya sigue al sistema con
+  // `prefers-color-scheme` en `globals.css`, y un `theme_color` solo dejaría la
+  // barra del navegador oscura sobre una app clara. El manifest lleva el
+  // oscuro nada más porque ahí sólo entra uno.
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
+    { media: '(prefers-color-scheme: dark)', color: '#0d1512' },
+  ],
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

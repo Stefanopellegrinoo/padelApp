@@ -5,6 +5,7 @@ import { seasonConfig } from '@/db/season'
 import { serverClient } from '@/db/server'
 import { initials, matchdayDay } from '@/app/format'
 import { Desempate, type StandingsRow, type TiebreakEntry } from './desempate'
+import { Volver } from './volver'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -120,6 +121,9 @@ export default async function TablaPage({ params }: PageProps) {
 
   return (
     <div className="flex flex-col gap-3 pt-4">
+      {/* La Tabla es la raíz del torneo: es la única de las cuatro pestañas
+          desde la que se sube, y sube a Mis torneos. */}
+      <Volver href="/torneos" label="Mis torneos" />
       <header className="flex items-start justify-between">
         <div>
           {estado !== null && (

@@ -8,6 +8,7 @@ import { EliminarTorneo } from './eliminar'
 import { Formato } from './formato'
 import { Plantel, type SeatVM } from './plantel'
 import { Reglas } from './reglas'
+import { Volver } from '../volver'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -72,6 +73,10 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
 
   return (
     <div className="flex flex-col gap-4 pt-3">
+      {/* A la Tabla, no a Mis torneos: acá se entra por el engranaje de la
+          Tabla, así que volver es deshacer ese paso. Mandar a Mis torneos
+          sacaría del torneo a quien sólo quiso cerrar los ajustes. */}
+      <Volver href={`/torneo/${seasonId}`} label="Tabla" />
       <header className="flex flex-col gap-[3px]">
         <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
           {header.name}

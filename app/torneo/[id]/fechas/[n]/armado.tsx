@@ -158,8 +158,13 @@ export function Armado({
                 ),
               )
             }
+            // Opacity is reserved for "the system is working" (the global
+            // `:disabled` rule). Resting states speak in color instead — the
+            // "No viene" chip and the "Avisó que no va" line already carry
+            // this state, so dimming the whole row here would also swallow
+            // the `disabled:opacity-45` feedback on tap.
             className={`flex items-center gap-3 rounded-field border border-line bg-surface p-3 text-left ${
-              seat.playing ? '' : 'opacity-50'
+              seat.playing ? '' : 'text-muted'
             }`}
           >
             <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full bg-chip text-[11px] font-extrabold text-muted">

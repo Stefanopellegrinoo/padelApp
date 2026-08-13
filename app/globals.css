@@ -50,3 +50,14 @@ body {
   color: var(--color-text);
   font-family: var(--font-sans);
 }
+
+@layer base {
+  /* The "system is working" channel. The repo's 17 `disabled={pending}` sites
+     drew nothing because Tailwind's preflight forces `opacity: 1` on controls
+     (node_modules/tailwindcss/index.css:790). Lives in `base`, not unlayered:
+     that way ANY utility overrides it and every screen keeps its escape hatch
+     without a refactor. */
+  :disabled {
+    opacity: 0.45;
+  }
+}

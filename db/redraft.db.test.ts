@@ -6,10 +6,12 @@ import {
   createMatchday,
   generateMastersPairs,
   generatePairs,
+  nameGuest,
   openMatchday,
   redraftMatchday,
   saveResult,
   setAttendance,
+  syncGuestSeat,
 } from './matchday'
 import { attendancesOf, matchdayDetail } from './read'
 import { adminClient } from './test/admin'
@@ -299,7 +301,63 @@ describe('redraftMatchday', () => {
     await closeMatchday(redrafted.admin.client, redrafted.matchdayId)
     const redraftedAwards = awardsBySeed(await awardsOf(redrafted.matchdayId), redrafted.squad)
 
+    // Sin esto, el `toEqual` de abajo pasa igual de bien comparando `[]` con
+    // `[]`: un plantel de 8 SIEMPRE reparte 4 posiciones (8 filas de award), así
+    // que si algún día viene vacío la comparación dejó de probar nada.
+    expect(controlAwards).toHaveLength(8)
     expect(redraftedAwards).toEqual(controlAwards)
+  })
+
+  // El camino completo, de punta a punta: es el escenario para el que existe
+  // todo este cambio y ningún otro test lo recorre entero. El #9 llega a OPEN
+  // sin puntuar, el "no-op" de arriba tiene resultados pero nunca regenera, y
+  // el anti-regresión puntúa desde una fecha OPEN virgen. Acá hay resultados
+  // ANTES de volver al armado, se cambia el plantel de verdad (uno se cae), se
+  // regenera y se vuelve a confirmar, y recién ahí se juega y se cierra.
+  it('resultados cargados, vuelve al armado, cambia quién juega, confirma de nuevo y cierra pagando bien', async () => {
+    const config = defaultConfig(10)
+    const { admin, matchdayId, squad } = await buildOpenMatchday(config, 10)
+
+    const [firstMatch] = await matchesOf(matchdayId)
+    if (firstMatch === undefined) throw new Error('Falta un partido de test.')
+    await saveResult(admin.client, firstMatch.id, [{ gamesA: 4, gamesB: 1 }])
+
+    await redraftMatchday(admin.client, matchdayId)
+    expect(await matchdayStatus(matchdayId)).toBe('DRAFT')
+
+    // Un jugador se cae. El plantel presente queda impar (9), así que
+    // `syncGuestSeat` —lo mismo que hace `toggleAttendance` en la acción— suma
+    // un invitado suelto para volver a par, igual que en la app real.
+    const dropped = squad[0]!
+    await setAttendance(admin.client, matchdayId, dropped, 'ABSENT')
+    await syncGuestSeat(admin.client, matchdayId)
+
+    const [guestId] = (await matchdayDetail(admin.client, matchdayId)).guestIds
+    if (guestId === undefined) throw new Error('syncGuestSeat no agregó invitado.')
+    await nameGuest(admin.client, guestId, 'Invitado de test')
+
+    await generatePairs(admin.client, matchdayId)
+    await openMatchday(admin.client, matchdayId)
+    expect(await matchdayStatus(matchdayId)).toBe('OPEN')
+
+    const playing = new Set(
+      (await matchdayDetail(admin.client, matchdayId)).pairs.flatMap((pair) => [pair.a, pair.b]),
+    )
+    expect(playing.has(dropped)).toBe(false)
+    expect(playing.has(guestId)).toBe(true)
+
+    await playAllMatches(admin, matchdayId, (pairA) => pairA)
+    await closeMatchday(admin.client, matchdayId)
+
+    expect(await matchdayStatus(matchdayId)).toBe('CLOSED')
+    const awards = await awardsOf(matchdayId)
+    // 9 jugadores del plantel presentes (10 - el que se cayó); el invitado no
+    // cobra (spec: "guests get nothing"), así que 9 filas de award es la única
+    // cuenta consistente con quién jugó de verdad.
+    expect(awards).toHaveLength(9)
+    expect(awards.some((award) => award.entry_id === dropped)).toBe(false)
+    expect(awards.some((award) => award.entry_id === guestId)).toBe(false)
+    for (const award of awards) expect(config.points).toContain(award.points)
   })
 
   it('el Masters también vuelve al armado, y el sorteo del Masters vuelve a estar disponible', async () => {

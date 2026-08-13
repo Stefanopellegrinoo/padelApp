@@ -448,9 +448,13 @@ export async function generatePairs(supabase: Client, matchdayId: string): Promi
   const pairs = buildPairs(input)
   const fixture = buildFixture(pairs.length)
 
-  // Deleting the pairs cascades to matches and match_sets. In DRAFT there are
-  // no results to lose; anywhere else this would be destructive, which is what
-  // the status guard above is for.
+  // Deleting the pairs cascades to matches and match_sets. A DRAFT matchday
+  // usually has no results to lose, but `redraft_matchday` can land one here
+  // WITH results already loaded — it goes back from OPEN without deleting
+  // anything, on purpose (spec: the transition itself deletes nothing).
+  // Regenerating from that state deliberately discards them; the confirm
+  // panel in the UI warns before this runs. The status guard above only
+  // blocks OPEN/CLOSED, it does not promise DRAFT is always a clean slate.
   await deletePairs(supabase, matchdayId)
 
   const stored = await insertPairs(supabase, matchdayId, pairs)

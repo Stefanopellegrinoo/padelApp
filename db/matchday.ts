@@ -611,6 +611,16 @@ export async function reopenMatchday(supabase: Client, matchdayId: string): Prom
   if (error !== null) throw new EdgeError(error.message)
 }
 
+/**
+ * Devuelve una fecha en juego al armado. No toca parejas, partidos ni
+ * asistencias: corregir quién viene es del armado, y `generatePairs` rearma
+ * cuando se lo pide. `redraft_matchday` valida admin y estado del lado de la base.
+ */
+export async function redraftMatchday(supabase: Client, matchdayId: string): Promise<void> {
+  const { error } = await supabase.rpc('redraft_matchday', { p_matchday: matchdayId })
+  if (error !== null) throw new EdgeError(error.message)
+}
+
 /** Guarda el resultado de un partido. Reemplaza cualquier set anterior en vez de acumularlo. */
 export async function saveResult(
   supabase: Client,

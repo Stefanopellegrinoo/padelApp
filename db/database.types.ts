@@ -469,6 +469,7 @@ export type Database = {
       matchday_season: { Args: { p_matchday: string }; Returns: string }
       my_player_id: { Args: never; Returns: string }
       open_matchday: { Args: { p_matchday: string }; Returns: undefined }
+      redraft_matchday: { Args: { p_matchday: string }; Returns: undefined }
       reopen_matchday: { Args: { p_matchday: string }; Returns: undefined }
       season_invite: {
         Args: { p_token: string }

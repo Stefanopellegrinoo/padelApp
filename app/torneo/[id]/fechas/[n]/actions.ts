@@ -13,6 +13,7 @@ import {
   lockPair,
   nameGuest,
   openMatchday,
+  redraftMatchday,
   removeGuest,
   reopenMatchday,
   saveResult,
@@ -207,6 +208,25 @@ export async function reopenTheMatchday(
 ): Promise<WriteResult> {
   return onMatchday(seasonId, matchdayNumber, async (supabase) => {
     await reopenMatchday(supabase, matchdayId)
+  })
+}
+
+/**
+ * `OPEN → DRAFT`. Las parejas quedan como están: lo que se corrige es quién juega.
+ *
+ * Pasa por `onMatchday`, no por `inDraft`, aunque la fecha va PARA el armado:
+ * `inDraft` siembra asistencias ANTES de `work()`, y `seedAttendances` rebota
+ * con "El presentismo sólo se toca con la fecha en armado" en cualquier estado
+ * que no sea DRAFT — y acá todavía es OPEN cuando la acción arranca. Sembrar
+ * pasa a ser trabajo de la próxima pantalla de armado, no de esta transición.
+ */
+export async function redraftTheMatchday(
+  seasonId: string,
+  matchdayId: string,
+  matchdayNumber: number,
+): Promise<WriteResult> {
+  return onMatchday(seasonId, matchdayNumber, async (supabase) => {
+    await redraftMatchday(supabase, matchdayId)
   })
 }
 

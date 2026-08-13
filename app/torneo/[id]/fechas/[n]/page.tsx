@@ -355,6 +355,11 @@ export default async function FechaDetailPage({ params }: PageProps) {
         ? { seasonId, matchdayId: matchday.id, matchdayNumber: matchday.number, format: config.matchFormat }
         : null
     const remainingMatches = detail.matches.filter((match) => match.sets.length === 0).length
+    // Para el aviso de "Volver al armado" (spec: no prometer que se conservan
+    // las parejas si ya hay algo cargado). No sale de `remainingMatches`: una
+    // fecha con resultados a medio cargar tiene `remaining > 0` Y resultados a
+    // la vez, así que hace falta mirar directamente si algún partido tiene sets.
+    const hasResults = detail.matches.some((match) => match.sets.length > 0)
     // "Reabrir fecha" aparece sólo donde `reopen_matchday` va a decir que sí, y
     // eso son DOS de sus guardas, no una:
     //   · no hay una fecha CLOSED posterior (0005_matchday_moves.sql:180-185)
@@ -484,6 +489,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
             status={status}
             remaining={remainingMatches}
             canReopen={isLastClosed}
+            hasResults={hasResults}
           />
         )}
       </div>

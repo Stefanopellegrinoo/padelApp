@@ -10,7 +10,13 @@ import {
   startLoad,
   type LoadState,
 } from './carga-state'
-import { closeTheMatchday, reopenTheMatchday, saveMatchResult, type WriteResult } from './actions'
+import {
+  closeTheMatchday,
+  redraftTheMatchday,
+  reopenTheMatchday,
+  saveMatchResult,
+  type WriteResult,
+} from './actions'
 
 /** Lo que la carga necesita saber de la fecha, igual para todos sus partidos. */
 export interface CargaContext {
@@ -142,25 +148,35 @@ export function Carga({
 }
 
 /**
- * El pie de la fecha para quien organiza: cerrarla mientras está en juego, o
- * reabrir la última cerrada.
+ * El pie de la fecha para quien organiza: cerrarla mientras está en juego,
+ * reabrir la última cerrada, o volver al armado una fecha en juego.
  *
- * Cerrar congela los puntos y reabrir los borra, así que reabrir revela un
- * bloque de confirmación en línea — nada de `window.confirm`. Las reglas de qué
- * se puede reabrir viven en `reopen_matchday` y no se replican acá: lo que se
+ * Cerrar congela los puntos; reabrir y volver al armado los borran (el
+ * segundo, indirectamente — ver más abajo), así que los dos revelan un bloque
+ * de confirmación en línea — nada de `window.confirm`. Las reglas de qué se
+ * puede reabrir viven en `reopen_matchday` y no se replican acá: lo que se
  * muestra es su mensaje.
+ *
+ * `asking` es un solo booleano para las dos confirmaciones, no una máquina de
+ * estados: reabrir sólo dibuja bajo `status === 'CLOSED'` y volver al armado
+ * sólo bajo `status === 'OPEN'`, y `status` es un solo valor — las dos ramas
+ * no pueden coexistir nunca. El día que dos confirmaciones convivan en la
+ * misma rama de estado, ahí sí hace falta `asking: 'reopen' | 'redraft' | null`.
  */
 export function CierreFecha({
   context,
   status,
   remaining,
   canReopen,
+  hasResults,
 }: {
   context: CargaContext
   status: 'OPEN' | 'CLOSED'
   /** Partidos sin resultado. `close_matchday` lo vuelve a verificar, y esa es la verificación que manda. */
   remaining: number
   canReopen: boolean
+  /** Si ya hay algún resultado cargado, para el segundo renglón del aviso de "Volver al armado". */
+  hasResults: boolean
 }) {
   const [error, setError] = useState<string | null>(null)
   const [asking, setAsking] = useState(false)
@@ -194,6 +210,52 @@ export function CierreFecha({
         >
           {complete ? 'Cerrar fecha' : `Cerrar fecha · faltan ${remaining} partidos`}
         </button>
+      )}
+
+      {status === 'OPEN' && !asking && (
+        <button
+          type="button"
+          onClick={() => setAsking(true)}
+          className="rounded-field border-[1.5px] border-line p-4 text-center text-[15px] font-extrabold text-muted"
+        >
+          Volver al armado
+        </button>
+      )}
+
+      {status === 'OPEN' && asking && (
+        <div className="flex flex-col gap-2 rounded-card border border-line bg-surface p-4">
+          <p className="text-[12.5px] font-bold">Volvés al armado para corregir quién juega.</p>
+          {/* Las parejas no se tocan en esta transición, pero un aviso que lo
+              dijera sería una promesa falsa: se caen igual en cuanto se toca
+              un tilde de presente (`toggleAttendance` → `syncGuestSeat` →
+              `clearPairs`), que es justo lo que se viene a hacer acá. */}
+          {hasResults && (
+            <p className="text-[12.5px] font-bold">
+              Ya hay resultados cargados: si cambiás quién juega o volvés a sortear, se borran.
+            </p>
+          )}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => run(() => redraftTheMatchday(seasonId, matchdayId, matchdayNumber))}
+              className="flex-1 rounded-field bg-accent p-3 text-center text-[14px] font-extrabold text-accent-text"
+            >
+              Volver al armado
+            </button>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => {
+                setError(null)
+                setAsking(false)
+              }}
+              className="flex-1 rounded-field bg-chip p-3 text-center text-[14px] font-extrabold text-muted"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
       )}
 
       {status === 'CLOSED' && canReopen && !asking && (

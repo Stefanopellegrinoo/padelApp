@@ -21,33 +21,13 @@
  * El navegador sale de la caché de Playwright (`~/.cache/ms-playwright`). Si no
  * hay ninguno, `npx playwright install chromium` lo baja.
  */
-import { createRequire } from 'node:module'
 import { execFileSync } from 'node:child_process'
-import { existsSync, readdirSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { launchChromium } from './playwright.mjs'
 
 const BASE = process.env.BASE_URL ?? 'http://localhost:3000'
 const DB = process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@127.0.0.1:54322/postgres'
-const PLAYWRIGHT_DIR = process.env.PLAYWRIGHT_DIR ?? '/tmp/smoke'
 const EMAIL = 'admin@demo.com'
 const PASSWORD = 'demodemo'
-
-const require = createRequire(join(PLAYWRIGHT_DIR, 'index.js'))
-const { chromium } = require('playwright-core')
-
-function chromePath() {
-  const cache = join(homedir(), '.cache', 'ms-playwright')
-  if (!existsSync(cache)) throw new Error(`No hay navegadores en ${cache}. Corré: npx playwright install chromium`)
-  const builds = readdirSync(cache)
-    .filter((name) => /^chromium-\d+$/.test(name))
-    .sort((a, b) => Number(a.split('-')[1]) - Number(b.split('-')[1]))
-  for (const build of builds.reverse()) {
-    const binary = join(cache, build, 'chrome-linux64', 'chrome')
-    if (existsSync(binary)) return binary
-  }
-  throw new Error(`No encontré el binario de chromium en ${cache}`)
-}
 
 /** Una consulta a la base, como texto. Es la fuente de verdad contra la que se compara la pantalla. */
 function query(sql) {
@@ -80,7 +60,7 @@ async function go(page, path) {
 }
 
 async function main() {
-  const browser = await chromium.launch({ executablePath: chromePath() })
+  const browser = await launchChromium()
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } })
   const page = await context.newPage()
 

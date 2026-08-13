@@ -1,0 +1,143 @@
+{
+  "measuredAt": "2026-08-13T23:33:42.842Z",
+  "results": [
+    {
+      "label": "01-login-submit",
+      "T_first_visible_change_ms": 75,
+      "T_complete_ms": 1007,
+      "error": null
+    },
+    {
+      "label": "02-attendance-toggle-off",
+      "T_first_visible_change_ms": 634,
+      "T_complete_ms": 585,
+      "error": null
+    },
+    {
+      "label": "03-attendance-toggle-on",
+      "T_first_visible_change_ms": 785,
+      "T_complete_ms": 653,
+      "error": null
+    },
+    {
+      "label": "04-generar-parejas",
+      "T_first_visible_change_ms": 84,
+      "T_complete_ms": 618,
+      "error": null
+    },
+    {
+      "label": "05-regenerar",
+      "T_first_visible_change_ms": 83,
+      "T_complete_ms": 301,
+      "error": null
+    },
+    {
+      "label": "06-confirmar-fecha",
+      "T_first_visible_change_ms": 86,
+      "T_complete_ms": 604,
+      "error": null
+    },
+    {
+      "label": "07-agregar-pareja-invitada",
+      "T_first_visible_change_ms": 85,
+      "T_complete_ms": 613,
+      "error": null
+    },
+    {
+      "label": "08-nombrar-invitado-blur",
+      "T_first_visible_change_ms": 82,
+      "T_complete_ms": 294,
+      "error": null
+    },
+    {
+      "label": "09-volver-al-armado-open-panel",
+      "T_first_visible_change_ms": 116,
+      "T_complete_ms": 66,
+      "error": null
+    },
+    {
+      "label": "10-volver-al-armado-confirm",
+      "T_first_visible_change_ms": 336,
+      "T_complete_ms": 554,
+      "error": null
+    },
+    {
+      "label": "11-cargar-resultado-open",
+      "T_first_visible_change_ms": 116,
+      "T_complete_ms": 69,
+      "error": null
+    },
+    {
+      "label": "12-quien-gano-tap",
+      "T_first_visible_change_ms": 52,
+      "T_complete_ms": 29,
+      "error": null
+    },
+    {
+      "label": "13-games-del-perdedor-save",
+      "T_first_visible_change_ms": 88,
+      "T_complete_ms": 307,
+      "error": null
+    },
+    {
+      "label": "14-cerrar-fecha",
+      "T_first_visible_change_ms": 51,
+      "T_complete_ms": 639,
+      "error": null
+    },
+    {
+      "label": "15-nav-fechas",
+      "T_first_visible_change_ms": 361,
+      "T_complete_ms": 634,
+      "error": null
+    },
+    {
+      "label": "16-nav-stats",
+      "T_first_visible_change_ms": 331,
+      "T_complete_ms": 293,
+      "error": null
+    },
+    {
+      "label": "17-nav-reglas",
+      "T_first_visible_change_ms": 334,
+      "T_complete_ms": 608,
+      "error": null
+    },
+    {
+      "label": "18-nav-tabla",
+      "T_first_visible_change_ms": 337,
+      "T_complete_ms": 300,
+      "error": null
+    },
+    {
+      "label": "19-wizard-step0-continuar",
+      "T_first_visible_change_ms": 86,
+      "T_complete_ms": 50,
+      "error": null
+    },
+    {
+      "label": "20-wizard-step1-continuar",
+      "T_first_visible_change_ms": 83,
+      "T_complete_ms": 50,
+      "error": null
+    },
+    {
+      "label": "21-wizard-step2-continuar",
+      "T_first_visible_change_ms": 82,
+      "T_complete_ms": 52,
+      "error": null
+    },
+    {
+      "label": "22-wizard-step3-continuar-submit",
+      "T_first_visible_change_ms": 85,
+      "T_complete_ms": 311,
+      "error": null
+    },
+    {
+      "label": "23-wizard-ir-al-torneo",
+      "T_first_visible_change_ms": 618,
+      "T_complete_ms": 562,
+      "error": null
+    }
+  ]
+}

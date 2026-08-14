@@ -4,6 +4,7 @@ import { myEntryId } from '@/db/read'
 import { serverClient } from '@/db/server'
 import { claimSeat } from './actions'
 import { initials } from '@/app/format'
+import { SubmitButton } from '@/app/submit-button'
 
 interface PageProps {
   params: Promise<{ token: string }>
@@ -119,12 +120,9 @@ export default async function UnirsePage({ params, searchParams }: PageProps) {
           <form action={claimSeat}>
             <input type="hidden" name="token" value={token} />
             <input type="hidden" name="entryId" value={selectedSeat.entry_id} />
-            <button
-              type="submit"
-              className="w-full rounded-field bg-accent p-4 text-center text-[15px] font-extrabold text-accent-text"
-            >
+            <SubmitButton className="w-full rounded-field bg-accent p-4 text-center text-[15px] font-extrabold text-accent-text">
               Entrar como {selectedSeat.display_name}
-            </button>
+            </SubmitButton>
           </form>
         ) : (
           <button

@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { signOut } from '@/app/auth/actions'
+import { SubmitButton } from '@/app/submit-button'
 import { serverClient } from '@/db/server'
 
 const BULLETS = [
@@ -65,12 +66,9 @@ export default async function HomePage() {
           </Link>
         ) : (
           <form action={signOut}>
-            <button
-              type="submit"
-              className="w-full rounded-field border border-line p-4 text-center font-extrabold text-text"
-            >
+            <SubmitButton className="w-full rounded-field border border-line p-4 text-center font-extrabold text-text">
               Cerrar sesión
-            </button>
+            </SubmitButton>
           </form>
         )}
         <p className="text-pretty pt-[2px] text-center text-[12.5px] font-medium text-muted">

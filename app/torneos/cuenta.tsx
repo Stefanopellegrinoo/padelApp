@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { initials } from '@/app/format'
 import { signOut } from '@/app/auth/actions'
+import { SubmitButton } from '@/app/submit-button'
 
 /**
  * El círculo con la inicial, arriba a la derecha de Mis torneos, y su menú.
@@ -63,13 +64,12 @@ export function Cuenta({ name }: { name: string }) {
             </p>
           )}
           <form action={signOut}>
-            <button
-              type="submit"
+            <SubmitButton
               role="menuitem"
               className="w-full px-3 py-3 text-left text-[14px] font-[750] text-live"
             >
               Cerrar sesión
-            </button>
+            </SubmitButton>
           </form>
         </div>
       )}

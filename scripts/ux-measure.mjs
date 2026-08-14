@@ -129,6 +129,26 @@ async function measureInteraction(page, label, runFn) {
   return entry
 }
 
+/**
+ * El gate es un TECHO ABSOLUTO, no una comparación contra el baseline.
+ *
+ * Comparar deltas acá no mide la app, mide el instrumento. Los checkpoints van
+ * de 20 en 20ms (línea 72) y cada `page.screenshot()` cuesta ~30ms, así que un
+ * toque que responde "enseguida" cae siempre en 50, 82, 86 o 100 — nunca en un
+ * valor intermedio. Un control parado en el borde de un escalón salta ±30ms
+ * entre dos corridas idénticas: medido, `14-cerrar-fecha` dio 51ms y 82ms en
+ * dos corridas limpias consecutivas sobre el MISMO commit. Ninguna tolerancia
+ * más fina que el escalón puede distinguir eso de una regresión, y un gate que
+ * falla sobre código sin cambios enseña a ignorarlo.
+ *
+ * Lo que el contrato pide tampoco es "no varió": es que el toque se conteste
+ * rápido. 150ms está muy por debajo de lo que este bug producía (300-800ms de
+ * pantalla muerta) y muy por encima del escalón del instrumento, así que sólo
+ * se enciende cuando algo se rompió de verdad. El delta contra el baseline
+ * queda en la tabla como información — que es para lo que sirve.
+ */
+const RESPONSIVE_CEILING_MS = 150
+
 function printComparison() {
   if (!existsSync(BASELINE_FILE)) {
     console.log(`\n(sin ${BASELINE_FILE} — nada para comparar, esta corrida ES el baseline)`)
@@ -137,24 +157,43 @@ function printComparison() {
   const baselineResults = JSON.parse(readFileSync(BASELINE_FILE, 'utf8')).results
   const baselineByLabel = new Map(baselineResults.map((r) => [r.label, r.T_first_visible_change_ms]))
 
-  console.log('\n=== Comparación vs baseline (T_first_visible_change_ms) ===')
+  console.log(`\n=== Comparación vs baseline (T_first_visible_change_ms, techo ${RESPONSIVE_CEILING_MS}ms) ===`)
   console.log('label'.padEnd(38), 'baseline'.padStart(10), 'ahora'.padStart(10), 'delta'.padStart(10))
-  let regressions = 0
+  let overCeiling = 0
+  let broken = 0
   for (const r of results) {
     const before = baselineByLabel.get(r.label)
     const after = r.T_first_visible_change_ms
     const delta = before != null && after != null ? after - before : null
-    const worse = delta !== null && delta > 0
-    if (worse) regressions++
-    console.log(
+    // No medir es peor que medir lento: una interacción que no corrió no
+    // demuestra nada, así que cuenta como fallo y no como fila vacía.
+    const slow = after !== null && after > RESPONSIVE_CEILING_MS
+    if (slow) overCeiling++
+    if (r.error || after === null) broken++
+    const line = [
       r.label.padEnd(38),
       String(before ?? '—').padStart(10),
       String(after ?? '—').padStart(10),
-      (delta === null ? '—' : (delta > 0 ? '+' : '') + delta).padStart(10) + (worse ? '  ⚠' : ''),
+      (delta === null ? '—' : (delta > 0 ? '+' : '') + delta).padStart(10) + (slow ? '  ⚠ LENTO' : ''),
+    ].join(' ')
+    // Un run puede haber caído en un error (ej. redirect a /login por sesión
+    // caída) y aun así dejar un T_first_visible_change_ms de aspecto legítimo
+    // — sin esto, un número limpio en la tabla podía esconder un run roto.
+    console.log(r.error ? `${line}  ⚠ ERROR: ${r.error}` : line)
+  }
+  if (overCeiling === 0 && broken === 0) {
+    console.log(`\nLas ${results.length} interacciones contestan por debajo de ${RESPONSIVE_CEILING_MS}ms.`)
+    return 0
+  }
+  if (overCeiling > 0) console.log(`\n${overCeiling} interacción(es) por encima del techo de ${RESPONSIVE_CEILING_MS}ms.`)
+  if (broken > 0) {
+    console.log(
+      `${broken} interacción(es) no se pudieron medir. Casi siempre es la escena consumida:` +
+        ` este script CIERRA fechas y arma parejas, así que hay que correr` +
+        ` \`npm run db:reset\` + \`ux-seed.ts\` ANTES DE CADA corrida.`,
     )
   }
-  console.log(regressions === 0 ? '\nNinguna interacción empeoró.' : `\n${regressions} interacción(es) empeoraron.`)
-  return regressions === 0 ? 0 : 1
+  return 1
 }
 
 async function main() {

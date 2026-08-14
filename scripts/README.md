@@ -28,6 +28,24 @@ acción/ruta pendiente, la haga visible la app o no. Sin ocultarlo
 carga que un usuario en producción nunca ve, y la razón por la que el bug
 original pasó desapercibido en una primera medición.
 
-`ux-baseline.json` queda commiteado como referencia: cada corrida posterior
-imprime `label | baseline | ahora | delta` y sale con código 1 si alguna de
-las 23 interacciones empeoró.
+**Hay que resembrar ANTES DE CADA corrida.** El script no es idempotente:
+cierra fechas, arma parejas y consume la escena que `ux-seed.ts` prepara.
+Correrlo dos veces seguidas sin `db:reset` no da "dos mediciones": da una
+medición y una corrida de timeouts contra una escena que ya no existe. Si
+aparecen varias filas en `⚠ ERROR`, es esto casi siempre.
+
+`ux-baseline.json` queda commiteado como referencia: cada corrida imprime
+`label | baseline | ahora | delta` y sale con código 1 si alguna interacción
+supera el **techo de 150ms** o no se pudo medir.
+
+El gate es un techo absoluto y NO una comparación contra el baseline, a
+propósito: los checkpoints van de 20 en 20ms y cada screenshot cuesta ~30ms,
+así que un toque rápido cae siempre en 50, 82, 86 o 100 y nunca en un valor
+intermedio. Medido: `14-cerrar-fecha` dio 51ms y 82ms en dos corridas limpias
+consecutivas sobre el mismo commit. Comparar deltas en esa zona mide el
+instrumento, no la app — y un gate que falla sobre código sin cambios enseña
+a ignorarlo. El delta queda impreso como información.
+
+Si una interacción corrió con error (ej. sesión caída, redirect inesperado)
+la fila lo marca con `⚠ ERROR: ...` aunque el número medido parezca legítimo,
+y cuenta como fallo: no medir no demuestra nada.

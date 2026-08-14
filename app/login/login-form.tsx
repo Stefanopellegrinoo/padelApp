@@ -122,10 +122,17 @@ export default function LoginForm() {
 
           {state.error !== null && <p className="text-[12px] font-bold text-live">{state.error}</p>}
 
+          {/* `canSubmit` is overloaded: disabled means either "form not valid
+              yet" or "submit in flight". The colour swap already reads as
+              disabled on its own, so the global opacity dim only earns its
+              keep while actually pending — otherwise it just washes out the
+              first thing a new user sees on arrival. */}
           <button
             type="submit"
             disabled={!canSubmit}
-            className="rounded-field bg-accent p-4 text-[15px] font-extrabold text-accent-text disabled:bg-chip disabled:text-muted"
+            className={`rounded-field bg-accent p-4 text-[15px] font-extrabold text-accent-text disabled:bg-chip disabled:text-muted ${
+              pending ? '' : 'disabled:opacity-100'
+            }`}
           >
             Entrar
           </button>

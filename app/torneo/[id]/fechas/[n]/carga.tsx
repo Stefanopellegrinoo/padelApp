@@ -199,13 +199,18 @@ export function CierreFecha({
   return (
     <div className="flex flex-col gap-2">
       {status === 'OPEN' && (
+        // `disabled={!complete || pending}` is overloaded: "faltan N partidos"
+        // is the only place on the page that shows how many are missing, so
+        // it needs to stay readable — the global opacity dim should only
+        // apply while a close is actually in flight, not while it's merely
+        // incomplete.
         <button
           type="button"
           disabled={!complete || pending}
           onClick={() => run(() => closeTheMatchday(seasonId, matchdayId, matchdayNumber))}
           className={`rounded-field p-4 text-center text-[15px] font-extrabold ${
             complete && !pending ? 'bg-accent text-accent-text' : 'bg-chip text-muted'
-          }`}
+          } ${pending ? '' : 'disabled:opacity-100'}`}
         >
           {complete ? 'Cerrar fecha' : `Cerrar fecha · faltan ${remaining} partidos`}
         </button>

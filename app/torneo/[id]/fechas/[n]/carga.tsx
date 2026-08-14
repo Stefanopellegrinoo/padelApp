@@ -65,7 +65,6 @@ export function Carga({
     }
 
     setError(null)
-    setState(next)
     startTransition(async () => {
       const result = await saveMatchResult(seasonId, matchdayNumber, matchId, next.sets)
       if (!result.ok) {
@@ -122,7 +121,7 @@ export function Carga({
           ) : (
             <>
               <p className="text-[11.5px] font-extrabold uppercase tracking-[.14em] text-muted">
-                Games del perdedor
+                {pending ? 'Guardando…' : 'Games del perdedor'}
               </p>
               <div className="flex flex-wrap gap-2">
                 {loserGamesOptions(format).map((games) => (

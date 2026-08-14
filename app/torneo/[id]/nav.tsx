@@ -1,6 +1,6 @@
 'use client'
 
-import Link from 'next/link'
+import Link, { useLinkStatus } from 'next/link'
 import { usePathname } from 'next/navigation'
 
 interface NavItem {
@@ -46,13 +46,33 @@ export function TorneoNav({ seasonId }: { seasonId: string }) {
             key={item.label}
             href={item.href}
             prefetch
-            className={`flex min-h-[44px] flex-1 flex-col items-center justify-center gap-1 ${active ? 'text-accent-link' : 'text-muted'}`}
+            className="flex min-h-[44px] flex-1 items-center justify-center"
           >
-            <span className={`h-[19px] w-[19px] border-2 border-current ${active ? 'bg-current' : ''}`} />
-            <span className="text-[9.5px] font-extrabold">{item.label}</span>
+            <Pestana label={item.label} active={active} />
           </Link>
         )
       })}
     </nav>
+  )
+}
+
+/**
+ * Reads the parent `<Link>`'s navigation status. Must be its own component
+ * rendered INSIDE the `<Link>`: `useLinkStatus` reads the nearest `<Link>`
+ * ancestor, and calling it from `TorneoNav` (which renders the `<Link>`
+ * itself) would always return `pending: false`.
+ *
+ * `active || pending`, not a separate "loading" look: on an already
+ * prefetched tab this avoids a flicker (pending lights it up, then active
+ * takes over — same paint either way).
+ */
+function Pestana({ label, active }: { label: string; active: boolean }) {
+  const { pending } = useLinkStatus()
+  const lit = active || pending
+  return (
+    <span className={`flex flex-col items-center gap-1 ${lit ? 'text-accent-link' : 'text-muted'}`}>
+      <span className={`h-[19px] w-[19px] border-2 border-current ${lit ? 'bg-current' : ''}`} />
+      <span className="text-[9.5px] font-extrabold">{label}</span>
+    </span>
   )
 }

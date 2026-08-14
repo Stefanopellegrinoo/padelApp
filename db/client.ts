@@ -56,14 +56,24 @@ async function withFreshTokenRetry(input: RequestInfo | URL, init?: RequestInit)
   return fetch(input, init)
 }
 
+/** `SUPABASE_TRACE_MS` en ms. `null` —instrumento apagado— ante cualquier cosa que no sea un número finito ≥ 0. */
+function parseTraceMs(raw: string | undefined): number | null {
+  if (raw === undefined) return null
+  const ms = Number(raw)
+  return Number.isFinite(ms) && ms >= 0 ? ms : null
+}
+
+/** Reseteado tras una pausa: así la ÚLTIMA línea de una ráfaga de consultas ya lee la cuenta completa. */
+const QUIET_GAP_MS = 400
+
 /**
  * Instrumento dev-only para medir lo que el harness de `scripts/ux-measure.mjs`
  * no puede ver: corre contra Supabase LOCAL (~0ms por consulta), así que un
  * número verde ahí no dice nada de lo que pasa contra una base a distancia
- * real. `SUPABASE_TRACE_MS` envuelve el mismo seam por el que pasan las tres
+ * real. `SUPABASE_TRACE_MS` envuelve el mismo seam por el que pasan los tres
  * clientes (`browserClient`, `serverClient`, `middleware.ts`) para (a) contar
  * viajes de ida y vuelta por consulta y (b) opcionalmente sumarles un delay,
- * modelando los hops intra-región reales.
+ * modelando la distancia real a la base.
  *
  * IMPOSIBLE de prender en producción: `NODE_ENV` es la puerta de AFUERA, no
  * `SUPABASE_TRACE_MS` sola. `next build` INLINEA `process.env.NODE_ENV` — el
@@ -74,15 +84,6 @@ async function withFreshTokenRetry(input: RequestInfo | URL, init?: RequestInit)
  * gate sería legible en runtime y por lo tanto activable por error — por eso
  * `NODE_ENV` va afuera, no como chequeo adicional adentro.
  */
-function parseTraceMs(raw: string | undefined): number | null {
-  if (raw === undefined) return null
-  const ms = Number(raw)
-  return Number.isFinite(ms) && ms >= 0 ? ms : null
-}
-
-/** Reseteado tras una pausa: así la ÚLTIMA línea de una ráfaga de consultas ya lee la cuenta completa. */
-const QUIET_GAP_MS = 400
-
 function traced(fetchFn: typeof withFreshTokenRetry, delayMs: number): typeof withFreshTokenRetry {
   let count = 0
   let lastAt = 0

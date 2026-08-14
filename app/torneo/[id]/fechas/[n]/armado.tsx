@@ -13,13 +13,11 @@ import {
   toggleAttendance,
   type WriteResult,
 } from './actions'
+import { applySeatTick, type SeatVM } from './armado-state'
 
-export interface SeatVM {
-  entryId: string
-  name: string
-  /** Sin fila de asistencia es `true`: el default es venir, y `seedAttendances` hace que la base opine lo mismo. */
-  playing: boolean
-}
+// `SeatVM` vive en `armado-state.ts` —con el reducer que lo usa— y se re-exporta
+// acá porque `page.tsx` lo importa de esta pantalla desde antes.
+export type { SeatVM }
 
 /** Un invitado SUELTO: juega con alguien del torneo, y ese compañero sí cobra. */
 export interface GuestVM {
@@ -83,16 +81,11 @@ export function Armado({
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
 
-  // Predice el asiento tocado, no lo que el servidor decide a partir de él.
-  // Absoluto, nunca un toggle: React vuelve a aplicar TODA la lista de acciones
-  // pendientes contra la base más reciente cada vez que cambian los props, y un
-  // toggle reaplicado sobre una base que ya trae el cambio lo vuelve a dar
-  // vuelta. Un valor absoluto es idempotente ante ese replay.
-  const [optimisticSeats, tickSeat] = useOptimistic(
-    seats,
-    (current: SeatVM[], tick: { entryId: string; playing: boolean }) =>
-      current.map((seat) => (seat.entryId === tick.entryId ? { ...seat, playing: tick.playing } : seat)),
-  )
+  // Predice el asiento tocado, no lo que el servidor decide a partir de él. El
+  // reducer vive en `armado-state.ts` y tiene test propio: es absoluto y no un
+  // toggle, y de eso depende que el tilde no se dé vuelta solo cuando React
+  // reaplica las acciones pendientes sobre props nuevos.
+  const [optimisticSeats, tickSeat] = useOptimistic(seats, applySeatTick)
   // Transición propia del tilde, separada de `pending`: así el tilde no dispara
   // el `disabled` compartido que grisa toda la pantalla, y este booleano sólo
   // se usa para apagar la banda de paridad mientras el tilde está en vuelo.
@@ -137,6 +130,17 @@ export function Armado({
 
   const confirmed = optimisticSeats.filter((seat) => seat.playing).length
   const guestCount = looseGuests.length + guestPairs.length * 2
+  // Mientras el tilde vuela, `confirmed` ya es el nuevo y `guestCount` sigue
+  // siendo el viejo: el asiento del invitado lo decide `syncGuestSeat` en el
+  // servidor y no se adivina. TODO lo que mezcla esos dos —`size`,
+  // `eventualSize`, la banda de paridad, y los avisos de "no alcanza" / "entran
+  // hasta N"— puede leer un número que no existe en ningún momento.
+  //
+  // Con 11 confirmados y un invitado sin nombre, tildar al 12° daba
+  // `eventualSize` 13 y encendía "Son 12 y entran hasta 12" — falso y además
+  // contradictorio consigo mismo. Nada derivado del tamaño se muestra hasta que
+  // el servidor confirme.
+  const sizeSettled = !seatPending
   // El tamaño de la fecha es el plantel confirmado MÁS los invitados: una pareja
   // invitada suma dos jugadores de verdad y el panel tiene que decirlo, o dice
   // "la fecha es de 8" con diez personas adentro.
@@ -170,13 +174,15 @@ export function Armado({
     <div className="flex flex-col gap-4">
       <section className="rounded-card border border-line bg-surface p-4">
         <p className="text-center text-[32px] font-extrabold leading-none">{confirmed} confirmados</p>
-        {/* Mientras el tilde está en vuelo, `confirmed` ya cambió pero
-            `guestCount` todavía no —ese medio segundo puede leer una paridad
-            que no es la real. Se apaga la banda entera y vuelve con la
-            paridad que el servidor confirme; una banda ausente un instante
-            es preferible a una mostrando algo falso. */}
-        {!seatPending &&
-          (needsLooseGuest ? (
+        {/* `invisible` y no desmontar: el bloque mide unos 36px justo encima de
+            la lista de asientos, así que sacarlo del layout hace saltar las
+            filas bajo el dedo en el primer toque de una ráfaga y volver a
+            bajarlas al asentarse. Ocultarlo reserva el lugar y no muestra nada
+            —`visibility:hidden` tampoco lo lee un lector de pantalla—, que es
+            lo que se busca: mejor una banda ausente un instante que una
+            mintiendo. */}
+        <div className={sizeSettled ? '' : 'invisible'}>
+          {needsLooseGuest ? (
             <p className="mt-2 rounded-field bg-warn-bg px-3 py-2 text-center text-[12.5px] font-bold">
               Son impares. Se suma 1 invitado y la fecha queda de {eventualSize}.
             </p>
@@ -188,7 +194,8 @@ export function Armado({
             <p className="mt-2 rounded-field bg-warn-bg px-3 py-2 text-center text-[12.5px] font-bold">
               Son {size} y sólo se juega de a pares. Falta uno.
             </p>
-          ))}
+          )}
+        </div>
       </section>
 
       <section className="flex flex-col gap-2">
@@ -325,12 +332,16 @@ export function Armado({
         </section>
       )}
 
-      {tooFew && (
+      {/* Los dos salen de `eventualSize`, que mezcla el `confirmed` optimista
+          con el `guestCount` que todavía no cambió — ver `sizeSettled`. Sin esta
+          guarda, tildar al 12° con un invitado sin nombre prendía "Son 12 y
+          entran hasta 12" en rojo durante toda la espera. */}
+      {sizeSettled && tooFew && (
         <p className="rounded-field bg-live-bg px-3 py-2.5 text-[12.5px] font-bold text-live">
           Con {confirmed} no alcanza para armar una fecha. Hacen falta {MIN_PLAYERS}.
         </p>
       )}
-      {tooMany && (
+      {sizeSettled && tooMany && (
         <p className="rounded-field bg-live-bg px-3 py-2.5 text-[12.5px] font-bold text-live">
           Son {confirmed} y entran hasta {MAX_PLAYERS}. Con más, la fecha no termina nunca.
         </p>

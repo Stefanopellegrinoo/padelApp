@@ -298,12 +298,10 @@ async function main() {
   }
 
   // ================= 2) Toggle de asistencia (fecha en borrador) =================
-  // El tilde de asistencia es optimista (armado.tsx): apenas se toca, el DOM ya
-  // puede leer "7 confirmados" ANTES de que el servidor conteste — eso hace
-  // que `bodyIncludes` por sí solo ya no pruebe que la escritura llegó a la
-  // base, sólo que la pantalla contestó. Lo que sí lo prueba es el CUERPO de
-  // la respuesta del POST: `revalidatePath` hace que el RSC actualizado viaje
-  // adentro de esa misma respuesta, así que leerlo demuestra persistencia real.
+  // Va por `assertPersisted` y no por `bodyIncludes`: el tilde es optimista, así
+  // que el DOM ya dice "7 confirmados" antes de que conteste el servidor. El
+  // porqué de la recarga —y por qué leer el cuerpo del POST NO sirve— está en
+  // el docblock de `assertPersisted`.
   await page.goto(seed.draft.url, { waitUntil: 'networkidle' })
   await measureInteraction(page, '02-attendance-toggle-off', async () => {
     await assertPersisted(page, 'Jugador de test 1', '7 confirmados')

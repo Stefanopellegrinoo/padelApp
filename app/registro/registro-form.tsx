@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-import { useActionState, useState } from 'react'
+import { useActionState, useState, useTransition } from 'react'
 import { signUp, type FormState } from '@/app/auth/actions'
 import { safeNextPath } from '@/app/auth/next-path'
 import { browserClient } from '@/db/client'
@@ -14,6 +14,7 @@ const INITIAL_STATE: FormState = { error: null }
 
 export default function RegistroForm() {
   const [state, formAction, pending] = useActionState(signUp, INITIAL_STATE)
+  const [googlePending, startGoogle] = useTransition()
   const [displayName, setDisplayName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -64,7 +65,8 @@ export default function RegistroForm() {
 
         <button
           type="button"
-          onClick={handleGoogle}
+          disabled={googlePending}
+          onClick={() => startGoogle(handleGoogle)}
           className="rounded-field border-[1.5px] border-line p-4 text-[15px] font-extrabold"
         >
           Continuar con Google

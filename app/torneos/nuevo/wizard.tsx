@@ -480,7 +480,8 @@ export function Wizard({ myName }: { myName: string }) {
         {step === 4 && created !== null ? (
           <button
             type="button"
-            onClick={() => router.push(`/torneo/${created.seasonId}`)}
+            disabled={pending}
+            onClick={() => startTransition(() => router.push(`/torneo/${created.seasonId}`))}
             className="flex-1 rounded-field bg-accent p-4 text-center text-[15px] font-extrabold text-accent-text"
           >
             Ir al torneo

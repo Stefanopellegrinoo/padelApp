@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-import { useActionState, useState } from 'react'
+import { useActionState, useState, useTransition } from 'react'
 import { signIn, type FormState } from '@/app/auth/actions'
 import { safeNextPath } from '@/app/auth/next-path'
 import { browserClient } from '@/db/client'
@@ -13,6 +13,7 @@ const INITIAL_STATE: FormState = { error: null }
 
 export default function LoginForm() {
   const [state, formAction, pending] = useActionState(signIn, INITIAL_STATE)
+  const [googlePending, startGoogle] = useTransition()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -58,7 +59,8 @@ export default function LoginForm() {
 
         <button
           type="button"
-          onClick={handleGoogle}
+          disabled={googlePending}
+          onClick={() => startGoogle(handleGoogle)}
           className="rounded-field border-[1.5px] border-line p-4 text-[15px] font-extrabold"
         >
           Continuar con Google

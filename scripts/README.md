@@ -49,3 +49,36 @@ a ignorarlo. El delta queda impreso como información.
 Si una interacción corrió con error (ej. sesión caída, redirect inesperado)
 la fila lo marca con `⚠ ERROR: ...` aunque el número medido parezca legítimo,
 y cuenta como fallo: no medir no demuestra nada.
+
+## Medir con latencia de base simulada (`SUPABASE_TRACE_MS`)
+
+Este harness corre contra Supabase LOCAL, donde una consulta cuesta ~0ms. Un
+número verde ahí NO prueba nada sobre lo que pasa contra una base a distancia
+real — así se coló una lectura de 84ms para una interacción que el usuario
+sentía como 2 segundos (ver `db/client.ts`, docblock de `traced`). Para medir
+de verdad hacen falta DOS terminales:
+
+```
+# Terminal 1 — servidor con el instrumento prendido
+SUPABASE_TRACE_MS=120 npm run dev -- -p 3003
+
+# Terminal 2 — el harness, contra ese puerto
+BASE_URL=http://localhost:3003 node scripts/ux-measure.mjs
+```
+
+Con `SUPABASE_TRACE_MS` puesto, la Terminal 1 imprime una línea por consulta:
+`[db] #N {ms}ms {método} {path}`, con `N` reiniciado tras una pausa de más de
+400ms — así la ÚLTIMA línea de una ráfaga (un tilde de asistencia, por
+ejemplo) ya lee la cuenta completa de esa ráfaga, sin contar líneas a mano.
+
+**El harness (Terminal 2) NO puede leer esa cuenta.** Corre en otro proceso, y
+las Server Actions de Next 15 no tienen forma soportada de devolver un header
+con ese número en la respuesta. El harness sigue midiendo lo suyo
+—`T_first_visible_change_ms`, que es del lado del cliente y no depende de la
+latencia inyectada—; la cuenta de consultas se lee a ojo en la Terminal 1,
+una interacción a la vez (ver el `ponytail:` en `traced` sobre tráfico
+concurrente).
+
+`SUPABASE_TRACE_MS` es inerte sin el env var, y **imposible** de prender en
+`next build`/producción: `NODE_ENV` lo tapa desde afuera, no el env var por sí
+solo (detalle completo en el docblock de `db/client.ts`).

@@ -44,10 +44,7 @@ const RETRY_DELAY_MS = 300
  * alcanza y hace falta un segundo reintento o backoff, ya no es un problema
  * de timing sino de la máquina bajo esa carga, y hay que mirar eso primero.
  */
-export async function fetchWithFreshTokenRetry(
-  input: RequestInfo | URL,
-  init?: RequestInit,
-): Promise<Response> {
+async function withFreshTokenRetry(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const response = await fetch(input, init)
   if (response.status !== 401) return response
 
@@ -58,6 +55,67 @@ export async function fetchWithFreshTokenRetry(
   await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS))
   return fetch(input, init)
 }
+
+/**
+ * Instrumento dev-only para medir lo que el harness de `scripts/ux-measure.mjs`
+ * no puede ver: corre contra Supabase LOCAL (~0ms por consulta), así que un
+ * número verde ahí no dice nada de lo que pasa contra una base a distancia
+ * real. `SUPABASE_TRACE_MS` envuelve el mismo seam por el que pasan las tres
+ * clientes (`browserClient`, `serverClient`, `middleware.ts`) para (a) contar
+ * viajes de ida y vuelta por consulta y (b) opcionalmente sumarles un delay,
+ * modelando los hops intra-región reales.
+ *
+ * IMPOSIBLE de prender en producción: `NODE_ENV` es la puerta de AFUERA, no
+ * `SUPABASE_TRACE_MS` sola. `next build` INLINEA `process.env.NODE_ENV` — el
+ * bundler convierte la condición en `'production' === 'production'` y borra
+ * la rama entera por dead-code elimination. No es un chequeo que alguien
+ * pueda prender desde el dashboard de Vercel: en producción no queda código
+ * que siquiera LEA `SUPABASE_TRACE_MS`. Una sola variable de entorno como
+ * gate sería legible en runtime y por lo tanto activable por error — por eso
+ * `NODE_ENV` va afuera, no como chequeo adicional adentro.
+ */
+function parseTraceMs(raw: string | undefined): number | null {
+  if (raw === undefined) return null
+  const ms = Number(raw)
+  return Number.isFinite(ms) && ms >= 0 ? ms : null
+}
+
+/** Reseteado tras una pausa: así la ÚLTIMA línea de una ráfaga de consultas ya lee la cuenta completa. */
+const QUIET_GAP_MS = 400
+
+function traced(fetchFn: typeof withFreshTokenRetry, delayMs: number): typeof withFreshTokenRetry {
+  let count = 0
+  let lastAt = 0
+
+  return async (input, init) => {
+    const now = Date.now()
+    if (now - lastAt > QUIET_GAP_MS) count = 0
+    lastAt = now
+    count += 1
+
+    // El reloj arranca ANTES del delay inyectado, no después: la línea tiene
+    // que leer lo que el round trip cuesta CON la latencia simulada puesta,
+    // que es el número que se compara contra los ~120ms/consulta reales.
+    const started = Date.now()
+    if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs))
+    const response = await fetchFn(input, init)
+    const path = typeof input === 'string' ? input : input.toString()
+    // ponytail: la cuenta asume consultas SECUENCIALES, una a la vez — si dos
+    // requests corren en paralelo se entrelazan y el número de la última línea
+    // deja de ser exacto. Correcto para leer el costo de UN tilde a la vez,
+    // que es para lo que sirve; para tráfico concurrente hace falta un id por
+    // request, no sólo un contador global.
+    console.log(`[db] #${count} ${Date.now() - started}ms ${init?.method ?? 'GET'} ${path}`)
+    return response
+  }
+}
+
+const traceMs = process.env.NODE_ENV === 'production' ? null : parseTraceMs(process.env.SUPABASE_TRACE_MS)
+
+// El export es la función original, no un wrapper con un `if` adentro: sin
+// instrumento activo el costo es literalmente cero, no una rama que se salta.
+export const fetchWithFreshTokenRetry =
+  traceMs === null ? withFreshTokenRetry : traced(withFreshTokenRetry, traceMs)
 
 export function browserClient() {
   const { url, anonKey } = credentials()

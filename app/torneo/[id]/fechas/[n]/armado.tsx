@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useOptimistic, useState, useTransition } from 'react'
 import { MAX_PLAYERS, MIN_PLAYERS } from '@/core'
 import { initials } from '@/app/format'
 import {
@@ -59,10 +59,17 @@ const STEP_TITLE = 'text-[15px] font-extrabold tracking-[-.02em]'
 
 /**
  * El armado de una fecha en `DRAFT`, que es la pantalla que el admin usa parado
- * en el club. Sólo dibuja e invoca: cada botón llama a una action, y toda la
- * verdad vuelve del servidor. No hay estado optimista, y es a propósito — el
- * asiento del invitado aparece y desaparece según la paridad, así que adivinar
- * el resultado de un tilde es adivinar mal.
+ * en el club. Casi todo sigue siendo sólo dibujar e invocar: cada botón llama
+ * a una action y espera la verdad del servidor.
+ *
+ * El tilde de asistencia es la excepción, a propósito: `optimisticSeats`
+ * predice el asiento tocado apenas se toca, sin esperar el viaje a la base.
+ * Lo que NO predice es el asiento del invitado — eso lo decide `syncGuestSeat`
+ * en el servidor según la paridad del plantel, y adivinarlo es adivinar mal.
+ * La banda de paridad se apaga mientras el tilde está en vuelo por la misma
+ * razón: `confirmed` ya cambió pero `guestCount` todavía no, así que por
+ * 300-500ms la cuenta puede leer "impar" sobre un tilde que en realidad
+ * arregló la paridad. Mejor una banda ausente un instante que una mintiendo.
  */
 export function Armado({
   seasonId,
@@ -76,15 +83,59 @@ export function Armado({
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
 
+  // Predice el asiento tocado, no lo que el servidor decide a partir de él.
+  // Absoluto, nunca un toggle: React vuelve a aplicar TODA la lista de acciones
+  // pendientes contra la base más reciente cada vez que cambian los props, y un
+  // toggle reaplicado sobre una base que ya trae el cambio lo vuelve a dar
+  // vuelta. Un valor absoluto es idempotente ante ese replay.
+  const [optimisticSeats, tickSeat] = useOptimistic(
+    seats,
+    (current: SeatVM[], tick: { entryId: string; playing: boolean }) =>
+      current.map((seat) => (seat.entryId === tick.entryId ? { ...seat, playing: tick.playing } : seat)),
+  )
+  // Transición propia del tilde, separada de `pending`: así el tilde no dispara
+  // el `disabled` compartido que grisa toda la pantalla, y este booleano sólo
+  // se usa para apagar la banda de paridad mientras el tilde está en vuelo.
+  const [seatPending, startSeatTransition] = useTransition()
+
   const run = (work: () => Promise<WriteResult>) => {
     setError(null)
     startTransition(async () => {
-      const result = await work()
-      if (!result.ok) setError(result.error)
+      try {
+        const result = await work()
+        if (!result.ok) setError(result.error)
+      } catch {
+        // `inDraft` deja pasar cualquier error que no sea `EdgeError` (caída de
+        // red, 500): sin este catch la promesa de la transición rechazaba sin
+        // que nadie llamara a `setError`, y el control volvía a su estado
+        // anterior sin ninguna explicación en pantalla. El admin parado en el
+        // club con wifi del lugar es exactamente ese caso.
+        setError('No pudimos guardar el cambio. Probá de nuevo.')
+      }
     })
   }
 
-  const confirmed = seats.filter((seat) => seat.playing).length
+  const tickAttendance = (seat: SeatVM) => {
+    const playing = !seat.playing
+    setError(null)
+    startSeatTransition(async () => {
+      tickSeat({ entryId: seat.entryId, playing })
+      try {
+        const result = await toggleAttendance(
+          seasonId,
+          matchdayId,
+          matchdayNumber,
+          seat.entryId,
+          playing ? 'PLAYING' : 'ABSENT',
+        )
+        if (!result.ok) setError(result.error)
+      } catch {
+        setError('No pudimos guardar el tilde. Probá de nuevo.')
+      }
+    })
+  }
+
+  const confirmed = optimisticSeats.filter((seat) => seat.playing).length
   const guestCount = looseGuests.length + guestPairs.length * 2
   // El tamaño de la fecha es el plantel confirmado MÁS los invitados: una pareja
   // invitada suma dos jugadores de verdad y el panel tiene que decirlo, o dice
@@ -119,19 +170,25 @@ export function Armado({
     <div className="flex flex-col gap-4">
       <section className="rounded-card border border-line bg-surface p-4">
         <p className="text-center text-[32px] font-extrabold leading-none">{confirmed} confirmados</p>
-        {needsLooseGuest ? (
-          <p className="mt-2 rounded-field bg-warn-bg px-3 py-2 text-center text-[12.5px] font-bold">
-            Son impares. Se suma 1 invitado y la fecha queda de {eventualSize}.
-          </p>
-        ) : size % 2 === 0 ? (
-          <p className="mt-2 text-center text-[12.5px] font-[600] text-muted">
-            La fecha es de {size} · {size / 2} parejas
-          </p>
-        ) : (
-          <p className="mt-2 rounded-field bg-warn-bg px-3 py-2 text-center text-[12.5px] font-bold">
-            Son {size} y sólo se juega de a pares. Falta uno.
-          </p>
-        )}
+        {/* Mientras el tilde está en vuelo, `confirmed` ya cambió pero
+            `guestCount` todavía no —ese medio segundo puede leer una paridad
+            que no es la real. Se apaga la banda entera y vuelve con la
+            paridad que el servidor confirme; una banda ausente un instante
+            es preferible a una mostrando algo falso. */}
+        {!seatPending &&
+          (needsLooseGuest ? (
+            <p className="mt-2 rounded-field bg-warn-bg px-3 py-2 text-center text-[12.5px] font-bold">
+              Son impares. Se suma 1 invitado y la fecha queda de {eventualSize}.
+            </p>
+          ) : size % 2 === 0 ? (
+            <p className="mt-2 text-center text-[12.5px] font-[600] text-muted">
+              La fecha es de {size} · {size / 2} parejas
+            </p>
+          ) : (
+            <p className="mt-2 rounded-field bg-warn-bg px-3 py-2 text-center text-[12.5px] font-bold">
+              Son {size} y sólo se juega de a pares. Falta uno.
+            </p>
+          ))}
       </section>
 
       <section className="flex flex-col gap-2">
@@ -142,22 +199,17 @@ export function Armado({
           </span>
         </div>
 
-        {seats.map((seat) => (
+        {optimisticSeats.map((seat) => (
           <button
             key={seat.entryId}
             type="button"
-            disabled={pending}
-            onClick={() =>
-              run(() =>
-                toggleAttendance(
-                  seasonId,
-                  matchdayId,
-                  matchdayNumber,
-                  seat.entryId,
-                  seat.playing ? 'ABSENT' : 'PLAYING',
-                ),
-              )
-            }
+            // Sin `disabled`, a propósito: `setAttendance` escribe un estado
+            // ABSOLUTO (no un toggle), así que un segundo toque mientras el
+            // primero sigue en vuelo es inofensivo — como mucho el usuario
+            // pidió lo mismo dos veces, o volvió al estado del que salió.
+            // Next además serializa las Server Actions en orden de toque, así
+            // que no hay escritura corriendo por delante de otra.
+            onClick={() => tickAttendance(seat)}
             // Opacity is reserved for "the system is working" (the global
             // `:disabled` rule). Resting states speak in color instead — the
             // "No viene" chip and the "Avisó que no va" line already carry
@@ -192,7 +244,7 @@ export function Armado({
         <GuestCard
           key={guest.entryId}
           guest={guest}
-          seats={seats}
+          seats={optimisticSeats}
           pending={pending}
           onName={(name) =>
             run(() => saveGuestName(seasonId, matchdayId, matchdayNumber, guest.entryId, name))

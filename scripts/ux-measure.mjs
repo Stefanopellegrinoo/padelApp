@@ -56,6 +56,30 @@ function bodyExcludes(page, text) {
 }
 
 /**
+ * Toca un botón y prueba que el servidor PERSISTIÓ el cambio, no sólo que la
+ * pantalla contestó rápido. Con el tilde optimista de `armado.tsx`, el DOM ya
+ * puede decir `expectedText` antes de que el servidor conteste — mirar el DOM
+ * ahí ya no prueba nada. Y el cuerpo del propio POST tampoco sirve: el flight
+ * de RSC serializa `{confirmed} confirmados` como DOS hijos separados (`7` y
+ * `" confirmados"`), así que el substring armado nunca aparece literal ahí
+ * adentro aunque el dato SÍ se haya guardado — se probó y rompe siempre.
+ *
+ * La única prueba que no depende del formato interno de Next es recargar: una
+ * navegación completa (GET, HTML de verdad) tira cualquier estado optimista y
+ * de router, y en HTML dos hijos de texto adyacentes SÍ quedan concatenados.
+ * Si el texto esperado no aparece después de la recarga, tira: una aserción
+ * que nunca falla no es una aserción.
+ */
+async function assertPersisted(page, buttonText, expectedText) {
+  await Promise.all([
+    page.waitForResponse((r) => r.request().method() === 'POST', { timeout: 10000 }),
+    page.locator('button', { hasText: buttonText }).click(),
+  ])
+  await page.reload({ waitUntil: 'networkidle' })
+  await bodyIncludes(page, expectedText)
+}
+
+/**
  * Corre una interacción, midiendo dos cosas contra el mismo Date.now():
  * - el primer diff de píxeles en pantalla (screenshots por sondeo, comparación exacta de bytes)
  * - la resolución propia de runFn (cada escenario define qué significa "listo" para él)
@@ -274,20 +298,18 @@ async function main() {
   }
 
   // ================= 2) Toggle de asistencia (fecha en borrador) =================
+  // El tilde de asistencia es optimista (armado.tsx): apenas se toca, el DOM ya
+  // puede leer "7 confirmados" ANTES de que el servidor conteste — eso hace
+  // que `bodyIncludes` por sí solo ya no pruebe que la escritura llegó a la
+  // base, sólo que la pantalla contestó. Lo que sí lo prueba es el CUERPO de
+  // la respuesta del POST: `revalidatePath` hace que el RSC actualizado viaje
+  // adentro de esa misma respuesta, así que leerlo demuestra persistencia real.
   await page.goto(seed.draft.url, { waitUntil: 'networkidle' })
   await measureInteraction(page, '02-attendance-toggle-off', async () => {
-    await Promise.all([
-      page.waitForResponse((r) => r.request().method() === 'POST', { timeout: 10000 }),
-      page.locator('button', { hasText: 'Jugador de test 1' }).click(),
-    ])
-    await bodyIncludes(page, '7 confirmados')
+    await assertPersisted(page, 'Jugador de test 1', '7 confirmados')
   })
   await measureInteraction(page, '03-attendance-toggle-on', async () => {
-    await Promise.all([
-      page.waitForResponse((r) => r.request().method() === 'POST', { timeout: 10000 }),
-      page.locator('button', { hasText: 'Jugador de test 1' }).click(),
-    ])
-    await bodyIncludes(page, '8 confirmados')
+    await assertPersisted(page, 'Jugador de test 1', '8 confirmados')
   })
 
   // ================= 3) Generar parejas / Regenerar =================

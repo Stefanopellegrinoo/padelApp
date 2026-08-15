@@ -164,8 +164,11 @@ describe('computeAwards — guests', () => {
 })
 
 // El teorema del que depende TODO `promote_guest` (spec 3.1, design #3771
-// decisión 12): copiar el award congelado del compañero es lo mismo que lo
-// que un reabrir-y-volver-a-cerrar hubiera calculado. La prueba anterior de
+// decisión 12), enunciado con su hipótesis puesta: copiar el award congelado
+// del compañero es lo mismo que lo que un reabrir-y-volver-a-cerrar hubiera
+// calculado **cuando esa pareja YA cobraba** — o sea, cuando el compañero
+// tiene un award congelado en esa fecha. Sin esa hipótesis es falso, y los
+// dos últimos tests de este bloque lo muestran con números. La prueba anterior de
 // esto era un probe suelto que se borró — vuelve acá, permanente, con
 // aserciones contra VALORES TIPEADOS A MANO, nunca contra el resultado de
 // otra corrida de la misma función: comparar una llamada contra otra no
@@ -204,5 +207,41 @@ describe('computeAwards — el teorema de la promoción (spec 3.1)', () => {
     const awards = computeAwards(standings, CONFIG, [])
     expect(awards.find((award) => award.entryId === 'p2')).toEqual({ entryId: 'p2', position: 2, points: 7 })
     expect(awards.find((award) => award.entryId === 'p3')).toEqual({ entryId: 'p3', position: 2, points: 7 })
+  })
+
+  // ── el borde del teorema: dónde DEJA de valer ────────────────────────────
+  // Los tres tests de arriba pinneaban el teorema sólo sobre la entrada donde
+  // es cierto, y por eso no agarraban al mutante que importa: neutralizar el
+  // filtro `paying` (core/awards.ts:26-28) los pasaba a los tres. Este par de
+  // casos mete una pareja TODA INVITADA adentro de la tabla, que es lo único
+  // que hace visible ese filtro — y de paso demuestra el contraejemplo por el
+  // que `promote_guest` (0014_promote_guest.sql) REFUSA ese caso en vez de
+  // saltearlo: ahí copiar el award congelado NO es lo que un recálculo daría.
+  const conParejaInvitada: PairStanding[] = [
+    standing('p1', 'p2', 1),
+    standing('g1', 'g2', 2),
+    standing('p3', 'p4', 3),
+  ]
+
+  it('congelado: la pareja toda invitada no consume posición paga, así que p3 y p4 cobran 7 en position 2', () => {
+    const awards = computeAwards(conParejaInvitada, CONFIG, ['g1', 'g2'])
+    // CONFIG.points = [10, 7, 5, 3, 2, 1]. Literales tipeados a mano.
+    expect(awards).toEqual([
+      { entryId: 'p1', position: 1, points: 10 },
+      { entryId: 'p2', position: 1, points: 10 },
+      { entryId: 'p3', position: 2, points: 7 },
+      { entryId: 'p4', position: 2, points: 7 },
+    ])
+  })
+
+  it('recalculado con g1 ya en el plantel: su pareja pasa a cobrar y p3 y p4 CAEN a position 3 con 5 — el teorema no vale acá', () => {
+    const awards = computeAwards(conParejaInvitada, CONFIG, ['g2'])
+    expect(awards).toEqual([
+      { entryId: 'p1', position: 1, points: 10 },
+      { entryId: 'p2', position: 1, points: 10 },
+      { entryId: 'g1', position: 2, points: 7 },
+      { entryId: 'p3', position: 3, points: 5 },
+      { entryId: 'p4', position: 3, points: 5 },
+    ])
   })
 })

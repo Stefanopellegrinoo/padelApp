@@ -24,7 +24,8 @@ import { Armado, type DraftPairVM, type GuestPairVM, type GuestVM, type SeatVM }
 import { CierreFecha } from './carga'
 import { DiaDeLaFecha } from './dia'
 import { MastersDraft, type QualifierVM } from './masters'
-import { SumarInvitado, type GuestPromoteVM, type SumarSeatVM } from './sumar'
+import { SumarInvitado, type SumarSeatVM } from './sumar'
+import { guestsToPromote, type GuestPromoteVM } from './sumar-state'
 
 interface PageProps {
   params: Promise<{ id: string; n: string }>
@@ -413,37 +414,11 @@ export default async function FechaDetailPage({ params }: PageProps) {
     // coinciden fila por fila. O sea: leer `awards` hoy no cambia lo que se
     // ve, cambia DE QUÉ DEPENDE lo que se ve.
     //
-    // El estado del invitado decide si se ofrece el botón o la explicación:
-    // sin award de compañero, `promote_guest` refusa SIEMPRE desde esta fecha
-    // (0014_promote_guest.sql), así que un botón ahí es un rebote garantizado
-    // — el defecto que este repo ya nombra en `ajustes/plantel.tsx:27-30`.
-    // El cuantificador va sobre TODAS sus parejas y no sobre la primera, que es
-    // el mismo `every` que decide la base (0014_promote_guest.sql: refusa si
-    // EXISTE una pareja suya cuyo compañero no tenga award). Con `find` esto
-    // era un `some` disfrazado: un invitado con dos filas en `pairs` —una que
-    // cobró y otra que no— mostraba el botón con los puntos de la primera y
-    // rebotaba al mandarlo, que es justo el "botón que siempre rebota" que esta
-    // pantalla dice haber sacado. La app no produce ese estado hoy
-    // (`generatePairs` borra las `pairs` de la fecha antes de insertar), pero la
-    // afirmación de `sumar.tsx` —"el mismo predicado que usa la base"— tiene que
-    // ser cierta por construcción y no por suerte.
+    // La clasificación en sí —qué estado le toca a cada invitado— vive en
+    // `sumar-state.ts`, que es pura y por eso tiene tests: acá adentro no los
+    // podía tener, y su predicado ya se escribió mal una vez.
     const guestsForPromotion: GuestPromoteVM[] = canPromote
-      ? detail.guestIds.map((guestId) => {
-          const name = nameOf.get(guestId) ?? '?'
-          const partnersPoints = detail.pairs
-            .filter((candidate) => candidate.a === guestId || candidate.b === guestId)
-            .map((pair) => frozenPoints.get(pair.a === guestId ? pair.b : pair.a))
-          if (partnersPoints.length === 0) return { entryId: guestId, name, estado: 'SIN_PAREJA' }
-          if (partnersPoints.some((points) => points === undefined)) {
-            return { entryId: guestId, name, estado: 'PAREJA_INVITADA' }
-          }
-          // Con más de una pareja y todas cobrando, la base tampoco promueve:
-          // el `insert ... select` trae dos filas con la misma clave y el
-          // `unique` de `awards` la corta entera (probado en
-          // `db/promote.db.test.ts`). El error se ve al mandar; la tarjeta no
-          // pretende adivinarlo, sólo promete los puntos de la primera.
-          return { entryId: guestId, name, estado: 'PUEDE', partnerPoints: partnersPoints[0]! }
-        })
+      ? guestsToPromote({ guestIds: detail.guestIds, pairs: detail.pairs, frozenPoints, nameOf })
       : []
     // La lista de asientos es sólo para el select de "antes de quién" de esa
     // tarjeta: sin invitados que sumar no hay tarjeta, y armarla es trabajo al

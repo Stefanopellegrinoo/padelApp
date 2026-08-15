@@ -118,17 +118,21 @@ describe('snapshotForMatchday', () => {
   // Pinning test for spec 2.2/2.3 (Capability 2, "Ubicar al que llega en el
   // orden de desempate"). This is a SANCTIONED exception to the RED-first
   // rule: it pins a property `snapshotForMatchday` already has, with zero
-  // production code changed. It still earns its place — it fails the day
-  // somebody changes how the snapshot derives from the seed order.
+  // production code changed.
   //
   // The claim is spec 2.3's corollary of 2.2: inserting a new seat mid-season
   // must not flip any tiebreak comparison between two players who both
-  // already existed. This holds for free here because `orderByPoints`
-  // compares `snapshot.indexOf(id)` — a RELATIVE position — and inserting one
-  // id into an array without disturbing the others' relative order is exactly
-  // what `add_squad_seat`'s shift does (proven separately, at the SQL layer,
-  // by `db/entries.db.test.ts`). No live matchday data needed: two seed
-  // orders differing only by one inserted id are enough.
+  // already existed. It holds because `orderByPoints` breaks ties on
+  // `snapshot.indexOf(id)` — a RELATIVE position — and inserting one id into
+  // the seed shifts everyone after it by the same +1 (the SQL side of that
+  // shift is proven separately in `db/entries.db.test.ts`).
+  //
+  // Both snapshots are asserted against HAND-COMPUTED literals, never against
+  // each other. An earlier version of this test compared `beforeSnapshot` and
+  // `afterSnapshot` pairwise, which was a tautology: both sides came out of
+  // the same function, so any transformation applied to both — deleting the
+  // refresh loop entirely, or returning the snapshot reversed — kept the
+  // assertion green. Fixed literals kill both mutants.
   it('an inserted seat never flips the relative order of any two players who existed before it (spec 2.2/2.3)', () => {
     const before = ['p1', 'p2', 'p3', 'p4', 'p5']
     const after = ['p1', 'p2', 'NEW', 'p3', 'p4', 'p5'] // NEW inserted at index 2
@@ -139,18 +143,21 @@ describe('snapshotForMatchday', () => {
       [3, [award('p3', 10), award('p5', 3)]],
     ])
 
-    const beforeSnapshot = snapshotForMatchday(5, before, awards, CONFIG)
-    const afterSnapshot = snapshotForMatchday(5, after, awards, CONFIG)
+    // Matchday 5 with tiebreakSnapshotEvery 3 refreshes once, over matchdays
+    // 1-3. Totals: p1 10, p3 10, p4 10, p2 6, p5 3. The three tied on 10 are
+    // cut by their seed index — p1 (0), p3 (2), p4 (3) — so the table reads
+    // p1, p3, p4, p2, p5, which is NOT the seed order: a snapshot that ignored
+    // the awards, or one that ignored the seed, misses this.
+    const EXPECTED_BEFORE = ['p1', 'p3', 'p4', 'p2', 'p5']
+    // Same awards, NEW inserted at seed index 2. NEW scored nothing, so it
+    // lands last; p3, p4 and p5 each move one seed slot down, all by the same
+    // amount, so no tie among the old five is cut differently.
+    const EXPECTED_AFTER = ['p1', 'p3', 'p4', 'p2', 'p5', 'NEW']
 
-    // Every pairwise comparison among the ids that existed before the insert
-    // is unchanged: whichever ranked above the other still does.
-    for (const left of before) {
-      for (const right of before) {
-        if (left === right) continue
-        const wasAbove = beforeSnapshot.indexOf(left) < beforeSnapshot.indexOf(right)
-        const stillAbove = afterSnapshot.indexOf(left) < afterSnapshot.indexOf(right)
-        expect(stillAbove).toBe(wasAbove)
-      }
-    }
+    expect(snapshotForMatchday(5, before, awards, CONFIG)).toEqual(EXPECTED_BEFORE)
+    expect(snapshotForMatchday(5, after, awards, CONFIG)).toEqual(EXPECTED_AFTER)
+    // What makes those two literals a statement of spec 2.3 and not just two
+    // frozen outputs: drop the newcomer from the second and it IS the first.
+    expect(EXPECTED_AFTER.filter((id) => id !== 'NEW')).toEqual(EXPECTED_BEFORE)
   })
 })

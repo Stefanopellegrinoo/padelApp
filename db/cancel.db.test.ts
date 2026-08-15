@@ -7,11 +7,13 @@ import {
   createMatchday,
   generatePairs,
   lockPair,
+  nameGuest,
   openMatchday,
   saveResult,
   setAttendance,
+  syncGuestSeat,
 } from './matchday'
-import { attendancesOf, pairLocksOf } from './read'
+import { attendancesOf, matchdayDetail, pairLocksOf } from './read'
 import { adminClient } from './test/admin'
 import { createSeason } from './test/factories'
 import { createTestUser, type TestUser } from './test/users'
@@ -114,6 +116,31 @@ async function matchdayExists(matchdayId: string): Promise<boolean> {
   return data !== null
 }
 
+async function entryExists(entryId: string): Promise<boolean> {
+  const db = adminClient()
+  const { data, error } = await db.from('entries').select('id').eq('id', entryId).maybeSingle()
+  if (error) throw new Error(error.message)
+  return data !== null
+}
+
+async function seasonStatus(seasonId: string): Promise<string> {
+  const db = adminClient()
+  const { data, error } = await db.from('seasons').select('status').eq('id', seasonId).single()
+  if (error || data === null) throw new Error(error?.message)
+  return data.status
+}
+
+async function matchdayRowsOf(seasonId: string): Promise<Array<{ id: string; number: number }>> {
+  const db = adminClient()
+  const { data, error } = await db
+    .from('matchdays')
+    .select('id, number')
+    .eq('season_id', seasonId)
+    .order('number', { ascending: true })
+  if (error) throw new Error(error.message)
+  return data ?? []
+}
+
 async function awardsOf(
   matchdayId: string,
 ): Promise<Array<{ entry_id: string; position: number; points: number }>> {
@@ -195,10 +222,16 @@ describe('cancelMatchday', () => {
 
     await cancelMatchday(admin.client, matchdayId)
 
+    // Las tres lecturas de después van con `service_role` y no con
+    // `admin.client`, y no es un detalle: `attendances_read` y `pair_locks_read`
+    // (0002_rls.sql:179 y :187) exigen `is_participant(matchday_season(...))`, y
+    // una vez que la fecha no existe eso es falso siempre. Con la llave del
+    // admin estas dos líneas devolvían `[]` con las filas borradas Y con las
+    // filas intactas: aserciones que no podían fallar.
     expect(await matchdayExists(matchdayId)).toBe(false)
-    expect(await attendancesOf(admin.client, matchdayId)).toHaveLength(0)
+    expect(await attendancesOf(adminClient(), matchdayId)).toHaveLength(0)
     expect(await guestEntriesOf(matchdayId)).toHaveLength(0)
-    expect(await pairLocksOf(admin.client, matchdayId)).toHaveLength(0)
+    expect(await pairLocksOf(adminClient(), matchdayId)).toHaveLength(0)
   })
 
   it('borra una fecha OPEN con parejas, partidos y resultados ya cargados', async () => {
@@ -220,6 +253,64 @@ describe('cancelMatchday', () => {
     expect(await pairsOf(matchdayId)).toHaveLength(0)
     expect(await matchesOf(matchdayId)).toHaveLength(0)
     expect(await matchSetsOf(matchIdsBefore)).toHaveLength(0)
+  })
+
+  // `pairs.entry_a/entry_b → entries` es `on delete no action`
+  // (0001_schema.sql:170): el único FK de toda la cadena que puede FRENAR el
+  // borrado en vez de acompañarlo, porque las entries GUEST se van con la fecha
+  // y las parejas las apuntan. Sólo se ejercita con un invitado ADENTRO de una
+  // pareja, y eso pasa únicamente con plantel presente impar — el primer test
+  // tiene invitados pero nunca genera parejas, y el segundo genera parejas con
+  // plantel par, así que ninguno de los dos lo toca.
+  it('borra una fecha con un invitado adentro de una pareja: el FK que podría frenar el borrado no frena', async () => {
+    const { admin, seasonId, squad } = await buildSeasonWithSquad(defaultConfig(10), 10)
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
+    await markAllPlaying(admin, matchdayId, squad)
+
+    // Uno se cae, el presente queda impar (9) y `syncGuestSeat` —lo mismo que
+    // corre `toggleAttendance` en la acción real— suma el invitado que devuelve
+    // el número a par. Es la única forma de que el sorteo lo meta en una pareja.
+    await setAttendance(admin.client, matchdayId, squad[0]!, 'ABSENT')
+    await syncGuestSeat(admin.client, matchdayId)
+    const [guestId] = (await matchdayDetail(admin.client, matchdayId)).guestIds
+    if (guestId === undefined) throw new Error('syncGuestSeat no agregó invitado.')
+    await nameGuest(admin.client, guestId, 'Invitado de test')
+
+    await generatePairs(admin.client, matchdayId)
+    const inPairs = new Set(
+      (await matchdayDetail(admin.client, matchdayId)).pairs.flatMap((pair) => [pair.a, pair.b]),
+    )
+    expect(await pairsOf(matchdayId)).not.toHaveLength(0)
+    expect(inPairs.has(guestId)).toBe(true)
+
+    await cancelMatchday(admin.client, matchdayId)
+
+    expect(await matchdayExists(matchdayId)).toBe(false)
+    expect(await entryExists(guestId)).toBe(false)
+    expect(await guestEntriesOf(matchdayId)).toHaveLength(0)
+    expect(await pairsOf(matchdayId)).toHaveLength(0)
+    expect(await matchesOf(matchdayId)).toHaveLength(0)
+  })
+
+  // El trinquete `SETUP → ACTIVE` de `open_matchday` (0005:37) al revés. Sin
+  // esto la temporada se queda ACTIVE con cero fechas, y "En curso" en Mis
+  // torneos (`app/torneos/page.tsx:27`) para algo que no empezó.
+  it('borrar la única fecha devuelve la temporada a SETUP y el número 1 vuelve a quedar libre', async () => {
+    const { admin, seasonId, squad } = await buildSeasonWithSquad(defaultConfig(8), 8)
+    const matchdayId = await openMatchdayIn(admin, seasonId, squad, '2026-08-10')
+    // Confirmar la primera fecha es lo que la mueve a ACTIVE. Sin esta línea el
+    // test pasaría por vacuidad si algún día dejara de moverla.
+    expect(await seasonStatus(seasonId)).toBe('ACTIVE')
+
+    await cancelMatchday(admin.client, matchdayId)
+
+    expect(await seasonStatus(seasonId)).toBe('SETUP')
+    expect(await matchdayRowsOf(seasonId)).toHaveLength(0)
+
+    // `createMatchday` numera con `max(number) + 1`, así que sin fechas vuelve a
+    // arrancar en 1: no queda ningún hueco en la numeración.
+    await createMatchday(admin.client, seasonId, '2026-08-17')
+    expect((await matchdayRowsOf(seasonId)).map((row) => row.number)).toEqual([1])
   })
 
   it('rechaza una fecha cerrada (CLOSED), y el mensaje manda a reabrir, no a borrar', async () => {
@@ -246,6 +337,10 @@ describe('cancelMatchday', () => {
     expect(await matchdayStatus(closedId)).toBe('CLOSED')
     expect(await awardsOf(closedId)).toEqual(awardsBefore)
     expect(await squadEntriesOf(seasonId)).toEqual(squadBefore)
+    // Y la temporada NO vuelve a SETUP: la reversión del trinquete es sólo para
+    // cuando no quedó ninguna fecha. Con una jugada encima, "sin empezar" sería
+    // mentira.
+    expect(await seasonStatus(seasonId)).toBe('ACTIVE')
   })
 
   it('un jugador del plantel, sin ser el admin, recibe "sólo quien organiza" y no mueve nada', async () => {

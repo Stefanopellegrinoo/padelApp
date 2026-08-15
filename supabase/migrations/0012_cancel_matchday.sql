@@ -3,18 +3,46 @@
 -- corresponde en ese caso es reabrir (0005_matchday_moves.sql:134), no
 -- desaparecerla — el mensaje de acá manda para ese lado y no para "cancelar".
 --
+-- **La guarda es una lista blanca, y eso no es cosmético.** Esta es la única
+-- función del esquema que pasa por encima del `revoke delete on matchdays`, así
+-- que su default tiene que ser NEGARSE, igual que en `redraft` (`<> 'OPEN'`) o
+-- en `close` (`<> 'OPEN'`). Con la versión anterior —`if v_status = 'CLOSED'`—
+-- alcanzaba con que la fila desapareciera entre `matchday_season` y el
+-- `select … for update` (un `deleteSeason` concurrente cascadeando) para que
+-- `v_status` quedara en null: `null = 'CLOSED'` da null, la rama no dispara, el
+-- delete borra 0 filas y **la función devuelve éxito**. La pantalla entonces
+-- redirige a una temporada que ya no existe. Por eso el null tiene su propia
+-- rama, con el mismo mensaje que la de arriba, y la lista blanca se ocupa del
+-- resto.
+--
 -- No hace falta un solo delete además del de `matchdays`: attendances,
 -- pair_locks, pairs, matches, match_sets y las entries GUEST de esta fecha
 -- cuelgan todas de `matchday_id` con `on delete cascade` (0001_schema.sql).
 -- El plantel SQUAD no tiene `matchday_id` —vive en la temporada, no en la
--- fecha— así que no hay ningún riesgo de arrastrarlo con esto.
+-- fecha— así que no hay ningún riesgo de arrastrarlo con esto. El único FK de
+-- toda la cadena que podría frenar el borrado es `pairs.entry_a/entry_b →
+-- entries`, que es `on delete no action` (0001_schema.sql:170): no frena
+-- porque las parejas se van en el mismo statement que los invitados, y el
+-- chequeo de `no action` corre al final del statement, no fila por fila.
+-- `db/cancel.db.test.ts` lo ejercita con un plantel impar, que es la única
+-- forma de tener un invitado ADENTRO de una pareja.
 --
--- Tampoco toca `seasons.status`: el único camino que la pone en FINISHED es
--- cerrar el Masters, y CLOSED queda afuera de esta función, así que ese
--- estado es inalcanzable desde acá. Y no deja un hueco en `number`:
--- `matchdays_one_live` garantiza como máximo una fecha sin cerrar por
--- temporada, y los números sólo crecen (`max(number) + 1` en
--- `createMatchday`), así que la que se borra siempre es la última creada.
+-- **Sí toca `seasons.status`, en un solo sentido.** `open_matchday` mueve la
+-- temporada de SETUP a ACTIVE al confirmar su primera fecha (0005:37). Si esa
+-- fecha era la única y se borra, la temporada queda ACTIVE con cero fechas, y
+-- las pantallas la anuncian como "En curso" cuando no empezó nada
+-- (`app/torneos/page.tsx:27`, `app/torneo/[id]/page.tsx:50`) — un estado que
+-- antes de esta función era inalcanzable. Por eso el trinquete se revierte, y
+-- con la guarda más angosta posible: sólo desde ACTIVE y sólo si no quedó
+-- ninguna fecha. Una temporada FINISHED nunca puede caminar para atrás por
+-- acá.
+--
+-- FINISHED, además, es inalcanzable desde esta función por otro lado: el único
+-- camino que la escribe es cerrar el Masters, y CLOSED queda afuera de la
+-- lista blanca. Y no deja un hueco en `number`: `matchdays_one_live` garantiza
+-- como máximo una fecha sin cerrar por temporada, y los números sólo crecen
+-- (`max(number) + 1` en `createMatchday`), así que la que se borra siempre es
+-- la última creada.
 --
 -- El mensaje de `reopen_matchday` en 0005_matchday_moves.sql:178 ("Borrala
 -- vos antes de reabrir ésta") NO se toca acá: hasta ahora era una promesa sin
@@ -41,11 +69,27 @@ begin
   end if;
 
   select status into v_status from public.matchdays where id = p_matchday for update;
-  if v_status = 'CLOSED' then
-    raise exception 'Una fecha cerrada no se borra: reabrila si hay que corregir algo.';
+  if v_status is null then
+    raise exception 'La fecha no existe.';
+  end if;
+  -- No dice "reabrila" y listo: `reopen_matchday` sólo acepta la ÚLTIMA fecha
+  -- cerrada (0005:180-185), así que mandar a reabrir la 3 cuando la 5 está
+  -- cerrada es prometer una puerta que no abre — el mismo defecto que esta
+  -- rama vino a pagar. El "si … es la última cerrada" es lo que lo hace cierto
+  -- en los dos casos.
+  if v_status not in ('DRAFT', 'OPEN') then
+    raise exception 'Una fecha cerrada no se borra. Si hay que corregirla y es la última cerrada, reabrila.';
   end if;
 
   delete from public.matchdays where id = p_matchday;
+
+  -- El trinquete de `open_matchday` (0005:37) al revés, y sólo cuando la
+  -- temporada se quedó sin una sola fecha: si no, "En curso" en Mis torneos
+  -- para una temporada vacía.
+  update public.seasons set status = 'SETUP'
+   where id = v_season
+     and status = 'ACTIVE'
+     and not exists (select 1 from public.matchdays where season_id = v_season);
 end;
 $$;
 

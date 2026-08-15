@@ -154,8 +154,14 @@ export function Plantel({
           }}
           className="flex flex-col gap-2 rounded-field border-[1.5px] border-accent bg-surface p-3"
         >
+          {/* `aria-label` y no un `<label>` visible: el placeholder ya dice qué
+              va acá y sumar un rótulo arriba desbalancea el bloque, pero un
+              placeholder NO es nombre accesible —desaparece al tipear— y un
+              lector de pantalla anunciaba "edit text, blank". El `<select>` de
+              abajo sí tiene `<label>` porque su rótulo es visible. */}
           <input
             autoFocus
+            aria-label="Nombre"
             placeholder="Nombre"
             disabled={pending}
             value={newName}
@@ -167,10 +173,12 @@ export function Plantel({
               "Juega con" en GuestCard. */}
           <label className="flex items-center gap-2 text-[12.5px] font-bold">
             Posición
-            {/* `min-h-[44px]`: misma regla que `ACTION` acá arriba — con
-                `p-[10px]` y el line-height 1.5 de preflight medía 42.25.
-                `text-[16px]` y no 13.5: abajo de 16 iOS hace zoom solo al
-                enfocar, que es de lo que ya se cuida el input del nombre. */}
+            {/* `min-h-[44px]`: misma regla que `ACTION` acá arriba. Sin él, el
+                alto sale de `p-[10px]` más el line-height de preflight, que
+                para 16px da menos de 44 — el mínimo se pone explícito en vez de
+                depender de esa cuenta. `text-[16px]` y no 13.5: abajo de 16 iOS
+                hace zoom solo al enfocar, que es de lo que ya se cuida el input
+                del nombre. */}
             <select
               value={newBefore}
               disabled={pending}
@@ -187,9 +195,11 @@ export function Plantel({
           </label>
           <div className="flex items-center gap-2">
             {/* `flex min-h-[44px] items-center justify-center` en vez de
-                `text-center`: con `p-[10px]` y el line-height 1.5 de preflight
-                medían 40.25 de alto, abajo del mínimo de 44 que este mismo
-                archivo se impone en `ACTION`. */}
+                `text-center`: con `p-[10px]` y el line-height de preflight, un
+                botón de 13.5px queda abajo del mínimo de 44 que este mismo
+                archivo se impone en `ACTION`. El `min-h` fija el piso y el
+                `flex` centra el texto adentro del alto resultante, que es lo
+                que `text-center` solo no hace. */}
             <button
               type="submit"
               disabled={pending || newName.trim().length === 0}

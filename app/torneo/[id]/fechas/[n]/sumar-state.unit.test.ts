@@ -100,6 +100,43 @@ describe('guestsToPromote', () => {
   })
 
   /**
+   * El único caso donde "promete los puntos de la PRIMERA" quiere decir algo:
+   * dos parejas y las DOS cobraron. Sin este test, cambiar `partnersPoints[0]`
+   * por el último elemento deja toda la suite en verde y el comentario de
+   * `sumar-state.ts` pasa a describir algo que el código ya no hace.
+   *
+   * Que el escenario no sea alcanzable hoy no lo hace innecesario: la base
+   * refusa esta promoción por el `unique` de `awards` y `generatePairs` borra
+   * las parejas de la fecha antes de insertar, pero justamente por eso nadie
+   * más va a notar la deriva. Lo que se fija es el copy que ve el admin, no la
+   * decisión de promover — el estado sigue siendo `PUEDE` y el error se ve al
+   * mandar.
+   */
+  it('con dos parejas que cobraron distinto, promete los puntos de la primera', () => {
+    const pairs = [
+      { a: 'ana', b: 'invi' },
+      { a: 'invi', b: 'beto' },
+    ]
+    const frozenPoints = new Map([
+      ['ana', 5],
+      ['beto', 9],
+    ])
+
+    const [invitado] = guestsToPromote(fecha({ pairs, frozenPoints }))
+    // Y al revés, para que la aserción no acierte por simetría de los valores.
+    const [alReves] = guestsToPromote(fecha({ pairs: [...pairs].reverse(), frozenPoints }))
+
+    expect(invitado).toEqual({
+      entryId: 'invi',
+      name: 'Invitado',
+      estado: 'PUEDE',
+      partnerPoints: 5,
+    })
+    expect(alReves?.estado).toBe('PUEDE')
+    expect(alReves).toHaveProperty('partnerPoints', 9)
+  })
+
+  /**
    * `0010_points_can_be_zero.sql` hace legal `points = 0`, así que un award de 0
    * es un award y no una ausencia: el chequeo va contra `undefined` y nunca
    * contra la falsedad del número. Con `!points` esto daría `PAREJA_INVITADA` y

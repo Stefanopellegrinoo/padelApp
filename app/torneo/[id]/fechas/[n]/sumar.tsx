@@ -5,7 +5,9 @@ import { sumarInvitado } from './actions'
 import type { GuestPromoteVM } from './sumar-state'
 
 // `GuestPromoteVM` vive en `sumar-state.ts` —con la función que lo produce— y
-// se re-exporta acá para que quien dibuja la tarjeta lo importe de un solo lado.
+// se re-exporta acá para que quien monta la pantalla traiga el componente y su
+// VM del mismo lado: `page.tsx` importa los dos de `./sumar`, igual que hace
+// con `Armado` y `SeatVM` (que vive en `armado-state.ts`) tres líneas antes.
 export type { GuestPromoteVM }
 
 export interface SumarSeatVM {

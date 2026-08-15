@@ -24,8 +24,8 @@ import { Armado, type DraftPairVM, type GuestPairVM, type GuestVM, type SeatVM }
 import { CierreFecha } from './carga'
 import { DiaDeLaFecha } from './dia'
 import { MastersDraft, type QualifierVM } from './masters'
-import { SumarInvitado, type SumarSeatVM } from './sumar'
-import { guestsToPromote, type GuestPromoteVM } from './sumar-state'
+import { SumarInvitado, type GuestPromoteVM, type SumarSeatVM } from './sumar'
+import { guestsToPromote } from './sumar-state'
 
 interface PageProps {
   params: Promise<{ id: string; n: string }>

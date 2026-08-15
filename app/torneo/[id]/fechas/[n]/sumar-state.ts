@@ -98,7 +98,8 @@ export function guestsToPromote({
     // `insert ... select` trae dos filas con la misma clave y el `unique` de
     // `awards` la corta entera (probado en `db/promote.db.test.ts`). El error se
     // ve al mandar; la tarjeta no pretende adivinarlo, sólo promete los puntos
-    // de la primera.
+    // de la PRIMERA pareja — que es lo único que este `[0]` afirma, y lo pinnea
+    // "con dos parejas que cobraron distinto" en `sumar-state.unit.test.ts`.
     return { entryId: guestId, name, estado: 'PUEDE', partnerPoints: partnersPoints[0]! }
   })
 }

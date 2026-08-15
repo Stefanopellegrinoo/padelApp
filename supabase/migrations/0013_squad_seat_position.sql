@@ -44,8 +44,13 @@
 --      es > M. Disjunto para todo p_from >= 0.
 --   3. pasada 2 vs. las quietas [0, p_from-1]: su destino arranca en
 --      p_from+1, que es > p_from-1. Disjunto para todo p_from >= 0.
---   4. pasada 2 vs. su propio origen [p_from+M+2, 2M+2]: su destino termina
---      en M+1, y M+1 < p_from+M+2 para todo p_from >= 0. Disjunto.
+--   4. pasada 2 vs. su propio origen: acá no hace falta NINGUNA condición
+--      sobre p_from, y conviene no escribir una de más. El `where` de la
+--      pasada 2 es `seed_position >= v_park`, así que la fila más baja que
+--      puede llegar a tocar está en M+2 pase lo que pase, y su destino más
+--      alto es M+1. M+1 < M+2 y se terminó: disjunto para CUALQUIER p_from
+--      —también negativo— y con cualquier patrón de huecos. Una guarda
+--      `p_from >= 0` acá arriba sería ruido: no hay hazard que evitar.
 --
 -- El punto 4 es el que costó caro y es la razón del +2. Con `v_park := M + 1`
 -- la cuenta daba M+1 < p_from+M+1, que es cierto sólo si p_from > 0: fallaba
@@ -140,7 +145,15 @@ begin
     raise exception 'Sólo quien organiza la temporada puede agregar un asiento.';
   end if;
 
-  if trim(coalesce(p_name, '')) = '' then
+  -- `!~ '\S'` y no `trim(...) = ''`: el `trim` de Postgres saca U+0020 y nada
+  -- más, así que `trim(E'\t') = ''` da FALSE y un `p_name` de un solo tab se
+  -- colaba — también pasa `entries_squad_named`, con lo cual quedaba un asiento
+  -- real que se dibuja en blanco en todas las pantallas y da `initials()`
+  -- vacías. El `String.trim()` de JS sí saca tabs, saltos y NBSP, así que la
+  -- guarda de acá era ESTRICTAMENTE más débil que la del cliente que existe
+  -- para respaldar. "No tiene ni un caracter que no sea espacio" cubre la
+  -- misma familia que JS sin tener que enumerarla.
+  if coalesce(p_name, '') !~ '\S' then
     raise exception 'El asiento necesita un nombre.';
   end if;
 

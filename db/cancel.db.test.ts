@@ -308,12 +308,15 @@ describe('cancelMatchday', () => {
   })
 
   // `pairs.entry_a/entry_b → entries` es `on delete no action`
-  // (0001_schema.sql:170): el único FK de toda la cadena que puede FRENAR el
-  // borrado en vez de acompañarlo, porque las entries GUEST se van con la fecha
-  // y las parejas las apuntan. Sólo se ejercita con un invitado ADENTRO de una
-  // pareja, y eso pasa únicamente con plantel presente impar — el primer test
-  // tiene invitados pero nunca genera parejas, y el segundo genera parejas con
-  // plantel par, así que ninguno de los dos lo toca.
+  // (0001_schema.sql:170-171): el FK que puede FRENAR el borrado en vez de
+  // acompañarlo, porque las entries GUEST se van con la fecha y las parejas las
+  // apuntan. No es el único con esa forma —`awards.entry_id → entries`
+  // (0001_schema.sql:225) también es `no action`— pero sí el único que esta
+  // función se cruza: `awards` sólo tiene filas en una fecha CLOSED, y CLOSED
+  // no entra a la lista blanca. Sólo se ejercita con un invitado ADENTRO de
+  // una pareja, y eso pasa únicamente con plantel presente impar — el primer
+  // test tiene invitados pero nunca genera parejas, y el segundo genera parejas
+  // con plantel par, así que ninguno de los dos lo toca.
   it('borra una fecha con un invitado adentro de una pareja: el FK que podría frenar el borrado no frena', async () => {
     const { admin, seasonId, squad } = await buildSeasonWithSquad(defaultConfig(10), 10)
     const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')

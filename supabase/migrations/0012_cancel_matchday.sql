@@ -26,13 +26,21 @@
 -- pair_locks, pairs, matches, match_sets y las entries GUEST de esta fecha
 -- cuelgan todas de `matchday_id` con `on delete cascade` (0001_schema.sql).
 -- El plantel SQUAD no tiene `matchday_id` —vive en la temporada, no en la
--- fecha— así que no hay ningún riesgo de arrastrarlo con esto. El único FK de
--- toda la cadena que podría frenar el borrado es `pairs.entry_a/entry_b →
--- entries`, que es `on delete no action` (0001_schema.sql:170): no frena
--- porque las parejas se van en el mismo statement que los invitados, y el
--- chequeo de `no action` corre al final del statement, no fila por fila.
--- `db/cancel.db.test.ts` lo ejercita con un plantel impar, que es la única
--- forma de tener un invitado ADENTRO de una pareja.
+-- fecha— así que no hay ningún riesgo de arrastrarlo con esto. Los FK que
+-- apuntan a `entries` con `on delete no action` —los únicos que podrían FRENAR
+-- el borrado en vez de acompañarlo— son DOS, no uno:
+--   · `pairs.entry_a/entry_b → entries` (0001_schema.sql:170-171). Es el que
+--     esta función se cruza de verdad, y no frena porque las parejas se van en
+--     el mismo statement que los invitados, y el chequeo de `no action` corre
+--     al final del statement, no fila por fila. `db/cancel.db.test.ts` lo
+--     ejercita con un plantel impar, que es la única forma de tener un
+--     invitado ADENTRO de una pareja.
+--   · `awards.entry_id → entries` (0001_schema.sql:225). Éste no se cruza
+--     NUNCA por acá, y no porque el borrado lo esquive: `awards` sólo tiene
+--     filas en una fecha CLOSED, y CLOSED queda afuera de la lista blanca de
+--     abajo. O sea, es inalcanzable por construcción de la guarda, no inocuo
+--     por la forma del cascade — si algún día la lista blanca aceptara CLOSED,
+--     este FK pasaría a ser el problema.
 --
 -- **Sí toca `seasons.status`, en un solo sentido.** `open_matchday` mueve la
 -- temporada de SETUP a ACTIVE al confirmar su primera fecha (0005:37). Si esa

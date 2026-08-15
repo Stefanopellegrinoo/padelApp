@@ -8,6 +8,7 @@ import {
   lockPair,
   nameGuest,
   openMatchday,
+  reopenMatchday,
   saveResult,
   setAttendance,
   syncGuestSeat,
@@ -209,45 +210,80 @@ describe('promoteGuest — spec 3.1: se copia el award congelado del compañero'
 
     await promoteGuest(admin.client, guestId)
 
+    // Que la promoción HAYA PASADO, primero: sin esto el test pasaba igual
+    // contra un `promote_guest` completamente no-op, porque lo único que
+    // afirmaba era que otra fecha seguía igual.
+    expect((await entryRow(guestId)).kind).toBe('SQUAD')
     expect(await awardsOf(firstId)).toEqual(firstAwardsBefore)
   })
 })
 
-describe('promoteGuest — spec 3.2: pareja toda invitada, se saltea sin sintetizar nada', () => {
-  it('el invitado promovido no se lleva ningún award, y el resto de la fecha queda intacto', async () => {
-    const squad = await fillerPlayers(8)
-    const { admin, seasonId, entryIds } = await buildSeasonWithSquad(squad)
-    const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
-    await markAllPlaying(admin, matchdayId, entryIds)
+/**
+ * Arma la fecha del incidente C1: 8 del plantel presentes + una PAREJA
+ * INVITADA trabada = 5 parejas, y `defaultConfig(8)` sólo tiene 4 valores de
+ * puntos. Es legal justamente porque `computeAwards` excluye a la pareja toda
+ * invitada de las posiciones que pagan; promover a uno de sus dos integrantes
+ * la mete adentro y rompe la cuenta.
+ */
+async function closedMatchdayWithGuestPair(): Promise<{
+  admin: TestUser
+  seasonId: string
+  matchdayId: string
+  guestA: string
+  guestB: string
+}> {
+  const squad = await fillerPlayers(8)
+  const { admin, seasonId, entryIds } = await buildSeasonWithSquad(squad)
+  const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
+  await markAllPlaying(admin, matchdayId, entryIds)
 
-    const guestA = await addGuest(admin.client, matchdayId, { displayName: 'Invitado A' })
-    const guestB = await addGuest(admin.client, matchdayId, { displayName: 'Invitado B' })
-    await lockPair(admin.client, matchdayId, guestA, guestB)
+  const guestA = await addGuest(admin.client, matchdayId, { displayName: 'Invitado A' })
+  const guestB = await addGuest(admin.client, matchdayId, { displayName: 'Invitado B' })
+  await lockPair(admin.client, matchdayId, guestA, guestB)
 
-    // 8 del plantel + la pareja invitada = 5 parejas, 4 pagan (config de 8
-    // sólo tiene 4 valores de puntos) — exactamente lo que excluye la pareja
-    // toda invitada de `computeAwards`.
-    await generatePairs(admin.client, matchdayId)
-    await openMatchday(admin.client, matchdayId)
-    await playAllMatches(admin, matchdayId)
-    await closeMatchday(admin.client, matchdayId)
+  await generatePairs(admin.client, matchdayId)
+  await openMatchday(admin.client, matchdayId)
+  await playAllMatches(admin, matchdayId)
+  await closeMatchday(admin.client, matchdayId)
+
+  return { admin, seasonId, matchdayId, guestA, guestB }
+}
+
+describe('promoteGuest — spec 3.2: pareja toda invitada, se REFUSA', () => {
+  it('no lo promueve y explica por qué: esa pareja no cobró y sumarlo le cambiaría los puntos a los demás', async () => {
+    const { admin, matchdayId, guestA, guestB } = await closedMatchdayWithGuestPair()
 
     const before = await awardsOf(matchdayId)
     expect(before.some((row) => row.entry_id === guestA || row.entry_id === guestB)).toBe(false)
 
-    await promoteGuest(admin.client, guestA)
+    await expect(promoteGuest(admin.client, guestA)).rejects.toThrow(
+      /jugó con otro invitado.*no se puede desde esta fecha/,
+    )
 
-    const after = await awardsOf(matchdayId)
-    expect(after.find((row) => row.entry_id === guestA)).toBeUndefined()
-    expect(after).toEqual(before)
+    // Nada se movió: ni el asiento ni una sola fila de awards.
+    expect((await entryRow(guestA)).kind).toBe('GUEST')
+    expect(await awardsOf(matchdayId)).toEqual(before)
+  })
 
-    const promoted = await entryRow(guestA)
-    expect(promoted.kind).toBe('SQUAD')
+  it('la fecha sigue pudiendo repartir sus puntos: reabrirla y volver a cerrarla no rompe nada', async () => {
+    // El daño real del salteo silencioso: `close_matchday` recalculaba con una
+    // pareja paga de más y la fecha quedaba OPEN para siempre, con los awards
+    // ya borrados por el reopen. Con el refuso, este ida y vuelta tiene que
+    // devolver EXACTAMENTE los mismos awards.
+    const { admin, matchdayId, guestA } = await closedMatchdayWithGuestPair()
+    const before = await awardsOf(matchdayId)
+
+    await expect(promoteGuest(admin.client, guestA)).rejects.toThrow(/no se puede desde esta fecha/)
+
+    await reopenMatchday(admin.client, matchdayId)
+    await closeMatchday(admin.client, matchdayId)
+
+    expect(await awardsOf(matchdayId)).toEqual(before)
   })
 })
 
 describe('promoteGuest — invitado nunca sorteado en una pareja de esa fecha', () => {
-  it('convierte el asiento sin crear ni saltear nada, porque no hay nada que copiar', async () => {
+  it('se REFUSA con su propio mensaje: no hay nada suyo que conservar en esta fecha', async () => {
     const { admin, seasonId, matchdayId } = await closedMatchdayWithLooseGuest('2026-08-10')
     const db = adminClient()
 
@@ -268,11 +304,12 @@ describe('promoteGuest — invitado nunca sorteado en una pareja de esa fecha', 
 
     const before = await awardsOf(matchdayId)
 
-    await promoteGuest(admin.client, loose.id)
+    await expect(promoteGuest(admin.client, loose.id)).rejects.toThrow(
+      /no quedó en ninguna pareja/,
+    )
 
     expect(await awardsOf(matchdayId)).toEqual(before)
-    const promoted = await entryRow(loose.id)
-    expect(promoted.kind).toBe('SQUAD')
+    expect((await entryRow(loose.id)).kind).toBe('GUEST')
   })
 })
 

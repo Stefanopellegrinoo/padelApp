@@ -16,14 +16,20 @@ import { sumarInvitado } from './actions'
  *                        compañero no tiene award congelado. Casi siempre es
  *                        porque jugó con otro invitado (spec 3.2) y por eso el
  *                        nombre, pero el predicado —el mismo que usa la base,
- *                        `0014_promote_guest.sql:73-78`— es a propósito más
+ *                        el `if exists` de `0014_promote_guest.sql:327-338`, y
+ *                        con el MISMO cuantificador desde que `page.tsx` mira
+ *                        todas sus parejas y no la primera— es a propósito más
  *                        ancho, así que el copy nombra la CAUSA (no cobró) y
  *                        deja el caso típico como ejemplo. Esa pareja quedó
  *                        afuera del reparto, y meterlo al plantel desde acá
  *                        correría las posiciones pagas de todos los demás.
- *   · `SIN_PAREJA`       nunca quedó adentro de una pareja de esta fecha
- *                        (spec 3.4). No hay nada suyo que conservar, y la base
- *                        también lo refusa.
+ *   · `SIN_PAREJA`       nunca quedó adentro de una pareja de esta fecha. No
+ *                        hay nada suyo que conservar, y la base también lo
+ *                        refusa. (El spec 3.4 pedía lo contrario —convertirlo
+ *                        de una— pero sólo para una fecha NO cerrada, y la
+ *                        decisión vigente es refusar toda fecha que no esté
+ *                        CLOSED: acá dentro la fecha siempre está cerrada, así
+ *                        que 3.4 no aplica a este caso y no lo justifica.)
  *
  * Es un union y no un `partnerPoints: number | null` porque `null` tapaba DOS
  * casos con un solo copy, y el copy afirmaba sólo uno de los dos: un invitado

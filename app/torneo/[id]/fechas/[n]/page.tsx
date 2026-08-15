@@ -15,7 +15,7 @@ import {
   type SeasonConfig,
 } from '@/core'
 import { attendancesOf, entriesOf, matchdayDetail, matchdaysOf, pairLocksOf, seasonHeader } from '@/db/read'
-import { awardsBefore, closedHistory } from '@/db/season'
+import { awardsBefore, closedHistory, frozenPointsOf } from '@/db/season'
 import { serverClient } from '@/db/server'
 import { EdgeError } from '@/db/errors'
 import { matchdayFull } from '@/app/format'
@@ -257,16 +257,19 @@ export default async function FechaDetailPage({ params }: PageProps) {
       .map((entry) => entry.id)
 
     const canPromote = header.isAdmin && status === 'CLOSED' && !isMasters
-    const [detail, awardsByMatchday, lastHistory, beforeLastHistory, frozenHistory] = await Promise.all([
+    const [detail, awardsByMatchday, lastHistory, beforeLastHistory, frozenPoints] = await Promise.all([
       matchdayDetail(supabase, matchday.id),
       awardsBefore(supabase, seasonId, matchdayNumber),
       closedHistory(supabase, seasonId, matchdayNumber - 1),
       closedHistory(supabase, seasonId, matchdayNumber - 2),
       // Los awards CONGELADOS de ESTA fecha, para la tarjeta de "Sumar
-      // invitado" de más abajo. `closedHistory` ya sabe leerlos y devolver
-      // `null` cuando la fecha no está cerrada; sólo se pide cuando la tarjeta
-      // se va a dibujar.
-      canPromote ? closedHistory(supabase, seasonId, matchdayNumber) : Promise.resolve(null),
+      // invitado" de más abajo. `canPromote` NO sabe si hay invitados —eso lo
+      // contesta `detail`, que resuelve en este mismo `Promise.all`—, así que
+      // esto sale en TODA fecha cerrada que abra quien organiza, tenga o no
+      // invitados. Es un viaje de ida y vuelta, no tres: por eso no es
+      // `closedHistory`, cuyas otras dos consultas acá son plata tirada (el
+      // estado ya está probado por `canPromote`, y las parejas se descartan).
+      canPromote ? frozenPointsOf(supabase, matchday.id) : Promise.resolve(new Map<string, number>()),
     ])
 
     const snapshot = snapshotForMatchday(matchdayNumber, seedOrder, awardsByMatchday, config)
@@ -414,7 +417,6 @@ export default async function FechaDetailPage({ params }: PageProps) {
     // sin award de compañero, `promote_guest` refusa SIEMPRE desde esta fecha
     // (0014_promote_guest.sql), así que un botón ahí es un rebote garantizado
     // — el defecto que este repo ya nombra en `ajustes/plantel.tsx:27-30`.
-    const frozenPoints = new Map((frozenHistory?.awards ?? []).map((award) => [award.entryId, award.points]))
     const guestsForPromotion: GuestPromoteVM[] = canPromote
       ? detail.guestIds.map((guestId) => {
           const name = nameOf.get(guestId) ?? '?'

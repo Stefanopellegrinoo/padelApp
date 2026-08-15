@@ -155,6 +155,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
         matchdayNumber={matchday.number}
         qualifiers={qualifiers}
         generated={detail.matches.length > 0}
+        loadedResults={detail.matches.filter((match) => match.sets.length > 0).length}
       />
     )
   }
@@ -241,6 +242,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
         looseGuests={looseGuests}
         guestPairs={guestPairs}
         pairs={draftPairs}
+        loadedResults={detail.matches.filter((match) => match.sets.length > 0).length}
       />
     )
   }

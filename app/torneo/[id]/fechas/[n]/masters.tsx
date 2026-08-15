@@ -77,6 +77,7 @@ export function MastersDraft({
   matchdayNumber,
   qualifiers,
   generated,
+  loadedResults,
 }: {
   seasonId: string
   matchdayId: string
@@ -84,6 +85,12 @@ export function MastersDraft({
   qualifiers: QualifierVM[]
   /** Si los tres partidos ya están sorteados. Recién ahí se puede confirmar. */
   generated: boolean
+  /**
+   * Cuántos de esos partidos ya tienen sets cargados. En DRAFT no siempre es
+   * cero: `redraft_matchday` vuelve de OPEN a DRAFT sin borrar resultados.
+   * Sólo lo usa el aviso de "Borrar fecha".
+   */
+  loadedResults: number
 }) {
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
@@ -149,7 +156,7 @@ export function MastersDraft({
         )}
       </div>
 
-      <BorrarFecha seasonId={seasonId} matchdayId={matchdayId} />
+      <BorrarFecha seasonId={seasonId} matchdayId={matchdayId} loadedResults={loadedResults} />
     </div>
   )
 }

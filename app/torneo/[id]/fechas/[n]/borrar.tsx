@@ -20,17 +20,21 @@ import { cancelTheMatchday } from './actions'
  * `!asking` con el que `CierreFecha` monta este componente; acá no hay forma
  * de saberlo y por eso no se intenta.
  *
- * `loadedResults` es opcional porque en DRAFT no hay ninguno: `armado.tsx` y
- * `masters.tsx` montan esto antes de que exista un solo partido jugado.
+ * `loadedResults` es obligatorio, sin default: una fecha en DRAFT SÍ puede
+ * tener resultados cargados. `redraft_matchday` (0011) mueve OPEN → DRAFT con
+ * un solo `update` de `status` y no borra nada —`db/redraft.db.test.ts:210` lo
+ * pinnea—, así que el admin que carga tres resultados y vuelve al armado ve
+ * esta pantalla con esos tres todavía adentro. Un default `0` acá le sacaba la
+ * fricción de abajo justo en el único camino donde la pérdida es real.
  */
 export function BorrarFecha({
   seasonId,
   matchdayId,
-  loadedResults = 0,
+  loadedResults,
 }: {
   seasonId: string
   matchdayId: string
-  loadedResults?: number
+  loadedResults: number
 }) {
   const [asking, setAsking] = useState(false)
   const [error, setError] = useState<string | null>(null)

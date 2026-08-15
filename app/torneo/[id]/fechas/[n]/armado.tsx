@@ -52,6 +52,13 @@ interface ArmadoProps {
   looseGuests: GuestVM[]
   guestPairs: GuestPairVM[]
   pairs: DraftPairVM[]
+  /**
+   * Cuántos partidos ya tienen sets cargados. En DRAFT no siempre es cero:
+   * `redraft_matchday` trae una fecha de OPEN a DRAFT sin borrar un solo
+   * resultado. Sólo lo usa el aviso de "Borrar fecha", para nombrar lo que
+   * realmente se pierde.
+   */
+  loadedResults: number
 }
 
 const STEP_TITLE = 'text-[15px] font-extrabold tracking-[-.02em]'
@@ -78,6 +85,7 @@ export function Armado({
   looseGuests,
   guestPairs,
   pairs,
+  loadedResults,
 }: ArmadoProps) {
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -382,7 +390,7 @@ export function Armado({
         )}
       </div>
 
-      <BorrarFecha seasonId={seasonId} matchdayId={matchdayId} />
+      <BorrarFecha seasonId={seasonId} matchdayId={matchdayId} loadedResults={loadedResults} />
     </div>
   )
 }

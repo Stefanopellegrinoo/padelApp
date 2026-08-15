@@ -28,6 +28,13 @@ const ACTION =
  * página, que es la que puede preguntarlo (`myEntryId`), y apaga el botón entero
  * en vez de dejarlo fallar: `claim_seat` rebota el segundo reclamo, pero ofrecer
  * un botón que siempre rebota es el defecto que ya apareció en "Reabrir fecha".
+ *
+ * El alta (spec "Ubicar al que llega en el orden de desempate") ya no es un
+ * único input con submit al `onBlur`: agregarle el select de posición al lado
+ * hubiera hecho que blurear el nombre PARA llegar al select dispare el alta
+ * con lo que hubiera tipeado hasta ahí. Por eso es un `<form>` con botón
+ * "Agregar" explícito — mismo motivo por el que `BorrarFecha` tiene su propio
+ * "Borrar" en vez de un blur.
  */
 export function Plantel({
   seasonId,
@@ -42,6 +49,8 @@ export function Plantel({
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [newBefore, setNewBefore] = useState('')
 
   const run = (work: () => Promise<WriteResult>) => {
     setError(null)
@@ -130,24 +139,75 @@ export function Plantel({
       </div>
 
       {adding ? (
-        <input
-          autoFocus
-          placeholder="Nombre"
-          disabled={pending}
-          onBlur={(event) => {
-            const name = event.target.value
-            if (name.trim().length === 0) {
-              setAdding(false)
-              return
-            }
-            run(() => addSeat(seasonId, name))
+        // Nombre y select en un `<form>` con botón explícito: el input solo
+        // (con submit al blur) no alcanza en cuanto hay un segundo control —
+        // blurear el nombre para llegar al select de posición disparaba el
+        // alta con lo que hubiera en el campo en ese instante.
+        <form
+          onSubmit={(event) => {
+            event.preventDefault()
+            if (newName.trim().length === 0) return
+            run(() => addSeat(seasonId, newName, newBefore === '' ? null : newBefore))
           }}
-          className="rounded-field border-[1.5px] border-accent bg-surface p-[15px] text-[16px] font-[750] outline-none placeholder:font-medium placeholder:text-muted"
-        />
+          className="flex flex-col gap-2 rounded-field border-[1.5px] border-accent bg-surface p-3"
+        >
+          <input
+            autoFocus
+            placeholder="Nombre"
+            disabled={pending}
+            value={newName}
+            onChange={(event) => setNewName(event.target.value)}
+            className="rounded-field border border-line bg-surface p-[10px] text-[16px] font-[750] outline-none placeholder:font-medium placeholder:text-muted"
+          />
+          {/* `seats` ya llega ordenado por seedPosition (ajustes/page.tsx), así
+              que el select sale en el mismo orden que el plantel — igual que
+              "Juega con" en GuestCard. */}
+          <label className="flex items-center gap-2 text-[12.5px] font-bold">
+            Posición
+            <select
+              value={newBefore}
+              disabled={pending}
+              onChange={(event) => setNewBefore(event.target.value)}
+              className="flex-1 rounded-field border border-line bg-surface p-[10px] text-[13.5px] font-bold outline-none"
+            >
+              <option value="">Al final</option>
+              {seats.map((seat) => (
+                <option key={seat.entryId} value={seat.entryId}>
+                  Antes de {seat.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="flex items-center gap-2">
+            <button
+              type="submit"
+              disabled={pending || newName.trim().length === 0}
+              className="flex-1 rounded-field bg-accent p-[10px] text-center text-[13.5px] font-extrabold text-accent-text disabled:opacity-45"
+            >
+              Agregar
+            </button>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => {
+                setAdding(false)
+                setNewName('')
+                setNewBefore('')
+              }}
+              className="flex-1 rounded-field bg-chip p-[10px] text-center text-[13.5px] font-extrabold text-muted"
+            >
+              Cancelar
+            </button>
+          </div>
+        </form>
       ) : (
         <button
           type="button"
-          onClick={() => setAdding(true)}
+          onClick={() => {
+            setAdding(true)
+            setNewName('')
+            setNewBefore('')
+          }}
           className="rounded-field border-[1.5px] border-line p-3 text-[13.5px] font-extrabold"
         >
           + Agregar jugador

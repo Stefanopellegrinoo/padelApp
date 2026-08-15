@@ -8,12 +8,14 @@ import { removeTournament } from './actions'
  * esta pantalla: cerrar sesión es de la cuenta y ahora vive en Mis torneos.
  *
  * **Pide escribir el nombre, y es el único lugar de la app donde hay fricción a
- * propósito.** Todo lo demás se puede deshacer —una fecha se reabre, un asiento
- * se desvincula, el formato se vuelve a cambiar— y esto no: se lleva las
- * fechas, los partidos, los sets, los premios y el plantel, no hay papelera y
- * nadie tiene backup. Un botón rojo con "¿estás seguro?" está a un toque mal
- * dado de borrar el año del grupo, y este botón vive justo debajo de la lista
- * del plantel, donde el admin toca "Sacar" seguido.
+ * propósito.** No porque sea lo único irreversible —"Borrar fecha"
+ * (`fechas/[n]/borrar.tsx`) también se lleva una fecha con los resultados
+ * cargados y tampoco se deshace— sino por el tamaño de lo que se lleva: una
+ * fecha es una noche, y esto es el año entero del grupo, con las fechas, los
+ * partidos, los sets, los premios y el plantel. No hay papelera y nadie tiene
+ * backup. Un botón rojo con "¿estás seguro?" está a un toque mal dado de
+ * borrarlo, y este botón vive justo debajo de la lista del plantel, donde el
+ * admin toca "Sacar" seguido.
  *
  * El conteo de fechas jugadas no es decoración: es la diferencia entre "estás
  * por borrar un torneo" y "estás por borrar siete fechas jugadas".

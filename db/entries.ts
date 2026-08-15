@@ -64,6 +64,37 @@ export async function addSquadSeat(
 }
 
 /**
+ * Promueve al invitado que ya jugó a un asiento del plantel, sin recalcular
+ * nada: si su pareja de esa fecha tiene un award congelado, se lo copia
+ * entero; si no —pareja toda invitada, o nunca quedó en ninguna pareja—, no
+ * se inventa ni se saltea nada más que eso.
+ *
+ * `beforeEntryId` es el mismo mecanismo de posicionamiento que
+ * `addSquadSeat`: "antes de este asiento", default `null` = al final. Los dos
+ * pasos —trabar la fecha CLOSED, correr la cola si hace falta, y sólo
+ * entonces copiar el award— tienen que viajar en UNA transacción, y por eso
+ * viven en `promote_guest` (0014_promote_guest.sql) y acá queda una sola
+ * llamada.
+ */
+export async function promoteGuest(
+  supabase: Client,
+  entryId: string,
+  beforeEntryId: string | null = null,
+): Promise<void> {
+  const { error } = await supabase.rpc('promote_guest', {
+    p_entry: entryId,
+    // Mismo motivo que en `addSquadSeat`: `p_before` es opcional en el tipo
+    // generado (tiene default en SQL), no nullable — `undefined` omite la
+    // clave y deja que el default de la función decida.
+    p_before: beforeEntryId ?? undefined,
+  })
+  // Sin prefijo, igual que `addSquadSeat` y el resto de las llamadas a RPC de
+  // este archivo: los `raise` de `promote_guest` ya están en castellano y
+  // pensados para que los lea el admin.
+  if (error !== null) throw new EdgeError(error.message)
+}
+
+/**
  * Reclama un asiento para quien llama, desde adentro del torneo.
  *
  * Es el mismo `claim_seat` que usa Unirse y no un update propio: ahí vive la

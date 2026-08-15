@@ -51,16 +51,39 @@
 -- CLOSED— dejaba pasar el caso "invitado suelto en una fecha DRAFT sin
 -- sortear": ahí no hay nada que copiar ni que saltear, así que convertirlo
 -- de una sería tan válido como la puerta que ya existe (sacarlo de invitado y
--- agregarlo con `add_squad_seat`). El problema es que "válido hoy" no es
--- "gratis para siempre": una fecha DRAFT se puede seguir editando —tildar
--- asistencia, cambiar con quién juega el invitado, volver a sortear— y el
--- entry recién convertido en SQUAD seguiría teniendo una `pair_locks` que
--- exige un invitado de un lado (0001_schema.sql:122-125, la garantía "toda
--- pareja trabada incluye a un invitado"), y `syncGuestSeat` seguiría
--- pudiendo decidir agregar OTRO invitado suelto sin enterarse de que éste ya
--- se fue del pool de invitados. Ninguno de los dos casos se probó ni se
--- descartó, y la puerta angosta no cuesta nada cerrarla: en DRAFT el admin ya
--- tiene el camino largo. Un guard en vez de dos.
+-- agregarlo con `add_squad_seat`). Igual se refusa: en DRAFT el admin ya tiene
+-- el camino largo, y un guard es más barato de sostener que dos.
+--
+-- Lo que este párrafo decía ANTES y era falso: que refusar DRAFT cerrara el
+-- peligro del `pair_lock` huérfano —una traba que se queda con los dos lados
+-- en SQUAD y viola "toda pareja trabada incluye a un invitado"
+-- (0001_schema.sql:122-125)—. No lo cerraba. Ese peligro no entra por la
+-- puerta que se refusa, entra por la que se ACEPTA: la fecha CLOSED se puede
+-- reabrir y volver al armado, y ahí la traba que quedó viva vuelve a ser
+-- código vivo. Medido, todo con acciones normales de la app (trabar a mano el
+-- invitado con un asiento → jugar → cerrar → "Sumar invitado" → reabrir →
+-- volver al armado):
+--   generatePairs             -> Una pareja fijada a mano tiene que incluir…
+--   toggle asistencia         -> OK
+--   generatePairs (2do)       -> Una pareja fijada a mano tiene que incluir…
+--   removeSeat(promovido)     -> Este jugador ya jugó alguna fecha…
+--   crear la fecha siguiente  -> Ya hay una fecha sin cerrar en esta temporada.
+--   openMatchday              -> Una pareja fijada a mano tiene que incluir…
+--   cancelMatchday (destruye) -> OK
+-- La fecha queda trabada y `matchdays_one_live` traba con ella toda la
+-- temporada; la traba no se ve en ninguna pantalla (`page.tsx` saltea los
+-- locks cuyos ids no son de invitados de la fecha, y la lista de sueltos sólo
+-- camina invitados), así que no hay ningún botón para destrabarla. La única
+-- salida era Borrar fecha: destruir una fecha ya jugada y sus resultados.
+--
+-- Lo que sí lo cierra es el `delete from public.pair_locks` de más abajo, en
+-- la misma transacción que el flip. `db/promote.db.test.ts` arma la secuencia
+-- entera y afirma que después de promover no sobrevive ninguna traba de esta
+-- fecha para este entry, y que reabrir y volver a sortear funciona.
+--
+-- (El otro caso que este párrafo nombraba —`syncGuestSeat` agregando OTRO
+-- invitado suelto sin enterarse de que éste se fue del pool— sigue sin
+-- probarse ni descartarse, y sigue siendo un motivo para no aceptar DRAFT.)
 --
 -- **Los casos del reparto: uno se acepta y el resto se refusan.**
 --   1. En cada pareja suya de esta fecha el compañero es del plantel y tiene
@@ -166,9 +189,11 @@
 --     ya tiene su propio 23503 cuando el duplicado quedó adentro de una fecha
 --     viva — inventar una segunda forma de borrarlo es la que no se prueba la
 --     que se rompe.
---   - No toca `pairs` ni `pair_locks` de la fecha del invitado: promociona la
---     entry ORIGINAL, el mismo id que esas tablas ya referencian, así que no
---     hay nada que repuntar.
+--   - No toca `pairs`: promociona la entry ORIGINAL, el mismo id que esa tabla
+--     ya referencia, así que no hay nada que repuntar. `pair_locks` es el caso
+--     contrario y por eso SÍ se borra (ver el párrafo del `pair_lock`
+--     huérfano): no hay a quién repuntar, la traba deja de tener sentido
+--     apenas el entry sale del pool de invitados.
 --   - No es DEFERRABLE ni usa un advisory lock por temporada: mismo techo
 --     conocido que `shift_seeds_up` en 0013 — dos admins tocando el mismo
 --     plantel a la vez no está probado fila por fila, sólo que si choca,
@@ -313,6 +338,21 @@ begin
     end if;
     perform public.shift_seeds_up(v_season, v_at);
   end if;
+
+  -- Las trabas de armado de ESTA fecha y de ESTE entry, antes del flip. Un
+  -- `pair_lock` es una restricción del SORTEO —"a este invitado ponelo con
+  -- fulano"— y para cuando la fecha está CLOSED el sorteo ya pasó y quedó
+  -- escrito en `pairs`: la traba no decide nada más. Dejarla viva es lo que
+  -- rompe la invariante "toda pareja trabada incluye a un invitado"
+  -- (0001_schema.sql:122-125), porque el flip de acá abajo le deja los DOS
+  -- lados en SQUAD.
+  --
+  -- El `where` es puntual a propósito: sólo las trabas de esta fecha que
+  -- nombran a este entry. Las de los otros invitados de la misma fecha no son
+  -- asunto de esta función y siguen valiendo si la fecha vuelve al armado.
+  delete from public.pair_locks
+   where matchday_id = v_matchday
+     and (entry_a = p_entry or entry_b = p_entry);
 
   -- Un solo `update`, `kind` y `matchday_id` juntos: `entries_shape`
   -- (0001_schema.sql:67-70) exige que un SQUAD tenga `matchday_id is null`, y

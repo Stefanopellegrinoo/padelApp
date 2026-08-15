@@ -8,13 +8,14 @@ import {
   lockPair,
   nameGuest,
   openMatchday,
+  redraftMatchday,
   reopenMatchday,
   saveResult,
   setAttendance,
   syncGuestSeat,
 } from './matchday'
 import { promoteGuest } from './entries'
-import { matchdayDetail } from './read'
+import { matchdayDetail, pairLocksOf } from './read'
 import { adminClient } from './test/admin'
 import { createSeason } from './test/factories'
 import { createTestUser, type TestUser } from './test/users'
@@ -351,6 +352,68 @@ describe('promoteGuest — invitado nunca sorteado en una pareja de esa fecha', 
 
     expect(await awardsOf(matchdayId)).toEqual(before)
     expect((await entryRow(loose.id)).kind).toBe('GUEST')
+  })
+})
+
+/**
+ * El `pair_lock` huérfano. La app deja elegir "Juega con ‹asiento del plantel›"
+ * para el invitado suelto (`armado.tsx`, el select de la tarjeta del invitado),
+ * y eso escribe un `pair_locks` de GUEST + SQUAD. Esa pareja COBRA, así que el
+ * compañero tiene award y `promote_guest` acepta — y si la traba sobrevive al
+ * flip, queda con los dos lados en SQUAD, violando "toda pareja trabada incluye
+ * a un invitado" (0001_schema.sql:122-125).
+ *
+ * No es un estado armado a mano: todo el escenario son acciones normales de la
+ * pantalla. Y no se puede deshacer desde ninguna pantalla —la traba huérfana no
+ * se dibuja en ningún lado, así que no hay botón para destrabarla—, con lo cual
+ * la fecha queda sin poder sortear ni abrir, y `matchdays_one_live` traba con
+ * ella toda la temporada.
+ */
+describe('promoteGuest — la traba de armado no puede sobrevivir a la promoción', () => {
+  it('borra el pair_lock del invitado en esa fecha, y la fecha vuelve a poder sortearse', async () => {
+    const squad = await fillerPlayers(8)
+    const { admin, seasonId, entryIds } = await buildSeasonWithSquad(squad)
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
+    await markAllPlaying(admin, matchdayId, entryIds)
+    await setAttendance(admin.client, matchdayId, entryIds[0]!, 'ABSENT')
+    await syncGuestSeat(admin.client, matchdayId)
+
+    const [guestId] = (await matchdayDetail(admin.client, matchdayId)).guestIds
+    if (guestId === undefined) throw new Error('syncGuestSeat no agregó invitado.')
+    await nameGuest(admin.client, guestId, 'Invitado con pareja elegida')
+
+    // Esto es exactamente lo que hace `setGuestPartner` cuando el admin elige
+    // "Juega con ‹asiento›" en el armado: una traba GUEST + SQUAD.
+    const chosenSeat = entryIds[1]!
+    await lockPair(admin.client, matchdayId, guestId, chosenSeat)
+    expect(await pairLocksOf(adminClient(), matchdayId)).toHaveLength(1)
+
+    await generatePairs(admin.client, matchdayId)
+    await openMatchday(admin.client, matchdayId)
+    await playAllMatches(admin, matchdayId)
+    await closeMatchday(admin.client, matchdayId)
+
+    await promoteGuest(admin.client, guestId)
+
+    // Con `service_role` y no con `admin.client`: leyendo por RLS, un `[]`
+    // podría venir de la política y no del borrado, y sería una aserción que no
+    // puede fallar. Mismo criterio que `db/cancel.db.test.ts`.
+    expect(await pairLocksOf(adminClient(), matchdayId)).toHaveLength(0)
+    expect((await entryRow(guestId)).kind).toBe('SQUAD')
+
+    // Y el motivo por el que importa: la fecha vuelve al armado y sortea. Con
+    // la traba viva, esto tiraba "Una pareja fijada a mano tiene que incluir a
+    // un invitado", igual que `openMatchday` — y la única salida era borrar la
+    // fecha jugada.
+    await reopenMatchday(admin.client, matchdayId)
+    await redraftMatchday(admin.client, matchdayId)
+    // El que faltaba vuelve: sin el invitado (que ahora es del plantel y no
+    // tiene asistencia en esta fecha) quedaban 7 presentes, y 7 no se juega de
+    // a pares. Es una acción normal del armado, no andamiaje.
+    await setAttendance(admin.client, matchdayId, entryIds[0]!, 'PLAYING')
+    await generatePairs(admin.client, matchdayId)
+
+    expect((await matchdayDetail(admin.client, matchdayId)).pairs).toHaveLength(4)
   })
 })
 

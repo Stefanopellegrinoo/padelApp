@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { computeRanking, defaultConfig, type SeasonConfig } from '@/core'
 import {
   addGuest,
+  cancelMatchday,
   closeMatchday,
   createMatchday,
   generatePairs,
@@ -241,6 +242,29 @@ describe('reopenMatchday', () => {
 
     expect(await matchdayStatus(md1)).toBe('CLOSED')
     expect(await matchdayStatus(md2)).toBe('OPEN')
+  })
+
+  // Spec 1.5: el mensaje de arriba ("...ya tiene datos cargados. Borrala vos
+  // antes de reabrir ésta.", 0005_matchday_moves.sql:178) manda a cancelar la
+  // fecha que está en el medio — y desde que existe `cancel_matchday`, eso ya
+  // no es una promesa vacía: se puede hacer, y hacerlo desbloquea la reapertura.
+  it('cancelar la fecha bloqueante desbloquea la reapertura que pedía "borrala vos"', async () => {
+    const { admin, seasonId, squad } = await buildSeasonWithSquad(defaultConfig(8), 8)
+    const md1 = await createMatchday(admin.client, seasonId, '2026-08-10')
+    await playMatchdayToClose(admin, md1, squad)
+    const md2 = await createMatchday(admin.client, seasonId, '2026-08-17')
+    await markAllPlaying(admin, md2, squad)
+    await generatePairs(admin.client, md2)
+    await openMatchday(admin.client, md2)
+
+    await expect(reopenMatchday(admin.client, md1)).rejects.toThrow(/ya tiene datos cargados/)
+
+    await cancelMatchday(admin.client, md2)
+    expect(await matchdayExists(md2)).toBe(false)
+
+    await reopenMatchday(admin.client, md1)
+
+    expect(await matchdayStatus(md1)).toBe('OPEN')
   })
 
   it('rechaza reabrir una fecha que no está cerrada', async () => {

@@ -450,6 +450,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      cancel_matchday: { Args: { p_matchday: string }; Returns: undefined }
       claim_seat: {
         Args: { p_entry: string; p_token: string }
         Returns: string

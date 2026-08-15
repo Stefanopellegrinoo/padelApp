@@ -205,6 +205,23 @@
 --     el otro borrando la fecha, pueden dar 40P01 (deadlock detected), que sale
 --     crudo y en inglés a través de `EdgeError`. No corrompe nada: Postgres mata
 --     una de las dos transacciones entera.
+--   - No deduplica por HUMANO: el mismo tipo invitado a dos fechas distintas
+--     son dos `entries` distintas, y promover las dos deja DOS asientos en el
+--     plantel. `entries_one_seat` (0001_schema.sql:88) es único por
+--     `(season_id, player_id)` `where player_id is not null`, y un invitado no
+--     tiene `player_id`, así que ese índice no lo mira. Medido sobre una
+--     temporada de 8, con "Pedro" de invitado en la fecha 1 y otra vez en la 2,
+--     las dos promociones por el camino normal de la app:
+--       promote fecha 1 -> OK   ·   promote fecha 2 -> OK
+--       asientos SQUAD  -> 10
+--       Pedros          -> seed 8 y seed 9, los dos con player_id null
+--     Techo conocido y aceptado, igual que los tres de arriba: no hay ningún
+--     dato en la base que diga que esos dos asientos son la misma persona —el
+--     nombre no es identidad, dos Pedros distintos son legales—, así que
+--     deduplicar acá sería adivinar. Y no se deshace desde ninguna pantalla
+--     mientras la fecha siga cerrada: medido, `removeSeat` sobre un asiento
+--     recién promovido rebota con "Este jugador ya jugó alguna fecha…" (el
+--     23503 de `pairs`/`awards`, traducido en db/entries.ts).
 create or replace function public.promote_guest(p_entry uuid, p_before uuid default null)
 returns void
 language plpgsql

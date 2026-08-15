@@ -12,10 +12,15 @@ import { sumarInvitado } from './actions'
  *                        Es el único caso que la base acepta, y `partnerPoints`
  *                        son los puntos de esa fila de `awards` (no un
  *                        recálculo): exactamente lo que se le va a copiar.
- *   · `PAREJA_INVITADA`  jugó con otro invitado. Esa pareja quedó afuera del
- *                        reparto, y meterlo al plantel desde acá correría las
- *                        posiciones pagas de todos los demás. La base lo
- *                        refusa (spec 3.2).
+ *   · `PAREJA_INVITADA`  alguna pareja suya de esta fecha NO cobró: su
+ *                        compañero no tiene award congelado. Casi siempre es
+ *                        porque jugó con otro invitado (spec 3.2) y por eso el
+ *                        nombre, pero el predicado —el mismo que usa la base,
+ *                        `0014_promote_guest.sql:73-78`— es a propósito más
+ *                        ancho, así que el copy nombra la CAUSA (no cobró) y
+ *                        deja el caso típico como ejemplo. Esa pareja quedó
+ *                        afuera del reparto, y meterlo al plantel desde acá
+ *                        correría las posiciones pagas de todos los demás.
  *   · `SIN_PAREJA`       nunca quedó adentro de una pareja de esta fecha
  *                        (spec 3.4). No hay nada suyo que conservar, y la base
  *                        también lo refusa.
@@ -73,7 +78,7 @@ export function SumarInvitado({
         ) : (
           <p key={guest.entryId} className="text-[11.5px] font-[600] text-muted">
             {guest.estado === 'PAREJA_INVITADA'
-              ? `${guest.name} jugó esta fecha con otro invitado, así que esa pareja no cobró puntos. Sumarlo desde acá le cambiaría los puntos a los demás, por eso no se puede: si va a jugar el torneo, agregalo al plantel desde Ajustes › Plantel.`
+              ? `${guest.name} jugó esta fecha en una pareja que no cobró puntos —lo habitual es que haya jugado con otro invitado—. Sumarlo desde acá le cambiaría los puntos a los demás, por eso no se puede: si va a jugar el torneo, agregalo al plantel desde Ajustes › Plantel.`
               : `${guest.name} no quedó en ninguna pareja de esta fecha, así que no hay ningún punto suyo que conservar. Si va a jugar el torneo, agregalo al plantel desde Ajustes › Plantel.`}
           </p>
         ),
@@ -100,7 +105,15 @@ function PromoteGuestCard({
     return (
       <button
         type="button"
-        onClick={() => setAsking(true)}
+        // `setError(null)` también acá. No es un bug que se pueda mostrar hoy:
+        // el único cierre con un error puesto es "Cancelar", que ya lo limpia
+        // (el submit fallido deja la tarjeta ABIERTA, y no revalida). Es dónde
+        // vive la invariante: "abrir la tarjeta empieza limpio" se cumple en
+        // la apertura, en vez de depender de que cada cierre futuro se acuerde.
+        onClick={() => {
+          setError(null)
+          setAsking(true)
+        }}
         className="flex min-h-[44px] items-center justify-center rounded-field border-[1.5px] border-line p-3 text-center text-[13.5px] font-extrabold"
       >
         ¿{guest.name} se suma al torneo?
@@ -111,7 +124,19 @@ function PromoteGuestCard({
   // Los puntos son los de la fila de `awards` de su compañero — la MISMA que
   // `promote_guest` copia. No una cuenta paralela: la tarjeta promete
   // exactamente lo que la escritura va a grabar.
-  const copy = `Pasa a ser uno más del plantel y se lleva los ${guest.partnerPoints} puntos que le tocaron a su pareja en esta fecha. Las demás fechas no se tocan.`
+  //
+  // "Las demás fechas no se tocan" es cierto y no alcanzaba: juntas, esas dos
+  // frases se leían como "no cambia nada más", y cambian DOS cosas medidas
+  // sobre una temporada de 8 después de promover un suelto:
+  //   asientos del plantel: 9   ·   config.squadSize: 8
+  //   próximo sorteo con todos presentes: "Son 9 y sólo se juega de a pares."
+  //   deshacer (removeSeat): rebota, "ya jugó alguna fecha"
+  // El desajuste asiento/config es la decisión registrada 3 —agregar un
+  // asiento no toca `squadSize` ni `points`— y todas las demás pantallas que
+  // agregan asientos lo dicen (`ajustes/page.tsx:60-67`, con `validateConfig`).
+  // Ésta era la única que no, y encima es la única cuya acción no se puede
+  // deshacer desde ninguna pantalla.
+  const copy = `Pasa a ser uno más del plantel y se lleva los ${guest.partnerPoints} puntos que le tocaron a su pareja en esta fecha. Las demás fechas no se tocan. El plantel queda con un asiento más del que dice Formato —hay que actualizarlo antes de sortear la próxima fecha— y esto no se deshace: como ya jugó ésta, Ajustes › Plantel no lo va a dejar sacar.`
 
   return (
     <form

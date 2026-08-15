@@ -14,6 +14,7 @@ import {
   type WriteResult,
 } from './actions'
 import { applySeatTick, type SeatVM } from './armado-state'
+import { BorrarFecha } from './borrar'
 
 // `SeatVM` vive en `armado-state.ts` —con el reducer que lo usa— y se re-exporta
 // acá porque `page.tsx` lo importa de esta pantalla desde antes.
@@ -380,6 +381,8 @@ export function Armado({
           </button>
         )}
       </div>
+
+      <BorrarFecha seasonId={seasonId} matchdayId={matchdayId} />
     </div>
   )
 }

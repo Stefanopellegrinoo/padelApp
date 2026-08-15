@@ -17,6 +17,7 @@ import {
   saveMatchResult,
   type WriteResult,
 } from './actions'
+import { BorrarFecha } from './borrar'
 
 /** Lo que la carga necesita saber de la fecha, igual para todos sus partidos. */
 export interface CargaContext {
@@ -161,6 +162,9 @@ export function Carga({
  * sólo bajo `status === 'OPEN'`, y `status` es un solo valor — las dos ramas
  * no pueden coexistir nunca. El día que dos confirmaciones convivan en la
  * misma rama de estado, ahí sí hace falta `asking: 'reopen' | 'redraft' | null`.
+ * La tercera confirmación de esta pantalla —borrar la fecha, también bajo
+ * `OPEN`— no cuenta: vive en `borrar.tsx`, con su propio `asking`, así que
+ * nunca compite con éste.
  */
 export function CierreFecha({
   context,
@@ -261,6 +265,8 @@ export function CierreFecha({
           </div>
         </div>
       )}
+
+      {status === 'OPEN' && <BorrarFecha seasonId={seasonId} matchdayId={matchdayId} />}
 
       {status === 'CLOSED' && canReopen && !asking && (
         <button

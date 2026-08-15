@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { MASTERS_SIZE } from '@/core'
 import { initials } from '@/app/format'
 import { buildMasters, confirmMatchday, drawMastersPairs, type WriteResult } from './actions'
+import { BorrarFecha } from './borrar'
 
 const ERROR_NOTE = 'rounded-field bg-live-bg px-3 py-2.5 text-[12.5px] font-bold text-live'
 
@@ -147,6 +148,8 @@ export function MastersDraft({
           </button>
         )}
       </div>
+
+      <BorrarFecha seasonId={seasonId} matchdayId={matchdayId} />
     </div>
   )
 }

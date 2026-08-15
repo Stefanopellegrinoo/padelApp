@@ -24,6 +24,7 @@ import { Armado, type DraftPairVM, type GuestPairVM, type GuestVM, type SeatVM }
 import { CierreFecha } from './carga'
 import { DiaDeLaFecha } from './dia'
 import { MastersDraft, type QualifierVM } from './masters'
+import { SumarInvitado, type GuestPromoteVM, type SumarSeatVM } from './sumar'
 
 interface PageProps {
   params: Promise<{ id: string; n: string }>
@@ -382,6 +383,26 @@ export default async function FechaDetailPage({ params }: PageProps) {
     const anyGuestInTable = status === 'CLOSED' && standings.some((row) => hasGuest(row.pair))
     const note = status === 'CLOSED' ? tiebreakNote(standings, config, nameOf) : null
 
+    // Sumar invitado (spec Capability 3) sólo existe con la fecha CLOSED:
+    // `promote_guest` rechaza cualquier otro estado del lado de la base, y
+    // `sumar.tsx` sólo se monta acá para no ofrecer un botón que siempre
+    // falla por estado. `partnerPoints` sale de la MISMA `pointsByEntry` que
+    // ya pinta la columna de puntos de la tabla de arriba — no una segunda
+    // cuenta que pueda desacordar con lo que la pantalla ya muestra.
+    const guestsForPromotion: GuestPromoteVM[] =
+      header.isAdmin && status === 'CLOSED'
+        ? detail.guestIds.map((guestId) => {
+            const pair = detail.pairs.find((candidate) => candidate.a === guestId || candidate.b === guestId)
+            const partnerId = pair === undefined ? null : pair.a === guestId ? pair.b : pair.a
+            const partnerPoints = partnerId === null ? null : (pointsByEntry.get(partnerId) ?? null)
+            return { entryId: guestId, name: nameOf.get(guestId) ?? '?', partnerPoints }
+          })
+        : []
+    const squadSeatsForPromotion: SumarSeatVM[] = entries
+      .filter((entry) => entry.kind === 'SQUAD')
+      .sort((a, b) => a.seedPosition - b.seedPosition)
+      .map((entry) => ({ entryId: entry.id, name: entry.displayName }))
+
     body = (
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap gap-1.5">
@@ -476,6 +497,10 @@ export default async function FechaDetailPage({ params }: PageProps) {
             <p className="text-[11.5px] font-[600] text-muted">
               El invitado no suma para el campeonato; su compañero sí.
             </p>
+          )}
+
+          {guestsForPromotion.length > 0 && (
+            <SumarInvitado seasonId={seasonId} guests={guestsForPromotion} seats={squadSeatsForPromotion} />
           )}
 
           {note !== null && <p className="text-[12.5px] font-[550] text-muted">{note}</p>}

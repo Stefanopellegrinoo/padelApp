@@ -3,18 +3,32 @@
 import { useState, useTransition } from 'react'
 import { sumarInvitado } from './actions'
 
-export interface GuestPromoteVM {
-  entryId: string
-  name: string
-  /**
-   * Los puntos que se llevó SU pareja en esta fecha, o `null` cuando no hay
-   * nada que copiarle: la pareja era toda invitada (spec 3.2) o, por algún
-   * motivo, el invitado nunca quedó en ninguna pareja de esta fecha (spec
-   * 3.4). `promote_guest` decide lo mismo del lado de la base con un `join`
-   * contra `awards`; esto es sólo la copia que necesita el copy de acá.
-   */
-  partnerPoints: number | null
-}
+/**
+ * Los tres estados en los que puede estar un invitado de una fecha cerrada, y
+ * son tres porque `promote_guest` (0014_promote_guest.sql) contesta tres cosas
+ * distintas — no dos:
+ *
+ *   · `PUEDE`            su compañero tiene un award CONGELADO en esta fecha.
+ *                        Es el único caso que la base acepta, y `partnerPoints`
+ *                        son los puntos de esa fila de `awards` (no un
+ *                        recálculo): exactamente lo que se le va a copiar.
+ *   · `PAREJA_INVITADA`  jugó con otro invitado. Esa pareja quedó afuera del
+ *                        reparto, y meterlo al plantel desde acá correría las
+ *                        posiciones pagas de todos los demás. La base lo
+ *                        refusa (spec 3.2).
+ *   · `SIN_PAREJA`       nunca quedó adentro de una pareja de esta fecha
+ *                        (spec 3.4). No hay nada suyo que conservar, y la base
+ *                        también lo refusa.
+ *
+ * Es un union y no un `partnerPoints: number | null` porque `null` tapaba DOS
+ * casos con un solo copy, y el copy afirmaba sólo uno de los dos: un invitado
+ * que nunca jugó leía "jugó con otro invitado".
+ */
+export type GuestPromoteVM = { entryId: string; name: string } & (
+  | { estado: 'PUEDE'; partnerPoints: number }
+  | { estado: 'PAREJA_INVITADA' }
+  | { estado: 'SIN_PAREJA' }
+)
 
 export interface SumarSeatVM {
   entryId: string
@@ -30,6 +44,11 @@ export interface SumarSeatVM {
  * Sólo se monta en CLOSED (page.tsx): `promote_guest` rechaza cualquier fecha
  * que no lo esté, así que el botón nunca ofrece algo que va a fallar por
  * estado — mismo criterio que "Reabrir fecha" (`plantel.tsx:28-30`).
+ *
+ * Y por el MISMO criterio, el botón tampoco aparece cuando el invitado no
+ * tiene un award de compañero que copiar: desde esta fecha `promote_guest` lo
+ * va a refusar SIEMPRE, así que ofrecer el botón es ofrecer un rebote seguro.
+ * En su lugar va la explicación de por qué no se puede y qué hacer.
  *
  * Un `<PromoteGuestCard>` por invitado, cada uno con su propio `asking`:
  * puede haber dos a la vez (una pareja invitada entera, spec 3.2), y abrir
@@ -48,9 +67,17 @@ export function SumarInvitado({
 
   return (
     <div className="flex flex-col gap-2">
-      {guests.map((guest) => (
-        <PromoteGuestCard key={guest.entryId} seasonId={seasonId} guest={guest} seats={seats} />
-      ))}
+      {guests.map((guest) =>
+        guest.estado === 'PUEDE' ? (
+          <PromoteGuestCard key={guest.entryId} seasonId={seasonId} guest={guest} seats={seats} />
+        ) : (
+          <p key={guest.entryId} className="text-[11.5px] font-[600] text-muted">
+            {guest.estado === 'PAREJA_INVITADA'
+              ? `${guest.name} jugó esta fecha con otro invitado, así que esa pareja no cobró puntos. Sumarlo desde acá le cambiaría los puntos a los demás, por eso no se puede: si va a jugar el torneo, agregalo al plantel desde Ajustes › Plantel.`
+              : `${guest.name} no quedó en ninguna pareja de esta fecha, así que no hay ningún punto suyo que conservar. Si va a jugar el torneo, agregalo al plantel desde Ajustes › Plantel.`}
+          </p>
+        ),
+      )}
     </div>
   )
 }
@@ -61,7 +88,7 @@ function PromoteGuestCard({
   seats,
 }: {
   seasonId: string
-  guest: GuestPromoteVM
+  guest: Extract<GuestPromoteVM, { estado: 'PUEDE' }>
   seats: SumarSeatVM[]
 }) {
   const [asking, setAsking] = useState(false)
@@ -81,10 +108,10 @@ function PromoteGuestCard({
     )
   }
 
-  const copy =
-    guest.partnerPoints === null
-      ? 'Pasa a ser uno más del plantel. En esta fecha jugó con otro invitado, así que esa pareja no cobró y no hay puntos que sumarle.'
-      : `Pasa a ser uno más del plantel y se lleva los ${guest.partnerPoints} puntos que le tocaron a su pareja en esta fecha. Las demás fechas no se tocan.`
+  // Los puntos son los de la fila de `awards` de su compañero — la MISMA que
+  // `promote_guest` copia. No una cuenta paralela: la tarjeta promete
+  // exactamente lo que la escritura va a grabar.
+  const copy = `Pasa a ser uno más del plantel y se lleva los ${guest.partnerPoints} puntos que le tocaron a su pareja en esta fecha. Las demás fechas no se tocan.`
 
   return (
     <form

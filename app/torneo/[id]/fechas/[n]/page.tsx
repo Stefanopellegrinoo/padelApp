@@ -256,11 +256,17 @@ export default async function FechaDetailPage({ params }: PageProps) {
       .sort((a, b) => a.seedPosition - b.seedPosition)
       .map((entry) => entry.id)
 
-    const [detail, awardsByMatchday, lastHistory, beforeLastHistory] = await Promise.all([
+    const canPromote = header.isAdmin && status === 'CLOSED' && !isMasters
+    const [detail, awardsByMatchday, lastHistory, beforeLastHistory, frozenHistory] = await Promise.all([
       matchdayDetail(supabase, matchday.id),
       awardsBefore(supabase, seasonId, matchdayNumber),
       closedHistory(supabase, seasonId, matchdayNumber - 1),
       closedHistory(supabase, seasonId, matchdayNumber - 2),
+      // Los awards CONGELADOS de ESTA fecha, para la tarjeta de "Sumar
+      // invitado" de más abajo. `closedHistory` ya sabe leerlos y devolver
+      // `null` cuando la fecha no está cerrada; sólo se pide cuando la tarjeta
+      // se va a dibujar.
+      canPromote ? closedHistory(supabase, seasonId, matchdayNumber) : Promise.resolve(null),
     ])
 
     const snapshot = snapshotForMatchday(matchdayNumber, seedOrder, awardsByMatchday, config)
@@ -386,22 +392,49 @@ export default async function FechaDetailPage({ params }: PageProps) {
     // Sumar invitado (spec Capability 3) sólo existe con la fecha CLOSED:
     // `promote_guest` rechaza cualquier otro estado del lado de la base, y
     // `sumar.tsx` sólo se monta acá para no ofrecer un botón que siempre
-    // falla por estado. `partnerPoints` sale de la MISMA `pointsByEntry` que
-    // ya pinta la columna de puntos de la tabla de arriba — no una segunda
-    // cuenta que pueda desacordar con lo que la pantalla ya muestra.
-    const guestsForPromotion: GuestPromoteVM[] =
-      header.isAdmin && status === 'CLOSED'
-        ? detail.guestIds.map((guestId) => {
-            const pair = detail.pairs.find((candidate) => candidate.a === guestId || candidate.b === guestId)
-            const partnerId = pair === undefined ? null : pair.a === guestId ? pair.b : pair.a
-            const partnerPoints = partnerId === null ? null : (pointsByEntry.get(partnerId) ?? null)
-            return { entryId: guestId, name: nameOf.get(guestId) ?? '?', partnerPoints }
-          })
-        : []
-    const squadSeatsForPromotion: SumarSeatVM[] = entries
-      .filter((entry) => entry.kind === 'SQUAD')
-      .sort((a, b) => a.seedPosition - b.seedPosition)
-      .map((entry) => ({ entryId: entry.id, name: entry.displayName }))
+    // falla por estado.
+    //
+    // Los puntos de la tarjeta salen de `awards` —la tabla CONGELADA, la misma
+    // fila que `promote_guest` copia con su `join`— y NO de `pointsByEntry`,
+    // que es el recálculo en vivo de veinte líneas más arriba. Reusar
+    // `pointsByEntry` parecía lo prudente ("una sola cuenta") y era justo al
+    // revés, porque las dos no contestan la misma pregunta: `pointsByEntry`
+    // dice cuánto daría un recálculo HOY, y la tarjeta tiene que prometer
+    // cuánto va a GRABAR la escritura. Con el salteo silencioso que había
+    // antes se separaban: medido en una temporada de 12, después de promover
+    // la pantalla mostraba al invitado con 5 puntos que no existían en ninguna
+    // fila de `awards` y a su compañero con 3 donde la tabla tenía 5.
+    // `promote_guest` ahora refusa ese caso, y sobre los dos escenarios que SÍ
+    // acepta —invitado suelto en una temporada de 12, e invitado suelto
+    // conviviendo con una pareja toda invitada en una de 8— las dos fuentes
+    // coinciden fila por fila. O sea: leer `awards` hoy no cambia lo que se
+    // ve, cambia DE QUÉ DEPENDE lo que se ve.
+    //
+    // El estado del invitado decide si se ofrece el botón o la explicación:
+    // sin award de compañero, `promote_guest` refusa SIEMPRE desde esta fecha
+    // (0014_promote_guest.sql), así que un botón ahí es un rebote garantizado
+    // — el defecto que este repo ya nombra en `ajustes/plantel.tsx:27-30`.
+    const frozenPoints = new Map((frozenHistory?.awards ?? []).map((award) => [award.entryId, award.points]))
+    const guestsForPromotion: GuestPromoteVM[] = canPromote
+      ? detail.guestIds.map((guestId) => {
+          const name = nameOf.get(guestId) ?? '?'
+          const pair = detail.pairs.find((candidate) => candidate.a === guestId || candidate.b === guestId)
+          if (pair === undefined) return { entryId: guestId, name, estado: 'SIN_PAREJA' }
+          const partnerPoints = frozenPoints.get(pair.a === guestId ? pair.b : pair.a)
+          if (partnerPoints === undefined) return { entryId: guestId, name, estado: 'PAREJA_INVITADA' }
+          return { entryId: guestId, name, estado: 'PUEDE', partnerPoints }
+        })
+      : []
+    // La lista de asientos es sólo para el select de "antes de quién" de esa
+    // tarjeta: sin invitados que sumar no hay tarjeta, y armarla es trabajo al
+    // pedo en la fecha cerrada de cualquier temporada sin invitados.
+    const squadSeatsForPromotion: SumarSeatVM[] =
+      guestsForPromotion.length === 0
+        ? []
+        : entries
+            .filter((entry) => entry.kind === 'SQUAD')
+            .sort((a, b) => a.seedPosition - b.seedPosition)
+            .map((entry) => ({ entryId: entry.id, name: entry.displayName }))
 
     body = (
       <div className="flex flex-col gap-4">

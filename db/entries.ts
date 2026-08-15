@@ -13,39 +13,41 @@
 import type { Client } from './client'
 import { EdgeError } from './errors'
 
-/** Agrega un asiento al plantel, al final del orden inicial. */
+/**
+ * Agrega un asiento al plantel. `beforeEntryId` es "antes de este asiento": el
+ * default `null` agrega al final, que es el comportamiento de siempre —
+ * byte a byte, nada cambia para quien ignora el selector nuevo.
+ *
+ * No es una posición numérica: `removeSeat` deja huecos en `seed_position` a
+ * propósito, así que "posición 3" es ambigua y queda vieja apenas alguien más
+ * entra o sale. "Antes de Juan" no.
+ *
+ * Elegir el lugar y correr la cola son dos pasos que tienen que viajar juntos
+ * en UNA transacción, y el cliente de Supabase no tiene eso — por eso los dos
+ * pasos viven en `add_squad_seat` (0013_squad_seat_position.sql) y acá queda
+ * una sola llamada.
+ */
 export async function addSquadSeat(
   supabase: Client,
   seasonId: string,
   displayName: string,
+  beforeEntryId: string | null = null,
 ): Promise<string> {
   const name = displayName.trim()
   if (name.length === 0) throw new EdgeError('El asiento necesita un nombre.')
 
-  const { data: last, error: lastError } = await supabase
-    .from('entries')
-    .select('seed_position')
-    .eq('season_id', seasonId)
-    .eq('kind', 'SQUAD')
-    .order('seed_position', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-  if (lastError) throw new EdgeError(`No se pudo leer el plantel: ${lastError.message}`)
-
-  const { data, error } = await supabase
-    .from('entries')
-    .insert({
-      season_id: seasonId,
-      kind: 'SQUAD',
-      display_name: name,
-      seed_position: (last?.seed_position ?? -1) + 1,
-    })
-    .select('id')
-    .single()
+  const { data, error } = await supabase.rpc('add_squad_seat', {
+    p_season: seasonId,
+    p_name: name,
+    // `p_before` es opcional en el tipo generado (tiene default en SQL), no
+    // nullable: `undefined` omite la clave y deja que el default de la
+    // función decida, que es exactamente "al final".
+    p_before: beforeEntryId ?? undefined,
+  })
   if (error !== null || data === null) {
     throw new EdgeError(`No se pudo agregar el jugador: ${error?.message}`)
   }
-  return data.id
+  return data
 }
 
 /**

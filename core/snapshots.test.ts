@@ -114,4 +114,43 @@ describe('snapshotForMatchday', () => {
     // If countBestOf were ignored, p4's raw total (18) would lead instead.
     expect(snapshotForMatchday(4, SEED, awards, bestOfTwo)[0]).toBe('p3')
   })
+
+  // Pinning test for spec 2.2/2.3 (Capability 2, "Ubicar al que llega en el
+  // orden de desempate"). This is a SANCTIONED exception to the RED-first
+  // rule: it pins a property `snapshotForMatchday` already has, with zero
+  // production code changed. It still earns its place — it fails the day
+  // somebody changes how the snapshot derives from the seed order.
+  //
+  // The claim is spec 2.3's corollary of 2.2: inserting a new seat mid-season
+  // must not flip any tiebreak comparison between two players who both
+  // already existed. This holds for free here because `orderByPoints`
+  // compares `snapshot.indexOf(id)` — a RELATIVE position — and inserting one
+  // id into an array without disturbing the others' relative order is exactly
+  // what `add_squad_seat`'s shift does (proven separately, at the SQL layer,
+  // by `db/entries.db.test.ts`). No live matchday data needed: two seed
+  // orders differing only by one inserted id are enough.
+  it('an inserted seat never flips the relative order of any two players who existed before it (spec 2.2/2.3)', () => {
+    const before = ['p1', 'p2', 'p3', 'p4', 'p5']
+    const after = ['p1', 'p2', 'NEW', 'p3', 'p4', 'p5'] // NEW inserted at index 2
+
+    const awards = new Map([
+      [1, [award('p4', 10), award('p2', 6)]],
+      [2, [award('p1', 10)]],
+      [3, [award('p3', 10), award('p5', 3)]],
+    ])
+
+    const beforeSnapshot = snapshotForMatchday(5, before, awards, CONFIG)
+    const afterSnapshot = snapshotForMatchday(5, after, awards, CONFIG)
+
+    // Every pairwise comparison among the ids that existed before the insert
+    // is unchanged: whichever ranked above the other still does.
+    for (const left of before) {
+      for (const right of before) {
+        if (left === right) continue
+        const wasAbove = beforeSnapshot.indexOf(left) < beforeSnapshot.indexOf(right)
+        const stillAbove = afterSnapshot.indexOf(left) < afterSnapshot.indexOf(right)
+        expect(stillAbove).toBe(wasAbove)
+      }
+    }
+  })
 })

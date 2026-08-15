@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { defaultConfig } from '@/core'
 import { addSquadSeat, removeSeat, renameSeat, unlinkSeat } from './entries'
 import {
+  addGuest,
   closeMatchday,
   createMatchday,
   generatePairs,
@@ -374,6 +375,122 @@ describe('the squad seats', () => {
     expect(seats.filter((e) => e.kind === 'SQUAD')).toHaveLength(8)
     expect(seats.find((e) => e.id === seatId)?.displayName).not.toBe('Robado')
     expect(seats.find((e) => e.id === entryIds[0])?.playerId).toBe(player.playerId)
+  })
+})
+
+// Capability 2 (spec: "Ubicar al que llega en el orden de desempate"). El
+// caso "al final, sin elegir nada" ya está cubierto arriba por "adds a seat
+// after the last one in the seed order" — ese test llama a `addSquadSeat` con
+// el cuarto argumento omitido, que es exactamente el default `null`, así que
+// duplicarlo acá no suma cobertura (ponytail: reuse, no lo repito).
+describe('addSquadSeat colocando el nuevo asiento (spec 2.1, 2.2, 2.4, 2.5, 2.6)', () => {
+  it('insertar antes de un asiento corre la cola +1 sin tocar el orden relativo de los demás', async () => {
+    const admin = await createTestUser()
+    const { seasonId } = await createSeason(admin.client, {
+      name: 'Los Jueves 2026',
+      squadNames: squadNames(8),
+      config: defaultConfig(8),
+    })
+    const before = (await entriesOf(admin.client, seasonId))
+      .filter((e) => e.kind === 'SQUAD')
+      .sort((a, b) => a.seedPosition - b.seedPosition)
+
+    // "Antes de" el 3er asiento (índice 2, seed_position 2 con seed 0-index).
+    const target = before[2]
+    if (target === undefined) throw new Error('Falta el asiento de test.')
+
+    const newId = await addSquadSeat(admin.client, seasonId, 'El Nuevo', target.id)
+
+    const after = (await entriesOf(admin.client, seasonId))
+      .filter((e) => e.kind === 'SQUAD')
+      .sort((a, b) => a.seedPosition - b.seedPosition)
+
+    // El nuevo cae exactamente donde estaba `target`, que ahora es el siguiente.
+    const expectedNames = before.map((e) => e.displayName)
+    expectedNames.splice(2, 0, 'El Nuevo')
+    expect(after.map((e) => e.displayName)).toEqual(expectedNames)
+    expect(after.find((e) => e.id === newId)?.seedPosition).toBe(2)
+
+    // Spec 2.2: el orden relativo entre los 8 preexistentes no cambió — nadie
+    // saltó por encima de nadie, sólo se corrieron un lugar.
+    expect(after.filter((e) => e.id !== newId).map((e) => e.id)).toEqual(before.map((e) => e.id))
+
+    // Spec 2.4: no queda ni un hueco ni un duplicado en seed_position — el
+    // corrimiento de dos pasadas (parking) es atómico adentro de la función.
+    expect(after.map((e) => e.seedPosition)).toEqual(Array.from({ length: 9 }, (_, i) => i))
+  })
+
+  it('rechaza un p_before que no es un asiento SQUAD de esta temporada, y no mueve nada', async () => {
+    const admin = await createTestUser()
+    const { seasonId } = await createSeason(admin.client, {
+      name: 'Los Jueves 2026',
+      squadNames: squadNames(8),
+      config: defaultConfig(8),
+    })
+    const before = (await entriesOf(admin.client, seasonId)).filter((e) => e.kind === 'SQUAD')
+
+    // Caso 1: un uuid que no existe en absoluto.
+    await expect(
+      addSquadSeat(admin.client, seasonId, 'Nuevo', '00000000-0000-0000-0000-000000000000'),
+    ).rejects.toThrow(/no está en el plantel/)
+
+    // Caso 2: un asiento real, pero de OTRA temporada.
+    const otherAdmin = await createTestUser()
+    const { seasonId: otherSeasonId } = await createSeason(otherAdmin.client, {
+      name: 'Otra temporada',
+      squadNames: squadNames(8),
+      config: defaultConfig(8),
+    })
+    const foreignSeat = (await entriesOf(otherAdmin.client, otherSeasonId)).find((e) => e.kind === 'SQUAD')
+    if (foreignSeat === undefined) throw new Error('Falta el asiento ajeno de test.')
+    await expect(addSquadSeat(admin.client, seasonId, 'Nuevo', foreignSeat.id)).rejects.toThrow(
+      /no está en el plantel/,
+    )
+
+    // Caso 3: un entry real de ESTA temporada, pero GUEST — no SQUAD.
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
+    const guestId = await addGuest(admin.client, matchdayId, { displayName: 'Invitado' })
+    await expect(addSquadSeat(admin.client, seasonId, 'Nuevo', guestId)).rejects.toThrow(
+      /no está en el plantel/,
+    )
+
+    // Ninguno de los tres intentos movió ni agregó nada al plantel.
+    expect((await entriesOf(admin.client, seasonId)).filter((e) => e.kind === 'SQUAD')).toEqual(before)
+  })
+
+  it('sólo el admin puede elegir dónde cae el nuevo asiento', async () => {
+    const player = await createTestUser()
+    const admin = await createTestUser()
+    const filler = await fillerPlayers(4)
+    const { seasonId, entryIds } = await buildSeasonScene({
+      admin,
+      squad: [player.playerId, ...filler],
+    })
+
+    await expect(addSquadSeat(player.client, seasonId, 'Colado', entryIds[1]!)).rejects.toThrow(
+      /Sólo quien organiza/,
+    )
+
+    expect((await entriesOf(admin.client, seasonId)).filter((e) => e.kind === 'SQUAD')).toHaveLength(5)
+  })
+
+  // Decisión de diseño 3: `shift_seeds_up` es una función plana sin ningún
+  // grant — ni a `authenticated` — porque sus únicas llamadoras son funciones
+  // `security definer` que ya validaron admin. Si esto alguna vez apareciera
+  // llamable por RPC, cualquier autenticado podría correr el plantel de
+  // CUALQUIER temporada sin pasar por `is_season_admin`.
+  it('shift_seeds_up no es alcanzable por RPC: nadie tiene el grant', async () => {
+    const admin = await createTestUser()
+    const { seasonId } = await createSeason(admin.client, {
+      name: 'Los Jueves 2026',
+      squadNames: squadNames(8),
+      config: defaultConfig(8),
+    })
+
+    const { data, error } = await admin.client.rpc('shift_seeds_up', { p_season: seasonId, p_from: 2 })
+
+    expect(data).toBeNull()
+    expect(error?.code).toBe('42501')
   })
 })
 

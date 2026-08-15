@@ -15,6 +15,13 @@
 -- rama, con el mismo mensaje que la de arriba, y la lista blanca se ocupa del
 -- resto.
 --
+-- Eso NO era una afirmación probada hasta ahora: los ocho tests que había
+-- entraban todos con un status real, así que los ocho pasaban enteros con el
+-- deny-list puesto. El que lo pinnea es "la fecha que desaparece entre la
+-- lectura y la traba" (`db/cancel.db.test.ts`), que monta el entrelazado con
+-- una segunda sesión de psql —una traba de fila que se suelta recién después
+-- de borrar— y falla si esta guarda vuelve a la forma vieja.
+--
 -- No hace falta un solo delete además del de `matchdays`: attendances,
 -- pair_locks, pairs, matches, match_sets y las entries GUEST de esta fecha
 -- cuelgan todas de `matchday_id` con `on delete cascade` (0001_schema.sql).

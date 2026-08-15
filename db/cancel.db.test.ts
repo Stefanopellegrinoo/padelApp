@@ -1,3 +1,5 @@
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 import { describe, expect, it } from 'vitest'
 import { defaultConfig, type SeasonConfig } from '@/core'
 import {
@@ -177,6 +179,56 @@ async function squadEntriesOf(
     .order('seed_position', { ascending: true })
   if (error) throw new Error(error.message)
   return data ?? []
+}
+
+/**
+ * SQL crudo contra la Postgres local, adentro del contenedor del stack de
+ * Supabase (`supabase_db_<project_id>`; el project_id es "padelApp" y vive en
+ * supabase/config.toml — si alguien lo cambia, esto revienta ruidosamente, que
+ * es lo que corresponde). Mismo mecanismo que `db/entries.db.test.ts`, y por el
+ * mismo motivo: hay cosas que supabase-js no puede hacer porque habla
+ * PostgREST. Ahí era elegir el plan; acá es tener una SEGUNDA sesión que
+ * mantenga una transacción abierta.
+ *
+ * Va por `docker exec` y no por un `psql` del host a propósito: el stack local
+ * ya exige Docker, un cliente de Postgres instalado en la máquina no. Y por
+ * construcción pega contra el contenedor local, así que no hay forma de que se
+ * escape a una base real ni salteándose `db/test/env.ts`.
+ *
+ * Un solo `-c` con varios statements es UNA transacción implícita, que es
+ * justamente lo que hace falta para que la traba de fila sobreviva al sleep.
+ */
+const execFileAsync = promisify(execFile)
+
+function localSqlAsync(sql: string): Promise<{ stdout: string }> {
+  return execFileAsync('docker', [
+    'exec', 'supabase_db_padelApp',
+    'psql', '-U', 'postgres', '-d', 'postgres',
+    '-X', '-q', '-A', '-t', '-v', 'ON_ERROR_STOP=1', '-c', sql,
+  ])
+}
+
+/** Cuánto espera la sesión bloqueadora antes de borrar la fila y soltar la traba. */
+const BLOCKER_WINDOW_SECONDS = 3
+
+/**
+ * Espera a que la sesión bloqueadora esté DURMIENDO. Su `pg_sleep` corre
+ * después del `select … for update`, así que verla en `PgSleep` prueba que la
+ * traba de fila ya está tomada — que es la condición que el test necesita
+ * antes de largar la otra sesión. El uuid de la fecha adentro del texto de la
+ * consulta es lo que la identifica: `pg_stat_activity.query` guarda el string
+ * entero del `-c`.
+ */
+async function waitUntilBlockerHoldsTheRow(matchdayId: string): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const { stdout } = await localSqlAsync(
+      `select count(*) from pg_stat_activity
+        where wait_event = 'PgSleep' and query like '%${matchdayId}%';`,
+    )
+    if (stdout.trim() === '1') return
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
+  throw new Error('La sesión bloqueadora nunca llegó a trabar la fila.')
 }
 
 /** Arma y confirma una fecha regular DENTRO de una temporada ya existente. */
@@ -381,5 +433,52 @@ describe('cancelMatchday', () => {
     expect(data).toBeNull()
     expect(error?.code).toBe('42501')
     expect(await matchdayExists(matchdayId)).toBe(true)
+  })
+
+  // La rama del null de `0012_cancel_matchday.sql`, que es la mitad de la lista
+  // blanca y hasta acá no tenía NINGÚN test que la pudiera hacer fallar: los
+  // otros ocho pasan enteros con el deny-list de antes (`if v_status =
+  // 'CLOSED'`, sin rama de null), porque todos entran con un status real.
+  //
+  // El escenario es el que describe el comentario de la migración: la fila
+  // desaparece ENTRE `matchday_season` —que ya devolvió la temporada— y el
+  // `select … for update`. Con el deny-list, `null = 'CLOSED'` da null, ninguna
+  // rama dispara, el delete borra 0 filas, el `update seasons` la devuelve a
+  // SETUP y la función **contesta éxito**: la pantalla redirige a una temporada
+  // que ya no existe. Con la lista blanca, refusa y no toca nada.
+  it('la fecha que desaparece entre la lectura y la traba se REFUSA, no devuelve éxito con cero filas borradas', async () => {
+    const { admin, seasonId, squad } = await buildSeasonWithSquad(defaultConfig(8), 8)
+    const matchdayId = await openMatchdayIn(admin, seasonId, squad, '2026-08-10')
+    // Confirmar la primera fecha es lo que mueve la temporada a ACTIVE, y eso
+    // es la mitad de la aserción de abajo.
+    expect(await seasonStatus(seasonId)).toBe('ACTIVE')
+
+    // Sesión B: traba la FILA de la fecha, espera a que la sesión A quede
+    // encolada detrás de esa traba, y recién ahí la borra. Los tres statements
+    // viajan en un solo `-c`, así que Postgres los corre en UNA transacción
+    // implícita: la traba dura desde el `for update` hasta el commit del final.
+    const blocker = localSqlAsync(`
+      select id from public.matchdays where id = '${matchdayId}' for update;
+      select pg_sleep(${BLOCKER_WINDOW_SECONDS});
+      delete from public.matchdays where id = '${matchdayId}';
+    `)
+    // El handshake NO es un sleep del lado de Node: si la sesión A arrancara
+    // antes de que B tenga la traba, borraría la fecha limpio y el test daría
+    // un rojo mentiroso. `pg_sleep` corre DESPUÉS del `for update` en la misma
+    // sesión, así que ver a B durmiendo es la prueba de que la traba ya está.
+    await waitUntilBlockerHoldsTheRow(matchdayId)
+
+    // Sesión A: `matchday_season` e `is_season_admin` ya leyeron la fila; el
+    // `select … for update` se cuelga esperando a B. Cuando B commitea su
+    // delete, READ COMMITTED reevalúa la fila, no la encuentra, y v_status
+    // queda en null.
+    const { error } = await admin.client.rpc('cancel_matchday', { p_matchday: matchdayId })
+    await blocker
+
+    expect(error?.message).toBe('La fecha no existe.')
+    // El `raise` deshace la función entera, así que el trinquete de la
+    // temporada tampoco se movió. Es la segunda mitad de la mutación: con el
+    // deny-list la temporada vuelve a SETUP sin que nadie se lo pida.
+    expect(await seasonStatus(seasonId)).toBe('ACTIVE')
   })
 })

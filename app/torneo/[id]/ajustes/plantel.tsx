@@ -146,7 +146,10 @@ export function Plantel({
         <form
           onSubmit={(event) => {
             event.preventDefault()
-            if (newName.trim().length === 0) return
+            // El `pending` no lo cubren los `disabled`: un Enter en el input
+            // dispara el submit del form igual, y el handler es el último
+            // lugar donde se puede frenar un alta duplicada.
+            if (pending || newName.trim().length === 0) return
             run(() => addSeat(seasonId, newName, newBefore === '' ? null : newBefore))
           }}
           className="flex flex-col gap-2 rounded-field border-[1.5px] border-accent bg-surface p-3"
@@ -164,11 +167,15 @@ export function Plantel({
               "Juega con" en GuestCard. */}
           <label className="flex items-center gap-2 text-[12.5px] font-bold">
             Posición
+            {/* `min-h-[44px]`: misma regla que `ACTION` acá arriba — con
+                `p-[10px]` y el line-height 1.5 de preflight medía 42.25.
+                `text-[16px]` y no 13.5: abajo de 16 iOS hace zoom solo al
+                enfocar, que es de lo que ya se cuida el input del nombre. */}
             <select
               value={newBefore}
               disabled={pending}
               onChange={(event) => setNewBefore(event.target.value)}
-              className="flex-1 rounded-field border border-line bg-surface p-[10px] text-[13.5px] font-bold outline-none"
+              className="min-h-[44px] flex-1 rounded-field border border-line bg-surface p-[10px] text-[16px] font-bold outline-none"
             >
               <option value="">Al final</option>
               {seats.map((seat) => (
@@ -179,10 +186,14 @@ export function Plantel({
             </select>
           </label>
           <div className="flex items-center gap-2">
+            {/* `flex min-h-[44px] items-center justify-center` en vez de
+                `text-center`: con `p-[10px]` y el line-height 1.5 de preflight
+                medían 40.25 de alto, abajo del mínimo de 44 que este mismo
+                archivo se impone en `ACTION`. */}
             <button
               type="submit"
               disabled={pending || newName.trim().length === 0}
-              className="flex-1 rounded-field bg-accent p-[10px] text-center text-[13.5px] font-extrabold text-accent-text disabled:opacity-45"
+              className="flex min-h-[44px] flex-1 items-center justify-center rounded-field bg-accent p-[10px] text-[13.5px] font-extrabold text-accent-text disabled:opacity-45"
             >
               Agregar
             </button>
@@ -194,7 +205,7 @@ export function Plantel({
                 setNewName('')
                 setNewBefore('')
               }}
-              className="flex-1 rounded-field bg-chip p-[10px] text-center text-[13.5px] font-extrabold text-muted"
+              className="flex min-h-[44px] flex-1 items-center justify-center rounded-field bg-chip p-[10px] text-[13.5px] font-extrabold text-muted"
             >
               Cancelar
             </button>

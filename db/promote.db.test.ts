@@ -257,7 +257,7 @@ describe('promoteGuest — spec 3.2: pareja toda invitada, se REFUSA', () => {
     expect(before.some((row) => row.entry_id === guestA || row.entry_id === guestB)).toBe(false)
 
     await expect(promoteGuest(admin.client, guestA)).rejects.toThrow(
-      /jugó con otro invitado.*no se puede desde esta fecha/,
+      /jugó en una pareja que no cobró puntos.*no se puede desde esta fecha/,
     )
 
     // Nada se movió: ni el asiento ni una sola fila de awards.
@@ -278,6 +278,47 @@ describe('promoteGuest — spec 3.2: pareja toda invitada, se REFUSA', () => {
     await reopenMatchday(admin.client, matchdayId)
     await closeMatchday(admin.client, matchdayId)
 
+    expect(await awardsOf(matchdayId)).toEqual(before)
+  })
+})
+
+/**
+ * El cuantificador del guard, que es lo que hacía falta arreglar: con "ALGUNA
+ * pareja suya tiene compañero que cobró" alcanzaba para promoverlo, y la OTRA
+ * pareja —la toda invitada— entraba a `paying` igual al voltear `kind`. O sea,
+ * el incidente original entero, por la puerta de al lado.
+ *
+ * Este estado no lo produce la app: `generatePairs` borra las `pairs` de la
+ * fecha antes de insertar (db/matchday.ts:458), así que `buildPairs` nunca mete
+ * un entry en dos parejas. Se arma a mano —igual que el test del `unique` de
+ * más abajo— porque está adentro del contrato que `promote_guest` dice
+ * defender, y medido contra la base el guard viejo lo dejaba pasar: promoción
+ * exitosa, y después la página tirando "La fecha tiene 6 parejas del torneo
+ * pero la lista de puntos sólo tiene 4 valores."
+ */
+describe('promoteGuest — el invitado en DOS parejas, una de ellas sin cobrar', () => {
+  it('se REFUSA aunque una de sus parejas sí tenga compañero con award', async () => {
+    const { admin, seasonId, matchdayId, guestA } = await closedMatchdayWithGuestPair()
+    const db = adminClient()
+
+    // Una segunda `pairs` para gA, contra un asiento del plantel que SÍ cobró:
+    // es exactamente lo que hacía pasar el guard viejo.
+    const payingSeat = (await awardsOf(matchdayId))[0]?.entry_id
+    if (payingSeat === undefined) throw new Error('La fecha de test no repartió ningún award.')
+    const { error } = await db
+      .from('pairs')
+      .insert({ matchday_id: matchdayId, season_id: seasonId, entry_a: guestA, entry_b: payingSeat })
+    if (error !== null) throw new Error(error.message)
+
+    const before = await awardsOf(matchdayId)
+
+    await expect(promoteGuest(admin.client, guestA)).rejects.toThrow(
+      /jugó en una pareja que no cobró puntos.*no se puede desde esta fecha/,
+    )
+
+    // Sigue de invitado, así que su pareja con gB sigue afuera de `paying` y
+    // la cuenta de la pantalla no cambió. Ni un award nuevo.
+    expect((await entryRow(guestA)).kind).toBe('GUEST')
     expect(await awardsOf(matchdayId)).toEqual(before)
   })
 })

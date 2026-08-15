@@ -4,8 +4,23 @@
 -- **El mecanismo, en una frase.** `promote_guest` NUNCA recalcula: copia el
 -- award CONGELADO que ya tiene la pareja de este invitado en esta fecha, o
 -- REFUSA la promoción entera. No hay una tercera opción, y no hay ningún `if`
--- que decida "está bien recalcular acá" — `close_matchday` es la única función
--- de todo el esquema que puede escribir en `awards`, y ésta no la llama.
+-- que decida "está bien recalcular acá": el único `insert into awards` de esta
+-- función es el de abajo, un `insert ... select` cuyos `position` y `points`
+-- salen de filas de `awards` que YA existen. El reparto nuevo lo trae
+-- `close_matchday` (0005:114) desde afuera, en su parámetro `p_awards`, y esta
+-- función no lo llama.
+--
+-- Dos cosas que NO se están diciendo, porque no son ciertas y una versión
+-- anterior de este comentario las afirmaba:
+--   · que `close_matchday` sea la única que escribe en `awards`. Los `insert
+--     into public.awards` de todo el esquema son exactamente dos —0005:114 y
+--     el de abajo— y el borrado vive en `reopen_matchday` (0005:187).
+--   · que nadie más pueda escribirlos. `awards_write` (0002_rls.sql:213-216) es
+--     `for all to authenticated` con `is_season_admin` y sin revoke por
+--     columna, así que un `POST /awards` desde el cliente autenticado de quien
+--     organiza la temporada entra sin pasar por ninguna función (medido).
+-- La garantía de acá abajo es sobre lo que ESTA función hace, no sobre lo que
+-- el esquema impide.
 --
 -- **Por qué copiar es lo mismo que reabrir y volver a cerrar — SÓLO en el caso
 -- que esta función acepta.** `computeAwards` (core/awards.ts) le da a LOS DOS
@@ -20,9 +35,11 @@
 --   congelado:   s5,s6 -> position 3, 5 puntos | gA -> sin fila
 --   recalculado: gA    -> position 3, 5 puntos | s5,s6 -> position 4, 3 puntos
 -- O sea: el teorema es FALSO cuando el compañero es otro invitado. Vale —y se
--- puede demostrar— sólo cuando la pareja del invitado YA estaba adentro de
--- `paying`, que es exactamente decir "su compañero tiene un award congelado en
--- esta fecha". Ése es el único caso que esta función acepta; los otros dos los
+-- puede demostrar— sólo cuando TODAS las parejas del invitado en esta fecha ya
+-- estaban adentro de `paying`, que es exactamente decir "en cada una de ellas
+-- su compañero tiene un award congelado". El cuantificador importa: "alguna
+-- pareja suya cobraba" NO alcanza, porque las otras entran a `paying` igual al
+-- voltear `kind`. Ése es el único caso que esta función acepta; los demás los
 -- rechaza (ver abajo). Pinneado con valores tipeados a mano —nunca comparando
 -- una corrida de `computeAwards` contra otra— en `core/awards.test.ts`,
 -- incluyendo un caso con una pareja toda invitada ADENTRO de la tabla, que es
@@ -45,14 +62,20 @@
 -- descartó, y la puerta angosta no cuesta nada cerrarla: en DRAFT el admin ya
 -- tiene el camino largo. Un guard en vez de dos.
 --
--- **Los tres casos del reparto: uno se acepta y DOS se refusan.**
---   1. El compañero es del plantel y tiene award en esta fecha (el incidente
---      original) → el join encuentra la fila, se copia UNA fila. ACEPTADO.
---   2. El compañero es OTRO invitado (pareja toda invitada, excluida de
---      posiciones pagas por `computeAwards`) → REFUSADO.
+-- **Los casos del reparto: uno se acepta y el resto se refusan.**
+--   1. En cada pareja suya de esta fecha el compañero es del plantel y tiene
+--      award (el incidente original: una sola pareja) → se copia una fila por
+--      pareja. ACEPTADO.
+--   2. En ALGUNA de sus parejas el compañero es OTRO invitado (pareja toda
+--      invitada, excluida de posiciones pagas por `computeAwards`) → REFUSADO,
+--      aunque en otra pareja suya el compañero sí cobre.
 --   3. El invitado nunca quedó adentro de una `pairs` de esta fecha (se puede
 --      armar a mano contra la base, aunque el flujo normal de la app no
 --      debería dejarlo pasar) → REFUSADO.
+-- El caso 2 con dos parejas no lo produce la app —`generatePairs`
+-- (db/matchday.ts:458) borra las `pairs` de la fecha antes de insertar, así que
+-- `buildPairs` nunca mete un entry en dos— pero sí se arma a mano contra la
+-- base, está adentro del contrato que esta función defiende, y tiene su test.
 -- "el compañero tiene award" es literalmente el predicado `paying` que usa
 -- `computeAwards` (core/awards.ts:26-28: `championshipMembers(row).length >
 -- 0`), así que preguntar por el award es una prueba MÁS fuerte que preguntar
@@ -62,7 +85,7 @@
 --
 -- **Por qué 2 y 3 se refusan en vez de saltearse.** La versión anterior
 -- insertaba cero filas y devolvía éxito, y eso ROMPÍA la fecha. La pantalla de
--- la fecha (`app/torneo/[id]/fechas/[n]/page.tsx:272-276`) no lee `awards`
+-- la fecha (`app/torneo/[id]/fechas/[n]/page.tsx:274-285`) no lee `awards`
 -- para pintar la columna de puntos: la RECALCULA en vivo con
 -- `computeAwards(standings, config, detail.guestIds)`. Promover a un miembro
 -- de una pareja toda invitada lo saca de `guestIds` sin tocar `pairs`, esa
@@ -80,10 +103,25 @@
 -- La fecha queda OPEN para siempre —`matchdays_one_live` traba todas las demás
 -- de la temporada— y los puntos ya no están. `removeSeat` tampoco lo deshace
 -- (23503 por `pairs`): sólo queda `cancel_matchday`, o sea borrar la fecha.
--- Refusando, toda promoción exitosa es una pareja que YA cobraba: la longitud
--- de `paying` no puede cambiar y el error es inalcanzable. El otro arreglo
--- posible —que la página lea los awards congelados en vez de recalcular— es
--- otra PR; ésta cierra la puerta del lado que escribe.
+-- Refusando, toda promoción exitosa es un invitado cuyas parejas YA cobraban
+-- todas: la longitud de `paying` no cambia por NINGUNA puerta que esta función
+-- abra.
+--
+-- Lo que eso NO dice —y lo que una versión anterior de este comentario decía
+-- de más— es que el error sea inalcanzable. No lo es: el cliente autenticado
+-- de quien organiza la temporada puede hacer el mismo flip sin pasar por acá,
+-- porque `entries_write` (0002_rls.sql:164-167) es `for all to authenticated`
+-- con `is_season_admin` y sin revoke por columna. Medido sobre esta misma
+-- fecha, con el cliente del admin (no con `service_role`):
+--   PATCH entries {kind:'SQUAD', matchday_id:null}                   -> 23505,
+--     `entries_seed`: el seed_position de invitado choca con el de un asiento
+--   PATCH entries {kind:'SQUAD', matchday_id:null, seed_position:99} -> PERMITIDO
+--   la página, después de ese segundo PATCH -> "La fecha tiene 5 parejas del
+--     torneo pero la lista de puntos sólo tiene 4 valores."
+-- O sea: RLS no lo frena, lo frena un índice único que se esquiva eligiendo
+-- un `seed_position` libre. El defecto de fondo es el recálculo en vivo de la
+-- página, y arreglarlo —que lea los awards congelados— es otra PR. Ésta cierra
+-- todas las puertas que abre; no cierra las que nunca fueron suyas.
 --
 -- **El flip es seguro ANTES del insert de awards.** `entries_seed`
 -- (0001_schema.sql:86) es un índice único parcial `where kind = 'SQUAD'`:
@@ -110,17 +148,16 @@
 --      montarlo pide dos conexiones crudas y no está escrito.
 --   2. Si esa primera línea de defensa fallara y el invitado tuviera DOS filas
 --      de `pairs` en la misma fecha, el `unique (matchday_id, entry_id)` de
---      `awards` (0001_schema.sql:220) corta en seco — pero sólo cuando LOS DOS
---      compañeros tienen award: ahí el `insert ... select` trae dos filas con
---      la misma clave, levanta 23505 y deshace TODA la función, porque toda
---      ella es una transacción implícita (probado en
---      `db/promote.db.test.ts`). Cuando sólo UNO de los dos compañeros cobró,
---      el join devuelve una sola fila y el invitado hereda el award de una
---      pareja elegida arbitrariamente, sin error. Nada del esquema impide ese
---      estado: el `unique (matchday_id, entry_a)` / `(entry_b)` está en
---      `pair_locks` (0001_schema.sql:135-136), NO en `pairs`. El guard nuevo
---      lo angosta —para llegar hasta acá al menos un compañero tiene que
---      cobrar— pero no lo elimina, y decir lo contrario sería mentir.
+--      `awards` (0001_schema.sql:220) corta en seco: el `insert ... select`
+--      trae dos filas con la misma clave, levanta 23505 y deshace TODA la
+--      función, porque toda ella es una transacción implícita (probado en
+--      `db/promote.db.test.ts`). Nada del esquema impide ese estado de `pairs`:
+--      el `unique (matchday_id, entry_a)` / `(entry_b)` está en `pair_locks`
+--      (0001_schema.sql:135-136), NO en `pairs`. El caso que antes se colaba
+--      —sólo UNO de los dos compañeros cobrando, el join devolviendo una sola
+--      fila y el invitado heredando el award de una pareja elegida
+--      arbitrariamente, sin error— ya no llega hasta acá: el guard de abajo
+--      pide que cobren TODOS, y lo refusa antes.
 --
 -- **Lo que esta función NO hace, a propósito:**
 --   - No borra el asiento SQUAD duplicado que pudo haber creado
@@ -135,7 +172,14 @@
 --   - No es DEFERRABLE ni usa un advisory lock por temporada: mismo techo
 --     conocido que `shift_seeds_up` en 0013 — dos admins tocando el mismo
 --     plantel a la vez no está probado fila por fila, sólo que si choca,
---     choca entero y no deja el plantel corrido a medias.
+--     choca entero y no deja el plantel corrido a medias. Adentro de ese mismo
+--     techo entra una inversión de orden de trabas: acá se toma `entries`
+--     (el `for update` de abajo) y DESPUÉS `matchdays`, mientras que
+--     `cancel_matchday` toma `matchdays` (0012:71) y después cascadea sobre las
+--     `entries` del invitado — dos admins de la misma temporada, uno sumando y
+--     el otro borrando la fecha, pueden dar 40P01 (deadlock detected), que sale
+--     crudo y en inglés a través de `EdgeError`. No corrompe nada: Postgres mata
+--     una de las dos transacciones entera.
 create or replace function public.promote_guest(p_entry uuid, p_before uuid default null)
 returns void
 language plpgsql
@@ -201,7 +245,7 @@ begin
   -- fila) no puede dejar la función leyendo un estado a medias.
   select status into v_status from public.matchdays where id = v_matchday for update;
 
-  -- Lista blanca, no lista negra: la forma que quedó en `cancel_matchday:79`
+  -- Lista blanca, no lista negra: la forma que quedó en `cancel_matchday:80`
   -- después de la corrección de la PR1. Enumerar los estados prohibidos y
   -- confiar en un comentario para el resto deja que un quinto valor de
   -- `matchdays.status` —o un null que ya no llega por donde pensábamos— entre
@@ -229,15 +273,27 @@ begin
     raise exception 'En esta fecha no quedó en ninguna pareja, así que no hay ningún punto suyo que conservar. Agregalo al plantel desde Ajustes › Plantel.';
   end if;
 
-  perform 1
-     from public.pairs pr
-     join public.awards a
-       on a.matchday_id = pr.matchday_id
-      and a.entry_id = case when pr.entry_a = p_entry then pr.entry_b else pr.entry_a end
-    where pr.matchday_id = v_matchday
-      and (pr.entry_a = p_entry or pr.entry_b = p_entry);
-  if not found then
-    raise exception 'En esta fecha jugó con otro invitado y esa pareja no cobró puntos. Sumarlo acá le cambiaría los puntos a los demás, así que no se puede desde esta fecha.';
+  -- El cuantificador va al derecho: se refusa si EXISTE UNA SOLA pareja suya
+  -- sin compañero cobrando, no si FALTAN TODAS. Con un `join` que sólo pide
+  -- "alguna pareja tiene compañero con award", un invitado metido en dos filas
+  -- de `pairs` —una con un asiento que cobró y otra toda invitada— pasaba el
+  -- guard por la primera, y la SEGUNDA entraba a `paying` igual al voltear
+  -- `kind`: el incidente original, tal cual, medido en `db/promote.db.test.ts`
+  -- ("dos parejas"). En el caso de una sola pareja —el único que la app
+  -- produce, `generatePairs` borra antes de insertar— las dos formas deciden
+  -- exactamente lo mismo y cuestan lo mismo.
+  if exists (
+    select 1
+      from public.pairs pr
+     where pr.matchday_id = v_matchday
+       and (pr.entry_a = p_entry or pr.entry_b = p_entry)
+       and not exists (
+         select 1
+           from public.awards a
+          where a.matchday_id = pr.matchday_id
+            and a.entry_id = case when pr.entry_a = p_entry then pr.entry_b else pr.entry_a end)
+  ) then
+    raise exception 'En esta fecha jugó en una pareja que no cobró puntos —lo habitual es que haya jugado con otro invitado—. Sumarlo acá le cambiaría los puntos a los demás, así que no se puede desde esta fecha.';
   end if;
 
   -- Mismo mecanismo que `add_squad_seat` (0013_squad_seat_position.sql):

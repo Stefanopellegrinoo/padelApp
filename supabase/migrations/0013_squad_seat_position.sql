@@ -21,22 +21,46 @@
 -- **El corrimiento es en dos pasadas ("parking"), no un `seed_position + 1`
 -- directo.** `entries_seed` (0001_schema.sql:86) es un índice único PARCIAL —
 -- `where kind = 'SQUAD'` — y un índice parcial no se puede declarar
--- `deferrable`, así que cada UPDATE individual tiene que dejar la tabla
--- consistente ANTES de que termine, no sólo al final de la transacción. Y
+-- `deferrable`, así que cada fila que el UPDATE escribe tiene que dejar la
+-- tabla consistente EN ESE INSTANTE, no al final de la transacción. Y
 -- `seed_position >= 0` es un CHECK (0001_schema.sql:63), así que "parkear"
--- corriendo todo a negativo tampoco es legal. Con
--- `v_park := max(seed_position) + 1` sobre el SQUAD de la temporada:
+-- corriendo todo a negativo tampoco es legal.
+--
+-- Con M = max(seed_position) del SQUAD de la temporada y `v_park := M + 2`:
 --   pasada 1: `seed_position += v_park` donde `seed_position >= p_from`
---             → cae en [p_from+v_park, M+v_park], todo > M, así que no pisa
---               ninguna fila de las que se quedaron quietas ([0, p_from-1]).
+--             origen [p_from, M] → destino [p_from+M+2, 2M+2]
 --   pasada 2: `seed_position -= v_park - 1` donde `seed_position >= v_park`
---             → cae en [p_from+1, M+1].
--- Ninguna de las dos pasadas puede chocar consigo misma en NINGÚN orden de
--- fila: el `UPDATE` no tiene `ORDER BY` —eso es Postgres, no una promesa— y
--- las dos pasadas mapean a rangos disjuntos de los que no tocan, así que el
--- mapeo es inyectivo sin importar en qué orden el motor visite las filas. Por
--- eso `v_park` sale de `max(seed_position) + 1` y NUNCA de un `count`: los
--- huecos de `removeSeat` hacen que contar mienta.
+--             origen [p_from+M+2, 2M+2] → destino [p_from+1, M+1]
+--
+-- El `UPDATE` no tiene `ORDER BY` y no lo puede tener: en qué orden el motor
+-- visita las filas lo elige el planner —un Index Scan sube por seed_position,
+-- un Seq Scan sobre un heap descendente baja— y eso cambia solo con un
+-- `ANALYZE`. Así que cada pasada tiene que ser segura en CUALQUIER orden, y
+-- para eso hay que probar CUATRO cosas, no dos: cada pasada no pisa ni a las
+-- filas quietas ni a su propio origen todavía sin procesar.
+--   1. pasada 1 vs. las quietas [0, p_from-1]: su destino arranca en
+--      p_from+M+2, que es > M. Disjunto para todo p_from >= 0.
+--   2. pasada 1 vs. su propio origen [p_from, M]: mismo número, p_from+M+2
+--      es > M. Disjunto para todo p_from >= 0.
+--   3. pasada 2 vs. las quietas [0, p_from-1]: su destino arranca en
+--      p_from+1, que es > p_from-1. Disjunto para todo p_from >= 0.
+--   4. pasada 2 vs. su propio origen [p_from+M+2, 2M+2]: su destino termina
+--      en M+1, y M+1 < p_from+M+2 para todo p_from >= 0. Disjunto.
+--
+-- El punto 4 es el que costó caro y es la razón del +2. Con `v_park := M + 1`
+-- la cuenta daba M+1 < p_from+M+1, que es cierto sólo si p_from > 0: fallaba
+-- en EXACTAMENTE un caso —insertar primero de todos, p_from = 0— y en
+-- exactamente un punto, la posición M+1. Ahí la fila que estaba en M aterriza
+-- encima de la que estaba en 0, que sigue parkeada porque todavía no le tocó.
+-- Si el motor visita la primera antes que la segunda, 23505 y se cae la
+-- función entera. Con Index Scan sube y zafa de casualidad; con Seq Scan sobre
+-- un heap descendente explota. El margen que hace falta es UNO —las posiciones
+-- son enteras— y eso es exactamente lo que compra el +2: separa los rangos sin
+-- importar el orden de visita. `db/entries.db.test.ts` fuerza el plan adverso
+-- para que no vuelva.
+--
+-- `v_park` sale de `max(seed_position)` y NUNCA de un `count`: los huecos de
+-- `removeSeat` hacen que contar mienta.
 --
 -- `shift_seeds_up` es una función PLANA — ni siquiera `security definer` — a
 -- la que se le saca el `execute` a `public`, `anon` Y `authenticated`: nadie
@@ -48,11 +72,16 @@
 -- ES la autorización completa — DEFINER salta RLS, así que sin ese chequeo
 -- cualquier autenticado movería el plantel de cualquier temporada.
 --
--- ponytail: dos admins agregando a la vez en la misma temporada calculan el
--- mismo `v_park` y uno de los dos pisa al otro — 23505 en la segunda pasada,
--- y como toda la función es una transacción implícita, se cae ENTERA: no
--- queda nunca un plantel corrido a medias. Techo conocido, no resuelto acá;
--- si dos admins editando el mismo plantel a la vez deja de ser anecdótico, la
+-- ponytail: dos admins agregando a la vez en la misma temporada leen el mismo
+-- `max(seed_position)` y calculan el mismo `v_park`, así que el segundo corre
+-- la cola con un `v_park` que se le quedó viejo apenas el primero commiteó. Lo
+-- único que está PROBADO acá es que si eso levanta una excepción —23505 es lo
+-- esperable— la función se cae entera, porque toda ella es una transacción
+-- implícita: en ese caso no queda un plantel corrido a medias. Lo que NO está
+-- probado es que SIEMPRE levante excepción en vez de commitear un orden
+-- distinto del que el admin eligió; el entrelazado bajo READ COMMITTED no se
+-- probó fila por fila. Techo conocido y aceptado, no resuelto acá: si dos
+-- admins editando el mismo plantel a la vez deja de ser anecdótico, la
 -- solución es un advisory lock por `season_id`.
 create or replace function public.shift_seeds_up(p_season uuid, p_from int)
 returns void
@@ -62,7 +91,7 @@ as $$
 declare
   v_park int;
 begin
-  select coalesce(max(seed_position), -1) + 1 into v_park
+  select coalesce(max(seed_position), -1) + 2 into v_park
     from public.entries
    where season_id = p_season and kind = 'SQUAD';
 

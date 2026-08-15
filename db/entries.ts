@@ -15,8 +15,13 @@ import { EdgeError } from './errors'
 
 /**
  * Agrega un asiento al plantel. `beforeEntryId` es "antes de este asiento": el
- * default `null` agrega al final, que es el comportamiento de siempre —
- * byte a byte, nada cambia para quien ignora el selector nuevo.
+ * default `null` agrega al final, y el RESULTADO es el mismo de siempre para
+ * quien ignora el selector nuevo. El camino no: la autorización se mudó de RLS
+ * al `is_season_admin` explícito de la función (que corre `security definer`),
+ * los viajes a la base pasaron de dos a uno, y por eso mismo los mensajes de
+ * error cambian — una denegación que antes leía "No se pudo agregar el
+ * jugador: new row violates row-level security policy…" ahora es "Sólo quien
+ * organiza la temporada puede agregar un asiento."
  *
  * No es una posición numérica: `removeSeat` deja huecos en `seed_position` a
  * propósito, así que "posición 3" es ambigua y queda vieja apenas alguien más

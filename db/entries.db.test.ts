@@ -600,6 +600,26 @@ describe('addSquadSeat colocando el nuevo asiento (spec 2.1, 2.2, 2.4, 2.5, 2.6)
     expect(after.map((e) => e.displayName)).toEqual(['J0', 'J1', 'J2', 'J3', 'J4', 'J5', 'J6', 'J7'])
   })
 
+  it('rechaza un nombre en blanco desde la función, no sólo desde el cliente', async () => {
+    const admin = await createTestUser()
+    const { seasonId } = await createSeason(admin.client, {
+      name: 'Los Jueves 2026',
+      squadNames: squadNames(8),
+      config: defaultConfig(8),
+    })
+
+    // Salteando el guard de `addSquadSeat`: la función está grantada a
+    // `authenticated` y sale en `database.types.ts`, así que esto es una
+    // llamada perfectamente posible desde afuera del cliente.
+    const { error } = await admin.client.rpc('add_squad_seat', {
+      p_season: seasonId,
+      p_name: '   ',
+    })
+
+    expect(error?.message).toBe('El asiento necesita un nombre.')
+    expect((await squadInSeedOrder(admin, seasonId))).toHaveLength(8)
+  })
+
   it('rechaza un p_before que no es un asiento SQUAD de esta temporada, y no mueve nada', async () => {
     const admin = await createTestUser()
     const { seasonId } = await createSeason(admin.client, {

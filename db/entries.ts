@@ -44,9 +44,17 @@ export async function addSquadSeat(
     // función decida, que es exactamente "al final".
     p_before: beforeEntryId ?? undefined,
   })
-  if (error !== null || data === null) {
-    throw new EdgeError(`No se pudo agregar el jugador: ${error?.message}`)
-  }
+  // El mensaje pasa DERECHO, sin prefijo, igual que el resto de las llamadas a
+  // RPC (`claim_seat` acá abajo, todo `db/matchday.ts`): los `raise` de
+  // `add_squad_seat` ya están escritos en castellano y para que los lea el
+  // admin. Prefijarlos daba "No se pudo agregar el jugador: Ese jugador no
+  // está en el plantel." — dos oraciones peleadas — y, cuando el error no era
+  // uno de los nuestros, pegaba el inglés crudo de Postgres atrás de una
+  // frase en castellano.
+  if (error !== null) throw new EdgeError(error.message)
+  // `data === null` con `error === null` no debería pasar —la función devuelve
+  // el uuid del asiento— pero interpolarlo daba literalmente "undefined".
+  if (data === null) throw new EdgeError('No se pudo agregar el jugador.')
   return data
 }
 

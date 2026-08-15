@@ -115,6 +115,13 @@ revoke execute on function public.shift_seeds_up(uuid, int) from public, anon, a
 -- SQUAD) se rechaza entero, sin agregar nada: aceptarlo en silencio y sumar
 -- igual al final sería peor que fallar — el admin eligió un lugar puntual y
 -- el sistema lo ignoró sin avisar.
+--
+-- El nombre vacío se valida ACÁ y no sólo en `db/entries.ts`: esta función
+-- está grantada a `authenticated` y sale en `db/database.types.ts`, así que es
+-- llamable por RPC directo sin pasar nunca por el cliente. Sin este chequeo,
+-- un nombre en blanco rebota contra el CHECK `entries_squad_named`
+-- (0001_schema.sql) y el admin lee un mensaje de Postgres en inglés. Mismo
+-- texto que el guard del cliente, a propósito: el borde no cambia el mensaje.
 create or replace function public.add_squad_seat(
   p_season uuid,
   p_name   text,
@@ -131,6 +138,10 @@ declare
 begin
   if not public.is_season_admin(p_season) then
     raise exception 'Sólo quien organiza la temporada puede agregar un asiento.';
+  end if;
+
+  if trim(coalesce(p_name, '')) = '' then
+    raise exception 'El asiento necesita un nombre.';
   end if;
 
   if p_before is null then

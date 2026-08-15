@@ -3,20 +3,35 @@
 -- corresponde en ese caso es reabrir (0005_matchday_moves.sql:134), no
 -- desaparecerla — el mensaje de acá manda para ese lado y no para "cancelar".
 --
--- **La guarda es una lista blanca, y eso no es cosmético.** Esta es la única
--- función del esquema que pasa por encima del `revoke delete on matchdays`, así
--- que su default tiene que ser NEGARSE, igual que en `redraft` (`<> 'OPEN'`) o
--- en `close` (`<> 'OPEN'`). Con la versión anterior —`if v_status = 'CLOSED'`—
--- alcanzaba con que la fila desapareciera entre `matchday_season` y el
--- `select … for update` (un `deleteSeason` concurrente cascadeando) para que
--- `v_status` quedara en null: `null = 'CLOSED'` da null, la rama no dispara, el
--- delete borra 0 filas y **la función devuelve éxito**. La pantalla entonces
--- redirige a una temporada que ya no existe. Por eso el null tiene su propia
--- rama, con el mismo mensaje que la de arriba, y la lista blanca se ocupa del
--- resto.
+-- **La rama `is null` explícita es la que niega, y eso no es cosmético.** Esta
+-- es la única función del esquema que pasa por encima del `revoke delete on
+-- matchdays`, así que su default tiene que ser NEGARSE. Con la versión
+-- anterior —`if v_status = 'CLOSED'`— alcanzaba con que la fila desapareciera
+-- entre `matchday_season` y el `select … for update` (un `deleteSeason`
+-- concurrente cascadeando) para que `v_status` quedara en null: `null =
+-- 'CLOSED'` da null, la rama no dispara, el delete borra 0 filas y **la
+-- función devuelve éxito**. La pantalla entonces redirige a una temporada que
+-- ya no existe.
 --
--- Eso NO era una afirmación probada hasta ahora: los ocho tests que había
--- entraban todos con un status real, así que los ocho pasaban enteros con el
+-- Por eso el null tiene su propia rama, con el mismo mensaje que la de arriba.
+-- Quien lo carga es ESA rama y no la lista blanca de abajo: `null not in
+-- ('DRAFT', 'OPEN')` también da null, así que la lista blanca tampoco niega el
+-- null — lo suyo es dejar CLOSED afuera, nada más. Sacar el `is null` por
+-- "redundante" contra la lista blanca reabre el agujero entero.
+--
+-- Las funciones hermanas NO son ejemplo de esto, al revés: los `<>` de
+-- `open` (0005:25), `close` (0005:68), `reopen` (0005:157) y `redraft`
+-- (0011:36) tampoco niegan null —`null <> 'OPEN'` da null, el `raise` no
+-- dispara y la ejecución sigue de largo con todas las guardas pasando en
+-- vacío—. Eso hasta ahora era inalcanzable: sin esta función no había manera
+-- de que una fecha se borrara sola debajo de otra sesión. Esta función es
+-- justamente la que lo vuelve alcanzable. Arreglarlo pide `create or replace`
+-- sobre 0005 y 0011 restateando cuerpos enteros de guardas cargadas para
+-- cambiar una línea en cada una, así que queda anotado como PR aparte y no se
+-- toca acá.
+--
+-- Eso NO era una afirmación probada hasta ahora: los nueve tests que había
+-- entraban todos con un status real, así que los nueve pasaban enteros con el
 -- deny-list puesto. El que lo pinnea es "la fecha que desaparece entre la
 -- lectura y la traba" (`db/cancel.db.test.ts`), que monta el entrelazado con
 -- una segunda sesión de psql —una traba de fila que se suelta recién después
@@ -28,19 +43,31 @@
 -- El plantel SQUAD no tiene `matchday_id` —vive en la temporada, no en la
 -- fecha— así que no hay ningún riesgo de arrastrarlo con esto. Los FK que
 -- apuntan a `entries` con `on delete no action` —los únicos que podrían FRENAR
--- el borrado en vez de acompañarlo— son DOS, no uno:
---   · `pairs.entry_a/entry_b → entries` (0001_schema.sql:170-171). Es el que
---     esta función se cruza de verdad, y no frena porque las parejas se van en
---     el mismo statement que los invitados, y el chequeo de `no action` corre
---     al final del statement, no fila por fila. `db/cancel.db.test.ts` lo
---     ejercita con un plantel impar, que es la única forma de tener un
---     invitado ADENTRO de una pareja.
+-- el borrado en vez de acompañarlo— son CUATRO, repartidos en TRES tablas
+-- (verificable con `select conname, conrelid::regclass from pg_constraint
+-- where contype = 'f' and confrelid = 'public.entries'::regclass`):
+--   · `pairs.entry_a/entry_b → entries` (0001_schema.sql:170-171), que son
+--     dos. Son los que esta función se cruza de verdad, y no frenan porque las
+--     parejas se van en el mismo statement que los invitados, y el chequeo de
+--     `no action` corre al final del statement, no fila por fila.
+--     `db/cancel.db.test.ts` lo ejercita con un plantel impar, que es UNA de
+--     las formas de tener un invitado ADENTRO de una pareja — `addGuestPair`
+--     (`app/torneo/[id]/fechas/[n]/actions.ts:273`) mete dos invitados
+--     trabados entre sí con el plantel perfectamente par, y es otra.
 --   · `awards.entry_id → entries` (0001_schema.sql:225). Éste no se cruza
 --     NUNCA por acá, y no porque el borrado lo esquive: `awards` sólo tiene
 --     filas en una fecha CLOSED, y CLOSED queda afuera de la lista blanca de
 --     abajo. O sea, es inalcanzable por construcción de la guarda, no inocuo
 --     por la forma del cascade — si algún día la lista blanca aceptara CLOSED,
 --     este FK pasaría a ser el problema.
+--   · `attendances.(entry_id, entry_kind) → entries (id, kind)`
+--     (0001_schema.sql:113). No lleva cláusula `on delete`, así que su default
+--     TAMBIÉN es no action — es fácil de pasar por alto porque la otra FK de
+--     la misma tabla, la de `(entry_id, season_id)`, sí cascadea. Tampoco
+--     frena, por dos motivos independientes: `attendances` es SQUAD-only (esa
+--     misma FK lo impone) y el plantel SQUAD no se borra acá, y además las
+--     filas de asistencia se van solas colgadas de `matchday_id` en el mismo
+--     statement.
 --
 -- **Sí toca `seasons.status`, en un solo sentido.** `open_matchday` mueve la
 -- temporada de SETUP a ACTIVE al confirmar su primera fecha (0005:37). Si esa

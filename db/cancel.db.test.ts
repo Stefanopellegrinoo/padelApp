@@ -231,6 +231,38 @@ async function waitUntilBlockerHoldsTheRow(matchdayId: string): Promise<void> {
   throw new Error('La sesión bloqueadora nunca llegó a trabar la fila.')
 }
 
+/**
+ * Espera a que ALGUIEN quede encolado DETRÁS de la traba de la sesión
+ * bloqueadora. Eso —y no el mensaje de error— es lo único que prueba que el
+ * entrelazado ocurrió.
+ *
+ * Hace falta porque las DOS guardas de `cancel_matchday` levantan el mismo
+ * texto ('La fecha no existe.'): la primera cuando `matchday_season` no
+ * encuentra la fecha, la segunda cuando la fila se fue debajo del `select …
+ * for update`. La ventana del bloqueador son `BLOCKER_WINDOW_SECONDS`; si el
+ * handshake de arriba la observara tarde y el delete ya hubiera commiteado, la
+ * sesión A entraría con la fecha borrada, se iría por la PRIMERA guarda y el
+ * test daría verde sin haber tocado nunca la rama que existe para pinnear.
+ *
+ * `pg_blocking_pids` es la respuesta directa: devuelve quién traba a quién. Al
+ * bloqueador se lo identifica igual que arriba, por el uuid adentro del texto
+ * de su consulta. La sesión que corre ESTA consulta también lleva el uuid en
+ * su texto, pero no traba a nadie, así que nunca aparece como bloqueadora.
+ */
+async function waitUntilSomeoneQueuesBehindTheBlocker(matchdayId: string): Promise<boolean> {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const { stdout } = await localSqlAsync(
+      `select count(*) from pg_stat_activity blocked
+         join lateral unnest(pg_blocking_pids(blocked.pid)) as holder(pid) on true
+         join pg_stat_activity blocker on blocker.pid = holder.pid
+        where blocker.query like '%${matchdayId}%';`,
+    )
+    if (Number(stdout.trim()) > 0) return true
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
+  return false
+}
+
 /** Arma y confirma una fecha regular DENTRO de una temporada ya existente. */
 async function openMatchdayIn(
   admin: TestUser,
@@ -314,9 +346,12 @@ describe('cancelMatchday', () => {
   // (0001_schema.sql:225) también es `no action`— pero sí el único que esta
   // función se cruza: `awards` sólo tiene filas en una fecha CLOSED, y CLOSED
   // no entra a la lista blanca. Sólo se ejercita con un invitado ADENTRO de
-  // una pareja, y eso pasa únicamente con plantel presente impar — el primer
-  // test tiene invitados pero nunca genera parejas, y el segundo genera parejas
-  // con plantel par, así que ninguno de los dos lo toca.
+  // una pareja. El plantel presente impar es UNA de las formas de llegar ahí
+  // —`addGuestPair` traba dos invitados entre sí con el plantel par y es
+  // otra—, y es la que se usa acá porque sale de `syncGuestSeat`, que es lo
+  // mismo que corre la acción real. El primer test tiene invitados pero nunca
+  // genera parejas, y el segundo genera parejas con plantel par y sin
+  // invitados, así que ninguno de los dos lo toca.
   it('borra una fecha con un invitado adentro de una pareja: el FK que podría frenar el borrado no frena', async () => {
     const { admin, seasonId, squad } = await buildSeasonWithSquad(defaultConfig(10), 10)
     const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
@@ -440,7 +475,7 @@ describe('cancelMatchday', () => {
 
   // La rama del null de `0012_cancel_matchday.sql`, que es la mitad de la lista
   // blanca y hasta acá no tenía NINGÚN test que la pudiera hacer fallar: los
-  // otros ocho pasan enteros con el deny-list de antes (`if v_status =
+  // otros nueve pasan enteros con el deny-list de antes (`if v_status =
   // 'CLOSED'`, sin rama de null), porque todos entran con un status real.
   //
   // El escenario es el que describe el comentario de la migración: la fila
@@ -475,9 +510,21 @@ describe('cancelMatchday', () => {
     // `select … for update` se cuelga esperando a B. Cuando B commitea su
     // delete, READ COMMITTED reevalúa la fila, no la encuentra, y v_status
     // queda en null.
-    const { error } = await admin.client.rpc('cancel_matchday', { p_matchday: matchdayId })
+    //
+    // El `.then()` no es decorativo: lo que devuelve `rpc()` es un thenable
+    // PEREZOSO —el request sale recién cuando alguien lo consume—, así que sin
+    // esto la sesión A no arrancaría hasta el `await` de abajo, o sea después
+    // del poll, y el entrelazado no pasaría nunca.
+    const sessionA = admin.client.rpc('cancel_matchday', { p_matchday: matchdayId }).then((r) => r)
+    // Sin await todavía: mientras A está en vuelo hay que VERLA encolada
+    // detrás de B. Las dos guardas devuelven el mismo mensaje, así que sin
+    // esto el test también pasa cuando A entra tarde, con la fecha ya borrada,
+    // y se va por la primera guarda sin ejercitar nunca la rama del null.
+    const queuedBehindTheLock = await waitUntilSomeoneQueuesBehindTheBlocker(matchdayId)
+    const { error } = await sessionA
     await blocker
 
+    expect(queuedBehindTheLock).toBe(true)
     expect(error?.message).toBe('La fecha no existe.')
     // El `raise` deshace la función entera, así que el trinquete de la
     // temporada tampoco se movió. Es la segunda mitad de la mutación: con el

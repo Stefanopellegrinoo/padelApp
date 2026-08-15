@@ -13,10 +13,25 @@ import { cancelTheMatchday } from './actions'
  * `CierreFecha`: esa pantalla ya tiene una confirmación en la misma rama
  * `OPEN` ("Volver al armado" — ver el comentario en `carga.tsx:159-163`), y
  * sumar ésta al mismo booleano hubiera forzado justo la máquina de estados
- * que ese comentario dice que todavía no hace falta. Con un estado propio,
- * nunca hace falta.
+ * que ese comentario dice que todavía no hace falta.
+ *
+ * **El estado propio no alcanza para que no compitan**, al contrario: es lo
+ * que las deja abiertas a la vez. Quien decide que nunca se apilen es el
+ * `!asking` con el que `CierreFecha` monta este componente; acá no hay forma
+ * de saberlo y por eso no se intenta.
+ *
+ * `loadedResults` es opcional porque en DRAFT no hay ninguno: `armado.tsx` y
+ * `masters.tsx` montan esto antes de que exista un solo partido jugado.
  */
-export function BorrarFecha({ seasonId, matchdayId }: { seasonId: string; matchdayId: string }) {
+export function BorrarFecha({
+  seasonId,
+  matchdayId,
+  loadedResults = 0,
+}: {
+  seasonId: string
+  matchdayId: string
+  loadedResults?: number
+}) {
   const [asking, setAsking] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
@@ -33,10 +48,22 @@ export function BorrarFecha({ seasonId, matchdayId }: { seasonId: string; matchd
     )
   }
 
+  // Nombrar lo que se pierde es la versión barata de la fricción de
+  // `ajustes/eliminar.tsx:64-66`: "estás por borrar una fecha" y "estás por
+  // borrar tres resultados ya cargados" no son el mismo aviso. El singular va
+  // aparte porque "los 1 resultados" es el plural roto que este proyecto ya
+  // tiene anotado como deuda en otros dos copys.
+  const perdida =
+    loadedResults === 0
+      ? 'resultados'
+      : loadedResults === 1
+        ? 'el resultado ya cargado'
+        : `los ${loadedResults} resultados ya cargados`
+
   return (
     <div className="flex flex-col gap-2 rounded-card border border-line bg-surface p-4">
       <p className="text-[12.5px] font-bold">
-        Se borra la fecha entera: presentismo, invitados, parejas, partidos y resultados. No se puede
+        Se borra la fecha entera: presentismo, invitados, parejas, partidos y {perdida}. No se puede
         deshacer.
       </p>
       <div className="flex items-center gap-2">
@@ -52,7 +79,9 @@ export function BorrarFecha({ seasonId, matchdayId }: { seasonId: string; matchd
               if (!result.ok) setError(result.error)
             })
           }}
-          className="flex-1 rounded-field bg-live p-3 text-center text-[14px] font-extrabold text-bg"
+          className={`flex-1 rounded-field p-3 text-center text-[14px] font-extrabold ${
+            pending ? 'bg-chip text-muted' : 'bg-live text-bg'
+          }`}
         >
           Borrar
         </button>

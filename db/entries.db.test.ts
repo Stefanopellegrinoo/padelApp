@@ -456,6 +456,82 @@ describe('addSquadSeat colocando el nuevo asiento (spec 2.1, 2.2, 2.4, 2.5, 2.6)
     expect(after.map((e) => e.seedPosition)).toEqual(Array.from({ length: 9 }, (_, i) => i))
   })
 
+  it('insertar antes del primero deja al nuevo en la punta (p_from = 0)', async () => {
+    const admin = await createTestUser()
+    const { seasonId } = await createSeason(admin.client, {
+      name: 'Los Jueves 2026',
+      squadNames: squadNames(8),
+      config: defaultConfig(8),
+    })
+    const before = await squadInSeedOrder(admin, seasonId)
+    const first = before[0]
+    if (first === undefined) throw new Error('Falta el asiento de test.')
+
+    const newId = await addSquadSeat(admin.client, seasonId, 'El Primero', first.id)
+
+    const after = await squadInSeedOrder(admin, seasonId)
+    expect(after.map((e) => e.displayName)).toEqual(['El Primero', ...before.map((e) => e.displayName)])
+    expect(after.find((e) => e.id === newId)?.seedPosition).toBe(0)
+    expect(after.map((e) => e.seedPosition)).toEqual(Array.from({ length: 9 }, (_, i) => i))
+  })
+
+  it('insertar antes del último asiento corre sólo al último', async () => {
+    const admin = await createTestUser()
+    const { seasonId } = await createSeason(admin.client, {
+      name: 'Los Jueves 2026',
+      squadNames: squadNames(8),
+      config: defaultConfig(8),
+    })
+    const before = await squadInSeedOrder(admin, seasonId)
+    const last = before[before.length - 1]
+    if (last === undefined) throw new Error('Falta el asiento de test.')
+
+    const newId = await addSquadSeat(admin.client, seasonId, 'El Penúltimo', last.id)
+
+    const after = await squadInSeedOrder(admin, seasonId)
+    const expectedNames = before.map((e) => e.displayName)
+    expectedNames.splice(before.length - 1, 0, 'El Penúltimo')
+    expect(after.map((e) => e.displayName)).toEqual(expectedNames)
+    expect(after.find((e) => e.id === newId)?.seedPosition).toBe(7)
+    expect(after.find((e) => e.id === last.id)?.seedPosition).toBe(8)
+    expect(after.map((e) => e.seedPosition)).toEqual(Array.from({ length: 9 }, (_, i) => i))
+  })
+
+  // Este es el caso que justifica que `p_before` sea un uuid y no un entero
+  // (0013_squad_seat_position.sql): con huecos, "posición 4" no quiere decir
+  // nada, pero "antes de Jugador 5" sigue queriendo decir exactamente eso. El
+  // hueco que dejó `removeSeat` tiene que SOBREVIVIR al alta: renumerarlo sería
+  // reescribir el orden de desempate inicial de todo el plantel.
+  it('inserta en un plantel con huecos de removeSeat sin renumerar ni tapar el hueco', async () => {
+    const admin = await createTestUser()
+    const { seasonId } = await createSeason(admin.client, {
+      name: 'Los Jueves 2026',
+      squadNames: squadNames(8),
+      config: defaultConfig(8),
+    })
+    const original = await squadInSeedOrder(admin, seasonId)
+    const removed = original[2]
+    const target = original[4]
+    if (removed === undefined || target === undefined) throw new Error('Faltan asientos de test.')
+
+    await removeSeat(admin.client, removed.id)
+    const withHole = await squadInSeedOrder(admin, seasonId)
+    expect(withHole.map((e) => e.seedPosition)).toEqual([0, 1, 3, 4, 5, 6, 7])
+
+    const newId = await addSquadSeat(admin.client, seasonId, 'El Nuevo', target.id)
+
+    const after = await squadInSeedOrder(admin, seasonId)
+    // El hueco en 2 sigue ahí; sólo se corrió la cola desde 4 para arriba.
+    expect(after.map((e) => e.seedPosition)).toEqual([0, 1, 3, 4, 5, 6, 7, 8])
+    expect(after.find((e) => e.id === newId)?.seedPosition).toBe(4)
+    expect(after.map((e) => e.displayName)).toEqual([
+      'Jugador 1', 'Jugador 2', 'Jugador 4', 'El Nuevo',
+      'Jugador 5', 'Jugador 6', 'Jugador 7', 'Jugador 8',
+    ])
+    // Ningún preexistente se pasó por encima de otro.
+    expect(after.filter((e) => e.id !== newId).map((e) => e.id)).toEqual(withHole.map((e) => e.id))
+  })
+
   // ── regresión del `+1` ────────────────────────────────────────────────────
   // El corrimiento con `v_park = max + 1` chocaba consigo mismo en un ÚNICO
   // caso: `p_from = 0`, en la posición M+1, y sólo si el motor visitaba esa

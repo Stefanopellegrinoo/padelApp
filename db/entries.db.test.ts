@@ -105,6 +105,35 @@ describe('createSeason', () => {
     expect(seats.every((seat) => seat.playerId === null)).toBe(true)
   })
 
+  // W4 (verify-report): antes, sólo `db/squad-position.db.test.ts` ejercitaba
+  // este backfill de rebote (removerlo tumbaba 1 test AJENO sobre posiciones
+  // de plantel, sin afirmar nada sobre createSeason en sí). `createMatchday`
+  // depende de esta disciplina para resolver `discipline_id` (0015/0016):
+  // sin ella, la primera fecha de cualquier torneo nuevo rompe con "No se
+  // pudo leer la disciplina de la temporada."
+  it('crea su propia disciplina PADEL con la config de la temporada (W4)', async () => {
+    const admin = await createTestUser()
+    const config = defaultConfig(8)
+
+    const { seasonId } = await createSeason(admin.client, {
+      name: 'Los Jueves 2026',
+      squadNames: ['Marce', 'Nico', 'Gastón', 'Juanma', 'Seba', 'Pablo', 'Fede', 'Diego'],
+      config,
+    })
+
+    const db = adminClient()
+    const { data, error } = await db
+      .from('disciplines')
+      .select('kind, status, config')
+      .eq('season_id', seasonId)
+    if (error) throw new Error(error.message)
+
+    expect(data).toHaveLength(1)
+    expect(data?.[0]?.kind).toBe('PADEL')
+    expect(data?.[0]?.status).toBe('SETUP')
+    expect(data?.[0]?.config).toEqual(config)
+  })
+
   // El que arma el torneo casi siempre lo juega. El asiento propio se reclama
   // en el mismo insert del plantel, así que lo que hay que probar es que cae en
   // el asiento QUE ELIGIÓ y en ninguno más — errarle por uno lo ata al lugar de

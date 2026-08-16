@@ -59,6 +59,12 @@ export { computeAwards } from './awards'
 export { computeRanking } from './ranking'
 export { snapshotForMatchday } from './snapshots'
 
+// El estado real de un torneo con más de una disciplina: DERIVADO, nunca
+// leído de una sola columna. `seasons.status` sigue en dual-write hasta el
+// contract (PR 27).
+export type { SeasonStatus } from './season'
+export { seasonStatusOf } from './season'
+
 // ── The Masters ──────────────────────────────────────────────────────────────
 export type { MastersFour } from './masters'
 export { mastersQualifiers, mastersFixture, mastersChampion } from './masters'

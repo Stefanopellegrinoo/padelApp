@@ -10,7 +10,17 @@
  * of its own: RLS is what keeps a stranger from reading a season that is not
  * theirs, and that only holds if the query actually runs as the caller.
  */
-import type { Award, EntryId, MatchResult, Pair, PlayedMatchday, SeasonConfig, SetScore } from '@/core'
+import { seasonStatusOf } from '@/core'
+import type {
+  Award,
+  EntryId,
+  MatchResult,
+  Pair,
+  PlayedMatchday,
+  SeasonConfig,
+  SeasonStatus,
+  SetScore,
+} from '@/core'
 import type { Client } from './client'
 import { EdgeError } from './errors'
 
@@ -146,6 +156,22 @@ export async function seasonHeader(supabase: Client, seasonId: string): Promise<
   if (error) throw new EdgeError(`No se pudo leer la temporada: ${error.message}`)
   if (data === null) throw new EdgeError('La temporada no existe.')
   return toSeasonHeader(data, userId)
+}
+
+/**
+ * El estado REAL de un torneo con más de una disciplina (REQ-D3-3):
+ * derivado de `disciplines.status`, no de `seasons.status` (que sigue
+ * existiendo en dual-write hasta el contract, PR 27, pero deja de ser fuente
+ * de verdad en cuanto una temporada tiene más de una disciplina).
+ *
+ * Ningún consumidor de `SeasonHeader.status` se cambia todavía a esto — esa
+ * migración de pantallas es de una fase posterior. Esta función existe para
+ * que quien la necesite ya la tenga.
+ */
+export async function derivedSeasonStatus(supabase: Client, seasonId: string): Promise<SeasonStatus> {
+  const { data, error } = await supabase.from('disciplines').select('status').eq('season_id', seasonId)
+  if (error) throw new EdgeError(`No se pudo leer las disciplinas: ${error.message}`)
+  return seasonStatusOf((data ?? []) as { status: SeasonStatus }[])
 }
 
 /**

@@ -4,17 +4,30 @@ import { adminClient } from './admin'
 import type { Json } from '../database.types'
 import type { TestUser } from './users'
 
+/** Una disciplina a crear junto con la temporada. Todo opcional: `{}` es un PADEL con la config de la temporada. */
+export interface DisciplineSpec {
+  kind?: 'PADEL' | 'FIFA'
+  config?: SeasonConfig
+  weight?: number
+}
+
 interface CreateSeasonOptions {
   admin: TestUser
   config?: SeasonConfig
   /** playerIds del plantel, en el orden que van a tener su seed_position. */
   squad?: string[]
+  /** Por defecto una sola disciplina PADEL con `config`. Con el tripwire `disciplines_one_per_season` puesto (hasta PR 4), sólo la primera del array se llega a insertar. */
+  disciplines?: DisciplineSpec[]
 }
 
 interface CreatedSeason {
   seasonId: string
   /** Un entry por cada id de `squad`, en el mismo orden. */
   entryIds: string[]
+  /** Un id por cada spec de `disciplines`, en el mismo orden. */
+  disciplineIds: string[]
+  /** La primera. Los archivos `*.db.test.ts` que ya existen leen ésta y nada más. */
+  disciplineId: string
 }
 
 // Arma una temporada entera con la llave de service_role: es escenario para un
@@ -23,6 +36,7 @@ export async function createSeason({
   admin,
   config = defaultConfig(8),
   squad = [],
+  disciplines = [{}],
 }: CreateSeasonOptions): Promise<CreatedSeason> {
   const db = adminClient()
 
@@ -37,6 +51,29 @@ export async function createSeason({
     .single()
   if (seasonError || season === null) {
     throw new Error(`No se pudo crear la temporada de test: ${seasonError?.message}`)
+  }
+
+  const disciplineIds: string[] = []
+  for (const [index, spec] of disciplines.entries()) {
+    const { data: discipline, error: disciplineError } = await db
+      .from('disciplines')
+      .insert({
+        season_id: season.id,
+        kind: spec.kind ?? 'PADEL',
+        config: (spec.config ?? config) as unknown as Json,
+        position: index,
+        ...(spec.weight === undefined ? {} : { weight: spec.weight }),
+      })
+      .select('id')
+      .single()
+    if (disciplineError || discipline === null) {
+      throw new Error(`No se pudo crear la disciplina de test: ${disciplineError?.message}`)
+    }
+    disciplineIds.push(discipline.id)
+  }
+  const disciplineId = disciplineIds[0]
+  if (disciplineId === undefined) {
+    throw new Error('createSeason necesita al menos una disciplina.')
   }
 
   const entryIds: string[] = []
@@ -58,5 +95,5 @@ export async function createSeason({
     entryIds.push(entry.id)
   }
 
-  return { seasonId: season.id, entryIds }
+  return { seasonId: season.id, entryIds, disciplineIds, disciplineId }
 }

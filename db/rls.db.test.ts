@@ -9,6 +9,7 @@ import { defaultConfig } from '../core/config'
 const TABLES = [
   'players',
   'seasons',
+  'disciplines',
   'matchdays',
   'entries',
   'attendances',
@@ -180,7 +181,7 @@ describe('RLS — lectura', () => {
     expect(error?.code).toBe('42501')
   })
 
-  it('anon no ve una sola fila de ninguna de las diez tablas', async () => {
+  it('anon no ve una sola fila de ninguna de las once tablas', async () => {
     const anon = anonClient()
 
     for (const table of TABLES) {
@@ -344,7 +345,7 @@ describe('RLS — escritura', () => {
     expect(error?.code).toBe('42501')
   })
 
-  it('a participant who is not the admin cannot insert into any of the ten tables', async () => {
+  it('a participant who is not the admin cannot insert into any of the eleven tables', async () => {
     const admin = await createTestUser()
     const member = await createTestUser()
     const filler = await fillerPlayers(3)
@@ -379,6 +380,13 @@ describe('RLS — escritura', () => {
       .select()
     expect(seasons.data, 'tabla seasons').toBeNull()
     expect(seasons.error?.code, 'tabla seasons').toBe('42501')
+
+    const disciplines = await member.client
+      .from('disciplines')
+      .insert({ season_id: seasonId, kind: 'FIFA', config: {} })
+      .select()
+    expect(disciplines.data, 'tabla disciplines').toBeNull()
+    expect(disciplines.error?.code, 'tabla disciplines').toBe('42501')
 
     const matchdays = await member.client
       .from('matchdays')

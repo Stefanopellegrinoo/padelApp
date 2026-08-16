@@ -377,6 +377,7 @@ describe('the squad seats', () => {
   })
 })
 
+
 // Borrar el torneo es lo más destructivo que hace la app: no hay papelera ni
 // forma de deshacerlo. Se prueba sobre una temporada JUGADA, que es el caso que
 // puede fallar — `awards.entry_id` y `pair_locks` referencian `entries` con

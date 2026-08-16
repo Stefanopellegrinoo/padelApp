@@ -60,9 +60,18 @@ export async function renameTournament(formData: FormData): Promise<void> {
   )
 }
 
-export async function addSeat(seasonId: string, displayName: string): Promise<WriteResult> {
+/**
+ * Agrega un asiento. `beforeEntryId` es "antes de este asiento" (spec
+ * "Ubicar al que llega en el orden de desempate"); `null` agrega al final,
+ * que es el default de `addSquadSeat` y el comportamiento de siempre.
+ */
+export async function addSeat(
+  seasonId: string,
+  displayName: string,
+  beforeEntryId: string | null = null,
+): Promise<WriteResult> {
   return onSeason(seasonId, async (supabase) => {
-    await addSquadSeat(supabase, seasonId, displayName)
+    await addSquadSeat(supabase, seasonId, displayName, beforeEntryId)
   })
 }
 

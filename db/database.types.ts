@@ -450,6 +450,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      add_squad_seat: {
+        Args: { p_before?: string; p_name: string; p_season: string }
+        Returns: string
+      }
       cancel_matchday: { Args: { p_matchday: string }; Returns: undefined }
       claim_seat: {
         Args: { p_entry: string; p_token: string }
@@ -497,6 +501,10 @@ export type Database = {
       }
       set_my_attendance: {
         Args: { p_matchday: string; p_status: string }
+        Returns: undefined
+      }
+      shift_seeds_up: {
+        Args: { p_from: number; p_season: string }
         Returns: undefined
       }
     }

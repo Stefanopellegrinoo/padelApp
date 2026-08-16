@@ -35,11 +35,24 @@ with season as (
     'demo',
     '00000000-0000-0000-0000-000000000001'
   )
+  returning id, config
+),
+-- Toda temporada necesita su disciplina de arranque (0015_disciplines.sql):
+-- sin esto, `createMatchday` no puede resolver un `discipline_id` y crear
+-- una fecha en el torneo demo rompe con PGRST116 apenas se resetea la base
+-- (REQ-NR-4, hallazgo C3 del verify-report). `cross join` más abajo no es
+-- decorativo: fuerza a Postgres a evaluar este CTE de escritura aunque nada
+-- lea su `id` — sin la referencia, el insert puede no correr.
+discipline as (
+  insert into public.disciplines (season_id, kind, config)
+  select id, 'PADEL', config from season
   returning id
 )
 insert into public.entries (season_id, display_name, kind, seed_position)
 select season.id, name, 'SQUAD', ord - 1
-from season, unnest(array[
+from season
+cross join discipline
+cross join unnest(array[
   'Jugador 1', 'Jugador 2', 'Jugador 3', 'Jugador 4',
   'Jugador 5', 'Jugador 6', 'Jugador 7', 'Jugador 8'
 ]) with ordinality as t(name, ord);

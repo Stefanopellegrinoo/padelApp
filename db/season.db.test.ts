@@ -69,6 +69,13 @@ async function createWalkthroughSeason(
     .single()
   if (seasonError || season === null) throw new Error(seasonError?.message)
 
+  // createMatchday necesita una disciplina para resolver discipline_id: esta
+  // temporada no pasa por db/test/factories.ts, así que se arma acá.
+  const { error: disciplineError } = await db
+    .from('disciplines')
+    .insert({ season_id: season.id, kind: 'PADEL', config: config as unknown as Json })
+  if (disciplineError) throw new Error(disciplineError.message)
+
   const players = await fillerPlayers(squadSize - 1)
   const entryIds: string[] = []
   for (let index = 0; index < squadSize; index++) {

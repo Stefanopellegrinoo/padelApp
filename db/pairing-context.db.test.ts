@@ -34,6 +34,14 @@ async function buildSeasonWithSquad(
   return { admin, seasonId, squad: entryIds }
 }
 
+// Una sola disciplina por temporada mientras el tripwire (0015) siga puesto.
+async function disciplineIdOf(seasonId: string): Promise<string> {
+  const db = adminClient()
+  const { data, error } = await db.from('disciplines').select('id').eq('season_id', seasonId).single()
+  if (error || data === null) throw new Error(error?.message)
+  return data.id
+}
+
 interface AwardInput {
   entryId: string
   position: number
@@ -54,9 +62,10 @@ async function closeMatchday(
   awards: AwardInput[],
 ): Promise<string> {
   const db = adminClient()
+  const disciplineId = await disciplineIdOf(seasonId)
   const { data: matchday, error } = await db
     .from('matchdays')
-    .insert({ season_id: seasonId, number, status: 'CLOSED' })
+    .insert({ season_id: seasonId, discipline_id: disciplineId, number, status: 'CLOSED' })
     .select('id')
     .single()
   if (error || matchday === null) throw new Error(error?.message)
@@ -90,9 +99,10 @@ async function openMatchday(
   status: 'DRAFT' | 'CLOSED' = 'DRAFT',
 ): Promise<string> {
   const db = adminClient()
+  const disciplineId = await disciplineIdOf(seasonId)
   const { data: matchday, error } = await db
     .from('matchdays')
-    .insert({ season_id: seasonId, number, status })
+    .insert({ season_id: seasonId, discipline_id: disciplineId, number, status })
     .select('id')
     .single()
   if (error || matchday === null) throw new Error(error?.message)

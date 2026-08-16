@@ -265,7 +265,7 @@ export type Database = {
       matchdays: {
         Row: {
           closed_at: string | null
-          discipline_id: string | null
+          discipline_id: string
           id: string
           kind: string
           number: number
@@ -275,7 +275,7 @@ export type Database = {
         }
         Insert: {
           closed_at?: string | null
-          discipline_id?: string | null
+          discipline_id: string
           id?: string
           kind?: string
           number: number
@@ -285,7 +285,7 @@ export type Database = {
         }
         Update: {
           closed_at?: string | null
-          discipline_id?: string | null
+          discipline_id?: string
           id?: string
           kind?: string
           number?: number
@@ -531,6 +531,7 @@ export type Database = {
       is_season_admin: { Args: { p_season: string }; Returns: boolean }
       match_is_open: { Args: { p_match: string }; Returns: boolean }
       match_season: { Args: { p_match: string }; Returns: string }
+      matchday_discipline: { Args: { p_matchday: string }; Returns: string }
       matchday_season: { Args: { p_matchday: string }; Returns: string }
       my_player_id: { Args: never; Returns: string }
       open_matchday: { Args: { p_matchday: string }; Returns: undefined }

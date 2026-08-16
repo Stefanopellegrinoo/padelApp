@@ -56,7 +56,13 @@ async function createWalkthroughSeason(
   admin: TestUser,
   config: SeasonConfig,
   squadSize: number,
-): Promise<{ seasonId: string; entryIds: string[]; openSeatEntryId: string; inviteToken: string }> {
+): Promise<{
+  seasonId: string
+  disciplineId: string
+  entryIds: string[]
+  openSeatEntryId: string
+  inviteToken: string
+}> {
   const db = adminClient()
   const { data: season, error: seasonError } = await db
     .from('seasons')
@@ -71,10 +77,12 @@ async function createWalkthroughSeason(
 
   // createMatchday necesita una disciplina para resolver discipline_id: esta
   // temporada no pasa por db/test/factories.ts, así que se arma acá.
-  const { error: disciplineError } = await db
+  const { data: discipline, error: disciplineError } = await db
     .from('disciplines')
     .insert({ season_id: season.id, kind: 'PADEL', config: config as unknown as Json })
-  if (disciplineError) throw new Error(disciplineError.message)
+    .select('id')
+    .single()
+  if (disciplineError || discipline === null) throw new Error(disciplineError?.message)
 
   const players = await fillerPlayers(squadSize - 1)
   const entryIds: string[] = []
@@ -96,7 +104,13 @@ async function createWalkthroughSeason(
   }
   const openSeatEntryId = entryIds[entryIds.length - 1]
   if (openSeatEntryId === undefined) throw new Error('Falta el asiento libre de test.')
-  return { seasonId: season.id, entryIds, openSeatEntryId, inviteToken: season.invite_token }
+  return {
+    seasonId: season.id,
+    disciplineId: discipline.id,
+    entryIds,
+    openSeatEntryId,
+    inviteToken: season.invite_token,
+  }
 }
 
 async function markPlaying(admin: TestUser, matchdayId: string, entryIds: string[]): Promise<void> {
@@ -157,11 +171,12 @@ const sortByEntry = <T extends { entry_id: string }>(rows: T[]): T[] =>
 async function rankingBefore(
   admin: TestUser,
   seasonId: string,
+  disciplineId: string,
   matchdayNumber: number,
   config: SeasonConfig,
 ) {
   const seedOrder = await squadSeedOrder(admin.client, seasonId)
-  const awardsByMatchday = await awardsBefore(admin.client, seasonId, matchdayNumber)
+  const awardsByMatchday = await awardsBefore(admin.client, disciplineId, matchdayNumber)
   const snapshot = snapshotForMatchday(matchdayNumber, seedOrder, awardsByMatchday, config)
   return computeRanking(awardsByMatchday, seedOrder, config, snapshot)
 }
@@ -184,11 +199,12 @@ function championPairOf(awards: AwardRow[], pairs: Pair[]): Pair | null {
 async function playByRankRule(
   admin: TestUser,
   seasonId: string,
+  disciplineId: string,
   matchdayId: string,
   matchdayNumber: number,
   config: SeasonConfig,
 ): Promise<void> {
-  const ranking = await rankingBefore(admin, seasonId, matchdayNumber, config)
+  const ranking = await rankingBefore(admin, seasonId, disciplineId, matchdayNumber, config)
   const rankIndex = new Map(ranking.map((row, index) => [row.entryId, index]))
   const worst = ranking.length // los invitados quedan afuera del ranking del plantel: valen como el peor posible
 
@@ -223,6 +239,7 @@ interface PlayMatchdayOptions {
 async function playMatchday(
   admin: TestUser,
   seasonId: string,
+  disciplineId: string,
   matchdayId: string,
   matchdayNumber: number,
   config: SeasonConfig,
@@ -246,7 +263,7 @@ async function playMatchday(
 
   await generatePairs(admin.client, matchdayId)
   await openMatchday(admin.client, matchdayId)
-  await playByRankRule(admin, seasonId, matchdayId, matchdayNumber, config)
+  await playByRankRule(admin, seasonId, disciplineId, matchdayId, matchdayNumber, config)
   await closeMatchday(admin.client, matchdayId)
 
   return { guestIds }
@@ -255,6 +272,7 @@ async function playMatchday(
 interface WalkthroughSeason {
   admin: TestUser
   seasonId: string
+  disciplineId: string
   config: SeasonConfig
   squad: string[]
   openSeatEntryId: string
@@ -284,11 +302,13 @@ function matchdayIdOf(season: WalkthroughSeason, number: number): string {
 async function buildWalkthroughSeason(): Promise<WalkthroughSeason> {
   const admin = await createTestUser()
   let config = defaultConfig(8)
-  const { seasonId, entryIds: squad, openSeatEntryId, inviteToken } = await createWalkthroughSeason(
-    admin,
-    config,
-    8,
-  )
+  const {
+    seasonId,
+    disciplineId,
+    entryIds: squad,
+    openSeatEntryId,
+    inviteToken,
+  } = await createWalkthroughSeason(admin, config, 8)
 
   const matchdayIds: string[] = []
   const pairsByMatchday = new Map<number, Pair[]>()
@@ -306,7 +326,7 @@ async function buildWalkthroughSeason(): Promise<WalkthroughSeason> {
 
   for (let number = 1; number <= 4; number++) {
     const matchdayId = await createMatchday(admin.client, seasonId, playedOn(number))
-    await playMatchday(admin, seasonId, matchdayId, number, config, { playing: squad })
+    await playMatchday(admin, seasonId, disciplineId, matchdayId, number, config, { playing: squad })
     await recordClose(matchdayId, number)
   }
 
@@ -314,7 +334,7 @@ async function buildWalkthroughSeason(): Promise<WalkthroughSeason> {
   config = { ...config, points: [12, 7, 4, 1] }
   await updateSeasonConfig(admin.client, seasonId, config)
   const md5 = await createMatchday(admin.client, seasonId, playedOn(5))
-  await playMatchday(admin, seasonId, md5, 5, config, { playing: squad })
+  await playMatchday(admin, seasonId, disciplineId, md5, 5, config, { playing: squad })
   await recordClose(md5, 5)
 
   // Fecha 6: invitado suelto por el ausente — nunca uno de los defensores que entran a esta fecha.
@@ -323,7 +343,7 @@ async function buildWalkthroughSeason(): Promise<WalkthroughSeason> {
   const absentee = squad.find((entryId) => !defending.has(entryId))
   if (absentee === undefined) throw new Error('No hay a quién ausentar sin tocar a los defensores.')
   const md6 = await createMatchday(admin.client, seasonId, playedOn(6))
-  const { guestIds: md6Guests } = await playMatchday(admin, seasonId, md6, 6, config, {
+  const { guestIds: md6Guests } = await playMatchday(admin, seasonId, disciplineId, md6, 6, config, {
     playing: squad.filter((entryId) => entryId !== absentee),
     guestNames: ['Invitado suelto'],
   })
@@ -333,12 +353,12 @@ async function buildWalkthroughSeason(): Promise<WalkthroughSeason> {
 
   // Fecha 7: vuelve el plantel completo.
   const md7 = await createMatchday(admin.client, seasonId, playedOn(7))
-  await playMatchday(admin, seasonId, md7, 7, config, { playing: squad })
+  await playMatchday(admin, seasonId, disciplineId, md7, 7, config, { playing: squad })
   await recordClose(md7, 7)
 
   // Fecha 8: equipo invitado — dos invitados trabados entre sí, plantel completo alrededor.
   const md8 = await createMatchday(admin.client, seasonId, playedOn(8))
-  const { guestIds: md8Guests } = await playMatchday(admin, seasonId, md8, 8, config, {
+  const { guestIds: md8Guests } = await playMatchday(admin, seasonId, disciplineId, md8, 8, config, {
     playing: squad,
     guestNames: ['Equipo invitado 1', 'Equipo invitado 2'],
     guestLock: [0, 1],
@@ -350,13 +370,14 @@ async function buildWalkthroughSeason(): Promise<WalkthroughSeason> {
   // Fechas 9-10: cierran la temporada regular con el plantel completo.
   for (let number = 9; number <= 10; number++) {
     const matchdayId = await createMatchday(admin.client, seasonId, playedOn(number))
-    await playMatchday(admin, seasonId, matchdayId, number, config, { playing: squad })
+    await playMatchday(admin, seasonId, disciplineId, matchdayId, number, config, { playing: squad })
     await recordClose(matchdayId, number)
   }
 
   return {
     admin,
     seasonId,
+    disciplineId,
     config,
     squad,
     openSeatEntryId,
@@ -377,7 +398,7 @@ async function playDeterministicSeason(
   const admin = await createTestUser()
   const config = defaultConfig(8)
   const players = await fillerPlayers(8)
-  const { seasonId, entryIds } = await createSeason({ admin, config, squad: players })
+  const { seasonId, disciplineId, entryIds } = await createSeason({ admin, config, squad: players })
   const seedPositionOf = new Map(entryIds.map((entryId, index) => [entryId, index]))
 
   const seasonAwards: Array<Array<{ seedPosition: number; position: number; points: number }>> = []
@@ -387,7 +408,7 @@ async function playDeterministicSeason(
       seasonId,
       `2026-02-${String(number).padStart(2, '0')}`,
     )
-    await playMatchday(admin, seasonId, matchdayId, number, config, { playing: entryIds })
+    await playMatchday(admin, seasonId, disciplineId, matchdayId, number, config, { playing: entryIds })
     const awards = await awardsOf(matchdayId)
     const bySeed = awards
       .map((award) => ({
@@ -413,7 +434,7 @@ describe('a whole season played end to end', () => {
       expect(await matchdayStatus(matchdayId)).toBe('CLOSED')
     }
 
-    const ranking = await rankingBefore(season.admin, season.seasonId, 11, season.config)
+    const ranking = await rankingBefore(season.admin, season.seasonId, season.disciplineId, 11, season.config)
     expect(ranking).toHaveLength(8)
     expect(new Set(ranking.map((row) => row.entryId)).size).toBe(8)
     for (const row of ranking) {
@@ -459,10 +480,10 @@ describe('a whole season played end to end', () => {
   })
 
   it("the table discards its worst results as of matchday 9's close", async () => {
-    const before9 = await rankingBefore(season.admin, season.seasonId, 9, season.config)
+    const before9 = await rankingBefore(season.admin, season.seasonId, season.disciplineId, 9, season.config)
     expect(before9.every((row) => row.discarded.length === 0)).toBe(true)
 
-    const before10 = await rankingBefore(season.admin, season.seasonId, 10, season.config)
+    const before10 = await rankingBefore(season.admin, season.seasonId, season.disciplineId, 10, season.config)
     const absenteeRow = before10.find((row) => row.entryId === season.absentee)
     expect(absenteeRow?.discarded.length).toBe(0)
 

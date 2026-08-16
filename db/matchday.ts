@@ -19,7 +19,14 @@ import {
 } from '@/core'
 import type { Database, Json } from './database.types'
 import { EdgeError } from './errors'
-import { awardsBefore, closedHistory, seasonConfig, squadSeedOrder, type Client } from './season'
+import {
+  awardsBefore,
+  closedHistory,
+  defaultDisciplineId,
+  seasonConfig,
+  squadSeedOrder,
+  type Client,
+} from './season'
 import {
   assertGuestsNamed,
   assertLocksAndGuests,
@@ -68,7 +75,7 @@ export async function matchdayContextFor(
 
   // Only the CLOSED matchdays BEFORE this one. Never this one: its own table is
   // what the snapshot is being used to break ties in.
-  const awardsByMatchday = await awardsBefore(supabase, matchday.season_id, matchday.number)
+  const awardsByMatchday = await awardsBefore(supabase, matchday.discipline_id, matchday.number)
   const snapshot = snapshotForMatchday(matchday.number, seedOrder, awardsByMatchday, config)
 
   const guests = await guestsOf(supabase, matchdayId)
@@ -105,8 +112,8 @@ export async function pairingContextFor(
   const points = new Map(ranking.map((row) => [row.entryId, row.points]))
 
   const { defenders, defendersAlreadyRepeated, previousPairs } = previousContext(
-    await closedHistory(supabase, matchday.season_id, matchday.number - 1),
-    await closedHistory(supabase, matchday.season_id, matchday.number - 2),
+    await closedHistory(supabase, matchday.discipline_id, matchday.number - 1),
+    await closedHistory(supabase, matchday.discipline_id, matchday.number - 2),
   )
 
   const present = [
@@ -177,30 +184,29 @@ export async function setMatchdayDate(
  * el dato que muestran todas las pantallas.
  *
  * `discipline_id` no lo manda el caller: se resuelve solo a partir de
- * `seasonId`. Mientras el tripwire `disciplines_one_per_season` (0015) siga
- * puesto, una temporada tiene exactamente una disciplina, así que la lectura
- * es inequívoca. Cuando eso deje de ser cierto (PR 11, wizard multi-disciplina)
- * esta función necesita un parámetro nuevo — hoy no lo tiene porque no hay
- * ningún caller que pueda elegir entre dos.
+ * `seasonId` con `defaultDisciplineId` (la primera por `position`). Con el
+ * tripwire `disciplines_one_per_season` caído (0018) una temporada YA puede
+ * tener más de una disciplina — antes de este fix, esta función resolvía con
+ * `.single()`, que con 2 filas rompía con PGRST116 ("multiple rows") en vez
+ * de crear la fecha. Hoy sigue sin haber wizard que sume una segunda
+ * disciplina (PR 11) ni un `discipline_id` elegible desde ningún caller, así
+ * que "la primera" es determinista y correcta — cuando eso deje de ser
+ * cierto, esta función necesita un parámetro nuevo.
  */
 export async function createMatchday(
   supabase: Client,
   seasonId: string,
   playedOn: string,
 ): Promise<string> {
-  const { data: discipline, error: disciplineError } = await supabase
-    .from('disciplines')
-    .select('id')
-    .eq('season_id', seasonId)
-    .single()
-  if (disciplineError || discipline === null) {
-    throw new EdgeError(`No se pudo leer la disciplina de la temporada: ${disciplineError?.message}`)
+  const disciplineId = await defaultDisciplineId(supabase, seasonId)
+  if (disciplineId === null) {
+    throw new EdgeError('No se pudo leer la disciplina de la temporada.')
   }
 
   const { data: last, error: lastError } = await supabase
     .from('matchdays')
     .select('number')
-    .eq('discipline_id', discipline.id)
+    .eq('discipline_id', disciplineId)
     .order('number', { ascending: false })
     .limit(1)
     .maybeSingle()
@@ -209,7 +215,7 @@ export async function createMatchday(
 
   const { data, error } = await supabase
     .from('matchdays')
-    .insert({ season_id: seasonId, discipline_id: discipline.id, number, played_on: playedOn })
+    .insert({ season_id: seasonId, discipline_id: disciplineId, number, played_on: playedOn })
     .select('id')
     .single()
   if (error !== null) {
@@ -511,7 +517,7 @@ export async function generateMastersPairs(supabase: Client, matchdayId: string)
   const config = await seasonConfig(supabase, matchday.season_id)
   assertValidConfig(config)
   const seedOrder = await squadSeedOrder(supabase, matchday.season_id)
-  const awardsByMatchday = await awardsBefore(supabase, matchday.season_id, matchday.number)
+  const awardsByMatchday = await awardsBefore(supabase, matchday.discipline_id, matchday.number)
   const snapshot = snapshotForMatchday(matchday.number, seedOrder, awardsByMatchday, config)
 
   const ranking = computeRanking(awardsByMatchday, seedOrder, config, snapshot)

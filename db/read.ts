@@ -23,6 +23,7 @@ import type {
 } from '@/core'
 import type { Client } from './client'
 import { EdgeError } from './errors'
+import { defaultDisciplineId } from './season'
 
 export interface SeasonHeader {
   id: string
@@ -80,6 +81,8 @@ export interface MatchdaySummary {
   kind: 'REGULAR' | 'MASTERS'
   status: 'DRAFT' | 'OPEN' | 'CLOSED'
   playedOn: string | null
+  /** Para que quien ya tiene esta fila no tenga que resolver la disciplina de nuevo (`awardsBefore`/`closedHistory` la piden). */
+  disciplineId: string
 }
 
 export interface MatchdayDetail {
@@ -104,6 +107,7 @@ interface MatchdayRow {
   kind: string
   status: string
   played_on: string | null
+  discipline_id: string
 }
 
 /** `null` for an anonymous or logged-out caller — never throws, so a stranger's read still resolves to "nothing theirs" instead of blowing up. */
@@ -133,6 +137,7 @@ function toMatchdaySummary(row: MatchdayRow): MatchdaySummary {
     kind: row.kind as 'REGULAR' | 'MASTERS',
     status: row.status as 'DRAFT' | 'OPEN' | 'CLOSED',
     playedOn: row.played_on,
+    disciplineId: row.discipline_id,
   }
 }
 
@@ -328,10 +333,15 @@ export async function publicRules(supabase: Client, seasonId: string): Promise<P
 }
 
 export async function matchdaysOf(supabase: Client, seasonId: string): Promise<MatchdaySummary[]> {
+  const disciplineId = await defaultDisciplineId(supabase, seasonId)
+  // Ninguna disciplina visible: para un extraño es RLS escondiéndolas, no un
+  // error — misma respuesta que daba `.eq('season_id', seasonId)` antes, que
+  // simplemente no encontraba filas.
+  if (disciplineId === null) return []
   const { data, error } = await supabase
     .from('matchdays')
-    .select('id, number, kind, status, played_on')
-    .eq('season_id', seasonId)
+    .select('id, number, kind, status, played_on, discipline_id')
+    .eq('discipline_id', disciplineId)
     .order('number', { ascending: true })
   if (error) throw new EdgeError(`No se pudieron leer las fechas: ${error.message}`)
   return (data ?? []).map(toMatchdaySummary)
@@ -341,7 +351,7 @@ export async function matchdaysOf(supabase: Client, seasonId: string): Promise<M
 export async function matchdayDetail(supabase: Client, matchdayId: string): Promise<MatchdayDetail> {
   const { data: matchdayRow, error: matchdayError } = await supabase
     .from('matchdays')
-    .select('id, number, kind, status, played_on')
+    .select('id, number, kind, status, played_on, discipline_id')
     .eq('id', matchdayId)
     .maybeSingle()
   if (matchdayError) throw new EdgeError(`No se pudo leer la fecha: ${matchdayError.message}`)
@@ -353,12 +363,14 @@ export async function matchdayDetail(supabase: Client, matchdayId: string): Prom
   return { matchday: toMatchdaySummary(matchdayRow), pairs, matches, guestIds }
 }
 
-/** Every CLOSED regular matchday of the season, in number order. The Masters is excluded: it is not part of the championship's played history. */
+/** Every CLOSED regular matchday of the season's own discipline, in number order. The Masters is excluded: it is not part of the championship's played history. */
 export async function closedHistoryAll(supabase: Client, seasonId: string): Promise<PlayedMatchday[]> {
+  const disciplineId = await defaultDisciplineId(supabase, seasonId)
+  if (disciplineId === null) return []
   const { data, error } = await supabase
     .from('matchdays')
     .select('id, number')
-    .eq('season_id', seasonId)
+    .eq('discipline_id', disciplineId)
     .eq('status', 'CLOSED')
     .eq('kind', 'REGULAR')
     .order('number', { ascending: true })
@@ -372,12 +384,14 @@ export async function closedHistoryAll(supabase: Client, seasonId: string): Prom
   return history
 }
 
-/** Every award of the season, keyed by the matchday number that paid it. */
+/** Every award of the season's own discipline, keyed by the matchday number that paid it. */
 export async function awardsOf(supabase: Client, seasonId: string): Promise<Map<number, Award[]>> {
+  const disciplineId = await defaultDisciplineId(supabase, seasonId)
+  if (disciplineId === null) return new Map()
   const { data: closed, error: closedError } = await supabase
     .from('matchdays')
     .select('id, number')
-    .eq('season_id', seasonId)
+    .eq('discipline_id', disciplineId)
     .eq('status', 'CLOSED')
   if (closedError) {
     throw new EdgeError(`No se pudieron leer las fechas cerradas: ${closedError.message}`)

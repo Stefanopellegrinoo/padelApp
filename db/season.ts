@@ -110,6 +110,28 @@ export async function closedHistory(
   }
 }
 
+/**
+ * Los puntos CONGELADOS de una fecha, por asiento: la tabla `awards` tal cual
+ * quedó al cerrarla, que es la MISMA fila que `promote_guest` copia.
+ *
+ * Existe en vez de reusar `closedHistory` porque de sus tres consultas dos
+ * sobran acá: quien llama ya probó que la fecha está CLOSED (si no, no dibuja
+ * la tarjeta), y `pairs` lo descarta sin mirarlo. Una consulta en vez de tres,
+ * y la fecha se identifica por id —no por número— así que tampoco hace falta
+ * volver a resolverla.
+ */
+export async function frozenPointsOf(
+  supabase: Client,
+  matchdayId: string,
+): Promise<Map<EntryId, number>> {
+  const { data, error } = await supabase
+    .from('awards')
+    .select('entry_id, points')
+    .eq('matchday_id', matchdayId)
+  if (error) throw new EdgeError(`No se pudieron leer los premios: ${error.message}`)
+  return new Map((data ?? []).map((row) => [row.entry_id, row.points]))
+}
+
 export interface NewSeason {
   name: string
   /** Un nombre por asiento, en el orden que va a ser el orden inicial de desempate. */

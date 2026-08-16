@@ -162,3 +162,86 @@ describe('computeAwards — guests', () => {
     )
   })
 })
+
+// El teorema del que depende TODO `promote_guest` (spec 3.1, design #3771
+// decisión 12), enunciado con su hipótesis puesta: copiar el award congelado
+// del compañero es lo mismo que lo que un reabrir-y-volver-a-cerrar hubiera
+// calculado **cuando esa pareja YA cobraba** — o sea, cuando el compañero
+// tiene un award congelado en esa fecha. Sin esa hipótesis es falso, y los
+// dos últimos tests de este bloque lo muestran con números. La prueba anterior de
+// esto era un probe suelto que se borró — vuelve acá, permanente, con
+// aserciones contra VALORES TIPEADOS A MANO, nunca contra el resultado de
+// otra corrida de la misma función: comparar una llamada contra otra no
+// prueba nada si las dos están calculadas con la misma lógica rota — eso
+// pasó en la PR anterior y un reviewer lo agarró recién con datos reales.
+describe('computeAwards — el teorema de la promoción (spec 3.1)', () => {
+  // Pareja 1: p1 (plantel) y g1 (invitado). Pareja 2: p2 y p3, plantel las dos.
+  // CONFIG.points = [10, 7, 5, 3, 2, 1] — literal del archivo, no derivado.
+  const standings: PairStanding[] = [standing('p1', 'g1', 1), standing('p2', 'p3', 2)]
+
+  it('con g1 invitado —el comportamiento real de close_matchday—, p1 se lleva 10 puntos y g1 no tiene award', () => {
+    const awards = computeAwards(standings, CONFIG, ['g1'])
+    // CONFIG.points[0] = 10, CONFIG.points[1] = 7: tipeados a mano, no calculados.
+    expect(awards).toEqual([
+      { entryId: 'p1', position: 1, points: 10 },
+      { entryId: 'p2', position: 2, points: 7 },
+      { entryId: 'p3', position: 2, points: 7 },
+    ])
+  })
+
+  // El teorema en sí: si g1 NO hubiera sido invitado —el hipotético "reabrir
+  // y volver a cerrar"—, se habría llevado EXACTAMENTE position 1 y 10
+  // puntos: los mismos valores literales que p1 ya tiene arriba, tipeados acá
+  // de nuevo a mano y nunca comparados contra el resultado de la otra
+  // llamada. Esa coincidencia entre dos literales —no una llamada contra
+  // otra— es la que hace que copiar el award congelado sea lo mismo que
+  // recalcular. `promote_guest` (0014_promote_guest.sql) hace la copia,
+  // nunca la segunda llamada.
+  it('si g1 no fuera invitado, se llevaría position 1 y 10 puntos: los mismos valores que ya tiene su pareja', () => {
+    const awards = computeAwards(standings, CONFIG, [])
+    const g1Award = awards.find((award) => award.entryId === 'g1')
+    expect(g1Award).toEqual({ entryId: 'g1', position: 1, points: 10 })
+  })
+
+  it('y ningún otro award cambia entre las dos corridas: p2 y p3 siguen en position 2 con 7 puntos', () => {
+    const awards = computeAwards(standings, CONFIG, [])
+    expect(awards.find((award) => award.entryId === 'p2')).toEqual({ entryId: 'p2', position: 2, points: 7 })
+    expect(awards.find((award) => award.entryId === 'p3')).toEqual({ entryId: 'p3', position: 2, points: 7 })
+  })
+
+  // ── el borde del teorema: dónde DEJA de valer ────────────────────────────
+  // Los tres tests de arriba pinneaban el teorema sólo sobre la entrada donde
+  // es cierto, y por eso no agarraban al mutante que importa: neutralizar el
+  // filtro `paying` (core/awards.ts:26-28) los pasaba a los tres. Este par de
+  // casos mete una pareja TODA INVITADA adentro de la tabla, que es lo único
+  // que hace visible ese filtro — y de paso demuestra el contraejemplo por el
+  // que `promote_guest` (0014_promote_guest.sql) REFUSA ese caso en vez de
+  // saltearlo: ahí copiar el award congelado NO es lo que un recálculo daría.
+  const conParejaInvitada: PairStanding[] = [
+    standing('p1', 'p2', 1),
+    standing('g1', 'g2', 2),
+    standing('p3', 'p4', 3),
+  ]
+
+  it('congelado: la pareja toda invitada no consume posición paga, así que p3 y p4 cobran 7 en position 2', () => {
+    const awards = computeAwards(conParejaInvitada, CONFIG, ['g1', 'g2'])
+    // CONFIG.points = [10, 7, 5, 3, 2, 1]. Literales tipeados a mano.
+    expect(awards).toEqual([
+      { entryId: 'p1', position: 1, points: 10 },
+      { entryId: 'p2', position: 1, points: 10 },
+      { entryId: 'p3', position: 2, points: 7 },
+      { entryId: 'p4', position: 2, points: 7 },
+    ])
+  })
+
+  it('recalculado con g1 ya en el plantel: su pareja pasa a cobrar y p3 y p4 CAEN a position 3 con 5 — el teorema no vale acá', () => {
+    const awards = computeAwards(conParejaInvitada, CONFIG, ['g2'])
+    expect(awards).toEqual([
+      { entryId: 'p1', position: 1, points: 10 },
+      { entryId: 'p2', position: 1, points: 10 },
+      { entryId: 'g1', position: 2, points: 7 },
+      { entryId: 'p3', position: 3, points: 5 },
+      { entryId: 'p4', position: 3, points: 5 },
+    ])
+  })
+})

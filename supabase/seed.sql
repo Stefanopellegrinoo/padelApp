@@ -40,9 +40,15 @@ with season as (
 -- Toda temporada necesita su disciplina de arranque (0015_disciplines.sql):
 -- sin esto, `createMatchday` no puede resolver un `discipline_id` y crear
 -- una fecha en el torneo demo rompe con PGRST116 apenas se resetea la base
--- (REQ-NR-4, hallazgo C3 del verify-report). `cross join` más abajo no es
--- decorativo: fuerza a Postgres a evaluar este CTE de escritura aunque nada
--- lea su `id` — sin la referencia, el insert puede no correr.
+-- (REQ-NR-4, hallazgo C3 del verify-report).
+--
+-- Sin `cross join` a propósito (N6, verify-report ronda 2): un CTE de
+-- escritura se ejecuta exactamente una vez y hasta el final SIEMPRE, se lea
+-- o no desde otro lado del `with` — comportamiento documentado de Postgres,
+-- no algo que haya que forzar con una referencia. `cross join discipline`
+-- era además un footgun: multiplica el insert de `entries` por la cantidad
+-- de filas de `discipline`, así que el día que este seed reparta más de una
+-- disciplina, los 8 entries se duplican por cada una (8 → 16 con dos).
 discipline as (
   insert into public.disciplines (season_id, kind, config)
   select id, 'PADEL', config from season
@@ -51,7 +57,6 @@ discipline as (
 insert into public.entries (season_id, display_name, kind, seed_position)
 select season.id, name, 'SQUAD', ord - 1
 from season
-cross join discipline
 cross join unnest(array[
   'Jugador 1', 'Jugador 2', 'Jugador 3', 'Jugador 4',
   'Jugador 5', 'Jugador 6', 'Jugador 7', 'Jugador 8'

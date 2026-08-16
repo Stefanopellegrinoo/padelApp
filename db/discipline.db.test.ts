@@ -36,21 +36,12 @@ describe('disciplines', () => {
     expect(row?.position).toBe(0)
   })
 
-  // El tripwire vive hasta que PR 4 (0018) lo saca en el mismo archivo que
-  // arregla reopen_matchday/cancel_matchday. Mientras tanto una temporada NO
-  // puede tener dos disciplinas — es la garantía que evita que reopen/cancel
-  // se rompan por season_id antes de que estén scopeadas por discipline_id.
-  it('el tripwire disciplines_one_per_season rechaza una segunda disciplina para la misma temporada', async () => {
-    const admin = await createTestUser()
-    const { seasonId } = await createSeason({ admin })
-
-    const db = adminClient()
-    const { error } = await db
-      .from('disciplines')
-      .insert({ season_id: seasonId, kind: 'FIFA', config: {} })
-
-    expect(error?.code).toBe('23505')
-  })
+  // El tripwire disciplines_one_per_season vivió acá desde PR 1 hasta que
+  // PR 4 (0018_reopen_cancel_scoped.sql) lo saca en el MISMO archivo que
+  // arregla reopen_matchday/cancel_matchday — nunca antes. Esta aserción
+  // ("rechaza una segunda disciplina") queda reemplazada por lo opuesto en
+  // db/discipline-scope.db.test.ts, que además prueba que reopen/cancel ya
+  // operan scopeadas por discipline_id (REQ-D4-3).
 
   // Sin el grant de columna, esto rebota con "permission denied for table
   // matchdays" — el mismo agujero silencioso que documenta 0002_rls.sql:236,

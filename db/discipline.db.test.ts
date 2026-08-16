@@ -59,6 +59,29 @@ describe('disciplines', () => {
     expect(error).toBeNull()
     expect(data?.id).toBeTypeOf('string')
   })
+
+  // W2 (0020_disciplines_grants.sql): el UPDATE de disciplines.status ya
+  // estaba revocado (0015:69); el INSERT era a nivel tabla y lo esquivaba —
+  // un admin de temporada (RLS lo deja escribir, `disciplines_write` pide
+  // sólo `is_season_admin`) podía crear una disciplina ya en ACTIVE por
+  // PostgREST, saltando el trinquete que las funciones (0019) existen para
+  // hacer cumplir. Prueba de comportamiento contra la API real, no
+  // introspección: `information_schema` no está expuesto por PostgREST
+  // (`supabase/config.toml`: `schemas = ["public", "graphql_public"]`), así
+  // que la verificación de grants en sí se hizo a mano contra la base
+  // (psql), no es alcanzable desde este archivo.
+  it('un admin de temporada no puede insertar una disciplina ya en ACTIVE (W2)', async () => {
+    const admin = await createTestUser()
+    const { seasonId } = await createSeason({ admin })
+
+    const { data, error } = await admin.client
+      .from('disciplines')
+      .insert({ season_id: seasonId, kind: 'FIFA', config: {}, status: 'ACTIVE' } as never)
+      .select('id')
+
+    expect(data).toBeNull()
+    expect(error?.code).toBe('42501')
+  })
 })
 
 // ── PR 2 — matchdays scopeadas por disciplina ───────────────────────────────
@@ -84,15 +107,20 @@ describe('matchdays.discipline_id (PR 2)', () => {
     expect(data.discipline_id).toBe(disciplineId)
   })
 
-  it('matchday_discipline(p_matchday) devuelve la disciplina de la fecha', async () => {
+  // W5 (0020_disciplines_grants.sql): PR 4 nunca la llamó (lee discipline_id
+  // del mismo `select ... for update` ya bloqueado, más seguro) y quedó
+  // expuesta como RPC pública sin un solo consumidor. Se revoca, mismo
+  // criterio que 0009 con handle_new_user — ver squad-position.db.test.ts
+  // para el mismo patrón con shift_seeds_up.
+  it('matchday_discipline no es alcanzable por RPC: nadie tiene el grant', async () => {
     const admin = await createTestUser()
-    const { seasonId, disciplineId } = await createSeason({ admin })
+    const { seasonId } = await createSeason({ admin })
     const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
 
     const { data, error } = await admin.client.rpc('matchday_discipline', { p_matchday: matchdayId })
 
-    expect(error).toBeNull()
-    expect(data).toBe(disciplineId)
+    expect(data).toBeNull()
+    expect(error?.code).toBe('42501')
   })
 
   it('discipline_id es NOT NULL: un insert que lo omite falla (REQ-NR-3)', async () => {
@@ -133,5 +161,28 @@ describe('derivedSeasonStatus (PR 3)', () => {
     if (error) throw new Error(error.message)
 
     expect(await derivedSeasonStatus(admin.client, seasonId)).toBe('ACTIVE')
+  })
+})
+
+// ── REQ-NR-4 (verify-report, hallazgo C3) ───────────────────────────────────
+// `supabase/seed.sql` insertaba la temporada demo a mano, sin su disciplina:
+// tras un `supabase db reset` limpio, crear una fecha en ese torneo rompía
+// con PGRST116 ("No se pudo leer la disciplina de la temporada"). El fix es
+// en el seed; esto es la aserción de no-regresión, medida contra la base
+// completa —no sólo contra lo que este archivo crea— para que un futuro
+// insert manual de `seasons` (acá o en otro seed) no vuelva a dejar una
+// temporada huérfana en silencio.
+describe('REQ-NR-4 — ninguna temporada se queda sin disciplina', () => {
+  it('count(seasons sin disciplinas) = 0', async () => {
+    const db = adminClient()
+    const { data: seasons, error: seasonsError } = await db.from('seasons').select('id')
+    if (seasonsError) throw new Error(seasonsError.message)
+
+    const { data: disciplineRows, error: disciplinesError } = await db.from('disciplines').select('season_id')
+    if (disciplinesError) throw new Error(disciplinesError.message)
+
+    const seasonsWithDiscipline = new Set((disciplineRows ?? []).map((row) => row.season_id))
+    const orphaned = (seasons ?? []).filter((season) => !seasonsWithDiscipline.has(season.id))
+    expect(orphaned).toHaveLength(0)
   })
 })

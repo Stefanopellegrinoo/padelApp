@@ -1,10 +1,13 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 import type { SetScore } from '@/core'
 import { EdgeError } from '@/db/errors'
+import { promoteGuest } from '@/db/entries'
 import {
   addGuest,
+  cancelMatchday,
   clearPairs,
   closeMatchday,
   createMasters,
@@ -231,6 +234,30 @@ export async function redraftTheMatchday(
 }
 
 /**
+ * Borra la fecha entera y vuelve a la lista de fechas.
+ *
+ * No pasa por `onMatchday`: ésa revalida `/fechas/{n}`, la página que la
+ * fecha acaba de dejar de existir — no tiene nada que mostrar. Sigue el
+ * patrón de `removeTournament` (ajustes/actions.ts): `redirect` va FUERA del
+ * try porque tira por dentro para cortar el render, y adentro el catch se lo
+ * comería.
+ */
+export async function cancelTheMatchday(seasonId: string, matchdayId: string): Promise<WriteResult> {
+  try {
+    const supabase = await serverClient()
+    await cancelMatchday(supabase, matchdayId)
+  } catch (error) {
+    if (error instanceof EdgeError) return { ok: false, error: error.message }
+    throw error
+  }
+
+  revalidatePath(`/torneo/${seasonId}/fechas`)
+  revalidatePath(`/torneo/${seasonId}`)
+  revalidatePath('/torneos')
+  redirect(`/torneo/${seasonId}/fechas`)
+}
+
+/**
  * Suma una pareja invitada: dos asientos que juegan juntos y **no cobran
  * ninguno de los dos**. Es el equipo que viene de visita a la fecha.
  *
@@ -324,5 +351,32 @@ export async function changeMatchdayDate(
   revalidatePath(`/torneo/${seasonId}/fechas`)
   revalidatePath(`/torneo/${seasonId}`)
   revalidatePath('/torneos')
+  return { ok: true }
+}
+
+/**
+ * Suma un invitado que ya jugó al plantel. No pasa por `inDraft` ni por
+ * `onMatchday`: la fecha del invitado está CLOSED —`promote_guest` lo exige
+ * del lado de la base— así que no hay asistencias que sembrar ni parejas que
+ * rehacer, y un solo `revalidatePath` con `'layout'` alcanza porque el
+ * asiento nuevo aparece en tres pantallas a la vez: esta fecha (el invitado
+ * sale de la lista), Ajustes › Plantel (que ahora lo tiene) y la tabla de la
+ * temporada (que ahora lo cuenta). `onMatchday` revalida esas tres rutas una
+ * por una; acá alcanza con el layout que las contiene a todas.
+ */
+export async function sumarInvitado(
+  seasonId: string,
+  entryId: string,
+  beforeEntryId: string | null,
+): Promise<WriteResult> {
+  try {
+    const supabase = await serverClient()
+    await promoteGuest(supabase, entryId, beforeEntryId)
+  } catch (error) {
+    if (error instanceof EdgeError) return { ok: false, error: error.message }
+    throw error
+  }
+
+  revalidatePath(`/torneo/${seasonId}`, 'layout')
   return { ok: true }
 }

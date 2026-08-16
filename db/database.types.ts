@@ -450,6 +450,11 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      add_squad_seat: {
+        Args: { p_before?: string; p_name: string; p_season: string }
+        Returns: string
+      }
+      cancel_matchday: { Args: { p_matchday: string }; Returns: undefined }
       claim_seat: {
         Args: { p_entry: string; p_token: string }
         Returns: string
@@ -469,6 +474,10 @@ export type Database = {
       matchday_season: { Args: { p_matchday: string }; Returns: string }
       my_player_id: { Args: never; Returns: string }
       open_matchday: { Args: { p_matchday: string }; Returns: undefined }
+      promote_guest: {
+        Args: { p_before?: string; p_entry: string }
+        Returns: undefined
+      }
       redraft_matchday: { Args: { p_matchday: string }; Returns: undefined }
       reopen_matchday: { Args: { p_matchday: string }; Returns: undefined }
       season_invite: {
@@ -496,6 +505,10 @@ export type Database = {
       }
       set_my_attendance: {
         Args: { p_matchday: string; p_status: string }
+        Returns: undefined
+      }
+      shift_seeds_up: {
+        Args: { p_from: number; p_season: string }
         Returns: undefined
       }
     }

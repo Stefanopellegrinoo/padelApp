@@ -15,7 +15,7 @@ import {
   type SeasonConfig,
 } from '@/core'
 import { attendancesOf, entriesOf, matchdayDetail, matchdaysOf, pairLocksOf, seasonHeader } from '@/db/read'
-import { awardsBefore, closedHistory } from '@/db/season'
+import { awardsBefore, closedHistory, frozenPointsOf } from '@/db/season'
 import { serverClient } from '@/db/server'
 import { EdgeError } from '@/db/errors'
 import { matchdayFull } from '@/app/format'
@@ -24,6 +24,8 @@ import { Armado, type DraftPairVM, type GuestPairVM, type GuestVM, type SeatVM }
 import { CierreFecha } from './carga'
 import { DiaDeLaFecha } from './dia'
 import { MastersDraft, type QualifierVM } from './masters'
+import { SumarInvitado, type GuestPromoteVM, type SumarSeatVM } from './sumar'
+import { guestsToPromote } from './sumar-state'
 
 interface PageProps {
   params: Promise<{ id: string; n: string }>
@@ -155,6 +157,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
         matchdayNumber={matchday.number}
         qualifiers={qualifiers}
         generated={detail.matches.length > 0}
+        loadedResults={detail.matches.filter((match) => match.sets.length > 0).length}
       />
     )
   }
@@ -241,6 +244,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
         looseGuests={looseGuests}
         guestPairs={guestPairs}
         pairs={draftPairs}
+        loadedResults={detail.matches.filter((match) => match.sets.length > 0).length}
       />
     )
   }
@@ -253,11 +257,20 @@ export default async function FechaDetailPage({ params }: PageProps) {
       .sort((a, b) => a.seedPosition - b.seedPosition)
       .map((entry) => entry.id)
 
-    const [detail, awardsByMatchday, lastHistory, beforeLastHistory] = await Promise.all([
+    const canPromote = header.isAdmin && status === 'CLOSED' && !isMasters
+    const [detail, awardsByMatchday, lastHistory, beforeLastHistory, frozenPoints] = await Promise.all([
       matchdayDetail(supabase, matchday.id),
       awardsBefore(supabase, seasonId, matchdayNumber),
       closedHistory(supabase, seasonId, matchdayNumber - 1),
       closedHistory(supabase, seasonId, matchdayNumber - 2),
+      // Los awards CONGELADOS de ESTA fecha, para la tarjeta de "Sumar
+      // invitado" de más abajo. `canPromote` NO sabe si hay invitados —eso lo
+      // contesta `detail`, que resuelve en este mismo `Promise.all`—, así que
+      // esto sale en TODA fecha cerrada que abra quien organiza, tenga o no
+      // invitados. Es un viaje de ida y vuelta, no tres: por eso no es
+      // `closedHistory`, cuyas otras dos consultas acá son plata tirada (el
+      // estado ya está probado por `canPromote`, y las parejas se descartan).
+      canPromote ? frozenPointsOf(supabase, matchday.id) : Promise.resolve(new Map<string, number>()),
     ])
 
     const snapshot = snapshotForMatchday(matchdayNumber, seedOrder, awardsByMatchday, config)
@@ -355,11 +368,13 @@ export default async function FechaDetailPage({ params }: PageProps) {
         ? { seasonId, matchdayId: matchday.id, matchdayNumber: matchday.number, format: config.matchFormat }
         : null
     const remainingMatches = detail.matches.filter((match) => match.sets.length === 0).length
-    // Para el aviso de "Volver al armado" (spec: no prometer que se conservan
-    // las parejas si ya hay algo cargado). No sale de `remainingMatches`: una
-    // fecha con resultados a medio cargar tiene `remaining > 0` Y resultados a
-    // la vez, así que hace falta mirar directamente si algún partido tiene sets.
-    const hasResults = detail.matches.some((match) => match.sets.length > 0)
+    // Para los dos avisos destructivos del pie: "Volver al armado" (spec: no
+    // prometer que se conservan las parejas si ya hay algo cargado) y "Borrar
+    // fecha", que nombra cuántos resultados se pierde. No sale de
+    // `remainingMatches`: una fecha con resultados a medio cargar tiene
+    // `remaining > 0` Y resultados a la vez, así que hace falta contar
+    // directamente los partidos que ya tienen sets.
+    const loadedResults = detail.matches.filter((match) => match.sets.length > 0).length
     // "Reabrir fecha" aparece sólo donde `reopen_matchday` va a decir que sí, y
     // eso son DOS de sus guardas, no una:
     //   · no hay una fecha CLOSED posterior (0005_matchday_moves.sql:180-185)
@@ -377,6 +392,44 @@ export default async function FechaDetailPage({ params }: PageProps) {
     const hasGuest = (pair: Pair) => detail.guestIds.includes(pair.a) || detail.guestIds.includes(pair.b)
     const anyGuestInTable = status === 'CLOSED' && standings.some((row) => hasGuest(row.pair))
     const note = status === 'CLOSED' ? tiebreakNote(standings, config, nameOf) : null
+
+    // Sumar invitado (spec Capability 3) sólo existe con la fecha CLOSED:
+    // `promote_guest` rechaza cualquier otro estado del lado de la base, y
+    // `sumar.tsx` sólo se monta acá para no ofrecer un botón que siempre
+    // falla por estado.
+    //
+    // Los puntos de la tarjeta salen de `awards` —la tabla CONGELADA, la misma
+    // fila que `promote_guest` copia con su `join`— y NO de `pointsByEntry`,
+    // que es el recálculo en vivo de veinte líneas más arriba. Reusar
+    // `pointsByEntry` parecía lo prudente ("una sola cuenta") y era justo al
+    // revés, porque las dos no contestan la misma pregunta: `pointsByEntry`
+    // dice cuánto daría un recálculo HOY, y la tarjeta tiene que prometer
+    // cuánto va a GRABAR la escritura. Con el salteo silencioso que había
+    // antes se separaban: medido en una temporada de 12, después de promover
+    // la pantalla mostraba al invitado con 5 puntos que no existían en ninguna
+    // fila de `awards` y a su compañero con 3 donde la tabla tenía 5.
+    // `promote_guest` ahora refusa ese caso, y sobre los dos escenarios que SÍ
+    // acepta —invitado suelto en una temporada de 12, e invitado suelto
+    // conviviendo con una pareja toda invitada en una de 8— las dos fuentes
+    // coinciden fila por fila. O sea: leer `awards` hoy no cambia lo que se
+    // ve, cambia DE QUÉ DEPENDE lo que se ve.
+    //
+    // La clasificación en sí —qué estado le toca a cada invitado— vive en
+    // `sumar-state.ts`, que es pura y por eso tiene tests: acá adentro no los
+    // podía tener, y su predicado ya se escribió mal una vez.
+    const guestsForPromotion: GuestPromoteVM[] = canPromote
+      ? guestsToPromote({ guestIds: detail.guestIds, pairs: detail.pairs, frozenPoints, nameOf })
+      : []
+    // La lista de asientos es sólo para el select de "antes de quién" de esa
+    // tarjeta: sin invitados que sumar no hay tarjeta, y armarla es trabajo al
+    // pedo en la fecha cerrada de cualquier temporada sin invitados.
+    const squadSeatsForPromotion: SumarSeatVM[] =
+      guestsForPromotion.length === 0
+        ? []
+        : entries
+            .filter((entry) => entry.kind === 'SQUAD')
+            .sort((a, b) => a.seedPosition - b.seedPosition)
+            .map((entry) => ({ entryId: entry.id, name: entry.displayName }))
 
     body = (
       <div className="flex flex-col gap-4">
@@ -474,6 +527,10 @@ export default async function FechaDetailPage({ params }: PageProps) {
             </p>
           )}
 
+          {guestsForPromotion.length > 0 && (
+            <SumarInvitado seasonId={seasonId} guests={guestsForPromotion} seats={squadSeatsForPromotion} />
+          )}
+
           {note !== null && <p className="text-[12.5px] font-[550] text-muted">{note}</p>}
         </div>
         )}
@@ -489,7 +546,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
             status={status}
             remaining={remainingMatches}
             canReopen={isLastClosed}
-            hasResults={hasResults}
+            loadedResults={loadedResults}
           />
         )}
       </div>

@@ -328,8 +328,8 @@ así que el desempate era **no determinista**: la misma temporada podía dar dos
 tablas distintas.
 
 **Y la lista corta de deuda visible.** Ninguna impide jugar; las cuatro están
-medidas y anotadas en `Aparecidos` del plan 4. Si la próxima sesión viene a
-tocar código, esto es lo que hay:
+medidas y anotadas en `Aparecidos` del plan 4, y la cuarta ya está saldada. Si la
+próxima sesión viene a tocar código, esto es lo que queda:
 
 1. **Plurales en singular:** `"faltan 1 partidos"` (cerrar la fecha) y
    `"jugaron 1 fechas"` (Estadísticas). Los dos salen de copys con `{n}` que el
@@ -339,12 +339,19 @@ tocar código, esto es lo que hay:
    pide "la pareja con mejor récord". La pantalla pone la mejor primera y el
    resto **ordenado por fechas jugadas juntas, no por récord**, así que la
    segunda fila puede decir 0%.
-3. **El mensaje de `reopen_matchday` pide algo imposible.** Dice "Borrala vos
-   antes de reabrir ésta" y **no existe ninguna forma de borrar una fecha** en
-   todo el producto — ni pantalla ni función en `db/`. Con la guarda de la
-   pantalla arreglada ya no se llega ahí desde la UI, pero el mensaje sigue.
-4. **El botón de Google falla hasta que se configure** — ver
+3. **El botón de Google falla hasta que se configure** — ver
    [`despliegue.md`](despliegue.md). O se configura, o se esconde.
+
+**Y una de esa lista que ya está saldada:** ~~el mensaje de `reopen_matchday`
+pedía algo imposible~~. Decía "Borrala vos antes de reabrir ésta" y **no existía
+ninguna forma de borrar una fecha** en todo el producto — ni pantalla ni función
+en `db/`. Ahora existe: `cancel_matchday` (`0012_cancel_matchday.sql`) borra una
+fecha DRAFT u OPEN entera, con presentismo, invitados, parejas, partidos y
+resultados, y "Borrar fecha" está en el armado, en la carga y en el Masters. El
+mensaje pasó a ser literalmente cierto, así que no se tocó: lo que estaba mal era
+que faltara la acción, no las palabras. Lo cerrado sigue afuera —para eso está
+reabrir— y borrar la única fecha de una temporada la devuelve a `SETUP`, que si
+no quedaba "En curso" con cero fechas.
 
 #### Dos cosas rotas que nadie sabía, y ya están arregladas
 

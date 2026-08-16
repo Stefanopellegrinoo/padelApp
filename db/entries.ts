@@ -13,39 +13,85 @@
 import type { Client } from './client'
 import { EdgeError } from './errors'
 
-/** Agrega un asiento al plantel, al final del orden inicial. */
+/**
+ * Agrega un asiento al plantel. `beforeEntryId` es "antes de este asiento": el
+ * default `null` agrega al final, y el RESULTADO es el mismo de siempre para
+ * quien ignora el selector nuevo. El camino no: la autorización se mudó de RLS
+ * al `is_season_admin` explícito de la función (que corre `security definer`),
+ * los viajes a la base pasaron de dos a uno, y por eso mismo los mensajes de
+ * error cambian — una denegación que antes leía "No se pudo agregar el
+ * jugador: new row violates row-level security policy…" ahora es "Sólo quien
+ * organiza la temporada puede agregar un asiento."
+ *
+ * No es una posición numérica: `removeSeat` deja huecos en `seed_position` a
+ * propósito, así que "posición 3" es ambigua y queda vieja apenas alguien más
+ * entra o sale. "Antes de Juan" no.
+ *
+ * Elegir el lugar y correr la cola son dos pasos que tienen que viajar juntos
+ * en UNA transacción, y el cliente de Supabase no tiene eso — por eso los dos
+ * pasos viven en `add_squad_seat` (0013_squad_seat_position.sql) y acá queda
+ * una sola llamada.
+ */
 export async function addSquadSeat(
   supabase: Client,
   seasonId: string,
   displayName: string,
+  beforeEntryId: string | null = null,
 ): Promise<string> {
   const name = displayName.trim()
   if (name.length === 0) throw new EdgeError('El asiento necesita un nombre.')
 
-  const { data: last, error: lastError } = await supabase
-    .from('entries')
-    .select('seed_position')
-    .eq('season_id', seasonId)
-    .eq('kind', 'SQUAD')
-    .order('seed_position', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-  if (lastError) throw new EdgeError(`No se pudo leer el plantel: ${lastError.message}`)
+  const { data, error } = await supabase.rpc('add_squad_seat', {
+    p_season: seasonId,
+    p_name: name,
+    // `p_before` es opcional en el tipo generado (tiene default en SQL), no
+    // nullable: `undefined` omite la clave y deja que el default de la
+    // función decida, que es exactamente "al final".
+    p_before: beforeEntryId ?? undefined,
+  })
+  // El mensaje pasa DERECHO, sin prefijo, igual que el resto de las llamadas a
+  // RPC (`claim_seat` acá abajo, todo `db/matchday.ts`): los `raise` de
+  // `add_squad_seat` ya están escritos en castellano y para que los lea el
+  // admin. Prefijarlos daba "No se pudo agregar el jugador: Ese jugador no
+  // está en el plantel." — dos oraciones peleadas — y, cuando el error no era
+  // uno de los nuestros, pegaba el inglés crudo de Postgres atrás de una
+  // frase en castellano.
+  if (error !== null) throw new EdgeError(error.message)
+  // `data === null` con `error === null` no debería pasar —la función devuelve
+  // el uuid del asiento— pero interpolarlo daba literalmente "undefined".
+  if (data === null) throw new EdgeError('No se pudo agregar el jugador.')
+  return data
+}
 
-  const { data, error } = await supabase
-    .from('entries')
-    .insert({
-      season_id: seasonId,
-      kind: 'SQUAD',
-      display_name: name,
-      seed_position: (last?.seed_position ?? -1) + 1,
-    })
-    .select('id')
-    .single()
-  if (error !== null || data === null) {
-    throw new EdgeError(`No se pudo agregar el jugador: ${error?.message}`)
-  }
-  return data.id
+/**
+ * Promueve al invitado que ya jugó a un asiento del plantel, sin recalcular
+ * nada: si su pareja de esa fecha tiene un award congelado, se lo copia
+ * entero; si no —pareja toda invitada, o nunca quedó en ninguna pareja—, no
+ * se inventa ni se saltea nada más que eso.
+ *
+ * `beforeEntryId` es el mismo mecanismo de posicionamiento que
+ * `addSquadSeat`: "antes de este asiento", default `null` = al final. Los dos
+ * pasos —trabar la fecha CLOSED, correr la cola si hace falta, y sólo
+ * entonces copiar el award— tienen que viajar en UNA transacción, y por eso
+ * viven en `promote_guest` (0014_promote_guest.sql) y acá queda una sola
+ * llamada.
+ */
+export async function promoteGuest(
+  supabase: Client,
+  entryId: string,
+  beforeEntryId: string | null = null,
+): Promise<void> {
+  const { error } = await supabase.rpc('promote_guest', {
+    p_entry: entryId,
+    // Mismo motivo que en `addSquadSeat`: `p_before` es opcional en el tipo
+    // generado (tiene default en SQL), no nullable — `undefined` omite la
+    // clave y deja que el default de la función decida.
+    p_before: beforeEntryId ?? undefined,
+  })
+  // Sin prefijo, igual que `addSquadSeat` y el resto de las llamadas a RPC de
+  // este archivo: los `raise` de `promote_guest` ya están en castellano y
+  // pensados para que los lea el admin.
+  if (error !== null) throw new EdgeError(error.message)
 }
 
 /**

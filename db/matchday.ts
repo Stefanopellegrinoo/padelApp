@@ -625,6 +625,16 @@ export async function redraftMatchday(supabase: Client, matchdayId: string): Pro
   if (error !== null) throw new EdgeError(error.message)
 }
 
+/**
+ * Borra la fecha entera: DRAFT u OPEN, con todo lo que tiene cargado adentro
+ * (asistencias, invitados, parejas, partidos, resultados). CLOSED se
+ * rechaza — `cancel_matchday` valida admin y estado del lado de la base.
+ */
+export async function cancelMatchday(supabase: Client, matchdayId: string): Promise<void> {
+  const { error } = await supabase.rpc('cancel_matchday', { p_matchday: matchdayId })
+  if (error !== null) throw new EdgeError(error.message)
+}
+
 /** Guarda el resultado de un partido. Reemplaza cualquier set anterior en vez de acumularlo. */
 export async function saveResult(
   supabase: Client,

@@ -17,6 +17,7 @@ import {
   saveMatchResult,
   type WriteResult,
 } from './actions'
+import { BorrarFecha } from './borrar'
 
 /** Lo que la carga necesita saber de la fecha, igual para todos sus partidos. */
 export interface CargaContext {
@@ -161,21 +162,35 @@ export function Carga({
  * sólo bajo `status === 'OPEN'`, y `status` es un solo valor — las dos ramas
  * no pueden coexistir nunca. El día que dos confirmaciones convivan en la
  * misma rama de estado, ahí sí hace falta `asking: 'reopen' | 'redraft' | null`.
+ *
+ * La tercera confirmación de esta pantalla —borrar la fecha, también bajo
+ * `OPEN`— vive en `borrar.tsx` con su propio `asking`. Tener un booleano
+ * aparte NO es lo que evita que compitan: es exactamente lo que las deja
+ * convivir, y sin nada más el admin terminaba con las dos abiertas a la vez,
+ * un primario verde y reversible ("Volver al armado") apoyado justo encima de
+ * uno rojo e irreversible ("Borrar"). Lo que las separa es el `!asking` del
+ * montaje de `<BorrarFecha>`, el mismo gate que ya usa el botón de volver al
+ * armado: mientras una confirmación está abierta, la otra ni se dibuja.
  */
 export function CierreFecha({
   context,
   status,
   remaining,
   canReopen,
-  hasResults,
+  loadedResults,
 }: {
   context: CargaContext
   status: 'OPEN' | 'CLOSED'
   /** Partidos sin resultado. `close_matchday` lo vuelve a verificar, y esa es la verificación que manda. */
   remaining: number
   canReopen: boolean
-  /** Si ya hay algún resultado cargado, para el segundo renglón del aviso de "Volver al armado". */
-  hasResults: boolean
+  /**
+   * Partidos CON resultado cargado. Es un conteo y no un booleano porque las
+   * dos confirmaciones destructivas de acá abajo lo usan distinto: "Volver al
+   * armado" sólo necesita saber si hay algo, y "Borrar fecha" nombra cuántos
+   * se pierden.
+   */
+  loadedResults: number
 }) {
   const [error, setError] = useState<string | null>(null)
   const [asking, setAsking] = useState(false)
@@ -233,7 +248,7 @@ export function CierreFecha({
               dijera sería una promesa falsa: se caen igual en cuanto se toca
               un tilde de presente (`toggleAttendance` → `syncGuestSeat` →
               `clearPairs`), que es justo lo que se viene a hacer acá. */}
-          {hasResults && (
+          {loadedResults > 0 && (
             <p className="text-[12.5px] font-bold">
               Ya hay resultados cargados: si cambiás quién juega o volvés a sortear, se borran.
             </p>
@@ -260,6 +275,10 @@ export function CierreFecha({
             </button>
           </div>
         </div>
+      )}
+
+      {status === 'OPEN' && !asking && (
+        <BorrarFecha seasonId={seasonId} matchdayId={matchdayId} loadedResults={loadedResults} />
       )}
 
       {status === 'CLOSED' && canReopen && !asking && (

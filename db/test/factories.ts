@@ -1,5 +1,5 @@
 import { defaultConfig } from '../../core/config'
-import type { SeasonConfig } from '../../core/types'
+import type { DisciplineId, SeasonConfig } from '../../core/types'
 import { adminClient } from './admin'
 import type { Json } from '../database.types'
 import type { TestUser } from './users'
@@ -25,9 +25,9 @@ interface CreatedSeason {
   /** Un entry por cada id de `squad`, en el mismo orden. */
   entryIds: string[]
   /** Un id por cada spec de `disciplines`, en el mismo orden. */
-  disciplineIds: string[]
+  disciplineIds: DisciplineId[]
   /** La primera. Los archivos `*.db.test.ts` que ya existen leen ésta y nada más. */
-  disciplineId: string
+  disciplineId: DisciplineId
 }
 
 // Arma una temporada entera con la llave de service_role: es escenario para un
@@ -53,7 +53,7 @@ export async function createSeason({
     throw new Error(`No se pudo crear la temporada de test: ${seasonError?.message}`)
   }
 
-  const disciplineIds: string[] = []
+  const disciplineIds: DisciplineId[] = []
   for (const [index, spec] of disciplines.entries()) {
     const { data: discipline, error: disciplineError } = await db
       .from('disciplines')
@@ -69,7 +69,9 @@ export async function createSeason({
     if (disciplineError || discipline === null) {
       throw new Error(`No se pudo crear la disciplina de test: ${disciplineError?.message}`)
     }
-    disciplineIds.push(discipline.id)
+    // Único cast de este archivo (N2): acá nace el `DisciplineId` que
+    // consume el resto de la suite de tests.
+    disciplineIds.push(discipline.id as DisciplineId)
   }
   const disciplineId = disciplineIds[0]
   if (disciplineId === undefined) {

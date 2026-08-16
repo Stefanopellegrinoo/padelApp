@@ -23,6 +23,7 @@ export { MIN_PLAYERS, MAX_PLAYERS, MASTERS_SIZE, MASTERS_MATCHES } from './const
 // so claiming a profile is one update and the tournament's history is untouched.
 export type {
   EntryId,
+  DisciplineId,
   MatchFormat,
   SeasonConfig,
   Pair,

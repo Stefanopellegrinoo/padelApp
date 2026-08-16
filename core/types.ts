@@ -1,6 +1,21 @@
 /** A seat in a season. Matches always reference this, never a player. */
 export type EntryId = string
 
+/**
+ * Distinto NOMINALMENTE de un season id (N2, verify-report ronda 2 de
+ * torneo-multi-disciplina): son dos strings con la misma forma (uuid) pero
+ * significados que no se pueden confundir sin que el compilador lo note.
+ * `awardsBefore`/`closedHistory` (db/season.ts) cambiaron su 2º parámetro de
+ * "season" a "discipline" con el MISMO tipo (`string`) — un caller que
+ * pasara el id equivocado compilaba limpio. La marca se aplica en la FUENTE
+ * (`db/read.ts: toMatchdaySummary`, `db/matchday.ts: requireMatchday`,
+ * `db/season.ts: defaultDisciplineId`): de ahí en más `disciplineId` ya es
+ * `DisciplineId` y `seasonId` sigue siendo `string` a secas, así que pasar
+ * uno por el otro es error de compilación en el call site, sin necesitar un
+ * cast repetido en cada uno.
+ */
+export type DisciplineId = string & { readonly __brand: 'DisciplineId' }
+
 export interface MatchFormat {
   setsToWin: number
   gamesPerSet: number

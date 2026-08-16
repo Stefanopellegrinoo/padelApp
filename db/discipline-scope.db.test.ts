@@ -253,6 +253,43 @@ describe('estado derivado real: abrir una fecha por el camino real (C1, C2)', ()
   })
 })
 
+// ── N7 (verify-report ronda 2): createMatchday, cobertura dedicada ─────────
+// El test de C1/C2 de arriba YA ejercita esto de rebote (createMatchday con
+// 2 disciplinas, antes rompía con PGRST116 vía `.single()` sobre season_id),
+// pero su asunto declarado es derivedSeasonStatus, no createMatchday. Este
+// test tiene una sola pregunta: ¿a qué disciplina queda scopeada la fecha
+// nueva? — y la responde leyendo `discipline_id` directo, no por rebote de
+// otro assert.
+describe('createMatchday resuelve la disciplina por defecto (N7)', () => {
+  it('la fecha nueva queda scopeada a la primera disciplina por position, no a la última creada', async () => {
+    const admin = await createTestUser()
+    const filler = await fillerPlayers(8)
+    // FIFA con position 0 (se crea primera), PADEL con position 1: si
+    // createMatchday resolviera por orden de creación en vez de por
+    // `position` (el criterio de `defaultDisciplineId`), este test lo
+    // detectaría igual porque acá coinciden — la próxima aserción no.
+    const { seasonId, disciplineIds } = await createSeason({
+      admin,
+      config: defaultConfig(8),
+      squad: filler,
+      disciplines: [{ kind: 'FIFA' }, { kind: 'PADEL' }],
+    })
+    const [firstByPosition] = disciplineIds
+    if (firstByPosition === undefined) throw new Error('Falta disciplina.')
+
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
+
+    const db = adminClient()
+    const { data: matchday, error } = await db
+      .from('matchdays')
+      .select('discipline_id')
+      .eq('id', matchdayId)
+      .single()
+    if (error || matchday === null) throw new Error(error?.message)
+    expect(matchday.discipline_id).toBe(firstByPosition)
+  })
+})
+
 // ── C4 — lecturas de producción scopeadas por disciplina, no por temporada ─
 // Antes del fix, las cinco funciones de abajo filtraban `matchdays` por
 // `season_id`: con dos disciplinas compartiendo número de fecha (posible

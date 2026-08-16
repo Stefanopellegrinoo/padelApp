@@ -125,6 +125,56 @@ export type Database = {
           },
         ]
       }
+      disciplines: {
+        Row: {
+          allows_draw: boolean
+          config: Json
+          created_at: string
+          has_masters: boolean
+          id: string
+          kind: string
+          pair_size: number
+          position: number
+          season_id: string
+          status: string
+          weight: number
+        }
+        Insert: {
+          allows_draw?: boolean
+          config: Json
+          created_at?: string
+          has_masters?: boolean
+          id?: string
+          kind: string
+          pair_size?: number
+          position?: number
+          season_id: string
+          status?: string
+          weight?: number
+        }
+        Update: {
+          allows_draw?: boolean
+          config?: Json
+          created_at?: string
+          has_masters?: boolean
+          id?: string
+          kind?: string
+          pair_size?: number
+          position?: number
+          season_id?: string
+          status?: string
+          weight?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "disciplines_season_id_fkey"
+            columns: ["season_id"]
+            isOneToOne: false
+            referencedRelation: "seasons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       entries: {
         Row: {
           created_at: string
@@ -215,6 +265,7 @@ export type Database = {
       matchdays: {
         Row: {
           closed_at: string | null
+          discipline_id: string | null
           id: string
           kind: string
           number: number
@@ -224,6 +275,7 @@ export type Database = {
         }
         Insert: {
           closed_at?: string | null
+          discipline_id?: string | null
           id?: string
           kind?: string
           number: number
@@ -233,6 +285,7 @@ export type Database = {
         }
         Update: {
           closed_at?: string | null
+          discipline_id?: string | null
           id?: string
           kind?: string
           number?: number
@@ -241,6 +294,13 @@ export type Database = {
           status?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "matchdays_discipline_season"
+            columns: ["discipline_id", "season_id"]
+            isOneToOne: false
+            referencedRelation: "disciplines"
+            referencedColumns: ["id", "season_id"]
+          },
           {
             foreignKeyName: "matchdays_season_id_fkey"
             columns: ["season_id"]

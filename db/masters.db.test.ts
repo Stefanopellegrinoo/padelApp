@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import { describe, expect, it } from 'vitest'
 import {
   computeRanking,
@@ -6,10 +7,12 @@ import {
   mastersQualifiers,
   samePair,
   snapshotForMatchday,
+  type DisciplineId,
   type MastersFour,
   type Pair,
   type SeasonConfig,
 } from '@/core'
+import type { Json } from './database.types'
 import {
   addGuest,
   clearPairs,
@@ -55,11 +58,32 @@ async function fillerPlayers(count: number): Promise<string[]> {
   return ids
 }
 
+/**
+ * SQL crudo contra la Postgres local, adentro del contenedor del stack de
+ * Supabase. Mismo patrón y misma razón que `db/squad-position.db.test.ts`:
+ * forzar los GUCs del planner (`enable_indexscan`, etc.) sólo se puede desde
+ * una sesión de `psql`, no desde el cliente de test (PostgREST no expone
+ * `set`). Acá además impersona al admin con `request.jwt.claim.sub` — el
+ * mismo GUC que lee `auth.uid()` (0002_rls.sql) — porque `create_masters` es
+ * `security definer` y su propio guard (`is_season_admin`) depende de él.
+ */
+function localSql(sql: string): string {
+  return execFileSync(
+    'docker',
+    [
+      'exec', '-i', 'supabase_db_padelApp',
+      'psql', '-U', 'postgres', '-d', 'postgres',
+      '-X', '-q', '-A', '-t', '-v', 'ON_ERROR_STOP=1', '-f', '-',
+    ],
+    { input: sql, encoding: 'utf8' },
+  )
+}
+
 interface Scene {
   admin: TestUser
   player: TestUser
   seasonId: string
-  disciplineId: string
+  disciplineId: DisciplineId
   squad: string[]
 }
 
@@ -106,7 +130,7 @@ async function playRegularSeason(admin: TestUser, seasonId: string, squad: strin
 async function qualifiersOf(
   admin: TestUser,
   seasonId: string,
-  disciplineId: string,
+  disciplineId: DisciplineId,
   mastersNumber: number,
 ): Promise<MastersFour> {
   const config = (await seasonHeader(admin.client, seasonId)).config
@@ -272,6 +296,97 @@ describe('the masters', () => {
 
     const after = await matchdayDetail(admin.client, mastersId)
     expect(mastersChampion(four, after.matches)).toBe(target)
+  })
+})
+
+// ── N1 (verify-report ronda 2): create_masters resuelve la disciplina ──────
+
+describe('create_masters discipline resolution (N1)', () => {
+  // 0016_matchday_scope.sql:85 resolvía `v_discipline` con un
+  // `select ... into` SIN `order by` ni `limit`: con una sola disciplina por
+  // temporada (el tripwire de 0015) daba siempre lo mismo por casualidad,
+  // pero con dos filas el resultado depende del plan que elija el planner.
+  // `defaultDisciplineId` (db/season.ts) ya tiene el criterio correcto
+  // (`position, created_at`); create_masters tiene que coincidir SIEMPRE, no
+  // sólo cuando el planner elige Index Scan.
+  it('picks the same discipline as defaultDisciplineId even under a Seq Scan over a reversed heap', async () => {
+    const config = shortSeason()
+    const admin = await createTestUser()
+    const filler = await fillerPlayers(config.squadSize - 1)
+    const { seasonId, entryIds: squad } = await createSeason({
+      admin,
+      config,
+      squad: [admin.playerId, ...filler],
+      disciplines: [{ kind: 'PADEL' }],
+    })
+
+    // Heap invertido respecto de `position`, mismo truco que
+    // squad-position.db.test.ts: un solo insert múltiple escribe las dos
+    // filas en el orden del array, así que FIFA (position 1) queda
+    // físicamente ANTES que PADEL (position 0). `order by position` sigue
+    // dando PADEL; un Seq Scan sin `order by` da FIFA.
+    const db = adminClient()
+    await db.from('disciplines').delete().eq('season_id', seasonId)
+    const { data: disciplines, error: disciplinesError } = await db
+      .from('disciplines')
+      .insert([
+        { season_id: seasonId, kind: 'FIFA', config: config as unknown as Json, position: 1 },
+        { season_id: seasonId, kind: 'PADEL', config: config as unknown as Json, position: 0 },
+      ])
+      .select('id, kind')
+    if (disciplinesError || disciplines === null) throw new Error(disciplinesError?.message)
+    const padelId = disciplines.find((row) => row.kind === 'PADEL')?.id
+    const fifaId = disciplines.find((row) => row.kind === 'FIFA')?.id
+    if (padelId === undefined || fifaId === undefined) throw new Error('Faltó una disciplina de test.')
+
+    // El heap quedó como se pide: no se asume, se mide (mismo criterio que
+    // squad-position.db.test.ts:228-230).
+    const heap = localSql(
+      `select kind from public.disciplines where season_id = '${seasonId}' order by ctid;`,
+    )
+      .trim()
+      .split('\n')
+    expect(heap).toEqual(['FIFA', 'PADEL'])
+
+    // El criterio correcto (el que ya usa defaultDisciplineId) sigue dando
+    // PADEL pase lo que pase con el heap: es la referencia contra la que
+    // create_masters tiene que coincidir.
+    const { data: authoritative } = await db
+      .from('disciplines')
+      .select('id')
+      .eq('season_id', seasonId)
+      .order('position', { ascending: true })
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+    expect(authoritative?.id).toBe(padelId)
+
+    // Cierra la única fecha regular de PADEL — FIFA se queda sin ninguna. Si
+    // create_masters resolviera FIFA por error, vería 0 fechas cerradas en
+    // vez de la 1 que pide `regularMatchdays` y explotaría con "faltan 1".
+    await playRegularSeason(admin, seasonId, squad)
+
+    // GUCs y llamada en la MISMA sesión de psql, mismo motivo que
+    // squad-position.db.test.ts:240-243: sin index scan ni bitmap scan al
+    // motor no le queda otra que el Seq Scan, que recorre el heap tal cual
+    // quedó escrito arriba.
+    const output = localSql(`
+      set enable_indexscan = off;
+      set enable_bitmapscan = off;
+      set enable_indexonlyscan = off;
+      set request.jwt.claim.sub = '${admin.userId}';
+      select public.create_masters('${seasonId}'::uuid, '2026-12-20'::date);
+    `)
+    const mastersId = output.trim()
+    expect(mastersId).toMatch(/^[0-9a-f-]{36}$/)
+
+    const { data: masters, error: mastersError } = await db
+      .from('matchdays')
+      .select('discipline_id')
+      .eq('id', mastersId)
+      .single()
+    if (mastersError || masters === null) throw new Error(mastersError?.message)
+    expect(masters.discipline_id).toBe(padelId)
   })
 })
 

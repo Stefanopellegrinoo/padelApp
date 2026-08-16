@@ -1,4 +1,4 @@
-import type { Award, EntryId, MatchdayHistory, SeasonConfig } from '@/core'
+import type { Award, DisciplineId, EntryId, MatchdayHistory, SeasonConfig } from '@/core'
 import type { Database, Json } from './database.types'
 import { EdgeError } from './errors'
 import { assertValidConfig } from './validate'
@@ -54,7 +54,7 @@ export async function squadSeedOrder(supabase: Client, seasonId: string): Promis
  * lectura que hoy devuelve `[]`/`new Map()` para un extraño sigue
  * devolviendo eso; una escritura que necesita un destino sí tira.
  */
-export async function defaultDisciplineId(supabase: Client, seasonId: string): Promise<string | null> {
+export async function defaultDisciplineId(supabase: Client, seasonId: string): Promise<DisciplineId | null> {
   const { data, error } = await supabase
     .from('disciplines')
     .select('id')
@@ -64,13 +64,15 @@ export async function defaultDisciplineId(supabase: Client, seasonId: string): P
     .limit(1)
     .maybeSingle()
   if (error) throw new EdgeError(`No se pudo leer la disciplina de la temporada: ${error.message}`)
-  return data?.id ?? null
+  // Única marca de esta función (N2): de acá en más el id que circula es
+  // `DisciplineId`, no `string` a secas — así lo lee todo el que lo reciba.
+  return (data?.id as DisciplineId | undefined) ?? null
 }
 
 /** Awards of the closed matchdays before `number` of one discipline's own calendar, keyed by matchday number. */
 export async function awardsBefore(
   supabase: Client,
-  disciplineId: string,
+  disciplineId: DisciplineId,
   number: number,
 ): Promise<Map<number, Award[]>> {
   const { data: closed, error: closedError } = await supabase
@@ -109,7 +111,7 @@ export async function awardsBefore(
 /** The matchday at `number` of one discipline's own calendar, or null when it does not exist or is not CLOSED. */
 export async function closedHistory(
   supabase: Client,
-  disciplineId: string,
+  disciplineId: DisciplineId,
   number: number,
 ): Promise<MatchdayHistory | null> {
   const { data: matchday, error: matchdayError } = await supabase

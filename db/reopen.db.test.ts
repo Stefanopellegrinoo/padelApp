@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeRanking, defaultConfig, type SeasonConfig } from '@/core'
+import { computeRanking, defaultConfig, type DisciplineId, type SeasonConfig } from '@/core'
 import {
   addGuest,
   cancelMatchday,
@@ -39,7 +39,7 @@ async function fillerPlayers(count: number): Promise<string[]> {
 async function buildSeasonWithSquad(
   config: SeasonConfig,
   squadSize: number,
-): Promise<{ admin: TestUser; seasonId: string; disciplineId: string; squad: string[] }> {
+): Promise<{ admin: TestUser; seasonId: string; disciplineId: DisciplineId; squad: string[] }> {
   const admin = await createTestUser()
   const players = await fillerPlayers(squadSize)
   const { seasonId, disciplineId, entryIds } = await createSeason({ admin, config, squad: players })

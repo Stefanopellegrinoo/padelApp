@@ -4,6 +4,7 @@ import {
   defaultConfig,
   samePair,
   snapshotForMatchday,
+  type DisciplineId,
   type Pair,
   type SeasonConfig,
 } from '@/core'
@@ -58,7 +59,7 @@ async function createWalkthroughSeason(
   squadSize: number,
 ): Promise<{
   seasonId: string
-  disciplineId: string
+  disciplineId: DisciplineId
   entryIds: string[]
   openSeatEntryId: string
   inviteToken: string
@@ -106,7 +107,9 @@ async function createWalkthroughSeason(
   if (openSeatEntryId === undefined) throw new Error('Falta el asiento libre de test.')
   return {
     seasonId: season.id,
-    disciplineId: discipline.id,
+    // Único cast de esta función (N2): esta temporada no pasa por
+    // db/test/factories.ts, así que nace su propio DisciplineId acá.
+    disciplineId: discipline.id as DisciplineId,
     entryIds,
     openSeatEntryId,
     inviteToken: season.invite_token,
@@ -171,7 +174,7 @@ const sortByEntry = <T extends { entry_id: string }>(rows: T[]): T[] =>
 async function rankingBefore(
   admin: TestUser,
   seasonId: string,
-  disciplineId: string,
+  disciplineId: DisciplineId,
   matchdayNumber: number,
   config: SeasonConfig,
 ) {
@@ -199,7 +202,7 @@ function championPairOf(awards: AwardRow[], pairs: Pair[]): Pair | null {
 async function playByRankRule(
   admin: TestUser,
   seasonId: string,
-  disciplineId: string,
+  disciplineId: DisciplineId,
   matchdayId: string,
   matchdayNumber: number,
   config: SeasonConfig,
@@ -239,7 +242,7 @@ interface PlayMatchdayOptions {
 async function playMatchday(
   admin: TestUser,
   seasonId: string,
-  disciplineId: string,
+  disciplineId: DisciplineId,
   matchdayId: string,
   matchdayNumber: number,
   config: SeasonConfig,
@@ -272,7 +275,7 @@ async function playMatchday(
 interface WalkthroughSeason {
   admin: TestUser
   seasonId: string
-  disciplineId: string
+  disciplineId: DisciplineId
   config: SeasonConfig
   squad: string[]
   openSeatEntryId: string

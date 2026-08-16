@@ -13,6 +13,7 @@
 import { seasonStatusOf } from '@/core'
 import type {
   Award,
+  DisciplineId,
   EntryId,
   MatchResult,
   Pair,
@@ -82,7 +83,7 @@ export interface MatchdaySummary {
   status: 'DRAFT' | 'OPEN' | 'CLOSED'
   playedOn: string | null
   /** Para que quien ya tiene esta fila no tenga que resolver la disciplina de nuevo (`awardsBefore`/`closedHistory` la piden). */
-  disciplineId: string
+  disciplineId: DisciplineId
 }
 
 export interface MatchdayDetail {
@@ -137,7 +138,9 @@ function toMatchdaySummary(row: MatchdayRow): MatchdaySummary {
     kind: row.kind as 'REGULAR' | 'MASTERS',
     status: row.status as 'DRAFT' | 'OPEN' | 'CLOSED',
     playedOn: row.played_on,
-    disciplineId: row.discipline_id,
+    // Única marca de esta función (N2): de acá en más `disciplineId` es
+    // `DisciplineId`, no `string` a secas.
+    disciplineId: row.discipline_id as DisciplineId,
   }
 }
 

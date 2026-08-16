@@ -9,6 +9,7 @@ import {
   previousContext,
   snapshotForMatchday,
   type Award,
+  type DisciplineId,
   type EntryId,
   type MatchFormat,
   type MatchResult,
@@ -38,7 +39,19 @@ import {
   type PairLock,
 } from './validate'
 
-type MatchdayRow = Database['public']['Tables']['matchdays']['Row']
+type RawMatchdayRow = Database['public']['Tables']['matchdays']['Row']
+/**
+ * `discipline_id` distinguido NOMINALMENTE de `season_id` (N2, verify-report
+ * ronda 2 de torneo-multi-disciplina): en la fila cruda que devuelve Supabase
+ * los dos son el mismo tipo (`string`/uuid), y `awardsBefore`/`closedHistory`
+ * cambiaron su 2º parámetro de "season" a "discipline" sin cambiar de tipo —
+ * un caller que pasara `matchday.season_id` donde correspondía
+ * `matchday.discipline_id` compilaba limpio. La marca se aplica UNA vez, acá,
+ * al leer la fila (`requireMatchday`); de ahí en más `matchday.discipline_id`
+ * ya es `DisciplineId` y `matchday.season_id` sigue siendo `string` a secas,
+ * así que confundirlos es error de compilación en el call site.
+ */
+type MatchdayRow = Omit<RawMatchdayRow, 'discipline_id'> & { discipline_id: DisciplineId }
 
 /**
  * What every operation on a matchday needs, whatever it is going to do with it.
@@ -697,7 +710,9 @@ async function requireMatchday(supabase: Client, matchdayId: string): Promise<Ma
     .maybeSingle()
   if (error) throw new EdgeError(`No se pudo leer la fecha: ${error.message}`)
   if (data === null) throw new EdgeError('La fecha no existe.')
-  return data
+  // Único cast de todo el archivo (ver el comentario de `MatchdayRow` arriba):
+  // acá es donde `discipline_id` pasa de `string` crudo a `DisciplineId`.
+  return data as MatchdayRow
 }
 
 async function guestsOf(supabase: Client, matchdayId: string): Promise<GuestSeat[]> {

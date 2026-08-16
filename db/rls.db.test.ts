@@ -41,9 +41,18 @@ async function buildMatch(seasonId: string, entryIds: string[], status: 'OPEN' |
     throw new Error('Hacen falta 4 entries para armar un partido de test.')
   }
 
+  // Una sola disciplina por temporada mientras el tripwire (0015) siga
+  // puesto: no hace falta que el caller la pase, se la busca acá.
+  const { data: discipline, error: disciplineError } = await db
+    .from('disciplines')
+    .select('id')
+    .eq('season_id', seasonId)
+    .single()
+  if (disciplineError || discipline === null) throw new Error(disciplineError?.message)
+
   const { data: matchday, error: matchdayError } = await db
     .from('matchdays')
-    .insert({ season_id: seasonId, number: 1, status })
+    .insert({ season_id: seasonId, discipline_id: discipline.id, number: 1, status })
     .select('id')
     .single()
   if (matchdayError || matchday === null) throw new Error(matchdayError?.message)
@@ -260,7 +269,7 @@ describe('RLS — escritura', () => {
 
   it('el admin escribe todo lo de su torneo', async () => {
     const admin = await createTestUser()
-    const { seasonId } = await createSeason({ admin })
+    const { seasonId, disciplineId } = await createSeason({ admin })
 
     const rename = await admin.client
       .from('seasons')
@@ -284,7 +293,7 @@ describe('RLS — escritura', () => {
 
     const newMatchday = await admin.client
       .from('matchdays')
-      .insert({ season_id: seasonId, number: 1 })
+      .insert({ season_id: seasonId, discipline_id: disciplineId, number: 1 })
       .select()
     expect(newMatchday.error).toBeNull()
     expect(newMatchday.data).toHaveLength(1)
@@ -308,11 +317,11 @@ describe('RLS — escritura', () => {
 
   it('nadie puede mover matchdays.status con un update directo', async () => {
     const admin = await createTestUser()
-    const { seasonId } = await createSeason({ admin })
+    const { seasonId, disciplineId } = await createSeason({ admin })
     const db = adminClient()
     const { data: matchday, error: matchdayError } = await db
       .from('matchdays')
-      .insert({ season_id: seasonId, number: 1 })
+      .insert({ season_id: seasonId, discipline_id: disciplineId, number: 1 })
       .select('id')
       .single()
     if (matchdayError || matchday === null) throw new Error(matchdayError?.message)
@@ -349,7 +358,7 @@ describe('RLS — escritura', () => {
     const admin = await createTestUser()
     const member = await createTestUser()
     const filler = await fillerPlayers(3)
-    const { seasonId, entryIds } = await createSeason({
+    const { seasonId, disciplineId, entryIds } = await createSeason({
       admin,
       squad: [member.playerId, ...filler],
     })
@@ -390,7 +399,7 @@ describe('RLS — escritura', () => {
 
     const matchdays = await member.client
       .from('matchdays')
-      .insert({ season_id: seasonId, number: 99 })
+      .insert({ season_id: seasonId, discipline_id: disciplineId, number: 99 })
       .select()
     expect(matchdays.data, 'tabla matchdays').toBeNull()
     expect(matchdays.error?.code, 'tabla matchdays').toBe('42501')

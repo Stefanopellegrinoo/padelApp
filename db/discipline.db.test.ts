@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { createMatchday } from './matchday'
 import { adminClient } from './test/admin'
 import { createSeason } from './test/factories'
 import { createTestUser } from './test/users'
@@ -65,5 +66,55 @@ describe('disciplines', () => {
 
     expect(error).toBeNull()
     expect(data?.id).toBeTypeOf('string')
+  })
+})
+
+// ── PR 2 — matchdays scopeadas por disciplina ───────────────────────────────
+// El tripwire de PR 1 sigue puesto: todavía no hay forma de tener dos
+// disciplinas en la misma temporada para probar el scoping en los dos
+// sentidos (eso es PR 4, cuando cae el índice). Lo que sí es de PR 2: que
+// `createMatchday` escribe `discipline_id` sola, que `matchday_discipline`
+// existe y contesta bien, y que la columna es de verdad NOT NULL.
+describe('matchdays.discipline_id (PR 2)', () => {
+  it('createMatchday escribe discipline_id sin que el caller lo pase (REQ-D3-1/2)', async () => {
+    const admin = await createTestUser()
+    const { seasonId, disciplineId } = await createSeason({ admin })
+
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
+
+    const db = adminClient()
+    const { data, error } = await db
+      .from('matchdays')
+      .select('discipline_id')
+      .eq('id', matchdayId)
+      .single()
+    if (error || data === null) throw new Error(error?.message)
+    expect(data.discipline_id).toBe(disciplineId)
+  })
+
+  it('matchday_discipline(p_matchday) devuelve la disciplina de la fecha', async () => {
+    const admin = await createTestUser()
+    const { seasonId, disciplineId } = await createSeason({ admin })
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
+
+    const { data, error } = await admin.client.rpc('matchday_discipline', { p_matchday: matchdayId })
+
+    expect(error).toBeNull()
+    expect(data).toBe(disciplineId)
+  })
+
+  it('discipline_id es NOT NULL: un insert que lo omite falla (REQ-NR-3)', async () => {
+    const admin = await createTestUser()
+    const { seasonId } = await createSeason({ admin })
+
+    const db = adminClient()
+    // `database.types.ts` ya exige discipline_id acá — bien, es justo lo que
+    // este test pinnea —, pero el caso real es un caller que lo saltea (SQL a
+    // mano, un tipo desactualizado). El cast fuerza ese payload inválido.
+    const { error } = await db
+      .from('matchdays')
+      .insert({ season_id: seasonId, number: 1 } as never)
+
+    expect(error?.code).toBe('23502')
   })
 })

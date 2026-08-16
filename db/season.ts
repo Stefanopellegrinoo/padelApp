@@ -204,6 +204,19 @@ export async function createSeason(
     throw new EdgeError(`No se pudo crear el torneo: ${seasonError?.message}`)
   }
 
+  // Una temporada nace con exactamente una disciplina PADEL con su misma
+  // config — el mismo backfill 1:1 que hizo 0015_disciplines.sql para las
+  // temporadas que ya existían. El wizard multi-disciplina (PR 11) es el que
+  // deja elegir más de una; hasta entonces toda temporada nueva necesita
+  // ésta para que `createMatchday` pueda resolver su `discipline_id`.
+  const { error: disciplineError } = await supabase
+    .from('disciplines')
+    .insert({ season_id: season.id, kind: 'PADEL', config: config as unknown as Json })
+  if (disciplineError !== null) {
+    await supabase.from('seasons').delete().eq('id', season.id)
+    throw new EdgeError(`No se pudo crear la disciplina del torneo: ${disciplineError.message}`)
+  }
+
   const { error: entriesError } = await supabase.from('entries').insert(
     squadNames.map((seat, index) => ({
       season_id: season.id,

@@ -88,7 +88,7 @@ describe('db/read', () => {
     stranger = await createTestUser()
 
     const fillers = await fillerPlayers(7)
-    const { seasonId: sid, entryIds } = await createSeason({
+    const { seasonId: sid, disciplineId, entryIds } = await createSeason({
       admin,
       config: defaultConfig(8),
       squad: [member.playerId, ...fillers],
@@ -117,7 +117,13 @@ describe('db/read', () => {
     const db = adminClient()
     const { data: masters, error: mastersError } = await db
       .from('matchdays')
-      .insert({ season_id: seasonId, number: mastersNumber, kind: 'MASTERS', status: 'CLOSED' })
+      .insert({
+        season_id: seasonId,
+        discipline_id: disciplineId,
+        number: mastersNumber,
+        kind: 'MASTERS',
+        status: 'CLOSED',
+      })
       .select('id')
       .single()
     if (mastersError || masters === null) throw new Error(mastersError?.message)

@@ -172,16 +172,35 @@ export async function setMatchdayDate(
   }
 }
 
-/** La siguiente fecha por número. Escribe `played_on`: la columna existe y es el dato que muestran todas las pantallas. */
+/**
+ * La siguiente fecha por número. Escribe `played_on`: la columna existe y es
+ * el dato que muestran todas las pantallas.
+ *
+ * `discipline_id` no lo manda el caller: se resuelve solo a partir de
+ * `seasonId`. Mientras el tripwire `disciplines_one_per_season` (0015) siga
+ * puesto, una temporada tiene exactamente una disciplina, así que la lectura
+ * es inequívoca. Cuando eso deje de ser cierto (PR 11, wizard multi-disciplina)
+ * esta función necesita un parámetro nuevo — hoy no lo tiene porque no hay
+ * ningún caller que pueda elegir entre dos.
+ */
 export async function createMatchday(
   supabase: Client,
   seasonId: string,
   playedOn: string,
 ): Promise<string> {
+  const { data: discipline, error: disciplineError } = await supabase
+    .from('disciplines')
+    .select('id')
+    .eq('season_id', seasonId)
+    .single()
+  if (disciplineError || discipline === null) {
+    throw new EdgeError(`No se pudo leer la disciplina de la temporada: ${disciplineError?.message}`)
+  }
+
   const { data: last, error: lastError } = await supabase
     .from('matchdays')
     .select('number')
-    .eq('season_id', seasonId)
+    .eq('discipline_id', discipline.id)
     .order('number', { ascending: false })
     .limit(1)
     .maybeSingle()
@@ -190,12 +209,12 @@ export async function createMatchday(
 
   const { data, error } = await supabase
     .from('matchdays')
-    .insert({ season_id: seasonId, number, played_on: playedOn })
+    .insert({ season_id: seasonId, discipline_id: discipline.id, number, played_on: playedOn })
     .select('id')
     .single()
   if (error !== null) {
     // El índice `matchdays_one_live` rebota esto cuando ya hay otra fecha sin
-    // cerrar en la temporada.
+    // cerrar en esta disciplina.
     if (error.code === '23505') {
       throw new EdgeError('Ya hay una fecha sin cerrar en esta temporada.')
     }

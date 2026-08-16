@@ -37,6 +37,11 @@ async function createOpenSeason(
     .single()
   if (seasonError || season === null) throw new Error(seasonError?.message)
 
+  const { error: disciplineError } = await db
+    .from('disciplines')
+    .insert({ season_id: season.id, kind: 'PADEL', config: defaultConfig(seatNames.length) as unknown as Json })
+  if (disciplineError) throw new Error(disciplineError.message)
+
   const entryIds: string[] = []
   for (const [index, name] of seatNames.entries()) {
     const { data: entry, error: entryError } = await db
@@ -53,9 +58,16 @@ async function createOpenSeason(
 
 async function addGuestEntry(seasonId: string): Promise<string> {
   const db = adminClient()
+  const { data: discipline, error: disciplineError } = await db
+    .from('disciplines')
+    .select('id')
+    .eq('season_id', seasonId)
+    .single()
+  if (disciplineError || discipline === null) throw new Error(disciplineError?.message)
+
   const { data: matchday, error: matchdayError } = await db
     .from('matchdays')
-    .insert({ season_id: seasonId, number: 1 })
+    .insert({ season_id: seasonId, discipline_id: discipline.id, number: 1 })
     .select('id')
     .single()
   if (matchdayError || matchday === null) throw new Error(matchdayError?.message)

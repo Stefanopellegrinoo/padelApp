@@ -1,10 +1,12 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 import type { SetScore } from '@/core'
 import { EdgeError } from '@/db/errors'
 import {
   addGuest,
+  cancelMatchday,
   clearPairs,
   closeMatchday,
   createMasters,
@@ -228,6 +230,30 @@ export async function redraftTheMatchday(
   return onMatchday(seasonId, matchdayNumber, async (supabase) => {
     await redraftMatchday(supabase, matchdayId)
   })
+}
+
+/**
+ * Borra la fecha entera y vuelve a la lista de fechas.
+ *
+ * No pasa por `onMatchday`: ésa revalida `/fechas/{n}`, la página que la
+ * fecha acaba de dejar de existir — no tiene nada que mostrar. Sigue el
+ * patrón de `removeTournament` (ajustes/actions.ts): `redirect` va FUERA del
+ * try porque tira por dentro para cortar el render, y adentro el catch se lo
+ * comería.
+ */
+export async function cancelTheMatchday(seasonId: string, matchdayId: string): Promise<WriteResult> {
+  try {
+    const supabase = await serverClient()
+    await cancelMatchday(supabase, matchdayId)
+  } catch (error) {
+    if (error instanceof EdgeError) return { ok: false, error: error.message }
+    throw error
+  }
+
+  revalidatePath(`/torneo/${seasonId}/fechas`)
+  revalidatePath(`/torneo/${seasonId}`)
+  revalidatePath('/torneos')
+  redirect(`/torneo/${seasonId}/fechas`)
 }
 
 /**

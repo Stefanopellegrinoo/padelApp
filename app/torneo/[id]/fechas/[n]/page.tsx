@@ -155,6 +155,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
         matchdayNumber={matchday.number}
         qualifiers={qualifiers}
         generated={detail.matches.length > 0}
+        loadedResults={detail.matches.filter((match) => match.sets.length > 0).length}
       />
     )
   }
@@ -241,6 +242,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
         looseGuests={looseGuests}
         guestPairs={guestPairs}
         pairs={draftPairs}
+        loadedResults={detail.matches.filter((match) => match.sets.length > 0).length}
       />
     )
   }
@@ -355,11 +357,13 @@ export default async function FechaDetailPage({ params }: PageProps) {
         ? { seasonId, matchdayId: matchday.id, matchdayNumber: matchday.number, format: config.matchFormat }
         : null
     const remainingMatches = detail.matches.filter((match) => match.sets.length === 0).length
-    // Para el aviso de "Volver al armado" (spec: no prometer que se conservan
-    // las parejas si ya hay algo cargado). No sale de `remainingMatches`: una
-    // fecha con resultados a medio cargar tiene `remaining > 0` Y resultados a
-    // la vez, así que hace falta mirar directamente si algún partido tiene sets.
-    const hasResults = detail.matches.some((match) => match.sets.length > 0)
+    // Para los dos avisos destructivos del pie: "Volver al armado" (spec: no
+    // prometer que se conservan las parejas si ya hay algo cargado) y "Borrar
+    // fecha", que nombra cuántos resultados se pierde. No sale de
+    // `remainingMatches`: una fecha con resultados a medio cargar tiene
+    // `remaining > 0` Y resultados a la vez, así que hace falta contar
+    // directamente los partidos que ya tienen sets.
+    const loadedResults = detail.matches.filter((match) => match.sets.length > 0).length
     // "Reabrir fecha" aparece sólo donde `reopen_matchday` va a decir que sí, y
     // eso son DOS de sus guardas, no una:
     //   · no hay una fecha CLOSED posterior (0005_matchday_moves.sql:180-185)
@@ -489,7 +493,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
             status={status}
             remaining={remainingMatches}
             canReopen={isLastClosed}
-            hasResults={hasResults}
+            loadedResults={loadedResults}
           />
         )}
       </div>

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { createMatchday } from './matchday'
+import { derivedSeasonStatus } from './read'
 import { adminClient } from './test/admin'
 import { createSeason } from './test/factories'
 import { createTestUser } from './test/users'
@@ -116,5 +117,30 @@ describe('matchdays.discipline_id (PR 2)', () => {
       .insert({ season_id: seasonId, number: 1 } as never)
 
     expect(error?.code).toBe('23502')
+  })
+})
+
+// ── PR 3 — estado derivado ───────────────────────────────────────────────────
+// El tripwire sigue puesto: acá sólo se prueba el camino de lectura contra
+// UNA disciplina real. El caso completo del spec ("pádel ACTIVE y FIFA
+// SETUP → ACTIVE") ya tiene su prueba unitaria en core/season.test.ts, y su
+// prueba end-to-end con dos disciplinas de verdad vive en PR 4, que es donde
+// el tripwire cae y dos disciplinas concurrentes dejan de ser hipotéticas.
+describe('derivedSeasonStatus (PR 3)', () => {
+  it('temporada recién creada: SETUP', async () => {
+    const admin = await createTestUser()
+    const { seasonId } = await createSeason({ admin })
+
+    expect(await derivedSeasonStatus(admin.client, seasonId)).toBe('SETUP')
+  })
+
+  it('con la disciplina en ACTIVE: ACTIVE', async () => {
+    const admin = await createTestUser()
+    const { seasonId, disciplineId } = await createSeason({ admin })
+    const db = adminClient()
+    const { error } = await db.from('disciplines').update({ status: 'ACTIVE' }).eq('id', disciplineId)
+    if (error) throw new Error(error.message)
+
+    expect(await derivedSeasonStatus(admin.client, seasonId)).toBe('ACTIVE')
   })
 })

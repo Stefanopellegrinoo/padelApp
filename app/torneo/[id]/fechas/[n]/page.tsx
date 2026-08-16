@@ -138,7 +138,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
       .sort((a, b) => a.seedPosition - b.seedPosition)
       .map((entry) => entry.id)
     const [awardsByMatchday, detail] = await Promise.all([
-      awardsBefore(supabase, seasonId, matchdayNumber),
+      awardsBefore(supabase, matchday.disciplineId, matchdayNumber),
       matchdayDetail(supabase, matchday.id),
     ])
     const snapshot = snapshotForMatchday(matchdayNumber, seedOrder, awardsByMatchday, header.config)
@@ -170,8 +170,8 @@ export default async function FechaDetailPage({ params }: PageProps) {
       attendancesOf(supabase, matchday.id),
       matchdayDetail(supabase, matchday.id),
       pairLocksOf(supabase, matchday.id),
-      closedHistory(supabase, seasonId, matchdayNumber - 1),
-      closedHistory(supabase, seasonId, matchdayNumber - 2),
+      closedHistory(supabase, matchday.disciplineId, matchdayNumber - 1),
+      closedHistory(supabase, matchday.disciplineId, matchdayNumber - 2),
     ])
 
     const { defenders, defendersAlreadyRepeated } = previousContext(lastHistory, beforeLastHistory)
@@ -260,9 +260,9 @@ export default async function FechaDetailPage({ params }: PageProps) {
     const canPromote = header.isAdmin && status === 'CLOSED' && !isMasters
     const [detail, awardsByMatchday, lastHistory, beforeLastHistory, frozenPoints] = await Promise.all([
       matchdayDetail(supabase, matchday.id),
-      awardsBefore(supabase, seasonId, matchdayNumber),
-      closedHistory(supabase, seasonId, matchdayNumber - 1),
-      closedHistory(supabase, seasonId, matchdayNumber - 2),
+      awardsBefore(supabase, matchday.disciplineId, matchdayNumber),
+      closedHistory(supabase, matchday.disciplineId, matchdayNumber - 1),
+      closedHistory(supabase, matchday.disciplineId, matchdayNumber - 2),
       // Los awards CONGELADOS de ESTA fecha, para la tarjeta de "Sumar
       // invitado" de más abajo. `canPromote` NO sabe si hay invitados —eso lo
       // contesta `detail`, que resuelve en este mismo `Promise.all`—, así que

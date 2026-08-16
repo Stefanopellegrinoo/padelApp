@@ -20,6 +20,7 @@ import {
   generatePairs,
   lockPair,
   openMatchday,
+  reopenMatchday,
   saveResult,
   seedAttendances,
   setAttendance,
@@ -58,6 +59,7 @@ interface Scene {
   admin: TestUser
   player: TestUser
   seasonId: string
+  disciplineId: string
   squad: string[]
 }
 
@@ -65,12 +67,12 @@ async function buildScene(config: SeasonConfig = shortSeason()): Promise<Scene> 
   const admin = await createTestUser()
   const player = await createTestUser()
   const filler = await fillerPlayers(config.squadSize - 1)
-  const { seasonId, entryIds } = await createSeason({
+  const { seasonId, disciplineId, entryIds } = await createSeason({
     admin,
     config,
     squad: [player.playerId, ...filler],
   })
-  return { admin, player, seasonId, squad: entryIds }
+  return { admin, player, seasonId, disciplineId, squad: entryIds }
 }
 
 async function matchIdsOf(matchdayId: string): Promise<string[]> {
@@ -101,10 +103,15 @@ async function playRegularSeason(admin: TestUser, seasonId: string, squad: strin
   }
 }
 
-async function qualifiersOf(admin: TestUser, seasonId: string, mastersNumber: number): Promise<MastersFour> {
+async function qualifiersOf(
+  admin: TestUser,
+  seasonId: string,
+  disciplineId: string,
+  mastersNumber: number,
+): Promise<MastersFour> {
   const config = (await seasonHeader(admin.client, seasonId)).config
   const seedOrder = await squadSeedOrder(admin.client, seasonId)
-  const awards = await awardsBefore(admin.client, seasonId, mastersNumber)
+  const awards = await awardsBefore(admin.client, disciplineId, mastersNumber)
   const snapshot = snapshotForMatchday(mastersNumber, seedOrder, awards, config)
   return mastersQualifiers(computeRanking(awards, seedOrder, config, snapshot))
 }
@@ -117,7 +124,7 @@ function pairKey(pair: Pair): string {
 
 describe('the masters', () => {
   it('lays out six pairs and three matches where everyone plays once with everyone', async () => {
-    const { admin, seasonId, squad } = await buildScene()
+    const { admin, seasonId, disciplineId, squad } = await buildScene()
     await playRegularSeason(admin, seasonId, squad)
 
     const mastersId = await createMasters(admin.client, seasonId, '2026-12-20')
@@ -127,7 +134,7 @@ describe('the masters', () => {
     expect(detail.pairs).toHaveLength(6)
     expect(detail.matches).toHaveLength(3)
 
-    const four = await qualifiersOf(admin, seasonId, detail.matchday.number)
+    const four = await qualifiersOf(admin, seasonId, disciplineId, detail.matchday.number)
 
     // Las 6 parejas son las 6 combinaciones posibles de 4 jugadores, sin repetir.
     const expected = new Set<string>()
@@ -144,14 +151,14 @@ describe('the masters', () => {
   })
 
   it('follows the fixture of the spec: 1+4 vs 2+3, 1+3 vs 2+4, 1+2 vs 3+4', async () => {
-    const { admin, seasonId, squad } = await buildScene()
+    const { admin, seasonId, disciplineId, squad } = await buildScene()
     await playRegularSeason(admin, seasonId, squad)
 
     const mastersId = await createMasters(admin.client, seasonId, '2026-12-20')
     await generateMastersPairs(admin.client, mastersId)
 
     const detail = await matchdayDetail(admin.client, mastersId)
-    const [one, two, three, four] = await qualifiersOf(admin, seasonId, detail.matchday.number)
+    const [one, two, three, four] = await qualifiersOf(admin, seasonId, disciplineId, detail.matchday.number)
     const byRound = [...detail.matches].sort((left, right) => left.round - right.round)
 
     const facing = (round: number): Set<string> =>
@@ -181,7 +188,7 @@ describe('the masters', () => {
   // Antes de este plan closeMatchday mandaba seis awards y close_matchday los
   // rebotaba con "El Masters no reparte puntos": el año no podía terminar.
   it('closes without paying a single point, and ends the year', async () => {
-    const { admin, seasonId, squad } = await buildScene()
+    const { admin, seasonId, disciplineId, squad } = await buildScene()
     await playRegularSeason(admin, seasonId, squad)
 
     const mastersId = await createMasters(admin.client, seasonId, '2026-12-20')
@@ -200,10 +207,49 @@ describe('the masters', () => {
       .eq('matchday_id', mastersId)
     expect(count).toBe(0)
     expect((await seasonHeader(admin.client, seasonId)).status).toBe('FINISHED')
+
+    // C1 (0019_discipline_status_moves.sql): cerrar el Masters termina TAMBIÉN
+    // la disciplina que lo jugó, mismo trinquete que seasons.status de arriba.
+    const { data: discipline, error } = await db
+      .from('disciplines')
+      .select('status')
+      .eq('id', disciplineId)
+      .single()
+    if (error || discipline === null) throw new Error(error?.message)
+    expect(discipline.status).toBe('FINISHED')
+  })
+
+  // C1 (0019_discipline_status_moves.sql): reabrir el Masters revierte
+  // disciplines.status a ACTIVE, gemelo del trinquete ya probado en
+  // db/season.db.test.ts para seasons.status.
+  it('reopening the masters returns disciplines.status to ACTIVE', async () => {
+    const { admin, disciplineId, seasonId, squad } = await buildScene()
+    await playRegularSeason(admin, seasonId, squad)
+
+    const mastersId = await createMasters(admin.client, seasonId, '2026-12-20')
+    await generateMastersPairs(admin.client, mastersId)
+    await openMatchday(admin.client, mastersId)
+    for (const matchId of await matchIdsOf(mastersId)) {
+      await saveResult(admin.client, matchId, [{ gamesA: 4, gamesB: 0 }])
+    }
+    await closeMatchday(admin.client, mastersId)
+
+    const db = adminClient()
+    const disciplineStatus = async (): Promise<string> => {
+      const { data, error } = await db.from('disciplines').select('status').eq('id', disciplineId).single()
+      if (error || data === null) throw new Error(error?.message)
+      return data.status
+    }
+    expect(await disciplineStatus()).toBe('FINISHED')
+
+    await reopenMatchday(admin.client, mastersId)
+
+    expect(await disciplineStatus()).toBe('ACTIVE')
+    expect((await seasonHeader(admin.client, seasonId)).status).toBe('ACTIVE')
   })
 
   it('crowns the player who won the most matches', async () => {
-    const { admin, seasonId, squad } = await buildScene()
+    const { admin, seasonId, disciplineId, squad } = await buildScene()
     await playRegularSeason(admin, seasonId, squad)
 
     const mastersId = await createMasters(admin.client, seasonId, '2026-12-20')
@@ -211,7 +257,7 @@ describe('the masters', () => {
     await openMatchday(admin.client, mastersId)
 
     const detail = await matchdayDetail(admin.client, mastersId)
-    const four = await qualifiersOf(admin, seasonId, detail.matchday.number)
+    const four = await qualifiersOf(admin, seasonId, disciplineId, detail.matchday.number)
     const target = four[3]! // el 4º del año: sin él no se distingue de un empate roto por ranking
 
     // El 4º gana sus tres partidos, así que gana limpio y no por desempate.

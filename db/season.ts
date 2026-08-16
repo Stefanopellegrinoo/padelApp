@@ -34,16 +34,49 @@ export async function squadSeedOrder(supabase: Client, seasonId: string): Promis
   return (data ?? []).map((row) => row.id)
 }
 
-/** Awards of the closed matchdays before `number`, keyed by matchday number. */
+/**
+ * La disciplina de una temporada, cuando quien llama no tiene forma de
+ * elegir cuál: hoy toda temporada nace con exactamente una (`createSeason`,
+ * el seed) y no hay wizard que sume una segunda (PR 11), así que la primera
+ * por `position` es siempre LA que hay.
+ *
+ * Con el tripwire `disciplines_one_per_season` caído (0018) una temporada ya
+ * PUEDE tener más de una — sin esto, `createMatchday` y las lecturas
+ * scopeadas por temporada rompían con PGRST116 ("multiple/0 rows") o
+ * mezclaban las dos disciplinas apenas existiera una segunda (verify-report,
+ * hallazgo C4). Mismo orden que `add_squad_seat` (0013/0020): `position,
+ * created_at`.
+ *
+ * `null` en vez de tirar: cero filas visibles puede ser "esta temporada de
+ * verdad no tiene disciplina" (C3) o, igual de legítimo, "RLS le esconde la
+ * fila a quien llama" (un extraño sin asiento) — `disciplines_read` (0015)
+ * exige `is_participant`. Quien llama decide qué hacer con `null`: una
+ * lectura que hoy devuelve `[]`/`new Map()` para un extraño sigue
+ * devolviendo eso; una escritura que necesita un destino sí tira.
+ */
+export async function defaultDisciplineId(supabase: Client, seasonId: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('disciplines')
+    .select('id')
+    .eq('season_id', seasonId)
+    .order('position', { ascending: true })
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+  if (error) throw new EdgeError(`No se pudo leer la disciplina de la temporada: ${error.message}`)
+  return data?.id ?? null
+}
+
+/** Awards of the closed matchdays before `number` of one discipline's own calendar, keyed by matchday number. */
 export async function awardsBefore(
   supabase: Client,
-  seasonId: string,
+  disciplineId: string,
   number: number,
 ): Promise<Map<number, Award[]>> {
   const { data: closed, error: closedError } = await supabase
     .from('matchdays')
     .select('id, number')
-    .eq('season_id', seasonId)
+    .eq('discipline_id', disciplineId)
     .eq('status', 'CLOSED')
     .lt('number', number)
   if (closedError) {
@@ -73,16 +106,16 @@ export async function awardsBefore(
   return result
 }
 
-/** The matchday at `number`, or null when it does not exist or is not CLOSED. */
+/** The matchday at `number` of one discipline's own calendar, or null when it does not exist or is not CLOSED. */
 export async function closedHistory(
   supabase: Client,
-  seasonId: string,
+  disciplineId: string,
   number: number,
 ): Promise<MatchdayHistory | null> {
   const { data: matchday, error: matchdayError } = await supabase
     .from('matchdays')
     .select('id, status')
-    .eq('season_id', seasonId)
+    .eq('discipline_id', disciplineId)
     .eq('number', number)
     .maybeSingle()
   if (matchdayError) throw new EdgeError(`No se pudo leer la fecha: ${matchdayError.message}`)

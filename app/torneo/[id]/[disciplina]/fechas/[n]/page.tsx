@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { notFound } from 'next/navigation'
 import type { ReactNode } from 'react'
 import {
   computeAwards,
@@ -7,6 +8,7 @@ import {
   mastersChampion,
   mastersQualifiers,
   previousContext,
+  resolveDisciplineBySlug,
   samePair,
   snapshotForMatchday,
   type MatchResult,
@@ -16,12 +18,12 @@ import {
 } from '@/core'
 import {
   attendancesOf,
+  disciplineOf,
   entriesOf,
   matchdayDetail,
-  matchdaysOf,
   pairLocksOf,
-  primaryDiscipline,
   seasonHeader,
+  seasonMatchdaysOf,
 } from '@/db/read'
 import { awardsBefore, closedHistory, frozenPointsOf } from '@/db/season'
 import { serverClient } from '@/db/server'
@@ -36,7 +38,7 @@ import { SumarInvitado, type GuestPromoteVM, type SumarSeatVM } from './sumar'
 import { guestsToPromote } from './sumar-state'
 
 interface PageProps {
-  params: Promise<{ id: string; n: string }>
+  params: Promise<{ id: string; disciplina: string; n: string }>
 }
 
 function pairKey(pair: Pair): string {
@@ -105,16 +107,28 @@ function tiebreakNote(standings: PairStanding[], config: SeasonConfig, nameOf: M
  * Plan 4.
  */
 export default async function FechaDetailPage({ params }: PageProps) {
-  const { id: seasonId, n } = await params
+  const { id: seasonId, disciplina, n } = await params
   const matchdayNumber = Number(n)
   const supabase = await serverClient()
 
   const [header, matchdays] = await Promise.all([
     seasonHeader(supabase, seasonId),
-    matchdaysOf(supabase, seasonId),
+    seasonMatchdaysOf(supabase, seasonId),
   ])
 
-  const matchday = matchdays.find((candidate) => candidate.number === matchdayNumber)
+  // REQ-NR-5: slug desconocido, o de otra temporada — mismo `notFound()` que
+  // `jugador/[entryId]/page.tsx` usa para un `entryId` que no resuelve.
+  const discipline = resolveDisciplineBySlug(header.disciplines, disciplina)
+  if (discipline === undefined) notFound()
+
+  // `number` es único por disciplina (REQ-D3-2), no por temporada: con dos
+  // disciplinas del mismo `kind` (Fase 2) puede haber una "fecha 2" de cada
+  // una, y buscar sólo por número sin la disciplina de la URL sería
+  // ambiguo — se quedaría con la primera que matchee, no necesariamente la
+  // que pidió la URL.
+  const matchday = matchdays.find(
+    (candidate) => candidate.number === matchdayNumber && candidate.disciplineId === discipline.id,
+  )
   if (matchday === undefined) throw new EdgeError('La fecha no existe.')
 
   // C8, verify-report ronda 4: `entriesOf` sin `disciplineId` explícito
@@ -156,7 +170,10 @@ export default async function FechaDetailPage({ params }: PageProps) {
       awardsBefore(supabase, matchday.disciplineId, matchdayNumber),
       matchdayDetail(supabase, matchday.id),
     ])
-    const mastersConfig = primaryDiscipline(header).config
+    // Adyacente cerrada por PR 10: antes leía primaryDiscipline(header).config
+    // ([0] de la temporada), no necesariamente la de ESTA fecha — la URL ya
+    // trae la disciplina, así que `matchday.disciplineId` es la fuente real.
+    const mastersConfig = disciplineOf(header, matchday.disciplineId).config
     const snapshot = snapshotForMatchday(matchdayNumber, seedOrder, awardsByMatchday, mastersConfig)
     const ranking = computeRanking(awardsByMatchday, seedOrder, mastersConfig, snapshot)
 
@@ -267,7 +284,9 @@ export default async function FechaDetailPage({ params }: PageProps) {
 
   if (matchday.status !== 'DRAFT') {
     const status = matchday.status
-    const config = primaryDiscipline(header).config
+    // Mismo cierre que arriba (Masters): la config es de la disciplina de
+    // ESTA fecha, no la [0] de la temporada.
+    const config = disciplineOf(header, matchday.disciplineId).config
     const seedOrder = entries
       .filter((entry) => entry.kind === 'SQUAD')
       .sort((a, b) => a.seedPosition - b.seedPosition)

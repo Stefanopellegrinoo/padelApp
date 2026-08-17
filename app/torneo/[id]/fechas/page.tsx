@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { MASTERS_SIZE, samePair, type MatchResult, type Pair } from '@/core'
+import { disciplineSlugs, MASTERS_SIZE, samePair, type DisciplineId, type MatchResult, type Pair } from '@/core'
 import {
   awardsOf,
   entriesOf,
@@ -9,9 +9,13 @@ import {
   type MatchdaySummary,
 } from '@/db/read'
 import { serverClient } from '@/db/server'
+import { EdgeError } from '@/db/errors'
 import { matchdayDay } from '@/app/format'
 import { AbrirFecha } from './abrir'
-import { ArmarMasters } from './[n]/masters'
+// PR 10: `masters.tsx` se mudó con el resto de `fechas/[n]/` bajo
+// `[disciplina]/` (REQ-NR-5). Import absoluto, no relativo: `../[disciplina]/…`
+// sería válido pero ilegible cruzando dos segmentos dinámicos.
+import { ArmarMasters } from '@/app/torneo/[id]/[disciplina]/fechas/[n]/masters'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -75,6 +79,17 @@ export default async function FechasPage({ params }: PageProps) {
   ])
 
   const nameById = new Map(entries.map((entry) => [entry.id, entry.displayName]))
+  const disciplineSlugById = disciplineSlugs(header.disciplines)
+  // PR 10 (REQ-NR-5): esta lista ya conoce la disciplina de cada fecha
+  // (`MatchdaySummary.disciplineId`), así que linkea directo a la ruta nueva
+  // en vez de pasar por el redirect 308 de la vieja. El `throw` es el mismo
+  // supuesto que `disciplineOf`/`primaryDiscipline` (db/read.ts): garantizado
+  // por la FK, nunca dispara en la práctica.
+  function slugOf(disciplineId: DisciplineId): string {
+    const slug = disciplineSlugById.get(disciplineId)
+    if (slug === undefined) throw new EdgeError('La disciplina de la fecha no existe en el torneo.')
+    return slug
+  }
   // El Masters no se dibuja como fila: esta pantalla sólo lista fechas REGULAR
   // y muestra el Masters como el bloque bloqueado del final (Task 7, Plan 3).
   const regularMatchdays = allMatchdays.filter((matchday) => matchday.kind === 'REGULAR')
@@ -186,7 +201,7 @@ export default async function FechasPage({ params }: PageProps) {
           return (
             <Link
               key={matchday.id}
-              href={`/torneo/${seasonId}/fechas/${matchday.number}`}
+              href={`/torneo/${seasonId}/${slugOf(matchday.disciplineId)}/fechas/${matchday.number}`}
               className={`block rounded-[14px] p-[14px] ${
                 live ? 'bg-accent text-accent-text' : 'border border-line bg-surface'
               }`}
@@ -239,7 +254,7 @@ export default async function FechasPage({ params }: PageProps) {
             Masters ya existe, la fila lo enlaza como cualquier otra fecha. */}
         {mastersMatchday !== null ? (
           <Link
-            href={`/torneo/${seasonId}/fechas/${mastersMatchday.number}`}
+            href={`/torneo/${seasonId}/${slugOf(mastersMatchday.disciplineId)}/fechas/${mastersMatchday.number}`}
             className="mt-3 inline-block rounded-full bg-ok-bg px-[10px] py-[6px] text-[10.5px] font-extrabold text-up"
           >
             {mastersMatchday.status === 'CLOSED' ? 'Jugado' : 'En juego'}

@@ -109,14 +109,21 @@ export default async function FechaDetailPage({ params }: PageProps) {
   const matchdayNumber = Number(n)
   const supabase = await serverClient()
 
-  const [header, entries, matchdays] = await Promise.all([
+  const [header, matchdays] = await Promise.all([
     seasonHeader(supabase, seasonId),
-    entriesOf(supabase, seasonId),
     matchdaysOf(supabase, seasonId),
   ])
 
   const matchday = matchdays.find((candidate) => candidate.number === matchdayNumber)
   if (matchday === undefined) throw new EdgeError('La fecha no existe.')
+
+  // C8, verify-report ronda 4: `entriesOf` sin `disciplineId` explícito
+  // resolvía la disciplina por dentro (`defaultDisciplineId`), que no tiene
+  // por qué ser la de ESTA fecha — el desempate del día se armaba con el
+  // plantel equivocado apenas hubiera más de una disciplina por temporada
+  // (PR 11). Por eso `entries` se pide DESPUÉS de conocer `matchday`, con su
+  // `disciplineId`, y ya no en el `Promise.all` de arriba.
+  const entries = await entriesOf(supabase, seasonId, matchday.disciplineId)
 
   const nameOf = new Map(entries.map((entry) => [entry.id, entry.displayName]))
   const pairName = (pair: Pair) => `${nameOf.get(pair.a) ?? '?'} & ${nameOf.get(pair.b) ?? '?'}`

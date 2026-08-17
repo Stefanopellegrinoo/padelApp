@@ -295,6 +295,87 @@ describe('addSquadSeat colocando el nuevo asiento (spec 2.1, 2.2, 2.4, 2.5, 2.6)
     )
   })
 
+  // C9, verify-report ronda 4: el fallback `?? row.seed_position` mezclaba dos
+  // numeraciones independientes — `entries.seed_position` es de LA TEMPORADA
+  // (dual-write tail-only desde PR 7), `discipline_entries.seed_position` es
+  // de LA DISCIPLINA — y con solape parcial entre disciplinas producía
+  // posiciones colisionadas. Inalcanzable hoy por la UI (una sola disciplina
+  // por temporada), pero ya reproducible a mano con `add_squad_seat
+  // p_disciplines`, mismo patrón que W6 (attendances-discipline-fk).
+  it('entriesOf sin disciplineId explícito no mezcla las dos numeraciones con plantel de solape parcial', async () => {
+    const admin = await createTestUser()
+    const { seasonId, disciplineIds } = await buildSeasonScene({
+      admin,
+      disciplines: [{ kind: 'PADEL' }, { kind: 'FIFA' }],
+    })
+    const [padelId, fifaId] = disciplineIds
+    if (padelId === undefined || fifaId === undefined) throw new Error('Faltan disciplinas.')
+
+    const seat = async (name: string, disciplineId: string): Promise<string> => {
+      const { data, error } = await admin.client.rpc('add_squad_seat', {
+        p_season: seasonId,
+        p_name: name,
+        p_disciplines: [disciplineId],
+      })
+      if (error !== null || data === null) throw new Error(error?.message)
+      return data
+    }
+
+    // Dos asientos SÓLO de FIFA primero: se llevan las posiciones 0 y 1 de
+    // `entries.seed_position` (temporada) — las mismas que después ocupan los
+    // dos primeros de PADEL en `discipline_entries` (disciplina).
+    const fifaA = await seat('SoloFIFA-A', fifaId)
+    const fifaB = await seat('SoloFIFA-B', fifaId)
+    const padel1 = await seat('Padel-1', padelId)
+    const padel2 = await seat('Padel-2', padelId)
+    const padel3 = await seat('Padel-3', padelId)
+    const padel4 = await seat('Padel-4', padelId)
+
+    // PADEL es la default (position 0): `entriesOf(seasonId)` sin id
+    // explícito resuelve contra ella.
+    const squad = (await entriesOf(admin.client, seasonId)).filter((entry) => entry.kind === 'SQUAD')
+
+    expect(squad.map((entry) => entry.id).sort()).toEqual([padel1, padel2, padel3, padel4].sort())
+    expect(squad.find((entry) => entry.id === fifaA)).toBeUndefined()
+    expect(squad.find((entry) => entry.id === fifaB)).toBeUndefined()
+    const positions = squad.map((entry) => entry.seedPosition)
+    expect(new Set(positions).size).toBe(positions.length)
+  })
+
+  // C8, verify-report ronda 4: la pantalla de una fecha necesita el orden de
+  // SU disciplina, no el de la default (`entriesOf` la resolvía siempre por
+  // dentro, sin forma de que el caller opine). `disciplineId` ahora es un
+  // parámetro explícito.
+  it('entriesOf con disciplineId explícito devuelve el plantel de ESA disciplina, no el de la default', async () => {
+    const admin = await createTestUser()
+    const { seasonId, disciplineIds } = await buildSeasonScene({
+      admin,
+      disciplines: [{ kind: 'PADEL' }, { kind: 'FIFA' }],
+    })
+    const [padelId, fifaId] = disciplineIds
+    if (padelId === undefined || fifaId === undefined) throw new Error('Faltan disciplinas.')
+
+    const seat = async (name: string, disciplineId: string): Promise<string> => {
+      const { data, error } = await admin.client.rpc('add_squad_seat', {
+        p_season: seasonId,
+        p_name: name,
+        p_disciplines: [disciplineId],
+      })
+      if (error !== null || data === null) throw new Error(error?.message)
+      return data
+    }
+
+    const fifaA = await seat('SoloFIFA-A', fifaId)
+    const fifaB = await seat('SoloFIFA-B', fifaId)
+    await seat('Padel-1', padelId)
+    await seat('Padel-2', padelId)
+
+    const fifaSquad = (await entriesOf(admin.client, seasonId, fifaId)).filter((entry) => entry.kind === 'SQUAD')
+
+    expect(fifaSquad.map((entry) => entry.id).sort()).toEqual([fifaA, fifaB].sort())
+    expect(fifaSquad.map((entry) => entry.seedPosition).sort((a, b) => a - b)).toEqual([0, 1])
+  })
+
   // ── regresión del `+1` ────────────────────────────────────────────────────
   // El corrimiento con `v_park = max + 1` chocaba consigo mismo en un ÚNICO
   // caso: `p_from = 0`, en la posición M+1, y sólo si el motor visitaba esa

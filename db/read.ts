@@ -314,43 +314,80 @@ export async function seasonRules(
  *
  * `seedPosition` para un GUEST sigue siendo `entries.seed_position` —
  * correlativo por FECHA, sin relación con `discipline_entries` (un GUEST
- * nunca tiene fila ahí, ver 0023). Para un SQUAD, desde C6 (verify-report
- * ronda 3) es `discipline_entries.seed_position` de la disciplina por
- * defecto (`defaultDisciplineId`, mismo criterio que el resto del código
- * hasta el wizard multi-disciplina, PR 11): `entries.seed_position` para
- * SQUAD es dual-write tail-only desde PR 7 y ya no refleja "antes de".
+ * nunca tiene fila ahí, ver 0023).
+ *
+ * Para un SQUAD, `disciplineId` (opcional) elige de cuál: sin él cae en
+ * `defaultDisciplineId`, el mismo criterio que el resto del código hasta el
+ * wizard multi-disciplina (PR 11) — la pantalla de una fecha SÍ pasa la suya
+ * (`matchday.disciplineId`, C8, verify-report ronda 4).
+ *
+ * Un SQUAD sin fila en `discipline_entries` de esa disciplina NO PERTENECE a
+ * ella y queda AFUERA de lo que devuelve esta función — ya no se lo cubre con
+ * `entries.seed_position` (C9, misma ronda): esa columna es otra numeración
+ * (de LA TEMPORADA, dual-write tail-only desde PR 7) y mezclarla con
+ * `discipline_entries.seed_position` (de LA DISCIPLINA) producía posiciones
+ * colisionadas. Única excepción: si la disciplina no se pudo resolver
+ * (`defaultDisciplineId` da `null` — típicamente un extraño sin RLS para
+ * verla) se usa `entries.seed_position` para TODO el plantel por igual, sin
+ * `discipline_entries` de por medio, porque ahí no hay dos espacios que
+ * mezclar, sólo uno.
  */
-export async function entriesOf(supabase: Client, seasonId: string): Promise<EntryRow[]> {
-  const [{ data, error }, disciplineId] = await Promise.all([
+export async function entriesOf(
+  supabase: Client,
+  seasonId: string,
+  disciplineId?: DisciplineId,
+): Promise<EntryRow[]> {
+  const effectiveDisciplineIdPromise: Promise<DisciplineId | null> =
+    disciplineId !== undefined ? Promise.resolve(disciplineId) : defaultDisciplineId(supabase, seasonId)
+
+  const [{ data, error }, effectiveDisciplineId] = await Promise.all([
     supabase
       .from('entries')
       .select('id, display_name, kind, seed_position, player_id, matchday_id')
-      .eq('season_id', seasonId),
-    defaultDisciplineId(supabase, seasonId),
+      .eq('season_id', seasonId)
+      .order('seed_position', { ascending: true }),
+    effectiveDisciplineIdPromise,
   ])
   if (error) throw new EdgeError(`No se pudo leer el plantel: ${error.message}`)
   const rows = data ?? []
 
   const squadIds = rows.filter((row) => row.kind === 'SQUAD').map((row) => row.id)
   const disciplineSeed = new Map<string, number>()
-  if (disciplineId !== null && squadIds.length > 0) {
+  if (effectiveDisciplineId !== null && squadIds.length > 0) {
     const { data: seats, error: seatsError } = await supabase
       .from('discipline_entries')
       .select('entry_id, seed_position')
-      .eq('discipline_id', disciplineId)
+      .eq('discipline_id', effectiveDisciplineId)
       .in('entry_id', squadIds)
     if (seatsError) throw new EdgeError(`No se pudo leer el orden del plantel: ${seatsError.message}`)
     for (const seat of seats ?? []) disciplineSeed.set(seat.entry_id, seat.seed_position)
   }
 
-  return rows.map((row) => ({
-    id: row.id,
-    displayName: row.display_name,
-    kind: row.kind as 'SQUAD' | 'GUEST',
-    seedPosition: row.kind === 'SQUAD' ? (disciplineSeed.get(row.id) ?? row.seed_position) : row.seed_position,
-    playerId: row.player_id,
-    matchdayId: row.matchday_id,
-  }))
+  const entries: EntryRow[] = []
+  for (const row of rows) {
+    if (row.kind !== 'SQUAD') {
+      entries.push({
+        id: row.id,
+        displayName: row.display_name,
+        kind: 'GUEST',
+        seedPosition: row.seed_position,
+        playerId: row.player_id,
+        matchdayId: row.matchday_id,
+      })
+      continue
+    }
+    const seedPosition = effectiveDisciplineId === null ? row.seed_position : disciplineSeed.get(row.id)
+    if (seedPosition === undefined) continue // no juega esta disciplina
+    entries.push({
+      id: row.id,
+      displayName: row.display_name,
+      kind: 'SQUAD',
+      seedPosition,
+      playerId: row.player_id,
+      matchdayId: row.matchday_id,
+    })
+  }
+  return entries
 }
 
 /** Who ticked what on one matchday. A seat with no row is coming: the screens draw the default, and `seedAttendances` makes the database agree. */

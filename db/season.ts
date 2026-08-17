@@ -22,16 +22,28 @@ export async function seasonConfig(supabase: Client, seasonId: string): Promise<
   return data.config as unknown as SeasonConfig
 }
 
-/** The squad's seed order. Explicit `order by`: nothing else keeps it stable. */
-export async function squadSeedOrder(supabase: Client, seasonId: string): Promise<EntryId[]> {
+/**
+ * The squad's seed order FOR ONE DISCIPLINE. Explicit `order by`: nothing else
+ * keeps it stable.
+ *
+ * Lee `discipline_entries`, no `entries` (C6, verify-report ronda 3):
+ * `entries.seed_position` es dual-write tail-only desde PR 7
+ * (0023_discipline_entries.sql) — `shift_seeds_up`/`add_squad_seat` ya no
+ * corren el parking ahí. `discipline_entries.seed_position` es la fuente
+ * real, y ésta es la que alimenta `snapshotForMatchday` (el desempate de
+ * cada fecha y el orden de fallback del sorteo).
+ */
+export async function squadSeedOrder(
+  supabase: Client,
+  disciplineId: DisciplineId,
+): Promise<EntryId[]> {
   const { data, error } = await supabase
-    .from('entries')
-    .select('id')
-    .eq('season_id', seasonId)
-    .eq('kind', 'SQUAD')
+    .from('discipline_entries')
+    .select('entry_id')
+    .eq('discipline_id', disciplineId)
     .order('seed_position', { ascending: true })
   if (error) throw new EdgeError(`No se pudo leer el plantel: ${error.message}`)
-  return (data ?? []).map((row) => row.id)
+  return (data ?? []).map((row) => row.entry_id)
 }
 
 /**

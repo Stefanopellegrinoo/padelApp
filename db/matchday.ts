@@ -19,12 +19,12 @@ import {
   type SetScore,
 } from '@/core'
 import type { Database, Json } from './database.types'
+import { disciplineConfig } from './discipline'
 import { EdgeError } from './errors'
 import {
   awardsBefore,
   closedHistory,
   defaultDisciplineId,
-  seasonConfig,
   squadSeedOrder,
   type Client,
 } from './season'
@@ -78,13 +78,13 @@ export async function matchdayContextFor(
   matchdayId: string,
 ): Promise<MatchdayContext> {
   const matchday = await requireMatchday(supabase, matchdayId)
-  const config = await seasonConfig(supabase, matchday.season_id)
+  const config = await disciplineConfig(supabase, matchday.discipline_id)
   assertValidConfig(config)
 
   // The seed order is also the squad, and it must be stable: buildPairs falls
   // back to the order it is given when two players are missing from the
   // snapshot, so an unordered read makes the draw non-deterministic.
-  const seedOrder = await squadSeedOrder(supabase, matchday.season_id)
+  const seedOrder = await squadSeedOrder(supabase, matchday.discipline_id)
 
   // Only the CLOSED matchdays BEFORE this one. Never this one: its own table is
   // what the snapshot is being used to break ties in.
@@ -537,9 +537,9 @@ export async function generateMastersPairs(supabase: Client, matchdayId: string)
     throw new EdgeError('El Masters ya está armado.')
   }
 
-  const config = await seasonConfig(supabase, matchday.season_id)
+  const config = await disciplineConfig(supabase, matchday.discipline_id)
   assertValidConfig(config)
-  const seedOrder = await squadSeedOrder(supabase, matchday.season_id)
+  const seedOrder = await squadSeedOrder(supabase, matchday.discipline_id)
   const awardsByMatchday = await awardsBefore(supabase, matchday.discipline_id, matchday.number)
   const snapshot = snapshotForMatchday(matchday.number, seedOrder, awardsByMatchday, config)
 
@@ -899,6 +899,6 @@ async function matchFormatOf(supabase: Client, matchId: string): Promise<MatchFo
   if (match === null) throw new EdgeError('El partido no existe.')
 
   const matchday = await requireMatchday(supabase, match.matchday_id)
-  const config = await seasonConfig(supabase, matchday.season_id)
+  const config = await disciplineConfig(supabase, matchday.discipline_id)
   return config.matchFormat
 }

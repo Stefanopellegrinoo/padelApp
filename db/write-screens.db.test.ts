@@ -321,10 +321,12 @@ describe('season_public_rules', () => {
   })
 
   // PR 5 (0022, REQ-D2-1): la config real vive en `disciplines.config`, no en
-  // `seasons.config` — `updateSeasonConfig` (db/season.ts) sigue escribiendo
-  // ahí (dual-write hasta el contract, PR 27) pero de acá en más esta RPC ya
-  // NO lo lee. Se diverge `seasons.config` a mano, sin pasar por la RPC, para
-  // probar que lo que vuelve es la disciplina, no la temporada desincronizada.
+  // `seasons.config`. `updateSeasonConfig` (db/season.ts) todavía ESCRIBE ahí
+  // (la columna sigue existiendo hasta el contract, PR 27) pero desde PR 6
+  // no tiene un solo caller de producción: `saveConfig` (Ajustes) llama
+  // `updateDisciplineConfig`. Esta RPC ya no lee `seasons.config`. Se diverge
+  // a mano, sin pasar por ninguna función de escritura, para probar que lo
+  // que vuelve es la disciplina, no la temporada desincronizada.
   it('lee la config de la disciplina, no la de la temporada (PR 5)', async () => {
     const admin = await createTestUser()
     const padelConfig = defaultConfig(8)

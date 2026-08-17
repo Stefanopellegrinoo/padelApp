@@ -18,6 +18,11 @@
 // matches exist because there are exactly four players.
 export { MIN_PLAYERS, MAX_PLAYERS, MASTERS_SIZE, MASTERS_MATCHES } from './constants'
 
+// ── El slug de una disciplina en la URL (PR 10, REQ-NR-5) ────────────────────
+// Derivado, no persistido: no hay columna `slug`.
+export type { SluggableDiscipline } from './discipline-slug'
+export { disciplineSlugs, resolveDisciplineBySlug } from './discipline-slug'
+
 // ── Domain types ─────────────────────────────────────────────────────────────
 // `EntryId` is a seat in a season, never a player. Matches reference the seat,
 // so claiming a profile is one update and the tournament's history is untouched.

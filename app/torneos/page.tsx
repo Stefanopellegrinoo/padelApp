@@ -8,6 +8,7 @@ import {
   myEntryId,
   mySeasons,
   playerNames,
+  primaryDiscipline,
   type SeasonHeader,
 } from '@/db/read'
 import { serverClient } from '@/db/server'
@@ -68,8 +69,9 @@ async function cardFor(supabase: Client, header: SeasonHeader): Promise<SeasonCa
     (matchday) => matchday.kind === 'REGULAR' && matchday.status === 'CLOSED',
   ).length
   const activeNumber = Math.min(closedCount + 1, header.regularMatchdays)
-  const snapshot = snapshotForMatchday(activeNumber, seedOrder, awardsByMatchday, header.config)
-  const ranking = computeRanking(awardsByMatchday, seedOrder, header.config, snapshot)
+  const config = primaryDiscipline(header).config
+  const snapshot = snapshotForMatchday(activeNumber, seedOrder, awardsByMatchday, config)
+  const ranking = computeRanking(awardsByMatchday, seedOrder, config, snapshot)
 
   const index = ranking.findIndex((row) => row.entryId === viewerEntryId)
   const live = matchdays.find((matchday) => matchday.status !== 'CLOSED') ?? null

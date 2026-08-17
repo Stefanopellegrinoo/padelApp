@@ -103,6 +103,21 @@ async function createWalkthroughSeason(
     if (error || entry === null) throw new Error(error?.message)
     entryIds.push(entry.id)
   }
+
+  // Mismo motivo que el comentario de arriba: esta temporada no pasa por
+  // db/test/factories.ts, así que el backfill de discipline_entries (PR 7)
+  // se arma acá a mano — sin esto, marcar presente (PR 8,
+  // attendances_entry_discipline) rebota para todo el plantel.
+  const { error: seatsError } = await db.from('discipline_entries').insert(
+    entryIds.map((entryId, index) => ({
+      discipline_id: discipline.id,
+      entry_id: entryId,
+      season_id: season.id,
+      seed_position: index,
+    })),
+  )
+  if (seatsError) throw new Error(seatsError.message)
+
   const openSeatEntryId = entryIds[entryIds.length - 1]
   if (openSeatEntryId === undefined) throw new Error('Falta el asiento libre de test.')
   return {

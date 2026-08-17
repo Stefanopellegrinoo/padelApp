@@ -81,9 +81,13 @@ async function buildMatch(seasonId: string, entryIds: string[], status: 'OPEN' |
   // Una fila en attendances, pair_locks y awards: son las tres tablas que
   // buildMatch todavía no tocaba, y los tests de cobertura por tabla las
   // necesitan pobladas.
-  const { error: attendanceError } = await db
-    .from('attendances')
-    .insert({ matchday_id: matchday.id, entry_id: a, season_id: seasonId, status: 'PLAYING' })
+  const { error: attendanceError } = await db.from('attendances').insert({
+    matchday_id: matchday.id,
+    entry_id: a,
+    season_id: seasonId,
+    discipline_id: discipline.id,
+    status: 'PLAYING',
+  })
   if (attendanceError) throw new Error(attendanceError.message)
 
   const { error: pairLockError } = await db
@@ -413,7 +417,13 @@ describe('RLS — escritura', () => {
 
     const attendances = await member.client
       .from('attendances')
-      .insert({ matchday_id: matchdayId, entry_id: b, season_id: seasonId, status: 'PLAYING' })
+      .insert({
+        matchday_id: matchdayId,
+        entry_id: b,
+        season_id: seasonId,
+        discipline_id: disciplineId,
+        status: 'PLAYING',
+      })
       .select()
     expect(attendances.data, 'tabla attendances').toBeNull()
     expect(attendances.error?.code, 'tabla attendances').toBe('42501')

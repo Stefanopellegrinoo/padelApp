@@ -254,12 +254,16 @@ export async function setAttendance(
     throw new EdgeError('El presentismo sólo se toca con la fecha en armado.')
   }
 
-  const { error } = await supabase
-    .from('attendances')
-    .upsert(
-      { matchday_id: matchdayId, entry_id: entryId, season_id: matchday.season_id, status },
-      { onConflict: 'matchday_id,entry_id' },
-    )
+  const { error } = await supabase.from('attendances').upsert(
+    {
+      matchday_id: matchdayId,
+      entry_id: entryId,
+      season_id: matchday.season_id,
+      discipline_id: matchday.discipline_id,
+      status,
+    },
+    { onConflict: 'matchday_id,entry_id' },
+  )
   if (error !== null) throw new EdgeError(`No se pudo guardar el presentismo: ${error.message}`)
 }
 
@@ -285,12 +289,18 @@ export async function setMyAttendance(
 }
 
 /**
- * Escribe PLAYING para todo asiento del plantel que todavía no tenga fila.
+ * Escribe PLAYING para todo asiento QUE JUEGA ESTA DISCIPLINA y todavía no
+ * tenga fila.
  *
  * Existe por una asimetría que muerde: `playingEntryIds` —lo que arma
  * `present`— cuenta filas PLAYING EXISTENTES, así que un plantel sin filas da
  * `present` vacío. La pantalla del armado dibuja "sin fila = viene", y ésta es
  * la función que hace que la base opine lo mismo.
+ *
+ * Lee `discipline_entries`, no el plantel entero de la temporada (PR 8,
+ * `attendances_entry_discipline`): sembrar PLAYING para alguien que no juega
+ * esta disciplina violaría esa FK — y aunque no la violara, sería presentismo
+ * fantasma para quien nunca pudo estar en esta fecha.
  *
  * Idempotente, y se llama al principio de cada acción del armado. Nunca al
  * renderizar: un Server Component que escribe al dibujarse es un GET con
@@ -303,10 +313,9 @@ export async function seedAttendances(supabase: Client, matchdayId: string): Pro
   }
 
   const { data: squad, error: squadError } = await supabase
-    .from('entries')
-    .select('id')
-    .eq('season_id', matchday.season_id)
-    .eq('kind', 'SQUAD')
+    .from('discipline_entries')
+    .select('entry_id')
+    .eq('discipline_id', matchday.discipline_id)
   if (squadError) throw new EdgeError(`No se pudo leer el plantel: ${squadError.message}`)
 
   const { data: existing, error: existingError } = await supabase
@@ -318,14 +327,15 @@ export async function seedAttendances(supabase: Client, matchdayId: string): Pro
   }
 
   const already = new Set((existing ?? []).map((row) => row.entry_id))
-  const missing = (squad ?? []).filter((entry) => !already.has(entry.id))
+  const missing = (squad ?? []).filter((entry) => !already.has(entry.entry_id))
   if (missing.length === 0) return
 
   const { error } = await supabase.from('attendances').insert(
     missing.map((entry) => ({
       matchday_id: matchdayId,
-      entry_id: entry.id,
+      entry_id: entry.entry_id,
       season_id: matchday.season_id,
+      discipline_id: matchday.discipline_id,
       status: 'PLAYING' as const,
     })),
   )

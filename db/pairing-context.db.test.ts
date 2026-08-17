@@ -108,15 +108,23 @@ async function openMatchday(
   if (error || matchday === null) throw new Error(error?.message)
 
   for (const entryId of playing) {
-    const { error: attError } = await db
-      .from('attendances')
-      .insert({ matchday_id: matchday.id, season_id: seasonId, entry_id: entryId, status: 'PLAYING' })
+    const { error: attError } = await db.from('attendances').insert({
+      matchday_id: matchday.id,
+      season_id: seasonId,
+      discipline_id: disciplineId,
+      entry_id: entryId,
+      status: 'PLAYING',
+    })
     if (attError) throw new Error(attError.message)
   }
   for (const entryId of absent) {
-    const { error: attError } = await db
-      .from('attendances')
-      .insert({ matchday_id: matchday.id, season_id: seasonId, entry_id: entryId, status: 'ABSENT' })
+    const { error: attError } = await db.from('attendances').insert({
+      matchday_id: matchday.id,
+      season_id: seasonId,
+      discipline_id: disciplineId,
+      entry_id: entryId,
+      status: 'ABSENT',
+    })
     if (attError) throw new Error(attError.message)
   }
   return matchday.id

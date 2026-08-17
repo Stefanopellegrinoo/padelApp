@@ -189,6 +189,32 @@ describe('REQ-NR-4 — ninguna temporada se queda sin disciplina', () => {
   })
 })
 
+// ── C7/W8 (verify-report ronda 3) ────────────────────────────────────────────
+// El gemelo de REQ-NR-4, un nivel más abajo: `supabase/seed.sql` dejaba el
+// torneo demo con 8 `entries` SQUAD y CERO filas en `discipline_entries`
+// (setAttendance rebotaba con 23503, FK violation), y dos scaffolds de test
+// (`db/claim.db.test.ts`, `db/rls.db.test.ts`) armaban `entries` a mano sin su
+// contraparte. Medido contra la base completa, igual que REQ-NR-4, para que
+// un futuro insert manual de `entries` (acá o en cualquier test nuevo) no
+// vuelva a dejar un asiento huérfano en silencio.
+describe('ningún asiento SQUAD se queda sin discipline_entries (C7, W8)', () => {
+  it('count(entries SQUAD sin fila en discipline_entries) = 0', async () => {
+    const db = adminClient()
+    const { data: squadEntries, error: entriesError } = await db
+      .from('entries')
+      .select('id')
+      .eq('kind', 'SQUAD')
+    if (entriesError) throw new Error(entriesError.message)
+
+    const { data: seatRows, error: seatsError } = await db.from('discipline_entries').select('entry_id')
+    if (seatsError) throw new Error(seatsError.message)
+
+    const seated = new Set((seatRows ?? []).map((row) => row.entry_id))
+    const orphaned = (squadEntries ?? []).filter((entry) => !seated.has(entry.id))
+    expect(orphaned).toHaveLength(0)
+  })
+})
+
 // ── PR 5 — config por disciplina (REQ-D2-1) ─────────────────────────────────
 // `disciplines.config` existe desde PR 1 (0015), pero hasta acá el único
 // escritor era `updateSeasonConfig`, que sólo toca `seasons.config` — dos

@@ -38,10 +38,12 @@ async function createOpenSeason(
     .single()
   if (seasonError || season === null) throw new Error(seasonError?.message)
 
-  const { error: disciplineError } = await db
+  const { data: discipline, error: disciplineError } = await db
     .from('disciplines')
     .insert({ season_id: season.id, kind: 'PADEL', config: defaultConfig(seatNames.length) as unknown as Json })
-  if (disciplineError) throw new Error(disciplineError.message)
+    .select('id')
+    .single()
+  if (disciplineError || discipline === null) throw new Error(disciplineError?.message)
 
   const entryIds: string[] = []
   for (const [index, name] of seatNames.entries()) {
@@ -52,6 +54,22 @@ async function createOpenSeason(
       .single()
     if (entryError || entry === null) throw new Error(entryError?.message)
     entryIds.push(entry.id)
+  }
+
+  // Cada asiento SQUAD entra también a la disciplina (W8, verify-report ronda
+  // 3): sin esto un asiento de este scaffold queda sin fila en
+  // discipline_entries y `seedAttendances` (que lee discipline_entries desde
+  // PR 8) lo trata como si no jugara nada.
+  if (entryIds.length > 0) {
+    const { error: seatsError } = await db.from('discipline_entries').insert(
+      entryIds.map((entryId, index) => ({
+        discipline_id: discipline.id,
+        entry_id: entryId,
+        season_id: season.id,
+        seed_position: index,
+      })),
+    )
+    if (seatsError) throw new Error(seatsError.message)
   }
 
   return { seasonId: season.id, token: season.invite_token, entryIds }

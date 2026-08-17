@@ -193,7 +193,7 @@ async function rankingBefore(
   matchdayNumber: number,
   config: SeasonConfig,
 ) {
-  const seedOrder = await squadSeedOrder(admin.client, seasonId)
+  const seedOrder = await squadSeedOrder(admin.client, disciplineId)
   const awardsByMatchday = await awardsBefore(admin.client, disciplineId, matchdayNumber)
   const snapshot = snapshotForMatchday(matchdayNumber, seedOrder, awardsByMatchday, config)
   return computeRanking(awardsByMatchday, seedOrder, config, snapshot)

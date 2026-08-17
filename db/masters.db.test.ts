@@ -134,7 +134,7 @@ async function qualifiersOf(
   mastersNumber: number,
 ): Promise<MastersFour> {
   const config = primaryDiscipline(await seasonHeader(admin.client, seasonId)).config
-  const seedOrder = await squadSeedOrder(admin.client, seasonId)
+  const seedOrder = await squadSeedOrder(admin.client, disciplineId)
   const awards = await awardsBefore(admin.client, disciplineId, mastersNumber)
   const snapshot = snapshotForMatchday(mastersNumber, seedOrder, awards, config)
   return mastersQualifiers(computeRanking(awards, seedOrder, config, snapshot))

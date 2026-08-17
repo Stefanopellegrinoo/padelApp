@@ -4,7 +4,7 @@ import { defaultConfig } from '@/core'
 import { addSquadSeat, removeSeat } from './entries'
 import { addGuest, createMatchday } from './matchday'
 import { entriesOf } from './read'
-import { createSeason, defaultDisciplineId } from './season'
+import { createSeason, defaultDisciplineId, squadSeedOrder } from './season'
 import { adminClient } from './test/admin'
 import { createSeason as buildSeasonScene } from './test/factories'
 import { createTestUser, type TestUser } from './test/users'
@@ -226,6 +226,35 @@ describe('addSquadSeat colocando el nuevo asiento (spec 2.1, 2.2, 2.4, 2.5, 2.6)
     ])
     // Ningún preexistente se pasó por encima de otro.
     expect(after.filter((e) => e.id !== newId).map((e) => e.id)).toEqual(withHole.map((e) => e.id))
+  })
+
+  // C6, verify-report ronda 3 — `squadSeedOrder` (db/season.ts) es la función
+  // que de verdad alimenta el sorteo y el desempate de cada fecha
+  // (`matchdayContextFor` -> `snapshotForMatchday`): hasta esta tanda seguía
+  // leyendo `entries.seed_position`, que desde PR 7 es dual-write tail-only.
+  // El "antes de Juan" de `add_squad_seat` quedaba en no-op para el sorteo
+  // aunque `discipline_entries` lo guardara bien.
+  it('squadSeedOrder lee discipline_entries: el "antes de" llega al sorteo y al desempate', async () => {
+    const admin = await createTestUser()
+    const { seasonId } = await createSeason(admin.client, {
+      name: 'Los Jueves 2026',
+      squadNames: squadNames(8),
+      config: defaultConfig(8),
+    })
+    const disciplineId = await defaultDisciplineId(admin.client, seasonId)
+    if (disciplineId === null) throw new Error('La temporada no tiene disciplina.')
+
+    const before = await disciplineSeedOrder(seasonId)
+    const target = before[2]
+    if (target === undefined) throw new Error('Falta el asiento de test.')
+
+    const newId = await addSquadSeat(admin.client, seasonId, 'El Nuevo', target.id)
+
+    const seedOrder = await squadSeedOrder(admin.client, disciplineId)
+    const expectedOrder = (await disciplineSeedOrder(seasonId)).map((seat) => seat.id)
+    expect(seedOrder).toEqual(expectedOrder)
+    // El nuevo cae en la posición 2 (donde estaba `target`), no al final.
+    expect(seedOrder.indexOf(newId)).toBe(2)
   })
 
   // Complemento de los cuatro de arriba: `entries.seed_position` sigue

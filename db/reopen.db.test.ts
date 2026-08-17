@@ -187,7 +187,7 @@ describe('reopenMatchday', () => {
 
     // El ranking "de cara a la fecha 3" es el mismo input que usaría un sorteo
     // de esa fecha: sólo lo cerrado antes de ella cuenta.
-    const seedOrder = await squadSeedOrder(admin.client, seasonId)
+    const seedOrder = await squadSeedOrder(admin.client, disciplineId)
     const rankingBeforeMd2 = computeRanking(
       await awardsBefore(admin.client, disciplineId, 3),
       seedOrder,

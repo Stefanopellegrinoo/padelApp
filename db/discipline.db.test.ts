@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { defaultConfig } from '@/core'
-import { createMatchday } from './matchday'
+import { createMatchday, matchdayContextFor } from './matchday'
 import { disciplineConfig, updateDisciplineConfig } from './discipline'
 import { derivedSeasonStatus } from './read'
 import { adminClient } from './test/admin'
@@ -237,5 +237,26 @@ describe('disciplineConfig / updateDisciplineConfig (PR 5, REQ-D2-1)', () => {
 
     await expect(updateDisciplineConfig(admin.client, disciplineId, broken)).rejects.toThrow()
     expect(await disciplineConfig(admin.client, disciplineId)).toEqual(defaultConfig(8))
+  })
+})
+
+// ── C5, verify-report ronda 3 ────────────────────────────────────────────────
+// `matchdayContextFor` (lo que arma `closeMatchday`) seguía resolviendo
+// `config` con `seasonConfig()` (`seasons.config`), que `updateDisciplineConfig`
+// nunca escribe desde PR 5: el admin editaba Reglas, Ajustes mostraba el valor
+// nuevo, y cerrar la fecha repartía los puntos VIEJOS en silencio.
+// `disciplineConfig` existía desde PR 5 sin un solo caller de producción (W7).
+describe('la config editada llega al motor de puntajes (C5, verify-report ronda 3)', () => {
+  it('matchdayContextFor recalcula con la config NUEVA después de updateDisciplineConfig', async () => {
+    const admin = await createTestUser()
+    const { seasonId, disciplineId } = await createSeason({ admin })
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
+
+    const newConfig = { ...defaultConfig(8), points: [100, 60, 30, 10], regularMatchdays: 42 }
+    await updateDisciplineConfig(admin.client, disciplineId, newConfig)
+
+    const context = await matchdayContextFor(admin.client, matchdayId)
+    expect(context.config.points).toEqual([100, 60, 30, 10])
+    expect(context.config.regularMatchdays).toBe(42)
   })
 })

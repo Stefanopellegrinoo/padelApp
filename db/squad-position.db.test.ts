@@ -67,7 +67,11 @@ function localSql(sql: string): string {
   )
 }
 
-/** El plantel de la temporada, leído en orden de seed de `entries` (dual-write, PR 25). */
+/**
+ * El plantel de la temporada, en el orden que devuelve `entriesOf` (el lector
+ * de producción): desde C6 (verify-report ronda 3) es el mismo orden que
+ * `discipline_entries` para SQUAD, no el dual-write de `entries.seed_position`.
+ */
 async function squadInSeedOrder(user: TestUser, seasonId: string) {
   return (await entriesOf(user.client, seasonId))
     .filter((entry) => entry.kind === 'SQUAD')
@@ -257,14 +261,17 @@ describe('addSquadSeat colocando el nuevo asiento (spec 2.1, 2.2, 2.4, 2.5, 2.6)
     expect(seedOrder.indexOf(newId)).toBe(2)
   })
 
-  // Complemento de los cuatro de arriba: `entries.seed_position` sigue
-  // existiendo (dual-write hasta PR 25) pero YA NO respeta `p_before` — el
-  // asiento nuevo entra siempre al final ahí, sin importar dónde se eligió
-  // insertarlo en `discipline_entries`. Degradación ACEPTADA y documentada en
-  // 0023_discipline_entries.sql, no un bug: se pinnea acá para que quien la
-  // reintroduzca por accidente (corriendo el parking de las dos tablas otra
-  // vez) vea este test romperse.
-  it('entries.seed_position ya no reserva "antes de": el dual-write siempre va al final', async () => {
+  // Complemento del test de arriba, mismo hallazgo (C6, verify-report ronda
+  // 3), otro lector: `entriesOf` (db/read.ts) es lo que alimenta la pantalla
+  // de Plantel (`app/torneo/[id]/ajustes/page.tsx`) y media docena más.
+  // Hasta esta tanda seguía devolviendo `entries.seed_position` para SQUAD —
+  // dual-write TAIL-ONLY desde PR 7 (0023), que ya no respeta `p_before` — así
+  // que el "antes de" quedaba bien guardado en `discipline_entries` y la
+  // pantalla lo mostraba igual, siempre al final. Este test reemplaza al que
+  // pinneaba esa degradación (`seedPosition === 8`): ahora exige el
+  // comportamiento CORRECTO, para que quien vuelva a leer `entries` por
+  // accidente lo vea romperse acá.
+  it('entriesOf refleja discipline_entries para SQUAD, no el dual-write de entries.seed_position', async () => {
     const admin = await createTestUser()
     const { seasonId } = await createSeason(admin.client, {
       name: 'Los Jueves 2026',
@@ -277,11 +284,14 @@ describe('addSquadSeat colocando el nuevo asiento (spec 2.1, 2.2, 2.4, 2.5, 2.6)
 
     const newId = await addSquadSeat(admin.client, seasonId, 'El Nuevo', target.id)
 
-    const after = await squadInSeedOrder(admin, seasonId)
-    expect(after.find((e) => e.id === newId)?.seedPosition).toBe(8)
-    // Nadie de `entries` se corrió: la cola sólo se movió en discipline_entries.
-    expect(after.filter((e) => e.id !== newId).map((e) => e.seedPosition)).toEqual(
-      before.map((e) => e.seedPosition),
+    const viaEntriesOf = await squadInSeedOrder(admin, seasonId)
+    const viaDisciplineEntries = await disciplineSeedOrder(seasonId)
+    // El nuevo cae en la posición 2 (donde estaba `target`), no al final.
+    expect(viaEntriesOf.find((e) => e.id === newId)?.seedPosition).toBe(2)
+    // El lector de producción coincide EXACTAMENTE con la fuente real —no
+    // sólo la posición del nuevo, el orden entero.
+    expect(viaEntriesOf.map((e) => ({ id: e.id, seedPosition: e.seedPosition }))).toEqual(
+      viaDisciplineEntries.map((e) => ({ id: e.id, seedPosition: e.seedPosition })),
     )
   })
 

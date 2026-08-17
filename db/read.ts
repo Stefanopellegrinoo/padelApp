@@ -308,18 +308,46 @@ export async function seasonRules(
   return { text: data.rules_text, updatedAt: data.rules_updated_at }
 }
 
-/** Squad and guests together, every matchday of the season. `playerId` is `null` for a seat nobody has claimed. */
+/**
+ * Squad and guests together, every matchday of the season. `playerId` is
+ * `null` for a seat nobody has claimed.
+ *
+ * `seedPosition` para un GUEST sigue siendo `entries.seed_position` —
+ * correlativo por FECHA, sin relación con `discipline_entries` (un GUEST
+ * nunca tiene fila ahí, ver 0023). Para un SQUAD, desde C6 (verify-report
+ * ronda 3) es `discipline_entries.seed_position` de la disciplina por
+ * defecto (`defaultDisciplineId`, mismo criterio que el resto del código
+ * hasta el wizard multi-disciplina, PR 11): `entries.seed_position` para
+ * SQUAD es dual-write tail-only desde PR 7 y ya no refleja "antes de".
+ */
 export async function entriesOf(supabase: Client, seasonId: string): Promise<EntryRow[]> {
-  const { data, error } = await supabase
-    .from('entries')
-    .select('id, display_name, kind, seed_position, player_id, matchday_id')
-    .eq('season_id', seasonId)
+  const [{ data, error }, disciplineId] = await Promise.all([
+    supabase
+      .from('entries')
+      .select('id, display_name, kind, seed_position, player_id, matchday_id')
+      .eq('season_id', seasonId),
+    defaultDisciplineId(supabase, seasonId),
+  ])
   if (error) throw new EdgeError(`No se pudo leer el plantel: ${error.message}`)
-  return (data ?? []).map((row) => ({
+  const rows = data ?? []
+
+  const squadIds = rows.filter((row) => row.kind === 'SQUAD').map((row) => row.id)
+  const disciplineSeed = new Map<string, number>()
+  if (disciplineId !== null && squadIds.length > 0) {
+    const { data: seats, error: seatsError } = await supabase
+      .from('discipline_entries')
+      .select('entry_id, seed_position')
+      .eq('discipline_id', disciplineId)
+      .in('entry_id', squadIds)
+    if (seatsError) throw new EdgeError(`No se pudo leer el orden del plantel: ${seatsError.message}`)
+    for (const seat of seats ?? []) disciplineSeed.set(seat.entry_id, seat.seed_position)
+  }
+
+  return rows.map((row) => ({
     id: row.id,
     displayName: row.display_name,
     kind: row.kind as 'SQUAD' | 'GUEST',
-    seedPosition: row.seed_position,
+    seedPosition: row.kind === 'SQUAD' ? (disciplineSeed.get(row.id) ?? row.seed_position) : row.seed_position,
     playerId: row.player_id,
     matchdayId: row.matchday_id,
   }))

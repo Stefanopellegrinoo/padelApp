@@ -11,7 +11,7 @@ import {
   type EntryId,
   type SeasonConfig,
 } from '@/core'
-import { awardsOf, closedHistoryAll, entriesOf, seasonHeader } from '@/db/read'
+import { awardsOf, closedHistoryAll, entriesOf, primaryDiscipline, seasonHeader } from '@/db/read'
 import { serverClient } from '@/db/server'
 import { initials } from '@/app/format'
 
@@ -201,8 +201,9 @@ export default async function JugadorPage({ params }: PageProps) {
   const nameById = new Map(entries.map((candidate) => [candidate.id, candidate.displayName]))
 
   const activeMatchdayNumber = Math.min(history.length + 1, header.regularMatchdays)
-  const snapshot = snapshotForMatchday(activeMatchdayNumber, seedOrder, awardsByMatchday, header.config)
-  const ranking = rankingWithMovement(awardsByMatchday, seedOrder, header.config, snapshot)
+  const config = primaryDiscipline(header).config
+  const snapshot = snapshotForMatchday(activeMatchdayNumber, seedOrder, awardsByMatchday, config)
+  const ranking = rankingWithMovement(awardsByMatchday, seedOrder, config, snapshot)
   const row = ranking.find((candidate) => candidate.entryId === entryId)
   if (row === undefined) {
     throw new Error(`unreachable: ${entryId} está en el plantel, computeRanking siempre le arma una fila`)
@@ -240,7 +241,7 @@ export default async function JugadorPage({ params }: PageProps) {
     history.map((matchday) => matchday.number),
     awardsByMatchday,
     seedOrder,
-    header.config,
+    config,
     entryId,
   )
 

@@ -2,10 +2,11 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import type { SeasonConfig } from '@/core'
+import type { DisciplineId, SeasonConfig } from '@/core'
+import { updateDisciplineConfig } from '@/db/discipline'
 import { addSquadSeat, claimOwnSeat, removeSeat, renameSeat, unlinkSeat } from '@/db/entries'
 import { EdgeError } from '@/db/errors'
-import { deleteSeason, renameSeason, updateSeasonConfig, updateSeasonRules } from '@/db/season'
+import { deleteSeason, renameSeason, updateSeasonRules } from '@/db/season'
 import { serverClient } from '@/db/server'
 
 export type WriteResult = { ok: true } | { ok: false; error: string }
@@ -118,10 +119,21 @@ export async function dropSeat(seasonId: string, entryId: string): Promise<Write
   })
 }
 
-/** Guarda al toque de cada `−`/`+`. `assertValidConfig` corre adentro y su mensaje se muestra en línea. */
-export async function saveConfig(seasonId: string, config: SeasonConfig): Promise<WriteResult> {
+/**
+ * Guarda al toque de cada `−`/`+`. `assertValidConfig` corre adentro y su
+ * mensaje se muestra en línea.
+ *
+ * Escribe `disciplines.config`, no `seasons.config` (PR 5/6): `seasonHeader`
+ * ya no lee de la temporada, así que escribir ahí dejaría la pantalla
+ * mostrando el valor viejo después de guardar.
+ */
+export async function saveConfig(
+  seasonId: string,
+  disciplineId: DisciplineId,
+  config: SeasonConfig,
+): Promise<WriteResult> {
   return onSeason(seasonId, async (supabase) => {
-    await updateSeasonConfig(supabase, seasonId, config)
+    await updateDisciplineConfig(supabase, disciplineId, config)
   })
 }
 

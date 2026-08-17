@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import type { SeasonConfig } from '@/core'
+import type { DisciplineId, SeasonConfig } from '@/core'
 import { STEPPERS } from '@/app/torneos/nuevo/wizard-state'
 import { saveConfig } from './actions'
 
@@ -17,18 +17,30 @@ import { saveConfig } from './actions'
  * `STEPPERS` sí se importa en vez de copiarse: son los labels, las ayudas y los
  * topes, y las dos pantallas TIENEN que decir lo mismo.
  *
- * Guarda a cada toque. `updateSeasonConfig` corre `assertValidConfig` antes de
- * escribir, así que un estado intermedio inválido —bajar las fechas por debajo
- * de las que cuentan, por ejemplo— vuelve como error en línea y no se guarda.
+ * Guarda a cada toque. `updateDisciplineConfig` corre `assertValidConfig`
+ * antes de escribir, así que un estado intermedio inválido —bajar las fechas
+ * por debajo de las que cuentan, por ejemplo— vuelve como error en línea y no
+ * se guarda.
+ *
+ * Escribe por `disciplineId`, no por `seasonId` (PR 5/6): `disciplines.config`
+ * es la fuente real desde que `seasonHeader` dejó de leer `seasons.config`.
  */
-export function Formato({ seasonId, config }: { seasonId: string; config: SeasonConfig }) {
+export function Formato({
+  seasonId,
+  disciplineId,
+  config,
+}: {
+  seasonId: string
+  disciplineId: DisciplineId
+  config: SeasonConfig
+}) {
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
 
   const save = (next: SeasonConfig) => {
     setError(null)
     startTransition(async () => {
-      const result = await saveConfig(seasonId, next)
+      const result = await saveConfig(seasonId, disciplineId, next)
       if (!result.ok) setError(result.error)
     })
   }

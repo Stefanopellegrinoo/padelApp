@@ -26,16 +26,45 @@ import type { Client } from './client'
 import { EdgeError } from './errors'
 import { defaultDisciplineId } from './season'
 
+/** Una disciplina, como la necesita un header: sólo lo que una pantalla de config puede llegar a mostrar. */
+export interface DisciplineHeader {
+  id: DisciplineId
+  kind: 'PADEL' | 'FIFA'
+  config: SeasonConfig
+}
+
 export interface SeasonHeader {
   id: string
   name: string
   status: string
   regularMatchdays: number
   isAdmin: boolean
-  /** The full config, for screens that need more than `regularMatchdays` — e.g. `narrateRules`. */
-  config: SeasonConfig
+  /**
+   * En orden de `position, created_at` — el mismo criterio que
+   * `defaultDisciplineId` y `create_masters` (0021). Nunca vacío: REQ-NR-4 lo
+   * garantiza, y `disciplines_read` (0015) usa el mismo gate `is_participant`
+   * que `seasons_read`, así que quien ve este header ve su disciplina.
+   *
+   * `SeasonHeader` ya NO trae `config`: hasta PR 5 este header devolvía
+   * `seasons.config` (`updateSeasonConfig` era su único escritor), que podía
+   * divergir de la disciplina sin que nada lo notara. `disciplines.config` es
+   * la fuente real desde PR 5; `primaryDiscipline` es el acceso de acá hasta
+   * que exista el wizard multi-disciplina (PR 11).
+   */
+  disciplines: DisciplineHeader[]
   /** The share link's token. Every participant can already read this column; the wizard and the settings screen show it. */
   inviteToken: string
+}
+
+/**
+ * La disciplina [0] de un header — la única hasta el wizard multi-disciplina
+ * (PR 11). Centraliza acá el único `throw` que necesita este supuesto, en vez
+ * de repetirlo en cada pantalla que hoy sólo conoce una disciplina.
+ */
+export function primaryDiscipline(header: SeasonHeader): DisciplineHeader {
+  const discipline = header.disciplines[0]
+  if (discipline === undefined) throw new EdgeError('El torneo no tiene disciplina.')
+  return discipline
 }
 
 export interface EntryRow {
@@ -97,9 +126,15 @@ interface SeasonRow {
   id: string
   name: string
   status: string
-  config: unknown
   created_by: string
   invite_token: string
+}
+
+interface DisciplineHeaderRow {
+  id: string
+  season_id: string
+  kind: string
+  config: unknown
 }
 
 interface MatchdayRow {
@@ -118,15 +153,28 @@ async function currentUserId(supabase: Client): Promise<string | null> {
   return data.user?.id ?? null
 }
 
-function toSeasonHeader(row: SeasonRow, userId: string | null): SeasonHeader {
-  const config = row.config as unknown as SeasonConfig
+function toDisciplineHeader(row: DisciplineHeaderRow): DisciplineHeader {
+  return {
+    id: row.id as DisciplineId,
+    kind: row.kind as 'PADEL' | 'FIFA',
+    config: row.config as unknown as SeasonConfig,
+  }
+}
+
+function toSeasonHeader(
+  row: SeasonRow,
+  disciplines: DisciplineHeader[],
+  userId: string | null,
+): SeasonHeader {
+  const primary = disciplines[0]
+  if (primary === undefined) throw new EdgeError('El torneo no tiene disciplina.')
   return {
     id: row.id,
     name: row.name,
     status: row.status,
-    regularMatchdays: config.regularMatchdays,
+    regularMatchdays: primary.config.regularMatchdays,
     isAdmin: row.created_by === userId,
-    config,
+    disciplines,
     inviteToken: row.invite_token,
   }
 }
@@ -144,7 +192,8 @@ function toMatchdaySummary(row: MatchdayRow): MatchdaySummary {
   }
 }
 
-const SEASON_HEADER_COLUMNS = 'id, name, status, config, created_by, invite_token'
+const SEASON_HEADER_COLUMNS = 'id, name, status, created_by, invite_token'
+const DISCIPLINE_HEADER_COLUMNS = 'id, season_id, kind, config'
 
 /** Every season where the caller has a seat — admin or squad. RLS does the filtering; this only shapes the rows. */
 export async function mySeasons(supabase: Client): Promise<SeasonHeader[]> {
@@ -153,17 +202,52 @@ export async function mySeasons(supabase: Client): Promise<SeasonHeader[]> {
     currentUserId(supabase),
   ])
   if (error) throw new EdgeError(`No se pudieron leer las temporadas: ${error.message}`)
-  return (data ?? []).map((row) => toSeasonHeader(row, userId))
+  const seasons = data ?? []
+  if (seasons.length === 0) return []
+
+  const { data: disciplineRows, error: disciplinesError } = await supabase
+    .from('disciplines')
+    .select(DISCIPLINE_HEADER_COLUMNS)
+    .in(
+      'season_id',
+      seasons.map((season) => season.id),
+    )
+    .order('position', { ascending: true })
+    .order('created_at', { ascending: true })
+  if (disciplinesError) {
+    throw new EdgeError(`No se pudieron leer las disciplinas: ${disciplinesError.message}`)
+  }
+
+  const disciplinesBySeason = new Map<string, DisciplineHeader[]>()
+  for (const row of disciplineRows ?? []) {
+    const discipline = toDisciplineHeader(row)
+    const bucket = disciplinesBySeason.get(row.season_id)
+    if (bucket === undefined) disciplinesBySeason.set(row.season_id, [discipline])
+    else bucket.push(discipline)
+  }
+
+  return seasons.map((season) =>
+    toSeasonHeader(season, disciplinesBySeason.get(season.id) ?? [], userId),
+  )
 }
 
 export async function seasonHeader(supabase: Client, seasonId: string): Promise<SeasonHeader> {
-  const [{ data, error }, userId] = await Promise.all([
+  const [{ data, error }, { data: disciplineRows, error: disciplinesError }, userId] = await Promise.all([
     supabase.from('seasons').select(SEASON_HEADER_COLUMNS).eq('id', seasonId).maybeSingle(),
+    supabase
+      .from('disciplines')
+      .select(DISCIPLINE_HEADER_COLUMNS)
+      .eq('season_id', seasonId)
+      .order('position', { ascending: true })
+      .order('created_at', { ascending: true }),
     currentUserId(supabase),
   ])
   if (error) throw new EdgeError(`No se pudo leer la temporada: ${error.message}`)
   if (data === null) throw new EdgeError('La temporada no existe.')
-  return toSeasonHeader(data, userId)
+  if (disciplinesError) {
+    throw new EdgeError(`No se pudieron leer las disciplinas: ${disciplinesError.message}`)
+  }
+  return toSeasonHeader(data, (disciplineRows ?? []).map(toDisciplineHeader), userId)
 }
 
 /**

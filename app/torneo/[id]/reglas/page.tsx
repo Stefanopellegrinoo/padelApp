@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { publicRules, seasonAdminName, seasonHeader, seasonRules } from '@/db/read'
+import { primaryDiscipline, publicRules, seasonAdminName, seasonHeader, seasonRules } from '@/db/read'
 import { serverClient } from '@/db/server'
 import { RulesBody } from './rules-body'
 
@@ -71,7 +71,7 @@ export default async function ReglasPage({ params }: ReglasPageProps) {
   return (
     <RulesBody
       seasonId={id}
-      config={header.config}
+      config={primaryDiscipline(header).config}
       adminName={adminName}
       rulesText={rules.text}
       isAdmin={header.isAdmin}

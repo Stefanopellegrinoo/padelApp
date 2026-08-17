@@ -14,7 +14,15 @@ import {
   type PairStanding,
   type SeasonConfig,
 } from '@/core'
-import { attendancesOf, entriesOf, matchdayDetail, matchdaysOf, pairLocksOf, seasonHeader } from '@/db/read'
+import {
+  attendancesOf,
+  entriesOf,
+  matchdayDetail,
+  matchdaysOf,
+  pairLocksOf,
+  primaryDiscipline,
+  seasonHeader,
+} from '@/db/read'
 import { awardsBefore, closedHistory, frozenPointsOf } from '@/db/season'
 import { serverClient } from '@/db/server'
 import { EdgeError } from '@/db/errors'
@@ -141,8 +149,9 @@ export default async function FechaDetailPage({ params }: PageProps) {
       awardsBefore(supabase, matchday.disciplineId, matchdayNumber),
       matchdayDetail(supabase, matchday.id),
     ])
-    const snapshot = snapshotForMatchday(matchdayNumber, seedOrder, awardsByMatchday, header.config)
-    const ranking = computeRanking(awardsByMatchday, seedOrder, header.config, snapshot)
+    const mastersConfig = primaryDiscipline(header).config
+    const snapshot = snapshotForMatchday(matchdayNumber, seedOrder, awardsByMatchday, mastersConfig)
+    const ranking = computeRanking(awardsByMatchday, seedOrder, mastersConfig, snapshot)
 
     const qualifiers: QualifierVM[] = mastersQualifiers(ranking).map((entryId) => ({
       entryId,
@@ -251,7 +260,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
 
   if (matchday.status !== 'DRAFT') {
     const status = matchday.status
-    const config = header.config
+    const config = primaryDiscipline(header).config
     const seedOrder = entries
       .filter((entry) => entry.kind === 'SQUAD')
       .sort((a, b) => a.seedPosition - b.seedPosition)

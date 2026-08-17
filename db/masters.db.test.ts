@@ -30,7 +30,7 @@ import {
   setMyAttendance,
   syncGuestSeat,
 } from './matchday'
-import { attendancesOf, entriesOf, matchdayDetail, matchdaysOf, seasonHeader } from './read'
+import { attendancesOf, entriesOf, matchdayDetail, matchdaysOf, primaryDiscipline, seasonHeader } from './read'
 import { awardsBefore, squadSeedOrder } from './season'
 import { adminClient } from './test/admin'
 import { createSeason } from './test/factories'
@@ -112,7 +112,7 @@ async function matchIdsOf(matchdayId: string): Promise<string[]> {
 
 /** Juega y cierra la temporada regular entera para dejarla lista para el Masters. */
 async function playRegularSeason(admin: TestUser, seasonId: string, squad: string[]): Promise<void> {
-  const config = (await seasonHeader(admin.client, seasonId)).config
+  const config = primaryDiscipline(await seasonHeader(admin.client, seasonId)).config
   for (let number = 1; number <= config.regularMatchdays; number++) {
     const matchdayId = await createMatchday(admin.client, seasonId, '2026-03-05')
     for (const entryId of squad) {
@@ -133,7 +133,7 @@ async function qualifiersOf(
   disciplineId: DisciplineId,
   mastersNumber: number,
 ): Promise<MastersFour> {
-  const config = (await seasonHeader(admin.client, seasonId)).config
+  const config = primaryDiscipline(await seasonHeader(admin.client, seasonId)).config
   const seedOrder = await squadSeedOrder(admin.client, seasonId)
   const awards = await awardsBefore(admin.client, disciplineId, mastersNumber)
   const snapshot = snapshotForMatchday(mastersNumber, seedOrder, awards, config)

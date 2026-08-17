@@ -1,6 +1,14 @@
 import { redirect } from 'next/navigation'
 import { validateConfig } from '@/core'
-import { entriesOf, matchdaysOf, myEntryId, playerNames, seasonHeader, seasonRules } from '@/db/read'
+import {
+  entriesOf,
+  matchdaysOf,
+  myEntryId,
+  playerNames,
+  primaryDiscipline,
+  seasonHeader,
+  seasonRules,
+} from '@/db/read'
 import { serverClient } from '@/db/server'
 import { renameTournament } from './actions'
 import { CopiarLink } from './copiar'
@@ -43,6 +51,7 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
     matchdaysOf(supabase, seasonId),
   ])
   if (!header.isAdmin) redirect(`/torneo/${seasonId}`)
+  const discipline = primaryDiscipline(header)
 
   const squad = entries
     .filter((entry) => entry.kind === 'SQUAD')
@@ -62,11 +71,11 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
   // toca `squadSize` ni `points` (decisión registrada 3), así que las dos cosas
   // pueden quedar en desacuerdo y hay que decirlo con la voz que ya existe.
   const mismatch =
-    seats.length === header.config.squadSize
+    seats.length === discipline.config.squadSize
       ? []
-      : validateConfig({ ...header.config, squadSize: seats.length })
+      : validateConfig({ ...discipline.config, squadSize: seats.length })
 
-  const { setsToWin, gamesPerSet } = header.config.matchFormat
+  const { setsToWin, gamesPerSet } = discipline.config.matchFormat
   // CLOSED y no todas: lo que el modal tiene que poner en juego es lo que ya se
   // jugó, no una fecha en DRAFT que no cuesta nada volver a abrir.
   const playedCount = matchdays.filter((matchday) => matchday.status === 'CLOSED').length
@@ -142,7 +151,7 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
       ))}
 
       <Plantel seasonId={seasonId} seats={seats} canTakeSeat={myEntry === null} />
-      <Formato seasonId={seasonId} config={header.config} />
+      <Formato seasonId={seasonId} disciplineId={discipline.id} config={discipline.config} />
       <Reglas seasonId={seasonId} text={rules.text} />
 
       {/* Acá estaba "Cerrar sesión", que no es de esta pantalla: es de la

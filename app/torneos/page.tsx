@@ -48,9 +48,13 @@ interface SeasonCard {
  * la que después le falta justo lo que la siguiente pantalla necesita. Esto son
  * cuatro lecturas que ya existen, compuestas para este caso.
  *
- * ponytail: cuatro consultas por temporada. Con las 1 a 3 temporadas que tiene
- * cualquiera de este grupo es gratis; si alguien llegara a veinte, acá hay que
- * mirar.
+ * ponytail: nueve consultas por temporada (medido con `pg_stat_statements`,
+ * verify-report ronda 4, S10) — no cuatro, que es lo que este comentario decía
+ * antes de esa medición. `defaultDisciplineId` sola se paga tres veces
+ * (`entriesOf`, `matchdaysOf`, `awardsOf` la resuelven cada una por su
+ * cuenta). Con las 1 a 3 temporadas que tiene cualquiera de este grupo sigue
+ * siendo gratis; si alguien llegara a veinte, acá hay que mirar — y el primer
+ * ahorro es resolver la disciplina UNA vez acá y pasarla, no tres.
  */
 async function cardFor(supabase: Client, header: SeasonHeader): Promise<SeasonCard> {
   const [entries, matchdays, awardsByMatchday, viewerEntryId] = await Promise.all([

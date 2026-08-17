@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
+import { defaultConfig } from '@/core'
 import { createMatchday } from './matchday'
+import { disciplineConfig, updateDisciplineConfig } from './discipline'
 import { derivedSeasonStatus } from './read'
 import { adminClient } from './test/admin'
 import { createSeason } from './test/factories'
@@ -184,5 +186,56 @@ describe('REQ-NR-4 — ninguna temporada se queda sin disciplina', () => {
     const seasonsWithDiscipline = new Set((disciplineRows ?? []).map((row) => row.season_id))
     const orphaned = (seasons ?? []).filter((season) => !seasonsWithDiscipline.has(season.id))
     expect(orphaned).toHaveLength(0)
+  })
+})
+
+// ── PR 5 — config por disciplina (REQ-D2-1) ─────────────────────────────────
+// `disciplines.config` existe desde PR 1 (0015), pero hasta acá el único
+// escritor era `updateSeasonConfig`, que sólo toca `seasons.config` — dos
+// disciplinas de la misma temporada podían divergir sin que nada las leyera
+// de vuelta. `disciplineConfig`/`updateDisciplineConfig` son el primer par
+// lectura/escritura que trata `disciplines.config` como la fuente real, POR
+// disciplina, sin herencia cruzada entre pádel y FIFA.
+describe('disciplineConfig / updateDisciplineConfig (PR 5, REQ-D2-1)', () => {
+  it('cada disciplina devuelve su propia config, sin herencia cruzada', async () => {
+    const admin = await createTestUser()
+    const padelConfig = defaultConfig(8)
+    const fifaConfig = { ...defaultConfig(10), regularMatchdays: 6 }
+    const { disciplineIds } = await createSeason({
+      admin,
+      disciplines: [{ config: padelConfig }, { kind: 'FIFA', config: fifaConfig }],
+    })
+    const [padelId, fifaId] = disciplineIds
+    if (padelId === undefined || fifaId === undefined) throw new Error('Faltan disciplinas.')
+
+    expect(await disciplineConfig(admin.client, padelId)).toEqual(padelConfig)
+    expect(await disciplineConfig(admin.client, fifaId)).toEqual(fifaConfig)
+  })
+
+  it('updateDisciplineConfig sólo toca la disciplina destino', async () => {
+    const admin = await createTestUser()
+    const padelConfig = defaultConfig(8)
+    const fifaConfig = defaultConfig(10)
+    const { disciplineIds } = await createSeason({
+      admin,
+      disciplines: [{ config: padelConfig }, { kind: 'FIFA', config: fifaConfig }],
+    })
+    const [padelId, fifaId] = disciplineIds
+    if (padelId === undefined || fifaId === undefined) throw new Error('Faltan disciplinas.')
+
+    const nextPadelConfig = { ...padelConfig, regularMatchdays: 14 }
+    await updateDisciplineConfig(admin.client, padelId, nextPadelConfig)
+
+    expect(await disciplineConfig(admin.client, padelId)).toEqual(nextPadelConfig)
+    expect(await disciplineConfig(admin.client, fifaId)).toEqual(fifaConfig)
+  })
+
+  it('rechaza una config inválida antes de escribir (assertValidConfig)', async () => {
+    const admin = await createTestUser()
+    const { disciplineId } = await createSeason({ admin })
+    const broken = { ...defaultConfig(8), tiebreakSnapshotEvery: 0 }
+
+    await expect(updateDisciplineConfig(admin.client, disciplineId, broken)).rejects.toThrow()
+    expect(await disciplineConfig(admin.client, disciplineId)).toEqual(defaultConfig(8))
   })
 })

@@ -36,6 +36,7 @@ export type Database = {
     Tables: {
       attendances: {
         Row: {
+          discipline_id: string
           entry_id: string
           entry_kind: string
           id: string
@@ -44,6 +45,7 @@ export type Database = {
           status: string
         }
         Insert: {
+          discipline_id: string
           entry_id: string
           entry_kind?: string
           id?: string
@@ -52,6 +54,7 @@ export type Database = {
           status: string
         }
         Update: {
+          discipline_id?: string
           entry_id?: string
           entry_kind?: string
           id?: string
@@ -60,6 +63,13 @@ export type Database = {
           status?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "attendances_entry_discipline"
+            columns: ["discipline_id", "entry_id"]
+            isOneToOne: false
+            referencedRelation: "discipline_entries"
+            referencedColumns: ["discipline_id", "entry_id"]
+          },
           {
             foreignKeyName: "attendances_entry_id_entry_kind_fkey"
             columns: ["entry_id", "entry_kind"]
@@ -73,6 +83,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "entries"
             referencedColumns: ["id", "season_id"]
+          },
+          {
+            foreignKeyName: "attendances_matchday_discipline"
+            columns: ["matchday_id", "discipline_id"]
+            isOneToOne: false
+            referencedRelation: "matchdays"
+            referencedColumns: ["id", "discipline_id"]
           },
           {
             foreignKeyName: "attendances_matchday_id_season_id_fkey"

@@ -361,6 +361,20 @@ describe('create_masters discipline resolution (N1)', () => {
       .maybeSingle()
     expect(authoritative?.id).toBe(padelId)
 
+    // El `delete` de disciplines de arriba se llevó en cascada las filas de
+    // `discipline_entries` del plantel (PR 7): sin reponerlas para el padelId
+    // NUEVO, `setAttendance` (adentro de `playRegularSeason`) choca contra
+    // `attendances_entry_discipline` (PR 8) apenas intenta marcar presente.
+    const { error: seatsError } = await db.from('discipline_entries').insert(
+      squad.map((entryId, index) => ({
+        discipline_id: padelId,
+        entry_id: entryId,
+        season_id: seasonId,
+        seed_position: index,
+      })),
+    )
+    if (seatsError) throw new Error(seatsError.message)
+
     // Cierra la única fecha regular de PADEL — FIFA se queda sin ninguna. Si
     // create_masters resolviera FIFA por error, vería 0 fechas cerradas en
     // vez de la 1 que pide `regularMatchdays` y explotaría con "faltan 1".

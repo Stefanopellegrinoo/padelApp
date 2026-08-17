@@ -1,7 +1,6 @@
 import Link from 'next/link'
 import { MASTERS_SIZE, rankingWithMovement, snapshotForMatchday, type EntryId } from '@/core'
-import { awardsOf, entriesOf, matchdaysOf, seasonHeader } from '@/db/read'
-import { seasonConfig } from '@/db/season'
+import { awardsOf, entriesOf, matchdaysOf, primaryDiscipline, seasonHeader } from '@/db/read'
 import { serverClient } from '@/db/server'
 import { initials, matchdayDay } from '@/app/format'
 import { Desempate, type StandingsRow, type TiebreakEntry } from './desempate'
@@ -23,13 +22,16 @@ export default async function TablaPage({ params }: PageProps) {
   const { id: seasonId } = await params
   const supabase = await serverClient()
 
-  const [header, entries, matchdays, awardsByMatchday, config] = await Promise.all([
+  const [header, entries, matchdays, awardsByMatchday] = await Promise.all([
     seasonHeader(supabase, seasonId),
     entriesOf(supabase, seasonId),
     matchdaysOf(supabase, seasonId),
     awardsOf(supabase, seasonId),
-    seasonConfig(supabase, seasonId),
   ])
+  // `disciplines.config` es la fuente real desde PR 5 — `seasonHeader` ya la
+  // trae, así que no hace falta una segunda consulta (C5, verify-report
+  // ronda 3: `seasons.config` quedó sin escritor y podía divergir).
+  const config = primaryDiscipline(header).config
 
   const squadEntries = entries
     .filter((entry) => entry.kind === 'SQUAD')

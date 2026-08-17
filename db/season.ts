@@ -244,30 +244,55 @@ export async function createSeason(
   // temporadas que ya existían. El wizard multi-disciplina (PR 11) es el que
   // deja elegir más de una; hasta entonces toda temporada nueva necesita
   // ésta para que `createMatchday` pueda resolver su `discipline_id`.
-  const { error: disciplineError } = await supabase
+  const { data: discipline, error: disciplineError } = await supabase
     .from('disciplines')
     .insert({ season_id: season.id, kind: 'PADEL', config: config as unknown as Json })
-  if (disciplineError !== null) {
+    .select('id')
+    .single()
+  if (disciplineError !== null || discipline === null) {
     await supabase.from('seasons').delete().eq('id', season.id)
-    throw new EdgeError(`No se pudo crear la disciplina del torneo: ${disciplineError.message}`)
+    throw new EdgeError(`No se pudo crear la disciplina del torneo: ${disciplineError?.message}`)
   }
 
-  const { error: entriesError } = await supabase.from('entries').insert(
-    squadNames.map((seat, index) => ({
-      season_id: season.id,
-      display_name: seat.trim(),
-      kind: 'SQUAD' as const,
-      seed_position: index,
-      player_id: index === mySeatIndex ? myPlayerId : null,
-    })),
-  )
-  if (entriesError !== null) {
+  const { data: entryRows, error: entriesError } = await supabase
+    .from('entries')
+    .insert(
+      squadNames.map((seat, index) => ({
+        season_id: season.id,
+        display_name: seat.trim(),
+        kind: 'SQUAD' as const,
+        seed_position: index,
+        player_id: index === mySeatIndex ? myPlayerId : null,
+      })),
+    )
+    .select('id, seed_position')
+  if (entriesError !== null || entryRows === null) {
     await supabase.from('seasons').delete().eq('id', season.id)
     throw new EdgeError(
-      entriesError.message.includes('entries_squad_named')
+      entriesError?.message.includes('entries_squad_named') === true
         ? 'Falta un nombre del plantel.'
-        : `No se pudo cargar el plantel: ${entriesError.message}`,
+        : `No se pudo cargar el plantel: ${entriesError?.message}`,
     )
+  }
+
+  // Cada asiento entra a la disciplina recién creada con el MISMO
+  // seed_position que en `entries` — no hay nada más que decidir con una sola
+  // disciplina. `discipline_entries` (PR 7) es la fuente real del orden desde
+  // acá en más; sin este insert, un torneo creado DESPUÉS de esta migración
+  // nacería con la disciplina vacía aunque `entries` tenga todo el plantel.
+  if (entryRows.length > 0) {
+    const { error: seatsError } = await supabase.from('discipline_entries').insert(
+      entryRows.map((row) => ({
+        discipline_id: discipline.id,
+        entry_id: row.id,
+        season_id: season.id,
+        seed_position: row.seed_position,
+      })),
+    )
+    if (seatsError !== null) {
+      await supabase.from('seasons').delete().eq('id', season.id)
+      throw new EdgeError(`No se pudo asignar el plantel a la disciplina: ${seatsError.message}`)
+    }
   }
 
   return { seasonId: season.id, inviteToken: season.invite_token }

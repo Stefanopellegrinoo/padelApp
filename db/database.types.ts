@@ -125,6 +125,55 @@ export type Database = {
           },
         ]
       }
+      discipline_entries: {
+        Row: {
+          created_at: string
+          discipline_id: string
+          entry_id: string
+          entry_kind: string
+          season_id: string
+          seed_position: number
+        }
+        Insert: {
+          created_at?: string
+          discipline_id: string
+          entry_id: string
+          entry_kind?: string
+          season_id: string
+          seed_position: number
+        }
+        Update: {
+          created_at?: string
+          discipline_id?: string
+          entry_id?: string
+          entry_kind?: string
+          season_id?: string
+          seed_position?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "discipline_entries_discipline_id_season_id_fkey"
+            columns: ["discipline_id", "season_id"]
+            isOneToOne: false
+            referencedRelation: "disciplines"
+            referencedColumns: ["id", "season_id"]
+          },
+          {
+            foreignKeyName: "discipline_entries_entry_id_entry_kind_fkey"
+            columns: ["entry_id", "entry_kind"]
+            isOneToOne: false
+            referencedRelation: "entries"
+            referencedColumns: ["id", "kind"]
+          },
+          {
+            foreignKeyName: "discipline_entries_entry_id_season_id_fkey"
+            columns: ["entry_id", "season_id"]
+            isOneToOne: false
+            referencedRelation: "entries"
+            referencedColumns: ["id", "season_id"]
+          },
+        ]
+      }
       disciplines: {
         Row: {
           allows_draw: boolean
@@ -511,7 +560,12 @@ export type Database = {
     }
     Functions: {
       add_squad_seat: {
-        Args: { p_before?: string; p_name: string; p_season: string }
+        Args: {
+          p_before?: string
+          p_disciplines?: string[]
+          p_name: string
+          p_season: string
+        }
         Returns: string
       }
       cancel_matchday: { Args: { p_matchday: string }; Returns: undefined }
@@ -569,7 +623,7 @@ export type Database = {
         Returns: undefined
       }
       shift_seeds_up: {
-        Args: { p_from: number; p_season: string }
+        Args: { p_discipline: string; p_from: number }
         Returns: undefined
       }
     }

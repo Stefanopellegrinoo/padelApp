@@ -336,4 +336,47 @@ describe('season_invite', () => {
     expect(error).toBeNull()
     expect(data?.[0]?.disciplines).toEqual(['PADEL'])
   })
+
+  // W10, verify-report ronda 4: el picker seguía ordenando por
+  // `entries.seed_position` (temporada, dual-write tail-only desde PR 7), no
+  // por el orden real de `discipline_entries` (disciplina) — "antes de Juan"
+  // quedaba bien guardado en la base y mal mostrado en la pantalla de Unirse.
+  it('ordena por discipline_entries, no por entries.seed_position: "antes de Juan" aparece antes de Juan', async () => {
+    const admin = await createTestUser()
+    const { seasonId, disciplineIds } = await createSeason({ admin, disciplines: [{ kind: 'PADEL' }] })
+    const [padelId] = disciplineIds
+    if (padelId === undefined) throw new Error('Falta la disciplina.')
+
+    const seat = async (name: string, before?: string): Promise<string> => {
+      const { data, error } = await admin.client.rpc('add_squad_seat', {
+        p_season: seasonId,
+        p_name: name,
+        p_disciplines: [padelId],
+        ...(before === undefined ? {} : { p_before: before }),
+      })
+      if (error !== null || data === null) throw new Error(error?.message)
+      return data
+    }
+
+    const juan = await seat('Juan')
+    const pedro = await seat('Pedro')
+    // "antes de Juan": entries.seed_position sigue siendo tail-only (Nuevo
+    // queda última fila ahí), pero discipline_entries sí lo corre adelante.
+    const nuevo = await seat('Nuevo', juan)
+
+    const db = adminClient()
+    const { data: season, error: seasonError } = await db
+      .from('seasons')
+      .select('invite_token')
+      .eq('id', seasonId)
+      .single()
+    if (seasonError || season === null) throw new Error(seasonError?.message)
+
+    const { data: picker, error: pickerError } = await admin.client.rpc('season_invite', {
+      p_token: season.invite_token,
+    })
+    if (pickerError) throw new Error(pickerError.message)
+
+    expect((picker ?? []).map((row) => row.entry_id)).toEqual([nuevo, juan, pedro])
+  })
 })

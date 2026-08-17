@@ -67,6 +67,24 @@ export function primaryDiscipline(header: SeasonHeader): DisciplineHeader {
   return discipline
 }
 
+/**
+ * La disciplina de UNA fecha puntual — no la [0] de la temporada. PR 10 pone
+ * la disciplina en la URL de `fechas/[n]`, y ese mismo cambio deja a mano
+ * `matchday.disciplineId` donde antes sólo estaba `primaryDiscipline(header)`
+ * (verify-report ronda 4, hallazgo adyacente): con dos disciplinas del mismo
+ * `kind` en la temporada (Fase 2), la [0] ya no es necesariamente la de ESTA
+ * fecha.
+ *
+ * El `throw` es el mismo supuesto de `primaryDiscipline`: `disciplineId` está
+ * garantizado por la FK compuesta `matchdays_discipline_season` (0015) a
+ * estar en `header.disciplines`, así que en la práctica nunca dispara.
+ */
+export function disciplineOf(header: SeasonHeader, disciplineId: DisciplineId): DisciplineHeader {
+  const discipline = header.disciplines.find((candidate) => candidate.id === disciplineId)
+  if (discipline === undefined) throw new EdgeError('La disciplina de la fecha no existe en el torneo.')
+  return discipline
+}
+
 export interface EntryRow {
   id: string
   displayName: string
@@ -494,6 +512,34 @@ export async function matchdaysOf(supabase: Client, seasonId: string): Promise<M
     .from('matchdays')
     .select('id, number, kind, status, played_on, discipline_id')
     .eq('discipline_id', disciplineId)
+    .order('number', { ascending: true })
+  if (error) throw new EdgeError(`No se pudieron leer las fechas: ${error.message}`)
+  return (data ?? []).map(toMatchdaySummary)
+}
+
+/**
+ * TODAS las fechas de la temporada, de CUALQUIER disciplina — a diferencia de
+ * `matchdaysOf`, que sólo trae las de la disciplina por defecto. Bug latente
+ * descubierto escribiendo el test:db de PR 10 (`legacy-fecha-redirect.db.test.ts`):
+ * hasta Fase 1 (una disciplina por temporada) las dos consultas daban lo
+ * mismo por casualidad, y con una segunda disciplina `matchdaysOf` la deja
+ * afuera en silencio — exactamente el síntoma de C8/C9 (ronda 4) en
+ * `entriesOf`, acá en `matchdaysOf`.
+ *
+ * `matchdaysOf` NO se toca: sus otros 4 llamadores (season overview, Mis
+ * torneos, Ajustes, la lista de fechas) siguen viendo sólo la disciplina por
+ * defecto hasta que ELLOS mismos se vuelvan multi-disciplina (mismo criterio
+ * que `entriesOf`: no cambiar el default de quien no lo pidió). Esta función
+ * es para quien necesita encontrar una fecha SIN saber de antemano a qué
+ * disciplina pertenece: la ruta `[disciplina]/fechas/[n]` (la conoce por la
+ * URL y filtra después) y el redirect de la URL vieja (la busca para
+ * AVERIGUARLA).
+ */
+export async function seasonMatchdaysOf(supabase: Client, seasonId: string): Promise<MatchdaySummary[]> {
+  const { data, error } = await supabase
+    .from('matchdays')
+    .select('id, number, kind, status, played_on, discipline_id')
+    .eq('season_id', seasonId)
     .order('number', { ascending: true })
   if (error) throw new EdgeError(`No se pudieron leer las fechas: ${error.message}`)
   return (data ?? []).map(toMatchdaySummary)

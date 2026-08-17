@@ -53,13 +53,17 @@ describe('legacyFechaRedirectTarget', () => {
     await insertMatchday(seasonId, firstPadelId, 3)
     await insertMatchday(seasonId, secondPadelId, 3)
 
-    const firstTarget = await legacyFechaRedirectTarget(admin.client, { seasonId, n: '3' })
+    const target = await legacyFechaRedirectTarget(admin.client, { seasonId, n: '3' })
     // `number` es único por disciplina (REQ-D3-2): con dos "fecha 3" en la
     // misma temporada, `legacyFechaRedirectTarget` no puede distinguir cuál
-    // quiso el bookmark viejo — se queda con la primera que encuentra, y no
-    // rompe. Es exactamente el borde que la ruta NUEVA resuelve al llevar la
-    // disciplina explícita en la URL en vez de inferirla.
-    expect(firstTarget).toBe(`/torneo/${seasonId}/padel/fechas/3`)
+    // quiso el bookmark viejo — Postgres no garantiza un orden estable entre
+    // dos filas empatadas en `number` sin una clave de desempate, así que
+    // CUÁL de las dos gana no está definido (se vio en la práctica: cambió
+    // entre corridas). Lo único garantizado es que resuelve a una disciplina
+    // VÁLIDA de esta temporada, nunca null ni un slug inventado — es
+    // exactamente el borde que la ruta NUEVA resuelve de verdad, al llevar
+    // la disciplina explícita en la URL en vez de inferirla.
+    expect([`/torneo/${seasonId}/padel/fechas/3`, `/torneo/${seasonId}/padel-2/fechas/3`]).toContain(target)
   })
 
   it('returns null when the matchday does not exist — nothing to redirect to', async () => {

@@ -617,6 +617,7 @@ export type Database = {
         Returns: {
           admin_name: string
           claimed: boolean
+          disciplines: string[]
           display_name: string
           entry_id: string
           season_id: string

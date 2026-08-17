@@ -16,9 +16,26 @@ import {
 } from './matchday'
 import { promoteGuest } from './entries'
 import { matchdayDetail, pairLocksOf } from './read'
+import { defaultDisciplineId } from './season'
 import { adminClient } from './test/admin'
 import { createSeason } from './test/factories'
 import { createTestUser, type TestUser } from './test/users'
+
+/** El plantel de UNA disciplina, en orden de discipline_entries.seed_position. */
+async function disciplineSeedPositions(
+  seasonId: string,
+): Promise<Array<{ id: string; seed_position: number }>> {
+  const db = adminClient()
+  const disciplineId = await defaultDisciplineId(db, seasonId)
+  if (disciplineId === null) throw new Error('La temporada no tiene disciplina.')
+  const { data, error } = await db
+    .from('discipline_entries')
+    .select('entry_id, seed_position')
+    .eq('discipline_id', disciplineId)
+    .order('seed_position', { ascending: true })
+  if (error) throw new Error(error.message)
+  return (data ?? []).map((row) => ({ id: row.entry_id, seed_position: row.seed_position }))
+}
 
 // ── scaffolding local a este archivo ────────────────────────────────────────
 // Mismo criterio que cancel.db.test.ts: esta lista de armadores sólo le sirve
@@ -425,10 +442,9 @@ describe('promoteGuest — spec 3.6: usa la ubicación de la Capability 2', () =
   // aceptada que `add_squad_seat`: `p_before` se sigue validando (mismo
   // mensaje si no existe), pero ya no reserva lugar en `entries`, que pasa a
   // recibir el asiento SIEMPRE al final (dual-write, dejará de existir para
-  // SQUAD en PR 25). Darle al invitado promovido su propia fila en
-  // `discipline_entries` —donde `p_before` SÍ va a volver a posicionar— es la
-  // próxima PR ("promote_guest restatement #1/3").
-  it('"antes de" sigue validando el asiento, pero entries.seed_position ya no lo posiciona (degradación aceptada, PR 9 lo cierra)', async () => {
+  // SQUAD en PR 25). Su propia fila en `discipline_entries` —donde `p_before`
+  // SÍ posiciona— es el test de abajo (PR 9, "promote_guest restatement #1/3").
+  it('"antes de" sigue validando el asiento, pero entries.seed_position ya no lo posiciona (degradación aceptada)', async () => {
     const { admin, seasonId, matchdayId, guestId } = await closedMatchdayWithLooseGuest('2026-08-10')
     const before = await squadSeedPositions(seasonId)
     const target = before[2]
@@ -447,6 +463,43 @@ describe('promoteGuest — spec 3.6: usa la ubicación de la Capability 2', () =
     )
     // Sin huecos ni duplicados en 0..8.
     expect(after.map((e) => e.seed_position).sort((a, b) => a - b)).toEqual(
+      Array.from({ length: 9 }, (_, i) => i),
+    )
+  })
+
+  // PR 9 (0025, "promote_guest restatement #1/3"): el invitado promovido SÍ
+  // entra a discipline_entries de la disciplina de ESTA fecha, y ahí `p_before`
+  // vuelve a reservar el lugar exacto — la degradación del test de arriba es
+  // sólo de `entries`, nunca de la fuente real del orden.
+  it('entra a discipline_entries de la disciplina de esta fecha, al final si p_before es null', async () => {
+    const { admin, seasonId, guestId } = await closedMatchdayWithLooseGuest('2026-08-10')
+    const before = await disciplineSeedPositions(seasonId)
+    expect(before).toHaveLength(8)
+
+    await promoteGuest(admin.client, guestId)
+
+    const after = await disciplineSeedPositions(seasonId)
+    expect(after).toHaveLength(9)
+    expect(after.find((seat) => seat.id === guestId)?.seed_position).toBe(8)
+    expect(after.filter((seat) => seat.id !== guestId)).toEqual(before)
+  })
+
+  it('con p_before puntual, corre la cola de discipline_entries igual que add_squad_seat', async () => {
+    const { admin, seasonId, guestId } = await closedMatchdayWithLooseGuest('2026-08-10')
+    const before = await disciplineSeedPositions(seasonId)
+    const target = before[2]
+    if (target === undefined) throw new Error('Falta el asiento de test.')
+
+    await promoteGuest(admin.client, guestId, target.id)
+
+    const after = await disciplineSeedPositions(seasonId)
+    expect(after).toHaveLength(9)
+    expect(after.find((seat) => seat.id === guestId)?.seed_position).toBe(2)
+    expect(after.find((seat) => seat.id === target.id)?.seed_position).toBe(3)
+    expect(after.filter((seat) => seat.id !== guestId).map((seat) => seat.id)).toEqual(
+      before.map((seat) => seat.id),
+    )
+    expect(after.map((seat) => seat.seed_position).sort((a, b) => a - b)).toEqual(
       Array.from({ length: 9 }, (_, i) => i),
     )
   })

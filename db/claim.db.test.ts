@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest'
 import { defaultConfig } from '../core/config'
 import type { Database, Json } from './database.types'
 import { adminClient } from './test/admin'
+import { createSeason } from './test/factories'
 import { createTestUser, type TestUser } from './test/users'
 
 // Cliente sin sesión: es el rol `anon` de PostgREST, no un `authenticated` de
@@ -295,5 +296,26 @@ describe('season_invite', () => {
     const { error } = await anonClient().rpc('season_invite', { p_token: 'cualquier-token' })
 
     expect(error?.code).toBe('42501')
+  })
+
+  // PR 9 (0025): `disciplines` sale de discipline_entries, no de `entries`.
+  // `createOpenSeason` (scaffolding de este archivo) no lo llena — sólo le
+  // sirve a claim_seat, que no necesita disciplinas—, así que este caso usa
+  // la factory, que sí las llena desde PR 7.
+  it('devuelve las disciplinas de cada asiento', async () => {
+    const admin = await createTestUser()
+    const { seasonId } = await createSeason({ admin, squad: [admin.playerId] })
+    const db = adminClient()
+    const { data: season, error: seasonError } = await db
+      .from('seasons')
+      .select('invite_token')
+      .eq('id', seasonId)
+      .single()
+    if (seasonError || season === null) throw new Error(seasonError?.message)
+
+    const { data, error } = await admin.client.rpc('season_invite', { p_token: season.invite_token })
+
+    expect(error).toBeNull()
+    expect(data?.[0]?.disciplines).toEqual(['PADEL'])
   })
 })

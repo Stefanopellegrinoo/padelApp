@@ -294,6 +294,18 @@ describe('RLS — escritura', () => {
       .select()
     expect(newEntry.error).toBeNull()
     expect(newEntry.data).toHaveLength(1)
+    const newEntryId = newEntry.data?.[0]?.id
+    if (newEntryId === undefined) throw new Error('Falta el id del asiento recién insertado.')
+
+    // discipline_entries_write (0023) también deja escribir al admin del
+    // torneo — sin esto, este mismo insert es el scaffold que W8
+    // (verify-report ronda 3) encontró dejando asientos huérfanos.
+    const newSeat = await admin.client
+      .from('discipline_entries')
+      .insert({ discipline_id: disciplineId, entry_id: newEntryId, season_id: seasonId, seed_position: 1 })
+      .select()
+    expect(newSeat.error).toBeNull()
+    expect(newSeat.data).toHaveLength(1)
 
     const newMatchday = await admin.client
       .from('matchdays')

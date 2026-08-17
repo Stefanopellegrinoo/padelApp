@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import { describe, it, expect } from 'vitest'
 import { defaultConfig } from '@/core'
 import { createMatchday, matchdayContextFor } from './matchday'
@@ -197,21 +198,36 @@ describe('REQ-NR-4 — ninguna temporada se queda sin disciplina', () => {
 // contraparte. Medido contra la base completa, igual que REQ-NR-4, para que
 // un futuro insert manual de `entries` (acá o en cualquier test nuevo) no
 // vuelva a dejar un asiento huérfano en silencio.
+//
+// UNA sola consulta SQL, no dos round-trips de PostgREST (`entries` y
+// `discipline_entries` por separado): con dos consultas independientes esta
+// aserción GLOBAL mostró huérfanos fantasma en 3 de ~7 corridas de la suite
+// completa — no una regresión real (aislado, en un solo archivo, sale
+// 100% estable RED antes del fix y GREEN después), sino la ventana entre las
+// dos llamadas HTTP mientras `vitest.db.config.ts` corre otros archivos en
+// paralelo (comentario del propio config: "los tests comparten una base,
+// aíslan por temporada, no por proceso"). Un `not exists` en una única
+// sentencia ve una sola foto consistente de Postgres — el mismo patrón que ya
+// usa `db/squad-position.db.test.ts` para forzar el plan del planner.
+function countOrphanedSquadEntries(): number {
+  const output = execFileSync(
+    'docker',
+    [
+      'exec', '-i', 'supabase_db_padelApp',
+      'psql', '-U', 'postgres', '-d', 'postgres',
+      '-X', '-q', '-A', '-t', '-v', 'ON_ERROR_STOP=1', '-c',
+      `select count(*) from public.entries e
+        where e.kind = 'SQUAD'
+        and not exists (select 1 from public.discipline_entries de where de.entry_id = e.id);`,
+    ],
+    { encoding: 'utf8' },
+  )
+  return Number(output.trim())
+}
+
 describe('ningún asiento SQUAD se queda sin discipline_entries (C7, W8)', () => {
-  it('count(entries SQUAD sin fila en discipline_entries) = 0', async () => {
-    const db = adminClient()
-    const { data: squadEntries, error: entriesError } = await db
-      .from('entries')
-      .select('id')
-      .eq('kind', 'SQUAD')
-    if (entriesError) throw new Error(entriesError.message)
-
-    const { data: seatRows, error: seatsError } = await db.from('discipline_entries').select('entry_id')
-    if (seatsError) throw new Error(seatsError.message)
-
-    const seated = new Set((seatRows ?? []).map((row) => row.entry_id))
-    const orphaned = (squadEntries ?? []).filter((entry) => !seated.has(entry.id))
-    expect(orphaned).toHaveLength(0)
+  it('count(entries SQUAD sin fila en discipline_entries) = 0', () => {
+    expect(countOrphanedSquadEntries()).toBe(0)
   })
 })
 

@@ -418,7 +418,17 @@ describe('promoteGuest — la traba de armado no puede sobrevivir a la promoció
 })
 
 describe('promoteGuest — spec 3.6: usa la ubicación de la Capability 2', () => {
-  it('insertar "antes de" un asiento corre la cola +1, sin tocar el orden relativo de los demás', async () => {
+  // `entries.seed_position` cambió de significado en torneo-multi-disciplina
+  // PR 7 (0023_discipline_entries.sql): `shift_seeds_up` dejó de tocar
+  // `entries` — corre `discipline_entries` — y el restatement de
+  // `promote_guest` en esa misma migración documenta la misma degradación
+  // aceptada que `add_squad_seat`: `p_before` se sigue validando (mismo
+  // mensaje si no existe), pero ya no reserva lugar en `entries`, que pasa a
+  // recibir el asiento SIEMPRE al final (dual-write, dejará de existir para
+  // SQUAD en PR 25). Darle al invitado promovido su propia fila en
+  // `discipline_entries` —donde `p_before` SÍ va a volver a posicionar— es la
+  // próxima PR ("promote_guest restatement #1/3").
+  it('"antes de" sigue validando el asiento, pero entries.seed_position ya no lo posiciona (degradación aceptada, PR 9 lo cierra)', async () => {
     const { admin, seasonId, matchdayId, guestId } = await closedMatchdayWithLooseGuest('2026-08-10')
     const before = await squadSeedPositions(seasonId)
     const target = before[2]
@@ -428,15 +438,29 @@ describe('promoteGuest — spec 3.6: usa la ubicación de la Capability 2', () =
 
     const after = await squadSeedPositions(seasonId)
     expect(after).toHaveLength(9)
-    expect(after.find((e) => e.id === guestId)?.seed_position).toBe(2)
-    expect(after.find((e) => e.id === target.id)?.seed_position).toBe(3)
-    // Nadie más se corrió salvo la cola desde la posición 2 en adelante, y
-    // ningún preexistente saltó por encima de otro.
-    expect(after.filter((e) => e.id !== guestId).map((e) => e.id)).toEqual(before.map((e) => e.id))
+    // Al final (max + 1 = 8), no en la posición 2 que pedía `p_before`.
+    expect(after.find((e) => e.id === guestId)?.seed_position).toBe(8)
+    // Nadie de los 8 preexistentes se corrió: sin `discipline_entries` propia
+    // todavía, no hay nada que parkear en `entries`.
+    expect(after.filter((e) => e.id !== guestId).map((e) => e.seed_position)).toEqual(
+      before.map((e) => e.seed_position),
+    )
     // Sin huecos ni duplicados en 0..8.
     expect(after.map((e) => e.seed_position).sort((a, b) => a - b)).toEqual(
       Array.from({ length: 9 }, (_, i) => i),
     )
+  })
+
+  it('rechaza un p_before que no es un asiento SQUAD de esta temporada, sin promover nada', async () => {
+    const { admin, seasonId, guestId } = await closedMatchdayWithLooseGuest('2026-08-10')
+    const before = await squadSeedPositions(seasonId)
+
+    await expect(
+      promoteGuest(admin.client, guestId, '00000000-0000-0000-0000-000000000000'),
+    ).rejects.toThrow(/no está en el plantel/)
+
+    const after = await squadSeedPositions(seasonId)
+    expect(after).toEqual(before)
   })
 })
 

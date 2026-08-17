@@ -97,5 +97,27 @@ export async function createSeason({
     entryIds.push(entry.id)
   }
 
+  // Desde PR 7 (discipline_entries): cada SQUAD entra a TODAS las disciplinas
+  // de la temporada, con el mismo `seed_position` que tiene en `entries` —
+  // mismo criterio que el backfill de 0023_discipline_entries.sql. Así los
+  // ~215 casos que ya usan `squad` + `disciplines` de a una siguen viendo el
+  // plantel sin tocarse; el solape parcial entre disciplinas (REQ-D1-4) se
+  // arma a mano, fuera de esta factory, cuando un test lo necesita.
+  if (entryIds.length > 0 && disciplineIds.length > 0) {
+    const { error: seatsError } = await db.from('discipline_entries').insert(
+      disciplineIds.flatMap((disciplineId) =>
+        entryIds.map((entryId, index) => ({
+          discipline_id: disciplineId,
+          entry_id: entryId,
+          season_id: season.id,
+          seed_position: index,
+        })),
+      ),
+    )
+    if (seatsError) {
+      throw new Error(`No se pudo asignar el plantel a las disciplinas de test: ${seatsError.message}`)
+    }
+  }
+
   return { seasonId: season.id, entryIds, disciplineIds, disciplineId }
 }

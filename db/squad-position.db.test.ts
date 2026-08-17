@@ -4,7 +4,7 @@ import { defaultConfig } from '@/core'
 import { addSquadSeat, removeSeat } from './entries'
 import { addGuest, createMatchday } from './matchday'
 import { entriesOf } from './read'
-import { createSeason } from './season'
+import { createSeason, defaultDisciplineId } from './season'
 import { adminClient } from './test/admin'
 import { createSeason as buildSeasonScene } from './test/factories'
 import { createTestUser, type TestUser } from './test/users'
@@ -67,14 +67,59 @@ function localSql(sql: string): string {
   )
 }
 
-/** El plantel de la temporada, leído en orden de seed. */
+/** El plantel de la temporada, leído en orden de seed de `entries` (dual-write, PR 25). */
 async function squadInSeedOrder(user: TestUser, seasonId: string) {
   return (await entriesOf(user.client, seasonId))
     .filter((entry) => entry.kind === 'SQUAD')
     .sort((left, right) => left.seedPosition - right.seedPosition)
 }
 
+/**
+ * El plantel de UNA disciplina, en orden de `discipline_entries.seed_position`
+ * — la fuente REAL del orden desde PR 7 (0023_discipline_entries.sql):
+ * `shift_seeds_up`/`add_squad_seat` ya no corren el parking sobre `entries`,
+ * así que las pruebas de posicionamiento tienen que mirar acá, no en
+ * `squadInSeedOrder`.
+ */
+async function disciplineSeedOrder(
+  seasonId: string,
+): Promise<Array<{ id: string; displayName: string; seedPosition: number }>> {
+  const db = adminClient()
+  const disciplineId = await defaultDisciplineId(db, seasonId)
+  if (disciplineId === null) throw new Error('La temporada no tiene disciplina.')
+
+  const { data: seats, error: seatsError } = await db
+    .from('discipline_entries')
+    .select('entry_id, seed_position')
+    .eq('discipline_id', disciplineId)
+    .order('seed_position', { ascending: true })
+  if (seatsError) throw new Error(seatsError.message)
+
+  const { data: entryRows, error: entriesError } = await db
+    .from('entries')
+    .select('id, display_name')
+    .in(
+      'id',
+      (seats ?? []).map((seat) => seat.entry_id),
+    )
+  if (entriesError) throw new Error(entriesError.message)
+  const nameById = new Map((entryRows ?? []).map((row) => [row.id, row.display_name]))
+
+  return (seats ?? []).map((seat) => ({
+    id: seat.entry_id,
+    displayName: nameById.get(seat.entry_id) ?? '?',
+    seedPosition: seat.seed_position,
+  }))
+}
+
 describe('addSquadSeat colocando el nuevo asiento (spec 2.1, 2.2, 2.4, 2.5, 2.6)', () => {
+  // Desde PR 7 (0023_discipline_entries.sql) el posicionamiento REAL vive en
+  // `discipline_entries`, no en `entries`: `shift_seeds_up`/`add_squad_seat`
+  // dejaron de correr el parking sobre `entries` (dual-write, siempre al
+  // final — ver el test dedicado más abajo). Estos cuatro tests migran su
+  // lectura de `squadInSeedOrder`/`entriesOf` a `disciplineSeedOrder`, mismo
+  // criterio que documenta 0023: "el test que fuerza el plan adverso migra a
+  // discipline_entries en la misma PR".
   it('insertar antes de un asiento corre la cola +1 sin tocar el orden relativo de los demás', async () => {
     const admin = await createTestUser()
     const { seasonId } = await createSeason(admin.client, {
@@ -82,9 +127,7 @@ describe('addSquadSeat colocando el nuevo asiento (spec 2.1, 2.2, 2.4, 2.5, 2.6)
       squadNames: squadNames(8),
       config: defaultConfig(8),
     })
-    const before = (await entriesOf(admin.client, seasonId))
-      .filter((e) => e.kind === 'SQUAD')
-      .sort((a, b) => a.seedPosition - b.seedPosition)
+    const before = await disciplineSeedOrder(seasonId)
 
     // "Antes de" el 3er asiento (índice 2, seed_position 2 con seed 0-index).
     const target = before[2]
@@ -92,9 +135,7 @@ describe('addSquadSeat colocando el nuevo asiento (spec 2.1, 2.2, 2.4, 2.5, 2.6)
 
     const newId = await addSquadSeat(admin.client, seasonId, 'El Nuevo', target.id)
 
-    const after = (await entriesOf(admin.client, seasonId))
-      .filter((e) => e.kind === 'SQUAD')
-      .sort((a, b) => a.seedPosition - b.seedPosition)
+    const after = await disciplineSeedOrder(seasonId)
 
     // El nuevo cae exactamente donde estaba `target`, que ahora es el siguiente.
     const expectedNames = before.map((e) => e.displayName)
@@ -118,13 +159,13 @@ describe('addSquadSeat colocando el nuevo asiento (spec 2.1, 2.2, 2.4, 2.5, 2.6)
       squadNames: squadNames(8),
       config: defaultConfig(8),
     })
-    const before = await squadInSeedOrder(admin, seasonId)
+    const before = await disciplineSeedOrder(seasonId)
     const first = before[0]
     if (first === undefined) throw new Error('Falta el asiento de test.')
 
     const newId = await addSquadSeat(admin.client, seasonId, 'El Primero', first.id)
 
-    const after = await squadInSeedOrder(admin, seasonId)
+    const after = await disciplineSeedOrder(seasonId)
     expect(after.map((e) => e.displayName)).toEqual(['El Primero', ...before.map((e) => e.displayName)])
     expect(after.find((e) => e.id === newId)?.seedPosition).toBe(0)
     expect(after.map((e) => e.seedPosition)).toEqual(Array.from({ length: 9 }, (_, i) => i))
@@ -137,13 +178,13 @@ describe('addSquadSeat colocando el nuevo asiento (spec 2.1, 2.2, 2.4, 2.5, 2.6)
       squadNames: squadNames(8),
       config: defaultConfig(8),
     })
-    const before = await squadInSeedOrder(admin, seasonId)
+    const before = await disciplineSeedOrder(seasonId)
     const last = before[before.length - 1]
     if (last === undefined) throw new Error('Falta el asiento de test.')
 
     const newId = await addSquadSeat(admin.client, seasonId, 'El Penúltimo', last.id)
 
-    const after = await squadInSeedOrder(admin, seasonId)
+    const after = await disciplineSeedOrder(seasonId)
     const expectedNames = before.map((e) => e.displayName)
     expectedNames.splice(before.length - 1, 0, 'El Penúltimo')
     expect(after.map((e) => e.displayName)).toEqual(expectedNames)
@@ -164,18 +205,18 @@ describe('addSquadSeat colocando el nuevo asiento (spec 2.1, 2.2, 2.4, 2.5, 2.6)
       squadNames: squadNames(8),
       config: defaultConfig(8),
     })
-    const original = await squadInSeedOrder(admin, seasonId)
+    const original = await disciplineSeedOrder(seasonId)
     const removed = original[2]
     const target = original[4]
     if (removed === undefined || target === undefined) throw new Error('Faltan asientos de test.')
 
     await removeSeat(admin.client, removed.id)
-    const withHole = await squadInSeedOrder(admin, seasonId)
+    const withHole = await disciplineSeedOrder(seasonId)
     expect(withHole.map((e) => e.seedPosition)).toEqual([0, 1, 3, 4, 5, 6, 7])
 
     const newId = await addSquadSeat(admin.client, seasonId, 'El Nuevo', target.id)
 
-    const after = await squadInSeedOrder(admin, seasonId)
+    const after = await disciplineSeedOrder(seasonId)
     // El hueco en 2 sigue ahí; sólo se corrió la cola desde 4 para arriba.
     expect(after.map((e) => e.seedPosition)).toEqual([0, 1, 3, 4, 5, 6, 7, 8])
     expect(after.find((e) => e.id === newId)?.seedPosition).toBe(4)
@@ -185,6 +226,34 @@ describe('addSquadSeat colocando el nuevo asiento (spec 2.1, 2.2, 2.4, 2.5, 2.6)
     ])
     // Ningún preexistente se pasó por encima de otro.
     expect(after.filter((e) => e.id !== newId).map((e) => e.id)).toEqual(withHole.map((e) => e.id))
+  })
+
+  // Complemento de los cuatro de arriba: `entries.seed_position` sigue
+  // existiendo (dual-write hasta PR 25) pero YA NO respeta `p_before` — el
+  // asiento nuevo entra siempre al final ahí, sin importar dónde se eligió
+  // insertarlo en `discipline_entries`. Degradación ACEPTADA y documentada en
+  // 0023_discipline_entries.sql, no un bug: se pinnea acá para que quien la
+  // reintroduzca por accidente (corriendo el parking de las dos tablas otra
+  // vez) vea este test romperse.
+  it('entries.seed_position ya no reserva "antes de": el dual-write siempre va al final', async () => {
+    const admin = await createTestUser()
+    const { seasonId } = await createSeason(admin.client, {
+      name: 'Los Jueves 2026',
+      squadNames: squadNames(8),
+      config: defaultConfig(8),
+    })
+    const before = await squadInSeedOrder(admin, seasonId)
+    const target = before[2]
+    if (target === undefined) throw new Error('Falta el asiento de test.')
+
+    const newId = await addSquadSeat(admin.client, seasonId, 'El Nuevo', target.id)
+
+    const after = await squadInSeedOrder(admin, seasonId)
+    expect(after.find((e) => e.id === newId)?.seedPosition).toBe(8)
+    // Nadie de `entries` se corrió: la cola sólo se movió en discipline_entries.
+    expect(after.filter((e) => e.id !== newId).map((e) => e.seedPosition)).toEqual(
+      before.map((e) => e.seedPosition),
+    )
   })
 
   // ── regresión del `+1` ────────────────────────────────────────────────────
@@ -202,6 +271,13 @@ describe('addSquadSeat colocando el nuevo asiento (spec 2.1, 2.2, 2.4, 2.5, 2.6)
   // Con el `+2` los rangos quedan disjuntos para todo `p_from` y el orden de
   // visita deja de importar — pero el test se queda igual, porque es el único
   // que distingue "está arreglado" de "el planner me está tapando el bug".
+  // Migrado a `discipline_entries` en esta misma PR (0023): `shift_seeds_up`
+  // ya no toca `entries`, así que forzar el heap adverso tiene que ser sobre
+  // la tabla que la función REALMENTE recorre. Reutiliza los 8 asientos que
+  // ya creó `createSeason` — sólo se reescriben sus filas de
+  // `discipline_entries`, no `entries` — para no inventar entries sueltas que
+  // ninguna FK compuesta (entry_id, season_id)/(entry_id, entry_kind) dejaría
+  // pasar sin su fila real.
   it('corre la cola desde 0 aunque el motor recorra las filas al revés (Seq Scan, heap descendente)', async () => {
     const admin = await createTestUser()
     const { seasonId } = await createSeason(admin.client, {
@@ -209,18 +285,22 @@ describe('addSquadSeat colocando el nuevo asiento (spec 2.1, 2.2, 2.4, 2.5, 2.6)
       squadNames: squadNames(8),
       config: defaultConfig(8),
     })
-
-    // `createSeason` inserta los asientos en orden ascendente, y con ese heap
-    // hasta un Seq Scan recorre de 0 para arriba. Se rearma al revés: la fila
-    // de seed_position 7 se escribe PRIMERO.
     const db = adminClient()
-    await db.from('entries').delete().eq('season_id', seasonId).eq('kind', 'SQUAD')
-    const { error: seedError } = await db.from('entries').insert(
-      [7, 6, 5, 4, 3, 2, 1, 0].map((position) => ({
+    const disciplineId = await defaultDisciplineId(db, seasonId)
+    if (disciplineId === null) throw new Error('La temporada no tiene disciplina.')
+
+    const original = await disciplineSeedOrder(seasonId)
+    expect(original).toHaveLength(8)
+
+    // Se reinserta al revés —el asiento de seed_position 7 primero— para que
+    // hasta un Seq Scan recorra el heap de arriba para abajo.
+    await db.from('discipline_entries').delete().eq('discipline_id', disciplineId)
+    const { error: seedError } = await db.from('discipline_entries').insert(
+      [...original].reverse().map((seat) => ({
+        discipline_id: disciplineId,
+        entry_id: seat.id,
         season_id: seasonId,
-        kind: 'SQUAD' as const,
-        display_name: `J${position}`,
-        seed_position: position,
+        seed_position: seat.seedPosition,
       })),
     )
     if (seedError !== null) throw new Error(seedError.message)
@@ -229,8 +309,8 @@ describe('addSquadSeat colocando el nuevo asiento (spec 2.1, 2.2, 2.4, 2.5, 2.6)
     // escribir en el orden del array, este test seguiría en verde sin probar
     // nada. `ctid` es el orden físico, que es el que recorre un Seq Scan.
     const heap = localSql(
-      `select seed_position from public.entries
-        where season_id = '${seasonId}' and kind = 'SQUAD' order by ctid;`,
+      `select seed_position from public.discipline_entries
+        where discipline_id = '${disciplineId}' order by ctid;`,
     )
       .trim()
       .split('\n')
@@ -249,15 +329,15 @@ describe('addSquadSeat colocando el nuevo asiento (spec 2.1, 2.2, 2.4, 2.5, 2.6)
     const output = localSql(`
       set enable_indexscan = off;
       set enable_bitmapscan = off;
-      explain (costs off) update public.entries set seed_position = seed_position - 9
-       where season_id = '${seasonId}' and kind = 'SQUAD' and seed_position >= 9;
-      select public.shift_seeds_up('${seasonId}'::uuid, 0);
+      explain (costs off) update public.discipline_entries set seed_position = seed_position - 9
+       where discipline_id = '${disciplineId}' and seed_position >= 9;
+      select public.shift_seeds_up('${disciplineId}'::uuid, 0);
     `)
-    expect(output).toContain('Seq Scan on entries')
+    expect(output).toContain('Seq Scan on discipline_entries')
 
-    const after = await squadInSeedOrder(admin, seasonId)
+    const after = await disciplineSeedOrder(seasonId)
     expect(after.map((e) => e.seedPosition)).toEqual([1, 2, 3, 4, 5, 6, 7, 8])
-    expect(after.map((e) => e.displayName)).toEqual(['J0', 'J1', 'J2', 'J3', 'J4', 'J5', 'J6', 'J7'])
+    expect(after.map((e) => e.displayName)).toEqual(original.map((e) => e.displayName))
 
     // Y el heap TAMBIÉN al final, que es la mitad que faltaba. Lo que hace
     // sensible a este test no es el orden físico de arriba sino el que hay al
@@ -269,8 +349,8 @@ describe('addSquadSeat colocando el nuevo asiento (spec 2.1, 2.2, 2.4, 2.5, 2.6)
     // con `+1` dejaría de chocar Y ESTE TEST SEGUIRÍA EN VERDE con el CRITICAL
     // de vuelta. Con esta línea, ese día falla acá y se ve.
     const heapAfter = localSql(
-      `select seed_position from public.entries
-        where season_id = '${seasonId}' and kind = 'SQUAD' order by ctid;`,
+      `select seed_position from public.discipline_entries
+        where discipline_id = '${disciplineId}' order by ctid;`,
     )
       .trim()
       .split('\n')
@@ -401,8 +481,15 @@ describe('addSquadSeat colocando el nuevo asiento (spec 2.1, 2.2, 2.4, 2.5, 2.6)
       squadNames: squadNames(8),
       config: defaultConfig(8),
     })
+    const disciplineId = await defaultDisciplineId(adminClient(), seasonId)
+    if (disciplineId === null) throw new Error('La temporada no tiene disciplina.')
 
-    const { data, error } = await admin.client.rpc('shift_seeds_up', { p_season: seasonId, p_from: 2 })
+    // `p_discipline`, no `p_season` (0023): shift_seeds_up corre sobre
+    // discipline_entries desde PR 7.
+    const { data, error } = await admin.client.rpc('shift_seeds_up', {
+      p_discipline: disciplineId,
+      p_from: 2,
+    })
 
     expect(data).toBeNull()
     expect(error?.code).toBe('42501')

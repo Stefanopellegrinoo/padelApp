@@ -31,6 +31,8 @@ export type {
   DisciplineId,
   MatchFormat,
   SeasonConfig,
+  SideSize,
+  Side,
   Pair,
   SetScore,
   MatchResult,
@@ -38,6 +40,13 @@ export type {
   Award,
   RankingRow,
 } from './types'
+
+// ── Un lado de 1 o 2 (decisión de producto #5, REQ-D5-1/2) ──────────────────
+// `Side` es una unión discriminada: leer `.b` sin angostar `size` a `2` es
+// error de compilación. `core/pair-compat.ts` (sideOf/pairOf) es el
+// adaptador temporal que migra `Pair` a `Side` un archivo a la vez — no se
+// exporta acá a propósito, ver el bloque "Deliberadamente NO exportado".
+export { single, pair, members, includes, partnerOf, sameSide } from './side'
 
 // ── Season configuration ─────────────────────────────────────────────────────
 // `validateConfig` RETURNS its problems in Spanish, it never throws — so it
@@ -107,11 +116,17 @@ export { tallyPlayers, partnerRecords, bestPair } from './playerstats'
 /*
  * Deliberately NOT exported — internal to the modules above:
  *
- *   allMatchings   (matchings.ts)  enumerates every way to split a pool into
- *                                  pairs. Only buildPairs needs it, and it
- *                                  throws above MAX_PLAYERS because (n-1)!!
- *                                  reaches 654 million at twenty players.
- *   orderByPoints  (order.ts)      sorts by points with the snapshot as
- *                                  tiebreak. Callers want computeRanking,
- *                                  which returns rows already in order.
+ *   allMatchings   (matchings.ts)   enumerates every way to split a pool into
+ *                                   pairs. Only buildPairs needs it, and it
+ *                                   throws above MAX_PLAYERS because (n-1)!!
+ *                                   reaches 654 million at twenty players.
+ *   orderByPoints  (order.ts)       sorts by points with the snapshot as
+ *                                   tiebreak. Callers want computeRanking,
+ *                                   which returns rows already in order.
+ *   sideOf/pairOf  (pair-compat.ts) TEMPORARY Pair<->Side adapter, born with
+ *                                   `Side` (PR14) and deleted at PR19 along
+ *                                   with `Pair` itself. Only files inside
+ *                                   `core/` migrating one producer/consumer
+ *                                   at a time should import it, and only
+ *                                   from `./pair-compat` directly.
  */

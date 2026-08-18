@@ -2,7 +2,7 @@
 
 import type { SeasonConfig } from '@/core'
 import { EdgeError } from '@/db/errors'
-import { createSeason } from '@/db/season'
+import { createSeason, type NewSeasonDiscipline } from '@/db/season'
 import { serverClient } from '@/db/server'
 
 export type CreateResult =
@@ -25,6 +25,12 @@ export async function createTournament(input: {
   config: SeasonConfig
   /** El asiento del que crea, o `null` si organiza sin jugar. Índice sobre `squadNames`. */
   mySeatIndex: number | null
+  /**
+   * Una fila de `disciplines` por elemento, en el orden que el wizard armó
+   * (paso 1, checkboxes). Sin esto, `createSeason` (PR11b) sigue creando la
+   * única PADEL de siempre — el default queda para quien llame sin wizard.
+   */
+  disciplines?: NewSeasonDiscipline[]
 }): Promise<CreateResult> {
   try {
     const supabase = await serverClient()

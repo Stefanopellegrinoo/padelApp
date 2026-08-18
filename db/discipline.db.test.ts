@@ -284,6 +284,57 @@ describe('disciplineConfig / updateDisciplineConfig (PR 5, REQ-D2-1)', () => {
     await expect(updateDisciplineConfig(admin.client, disciplineId, broken)).rejects.toThrow()
     expect(await disciplineConfig(admin.client, disciplineId)).toEqual({ config: defaultConfig(8), pairSize: 2 })
   })
+
+  /*
+   * C20 (verify-report ronda 13). `updateDisciplineConfig` es el ÚNICO escritor
+   * de `disciplines.config` y validaba con `sideSize` hardcodeado en 2. Sobre
+   * una disciplina de a uno eso queda INVERTIDO: rechaza la única config válida
+   * y acepta la que la deja inutilizable.
+   *
+   * El daño no es "no se puede editar". Con una fecha OPEN y los resultados
+   * cargados, un solo toque del +/− en Ajustes → Formato (que guarda a cada
+   * toque) escribe una config que `matchdayContextFor` después rechaza: la
+   * fecha no cierra, y la config no se puede volver atrás desde la misma
+   * pantalla porque el escritor sigue exigiendo la aritmética de parejas.
+   * Salida sólo por SQL — estrictamente peor que C19, que dejaba cancelar.
+   *
+   * `validateConfig` exige `points.length === floor(squadSize / sideSize)`, así
+   * que con 8 asientos de a uno la config correcta tiene 8 valores, no 4.
+   */
+  it('valida con el pair_size REAL de la disciplina, no con 2 fijo (C20)', async () => {
+    const admin = await createTestUser()
+    const soloConfig = { ...defaultConfig(8), points: [8, 7, 6, 5, 4, 3, 2, 1] }
+    const { disciplineIds } = await createSeason({
+      admin,
+      disciplines: [{ kind: 'FIFA', pairSize: 1, config: soloConfig }],
+    })
+    const [soloId] = disciplineIds
+    if (soloId === undefined) throw new Error('Falta la disciplina de a uno.')
+
+    // 1) La config CORRECTA de una disciplina de a uno se acepta.
+    const nextSolo = { ...soloConfig, regularMatchdays: 14 }
+    await updateDisciplineConfig(admin.client, soloId, nextSolo)
+    expect(await disciplineConfig(admin.client, soloId)).toEqual({ config: nextSolo, pairSize: 1 })
+
+    // 2) La config de PAREJAS (4 valores para 8 asientos) se rechaza, y no se
+    //    escribe: es la que dejaba la disciplina sin poder armar ni cerrar.
+    const pairShaped = { ...soloConfig, points: [10, 7, 5, 3] }
+    await expect(updateDisciplineConfig(admin.client, soloId, pairShaped)).rejects.toThrow(
+      /8 valores de puntos/,
+    )
+    expect(await disciplineConfig(admin.client, soloId)).toEqual({ config: nextSolo, pairSize: 1 })
+  })
+
+  it('sigue exigiendo la aritmética de parejas donde el lado es de dos (C20, no-regresión)', async () => {
+    const admin = await createTestUser()
+    const { disciplineId } = await createSeason({ admin })
+    const soloShaped = { ...defaultConfig(8), points: [8, 7, 6, 5, 4, 3, 2, 1] }
+
+    await expect(updateDisciplineConfig(admin.client, disciplineId, soloShaped)).rejects.toThrow(
+      /4 valores de puntos/,
+    )
+    expect(await disciplineConfig(admin.client, disciplineId)).toEqual({ config: defaultConfig(8), pairSize: 2 })
+  })
 })
 
 // ── C5, verify-report ronda 3 ────────────────────────────────────────────────

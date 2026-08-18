@@ -33,6 +33,25 @@ export interface SeasonConfig {
   tiebreakSnapshotEvery: number
 }
 
+/**
+ * Cuántas entries hacen un lado. Elegido AL CONFIGURAR la disciplina, no
+ * derivado de `kind` (decisión de producto #5): FIFA es 1v1 Y 2v2. La base lo
+ * hace cumplir con una FK compuesta (`disciplines_size_anchor`), no un `if`.
+ */
+export type SideSize = 1 | 2
+
+/**
+ * Unión DISCRIMINADA sobre `size`: leer `.b` de un `Side` sin haber
+ * angostado `size` a `2` es error de COMPILACIÓN, no un `undefined` en
+ * runtime. Antes de este tipo, `pair.a === guestId ? pair.b : pair.a`
+ * (sumar-state.ts:92) devolvía `undefined` en silencio para un lado que no
+ * tenía `.b` — con `Side` ese mismo código no compila.
+ */
+export type Side =
+  | { readonly size: 1; readonly a: EntryId }
+  | { readonly size: 2; readonly a: EntryId; readonly b: EntryId }
+
+/** @deprecated Reemplazado por `Side`. Vive hasta PR19, junto con `core/pair-compat.ts`. */
 export interface Pair {
   a: EntryId
   b: EntryId

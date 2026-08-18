@@ -1,8 +1,15 @@
-import { samePair } from './pairing'
-import type { EntryId, MatchResult, Pair, PairStanding, SeasonConfig } from './types'
+import { pairOf, sideOf } from './pair-compat'
+import { members, sameSide } from './side'
+import type { EntryId, MatchResult, Pair, PairStanding, SeasonConfig, Side } from './types'
 
+/**
+ * Ephemeral tally for a single matchday's computation — never persisted,
+ * never carried across matchdays. `side` replaces `pair` as the identity
+ * (design #3801, decision #6): a side is a shape for a matchday's play, not
+ * something that accumulates points across time. Points stay per person.
+ */
 interface Tally {
-  pair: Pair
+  side: Side
   played: number
   won: number
   setsWon: number
@@ -18,6 +25,15 @@ interface Tally {
  * That last step almost never fires, but it has to exist: in a three-way 2-2-2
  * the head to head is circular and resolves nothing, and without a final cut
  * three pairs would be left arguing over first place.
+ *
+ * The boundary sits at `sideOf`/`pairOf` (design #3801, PUNTO 4 fila 14,
+ * "Borde: pairOf en el retorno"): `MatchResult`/`PairStanding` stay Pair-shaped
+ * because their other producers/consumers (core/awards.ts, core/masters.ts,
+ * db/**, app/**) have not migrated yet — that migration is PR17+ per the
+ * design's own file-by-file table. Internally this function works entirely
+ * on `Side` via `sameSide`/`members`, so `bestPlayerRank` and the tally
+ * lookup are already correct for a one-member side, ready for the day a real
+ * one flows in without this file changing again.
  */
 export function computeStandings(
   pairs: Pair[],
@@ -26,7 +42,7 @@ export function computeStandings(
   snapshot: EntryId[],
 ): PairStanding[] {
   const tallies = pairs.map<Tally>((pair) => ({
-    pair,
+    side: sideOf(pair),
     played: 0,
     won: 0,
     setsWon: 0,
@@ -35,13 +51,13 @@ export function computeStandings(
     gamesLost: 0,
   }))
 
-  const find = (pair: Pair): Tally | undefined =>
-    tallies.find((tally) => samePair(tally.pair, pair))
+  const find = (side: Side): Tally | undefined =>
+    tallies.find((tally) => sameSide(tally.side, side))
 
   for (const match of matches) {
     if (match.sets.length === 0) continue // not played yet
-    const left = find(match.pairA)
-    const right = find(match.pairB)
+    const left = find(sideOf(match.pairA))
+    const right = find(sideOf(match.pairB))
     if (left === undefined || right === undefined) continue
 
     let setsA = 0
@@ -71,8 +87,8 @@ export function computeStandings(
 
   const snapshotRank = new Map(snapshot.map((id, index) => [id, index]))
   const OUTSIDE = Number.MAX_SAFE_INTEGER
-  const bestPlayerRank = (pair: Pair): number =>
-    Math.min(snapshotRank.get(pair.a) ?? OUTSIDE, snapshotRank.get(pair.b) ?? OUTSIDE)
+  const bestPlayerRank = (side: Side): number =>
+    Math.min(...members(side).map((entryId) => snapshotRank.get(entryId) ?? OUTSIDE))
 
   const usesSetsDiff = config.matchFormat.setsToWin > 1
 
@@ -102,15 +118,15 @@ export function computeStandings(
     if (group.length === 2) {
       const [first, second] = group
       if (first !== undefined && second !== undefined) {
-        const head = headToHead(first.pair, second.pair, matches)
+        const head = headToHead(first.side, second.side, matches)
         if (head !== 0) return head < 0 ? [first, second] : [second, first]
       }
     }
-    return [...group].sort((left, right) => bestPlayerRank(left.pair) - bestPlayerRank(right.pair))
+    return [...group].sort((left, right) => bestPlayerRank(left.side) - bestPlayerRank(right.side))
   })
 
   return sorted.map((tally, index) => ({
-    pair: tally.pair,
+    pair: pairOf(tally.side),
     played: tally.played,
     won: tally.won,
     setsDiff: tally.setsWon - tally.setsLost,
@@ -130,12 +146,20 @@ function compareObjective(left: Tally, right: Tally, usesSetsDiff: boolean): num
   return right.gamesWon - right.gamesLost - (left.gamesWon - left.gamesLost)
 }
 
-/** Negative when left beat right, positive when right beat left, zero otherwise. */
-function headToHead(left: Pair, right: Pair, matches: MatchResult[]): number {
+/**
+ * Negative when left beat right, positive when right beat left, zero
+ * otherwise (no meeting, or a draw — draws are unreachable in a
+ * disciplines.allows_draw=false matchday, which is every discipline this PR
+ * touches; the 4-value `HeadToHead`/`DRAW`/`NOT_PLAYED` split from design
+ * PUNTO 6 is PR22's job, once `allows_draw` actually reaches this file).
+ */
+function headToHead(left: Side, right: Side, matches: MatchResult[]): number {
   for (const match of matches) {
     if (match.sets.length === 0) continue
-    const leftIsA = samePair(match.pairA, left) && samePair(match.pairB, right)
-    const leftIsB = samePair(match.pairA, right) && samePair(match.pairB, left)
+    const matchLeft = sideOf(match.pairA)
+    const matchRight = sideOf(match.pairB)
+    const leftIsA = sameSide(matchLeft, left) && sameSide(matchRight, right)
+    const leftIsB = sameSide(matchLeft, right) && sameSide(matchRight, left)
     if (!leftIsA && !leftIsB) continue
 
     let setsA = 0

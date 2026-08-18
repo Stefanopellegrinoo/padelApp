@@ -121,7 +121,6 @@ export async function awardsBefore(
   return result
 }
 
-
 /** The matchday at `number` of one discipline's own calendar, or null when it does not exist or is not CLOSED. */
 export async function closedHistory(
   supabase: Client,

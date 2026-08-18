@@ -144,6 +144,24 @@ describe('matchdayShape', () => {
       expect(matchdayShape({ confirmed: 12, looseGuests: 0, guestPairs: 0, sideSize: 2 }).matches).toBe(15)
     })
 
+    it('una pareja invitada suma dos jugadores que juegan solos (S42)', () => {
+      // S42 (verify-report ronda 13): la matriz tenía `guestPairs` sólo con
+      // `sideSize: 2`. Este es el caso que produjo W41 — el servidor rechazaba
+      // esta misma fecha mientras la pantalla la mostraba armable.
+      const shape = matchdayShape({ confirmed: 8, looseGuests: 0, guestPairs: 1, sideSize: 1 })
+      expect(shape.size).toBe(10)
+      expect(shape.sides).toBe(10)
+      expect(shape.matches).toBe(45)
+      expect(shape.complete).toBe(true)
+      expect(shape.needsLooseGuest).toBe(false)
+      // Y el servidor tiene que estar de acuerdo: con W41 arreglado,
+      // `assertPointsCoverMatchday` cuenta 8 competidores del torneo para esta
+      // misma fecha —los 2 invitados son dos lados que no cobran—, así que la
+      // pantalla y la base dicen lo mismo. Antes de W41 el botón estaba
+      // habilitado y el sorteo rebotaba.
+      expect(shape.tooMany).toBe(false)
+    })
+
     it('respeta el mismo piso y el mismo techo que la base enforcea hoy', () => {
       // `assertMatchdaySize` no condiciona MIN/MAX por `sideSize` (W32 sigue
       // abierto, reasignado a PR21/grupos): la pantalla no puede prometer un

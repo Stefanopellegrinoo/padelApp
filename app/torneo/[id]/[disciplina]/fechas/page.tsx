@@ -35,6 +35,17 @@ interface ChampionInfo {
  * partidos, el mismo tally que hace `computeStandings` puertas adentro pero
  * para una sola pareja.
  */
+/**
+ * Clave estable de un lado, de uno o de dos: el orden de los miembros no
+ * importa. N30 (verify-report ronda 13): esta pantalla usaba
+ * `members(side).join('-')` (sin ordenar, otro separador) mientras
+ * `fechas/[n]/page.tsx` usaba la versión ordenada — la misma pregunta
+ * contestada de dos formas a 200 líneas de distancia.
+ */
+function sideKey(side: Side): string {
+  return [...members(side)].sort().join('~')
+}
+
 /** Los nombres del lado unidos con `&`: uno solo cuando la disciplina es de a uno. */
 function sideNames(side: Side, nameById: ReadonlyMap<string, string>): string {
   return members(side)
@@ -244,7 +255,7 @@ export default async function FechasPage({ params }: PageProps) {
               {inProgress && openDetail !== null && (
                 <div className="mt-2 flex flex-col gap-1">
                   {openDetail.sides.map((side) => (
-                    <p key={members(side).join('-')} className="text-[13.5px] font-bold">
+                    <p key={sideKey(side)} className="text-[13.5px] font-bold">
                       {sideNames(side, nameById)}
                     </p>
                   ))}

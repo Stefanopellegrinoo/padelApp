@@ -17,6 +17,7 @@ import {
   type MatchResult,
   type SeasonConfig,
   type Side,
+  type SideSize,
   type SideStanding,
 } from '@/core'
 import {
@@ -78,8 +79,19 @@ function matchWinner(match: MatchResult): 'A' | 'B' | null {
  * games) de a pares consecutivos: el patrón del handoff describe exactamente el
  * caso de "empataron en partidos ganados, cortó la diferencia de games".
  */
-function tiebreakNote(standings: SideStanding[], config: SeasonConfig, nameOf: Map<string, string>): string | null {
+function tiebreakNote(
+  standings: SideStanding[],
+  config: SeasonConfig,
+  nameOf: Map<string, string>,
+  sideSize: SideSize,
+): string | null {
   const label = (side: Side) => sideLabel(side, nameOf)
+  // S41 (verify-report ronda 13): el slice anterior normalizó "parejas"→
+  // "jugadores" en cinco lugares y dejó éste, que es el único texto largo de
+  // la pantalla — "Jugador de test 3 QUEDARON 3° ... EMPATARON en partidos
+  // ganados" sobre una persona sola.
+  const quedaron = sideSize === 1 ? 'quedó' : 'quedaron'
+  const empataron = sideSize === 1 ? 'empató' : 'empataron'
   const usesSetsDiff = config.matchFormat.setsToWin > 1
 
   for (let i = 1; i < standings.length; i++) {
@@ -90,7 +102,7 @@ function tiebreakNote(standings: SideStanding[], config: SeasonConfig, nameOf: M
     if (usesSetsDiff && better.setsDiff !== worse.setsDiff) continue
 
     if (better.gamesDiff !== worse.gamesDiff) {
-      return `${label(worse.side)} quedaron ${worse.position}° por diferencia de games: empataron en partidos ganados con ${label(better.side)}.`
+      return `${label(worse.side)} ${quedaron} ${worse.position}° por diferencia de games: ${empataron} en partidos ganados con ${label(better.side)}.`
     }
 
     // ponytail: con todo empatado (partidos ganados y diferencia de games) el
@@ -99,7 +111,7 @@ function tiebreakNote(standings: SideStanding[], config: SeasonConfig, nameOf: M
     // No hay copy contractual para ese caso puntual y no ocurre con el formato
     // a un set por defecto (sin empates posibles); si hiciera falta, se
     // exporta el criterio exacto desde `core/standings.ts`.
-    return `${label(worse.side)} quedaron ${worse.position}° por el desempate de la fecha: empataron en partidos ganados y en diferencia de games con ${label(better.side)}.`
+    return `${label(worse.side)} ${quedaron} ${worse.position}° por el desempate de la fecha: ${empataron} en partidos ganados y en diferencia de games con ${label(better.side)}.`
   }
   return null
 }
@@ -461,7 +473,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
 
     const hasGuest = (side: Side) => members(side).some((entryId) => detail.guestIds.includes(entryId))
     const anyGuestInTable = status === 'CLOSED' && standings.some((row) => hasGuest(row.side))
-    const note = status === 'CLOSED' ? tiebreakNote(standings, config, nameOf) : null
+    const note = status === 'CLOSED' ? tiebreakNote(standings, config, nameOf, discipline.pairSize) : null
 
     // Sumar invitado (spec Capability 3) sólo existe con la fecha CLOSED:
     // `promote_guest` rechaza cualquier otro estado del lado de la base, y

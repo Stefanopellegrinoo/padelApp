@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { buildPairs, buildSides, samePair, type PairingInput, type SideBuildInput } from './pairing'
+import { single } from './side'
 import type { Pair } from './types'
 
 const SNAPSHOT = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10', 'p11', 'p12']
@@ -361,5 +362,44 @@ describe('buildSides — sideSize 1 (design PUNTO 5, decisión #5/#6)', () => {
       }),
     )
     expect(sides).toHaveLength(3)
+  })
+})
+
+/*
+ * PR19. Al borrar `Pair`, `fixedPairs`/`defenders`/`previousPairs` pasan a ser
+ * `Side[]`, y con eso un lado de UNO se vuelve REPRESENTABLE donde antes el
+ * tipo lo impedía. `Pair` era `{a, b}` y no había forma de escribir uno solo;
+ * `Side` es una unión y sí la hay.
+ *
+ * No es teórico: `buildSides` recibe el mismo objeto para las dos aridades
+ * (`SideBuildInput extends PairingInput`), así que una `SideBuildInput` armada
+ * para `sideSize: 1` —donde un lado de uno en `fixedPairs` es lo natural— y
+ * reusada con `sideSize: 2` cae justo acá.
+ *
+ * Antes de este guard el sorteo tiraba igual, pero con basura: `take` recorría
+ * `[pair.a, pair.b]`, el `.b` inexistente daba `undefined`, y el mensaje decía
+ * "Una pareja fija incluye a undefined, que no juega esta fecha" — que manda a
+ * buscar un asiento fantasma en vez de decir que el lado está mal formado.
+ */
+describe('buildSides — un lado de uno donde se juega de a dos (PR19)', () => {
+  it('rechaza un lado de uno en fixedPairs con un mensaje que nombra la causa', () => {
+    expect(() =>
+      buildSides(sideInput({ sideSize: 2, fixedPairs: [single('p1')] })),
+    ).toThrow(/Una pareja fija es de dos: llegó un lado de uno \(p1\)\./)
+  })
+
+  it('rechaza un lado de uno como pareja defensora', () => {
+    expect(() =>
+      buildSides(sideInput({ sideSize: 2, defenders: single('p1') })),
+    ).toThrow(/La pareja defensora es de dos: llegó un lado de uno \(p1\)\./)
+  })
+
+  it('un lado de uno en previousPairs no puede hacer que el sorteo se quede sin salida', () => {
+    // `previousPairs` sólo alimenta la regla de no-repetir, que compara con
+    // `sameSide`: un lado de uno nunca va a ser igual a uno de dos, así que se
+    // ignora solo. Lo que NO puede pasar es que reviente.
+    expect(() =>
+      buildSides(sideInput({ sideSize: 2, previousPairs: [single('p1')] })),
+    ).not.toThrow()
   })
 })

@@ -112,7 +112,7 @@ export default async function TablaGlobalPage({ params }: PageProps) {
             className="flex items-center justify-between rounded-card border border-line bg-surface p-4"
           >
             <p className="text-[15px] font-extrabold">Tabla de {DISCIPLINE_LABELS[discipline.kind]}</p>
-            <span className="text-muted">›</span>
+            <span className="text-muted">{slugOf.get(discipline.id)} ›</span>
           </Link>
         ))}
       </div>

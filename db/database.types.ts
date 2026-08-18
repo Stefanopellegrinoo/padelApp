@@ -335,6 +335,7 @@ export type Database = {
           id: string
           kind: string
           number: number
+          pair_size: number
           played_on: string | null
           season_id: string
           status: string
@@ -345,6 +346,7 @@ export type Database = {
           id?: string
           kind?: string
           number: number
+          pair_size?: number
           played_on?: string | null
           season_id: string
           status?: string
@@ -355,6 +357,7 @@ export type Database = {
           id?: string
           kind?: string
           number?: number
+          pair_size?: number
           played_on?: string | null
           season_id?: string
           status?: string
@@ -366,6 +369,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "disciplines"
             referencedColumns: ["id", "season_id"]
+          },
+          {
+            foreignKeyName: "matchdays_discipline_size"
+            columns: ["discipline_id", "pair_size"]
+            isOneToOne: false
+            referencedRelation: "disciplines"
+            referencedColumns: ["id", "pair_size"]
           },
           {
             foreignKeyName: "matchdays_season_id_fkey"
@@ -471,23 +481,26 @@ export type Database = {
       pairs: {
         Row: {
           entry_a: string
-          entry_b: string
+          entry_b: string | null
           id: string
           matchday_id: string
+          pair_size: number
           season_id: string
         }
         Insert: {
           entry_a: string
-          entry_b: string
+          entry_b?: string | null
           id?: string
           matchday_id: string
+          pair_size?: number
           season_id: string
         }
         Update: {
           entry_a?: string
-          entry_b?: string
+          entry_b?: string | null
           id?: string
           matchday_id?: string
+          pair_size?: number
           season_id?: string
         }
         Relationships: [
@@ -511,6 +524,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "matchdays"
             referencedColumns: ["id", "season_id"]
+          },
+          {
+            foreignKeyName: "pairs_matchday_size"
+            columns: ["matchday_id", "pair_size"]
+            isOneToOne: false
+            referencedRelation: "matchdays"
+            referencedColumns: ["id", "pair_size"]
           },
         ]
       }

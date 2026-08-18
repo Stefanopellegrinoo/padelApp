@@ -45,6 +45,8 @@ export interface DraftPairVM {
 interface ArmadoProps {
   seasonId: string
   matchdayId: string
+  /** El slug de la URL desde la que se abrió esta fecha (W28) — lo necesita `BorrarFecha` para volver a la lista correcta. */
+  disciplina: string
   matchdayNumber: number
   /** El plantel en orden de siembra. Los invitados van aparte: son un asiento de esta fecha, no del torneo. */
   seats: SeatVM[]
@@ -80,6 +82,7 @@ const STEP_TITLE = 'text-[15px] font-extrabold tracking-[-.02em]'
 export function Armado({
   seasonId,
   matchdayId,
+  disciplina,
   matchdayNumber,
   seats,
   looseGuests,
@@ -390,7 +393,7 @@ export function Armado({
         )}
       </div>
 
-      <BorrarFecha seasonId={seasonId} matchdayId={matchdayId} loadedResults={loadedResults} />
+      <BorrarFecha seasonId={seasonId} matchdayId={matchdayId} disciplina={disciplina} loadedResults={loadedResults} />
     </div>
   )
 }

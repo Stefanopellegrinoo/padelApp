@@ -247,7 +247,7 @@ export async function redraftTheMatchday(
  * try porque tira por dentro para cortar el render, y adentro el catch se lo
  * comería.
  */
-export async function cancelTheMatchday(seasonId: string, matchdayId: string): Promise<WriteResult> {
+export async function cancelTheMatchday(seasonId: string, matchdayId: string, disciplina: string): Promise<WriteResult> {
   try {
     const supabase = await serverClient()
     await cancelMatchday(supabase, matchdayId)
@@ -260,11 +260,11 @@ export async function cancelTheMatchday(seasonId: string, matchdayId: string): P
   // llamado — mismo criterio que `inDraft`/`onMatchday` más arriba.
   revalidatePath(`/torneo/${seasonId}`, 'layout')
   revalidatePath('/torneos')
-  // PR13c slice B: redirige al stub sin disciplina (`app/torneo/[id]/fechas/page.tsx`),
-  // que reenvía a la disciplina [0] de la temporada — no necesariamente ÉSTA.
-  // Esta acción no conoce el slug de la URL desde la que se llamó (`BorrarFecha`
-  // no lo recibe todavía); documentado como pendiente en `apply-progress`.
-  redirect(`/torneo/${seasonId}/fechas`)
+  // W28 (verify-report ronda 8): antes redirigía al stub sin disciplina, que
+  // reenvía a la disciplina [0] de la temporada — no necesariamente la de la
+  // fecha borrada. `disciplina` ahora viaja desde `[n]/page.tsx` (ya la tiene
+  // en `params`) hasta acá, así que la lista de destino es SIEMPRE la suya.
+  redirect(`/torneo/${seasonId}/${disciplina}/fechas`)
 }
 
 /**

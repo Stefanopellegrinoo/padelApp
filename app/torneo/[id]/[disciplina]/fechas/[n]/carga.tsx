@@ -23,6 +23,8 @@ import { BorrarFecha } from './borrar'
 export interface CargaContext {
   seasonId: string
   matchdayId: string
+  /** El slug de la URL desde la que se abrió esta fecha (W28) — lo necesita `BorrarFecha` para volver a la lista correcta. */
+  disciplina: string
   matchdayNumber: number
   format: MatchFormat
 }
@@ -195,7 +197,7 @@ export function CierreFecha({
   const [error, setError] = useState<string | null>(null)
   const [asking, setAsking] = useState(false)
   const [pending, startTransition] = useTransition()
-  const { seasonId, matchdayId, matchdayNumber } = context
+  const { seasonId, matchdayId, disciplina, matchdayNumber } = context
 
   const run = (work: () => Promise<WriteResult>) => {
     setError(null)
@@ -278,7 +280,7 @@ export function CierreFecha({
       )}
 
       {status === 'OPEN' && !asking && (
-        <BorrarFecha seasonId={seasonId} matchdayId={matchdayId} loadedResults={loadedResults} />
+        <BorrarFecha seasonId={seasonId} matchdayId={matchdayId} disciplina={disciplina} loadedResults={loadedResults} />
       )}
 
       {status === 'CLOSED' && canReopen && !asking && (

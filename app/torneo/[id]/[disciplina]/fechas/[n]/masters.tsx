@@ -74,6 +74,7 @@ export interface QualifierVM {
 export function MastersDraft({
   seasonId,
   matchdayId,
+  disciplina,
   matchdayNumber,
   qualifiers,
   generated,
@@ -81,6 +82,8 @@ export function MastersDraft({
 }: {
   seasonId: string
   matchdayId: string
+  /** El slug de la URL desde la que se abrió esta fecha (W28) — lo necesita `BorrarFecha` para volver a la lista correcta. */
+  disciplina: string
   matchdayNumber: number
   qualifiers: QualifierVM[]
   /** Si los tres partidos ya están sorteados. Recién ahí se puede confirmar. */
@@ -156,7 +159,7 @@ export function MastersDraft({
         )}
       </div>
 
-      <BorrarFecha seasonId={seasonId} matchdayId={matchdayId} loadedResults={loadedResults} />
+      <BorrarFecha seasonId={seasonId} matchdayId={matchdayId} disciplina={disciplina} loadedResults={loadedResults} />
     </div>
   )
 }

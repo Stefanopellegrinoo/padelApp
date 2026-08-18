@@ -30,10 +30,13 @@ import { cancelTheMatchday } from './actions'
 export function BorrarFecha({
   seasonId,
   matchdayId,
+  disciplina,
   loadedResults,
 }: {
   seasonId: string
   matchdayId: string
+  /** El slug de la URL desde la que se abrió esta fecha (W28): a esa lista vuelve el borrado, no a la disciplina por defecto. */
+  disciplina: string
   loadedResults: number
 }) {
   const [asking, setAsking] = useState(false)
@@ -79,7 +82,7 @@ export function BorrarFecha({
             startTransition(async () => {
               // En el camino feliz esto no vuelve: la acción redirige a la
               // lista de fechas. Si volvió, es que algo falló.
-              const result = await cancelTheMatchday(seasonId, matchdayId)
+              const result = await cancelTheMatchday(seasonId, matchdayId, disciplina)
               if (!result.ok) setError(result.error)
             })
           }}

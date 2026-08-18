@@ -612,6 +612,16 @@ export async function generateMastersPairs(supabase: Client, matchdayId: string)
   if (matchday.status !== 'DRAFT') {
     throw new EdgeError('El Masters ya está armado.')
   }
+  // W39 (verify-report ronda 12): sin este guard, una disciplina pair_size=1
+  // llegaba hasta el insert y `pairs_matchday_size` (FK real, no `season_id`
+  // suelta — ver el comentario de `insertPairs` más abajo) la rebotaba con el
+  // mensaje genérico de carrera de W34/S35: "El plantel o la fecha cambiaron
+  // mientras armabas las parejas. Volvé a intentar." — falso acá, porque el
+  // Masters es estructuralmente de a dos (mastersFixture/assertValidConfig
+  // más abajo, siempre `size: 2`) y reintentar falla siempre igual.
+  if (matchday.pair_size !== 2) {
+    throw new EdgeError('El Masters se juega de a parejas: una disciplina de a uno no lo arma.')
+  }
 
   const { config } = await disciplineConfig(supabase, matchday.discipline_id)
   // 2, no un placeholder: el Masters arma 6 PAREJAS por diseño de formato
@@ -901,10 +911,15 @@ async function insertPairs(
       // porque este insert no mandaba `pair_size`. Ahora lo manda (arriba), y
       // el mensaje se BORRA en vez de reescribirse: una disciplina de a uno
       // SÍ arma sola desde acá, así que no queda nada honesto que decir sobre
-      // ese caso. S35 (verify-report ronda 11) sigue vigente para las otras
-      // cuatro FK del mismo insert (matchday/season, entry_a, entry_b,
-      // season_id): esas sí son una carrera real —alguien tocó el plantel o
-      // la fecha mientras se armaba— y comparten este único mensaje genérico.
+      // ese caso EN EL DRAW. S35 (verify-report ronda 11) sigue vigente para
+      // las otras tres FK reales del mismo insert (`pairs_entry_a_season_id_fkey`,
+      // `pairs_entry_b_season_id_fkey`, `pairs_matchday_id_season_id_fkey` —
+      // no hay FK de `season_id` sola sobre `pairs`, corregido W39 verify-
+      // report ronda 12): esas sí son una carrera real —alguien tocó el
+      // plantel o la fecha mientras se armaba— y comparten este único mensaje
+      // genérico. `pairs_matchday_size` SIGUE pudiendo disparar acá, pero sólo
+      // por el camino de `generateMastersPairs`, que ahora corta antes con su
+      // propio guard (W39, arriba) en vez de llegar a este insert.
       if (error?.code === '23503') {
         throw new EdgeError('El plantel o la fecha cambiaron mientras armabas las parejas. Volvé a intentar.')
       }

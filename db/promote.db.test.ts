@@ -728,3 +728,105 @@ describe('promoteGuest — discipline_entries de la disciplina de la fecha, no l
     expect(promoted?.playerId).toBeNull()
   })
 })
+
+// ── PR18c — slice D re-especificada (W35, verify-report ronda 10) ────────────
+//
+// El design (#3801) traía un "HALLAZGO NUEVO" que decía que `promote_guest`
+// con `pair_size=1` sobre una fecha CERRADA copiaba 0 puntos EN SILENCIO, y
+// proponía agregar un `raise` para que fallara ruidoso. W35 midió eso contra
+// la función real y encontró que la premisa era FALSA en las dos puntas: ya
+// falla ruidoso, y falla por el guard EQUIVOCADO.
+//
+// La causa no es la copia final (que es inalcanzable): 60 líneas antes, el
+// guard de "¿el compañero cobró?" arma `case when pr.entry_a = p_entry then
+// pr.entry_b else pr.entry_a end`, y con un lado de uno eso da NULL, así que
+// `a.entry_id = NULL` no matchea nunca y "el compañero no cobró" sale TRUE.
+// Misma lógica de tres valores que C17, en la dirección conservadora.
+//
+// Por eso la re-especificación NO es agregar un raise: es SALTEAR el guard del
+// compañero y la copia cuando `pair_size = 1`, y dejar que la promoción
+// proceda. En una disciplina de a uno el invitado ES su propio lado y no cobró
+// nada al cerrar — no hay puntos que conservar ni que copiar, y sumarlo al
+// plantel no le mueve la posición a nadie.
+
+async function closedSoloMatchdayWithGuest(): Promise<{
+  admin: TestUser
+  seasonId: string
+  matchdayId: string
+  guestId: string
+  squadEntryIds: string[]
+}> {
+  const admin = await createTestUser()
+  const squad = await fillerPlayers(8)
+  // 8 asientos de a uno son 8 lados del torneo, así que la lista de puntos
+  // tiene 8 valores y no 4 — `validateConfig` lo exige por `sideSize`.
+  const config = { ...defaultConfig(8), points: [8, 7, 6, 5, 4, 3, 2, 1] }
+  const { seasonId, entryIds } = await createSeason({
+    admin,
+    squad,
+    disciplines: [{ kind: 'FIFA', pairSize: 1, config }],
+  })
+  const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
+  await markAllPlaying(admin, matchdayId, entryIds)
+
+  // UN invitado, sin lock: de a uno no hay a quién trabarlo. Son 9 lados, 8
+  // del torneo (el invitado no cobra) y 36 partidos.
+  const guestId = await addGuest(admin.client, matchdayId, { displayName: 'Invitado solo' })
+
+  await generatePairs(admin.client, matchdayId)
+  await openMatchday(admin.client, matchdayId)
+  await playAllMatches(admin, matchdayId)
+  await closeMatchday(admin.client, matchdayId)
+
+  return { admin, seasonId, matchdayId, guestId, squadEntryIds: entryIds }
+}
+
+describe('promoteGuest — disciplina de a uno: se promueve, sin copiar nada (PR18c, W35)', () => {
+  it('el invitado que jugó solo entra al plantel en vez de rebotar contra el guard del compañero', async () => {
+    const { admin, seasonId, matchdayId, guestId, squadEntryIds } =
+      await closedSoloMatchdayWithGuest()
+
+    // Punto de partida: los 8 del plantel cobraron, el invitado no. Eso es
+    // `computeAwards`, que saltea los lados hechos sólo de invitados.
+    const before = await awardsOf(matchdayId)
+    expect(before).toHaveLength(8)
+    expect(before.some((row) => row.entry_id === guestId)).toBe(false)
+
+    await promoteGuest(admin.client, guestId)
+
+    // El asiento pasó a ser del plantel y dejó de pertenecer a esa fecha.
+    const promoted = await entryRow(guestId)
+    expect(promoted.kind).toBe('SQUAD')
+    expect(promoted.matchday_id).toBeNull()
+
+    // Y entró a la disciplina de ESTA fecha, al final del orden.
+    const seeds = await disciplineSeedPositions(seasonId)
+    expect(seeds.map((row) => row.id)).toContain(guestId)
+    expect(seeds[seeds.length - 1]?.id).toBe(guestId)
+  })
+
+  it('no se lleva puntos de esa fecha, y no le mueve la posición a nadie', async () => {
+    const { admin, matchdayId, guestId } = await closedSoloMatchdayWithGuest()
+    const before = await awardsOf(matchdayId)
+
+    await promoteGuest(admin.client, guestId)
+
+    // Jugó solo: no hubo compañero que cobrara, así que no hay nada que
+    // copiar. Y las 8 filas de los demás quedan EXACTAMENTE como estaban —
+    // que es la razón por la que la promoción se permite: no reescribe la
+    // tabla de una fecha ya cerrada.
+    const after = await awardsOf(matchdayId)
+    expect(after.some((row) => row.entry_id === guestId)).toBe(false)
+    expect(after).toEqual(before)
+  })
+
+  it('de a DOS sigue refusando la pareja toda invitada (no-regresión de spec 3.2)', async () => {
+    // El mismo guard que se saltea de a uno tiene que seguir disparando donde
+    // el lado es de dos: ahí sumarlo SÍ le cambiaría los puntos a los demás.
+    const { admin, guestA } = await closedMatchdayWithGuestPair()
+    await expect(promoteGuest(admin.client, guestA)).rejects.toThrow(
+      /jugó en una pareja que no cobró puntos/,
+    )
+    expect((await entryRow(guestA)).kind).toBe('GUEST')
+  })
+})

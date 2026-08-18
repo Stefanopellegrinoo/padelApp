@@ -195,6 +195,31 @@ describe('generatePairs', () => {
     )
     expect(mixedPair).toBe(true)
   })
+
+  // W34 (verify-report ronda 10): `insertPairs` todavía no escribe `pair_size`
+  // (es trabajo de PR15/PR17, buildSides es el primer productor de un lado de
+  // uno real). En una disciplina pair_size=1, el default de columna (2) choca
+  // con `pairs_matchday_size` y, sin traducir, el string crudo de Postgres
+  // llegaba tal cual al toast de armado.
+  it('un string de Postgres no le llega al jugador cuando la disciplina todavía no puede armar parejas de a uno', async () => {
+    const admin = await createTestUser()
+    const filler = await fillerPlayers(8)
+    // squadSize/pairSize = 8 valores de puntos, no los 4 de defaultConfig(8)
+    // (pensada para pair_size=2) — si no, C16 (assertPointsCoverMatchday)
+    // corta antes de llegar al camino que este test quiere ejercitar.
+    const config: SeasonConfig = { ...defaultConfig(8), points: [8, 7, 6, 5, 4, 3, 2, 1] }
+    const { seasonId, entryIds } = await createSeason({
+      admin,
+      squad: filler,
+      disciplines: [{ kind: 'FIFA', pairSize: 1, config }],
+    })
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
+    await markAllPlaying(admin, matchdayId, entryIds)
+
+    await expect(generatePairs(admin.client, matchdayId)).rejects.toThrow(
+      'Una disciplina de a uno todavía no puede armar parejas automáticamente.',
+    )
+  })
 })
 
 describe('openMatchday', () => {

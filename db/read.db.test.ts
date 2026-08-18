@@ -259,15 +259,22 @@ describe('db/read', () => {
         disciplines: [{ kind: 'PADEL', weight: 1 }, { kind: 'FIFA', weight: 0.5 }],
       })
       const [padelId, fifaId] = disciplineIds
+      if (padelId === undefined || fifaId === undefined) throw new Error('createSeason no armó las 2 disciplinas.')
+      const firstEntryId = entryIds[0]
+      if (firstEntryId === undefined) throw new Error('createSeason no armó el plantel.')
 
       // Solape parcial (REQ-D1-4): un asiento sólo juega pádel.
       const db = adminClient()
-      await db.from('discipline_entries').delete().eq('discipline_id', fifaId).eq('entry_id', entryIds[0])
+      await db.from('discipline_entries').delete().eq('discipline_id', fifaId).eq('entry_id', firstEntryId)
 
       // `seasonSquadOf` no lo excluye por eso: a diferencia de `entriesOf`, no
       // pasa por `discipline_entries` de UNA disciplina.
       expect(await seasonSquadOf(owner.client, multiId)).toEqual(entryIds)
 
+      // Para cerrar una fecha hace falta el piso de MIN_PLAYERS (8): la
+      // fecha de FIFA la juega el plantel completo, discipline_entries
+      // intacto — el solape parcial ya quedó probado arriba, sin necesitar
+      // cerrar una fecha para eso.
       async function closeOne(disciplineId: string, playedOn: string): Promise<void> {
         const { data: matchday, error } = await db
           .from('matchdays')
@@ -288,6 +295,15 @@ describe('db/read', () => {
         await playAllMatches(owner, matchday.id)
         await closeMatchday(owner.client, matchday.id)
       }
+
+      // El asiento sin fila en discipline_entries de FIFA no puede jugar esa
+      // fecha (0023: attendances_entry_discipline la rechaza) — se lo
+      // restituye acá para poder cerrarla; el solape parcial ya quedó
+      // probado arriba con seasonSquadOf, sin depender de esto.
+      await db
+        .from('discipline_entries')
+        .insert({ discipline_id: fifaId, entry_id: firstEntryId, season_id: multiId, seed_position: 0 })
+
       // Mismo número (1) en las dos: REQ-D3-2 lo permite, y es el caso que C10
       // (verify-report ronda 5) probó que el redirect legacy desempataba mal —
       // `seasonAwardsOf` lo desambigua por `disciplineId`, no por `number` solo.

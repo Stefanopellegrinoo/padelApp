@@ -565,6 +565,73 @@ export async function seasonMatchdaysOf(supabase: Client, seasonId: string): Pro
 }
 
 /** Pairs, matches and full sets of one matchday. Empty pairs/matches — not an error — for a matchday still in DRAFT. */
+/**
+ * El plantel SQUAD de la temporada ENTERA, sin importar qué disciplinas
+ * juega cada quien — lo que la tabla global necesita (REQ-D9) y `entriesOf`
+ * no da: `entriesOf` resuelve una disciplina puntual (la por defecto, o la
+ * que se le pase) y deja afuera a quien no tiene fila en
+ * `discipline_entries` de ESA disciplina (C8/C9, verify-report ronda 4) — acá
+ * es exactamente lo contrario, nadie queda afuera del plantel por no jugar
+ * una disciplina puntual, porque no se pasa por `discipline_entries` en
+ * absoluto. Sumar los puntos ponderados de cada disciplina (`computeRanking`
+ * por disciplina + `computeGlobalRanking`) ya deja en 0 a quien no jugó una
+ * de ellas — no hace falta excluirlo acá.
+ */
+export async function seasonSquadOf(supabase: Client, seasonId: string): Promise<EntryId[]> {
+  const { data, error } = await supabase
+    .from('entries')
+    .select('id')
+    .eq('season_id', seasonId)
+    .eq('kind', 'SQUAD')
+    .order('seed_position', { ascending: true })
+  if (error) throw new EdgeError(`No se pudo leer el plantel: ${error.message}`)
+  return (data ?? []).map((row) => row.id)
+}
+
+/**
+ * Los awards de TODAS las fechas cerradas de la temporada, agrupados por
+ * disciplina y por número de fecha adentro — la versión "temporada entera"
+ * de `awardsOf`, mismo criterio que `seasonMatchdaysOf` (PR 10) sobre
+ * `matchdaysOf`: para la tabla global (REQ-D9) hace falta sumar ponderado
+ * TODAS las disciplinas, no sólo la por defecto.
+ *
+ * Toma `matchdays` ya resueltas (`seasonMatchdaysOf`) en vez de leerlas de
+ * nuevo: quien ya las pidió para otra cosa (armar "próxima fecha", por
+ * ejemplo) no paga la consulta dos veces.
+ */
+export async function seasonAwardsOf(
+  supabase: Client,
+  matchdays: readonly MatchdaySummary[],
+): Promise<Map<DisciplineId, Map<number, Award[]>>> {
+  const closed = matchdays.filter((matchday) => matchday.status === 'CLOSED')
+  const result = new Map<DisciplineId, Map<number, Award[]>>()
+  if (closed.length === 0) return result
+
+  const metaByMatchdayId = new Map(
+    closed.map((matchday) => [matchday.id, { number: matchday.number, disciplineId: matchday.disciplineId }]),
+  )
+  const { data, error } = await supabase
+    .from('awards')
+    .select('matchday_id, entry_id, position, points')
+    .in('matchday_id', [...metaByMatchdayId.keys()])
+  if (error) throw new EdgeError(`No se pudieron leer los premios: ${error.message}`)
+
+  for (const row of data ?? []) {
+    const meta = metaByMatchdayId.get(row.matchday_id)
+    if (meta === undefined) continue
+    const award: Award = { entryId: row.entry_id, position: row.position, points: row.points }
+    let byNumber = result.get(meta.disciplineId)
+    if (byNumber === undefined) {
+      byNumber = new Map()
+      result.set(meta.disciplineId, byNumber)
+    }
+    const bucket = byNumber.get(meta.number)
+    if (bucket === undefined) byNumber.set(meta.number, [award])
+    else bucket.push(award)
+  }
+  return result
+}
+
 export async function matchdayDetail(supabase: Client, matchdayId: string): Promise<MatchdayDetail> {
   const { data: matchdayRow, error: matchdayError } = await supabase
     .from('matchdays')

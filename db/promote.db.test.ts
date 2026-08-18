@@ -15,6 +15,7 @@ import {
   syncGuestSeat,
 } from './matchday'
 import { promoteGuest } from './entries'
+import { disciplineConfig } from './discipline'
 import { entriesOf, matchdayDetail, pairLocksOf, seasonSquadMembersOf } from './read'
 import { defaultDisciplineId, frozenPointsOf } from './season'
 import { adminClient } from './test/admin'
@@ -854,6 +855,60 @@ describe('promoteGuest — disciplina de a uno: se promueve, sin copiar nada (PR
     const detail = await matchdayDetail(admin.client, matchdayId)
     expect(detail.sides).toHaveLength(9)
     expect(detail.guestIds).toEqual([])
+  })
+
+  /*
+   * Decisión de producto de Stefano (esta sesión). La lista de puntos tiene
+   * que tener un casillero por lado, aunque valga 0 — el 0 ya significa "de
+   * acá para abajo no se suma" (`core/config.ts: pointsErrors`). Lo que trababa
+   * la temporada no era una regla de reparto: era el LARGO de la lista.
+   *
+   * Al promover un invitado de a uno el plantel pasa de 8 a 9 y la lista se
+   * queda corta, así que la fecha siguiente no se puede sortear y —peor— si se
+   * REABRE ésta, los premios se borran y no se puede volver a cerrar (C22,
+   * verify-report ronda 15).
+   *
+   * La decisión: que la app agregue el casillero SOLA, con 0. El admin después
+   * lo deja en 0 o le pone valor. Cambia a propósito la convención de que
+   * "agregar un asiento no toca squadSize ni points" — acá la app no está
+   * eligiendo un reparto, está manteniendo el invariante de largo que ella
+   * misma exige.
+   */
+  it('promover de a uno agrega el casillero de puntos y sube el plantel', async () => {
+    const { admin, seasonId, guestId } = await closedSoloMatchdayWithGuest()
+    const disciplineId = await defaultDisciplineId(adminClient(), seasonId)
+    if (disciplineId === null) throw new Error('La temporada no tiene disciplina.')
+
+    const antes = await disciplineConfig(admin.client, disciplineId)
+    expect(antes.config.squadSize).toBe(8)
+    expect(antes.config.points).toEqual([8, 7, 6, 5, 4, 3, 2, 1])
+
+    await promoteGuest(admin.client, guestId)
+
+    const despues = await disciplineConfig(admin.client, disciplineId)
+    expect(despues.config.squadSize).toBe(9)
+    // El casillero nuevo va al final y en 0: el promovido no cobra por haberse
+    // sumado, y el orden de la lista sigue siendo de mayor a menor.
+    expect(despues.config.points).toEqual([8, 7, 6, 5, 4, 3, 2, 1, 0])
+    // Y el resto de la config no se toca.
+    expect({ ...despues.config, squadSize: 8, points: antes.config.points }).toEqual(antes.config)
+  })
+
+  it('la fecha se puede reabrir y volver a cerrar después de promover (C22)', async () => {
+    // C22 (verify-report ronda 15): esto borraba los 8 premios y después no
+    // dejaba cerrar — la fecha quedaba OPEN con cero puntos repartidos y sin
+    // salida por ninguna pantalla. Con el casillero agregado, el re-cierre
+    // reparte 9 premios y el noveno es 0.
+    const { admin, matchdayId, guestId } = await closedSoloMatchdayWithGuest()
+    await promoteGuest(admin.client, guestId)
+
+    await reopenMatchday(admin.client, matchdayId)
+    await closeMatchday(admin.client, matchdayId)
+
+    const awards = await awardsOf(matchdayId)
+    expect(awards).toHaveLength(9)
+    expect([...awards.map((row) => row.points)].sort((a, b) => b - a)).toEqual([8, 7, 6, 5, 4, 3, 2, 1, 0])
+    expect(awards.some((row) => row.entry_id === guestId)).toBe(true)
   })
 
   it('de a DOS sigue refusando la pareja toda invitada (no-regresión de spec 3.2)', async () => {

@@ -262,6 +262,69 @@ describe('assertPointsCoverMatchday', () => {
       /10 competidores del torneo/,
     )
   })
+
+  /*
+   * W41 (verify-report ronda 13). C16 arregló el DIVISOR y dejó el
+   * SUSTRAENDO: un lock de dos invitados se restaba como UN lado que no cobra,
+   * sea cual sea la aridad. De a dos eso es exacto — los dos invitados son un
+   * lado solo. De a uno son DOS lados, porque cada invitado juega solo
+   * (`buildSides` con `sideSize === 1` ignora `fixedPairs` entero).
+   *
+   * La consecuencia medida por la auditoría: plantel de 8 de a uno con los 8
+   * valores de puntos + una pareja invitada rebotaba con "La fecha deja 9
+   * competidores... sólo 8 posiciones". Son 8 competidores, no 9. Y como
+   * `addGuestPair` es HOY el único camino para sumar un invitado a una fecha
+   * de a uno, ese camino quedaba muerto con el plantel completo — que en el
+   * piso de MIN_PLAYERS=8 es el caso normal.
+   */
+  const soloConfig = { ...config, points: [8, 7, 6, 5, 4, 3, 2, 1] } // 8 valores
+
+  it('un lock de dos invitados son DOS lados sin pagar cuando se juega de a uno (W41)', () => {
+    // 8 del plantel + 2 invitados trabados = 10 lados, 8 del torneo.
+    const present = [...players(8), 'g1', 'g2']
+    const guests: GuestSeat[] = [
+      { entryId: 'g1', displayName: 'G1' },
+      { entryId: 'g2', displayName: 'G2' },
+    ]
+    const locks: PairLock[] = [{ a: 'g1', b: 'g2' }]
+    expect(() => assertPointsCoverMatchday(present, guests, locks, soloConfig, 1)).not.toThrow()
+  })
+
+  it('el mensaje cuenta los competidores reales, no uno de más (W41)', () => {
+    // Un invitado más de los que la lista de puntos aguanta: 9 del plantel + 2
+    // invitados = 9 competidores contra 8 posiciones. Tiene que decir 9, no 10.
+    const present = [...players(9), 'g1', 'g2']
+    const guests: GuestSeat[] = [
+      { entryId: 'g1', displayName: 'G1' },
+      { entryId: 'g2', displayName: 'G2' },
+    ]
+    const locks: PairLock[] = [{ a: 'g1', b: 'g2' }]
+    expect(() => assertPointsCoverMatchday(present, guests, locks, soloConfig, 1)).toThrow(
+      /9 competidores del torneo/,
+    )
+  })
+
+  it('de a uno un invitado no cobra aunque nadie lo haya trabado (W41)', () => {
+    // Sin lock: de a uno el lock no significa nada igual, cada invitado ES su
+    // propio lado y ninguno cobra. Restar por locks dejaba esto sin contar.
+    const present = [...players(8), 'g1']
+    const guests: GuestSeat[] = [{ entryId: 'g1', displayName: 'G1' }]
+    expect(() => assertPointsCoverMatchday(present, guests, [], soloConfig, 1)).not.toThrow()
+  })
+
+  it('de a dos sigue restando UN lado por lock de invitados (W41, no-regresión)', () => {
+    const present = players(10)
+    const guests: GuestSeat[] = [
+      { entryId: 'g1', displayName: 'G1' },
+      { entryId: 'g2', displayName: 'G2' },
+    ]
+    const locks: PairLock[] = [{ a: 'g1', b: 'g2' }]
+    expect(() => assertPointsCoverMatchday(present, guests, locks, config, 2)).not.toThrow()
+    // Y un invitado trabado con alguien del plantel SÍ cobra: se sigue contando.
+    expect(() =>
+      assertPointsCoverMatchday(present, guests, [{ a: 'g1', b: 'p0' }], config, 2),
+    ).toThrow(EdgeError)
+  })
 })
 
 describe('assertGuestsNamed', () => {

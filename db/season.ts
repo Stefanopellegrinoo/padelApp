@@ -1,4 +1,4 @@
-import type { Award, DisciplineId, EntryId, MatchdayHistory, SeasonConfig } from '@/core'
+import type { Award, DisciplineId, EntryId, MatchdayHistory, SeasonConfig, SideSize } from '@/core'
 import type { Database, Json } from './database.types'
 import { EdgeError } from './errors'
 import { assertValidConfig } from './validate'
@@ -190,7 +190,7 @@ export interface NewSeasonDiscipline {
    * `0015_disciplines.sql` revoca su UPDATE a propósito — se fija acá, al
    * crear, y no se edita después.
    */
-  pairSize?: 1 | 2
+  pairSize?: SideSize
   /** Si esta disciplina admite empates (decisión #7). Sin especificar, false: el pádel de siempre. Misma inmutabilidad que `pairSize`. */
   allowsDraw?: boolean
 }
@@ -244,9 +244,11 @@ export async function createSeason(
   { name, squadNames, config, mySeatIndex = null, disciplines }: NewSeason,
 ): Promise<{ seasonId: string; inviteToken: string }> {
   const disciplineSpecs = disciplines ?? [{ kind: 'PADEL' as const, config }]
-  assertValidConfig(config)
+  // `config` es el legacy `seasons.config` (drop en el PR de contract):
+  // siempre pádel, sideSize=2 fijo, nunca disciplina-specific.
+  assertValidConfig(config, 2)
   for (const spec of disciplineSpecs) {
-    assertValidConfig(spec.config)
+    assertValidConfig(spec.config, spec.pairSize ?? 2)
     if (squadNames.length !== spec.config.squadSize) {
       throw new EdgeError(
         `El plantel tiene ${squadNames.length} nombres y la configuración de ${spec.kind ?? 'PADEL'} dice ${spec.config.squadSize}.`,
@@ -413,13 +415,18 @@ export async function updateSeasonRules(
   if (error !== null) throw new EdgeError(`No se pudieron guardar las reglas: ${error.message}`)
 }
 
-/** The only writer in this plan: `assertValidConfig` runs before the update lands. */
+/**
+ * The only writer in this plan: `assertValidConfig` runs before the update lands.
+ *
+ * `sideSize` hardcoded at 2: `seasons.config` is the legacy, pre-disciplines
+ * field (dropped at the contract PR) and is always padel-shaped.
+ */
 export async function updateSeasonConfig(
   supabase: Client,
   seasonId: string,
   config: SeasonConfig,
 ): Promise<void> {
-  assertValidConfig(config)
+  assertValidConfig(config, 2)
   const { error } = await supabase
     .from('seasons')
     .update({ config: config as unknown as Json })

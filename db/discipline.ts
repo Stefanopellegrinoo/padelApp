@@ -1,4 +1,4 @@
-import type { DisciplineId, SeasonConfig } from '@/core'
+import type { DisciplineId, SeasonConfig, SideSize } from '@/core'
 import type { Client } from './client'
 import type { Json } from './database.types'
 import { EdgeError } from './errors'
@@ -30,13 +30,23 @@ export async function disciplineConfig(
   return data.config as unknown as SeasonConfig
 }
 
-/** El único escritor de `disciplines.config`: `assertValidConfig` corre antes que el update, igual que `updateSeasonConfig`. */
+/**
+ * El único escritor de `disciplines.config`: `assertValidConfig` corre antes que el update, igual que `updateSeasonConfig`.
+ *
+ * `sideSize` hardcodeado en 2: `pair_size` es identidad fijada al crear la
+ * disciplina (PR14 slice A) y esta función no lee la fila antes de escribir
+ * — agregar esa lectura sólo para validar sería ensanchar esta PR con una
+ * query nueva. Correcto hoy porque toda disciplina real es `pair_size=2`;
+ * el día que exista una de `pair_size=1` editable, este hardcode es el
+ * primer lugar a tocar (candidato: pasar `sideSize` como parámetro, como ya
+ * hace `addDiscipline` con `spec.pairSize`).
+ */
 export async function updateDisciplineConfig(
   supabase: Client,
   disciplineId: DisciplineId,
   config: SeasonConfig,
 ): Promise<void> {
-  assertValidConfig(config)
+  assertValidConfig(config, 2)
   const { error } = await supabase
     .from('disciplines')
     .update({ config: config as unknown as Json })
@@ -51,7 +61,7 @@ export interface NewDiscipline {
   kind?: 'PADEL' | 'FIFA'
   config: SeasonConfig
   /** Mismo contrato que `NewSeasonDiscipline` (db/season.ts): elegido al crear, no derivado de `kind`. Sin especificar, 2. */
-  pairSize?: 1 | 2
+  pairSize?: SideSize
   /** Mismo contrato que `NewSeasonDiscipline`. Sin especificar, false. */
   allowsDraw?: boolean
 }
@@ -88,7 +98,7 @@ export async function addDiscipline(
   spec: NewDiscipline,
   entryIds?: string[],
 ): Promise<DisciplineId> {
-  assertValidConfig(spec.config)
+  assertValidConfig(spec.config, spec.pairSize ?? 2)
 
   const { data: maxRow, error: maxError } = await supabase
     .from('disciplines')

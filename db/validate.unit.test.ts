@@ -19,18 +19,18 @@ function players(count: number): string[] {
 
 describe('assertValidConfig', () => {
   it('lets the default config through', () => {
-    expect(() => assertValidConfig(defaultConfig(8))).not.toThrow()
+    expect(() => assertValidConfig(defaultConfig(8), 2)).not.toThrow()
   })
 
   it('rejects tiebreakSnapshotEvery at 0, which would hang the snapshot chain', () => {
     const config = { ...defaultConfig(8), tiebreakSnapshotEvery: 0 }
-    expect(() => assertValidConfig(config)).toThrow(EdgeError)
+    expect(() => assertValidConfig(config, 2)).toThrow(EdgeError)
   })
 
   it('joins every error into one message', () => {
     const config = { ...defaultConfig(8), tiebreakSnapshotEvery: 0, regularMatchdays: 0 }
     try {
-      assertValidConfig(config)
+      assertValidConfig(config, 2)
       throw new Error('should have thrown')
     } catch (error) {
       expect(error).toBeInstanceOf(EdgeError)
@@ -38,6 +38,16 @@ describe('assertValidConfig', () => {
       expect(message).toContain('El torneo tiene que tener al menos 1 fecha.')
       expect(message).toContain('El orden de desempate se tiene que refrescar cada 1 fecha o más.')
     }
+  })
+
+  // REQ-D2-2 (W24): un plantel impar es válido con sideSize=1 — la paridad
+  // es una regla de la pareja, no del plantel. 9, no 7 como en el GIVEN del
+  // spec: MIN_PLAYERS=8 sigue siendo un piso compartido (PUNTO 3 del
+  // design, afuera de esta tanda), y 7 tropezaría con él sin decir nada
+  // sobre la paridad.
+  it('lets an odd squad through when the side is a single', () => {
+    const config = { ...defaultConfig(8), squadSize: 9, points: [10, 7, 5, 3] }
+    expect(() => assertValidConfig(config, 1)).not.toThrow()
   })
 })
 
@@ -114,20 +124,31 @@ describe('matchError', () => {
 })
 
 describe('assertMatchdaySize', () => {
-  it.each([8, 10, 12])('accepts %i', (size) => {
-    expect(() => assertMatchdaySize(players(size))).not.toThrow()
+  it.each([8, 10, 12])('accepts %i on a side of two', (size) => {
+    expect(() => assertMatchdaySize(players(size), 2)).not.toThrow()
   })
 
   it('rejects 6 and says how many are missing', () => {
-    expect(() => assertMatchdaySize(players(6))).toThrow(/hacen falta 2/)
+    expect(() => assertMatchdaySize(players(6), 2)).toThrow(/hacen falta 2/)
   })
 
   it('rejects 14 and says how many are extra', () => {
-    expect(() => assertMatchdaySize(players(14))).toThrow(/sobran 2/)
+    expect(() => assertMatchdaySize(players(14), 2)).toThrow(/sobran 2/)
   })
 
-  it('rejects an odd number', () => {
-    expect(() => assertMatchdaySize(players(9))).toThrow(/de a pares/)
+  it('rejects an odd number on a side of two', () => {
+    expect(() => assertMatchdaySize(players(9), 2)).toThrow(/de a pares/)
+  })
+
+  // REQ-D5-2: FIFA (sideSize=1) con 7 presentes no tiene error de paridad —
+  // cada presente es su propio lado.
+  it('accepts an odd number on a side of one (REQ-D5-2)', () => {
+    expect(() => assertMatchdaySize(players(9), 1)).not.toThrow()
+  })
+
+  it('still enforces the floor/ceiling on a side of one', () => {
+    expect(() => assertMatchdaySize(players(6), 1)).toThrow(/hacen falta 2/)
+    expect(() => assertMatchdaySize(players(14), 1)).toThrow(/sobran 2/)
   })
 })
 

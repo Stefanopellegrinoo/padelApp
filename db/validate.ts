@@ -5,6 +5,7 @@ import {
   type MatchFormat,
   type SeasonConfig,
   type SetScore,
+  type SideSize,
 } from '@/core'
 import { EdgeError } from './errors'
 
@@ -26,8 +27,8 @@ export interface PairLock {
  * it is not untidy, it is a hang: `tiebreakSnapshotEvery: 0` makes
  * `snapshotForMatchday` loop forever.
  */
-export function assertValidConfig(config: SeasonConfig): void {
-  const errors = validateConfig(config)
+export function assertValidConfig(config: SeasonConfig, sideSize: SideSize): void {
+  const errors = validateConfig(config, sideSize)
   if (errors.length > 0) throw new EdgeError(errors.join(' '))
 }
 
@@ -92,7 +93,13 @@ export function matchError(sets: readonly SetScore[], format: MatchFormat): stri
   return null
 }
 
-export function assertMatchdaySize(present: readonly string[]): void {
+/**
+ * `sideSize` condiciona la paridad (W24, REQ-D5-2): con `sideSize=1` cada
+ * presente es su propio lado, así que un headcount impar no le falta nada a
+ * nadie. El piso/techo sigue sin condicionar: es cantidad, no paridad, y
+ * REQ-D2-2 no lo toca.
+ */
+export function assertMatchdaySize(present: readonly string[], sideSize: SideSize): void {
   if (present.length < MIN_PLAYERS) {
     throw new EdgeError(
       `Con ${present.length} no hay fecha: hacen falta ${MIN_PLAYERS - present.length} más.`,
@@ -103,7 +110,7 @@ export function assertMatchdaySize(present: readonly string[]): void {
       `Con ${present.length} no entra en una tarde: sobran ${present.length - MAX_PLAYERS}.`,
     )
   }
-  if (present.length % 2 !== 0) {
+  if (sideSize === 2 && present.length % 2 !== 0) {
     throw new EdgeError(`Son ${present.length} y sólo se juega de a pares. Falta uno.`)
   }
 }

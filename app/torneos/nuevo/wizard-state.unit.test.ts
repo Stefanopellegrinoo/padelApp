@@ -3,7 +3,9 @@ import { defaultConfig, validateConfig } from '@/core'
 import {
   type Squad,
   addMySeat,
+  buildDisciplines,
   configFor,
+  disciplinesWarning,
   filledCount,
   formatErrors,
   moveSeat,
@@ -12,6 +14,7 @@ import {
   squadWarning,
   submitSeats,
   summaryOf,
+  toggleDiscipline,
 } from './wizard-state'
 
 describe('squadWarning', () => {
@@ -209,6 +212,59 @@ describe('moveSeat', () => {
     const squad = { names: ['Colo', 'Nacho'], mySeat: 0 }
     expect(moveSeat(squad, 0, -1)).toEqual(squad)
     expect(moveSeat(squad, 1, 2)).toEqual(squad)
+  })
+})
+
+describe('toggleDiscipline', () => {
+  it('adds a kind that was not picked, at the end', () => {
+    expect(toggleDiscipline(['PADEL'], 'FIFA')).toEqual(['PADEL', 'FIFA'])
+  })
+
+  it('removes a kind that was already picked', () => {
+    expect(toggleDiscipline(['PADEL', 'FIFA'], 'PADEL')).toEqual(['FIFA'])
+  })
+
+  // El orden de toque ES el contrato (11b/PR10): se vuelve `position` y de ahí
+  // el ordinal del slug. No hay un orden "correcto" por kind.
+  it('keeps the touch order, not a fixed one', () => {
+    expect(toggleDiscipline(['FIFA'], 'PADEL')).toEqual(['FIFA', 'PADEL'])
+  })
+})
+
+describe('disciplinesWarning', () => {
+  it('asks for at least one discipline when none is picked', () => {
+    expect(disciplinesWarning([])).toBe('Elegí al menos una disciplina para el torneo.')
+  })
+
+  it('says nothing once at least one is picked', () => {
+    expect(disciplinesWarning(['PADEL'])).toBeNull()
+    expect(disciplinesWarning(['FIFA'])).toBeNull()
+  })
+})
+
+describe('buildDisciplines', () => {
+  it('gives back one row per kind picked, sharing the same config', () => {
+    const config = configFor(8)
+    expect(buildDisciplines(['PADEL', 'FIFA'], config)).toEqual([
+      { kind: 'PADEL', config },
+      { kind: 'FIFA', config },
+    ])
+  })
+
+  // El contrato de 11b/PR10: el orden de este array ES el orden de creación,
+  // que se vuelve `position` (createSeason lo escribe explícito) y de ahí el
+  // ordinal del slug (padel/padel-2). Tocar FIFA antes que Pádel tiene que dar
+  // FIFA primero, no importa el orden en que aparecen los checkboxes en pantalla.
+  it('keeps the order the user picked, not DISCIPLINE_KINDS order', () => {
+    const config = configFor(8)
+    expect(buildDisciplines(['FIFA', 'PADEL'], config)).toEqual([
+      { kind: 'FIFA', config },
+      { kind: 'PADEL', config },
+    ])
+  })
+
+  it('gives back nothing for an empty pick', () => {
+    expect(buildDisciplines([], configFor(8))).toEqual([])
   })
 })
 

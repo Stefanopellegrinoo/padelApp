@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { computeAwards } from './awards'
 import { defaultConfig } from './config'
-import { pair } from './side'
+import { pair, single } from './side'
 import type { Side, SideStanding, SeasonConfig } from './types'
 
 const CONFIG: SeasonConfig = {
@@ -94,6 +94,36 @@ describe('computeAwards', () => {
   it('throws when the standings are longer than the points list', () => {
     const tooMany = Array.from({ length: 7 }, (_, i) => standing(`p${i}a`, `p${i}b`, i + 1))
     expect(() => computeAwards(tooMany, CONFIG, [])).toThrow(/puntos/)
+  })
+
+  /*
+   * S44 (verify-report ronda 14): el mensaje decía "parejas" siempre, y en una
+   * disciplina de a uno eso manda a buscar un bug de parejas donde no las hay.
+   * Es el único rastro que queda en un log cuando el reparto no cierra — la
+   * ronda 14 lo encontró en el server.log como la firma de C21.
+   */
+  it('dice "competidores" y no "parejas" cuando el lado es de uno (S44)', () => {
+    const solos = ['s1', 's2', 's3', 's4', 's5', 's6', 's7'].map((id, index) => ({
+      side: single(id),
+      played: 0,
+      won: 0,
+      setsDiff: 0,
+      gamesDiff: 0,
+      position: index + 1,
+    }))
+    expect(() => computeAwards(solos, CONFIG, [])).toThrow(
+      /La fecha tiene 7 competidores del torneo pero la lista de puntos sólo tiene 6 valores\./,
+    )
+  })
+
+  it('sigue diciendo "parejas" cuando el lado es de dos (S44, no-regresión)', () => {
+    const tooMany = table([
+      pair('a1', 'a2'), pair('b1', 'b2'), pair('c1', 'c2'), pair('d1', 'd2'),
+      pair('e1', 'e2'), pair('f1', 'f2'), pair('g1', 'g2'),
+    ])
+    expect(() => computeAwards(tooMany, CONFIG, [])).toThrow(
+      /La fecha tiene 7 parejas del torneo pero la lista de puntos sólo tiene 6 valores\./,
+    )
   })
 })
 

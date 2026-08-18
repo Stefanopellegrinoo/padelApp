@@ -58,13 +58,23 @@ export async function middleware(request: NextRequest) {
   // ES el status code (no un objeto `init` con otra cosa) — verificado en
   // `node_modules/next/dist/server/web/spec-extension/response.js`, cuyo
   // default sin el segundo argumento es 307, no 308.
+  // W15 (verify-report ronda 5): `legacyFechaRedirectTarget` tira `EdgeError`
+  // cuando la temporada no resuelve (RLS sin fila) — antes ese throw salía
+  // del middleware entero y reemplazaba `app/error.tsx` por el 500 pelado de
+  // Next. El propio módulo ya trata "no hay a dónde redirigir" como `null`
+  // sin drama (línea de arriba); una excepción es el mismo caso — mejor
+  // esfuerzo, sin bloquear el resto del request si falla.
   const legacy = parseLegacyFechaPath(request.nextUrl.pathname)
   if (legacy !== null) {
-    const target = await legacyFechaRedirectTarget(supabase as unknown as Client, legacy)
-    if (target !== null) {
-      const redirectUrl = request.nextUrl.clone()
-      redirectUrl.pathname = target
-      return NextResponse.redirect(redirectUrl, 308)
+    try {
+      const target = await legacyFechaRedirectTarget(supabase as unknown as Client, legacy)
+      if (target !== null) {
+        const redirectUrl = request.nextUrl.clone()
+        redirectUrl.pathname = target
+        return NextResponse.redirect(redirectUrl, 308)
+      }
+    } catch {
+      // best-effort: cae a la resolución normal (404/error.tsx del render).
     }
   }
 

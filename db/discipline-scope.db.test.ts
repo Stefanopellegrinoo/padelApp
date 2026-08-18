@@ -290,6 +290,37 @@ describe('createMatchday resuelve la disciplina por defecto (N7)', () => {
   })
 })
 
+// ── C12 (verify-report ronda 7) — createMatchday con disciplineId explícito ─
+// N7 (arriba) prueba el default sin tocar; esto prueba el lado que faltaba:
+// el escritor YA puede apuntar a una disciplina que no sea la default, y dos
+// disciplinas pueden tener cada una su fecha sin cerrar A LA VEZ pasando por
+// el mismo `createMatchday` real (no fabricado) — REQ-D3-1 de punta a punta,
+// no sólo a nivel de índice.
+describe('createMatchday con disciplineId explícito (C12)', () => {
+  it('la fecha nueva queda en la disciplina que se le pasa, no en la default, y ambas coexisten sin cerrar', async () => {
+    const admin = await createTestUser()
+    const { seasonId, disciplineIds } = await createSeason({
+      admin,
+      disciplines: [{ kind: 'PADEL' }, { kind: 'FIFA' }],
+    })
+    const [padelId, fifaId] = disciplineIds
+    if (padelId === undefined || fifaId === undefined) throw new Error('Faltan disciplinas.')
+
+    const padelMatchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
+    const fifaMatchdayId = await createMatchday(admin.client, seasonId, '2026-08-10', fifaId)
+
+    const db = adminClient()
+    const { data: rows, error } = await db
+      .from('matchdays')
+      .select('id, discipline_id')
+      .in('id', [padelMatchdayId, fifaMatchdayId])
+    if (error) throw new Error(error.message)
+    const disciplineOf = new Map((rows ?? []).map((row) => [row.id, row.discipline_id]))
+    expect(disciplineOf.get(padelMatchdayId)).toBe(padelId)
+    expect(disciplineOf.get(fifaMatchdayId)).toBe(fifaId)
+  })
+})
+
 // ── C4 — lecturas de producción scopeadas por disciplina, no por temporada ─
 // Antes del fix, las cinco funciones de abajo filtraban `matchdays` por
 // `season_id`: con dos disciplinas compartiendo número de fecha (posible

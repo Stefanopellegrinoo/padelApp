@@ -32,9 +32,10 @@ export interface DisciplineHeader {
   kind: 'PADEL' | 'FIFA'
   config: SeasonConfig
   /**
-   * `disciplines.weight` ya convertido a `number` (REQ-D9-1/2, tabla global).
-   * PostgREST devuelve `numeric(4,2)` como string — `toDisciplineHeader` es
-   * el ÚNICO lugar que hace `Number(...)`; de acá para adentro es number limpio.
+   * `disciplines.weight` (REQ-D9-1/2, tabla global) — ya `number` desde que
+   * sale de PostgREST (W21, `verify-report` ronda 6, medido con el cliente
+   * real; el `Number(...)` de `toDisciplineHeader` es un no-op de cinturón,
+   * no una conversión real).
    */
   weight: number
 }
@@ -160,10 +161,11 @@ interface DisciplineHeaderRow {
   kind: string
   config: unknown
   /**
-   * `database.types.ts` (generado) declara esto `number`, pero PostgREST
-   * serializa un `numeric` como STRING en el JSON real — el generador de
-   * Supabase no lo refleja. `toDisciplineHeader` es el único lugar que no le
-   * cree al tipo y convierte de verdad.
+   * `database.types.ts` (generado) declara esto `number`, y el tipo NO
+   * miente (W21, `verify-report` ronda 6, medido con el cliente real):
+   * PostgREST emite `numeric(4,2)` sin comillas y `Response.json()` lo
+   * entrega ya como `number`. `toDisciplineHeader` igual lo pasa por
+   * `Number()`, ver ahí el porqué.
    */
   weight: number
 }
@@ -189,9 +191,11 @@ export function toDisciplineHeader(row: DisciplineHeaderRow): DisciplineHeader {
     id: row.id as DisciplineId,
     kind: row.kind as 'PADEL' | 'FIFA',
     config: row.config as unknown as SeasonConfig,
-    // Number(...) EN ESTE ÚNICO LUGAR (gotcha de PR12, ver DisciplineHeaderRow.weight):
-    // Number(1) === 1, así que un valor ya numérico (default, tests directos
-    // a la base) no cambia. `db/read.unit.test.ts` prueba el caso real.
+    // Number(...) EN ESTE ÚNICO LUGAR: no convierte nada en la práctica —
+    // `row.weight` ya llega `number` (ver DisciplineHeaderRow.weight) — pero
+    // se deja como cinturón para cualquier lectura futura que no pase por
+    // `fetch`+`JSON.parse` (W21, `verify-report` ronda 6). `Number(1) === 1`,
+    // cero riesgo.
     weight: Number(row.weight),
   }
 }

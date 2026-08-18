@@ -41,38 +41,26 @@ interface SeasonCard {
 }
 
 /**
- * Se compone acá y no en `db/read.ts` a propósito.
- *
- * La lección del Plan 3 fue que una función de datos con forma de pantalla es
- * la que después le falta justo lo que la siguiente pantalla necesita. Esto son
- * lecturas que ya existen, compuestas para este caso.
+ * Se compone acá y no en `db/read.ts` a propósito (Plan 3: una función de
+ * datos con forma de pantalla es la que después le falta algo).
  *
  * "Mi posición" es la de la TABLA GLOBAL (REQ-D9-1/2): suma, por persona, los
  * puntos de cada disciplina × su `weight` — con una sola disciplina y
- * `weight=1` (el caso de hoy) da exactamente lo mismo que antes. Por eso lee
- * `seasonSquadOf`/`seasonAwardsOf` (temporada entera, TODAS las disciplinas)
- * y no `entriesOf`/`awardsOf` (una disciplina puntual): la global necesita el
- * plantel y los premios de cada una para sumarlos ponderados, no sólo los de
- * la default.
+ * `weight=1` (el caso de hoy) da lo mismo que antes. Por eso lee
+ * `seasonSquadOf`/`seasonAwardsOf` (temporada entera) y no `entriesOf`/
+ * `awardsOf` (una disciplina puntual): la global necesita el plantel y los
+ * premios de CADA disciplina para sumarlos ponderados.
  *
- * ponytail: sin criterio de desempate propio para el global — `computeRanking`
- * se llama con snapshot vacío (mismo mecanismo que ya usa `computeGlobalRanking`
- * internamente): sólo importa el `.points` de cada fila, nunca su orden.
- * Alcanza mientras nadie necesite ver POR QUÉ dos personas empatan en la
- * global; si hace falta, ahí se suma un criterio explícito.
+ * ponytail: sin criterio de desempate propio — `computeRanking` corre con
+ * snapshot vacío, sólo importa `.points`, nunca el orden. Alcanza mientras
+ * nadie necesite ver POR QUÉ empatan dos personas en la global.
  *
- * Consultas por temporada — REMEDIDO con `pg_stat_statements` para esta PR,
- * misma técnica que S10 (verify-report ronda 4): con una fecha cerrada real
- * (el caso que importa: una temporada con puntos, no una recién creada),
- * ANTES daba **10** (S10 midió 9 contra una temporada SIN fecha cerrada
- * todavía — `awardsOf` corta antes de su 3ª consulta cuando no hay ninguna
- * CLOSED; con una sí la hay, y las cuentas de acá arriba, defaultDisciplineId
- * ×3 incluido, dan 10 parejo). DESPUÉS da **5**: `seasonSquadOf` (1) +
- * `seasonMatchdaysOf` (1, sin resolver disciplina por defecto) +
- * `seasonAwardsOf` (1, ya con las fechas resueltas) + `myEntryId` (2). No hay
- * fan-out por disciplina: las dos lecturas de temporada entera traen TODAS
- * las disciplinas en una sola consulta cada una, sin importar cuántas haya —
- * mejora, no regresión, y el número no crece con la cantidad de disciplinas.
+ * Consultas por temporada, REMEDIDAS con `pg_stat_statements` (misma técnica
+ * que S10, verify-report ronda 4) contra un escenario con una fecha cerrada
+ * real: **10 antes** (S10 midió 9 sin ninguna CLOSED — `awardsOf` corta antes
+ * de su 3ª consulta cuando no hay ninguna) → **5 después**. Sin fan-out por
+ * disciplina: las dos lecturas de temporada entera traen TODAS en una sola
+ * consulta cada una — mejora, y no crece con la cantidad de disciplinas.
  */
 async function cardFor(supabase: Client, header: SeasonHeader): Promise<SeasonCard> {
   const [squad, matchdays, viewerEntryId] = await Promise.all([

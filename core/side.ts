@@ -1,12 +1,17 @@
 import type { EntryId, Side, SideSize } from './types'
 
 /** Un lado de a uno — FIFA 1v1, o cualquier disciplina con `pairSize: 1`. */
-export function single(a: EntryId): Side {
+/** Un lado de UNO, angostado: el tipo lo distingue de un lado de dos. */
+export type Solo = Extract<Side, { size: 1 }>
+/** Un lado de DOS, angostado. Lo que el sorteo de parejas sabe manejar. */
+export type Duo = Extract<Side, { size: 2 }>
+
+export function single(a: EntryId): Solo {
   return { size: 1, a }
 }
 
 /** Un lado de a dos — todos los lados de hoy, hasta que exista una disciplina con `pairSize: 1`. */
-export function pair(a: EntryId, b: EntryId): Side {
+export function pair(a: EntryId, b: EntryId): Duo {
   return { size: 2, a, b }
 }
 

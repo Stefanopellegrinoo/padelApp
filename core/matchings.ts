@@ -1,6 +1,6 @@
 import { MAX_PLAYERS } from './constants'
-import { pair } from './side'
-import type { EntryId, Side } from './types'
+import { pair, type Duo } from './side'
+import type { EntryId } from './types'
 
 /**
  * Every perfect matching of the pool. The count is (n-1)!!, which stays tiny
@@ -10,7 +10,7 @@ import type { EntryId, Side } from './types'
  * The first player is fixed and paired with each of the rest in turn, which
  * is what keeps every matching unique instead of producing permutations.
  */
-export function allMatchings(pool: EntryId[]): Side[][] {
+export function allMatchings(pool: EntryId[]): Duo[][] {
   if (pool.length % 2 !== 0) {
     throw new Error(`No se puede emparejar un pool impar: son ${pool.length} jugadores.`)
   }
@@ -27,7 +27,7 @@ export function allMatchings(pool: EntryId[]): Side[][] {
   // Only here to satisfy noUncheckedIndexedAccess.
   if (first === undefined) return [[]]
 
-  const result: Side[][] = []
+  const result: Duo[][] = []
   for (let i = 0; i < rest.length; i++) {
     const partner = rest[i]
     // Unreachable: i stays within rest's own bounds (0..rest.length-1), so

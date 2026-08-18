@@ -396,7 +396,17 @@ export async function deleteSeason(supabase: Client, seasonId: string): Promise<
   }
 }
 
-/** Cambia el nombre del torneo. Lo dice el paso 1 del wizard: "se puede cambiar después". */
+/**
+ * Cambia el nombre del torneo. Lo dice el paso 1 del wizard: "se puede cambiar
+ * después".
+ *
+ * `count: 'exact'` por el mismo motivo que `setMatchdayDate` (W49,
+ * verify-report ronda 15): un update que no toca ninguna fila NO es un error
+ * en PostgREST. Estas escrituras se apoyan en RLS y no chequean admin por su
+ * cuenta, así que a un participante que no organiza le decían que guardó y al
+ * recargar volvía el valor viejo. La ronda 15 lo midió con un participante
+ * real en las cuatro.
+ */
 export async function renameSeason(
   supabase: Client,
   seasonId: string,
@@ -405,21 +415,43 @@ export async function renameSeason(
   const trimmed = name.trim()
   if (trimmed.length === 0) throw new EdgeError('El torneo necesita un nombre.')
 
-  const { error } = await supabase.from('seasons').update({ name: trimmed }).eq('id', seasonId)
+  const { error, count } = await supabase
+    .from('seasons')
+    .update({ name: trimmed }, { count: 'exact' })
+    .eq('id', seasonId)
   if (error !== null) throw new EdgeError(`No se pudo cambiar el nombre: ${error.message}`)
+  if (count === 0) {
+    throw new EdgeError('No se pudo cambiar el nombre: sólo puede hacerlo quien organiza.')
+  }
 }
 
-/** El texto libre del admin. Mueve el sello de última actualización, que la página de reglas muestra. */
+/**
+ * El texto libre del admin. Mueve el sello de última actualización, que la
+ * página de reglas muestra.
+ *
+ * `count: 'exact'` por el mismo motivo que `setMatchdayDate` (W49,
+ * verify-report ronda 15): un update que no toca ninguna fila NO es un error
+ * en PostgREST. Estas escrituras se apoyan en RLS y no chequean admin por su
+ * cuenta, así que a un participante que no organiza le decían que guardó y al
+ * recargar volvía el valor viejo. La ronda 15 lo midió con un participante
+ * real en las cuatro.
+ */
 export async function updateSeasonRules(
   supabase: Client,
   seasonId: string,
   text: string,
 ): Promise<void> {
-  const { error } = await supabase
+  const { error, count } = await supabase
     .from('seasons')
-    .update({ rules_text: text, rules_updated_at: new Date().toISOString() })
+    .update(
+      { rules_text: text, rules_updated_at: new Date().toISOString() },
+      { count: 'exact' },
+    )
     .eq('id', seasonId)
   if (error !== null) throw new EdgeError(`No se pudieron guardar las reglas: ${error.message}`)
+  if (count === 0) {
+    throw new EdgeError('No se pudieron guardar las reglas: sólo puede hacerlo quien organiza.')
+  }
 }
 
 /**

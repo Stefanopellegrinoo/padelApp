@@ -861,6 +861,16 @@ async function insertPairs(
       .select('id')
       .single()
     if (error || data === null) {
+      // W34 (verify-report ronda 10): este insert todavía no manda `pair_size`
+      // (PR15/PR17 son quienes tienen que enrutar el primer lado de uno de
+      // verdad, no acá). En una disciplina pair_size=1 eso choca con
+      // `pairs_matchday_size` (el default de columna sigue siendo 2) y, sin
+      // traducir, el string crudo de Postgres llegaba tal cual al toast de
+      // armado. Mismo patrón que `removeSeat` (entries.ts:166) y
+      // `createMatchday` (matchday.ts:281): código conocido antes del genérico.
+      if (error?.code === '23503') {
+        throw new EdgeError('Una disciplina de a uno todavía no puede armar parejas automáticamente.')
+      }
       throw new EdgeError(`No se pudo guardar una pareja: ${error?.message}`)
     }
     ids.push(data.id)

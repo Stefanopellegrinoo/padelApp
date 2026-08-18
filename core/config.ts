@@ -1,5 +1,5 @@
 import { MAX_PLAYERS, MIN_PLAYERS } from './constants'
-import type { SeasonConfig } from './types'
+import type { SeasonConfig, SideSize } from './types'
 
 /**
  * Points for a full squad, longest first. A matchday with fewer pairs uses
@@ -23,12 +23,19 @@ export function defaultConfig(squadSize: number): SeasonConfig {
   }
 }
 
-export function validateConfig(config: SeasonConfig): string[] {
+/**
+ * `sideSize` condiciona la paridad (W24, REQ-D2-2/REQ-D5-2): un plantel impar
+ * sólo es un problema cuando un lado necesita DOS. Con `sideSize=1` cada
+ * presente es su propio lado — la regla no se relaja, es INAPLICABLE. El
+ * piso/techo (`MIN_PLAYERS`/`MAX_PLAYERS`) sigue sin condicionar: eso es un
+ * guard real de cantidad, no de paridad, y no lo toca esta decisión.
+ */
+export function validateConfig(config: SeasonConfig, sideSize: SideSize): string[] {
   const errors: string[] = []
   const { squadSize, matchFormat, points, regularMatchdays, countBestOf, tiebreakSnapshotEvery } =
     config
 
-  if (squadSize % 2 !== 0) {
+  if (sideSize === 2 && squadSize % 2 !== 0) {
     errors.push('El plantel tiene que ser un número par.')
   }
   if (squadSize < MIN_PLAYERS) {

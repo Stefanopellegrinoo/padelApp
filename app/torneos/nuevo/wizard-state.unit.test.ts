@@ -72,7 +72,7 @@ describe('the config the wizard builds', () => {
   // `createSeason` lo rebota en el submit y el usuario se entera al final.
   it('produces a config core accepts, for every squad size', () => {
     for (const size of [8, 10, 12]) {
-      expect(validateConfig(configFor(size))).toEqual([])
+      expect(validateConfig(configFor(size), 2)).toEqual([])
       expect(formatErrors(configFor(size))).toEqual([])
     }
   })
@@ -117,7 +117,7 @@ describe('formatErrors', () => {
     ]
     for (const points of lists) {
       const config = { ...configFor(8), points }
-      const coreRejects = validateConfig(config).length > 0
+      const coreRejects = validateConfig(config, 2).length > 0
       const wizardRejects = formatErrors(config).length > 0
       expect(wizardRejects, `puntos ${points.join('·')}`).toBe(coreRejects)
     }

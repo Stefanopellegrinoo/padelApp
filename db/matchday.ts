@@ -79,7 +79,12 @@ export async function matchdayContextFor(
 ): Promise<MatchdayContext> {
   const matchday = await requireMatchday(supabase, matchdayId)
   const config = await disciplineConfig(supabase, matchday.discipline_id)
-  assertValidConfig(config)
+  // sideSize hardcoded at 2: `matchdays`/`MatchdayContext` do not carry
+  // `pair_size` yet (design #3801 PUNTO 1, `matchdays.pair_size` FK chain —
+  // not migrated in this slice). Correct today because every real matchday
+  // is `pair_size=2`; threading the real value is PR15's job together with
+  // `buildSides`'s 1v1 branch (design table, PUNTO 5).
+  assertValidConfig(config, 2)
 
   // The seed order is also the squad, and it must be stable: buildPairs falls
   // back to the order it is given when two players are missing from the
@@ -133,7 +138,9 @@ export async function pairingContextFor(
     ...(await playingEntryIds(supabase, matchdayId)),
     ...guests.map((guest) => guest.entryId),
   ]
-  assertMatchdaySize(present)
+  // Mismo hardcode y misma razón que `matchdayContextFor` arriba: sin
+  // `pair_size` todavía en `MatchdayContext`.
+  assertMatchdaySize(present, 2)
   assertPointsCoverMatchday(present, guests, locks, config)
 
   return {
@@ -558,7 +565,10 @@ export async function generateMastersPairs(supabase: Client, matchdayId: string)
   }
 
   const config = await disciplineConfig(supabase, matchday.discipline_id)
-  assertValidConfig(config)
+  // 2, no un placeholder: el Masters arma 6 PAREJAS por diseño de formato
+  // (mastersFixture), sideSize=1 no tiene sentido acá sin importar qué
+  // dispone la disciplina.
+  assertValidConfig(config, 2)
   const seedOrder = await squadSeedOrder(supabase, matchday.discipline_id)
   const awardsByMatchday = await awardsBefore(supabase, matchday.discipline_id, matchday.number)
   const snapshot = snapshotForMatchday(matchday.number, seedOrder, awardsByMatchday, config)

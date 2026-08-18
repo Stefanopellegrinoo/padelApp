@@ -1,5 +1,5 @@
 import { defaultConfig } from '../../core/config'
-import type { DisciplineId, SeasonConfig } from '../../core/types'
+import type { DisciplineId, SeasonConfig, SideSize } from '../../core/types'
 import { adminClient } from './admin'
 import type { Json } from '../database.types'
 import type { TestUser } from './users'
@@ -10,7 +10,7 @@ export interface DisciplineSpec {
   config?: SeasonConfig
   weight?: number
   /** Mismo contrato que `NewSeasonDiscipline`/`NewDiscipline` (PR14 slice A): elegido al crear, no derivado de `kind`. Sin especificar, default de columna (2). */
-  pairSize?: 1 | 2
+  pairSize?: SideSize
   /** Mismo contrato. Sin especificar, default de columna (false). */
   allowsDraw?: boolean
 }

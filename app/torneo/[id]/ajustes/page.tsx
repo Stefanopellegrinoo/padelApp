@@ -78,7 +78,10 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
   const mismatch =
     seats.length === discipline.config.squadSize
       ? []
-      : validateConfig({ ...discipline.config, squadSize: seats.length })
+      : // 2, no un placeholder real: `DisciplineHeader` todavía no trae
+        // `pairSize` (PR14 slice B no lo agregó a propósito, ver
+        // apply-progress) y el único torneo real hoy es pádel.
+        validateConfig({ ...discipline.config, squadSize: seats.length }, 2)
 
   const { setsToWin, gamesPerSet } = discipline.config.matchFormat
   // CLOSED y no todas: lo que el modal tiene que poner en juego es lo que ya se

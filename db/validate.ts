@@ -97,7 +97,10 @@ export function matchError(sets: readonly SetScore[], format: MatchFormat): stri
  * `sideSize` condiciona la paridad (W24, REQ-D5-2): con `sideSize=1` cada
  * presente es su propio lado, así que un headcount impar no le falta nada a
  * nadie. El piso/techo sigue sin condicionar: es cantidad, no paridad, y
- * REQ-D2-2 no lo toca.
+ * REQ-D2-2 no lo toca directamente. Pero el TECHO (`MAX_PLAYERS`) mide
+ * partidos, no jugadores (W32, verify-report ronda 9), y esa unidad SÍ
+ * cambia con `sideSize` — dejarlo sin condicionar es deuda documentada, no
+ * una decisión cerrada (ver el comentario de `MAX_PLAYERS`).
  */
 export function assertMatchdaySize(present: readonly string[], sideSize: SideSize): void {
   if (present.length < MIN_PLAYERS) {
@@ -156,30 +159,38 @@ export function assertLocksAndGuests(
 }
 
 /**
- * `points` holds exactly squadSize / 2 values, so a matchday padded with a guest
- * team can end up with more championship pairs than there are positions to pay.
- * With a squad of eight and a visiting team, eight players plus two guests make
- * five pairs and only four values exist.
+ * `points` holds exactly squadSize / sideSize values, so a matchday padded
+ * with a guest team can end up with more championship sides than there are
+ * positions to pay. With a squad of eight and a visiting pair, eight players
+ * plus two guests make five sides and only four values exist.
  *
- * A lock made of two guests is the only kind of pair that does not get paid, so
+ * A lock made of two guests is the only kind of side that does not get paid, so
  * it is the only one subtracted. A lock of guest plus squad player does get
  * paid — the partner played and earned it.
+ *
+ * C16 (verify-report ronda 9): dividía siempre por 2 — el guard que existe
+ * justo para avisar "faltan valores de puntos" ANTES del sorteo quedaba
+ * ciego con `sideSize=1` y encima imprimía una FRACCIÓN en el mensaje
+ * ("4.5 parejas") con un headcount impar.
  */
 export function assertPointsCoverMatchday(
   present: readonly string[],
   guests: readonly GuestSeat[],
   locks: readonly PairLock[],
   config: SeasonConfig,
+  sideSize: SideSize,
 ): void {
   const isGuest = new Set(guests.map((guest) => guest.entryId))
   const guestOnlyPairs = locks.filter(
     (lock) => isGuest.has(lock.a) && isGuest.has(lock.b),
   ).length
-  const championshipPairs = present.length / 2 - guestOnlyPairs
+  const championshipSides = present.length / sideSize - guestOnlyPairs
 
-  if (championshipPairs > config.points.length) {
+  if (championshipSides > config.points.length) {
     throw new EdgeError(
-      `La fecha deja ${championshipPairs} parejas del torneo y la temporada sólo definió puntos para ${config.points.length} posiciones. Agregá valores en Ajustes o sacá un invitado.`,
+      sideSize === 1
+        ? `La fecha deja ${championshipSides} competidores del torneo y la temporada sólo definió puntos para ${config.points.length} posiciones. Agregá valores en Ajustes o sacá un invitado.`
+        : `La fecha deja ${championshipSides} parejas del torneo y la temporada sólo definió puntos para ${config.points.length} posiciones. Agregá valores en Ajustes o sacá un invitado.`,
     )
   }
 }

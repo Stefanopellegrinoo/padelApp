@@ -21,6 +21,7 @@ import type {
   SeasonConfig,
   SeasonStatus,
   SetScore,
+  SideSize,
 } from '@/core'
 import type { Client } from './client'
 import { EdgeError } from './errors'
@@ -38,6 +39,8 @@ export interface DisciplineHeader {
    * no una conversión real).
    */
   weight: number
+  /** `disciplines.pair_size` real (W30, verify-report ronda 9) — mismo select, una columna más. */
+  pairSize: SideSize
 }
 
 export interface SeasonHeader {
@@ -168,6 +171,7 @@ interface DisciplineHeaderRow {
    * `Number()`, ver ahí el porqué.
    */
   weight: number
+  pair_size: number
 }
 
 interface MatchdayRow {
@@ -197,6 +201,7 @@ export function toDisciplineHeader(row: DisciplineHeaderRow): DisciplineHeader {
     // `fetch`+`JSON.parse` (W21, `verify-report` ronda 6). `Number(1) === 1`,
     // cero riesgo.
     weight: Number(row.weight),
+    pairSize: row.pair_size as SideSize,
   }
 }
 
@@ -232,7 +237,7 @@ function toMatchdaySummary(row: MatchdayRow): MatchdaySummary {
 }
 
 const SEASON_HEADER_COLUMNS = 'id, name, status, created_by, invite_token'
-const DISCIPLINE_HEADER_COLUMNS = 'id, season_id, kind, config, weight'
+const DISCIPLINE_HEADER_COLUMNS = 'id, season_id, kind, config, weight, pair_size'
 
 /** Every season where the caller has a seat — admin or squad. RLS does the filtering; this only shapes the rows. */
 export async function mySeasons(supabase: Client): Promise<SeasonHeader[]> {

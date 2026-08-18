@@ -4,8 +4,19 @@ import type { Json } from './database.types'
 import { EdgeError } from './errors'
 import { assertValidConfig } from './validate'
 
+/** `disciplineConfig`'s return: la config Y el `pair_size` real, del mismo select. */
+export interface DisciplineConfigRow {
+  config: SeasonConfig
+  pairSize: SideSize
+}
+
 /**
- * La config de UNA disciplina — `disciplines.config`, no `seasons.config`.
+ * La config de UNA disciplina — `disciplines.config`, no `seasons.config` —
+ * MÁS `pair_size`, de la misma fila y el mismo select (W30, verify-report
+ * ronda 9): antes esta función sólo traía `config` y tres call sites
+ * (`matchdayContextFor`, `pairingContextFor`, `DISCIPLINE_HEADER_COLUMNS` en
+ * db/read.ts) pasaban un `2` literal a `assertValidConfig`/`assertMatchdaySize`
+ * aunque el valor real estaba a una columna de un select que ya corría.
  *
  * `disciplines.config` existe desde PR 1 (0015), backfillada 1:1 con la
  * config de la temporada en ese momento, pero hasta PR 5 nada la volvía a
@@ -17,17 +28,17 @@ import { assertValidConfig } from './validate'
 export async function disciplineConfig(
   supabase: Client,
   disciplineId: DisciplineId,
-): Promise<SeasonConfig> {
+): Promise<DisciplineConfigRow> {
   const { data, error } = await supabase
     .from('disciplines')
-    .select('config')
+    .select('config, pair_size')
     .eq('id', disciplineId)
     .maybeSingle()
   if (error) {
     throw new EdgeError(`No se pudo leer la configuración de la disciplina: ${error.message}`)
   }
   if (data === null) throw new EdgeError('La disciplina no existe.')
-  return data.config as unknown as SeasonConfig
+  return { config: data.config as unknown as SeasonConfig, pairSize: data.pair_size as SideSize }
 }
 
 /**

@@ -1,6 +1,16 @@
 import { describe, it, expect } from 'vitest'
-import { defaultConfig } from '@/core'
-import { cancelMatchday, createMatchday, generatePairs, openMatchday, reopenMatchday, setAttendance } from './matchday'
+import { defaultConfig, type SeasonConfig } from '@/core'
+import {
+  cancelMatchday,
+  createMatchday,
+  generatePairs,
+  matchdayContextFor,
+  openMatchday,
+  pairingContextFor,
+  reopenMatchday,
+  setAttendance,
+  syncGuestSeat,
+} from './matchday'
 import { awardsOf, closedHistoryAll, derivedSeasonStatus, matchdaysOf } from './read'
 import { awardsBefore, closedHistory } from './season'
 import { adminClient } from './test/admin'
@@ -428,5 +438,86 @@ describe('lecturas de producción scopeadas por disciplina, no por temporada (C4
 
     const map = await awardsOf(admin.client, seasonId)
     expect(map.get(1)).toEqual([{ entryId: a, position: 1, points: 10 }])
+  })
+})
+
+// ── W30 (verify-report ronda 9) — pair_size real, no un hardcode ───────────
+// Antes de esta tanda, `matchdayContextFor`/`pairingContextFor` pasaban un
+// `2` literal a `assertValidConfig`/`assertMatchdaySize` aunque
+// `disciplineConfig` ya leía la fila de `disciplines` donde vive `pair_size`
+// — el valor real estaba a una columna del select que ya corría. Medido
+// antes del fix: esta misma escena tiraba "El plantel tiene que ser un
+// número par." contra una disciplina de a uno con plantel impar.
+describe('matchdayContextFor/pairingContextFor leen el pair_size real (W30)', () => {
+  it('una disciplina pair_size=1 con plantel impar no tropieza con la paridad de a dos', async () => {
+    const admin = await createTestUser()
+    const filler = await fillerPlayers(9)
+    const config: SeasonConfig = {
+      ...defaultConfig(8),
+      squadSize: 9,
+      points: [10, 9, 8, 7, 6, 5, 4, 3, 2],
+    }
+    const { seasonId, disciplineIds, entryIds } = await createSeason({
+      admin,
+      squad: filler,
+      disciplines: [{ kind: 'FIFA', pairSize: 1, config }],
+    })
+    const [fifaId] = disciplineIds
+    if (fifaId === undefined) throw new Error('Falta la disciplina.')
+    const matchdayId = await insertMatchday(seasonId, fifaId, 1, 'DRAFT')
+    for (const entryId of entryIds) {
+      await setAttendance(admin.client, matchdayId, entryId, 'PLAYING')
+    }
+
+    const context = await matchdayContextFor(admin.client, matchdayId)
+    expect(context.pairSize).toBe(1)
+
+    const pairingContext = await pairingContextFor(admin.client, matchdayId)
+    expect(pairingContext.input.present).toHaveLength(9)
+  })
+})
+
+// ── C15 (verify-report ronda 9) — syncGuestSeat no inventa invitados en 1v1 ─
+// Antes de esta tanda, `syncGuestSeat` calculaba `isOdd` sobre el headcount
+// sin mirar `pair_size`: en una disciplina de a uno, un plantel impar es
+// NORMAL (cada presente es su propio lado) y no le falta nadie — pero la
+// función igual insertaba un GUEST fantasma (nombre vacío) y borraba el
+// sorteo de paso. Medido antes del fix: 0 filas GUEST antes, 1 después.
+describe('syncGuestSeat no inventa un invitado en una disciplina de a uno (C15)', () => {
+  it('con pair_size=1 y presentes impares, no crea GUEST ni toca las parejas', async () => {
+    const admin = await createTestUser()
+    const filler = await fillerPlayers(9)
+    const { seasonId, disciplineIds, entryIds } = await createSeason({
+      admin,
+      squad: filler,
+      disciplines: [{ kind: 'FIFA', pairSize: 1 }],
+    })
+    const [fifaId] = disciplineIds
+    if (fifaId === undefined) throw new Error('Falta la disciplina.')
+    const matchdayId = await insertMatchday(seasonId, fifaId, 1, 'DRAFT')
+    for (const entryId of entryIds) {
+      await setAttendance(admin.client, matchdayId, entryId, 'PLAYING')
+    }
+    const [a, b] = entryIds
+    if (a === undefined || b === undefined) throw new Error('Faltan asientos.')
+    await insertPair(matchdayId, seasonId, a, b)
+
+    await syncGuestSeat(admin.client, matchdayId)
+
+    const db = adminClient()
+    const { data: guests, error: guestsError } = await db
+      .from('entries')
+      .select('id')
+      .eq('matchday_id', matchdayId)
+      .eq('kind', 'GUEST')
+    if (guestsError) throw new Error(guestsError.message)
+    expect(guests).toHaveLength(0)
+
+    const { data: pairs, error: pairsError } = await db
+      .from('pairs')
+      .select('id')
+      .eq('matchday_id', matchdayId)
+    if (pairsError) throw new Error(pairsError.message)
+    expect(pairs).toHaveLength(1)
   })
 })

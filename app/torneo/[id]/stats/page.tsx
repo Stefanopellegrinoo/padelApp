@@ -219,7 +219,7 @@ export default async function StatsPage({ params, searchParams }: PageProps) {
   // `disciplines.config` es la fuente real desde PR 5 (C5, verify-report
   // ronda 3: `seasons.config` quedó sin escritor y podía divergir en silencio).
   if (disciplineId === null) throw new EdgeError('El torneo no tiene disciplina.')
-  const config = await disciplineConfig(supabase, disciplineId)
+  const { config } = await disciplineConfig(supabase, disciplineId)
 
   if (history.length < MIN_CLOSED_MATCHDAYS_FOR_STATS) {
     return <InsufficientData closedCount={history.length} />

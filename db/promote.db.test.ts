@@ -15,7 +15,7 @@ import {
   syncGuestSeat,
 } from './matchday'
 import { promoteGuest } from './entries'
-import { matchdayDetail, pairLocksOf } from './read'
+import { entriesOf, matchdayDetail, pairLocksOf } from './read'
 import { defaultDisciplineId } from './season'
 import { adminClient } from './test/admin'
 import { createSeason } from './test/factories'
@@ -648,5 +648,68 @@ describe('promoteGuest — el unique de awards protege contra una pareja duplica
     // Nada quedó a mitad de camino: ni el flip a SQUAD ni ningún award nuevo.
     expect((await entryRow(guestId)).kind).toBe('GUEST')
     expect((await awardsOf(matchdayId)).filter((row) => row.entry_id === guestId)).toHaveLength(0)
+  })
+})
+
+// ── S23 (verify-report ronda 7) — discipline_entries de LA FECHA, no la default
+// `promote_guest` (0025_promote_guest_discipline_entries.sql) ya siembra la
+// disciplina de la fecha en la que jugó el invitado, no la default — la
+// siembra estaba bien desde el restatement de esa migración, pero C12
+// bloqueaba llegar a este escenario (no se podía abrir una fecha fuera de la
+// default). Con C12 cerrado, esto ya es alcanzable: se prueba de punta a
+// punta, con `entriesOf` (la misma función que lee "Plantel" en Ajustes) del
+// lado de la disciplina correcta y del lado de la default.
+describe('promoteGuest — discipline_entries de la disciplina de la fecha, no la default (S23)', () => {
+  it('un invitado promovido desde una fecha FIFA entra a discipline_entries de FIFA, no de la default PADEL', async () => {
+    const squad = await fillerPlayers(8)
+    const admin = await createTestUser()
+    const { seasonId, disciplineIds, entryIds } = await createSeason({
+      admin,
+      config: defaultConfig(8),
+      squad,
+      disciplines: [{ kind: 'PADEL' }, { kind: 'FIFA' }],
+    })
+    const [padelId, fifaId] = disciplineIds
+    if (padelId === undefined || fifaId === undefined) throw new Error('Faltan disciplinas.')
+
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10', fifaId)
+    await markAllPlaying(admin, matchdayId, entryIds)
+    await setAttendance(admin.client, matchdayId, entryIds[0]!, 'ABSENT')
+    await syncGuestSeat(admin.client, matchdayId)
+
+    const [guestId] = (await matchdayDetail(admin.client, matchdayId)).guestIds
+    if (guestId === undefined) throw new Error('syncGuestSeat no agregó invitado.')
+    await nameGuest(admin.client, guestId, 'Invitade de FIFA')
+
+    await generatePairs(admin.client, matchdayId)
+    await openMatchday(admin.client, matchdayId)
+    await playAllMatches(admin, matchdayId)
+    await closeMatchday(admin.client, matchdayId)
+
+    await promoteGuest(admin.client, guestId)
+
+    const db = adminClient()
+    const { data: fifaSeat, error: fifaSeatError } = await db
+      .from('discipline_entries')
+      .select('entry_id')
+      .eq('discipline_id', fifaId)
+      .eq('entry_id', guestId)
+      .maybeSingle()
+    if (fifaSeatError) throw new Error(fifaSeatError.message)
+    expect(fifaSeat).not.toBeNull()
+
+    const { data: padelSeat, error: padelSeatError } = await db
+      .from('discipline_entries')
+      .select('entry_id')
+      .eq('discipline_id', padelId)
+      .eq('entry_id', guestId)
+      .maybeSingle()
+    if (padelSeatError) throw new Error(padelSeatError.message)
+    expect(padelSeat).toBeNull()
+
+    // Misma función que arma "Plantel" en Ajustes: aparece del lado de FIFA,
+    // no del lado de la default (padel) — ahí es donde S23 mordía.
+    expect((await entriesOf(admin.client, seasonId, fifaId)).some((entry) => entry.id === guestId)).toBe(true)
+    expect((await entriesOf(admin.client, seasonId, padelId)).some((entry) => entry.id === guestId)).toBe(false)
   })
 })

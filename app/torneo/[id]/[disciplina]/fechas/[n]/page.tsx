@@ -164,9 +164,12 @@ export default async function FechaDetailPage({ params }: PageProps) {
         ? `En juego${matchday.playedOn !== null ? ` · ${matchdayFull(matchday.playedOn)}` : ''}`
         : `Cerrada${matchday.playedOn !== null ? ` · ${matchdayFull(matchday.playedOn)}` : ''}`
 
+  // El vocabulario de la disciplina: un lado de uno no es "una pareja".
+  const sideWord = discipline.pairSize === 1 ? 'jugadores' : 'parejas'
+
   let body: ReactNode = (
     <div className="rounded-card bg-chip p-4 text-center text-[13px] font-[550] text-muted">
-      Se está armando. Todavía no hay parejas ni partidos para mostrar.
+      Se está armando. Todavía no hay {sideWord} ni partidos para mostrar.
     </div>
   )
 
@@ -296,6 +299,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
         seasonId={seasonId}
         matchdayId={matchday.id}
         disciplina={disciplina}
+        sideSize={discipline.pairSize}
         matchdayNumber={matchday.number}
         seats={seats}
         looseGuests={looseGuests}
@@ -535,7 +539,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
           <p className="text-[15px] font-extrabold tracking-[-.02em]">Tabla de la fecha</p>
           <div className="overflow-hidden rounded-[14px] border border-line">
             <div className="grid grid-cols-[1fr_34px_44px_44px] gap-2 bg-chip px-3 py-2 text-[9.5px] font-extrabold uppercase tracking-[.13em] text-muted">
-              <span>Pareja</span>
+              <span>{discipline.pairSize === 1 ? 'Jugador' : 'Pareja'}</span>
               <span className="text-right">PG</span>
               <span className="text-right">Dif</span>
               <span className="text-right">Pts</span>

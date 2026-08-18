@@ -28,6 +28,16 @@ import type { Side } from '@/core'
  *                        típico como ejemplo. Esa pareja quedó afuera del
  *                        reparto, y meterlo al plantel desde acá correría las
  *                        posiciones pagas de todos los demás.
+ *   · `JUGO_SOLO`        la disciplina es de a uno: fue su propio lado, así
+ *                        que no hubo compañero que cobrara. SE PUEDE sumar
+ *                        —`promote_guest` saltea el guard del compañero y la
+ *                        copia con `pair_size = 1` desde
+ *                        `0031_promote_guest_single_side.sql`, W35— pero NO
+ *                        se lleva puntos de esta fecha, y por eso no lleva
+ *                        `partnerPoints`: no hay ninguno que prometer.
+ *                        Sumarlo no le mueve la posición a nadie, que es
+ *                        justo lo que hace legítima esta promoción y no la
+ *                        de `PAREJA_INVITADA`.
  *   · `SIN_PAREJA`       nunca quedó adentro de una pareja de esta fecha. No
  *                        hay nada suyo que conservar, y la base también lo
  *                        refusa. (El spec 3.4 pedía lo contrario —convertirlo
@@ -42,6 +52,7 @@ import type { Side } from '@/core'
  */
 export type GuestPromoteVM = { entryId: string; name: string } & (
   | { estado: 'PUEDE'; partnerPoints: number }
+  | { estado: 'JUGO_SOLO' }
   | { estado: 'PAREJA_INVITADA' }
   | { estado: 'SIN_PAREJA' }
 )
@@ -98,13 +109,13 @@ export function guestsToPromote({
       .filter((side) => side.a === guestId || (side.size === 2 && side.b === guestId))
       .map((side) => partnerOf(side, guestId))
     if (partners.length === 0) return { entryId: guestId, name, estado: 'SIN_PAREJA' }
-    // ponytail: un invitado que jugó SOLO (disciplina `pair_size=1`) no tiene
-    // compañero de quien copiar, y `promote_guest` hoy lo RECHAZA — su guard
-    // de "¿el compañero cobró?" da TRUE con `entry_b` nulo (W35, verify-report
-    // ronda 10). Ofrecer el botón acá sería el rebote garantizado que esta
-    // pantalla existe para no ofrecer. Sale de la lista hasta PR18c, que es la
-    // que hace que la base acepte esa promoción (slice D re-especificada).
-    if (partners.some((partnerId) => partnerId === null)) return null
+    // Jugó solo: `partnerOf` devolvió `null` porque el lado es de uno, no
+    // porque falte un dato. La base acepta esta promoción desde
+    // `0031_promote_guest_single_side.sql` (PR18c, W35) y no copia nada — el
+    // invitado no cobró, y sumarlo no le mueve la posición a nadie.
+    if (partners.some((partnerId) => partnerId === null)) {
+      return { entryId: guestId, name, estado: 'JUGO_SOLO' }
+    }
     const partnersPoints = partners.map((partnerId) => frozenPoints.get(partnerId ?? ''))
     if (partnersPoints.some((points) => points === undefined)) {
       return { entryId: guestId, name, estado: 'PAREJA_INVITADA' }
@@ -116,5 +127,5 @@ export function guestsToPromote({
     // de la PRIMERA pareja — que es lo único que este `[0]` afirma, y lo pinnea
     // "con dos parejas que cobraron distinto" en `sumar-state.unit.test.ts`.
     return { entryId: guestId, name, estado: 'PUEDE', partnerPoints: partnersPoints[0]! }
-  }).filter((row): row is GuestPromoteVM => row !== null)
+  })
 }

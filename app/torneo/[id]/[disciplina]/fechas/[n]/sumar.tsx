@@ -47,17 +47,37 @@ export function SumarInvitado({
 
   return (
     <div className="flex flex-col gap-2">
-      {guests.map((guest) =>
-        guest.estado === 'PUEDE' ? (
-          <PromoteGuestCard key={guest.entryId} seasonId={seasonId} guest={guest} seats={seats} />
-        ) : (
-          <p key={guest.entryId} className="text-[11.5px] font-[600] text-muted">
-            {guest.estado === 'PAREJA_INVITADA'
-              ? `${guest.name} jugó esta fecha en una pareja que no cobró puntos —lo habitual es que haya jugado con otro invitado—. Sumarlo desde acá le cambiaría los puntos a los demás, por eso no se puede: si va a jugar el torneo, agregalo al plantel desde Ajustes › Plantel.`
-              : `${guest.name} no quedó en ninguna pareja de esta fecha, así que no hay ningún punto suyo que conservar. Si va a jugar el torneo, agregalo al plantel desde Ajustes › Plantel.`}
-          </p>
-        ),
-      )}
+      {guests.map((guest) => {
+        // Exhaustivo a propósito, con `never` al final: antes era
+        // `estado === 'PUEDE' ? card : <p>…</p>` con un ternario adentro, y ese
+        // `else` se tragaba cualquier estado nuevo sin que el compilador dijera
+        // nada. `JUGO_SOLO` (PR18c) cayó ahí la primera vez y habría mostrado
+        // "no quedó en ninguna pareja" sobre alguien que jugó la fecha entera,
+        // sin ofrecer el botón que la base ahora sí acepta.
+        switch (guest.estado) {
+          case 'PUEDE':
+          case 'JUGO_SOLO':
+            return (
+              <PromoteGuestCard key={guest.entryId} seasonId={seasonId} guest={guest} seats={seats} />
+            )
+          case 'PAREJA_INVITADA':
+            return (
+              <p key={guest.entryId} className="text-[11.5px] font-[600] text-muted">
+                {`${guest.name} jugó esta fecha en una pareja que no cobró puntos —lo habitual es que haya jugado con otro invitado—. Sumarlo desde acá le cambiaría los puntos a los demás, por eso no se puede: si va a jugar el torneo, agregalo al plantel desde Ajustes › Plantel.`}
+              </p>
+            )
+          case 'SIN_PAREJA':
+            return (
+              <p key={guest.entryId} className="text-[11.5px] font-[600] text-muted">
+                {`${guest.name} no quedó en ninguna pareja de esta fecha, así que no hay ningún punto suyo que conservar. Si va a jugar el torneo, agregalo al plantel desde Ajustes › Plantel.`}
+              </p>
+            )
+          default: {
+            const unreachable: never = guest
+            return unreachable
+          }
+        }
+      })}
     </div>
   )
 }
@@ -68,7 +88,7 @@ function PromoteGuestCard({
   seats,
 }: {
   seasonId: string
-  guest: Extract<GuestPromoteVM, { estado: 'PUEDE' }>
+  guest: Extract<GuestPromoteVM, { estado: 'PUEDE' | 'JUGO_SOLO' }>
   seats: SumarSeatVM[]
 }) {
   const [asking, setAsking] = useState(false)
@@ -111,7 +131,16 @@ function PromoteGuestCard({
   // agregan asientos lo dicen (`ajustes/page.tsx:60-67`, con `validateConfig`).
   // Ésta era la única que no, y encima es la única cuya acción no se puede
   // deshacer desde ninguna pantalla.
-  const copy = `Pasa a ser uno más del plantel y se lleva los ${guest.partnerPoints} puntos que le tocaron a su pareja en esta fecha. Las demás fechas no se tocan. El plantel queda con un asiento más del que dice Formato —hay que actualizarlo antes de sortear la próxima fecha— y esto no se deshace: como ya jugó ésta, Ajustes › Plantel no lo va a dejar sacar.`
+  // Con un lado de uno no hay puntos que prometer y la frase tiene que
+  // decirlo, no callarlo: el invitado fue su propio lado y `computeAwards`
+  // saltea los lados hechos sólo de invitados, así que no cobró nada. La base
+  // lo promueve igual (`0031_promote_guest_single_side.sql`, W35) justamente
+  // porque no hay nada que copiar NI posiciones ajenas que correr.
+  const puntos =
+    guest.estado === 'JUGO_SOLO'
+      ? 'Jugó solo, así que esta fecha no le dejó puntos y no se lleva ninguno.'
+      : `Se lleva los ${guest.partnerPoints} puntos que le tocaron a su pareja en esta fecha.`
+  const copy = `Pasa a ser uno más del plantel. ${puntos} Las demás fechas no se tocan. El plantel queda con un asiento más del que dice Formato —hay que actualizarlo antes de sortear la próxima fecha— y esto no se deshace: como ya jugó ésta, Ajustes › Plantel no lo va a dejar sacar.`
 
   return (
     <form

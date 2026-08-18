@@ -735,6 +735,20 @@ export async function awardsOf(supabase: Client, seasonId: string): Promise<Map<
 
 // ── helpers privados, compartidos por matchdayDetail y closedHistoryAll ─────
 
+/**
+ * `pairs.entry_b` es `string | null` desde 0028 (REQ-D5-1, PR14 slice C):
+ * `pairs_side_shape` es la garantía real, esto sólo la hace explícita acá.
+ * Nada produce todavía un lado de uno (PR15, `buildSides`) — un null en
+ * este camino sería un bug de otra parte. Muere en PR17, cuando
+ * `pairsAndMatchesOf` migra de `Pair` a `Side` (design #3801, PUNTO 4).
+ */
+function requirePartner(entryB: string | null): string {
+  if (entryB === null) {
+    throw new Error('Una pareja sin segundo miembro llegó a un camino que todavía sólo entiende parejas de a dos.')
+  }
+  return entryB
+}
+
 /** Las parejas y los partidos de la fecha, con los sets de cada partido ordenados por `set_number`. */
 async function pairsAndMatchesOf(
   supabase: Client,
@@ -747,7 +761,7 @@ async function pairsAndMatchesOf(
   if (pairsError) throw new EdgeError(`No se pudieron leer las parejas: ${pairsError.message}`)
 
   const pairById = new Map(
-    (pairRows ?? []).map((row) => [row.id, { a: row.entry_a, b: row.entry_b }]),
+    (pairRows ?? []).map((row) => [row.id, { a: row.entry_a, b: requirePartner(row.entry_b) }]),
   )
 
   const { data: matchRows, error: matchesError } = await supabase

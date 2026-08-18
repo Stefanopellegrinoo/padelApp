@@ -37,6 +37,13 @@ import type { Json } from './database.types'
 
 type AwardRow = { entry_id: string; position: number; points: number }
 
+// `entry_b` es `string | null` en la fila real (0028, REQ-D5-1); esta suite
+// sólo ejercita pádel (pair_size=2, siempre con segundo miembro).
+function requirePartner(entryB: string | null): string {
+  if (entryB === null) throw new Error('Pareja sin segundo miembro en un test que sólo espera pádel.')
+  return entryB
+}
+
 async function fillerPlayers(count: number): Promise<string[]> {
   const db = adminClient()
   const ids: string[] = []
@@ -137,9 +144,11 @@ async function markPlaying(admin: TestUser, matchdayId: string, entryIds: string
   }
 }
 
+// `entry_b: string | null` desde 0028 (REQ-D5-1): la fila real ya lo permite,
+// aunque esta suite sólo ejercita pádel (pair_size=2, siempre no-nulo).
 async function pairsOf(
   matchdayId: string,
-): Promise<Array<{ id: string; entry_a: string; entry_b: string }>> {
+): Promise<Array<{ id: string; entry_a: string; entry_b: string | null }>> {
   const db = adminClient()
   const { data, error } = await db
     .from('pairs')
@@ -230,7 +239,7 @@ async function playByRankRule(
   const pairRank = new Map(
     pairs.map((pair) => [
       pair.id,
-      Math.min(rankIndex.get(pair.entry_a) ?? worst, rankIndex.get(pair.entry_b) ?? worst),
+      Math.min(rankIndex.get(pair.entry_a) ?? worst, rankIndex.get(requirePartner(pair.entry_b)) ?? worst),
     ]),
   )
 
@@ -337,7 +346,7 @@ async function buildWalkthroughSeason(): Promise<WalkthroughSeason> {
     matchdayIds[number - 1] = matchdayId
     pairsByMatchday.set(
       number,
-      (await pairsOf(matchdayId)).map((row) => ({ a: row.entry_a, b: row.entry_b })),
+      (await pairsOf(matchdayId)).map((row) => ({ a: row.entry_a, b: requirePartner(row.entry_b) })),
     )
     awardsRightAfterClose.set(number, sortByEntry(await awardsOf(matchdayId)))
   }

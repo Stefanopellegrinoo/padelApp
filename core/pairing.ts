@@ -1,6 +1,8 @@
 import { allMatchings } from './matchings'
 import { orderByPoints } from './order'
-import type { EntryId, Pair } from './types'
+import { sideOf } from './pair-compat'
+import { single } from './side'
+import type { EntryId, Pair, Side, SideSize } from './types'
 
 export interface PairingInput {
   /**
@@ -102,6 +104,39 @@ export function buildPairs(input: PairingInput): Pair[] {
   }
 
   return [...settled, ...best]
+}
+
+/** `PairingInput` plus which size the discipline declared (REQ-D5-1/2). */
+export interface SideBuildInput extends PairingInput {
+  sideSize: SideSize
+}
+
+/**
+ * The only fork between a side of one and a side of two (design PUNTO 5,
+ * decision #5): the size is declared by the discipline and enforced by the
+ * base, never chosen here.
+ *
+ * With `sideSize === 1` there is no partner to find, so none of the
+ * pairing machinery applies: no defenders, no fixed pairs, no no-repeat
+ * rule — decision #6 is that a fixed duo is a pairing CONSTRAINT, and a
+ * constraint on a pairing that never happens constrains nothing. Every
+ * present player, guest included, becomes their own side. `orderPool` is
+ * the exact function the pair path uses to rank the table and send guests
+ * to the tail, so the order invariant documented on `present` above
+ * (comment at the top of this file) carries over unchanged — this branch
+ * does not add a new one.
+ *
+ * With `sideSize === 2` this is `buildPairs`, unmodified, mapped through
+ * `sideOf` (core/pair-compat.ts) so both branches return the same type.
+ */
+export function buildSides(input: SideBuildInput): Side[] {
+  if (input.sideSize === 1) {
+    if (input.present.length === 0) {
+      throw new Error('No se puede armar una fecha sin jugadores.')
+    }
+    return orderPool(input.present, input.points, input.snapshot, input.guestIds).map(single)
+  }
+  return buildPairs(input).map(sideOf)
 }
 
 /**

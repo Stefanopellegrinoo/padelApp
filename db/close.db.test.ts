@@ -541,4 +541,63 @@ describe('closeMatchday', () => {
 
     expect(error?.message).toBe('La lista de puntos llegó mal formada.')
   })
+
+  // S36 (verify-report ronda 11): G1 no tenía ni un test — cancel.db.test.ts:528
+  // cubre la misma frase para `cancel_matchday`, una función distinta.
+  it('rejects a direct RPC call for a matchday that does not exist', async () => {
+    const { admin } = await buildSeasonWithSquad(defaultConfig(8), 8)
+
+    const { error } = await admin.client.rpc('close_matchday', {
+      p_matchday: '00000000-0000-0000-0000-000000000000',
+      p_awards: [],
+    })
+
+    expect(error?.message).toBe('La fecha no existe.')
+  })
+
+  // S36: la mitad de G4 (`p_awards` no nulo pero tampoco array) no tenía test —
+  // sólo el caso `null`, arriba, cubría la otra mitad del `or`.
+  it('rejects a direct RPC call with a malformed (non-array) awards payload', async () => {
+    const { admin, seasonId, squad } = await buildSeasonWithSquad(defaultConfig(8), 8)
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
+    await markAllPlaying(admin, matchdayId, squad)
+    await generatePairs(admin.client, matchdayId)
+    await openMatchday(admin.client, matchdayId)
+
+    const { error } = await admin.client.rpc('close_matchday', {
+      p_matchday: matchdayId,
+      p_awards: { not: 'an array' },
+    })
+
+    expect(error?.message).toBe('La lista de puntos llegó mal formada.')
+  })
+
+  // S36: G6 tampoco tenía test de su `raise` — masters.db.test.ts:225 sólo
+  // prueba el paso a través con lista vacía. El premio tiene que ser para
+  // alguien que SÍ jugó: el guard de premios (G5) corre antes y taparía a G6.
+  it('rejects a direct RPC call awarding points on the Masters', async () => {
+    const admin = await createTestUser()
+    const filler = await fillerPlayers(2)
+    const { seasonId, disciplineId, entryIds } = await createSeason({ admin, squad: filler })
+    const [a, b] = entryIds
+    if (a === undefined || b === undefined) throw new Error('Falta escenario de test.')
+    const db = adminClient()
+    const { data: matchday, error: matchdayError } = await db
+      .from('matchdays')
+      .insert({ season_id: seasonId, discipline_id: disciplineId, number: 1, kind: 'MASTERS', status: 'OPEN' })
+      .select('id')
+      .single()
+    if (matchdayError || matchday === null) throw new Error(matchdayError?.message)
+    const { error: pairError } = await db
+      .from('pairs')
+      .insert({ matchday_id: matchday.id, season_id: seasonId, entry_a: a, entry_b: b })
+    if (pairError) throw new Error(pairError.message)
+
+    const { error } = await admin.client.rpc('close_matchday', {
+      p_matchday: matchday.id,
+      p_awards: [{ entryId: a, position: 1, points: 100 }],
+    })
+
+    expect(error?.message).toBe('El Masters no reparte puntos.')
+  })
 })

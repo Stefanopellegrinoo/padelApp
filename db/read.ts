@@ -582,6 +582,30 @@ export async function seasonSquadOf(supabase: Client, seasonId: string): Promise
   return (data ?? []).map((row) => row.id)
 }
 
+/** Una fila de `seasonSquadMembersOf`: el id que necesita `computeRanking` más el nombre que la pantalla dibuja. */
+export interface SquadMember {
+  id: EntryId
+  displayName: string
+}
+
+/**
+ * Igual que `seasonSquadOf` pero con `display_name` (PR12b slice 2, tabla
+ * global): la raíz de la temporada necesita el NOMBRE de cada fila, no sólo
+ * el id — algo que `entriesOf` sí trae pero filtrado a UNA disciplina
+ * (exactamente lo que esta pantalla no puede hacer). `seasonSquadOf` se deja
+ * intacto: `torneos/page.tsx` sólo necesita los ids.
+ */
+export async function seasonSquadMembersOf(supabase: Client, seasonId: string): Promise<SquadMember[]> {
+  const { data, error } = await supabase
+    .from('entries')
+    .select('id, display_name')
+    .eq('season_id', seasonId)
+    .eq('kind', 'SQUAD')
+    .order('seed_position', { ascending: true })
+  if (error) throw new EdgeError(`No se pudo leer el plantel: ${error.message}`)
+  return (data ?? []).map((row) => ({ id: row.id, displayName: row.display_name }))
+}
+
 /**
  * Los awards de TODAS las fechas cerradas de la temporada, agrupados por
  * disciplina y por número de fecha adentro — versión "temporada entera" de

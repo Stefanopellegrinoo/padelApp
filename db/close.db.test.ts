@@ -124,6 +124,31 @@ async function matchdayStatus(matchdayId: string): Promise<string> {
   return data.status
 }
 
+// ── C17 (verify-report ronda 10) ────────────────────────────────────────────
+// Producción todavía no puede escribir un `pairs` de `pair_size=1` (W34:
+// `insertPairs` no manda esa columna, así que `generatePairs` muere contra
+// `pairs_matchday_size`). El escenario se arma con service_role, igual que
+// `pairs-side-shape.db.test.ts` — es el único camino que hoy puede crear la
+// fila legal que este test necesita.
+async function insertOpenSingleMatchday(seasonId: string, disciplineId: string, number: number): Promise<string> {
+  const db = adminClient()
+  const { data, error } = await db
+    .from('matchdays')
+    .insert({ season_id: seasonId, discipline_id: disciplineId, number, pair_size: 1, status: 'OPEN' })
+    .select('id')
+    .single()
+  if (error || data === null) throw new Error(error?.message)
+  return data.id
+}
+
+async function insertSingle(matchdayId: string, seasonId: string, entryId: string): Promise<void> {
+  const db = adminClient()
+  const { error } = await db
+    .from('pairs')
+    .insert({ matchday_id: matchdayId, season_id: seasonId, entry_a: entryId, entry_b: null, pair_size: 1 })
+  if (error) throw new Error(error.message)
+}
+
 /**
  * Carga un resultado por cada partido de la fecha. `winnerOf` recibe los dos
  * `pair_a`/`pair_b` de cada partido y devuelve cuál gana; el ganador se manda
@@ -451,6 +476,32 @@ describe('closeMatchday', () => {
     await generatePairs(admin.client, matchdayId)
     await openMatchday(admin.client, matchdayId)
     await playAllMatches(admin, matchdayId, (pairA) => pairA)
+
+    const { error } = await admin.client.rpc('close_matchday', {
+      p_matchday: matchdayId,
+      p_awards: [{ entryId: benched, position: 1, points: 100 }],
+    })
+
+    expect(error?.message).toBe('Hay puntos para alguien que no jugó esta fecha.')
+    expect(await matchdayStatus(matchdayId)).toBe('OPEN')
+  })
+
+  it('rejects a direct RPC call with an award for a player who did not play this matchday (pair_size=1)', async () => {
+    const admin = await createTestUser()
+    const filler = await fillerPlayers(3)
+    const { seasonId, disciplineIds, entryIds } = await createSeason({
+      admin,
+      squad: filler,
+      disciplines: [{ kind: 'FIFA', pairSize: 1 }],
+    })
+    const [fifaId] = disciplineIds
+    const [playerA, playerB, benched] = entryIds
+    if (fifaId === undefined || playerA === undefined || playerB === undefined || benched === undefined) {
+      throw new Error('Falta escenario de test.')
+    }
+    const matchdayId = await insertOpenSingleMatchday(seasonId, fifaId, 1)
+    await insertSingle(matchdayId, seasonId, playerA)
+    await insertSingle(matchdayId, seasonId, playerB)
 
     const { error } = await admin.client.rpc('close_matchday', {
       p_matchday: matchdayId,

@@ -105,15 +105,34 @@ export async function addDiscipline(
     })
     .select('id')
     .single()
-  if (disciplineError || discipline === null) {
-    throw new EdgeError(`No se pudo crear la disciplina: ${disciplineError?.message}`)
+  if (disciplineError !== null) {
+    // W22 (verify-report ronda 7): mismo patrón que createMatchday (matchday.ts:237) —
+    // traducir los códigos conocidos en vez de dejar pasar el mensaje crudo de Postgres.
+    if (disciplineError.code === '23505') {
+      throw new EdgeError('Alguien acaba de agregar otra disciplina. Probá de nuevo.')
+    }
+    if (disciplineError.code === '42501') {
+      throw new EdgeError('Sólo quien organiza la temporada puede agregar una disciplina.')
+    }
+    throw new EdgeError(`No se pudo crear la disciplina: ${disciplineError.message}`)
   }
+  if (discipline === null) throw new EdgeError('No se pudo crear la disciplina.')
   const disciplineId = discipline.id as DisciplineId
 
   let seatQuery = supabase.from('entries').select('id, seed_position').eq('season_id', seasonId).eq('kind', 'SQUAD')
   if (entryIds !== undefined) seatQuery = seatQuery.in('id', entryIds)
   const { data: seats, error: seatsReadError } = await seatQuery
   if (seatsReadError) throw new EdgeError(`No se pudo leer el plantel: ${seatsReadError.message}`)
+
+  // C13 (verify-report ronda 7): misma guarda que createSeason (season.ts:240)
+  // — sin esto, la config podía describir un plantel que no era el sembrado.
+  const seatCount = seats?.length ?? 0
+  if (seatCount !== spec.config.squadSize) {
+    await supabase.from('disciplines').delete().eq('id', disciplineId)
+    throw new EdgeError(
+      `El plantel tiene ${seatCount} nombres y la configuración de ${spec.kind ?? 'PADEL'} dice ${spec.config.squadSize}.`,
+    )
+  }
 
   if (seats !== null && seats.length > 0) {
     const { error: seatsError } = await supabase.from('discipline_entries').insert(

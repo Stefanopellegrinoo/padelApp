@@ -407,25 +407,29 @@ describe('addDiscipline (PR 13, REQ-D1-2)', () => {
 
   it('siembra discipline_entries: todo el plantel por default, un subconjunto si se pasa entryIds (REQ-D1-4)', async () => {
     const admin = await createTestUser()
+    // 10 asientos, no 8: la guarda de C13 exige que config.squadSize coincida
+    // con lo sembrado, y el subconjunto no-contiguo de abajo necesita quedar
+    // en un tamaño válido ({8,10,12}) distinto del total.
     const { seasonId, entryIds } = await createSeason({
       admin,
-      squad: [admin.playerId, ...(await fillerPlayers(7))], // MIN_PLAYERS = 8
+      squad: [admin.playerId, ...(await fillerPlayers(9))],
     })
-    const [a, , c] = entryIds
-    if (a === undefined || c === undefined) throw new Error('Faltan asientos.')
+    const [, skip1, , skip2] = entryIds
+    if (skip1 === undefined || skip2 === undefined) throw new Error('Faltan asientos.')
     const db = adminClient()
 
-    const allId = await addDiscipline(admin.client, seasonId, { kind: 'FIFA', config: defaultConfig(8) })
+    const allId = await addDiscipline(admin.client, seasonId, { kind: 'FIFA', config: defaultConfig(10) })
     expect(await squadSeedOrder(admin.client, allId)).toEqual(entryIds)
 
     await db.from('disciplines').delete().eq('id', allId)
+    const subset = entryIds.filter((id) => id !== skip1 && id !== skip2)
     const partialId = await addDiscipline(
       admin.client,
       seasonId,
-      { kind: 'FIFA', config: defaultConfig(8) },
-      [a, c],
+      { kind: 'FIFA', config: defaultConfig(subset.length) },
+      subset,
     )
-    expect(await squadSeedOrder(admin.client, partialId)).toEqual([a, c])
+    expect(await squadSeedOrder(admin.client, partialId)).toEqual(subset)
   })
 
   // C13 (verify-report ronda 7): `config.squadSize` no se comparaba contra

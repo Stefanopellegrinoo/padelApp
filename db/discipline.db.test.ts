@@ -254,8 +254,8 @@ describe('disciplineConfig / updateDisciplineConfig (PR 5, REQ-D2-1)', () => {
     const [padelId, fifaId] = disciplineIds
     if (padelId === undefined || fifaId === undefined) throw new Error('Faltan disciplinas.')
 
-    expect(await disciplineConfig(admin.client, padelId)).toEqual(padelConfig)
-    expect(await disciplineConfig(admin.client, fifaId)).toEqual(fifaConfig)
+    expect(await disciplineConfig(admin.client, padelId)).toEqual({ config: padelConfig, pairSize: 2 })
+    expect(await disciplineConfig(admin.client, fifaId)).toEqual({ config: fifaConfig, pairSize: 2 })
   })
 
   it('updateDisciplineConfig sólo toca la disciplina destino', async () => {
@@ -272,8 +272,8 @@ describe('disciplineConfig / updateDisciplineConfig (PR 5, REQ-D2-1)', () => {
     const nextPadelConfig = { ...padelConfig, regularMatchdays: 14 }
     await updateDisciplineConfig(admin.client, padelId, nextPadelConfig)
 
-    expect(await disciplineConfig(admin.client, padelId)).toEqual(nextPadelConfig)
-    expect(await disciplineConfig(admin.client, fifaId)).toEqual(fifaConfig)
+    expect(await disciplineConfig(admin.client, padelId)).toEqual({ config: nextPadelConfig, pairSize: 2 })
+    expect(await disciplineConfig(admin.client, fifaId)).toEqual({ config: fifaConfig, pairSize: 2 })
   })
 
   it('rechaza una config inválida antes de escribir (assertValidConfig)', async () => {
@@ -282,7 +282,7 @@ describe('disciplineConfig / updateDisciplineConfig (PR 5, REQ-D2-1)', () => {
     const broken = { ...defaultConfig(8), tiebreakSnapshotEvery: 0 }
 
     await expect(updateDisciplineConfig(admin.client, disciplineId, broken)).rejects.toThrow()
-    expect(await disciplineConfig(admin.client, disciplineId)).toEqual(defaultConfig(8))
+    expect(await disciplineConfig(admin.client, disciplineId)).toEqual({ config: defaultConfig(8), pairSize: 2 })
   })
 })
 
@@ -442,9 +442,11 @@ describe('addDiscipline (PR 13, REQ-D1-2)', () => {
       squad: [admin.playerId, ...(await fillerPlayers(7))],
     })
 
+    // 8 valores de puntos, no los 4 de `defaultConfig(8)` (C16, verify-report
+    // ronda 9): con `pairSize: 1`, 8 presentes son 8 lados, no 4 parejas.
     const fifaId = await addDiscipline(admin.client, seasonId, {
       kind: 'FIFA',
-      config: defaultConfig(8),
+      config: { ...defaultConfig(8), points: [8, 7, 6, 5, 4, 3, 2, 1] },
       pairSize: 1,
       allowsDraw: true,
     })

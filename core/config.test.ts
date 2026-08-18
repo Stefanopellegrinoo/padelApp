@@ -51,6 +51,17 @@ describe('validateConfig', () => {
     expect(errors).toContain('Con un plantel de 12 hacen falta 6 valores de puntos, no 4.')
   })
 
+  // C16 (verify-report ronda 9): expectedPoints dividía siempre por 2, así
+  // que un 1v1 de 10 pedía la MITAD de los valores que necesita — y
+  // rechazaba los 10 que un plantel de 10 lados-de-uno sí necesita.
+  it('expects one value per side, not always per pair (C16)', () => {
+    const cfg = { ...valid, squadSize: 10 }
+    const tenValues = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1]
+    expect(validateConfig({ ...cfg, points: tenValues }, 1)).toEqual([])
+    const errors = validateConfig({ ...cfg, points: [10, 7, 5, 3, 2] }, 1)
+    expect(errors).toContain('Con un plantel de 10 hacen falta 10 valores de puntos, no 5.')
+  })
+
   const ORDER = 'Los puntos tienen que ir de mayor a menor. El único que se puede repetir es el 0.'
 
   it('rejects a repeated value that pays', () => {
@@ -153,5 +164,12 @@ describe('defaultConfig', () => {
   it('gives the winner ten points regardless of squad size', () => {
     expect(defaultConfig(8).points[0]).toBe(10)
     expect(defaultConfig(12).points[0]).toBe(10)
+  })
+
+  // C16 (verify-report ronda 9): pairCount dividía siempre por 2 — 4 lados
+  // de a uno necesitan la misma tabla que 4 parejas (8 jugadores), no la
+  // tabla vacía que le tocaba por casualidad.
+  it('divides by the real side size, not always by 2 (C16)', () => {
+    expect(defaultConfig(4, 1).points).toEqual(defaultConfig(8, 2).points)
   })
 })

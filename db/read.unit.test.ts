@@ -12,7 +12,14 @@ import { toDisciplineHeader } from './read'
  */
 describe('toDisciplineHeader', () => {
   it('leaves an already-numeric weight (e.g. the DB default of 1) untouched', () => {
-    const header = toDisciplineHeader({ id: 'd1', season_id: 's1', kind: 'PADEL', config: {}, weight: 1 })
+    const header = toDisciplineHeader({
+      id: 'd1',
+      season_id: 's1',
+      kind: 'PADEL',
+      config: {},
+      weight: 1,
+      pair_size: 2,
+    })
     expect(header.weight).toBe(1)
   })
 })

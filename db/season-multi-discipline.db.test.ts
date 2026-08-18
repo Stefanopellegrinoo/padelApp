@@ -149,13 +149,16 @@ describe('createSeason con múltiples disciplinas (REQ-D1-1, contrato S13)', () 
   it('pair_size y allows_draw se persisten por disciplina, sin heredar de kind (REQ-D2-1)', async () => {
     const admin = await createTestUser()
     const config = defaultConfig(8)
+    // 8 valores de puntos, no los 4 de `config` (C16, verify-report ronda 9):
+    // con `pairSize: 1`, 8 presentes son 8 lados, no 4 parejas.
+    const fifaConfig = { ...config, points: [8, 7, 6, 5, 4, 3, 2, 1] }
     const { seasonId } = await createSeason(admin.client, {
       name: 'Formas mixtas',
       squadNames: squadNames(8),
       config,
       disciplines: [
         { kind: 'PADEL', config },
-        { kind: 'FIFA', config, pairSize: 1, allowsDraw: true },
+        { kind: 'FIFA', config: fifaConfig, pairSize: 1, allowsDraw: true },
       ],
     })
 

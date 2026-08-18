@@ -17,6 +17,7 @@ import {
   type PairingInput,
   type SeasonConfig,
   type SetScore,
+  type SideSize,
 } from '@/core'
 import type { Database, Json } from './database.types'
 import { disciplineConfig } from './discipline'
@@ -66,6 +67,14 @@ type MatchdayRow = Omit<RawMatchdayRow, 'discipline_id'> & { discipline_id: Disc
 export interface MatchdayContext {
   matchday: MatchdayRow
   config: SeasonConfig
+  /**
+   * El `pair_size` real de la disciplina de esta fecha (W30, verify-report
+   * ronda 9), leído del mismo `disciplineConfig` que ya trae `config` —
+   * ningún select nuevo. `matchdays.pair_size` (design #3801 PUNTO 1) sigue
+   * sin migrar: hasta que exista, ésta es la fuente, y es la real, no un
+   * hardcode.
+   */
+  pairSize: SideSize
   seedOrder: EntryId[]
   awardsByMatchday: Map<number, Award[]>
   snapshot: EntryId[]
@@ -78,13 +87,8 @@ export async function matchdayContextFor(
   matchdayId: string,
 ): Promise<MatchdayContext> {
   const matchday = await requireMatchday(supabase, matchdayId)
-  const config = await disciplineConfig(supabase, matchday.discipline_id)
-  // sideSize hardcoded at 2: `matchdays`/`MatchdayContext` do not carry
-  // `pair_size` yet (design #3801 PUNTO 1, `matchdays.pair_size` FK chain —
-  // not migrated in this slice). Correct today because every real matchday
-  // is `pair_size=2`; threading the real value is PR15's job together with
-  // `buildSides`'s 1v1 branch (design table, PUNTO 5).
-  assertValidConfig(config, 2)
+  const { config, pairSize } = await disciplineConfig(supabase, matchday.discipline_id)
+  assertValidConfig(config, pairSize)
 
   // The seed order is also the squad, and it must be stable: buildPairs falls
   // back to the order it is given when two players are missing from the
@@ -100,7 +104,7 @@ export async function matchdayContextFor(
   const locks = await locksOf(supabase, matchdayId)
   assertLocksAndGuests(guests, locks)
 
-  return { matchday, config, seedOrder, awardsByMatchday, snapshot, guests, locks }
+  return { matchday, config, pairSize, seedOrder, awardsByMatchday, snapshot, guests, locks }
 }
 
 export interface PairingContext extends MatchdayContext {
@@ -121,7 +125,7 @@ export async function pairingContextFor(
   matchdayId: string,
 ): Promise<PairingContext> {
   const context = await matchdayContextFor(supabase, matchdayId)
-  const { matchday, config, seedOrder, awardsByMatchday, snapshot, guests, locks } = context
+  const { matchday, config, pairSize, seedOrder, awardsByMatchday, snapshot, guests, locks } = context
 
   // Decision 3: the pool is ordered by the ranking — best N of M — and never by
   // a running total. The table you look at is the table that pairs you, and the
@@ -138,10 +142,8 @@ export async function pairingContextFor(
     ...(await playingEntryIds(supabase, matchdayId)),
     ...guests.map((guest) => guest.entryId),
   ]
-  // Mismo hardcode y misma razón que `matchdayContextFor` arriba: sin
-  // `pair_size` todavía en `MatchdayContext`.
-  assertMatchdaySize(present, 2)
-  assertPointsCoverMatchday(present, guests, locks, config)
+  assertMatchdaySize(present, pairSize)
+  assertPointsCoverMatchday(present, guests, locks, config, pairSize)
 
   return {
     ...context,
@@ -413,8 +415,20 @@ export async function removeGuest(supabase: Client, entryId: string): Promise<vo
  *   jugar junto, lo cargó alguien a mano y no es de esta función deshacerlo
  * - con número par y un invitado YA NOMBRADO tampoco. Alguien lo puso a
  *   propósito; sacarlo porque cambió un tilde es perder un dato cargado
+ *
+ * C15 (verify-report ronda 9): la regla entera es de PAREJA, no de cantidad —
+ * en una disciplina `pair_size=1` cada presente YA es su propio lado, así que
+ * un plantel impar no le falta nada a nadie. Antes de este guard, la función
+ * escribía un GUEST fantasma (nombre vacío) y borraba el sorteo en una
+ * disciplina de a uno con presentes impares: medido, fila real. Con
+ * `pairSize !== 2` ninguna de las dos ramas de abajo aplica (ni sumar ni
+ * sacar un invitado), así que se corta antes de leer nada más.
  */
 export async function syncGuestSeat(supabase: Client, matchdayId: string): Promise<void> {
+  const matchday = await requireMatchday(supabase, matchdayId)
+  const { pairSize } = await disciplineConfig(supabase, matchday.discipline_id)
+  if (pairSize !== 2) return
+
   const playing = await playingEntryIds(supabase, matchdayId)
   const guests = await guestsOf(supabase, matchdayId)
   const locks = await locksOf(supabase, matchdayId)
@@ -564,7 +578,7 @@ export async function generateMastersPairs(supabase: Client, matchdayId: string)
     throw new EdgeError('El Masters ya está armado.')
   }
 
-  const config = await disciplineConfig(supabase, matchday.discipline_id)
+  const { config } = await disciplineConfig(supabase, matchday.discipline_id)
   // 2, no un placeholder: el Masters arma 6 PAREJAS por diseño de formato
   // (mastersFixture), sideSize=1 no tiene sentido acá sin importar qué
   // dispone la disciplina.
@@ -929,6 +943,6 @@ async function matchFormatOf(supabase: Client, matchId: string): Promise<MatchFo
   if (match === null) throw new EdgeError('El partido no existe.')
 
   const matchday = await requireMatchday(supabase, match.matchday_id)
-  const config = await disciplineConfig(supabase, matchday.discipline_id)
+  const { config } = await disciplineConfig(supabase, matchday.discipline_id)
   return config.matchFormat
 }

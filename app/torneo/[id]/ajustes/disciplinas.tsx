@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useState, useTransition } from 'react'
 import { DISCIPLINE_KINDS, DISCIPLINE_LABELS, type DisciplineKind } from '@/app/torneos/nuevo/wizard-state'
 import { addDisciplineToSeason, type WriteResult } from './actions'
@@ -48,6 +49,10 @@ export function Disciplinas({
   const [adding, setAdding] = useState(false)
   const [kind, setKind] = useState<DisciplineKind>('PADEL')
   const [selected, setSelected] = useState<Set<string>>(() => new Set(squad.map((member) => member.entryId)))
+  // C13: el Set inicial no se resincroniza si `squad` cambia bajo el
+  // formulario abierto (ej. sacar un asiento en Plantel) — derivar contra
+  // `squad` en cada render evita mandar/mostrar un asiento que ya no existe.
+  const validSelected = [...selected].filter((id) => squad.some((member) => member.entryId === id))
 
   const toggle = (entryId: string) => {
     setSelected((prev) => {
@@ -61,7 +66,7 @@ export function Disciplinas({
   const submit = () => {
     setError(null)
     startTransition(async () => {
-      const result: WriteResult = await addDisciplineToSeason(seasonId, kind, [...selected])
+      const result: WriteResult = await addDisciplineToSeason(seasonId, kind, validSelected)
       if (!result.ok) {
         setError(result.error)
         return
@@ -76,14 +81,14 @@ export function Disciplinas({
 
       <div className="overflow-hidden rounded-[14px] border border-line bg-surface">
         {disciplines.map((discipline, index) => (
-          <a
+          <Link
             key={discipline.id}
             href={`/torneo/${seasonId}/${discipline.slug}`}
             className={`flex items-center justify-between gap-3 px-3 py-3 ${index > 0 ? 'border-t border-line' : ''}`}
           >
             <span className="text-[14px] font-bold">{DISCIPLINE_LABELS[discipline.kind]}</span>
             <span className="shrink-0 text-[13px] font-[750] text-muted">{discipline.slug} ›</span>
-          </a>
+          </Link>
         ))}
       </div>
 
@@ -94,7 +99,7 @@ export function Disciplinas({
             {DISCIPLINE_KINDS.map((candidate) => (
               <label
                 key={candidate}
-                className="flex items-center gap-2.5 rounded-field border border-line p-2.5 text-[13.5px] font-[700]"
+                className="flex min-h-[44px] items-center gap-2.5 rounded-field border border-line p-2.5 text-[13.5px] font-[700]"
               >
                 <input
                   type="radio"
@@ -111,10 +116,13 @@ export function Disciplinas({
 
           <fieldset className="flex flex-col gap-1.5">
             <legend className="text-[11.5px] font-extrabold uppercase tracking-[.14em] text-muted">
-              Quién juega ({selected.size})
+              Quién juega ({validSelected.length})
             </legend>
             {squad.map((member) => (
-              <label key={member.entryId} className="flex items-center gap-2.5 text-[13.5px] font-[600]">
+              <label
+                key={member.entryId}
+                className="flex min-h-[44px] items-center gap-2.5 text-[13.5px] font-[600]"
+              >
                 <input
                   type="checkbox"
                   disabled={pending}
@@ -130,7 +138,7 @@ export function Disciplinas({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              disabled={pending || selected.size === 0}
+              disabled={pending || validSelected.length === 0}
               onClick={submit}
               className="flex min-h-[44px] flex-1 items-center justify-center rounded-field bg-accent p-[10px] text-[13.5px] font-extrabold text-accent-text disabled:opacity-45"
             >

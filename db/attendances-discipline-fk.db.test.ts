@@ -27,17 +27,10 @@ describe('attendances.discipline_id — FK contra discipline_entries (PR 8)', ()
     })
     if (seatError !== null || padelOnlyEntry === null) throw new Error(seatError?.message)
 
-    const fifaMatchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
-    // `createMatchday` resuelve `discipline_id` con `defaultDisciplineId`
-    // (`position, created_at` — pádel primero); se reasigna la fecha a FIFA a
-    // mano para no depender de un wizard multi-disciplina que todavía no
-    // existe (PR 11).
+    // `disciplineId` explícito (C12, PR13c slice A): ya no hace falta crear
+    // en la default y reasignar a mano, como pedía el comentario viejo.
+    const fifaMatchdayId = await createMatchday(admin.client, seasonId, '2026-08-10', fifaId)
     const db = adminClient()
-    const { error: reassignError } = await db
-      .from('matchdays')
-      .update({ discipline_id: fifaId })
-      .eq('id', fifaMatchdayId)
-    if (reassignError) throw new Error(reassignError.message)
 
     // S7, verify-report ronda 3: matcher específico, no cualquier rechazo —
     // sin él, este `rejects.toThrow()` pasaría igual con cualquier otro error.
@@ -70,13 +63,8 @@ describe('attendances.discipline_id — FK contra discipline_entries (PR 8)', ()
     })
     if (seatError !== null || bothEntry === null) throw new Error(seatError?.message)
 
-    const fifaMatchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
+    const fifaMatchdayId = await createMatchday(admin.client, seasonId, '2026-08-10', fifaId)
     const db = adminClient()
-    const { error: reassignError } = await db
-      .from('matchdays')
-      .update({ discipline_id: fifaId })
-      .eq('id', fifaMatchdayId)
-    if (reassignError) throw new Error(reassignError.message)
 
     await setAttendance(admin.client, fifaMatchdayId, bothEntry, 'PLAYING')
 
@@ -117,13 +105,8 @@ describe('attendances.discipline_id — FK contra discipline_entries (PR 8)', ()
     })
     if (bothError !== null || bothEntry === null) throw new Error(bothError?.message)
 
-    const fifaMatchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
+    const fifaMatchdayId = await createMatchday(admin.client, seasonId, '2026-08-10', fifaId)
     const db = adminClient()
-    const { error: reassignError } = await db
-      .from('matchdays')
-      .update({ discipline_id: fifaId })
-      .eq('id', fifaMatchdayId)
-    if (reassignError) throw new Error(reassignError.message)
 
     await seedAttendances(admin.client, fifaMatchdayId)
 

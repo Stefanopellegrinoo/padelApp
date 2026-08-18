@@ -56,8 +56,12 @@ export { single, pair, members, includes, partnerOf, sameSide, sideOfRow } from 
 export { validateConfig, defaultConfig, pointsErrors } from './config'
 
 // ── Building a matchday ──────────────────────────────────────────────────────
-export type { PairingInput } from './pairing'
-export { buildPairs, samePair } from './pairing'
+// `buildSides` (PR16, design PUNTO 5) is the Side-native entry point: with
+// `sideSize=2` it is `buildPairs` unmodified, mapped through `sideOf`.
+// `buildPairs`/`PairingInput` stay exported — `db/matchday.ts` still calls
+// them directly until PR18 migrates that caller.
+export type { PairingInput, SideBuildInput } from './pairing'
+export { buildPairs, buildSides, samePair } from './pairing'
 export { buildFixture } from './fixture'
 
 // ── El contexto que hereda una fecha de las anteriores ───────────────────────

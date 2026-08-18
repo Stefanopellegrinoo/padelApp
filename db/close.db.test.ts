@@ -522,7 +522,7 @@ describe('closeMatchday', () => {
    * armar: `generatePairs` moría en la FK `pairs_matchday_size` (W34) para
    * cualquier disciplina `pair_size=1`. `closeMatchday()` (el wrapper TS) NO
    * se usa acá: sigue llamando a `computeStandings`, cuyo límite público
-   * sigue `Pair` in/out hasta que `core/types.ts`/`app/**` migren (design
+   * seguía `Pair` in/out hasta que `core/types.ts`/`app/**` migraron (design
    * #3801 PUNTO 4) — `resultsOf` (db/matchday.ts) tira con un lado de uno por
    * diseño (ver el comentario de `pairFromRow` ahí). Se llama al RPC
    * `close_matchday` directo, con un payload armado a mano, igual que el

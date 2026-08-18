@@ -8,7 +8,6 @@ import {
   mastersChampion,
   mastersQualifiers,
   members,
-  pair,
   previousContext,
   resolveDisciplineBySlug,
   sameSide,
@@ -239,13 +238,11 @@ export default async function FechaDetailPage({ params }: PageProps) {
 
     const { defenders, defendersAlreadyRepeated } = previousContext(lastHistory, beforeLastHistory)
     const effectiveDefenders = defenders !== null && !defendersAlreadyRepeated ? defenders : null
-    // Los defensores llegan como `Pair` porque son una restricción DEL SORTEO
-    // de parejas (core/history.ts): en una disciplina de a uno no hay con quién
-    // repetir, así que `previousContext` devuelve `null` y ningún lado se marca
-    // como defensor. Se sube a `Side` una vez para comparar con `sameSide`, en
-    // vez de angostar en cada uso.
-    const defendingSide: Side | null =
-      effectiveDefenders === null ? null : pair(effectiveDefenders.a, effectiveDefenders.b)
+    // Los defensores ya llegan como `Side` (PR19): `previousContext` devuelve
+    // `null` en una disciplina de a uno —no hay con quién repetir— así que
+    // ningún lado se marca como defensor ahí. Antes esto los subía de `Pair` a
+    // `Side` con `pair()`; ese puente se fue con el tipo.
+    const defendingSide = effectiveDefenders
 
     // Sin fila de asistencia es "viene": el admin arma la fecha con todos y
     // descuenta a los que avisaron. `seedAttendances` —que corre en cada action,
@@ -355,8 +352,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
 
     const { defenders, defendersAlreadyRepeated } = previousContext(lastHistory, beforeLastHistory)
     const effectiveDefenders = defenders !== null && !defendersAlreadyRepeated ? defenders : null
-    const defendingSide: Side | null =
-      effectiveDefenders === null ? null : pair(effectiveDefenders.a, effectiveDefenders.b)
+    const defendingSide = effectiveDefenders
     const isDefendingSide = (side: Side) => defendingSide !== null && sameSide(side, defendingSide)
 
     // Los puntos de la fecha cerrada son los CONGELADOS, no un recálculo.

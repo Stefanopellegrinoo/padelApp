@@ -1,8 +1,25 @@
 import { allMatchings } from './matchings'
 import { orderByPoints } from './order'
-import { sideOf } from './pair-compat'
-import { single } from './side'
-import type { EntryId, Pair, Side, SideSize } from './types'
+import { members, sameSide, single } from './side'
+import type { EntryId, Side, SideSize } from './types'
+
+/** Un lado de DOS. El sorteo de parejas no sabe hacer otra cosa. */
+type Duo = Extract<Side, { size: 2 }>
+
+/**
+ * PR19: `Pair` ya no existe, así que `defenders`/`previousPairs`/`fixedPairs`
+ * son `Side`. Eso vuelve REPRESENTABLE un lado de uno donde antes el tipo lo
+ * impedía, y `buildSides` recibe el mismo objeto para las dos aridades — así
+ * que el chequeo tiene que ser de runtime y no de tipos. Falla ruidoso y
+ * nombrando la causa, en vez de dejar que `undefined` se filtre hasta un
+ * mensaje que habla de un asiento fantasma.
+ */
+function requireDuo(side: Side, what: string): Duo {
+  if (side.size === 1) {
+    throw new Error(`${what} es de dos: llegó un lado de uno (${side.a}).`)
+  }
+  return side
+}
 
 export interface PairingInput {
   /**
@@ -23,10 +40,10 @@ export interface PairingInput {
    * guest-only pair takes no championship position. Null when there was
    * none.
    */
-  defenders: Pair | null
+  defenders: Side | null
   /** True when the defenders already played their one repeat. */
   defendersAlreadyRepeated: boolean
-  previousPairs: Pair[]
+  previousPairs: Side[]
   /**
    * This matchday's guests, in the order the admin wants them. They all sit at
    * the tail of the pool, keeping that order among themselves.
@@ -42,16 +59,10 @@ export interface PairingInput {
    * together. The defenders are NOT listed here: they have their own rule,
    * which can dissolve them.
    */
-  fixedPairs: Pair[]
+  fixedPairs: Side[]
 }
 
-export function samePair(left: Pair, right: Pair): boolean {
-  return (
-    (left.a === right.a && left.b === right.b) || (left.a === right.b && left.b === right.a)
-  )
-}
-
-export function buildPairs(input: PairingInput): Pair[] {
+export function buildPairs(input: PairingInput): Side[] {
   const {
     present,
     points,
@@ -71,7 +82,7 @@ export function buildPairs(input: PairingInput): Pair[] {
   }
 
   const settled = resolveSettled(present, defenders, defendersAlreadyRepeated, fixedPairs)
-  const taken = new Set(settled.flatMap((pair) => [pair.a, pair.b]))
+  const taken = new Set(settled.flatMap((side) => members(side)))
   const pool = present.filter((entryId) => !taken.has(entryId))
 
   const ordered = orderPool(pool, points, snapshot, guestIds)
@@ -81,7 +92,9 @@ export function buildPairs(input: PairingInput): Pair[] {
   const candidates = allMatchings(ordered)
   const legal = candidates.filter(
     (matching) =>
-      !matching.some((pair) => previousPairs.some((previous) => samePair(previous, pair))),
+      // `sameSide` en vez de `samePair` (PR19): un lado de uno en
+      // `previousPairs` nunca iguala a uno de dos, así que se ignora solo.
+      !matching.some((side) => previousPairs.some((previous) => sameSide(previous, side))),
   )
 
   // Proven in the spec (2.5): the no-repeat rule can never rule out everything.
@@ -126,8 +139,9 @@ export interface SideBuildInput extends PairingInput {
  * (comment at the top of this file) carries over unchanged — this branch
  * does not add a new one.
  *
- * With `sideSize === 2` this is `buildPairs`, unmodified, mapped through
- * `sideOf` (core/pair-compat.ts) so both branches return the same type.
+ * With `sideSize === 2` this is `buildPairs`, unmodified: desde PR19 devuelve
+ * `Side[]` de por sí, así que el adaptador `sideOf` que había acá se fue con
+ * `core/pair-compat.ts` — que PR19 borró junto con `Pair` mismo.
  */
 export function buildSides(input: SideBuildInput): Side[] {
   if (input.sideSize === 1) {
@@ -136,7 +150,7 @@ export function buildSides(input: SideBuildInput): Side[] {
     }
     return orderPool(input.present, input.points, input.snapshot, input.guestIds).map(single)
   }
-  return buildPairs(input).map(sideOf)
+  return buildPairs(input)
 }
 
 /**
@@ -147,19 +161,19 @@ export function buildSides(input: SideBuildInput): Side[] {
  */
 function resolveSettled(
   present: EntryId[],
-  defenders: Pair | null,
+  defenders: Side | null,
   alreadyRepeated: boolean,
-  fixedPairs: Pair[],
-): Pair[] {
-  const settled: Pair[] = []
+  fixedPairs: Side[],
+): Duo[] {
+  const settled: Duo[] = []
   const taken = new Set<EntryId>()
   // Entries already claimed by the defenders specifically — tracked apart from
   // `taken` so a clash with them gets its own, accurate message: the admin
   // never typed a second fixed pair, the other claimant is the defenders.
   const defendingEntries = new Set<EntryId>()
 
-  const take = (pair: Pair, what: string): void => {
-    for (const entryId of [pair.a, pair.b]) {
+  const take = (side: Duo, what: string): void => {
+    for (const entryId of members(side)) {
       if (!present.includes(entryId)) {
         throw new Error(`${what} incluye a ${entryId}, que no juega esta fecha.`)
       }
@@ -171,7 +185,7 @@ function resolveSettled(
       }
       taken.add(entryId)
     }
-    settled.push(pair)
+    settled.push(side)
   }
 
   const defending = resolveDefenders(present, defenders, alreadyRepeated)
@@ -180,7 +194,7 @@ function resolveSettled(
     defendingEntries.add(defending.a)
     defendingEntries.add(defending.b)
   }
-  for (const pair of fixedPairs) take(pair, 'Una pareja fija')
+  for (const side of fixedPairs) take(requireDuo(side, 'Una pareja fija'), 'Una pareja fija')
 
   return settled
 }
@@ -192,13 +206,17 @@ function resolveSettled(
  */
 function resolveDefenders(
   present: EntryId[],
-  defenders: Pair | null,
+  defenders: Side | null,
   alreadyRepeated: boolean,
-): Pair | null {
+): Duo | null {
   if (defenders === null) return null
+  // ANTES del guard esto devolvía `null` en silencio con un lado de uno:
+  // `present.includes(defenders.b)` con `b` inexistente daba `false` y la
+  // pareja defensora simplemente desaparecía del sorteo (PR19, RED).
+  const duo = requireDuo(defenders, 'La pareja defensora')
   if (alreadyRepeated) return null
-  const bothPresent = present.includes(defenders.a) && present.includes(defenders.b)
-  return bothPresent ? defenders : null
+  const bothPresent = present.includes(duo.a) && present.includes(duo.b)
+  return bothPresent ? duo : null
 }
 
 /**
@@ -231,10 +249,10 @@ function orderPool(
  * a balanced pair adds up to n+1, so the further each pair strays from that
  * sum, the worse the draw.
  */
-function imbalance(matching: Pair[], position: Map<EntryId, number>, idealSum: number): number {
+function imbalance(matching: Side[], position: Map<EntryId, number>, idealSum: number): number {
   let total = 0
-  for (const pair of matching) {
-    const sum = (position.get(pair.a) ?? 0) + (position.get(pair.b) ?? 0)
+  for (const side of matching) {
+    const sum = members(side).reduce((acc, entryId) => acc + (position.get(entryId) ?? 0), 0)
     total += Math.abs(sum - idealSum)
   }
   return total

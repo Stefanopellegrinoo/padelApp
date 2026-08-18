@@ -33,7 +33,6 @@ export type {
   SeasonConfig,
   SideSize,
   Side,
-  Pair,
   SetScore,
   MatchResult,
   SideStanding,
@@ -43,14 +42,9 @@ export type {
 
 // ── Un lado de 1 o 2 (decisión de producto #5, REQ-D5-1/2) ──────────────────
 // `Side` es una unión discriminada: leer `.b` sin angostar `size` a `2` es
-// error de compilación. `core/pair-compat.ts` (sideOf/pairOf) es el
-// adaptador temporal que migra `Pair` a `Side` un archivo a la vez — no se
-// exporta acá a propósito, ver el bloque "Deliberadamente NO exportado".
-// `db/` construye sus lados con `sideOfRow` y ya no necesita bajarlos a
-// `Pair`: `pairFromRow` (S38, verify-report ronda 12) era la ÚNICA excepción
-// exportada de `pair-compat.ts` y murió con PR18b, que dejó a `db/read.ts`,
-// `db/matchday.ts` y `db/season.ts` hablando `Side` de punta a punta. El
-// bloque "Deliberadamente NO exportado" vuelve a estar entero.
+// error de compilación. **PR19 borró `Pair`, `sideOf`, `pairOf` y
+// `core/pair-compat.ts` enteros**: ya no hay adaptador ni tipo paralelo, y
+// `Side` es la única forma de nombrar un lado en todo el repo.
 export { single, pair, members, includes, partnerOf, sameSide, sideOfRow } from './side'
 
 // ── Season configuration ─────────────────────────────────────────────────────
@@ -62,13 +56,13 @@ export { validateConfig, defaultConfig, pointsErrors } from './config'
 
 // ── Building a matchday ──────────────────────────────────────────────────────
 // `buildSides` (PR16, design PUNTO 5) is the Side-native entry point: with
-// `sideSize=2` it is `buildPairs` unmodified, mapped through `sideOf`.
+// `sideSize=2` it is `buildPairs`, que desde PR19 ya devuelve `Side[]` solo.
 // `buildPairs`/`PairingInput` stay exported for `core/`-internal callers and
 // tests (`buildSides` itself, `core/pairing.test.ts`) — N27 (verify-report
 // ronda 12): `db/matchday.ts` no llama `buildPairs` directo desde PR18a, sólo
 // `buildSides`/`type PairingInput`.
 export type { PairingInput, SideBuildInput } from './pairing'
-export { buildPairs, buildSides, samePair } from './pairing'
+export { buildPairs, buildSides } from './pairing'
 export { buildFixture } from './fixture'
 
 // ── El contexto que hereda una fecha de las anteriores ───────────────────────
@@ -134,12 +128,4 @@ export { tallyPlayers, partnerRecords, bestPair } from './playerstats'
  *   orderByPoints  (order.ts)       sorts by points with the snapshot as
  *                                   tiebreak. Callers want computeRanking,
  *                                   which returns rows already in order.
- *   sideOf/pairOf  (pair-compat.ts) TEMPORARY Pair<->Side adapter, born with
- *                                   `Side` (PR14) and deleted at PR19 along
- *                                   with `Pair` itself. Only files inside
- *                                   `core/` migrating one producer/consumer
- *                                   at a time should import it, and only
- *                                   from `./pair-compat` directly. Sin
- *                                   excepciones desde PR18b: `pairFromRow`
- *                                   fue la única y ya no tiene consumidores.
  */

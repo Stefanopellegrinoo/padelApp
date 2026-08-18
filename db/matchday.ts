@@ -193,33 +193,35 @@ export async function setMatchdayDate(
 }
 
 /**
- * La siguiente fecha por número. Escribe `played_on`: la columna existe y es
- * el dato que muestran todas las pantallas.
+ * La siguiente fecha por número, de la disciplina que se le pasa. Escribe
+ * `played_on`: la columna existe y es el dato que muestran todas las
+ * pantallas.
  *
- * `discipline_id` no lo manda el caller: se resuelve solo a partir de
- * `seasonId` con `defaultDisciplineId` (la primera por `position`). Con el
- * tripwire `disciplines_one_per_season` caído (0018) una temporada YA puede
- * tener más de una disciplina — antes de este fix, esta función resolvía con
- * `.single()`, que con 2 filas rompía con PGRST116 ("multiple rows") en vez
- * de crear la fecha. Hoy sigue sin haber wizard que sume una segunda
- * disciplina (PR 11) ni un `discipline_id` elegible desde ningún caller, así
- * que "la primera" es determinista y correcta — cuando eso deje de ser
- * cierto, esta función necesita un parámetro nuevo.
+ * `disciplineId` es OPCIONAL (C12, verify-report ronda 7): sin él, cae en
+ * `defaultDisciplineId` (la primera por `position`) — el único camino que usa
+ * hoy `app/torneo/[id]/actions.ts`, que todavía no deja elegir disciplina
+ * (queda para el slice de UI que cierra C12 del todo). Con él explícito, la
+ * fecha queda scopeada a ESA disciplina sin tocar `defaultDisciplineId` —
+ * es lo que REQ-D3-1 necesita (dos disciplinas, cada una con su propia fecha
+ * sin cerrar a la vez): `matchdays_one_live` (0016) ya scopea por
+ * `discipline_id`, así que dos llamadas a disciplinas distintas no compiten
+ * entre sí.
  */
 export async function createMatchday(
   supabase: Client,
   seasonId: string,
   playedOn: string,
+  disciplineId?: string,
 ): Promise<string> {
-  const disciplineId = await defaultDisciplineId(supabase, seasonId)
-  if (disciplineId === null) {
+  const resolvedDisciplineId = disciplineId ?? (await defaultDisciplineId(supabase, seasonId))
+  if (resolvedDisciplineId === null) {
     throw new EdgeError('No se pudo leer la disciplina de la temporada.')
   }
 
   const { data: last, error: lastError } = await supabase
     .from('matchdays')
     .select('number')
-    .eq('discipline_id', disciplineId)
+    .eq('discipline_id', resolvedDisciplineId)
     .order('number', { ascending: false })
     .limit(1)
     .maybeSingle()
@@ -228,7 +230,7 @@ export async function createMatchday(
 
   const { data, error } = await supabase
     .from('matchdays')
-    .insert({ season_id: seasonId, discipline_id: disciplineId, number, played_on: playedOn })
+    .insert({ season_id: seasonId, discipline_id: resolvedDisciplineId, number, played_on: playedOn })
     .select('id')
     .single()
   if (error !== null) {

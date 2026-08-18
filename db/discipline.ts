@@ -44,20 +44,28 @@ export async function disciplineConfig(
 /**
  * El único escritor de `disciplines.config`: `assertValidConfig` corre antes que el update, igual que `updateSeasonConfig`.
  *
- * `sideSize` hardcodeado en 2: `pair_size` es identidad fijada al crear la
- * disciplina (PR14 slice A) y esta función no lee la fila antes de escribir
- * — agregar esa lectura sólo para validar sería ensanchar esta PR con una
- * query nueva. Correcto hoy porque toda disciplina real es `pair_size=2`;
- * el día que exista una de `pair_size=1` editable, este hardcode es el
- * primer lugar a tocar (candidato: pasar `sideSize` como parámetro, como ya
- * hace `addDiscipline` con `spec.pairSize`).
+ * C20 (verify-report ronda 13): el `sideSize` estaba HARDCODEADO en 2, y sobre
+ * una disciplina de a uno eso dejaba la validación invertida — rechazaba la
+ * única config válida (8 valores de puntos para 8 asientos) y aceptaba la de
+ * parejas (4), que después `matchdayContextFor` rechaza al armar y al cerrar.
+ * Una fecha OPEN con resultados quedaba sin poder cerrarse Y sin poder volver
+ * atrás desde Ajustes, porque el rollback chocaba contra este mismo `2`.
+ *
+ * El `pair_size` se LEE acá adentro en vez de recibirse por parámetro, a
+ * propósito: es identidad de la disciplina, no una opción de quien llama. Con
+ * un parámetro, cada call site presente y futuro puede pasar el equivocado y
+ * el compilador no lo nota —`SideSize` es `1 | 2` en los dos casos—, que es
+ * exactamente la clase de bug por la que `DisciplineId` está branded (N2,
+ * ronda 2). Leerlo cuesta un SELECT por guardado en una pantalla de admin;
+ * `disciplineConfig`, justo arriba, ya trae la fila que hace falta.
  */
 export async function updateDisciplineConfig(
   supabase: Client,
   disciplineId: DisciplineId,
   config: SeasonConfig,
 ): Promise<void> {
-  assertValidConfig(config, 2)
+  const { pairSize } = await disciplineConfig(supabase, disciplineId)
+  assertValidConfig(config, pairSize)
   const { error } = await supabase
     .from('disciplines')
     .update({ config: config as unknown as Json })

@@ -213,6 +213,24 @@ export async function createMatchday(
   playedOn: string,
   disciplineId?: string,
 ): Promise<string> {
+  // S26 (verify-report ronda 8): omitir `disciplineId` no es ambiguo con UNA
+  // disciplina — es la única respuesta posible, y sigue resolviendo por
+  // default más abajo. Con DOS o más, adivinar en silencio es la misma
+  // clase de bug que ya causó C8, C9, C12 y el de `matchdaysOf` en esta
+  // cadena: mismo criterio tripwire que `0021` (create_masters, empate de
+  // disciplina) y `0027` (empate de position) — el estado ambiguo se vuelve
+  // ruidoso en vez de silencioso.
+  if (disciplineId === undefined) {
+    const { count, error: countError } = await supabase
+      .from('disciplines')
+      .select('id', { count: 'exact', head: true })
+      .eq('season_id', seasonId)
+    if (countError) throw new EdgeError(`No se pudo leer las disciplinas de la temporada: ${countError.message}`)
+    if ((count ?? 0) > 1) {
+      throw new EdgeError('La temporada tiene más de una disciplina: hay que indicar cuál.')
+    }
+  }
+
   const resolvedDisciplineId = disciplineId ?? (await defaultDisciplineId(supabase, seasonId))
   if (resolvedDisciplineId === null) {
     throw new EdgeError('No se pudo leer la disciplina de la temporada.')

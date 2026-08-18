@@ -236,9 +236,10 @@ describe('estado derivado real: abrir una fecha por el camino real (C1, C2)', ()
     // Recién creada: las dos disciplinas en SETUP, la temporada también.
     expect(await derivedSeasonStatus(admin.client, seasonId)).toBe('SETUP')
 
-    // `createMatchday` resuelve la disciplina por defecto (`position` 0 =
-    // pádel, ver `defaultDisciplineId`): la fecha que arma es de pádel.
-    const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
+    // `disciplineId` explícito (S26, guarda de ambigüedad): la temporada
+    // tiene dos disciplinas, así que omitirlo ahora tira en vez de adivinar
+    // — la fecha que este test necesita es de pádel.
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10', padelId)
     for (const entryId of entryIds) {
       await setAttendance(admin.client, matchdayId, entryId, 'PLAYING')
     }
@@ -261,21 +262,10 @@ describe('estado derivado real: abrir una fecha por el camino real (C1, C2)', ()
 // nueva? — y la responde leyendo `discipline_id` directo, no por rebote de
 // otro assert.
 describe('createMatchday resuelve la disciplina por defecto (N7)', () => {
-  it('la fecha nueva queda scopeada a la primera disciplina por position, no a la última creada', async () => {
+  it('sin disciplineId y con una sola disciplina, la fecha queda scopeada a esa disciplina', async () => {
     const admin = await createTestUser()
     const filler = await fillerPlayers(8)
-    // FIFA con position 0 (se crea primera), PADEL con position 1: si
-    // createMatchday resolviera por orden de creación en vez de por
-    // `position` (el criterio de `defaultDisciplineId`), este test lo
-    // detectaría igual porque acá coinciden — la próxima aserción no.
-    const { seasonId, disciplineIds } = await createSeason({
-      admin,
-      config: defaultConfig(8),
-      squad: filler,
-      disciplines: [{ kind: 'FIFA' }, { kind: 'PADEL' }],
-    })
-    const [firstByPosition] = disciplineIds
-    if (firstByPosition === undefined) throw new Error('Falta disciplina.')
+    const { seasonId, disciplineId } = await createSeason({ admin, config: defaultConfig(8), squad: filler })
 
     const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
 
@@ -286,18 +276,41 @@ describe('createMatchday resuelve la disciplina por defecto (N7)', () => {
       .eq('id', matchdayId)
       .single()
     if (error || matchday === null) throw new Error(error?.message)
-    expect(matchday.discipline_id).toBe(firstByPosition)
+    expect(matchday.discipline_id).toBe(disciplineId)
+  })
+
+  // S26 (verify-report ronda 8): con UNA sola disciplina, "no elegir" no es
+  // ambiguo — hay una sola respuesta posible (el test de arriba). Con MÁS de
+  // una, adivinar en silencio es exactamente la clase de bug que ya causó
+  // C8, C9, C12 y el de `matchdaysOf` en esta cadena: este test ANTES
+  // aseveraba ese default a propósito ("la fecha nueva queda scopeada a la
+  // primera disciplina por position, no a la última creada") — ya no es el
+  // comportamiento correcto, así que se reescribe en vez de mantenerlo: la
+  // ambigüedad ahora es un error, no una resolución silenciosa.
+  it('sin disciplineId y con más de una disciplina, tira en vez de adivinar', async () => {
+    const admin = await createTestUser()
+    const filler = await fillerPlayers(8)
+    const { seasonId } = await createSeason({
+      admin,
+      config: defaultConfig(8),
+      squad: filler,
+      disciplines: [{ kind: 'FIFA' }, { kind: 'PADEL' }],
+    })
+
+    await expect(createMatchday(admin.client, seasonId, '2026-08-10')).rejects.toThrow(/más de una disciplina/)
   })
 })
 
 // ── C12 (verify-report ronda 7) — createMatchday con disciplineId explícito ─
-// N7 (arriba) prueba el default sin tocar; esto prueba el lado que faltaba:
-// el escritor YA puede apuntar a una disciplina que no sea la default, y dos
-// disciplinas pueden tener cada una su fecha sin cerrar A LA VEZ pasando por
-// el mismo `createMatchday` real (no fabricado) — REQ-D3-1 de punta a punta,
-// no sólo a nivel de índice.
+// N7 (arriba) prueba el caso de una sola disciplina; esto prueba el lado que
+// faltaba: el escritor puede apuntar CADA fecha a la disciplina que le
+// corresponde, y dos disciplinas pueden tener cada una su fecha sin cerrar A
+// LA VEZ pasando por el mismo `createMatchday` real (no fabricado) —
+// REQ-D3-1 de punta a punta, no sólo a nivel de índice. Las dos llamadas
+// pasan `disciplineId` explícito (S26, guarda de ambigüedad): con dos
+// disciplinas, omitirlo ya no resuelve por default, tira.
 describe('createMatchday con disciplineId explícito (C12)', () => {
-  it('la fecha nueva queda en la disciplina que se le pasa, no en la default, y ambas coexisten sin cerrar', async () => {
+  it('la fecha nueva queda en la disciplina que se le pasa, y las dos coexisten sin cerrar', async () => {
     const admin = await createTestUser()
     const { seasonId, disciplineIds } = await createSeason({
       admin,
@@ -306,7 +319,7 @@ describe('createMatchday con disciplineId explícito (C12)', () => {
     const [padelId, fifaId] = disciplineIds
     if (padelId === undefined || fifaId === undefined) throw new Error('Faltan disciplinas.')
 
-    const padelMatchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
+    const padelMatchdayId = await createMatchday(admin.client, seasonId, '2026-08-10', padelId)
     const fifaMatchdayId = await createMatchday(admin.client, seasonId, '2026-08-10', fifaId)
 
     const db = adminClient()

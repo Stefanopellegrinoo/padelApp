@@ -110,11 +110,22 @@ async function matchIdsOf(matchdayId: string): Promise<string[]> {
   return (data ?? []).map((row) => row.id)
 }
 
-/** Juega y cierra la temporada regular entera para dejarla lista para el Masters. */
-async function playRegularSeason(admin: TestUser, seasonId: string, squad: string[]): Promise<void> {
+/**
+ * Juega y cierra la temporada regular entera para dejarla lista para el Masters.
+ *
+ * `disciplineId` es opcional: todos los llamadores salvo el de N1 (heap
+ * invertido, dos disciplinas) usan `buildScene()`, de una sola disciplina —
+ * ahí omitirlo sigue sin ser ambiguo (S26, guarda de `createMatchday`).
+ */
+async function playRegularSeason(
+  admin: TestUser,
+  seasonId: string,
+  squad: string[],
+  disciplineId?: string,
+): Promise<void> {
   const config = primaryDiscipline(await seasonHeader(admin.client, seasonId)).config
   for (let number = 1; number <= config.regularMatchdays; number++) {
-    const matchdayId = await createMatchday(admin.client, seasonId, '2026-03-05')
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-03-05', disciplineId)
     for (const entryId of squad) {
       await setAttendance(admin.client, matchdayId, entryId, 'PLAYING')
     }
@@ -378,7 +389,7 @@ describe('create_masters discipline resolution (N1)', () => {
     // Cierra la única fecha regular de PADEL — FIFA se queda sin ninguna. Si
     // create_masters resolviera FIFA por error, vería 0 fechas cerradas en
     // vez de la 1 que pide `regularMatchdays` y explotaría con "faltan 1".
-    await playRegularSeason(admin, seasonId, squad)
+    await playRegularSeason(admin, seasonId, squad, padelId)
 
     // GUCs y llamada en la MISMA sesión de psql, mismo motivo que
     // squad-position.db.test.ts:240-243: sin index scan ni bitmap scan al

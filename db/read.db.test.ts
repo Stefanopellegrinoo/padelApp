@@ -248,14 +248,16 @@ describe('db/read', () => {
 
   // REQ-D9: la tabla global necesita el plantel y los premios de TODAS las
   // disciplinas, no de la default (`entriesOf`/`awardsOf`) — mismo criterio
-  // que `seasonMatchdaysOf` (PR 10) sobre `matchdaysOf`.
+  // que `seasonMatchdaysOf` (PR 10) sobre `matchdaysOf`. Los awards se
+  // insertan directo (no se juega la fecha entera): lo que prueba esto es el
+  // AGRUPADO de la lectura, no el pipeline de cierre — eso ya lo cubre
+  // `close.db.test.ts`.
   describe('seasonSquadOf y seasonAwardsOf', () => {
     it('el plantel es de la temporada entera, y los premios quedan agrupados por disciplina', async () => {
       const owner = await createTestUser()
-      const players = await fillerPlayers(8)
       const { seasonId: multiId, entryIds, disciplineIds } = await createSeason({
         admin: owner,
-        squad: players,
+        squad: await fillerPlayers(4),
         disciplines: [{ kind: 'PADEL', weight: 1 }, { kind: 'FIFA', weight: 0.5 }],
       })
       const [padelId, fifaId] = disciplineIds
@@ -263,57 +265,41 @@ describe('db/read', () => {
       const firstEntryId = entryIds[0]
       if (firstEntryId === undefined) throw new Error('createSeason no armó el plantel.')
 
-      // Solape parcial (REQ-D1-4): un asiento sólo juega pádel.
+      // Solape parcial (REQ-D1-4): un asiento sólo juega pádel. `seasonSquadOf`
+      // no lo excluye por eso — a diferencia de `entriesOf`, no pasa por
+      // `discipline_entries` de UNA disciplina.
       const db = adminClient()
       await db.from('discipline_entries').delete().eq('discipline_id', fifaId).eq('entry_id', firstEntryId)
-
-      // `seasonSquadOf` no lo excluye por eso: a diferencia de `entriesOf`, no
-      // pasa por `discipline_entries` de UNA disciplina.
       expect(await seasonSquadOf(owner.client, multiId)).toEqual(entryIds)
-
-      // Para cerrar una fecha hace falta el piso de MIN_PLAYERS (8): la
-      // fecha de FIFA la juega el plantel completo, discipline_entries
-      // intacto — el solape parcial ya quedó probado arriba, sin necesitar
-      // cerrar una fecha para eso.
-      async function closeOne(disciplineId: string, playedOn: string): Promise<void> {
-        const { data: matchday, error } = await db
-          .from('matchdays')
-          .insert({
-            season_id: multiId,
-            discipline_id: disciplineId,
-            number: 1,
-            kind: 'REGULAR',
-            status: 'DRAFT',
-            played_on: playedOn,
-          })
-          .select('id')
-          .single()
-        if (error || matchday === null) throw new Error(error?.message)
-        for (const entryId of entryIds) await setAttendance(owner.client, matchday.id, entryId, 'PLAYING')
-        await generatePairs(owner.client, matchday.id)
-        await openMatchday(owner.client, matchday.id)
-        await playAllMatches(owner, matchday.id)
-        await closeMatchday(owner.client, matchday.id)
-      }
-
-      // El asiento sin fila en discipline_entries de FIFA no puede jugar esa
-      // fecha (0023: attendances_entry_discipline la rechaza) — se lo
-      // restituye acá para poder cerrarla; el solape parcial ya quedó
-      // probado arriba con seasonSquadOf, sin depender de esto.
-      await db
-        .from('discipline_entries')
-        .insert({ discipline_id: fifaId, entry_id: firstEntryId, season_id: multiId, seed_position: 0 })
 
       // Mismo número (1) en las dos: REQ-D3-2 lo permite, y es el caso que C10
       // (verify-report ronda 5) probó que el redirect legacy desempataba mal —
       // `seasonAwardsOf` lo desambigua por `disciplineId`, no por `number` solo.
-      await closeOne(padelId, '2026-03-01')
-      await closeOne(fifaId, '2026-03-08')
+      async function seedClosed(disciplineId: string): Promise<void> {
+        const { data: matchday, error } = await db
+          .from('matchdays')
+          .insert({ season_id: multiId, discipline_id: disciplineId, number: 1, kind: 'REGULAR', status: 'CLOSED' })
+          .select('id')
+          .single()
+        if (error || matchday === null) throw new Error(error?.message)
+        const { error: awardsError } = await db.from('awards').insert(
+          entryIds.map((entryId, index) => ({
+            matchday_id: matchday.id,
+            entry_id: entryId,
+            season_id: multiId,
+            position: index + 1,
+            points: 10 - index,
+          })),
+        )
+        if (awardsError) throw new Error(awardsError.message)
+      }
+      await seedClosed(padelId)
+      await seedClosed(fifaId)
 
       const matchdays = await seasonMatchdaysOf(owner.client, multiId)
       const seasonAwards = await seasonAwardsOf(owner.client, matchdays)
-      expect(seasonAwards.get(padelId)?.get(1)).toHaveLength(8)
-      expect(seasonAwards.get(fifaId)?.get(1)).toHaveLength(8)
+      expect(seasonAwards.get(padelId)?.get(1)).toHaveLength(entryIds.length)
+      expect(seasonAwards.get(fifaId)?.get(1)).toHaveLength(entryIds.length)
     })
   })
 

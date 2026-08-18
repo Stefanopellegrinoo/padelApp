@@ -162,10 +162,8 @@ interface DisciplineHeaderRow {
   /**
    * `database.types.ts` (generado) declara esto `number`, pero PostgREST
    * serializa un `numeric` como STRING en el JSON real — el generador de
-   * tipos de Supabase no lo refleja. El tipo de acá miente igual que el
-   * generado a propósito, para no forzar un cast en cada call site del
-   * `.select()`; `toDisciplineHeader` es el único lugar que no le cree al
-   * tipo y convierte de verdad.
+   * Supabase no lo refleja. `toDisciplineHeader` es el único lugar que no le
+   * cree al tipo y convierte de verdad.
    */
   weight: number
 }
@@ -564,18 +562,14 @@ export async function seasonMatchdaysOf(supabase: Client, seasonId: string): Pro
   return (data ?? []).map(toMatchdaySummary)
 }
 
-/** Pairs, matches and full sets of one matchday. Empty pairs/matches — not an error — for a matchday still in DRAFT. */
 /**
  * El plantel SQUAD de la temporada ENTERA, sin importar qué disciplinas
  * juega cada quien — lo que la tabla global necesita (REQ-D9) y `entriesOf`
- * no da: `entriesOf` resuelve una disciplina puntual (la por defecto, o la
- * que se le pase) y deja afuera a quien no tiene fila en
- * `discipline_entries` de ESA disciplina (C8/C9, verify-report ronda 4) — acá
- * es exactamente lo contrario, nadie queda afuera del plantel por no jugar
- * una disciplina puntual, porque no se pasa por `discipline_entries` en
- * absoluto. Sumar los puntos ponderados de cada disciplina (`computeRanking`
- * por disciplina + `computeGlobalRanking`) ya deja en 0 a quien no jugó una
- * de ellas — no hace falta excluirlo acá.
+ * no da: `entriesOf` deja afuera a quien no tiene fila en
+ * `discipline_entries` de LA disciplina resuelta (C8/C9, ronda 4); acá nadie
+ * queda afuera porque no se pasa por esa tabla. Sumar puntos ponderados
+ * (`computeRanking` por disciplina + `computeGlobalRanking`) ya deja en 0 a
+ * quien no jugó una de ellas — no hace falta excluirlo acá.
  */
 export async function seasonSquadOf(supabase: Client, seasonId: string): Promise<EntryId[]> {
   const { data, error } = await supabase
@@ -590,14 +584,10 @@ export async function seasonSquadOf(supabase: Client, seasonId: string): Promise
 
 /**
  * Los awards de TODAS las fechas cerradas de la temporada, agrupados por
- * disciplina y por número de fecha adentro — la versión "temporada entera"
- * de `awardsOf`, mismo criterio que `seasonMatchdaysOf` (PR 10) sobre
- * `matchdaysOf`: para la tabla global (REQ-D9) hace falta sumar ponderado
- * TODAS las disciplinas, no sólo la por defecto.
- *
- * Toma `matchdays` ya resueltas (`seasonMatchdaysOf`) en vez de leerlas de
- * nuevo: quien ya las pidió para otra cosa (armar "próxima fecha", por
- * ejemplo) no paga la consulta dos veces.
+ * disciplina y por número de fecha adentro — versión "temporada entera" de
+ * `awardsOf` (REQ-D9). Toma `matchdays` ya resueltas (`seasonMatchdaysOf`) en
+ * vez de leerlas de nuevo: quien ya las pidió para otra cosa no paga la
+ * consulta dos veces.
  */
 export async function seasonAwardsOf(
   supabase: Client,
@@ -632,6 +622,7 @@ export async function seasonAwardsOf(
   return result
 }
 
+/** Pairs, matches and full sets of one matchday. Empty pairs/matches — not an error — for a matchday still in DRAFT. */
 export async function matchdayDetail(supabase: Client, matchdayId: string): Promise<MatchdayDetail> {
   const { data: matchdayRow, error: matchdayError } = await supabase
     .from('matchdays')

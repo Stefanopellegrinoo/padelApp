@@ -24,9 +24,11 @@ import {
   playerNames,
   publicRules,
   seasonAdminName,
+  seasonAwardsOf,
   seasonHeader,
   seasonMatchdaysOf,
   seasonRules,
+  seasonSquadOf,
 } from './read'
 import { adminClient } from './test/admin'
 import { createSeason } from './test/factories'
@@ -244,6 +246,61 @@ describe('db/read', () => {
     })
   })
 
+  // REQ-D9: la tabla global necesita el plantel y los premios de TODAS las
+  // disciplinas, no de la default (`entriesOf`/`awardsOf`) — mismo criterio
+  // que `seasonMatchdaysOf` (PR 10) sobre `matchdaysOf`.
+  describe('seasonSquadOf y seasonAwardsOf', () => {
+    it('el plantel es de la temporada entera, y los premios quedan agrupados por disciplina', async () => {
+      const owner = await createTestUser()
+      const players = await fillerPlayers(8)
+      const { seasonId: multiId, entryIds, disciplineIds } = await createSeason({
+        admin: owner,
+        squad: players,
+        disciplines: [{ kind: 'PADEL', weight: 1 }, { kind: 'FIFA', weight: 0.5 }],
+      })
+      const [padelId, fifaId] = disciplineIds
+
+      // Solape parcial (REQ-D1-4): un asiento sólo juega pádel.
+      const db = adminClient()
+      await db.from('discipline_entries').delete().eq('discipline_id', fifaId).eq('entry_id', entryIds[0])
+
+      // `seasonSquadOf` no lo excluye por eso: a diferencia de `entriesOf`, no
+      // pasa por `discipline_entries` de UNA disciplina.
+      expect(await seasonSquadOf(owner.client, multiId)).toEqual(entryIds)
+
+      async function closeOne(disciplineId: string, playedOn: string): Promise<void> {
+        const { data: matchday, error } = await db
+          .from('matchdays')
+          .insert({
+            season_id: multiId,
+            discipline_id: disciplineId,
+            number: 1,
+            kind: 'REGULAR',
+            status: 'DRAFT',
+            played_on: playedOn,
+          })
+          .select('id')
+          .single()
+        if (error || matchday === null) throw new Error(error?.message)
+        for (const entryId of entryIds) await setAttendance(owner.client, matchday.id, entryId, 'PLAYING')
+        await generatePairs(owner.client, matchday.id)
+        await openMatchday(owner.client, matchday.id)
+        await playAllMatches(owner, matchday.id)
+        await closeMatchday(owner.client, matchday.id)
+      }
+      // Mismo número (1) en las dos: REQ-D3-2 lo permite, y es el caso que C10
+      // (verify-report ronda 5) probó que el redirect legacy desempataba mal —
+      // `seasonAwardsOf` lo desambigua por `disciplineId`, no por `number` solo.
+      await closeOne(padelId, '2026-03-01')
+      await closeOne(fifaId, '2026-03-08')
+
+      const matchdays = await seasonMatchdaysOf(owner.client, multiId)
+      const seasonAwards = await seasonAwardsOf(owner.client, matchdays)
+      expect(seasonAwards.get(padelId)?.get(1)).toHaveLength(8)
+      expect(seasonAwards.get(fifaId)?.get(1)).toHaveLength(8)
+    })
+  })
+
   // ── lo que el Plan 4 necesita y el Plan 3 no había leído ──────────────────
 
   describe('attendancesOf', () => {
@@ -338,7 +395,7 @@ describe('db/read', () => {
   })
 
   describe('a stranger who is not part of the season', () => {
-    it('reads nothing back from any of the nine functions', async () => {
+    it('reads nothing back from any of the eleven functions', async () => {
       const seasons = await mySeasons(stranger.client)
       expect(seasons.map((season) => season.id)).not.toContain(seasonId)
 
@@ -359,6 +416,16 @@ describe('db/read', () => {
 
       expect(await closedHistoryAll(stranger.client, seasonId)).toEqual([])
       expect(await awardsOf(stranger.client, seasonId)).toEqual(new Map())
+
+      // seasonSquadOf/seasonAwardsOf (REQ-D9): mismo criterio que
+      // seasonMatchdaysOf arriba — filtran directo por season_id, RLS da 0
+      // filas para quien no participa, sin error. Se le pasa a
+      // seasonAwardsOf la lista REAL de fechas cerradas (vista por admin),
+      // no una lista vacía: lo que prueba es que RLS bloquea la tabla
+      // `awards` para el extraño aunque conozca los ids de matchday.
+      expect(await seasonSquadOf(stranger.client, seasonId)).toEqual([])
+      const realMatchdays = await seasonMatchdaysOf(admin.client, seasonId)
+      expect(await seasonAwardsOf(stranger.client, realMatchdays)).toEqual(new Map())
     })
   })
 })

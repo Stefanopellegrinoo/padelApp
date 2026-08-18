@@ -1,5 +1,5 @@
-import { sideOfRow } from '@/core'
-import type { Award, DisciplineId, EntryId, MatchdayHistory, Pair, SeasonConfig, SideSize } from '@/core'
+import { pairFromRow } from '@/core'
+import type { Award, DisciplineId, EntryId, MatchdayHistory, SeasonConfig, SideSize } from '@/core'
 import type { Database, Json } from './database.types'
 import { EdgeError } from './errors'
 import { assertValidConfig } from './validate'
@@ -121,26 +121,11 @@ export async function awardsBefore(
   return result
 }
 
-/**
- * W36/S34 (verify-report ronda 10/11): retira la copia local de
- * `requirePartner` — `sideOfRow` (core/side.ts) es el hogar único. Separa las
- * dos fallas que `requirePartner` fusionaba en una: una fila `pair_size=2`
- * sin `entry_b` es dato roto (tira ahí, con SU mensaje); un lado de uno
- * legítimo (`pair_size=1`) arma un `Side` sin tirar — recién acá, que
- * `closedHistory` alimenta `MatchdayHistory.pairs: Pair[]` (`core/history.ts`,
- * sin migrar a `Side` hasta PR19, design #3801 PUNTO 4), es donde hace falta
- * migrar este camino. `sideOf`/`pairOf` (core/pair-compat.ts) no se importan
- * desde `db/`: ese adaptador es interno de `core/` (core/index.ts,
- * "Deliberadamente NO exportado") — este chequeo hace lo mismo que `pairOf`
- * a mano.
- */
-function pairFromRow(pairSize: SideSize, entryA: string, entryB: string | null): Pair {
-  const side = sideOfRow(pairSize, entryA, entryB)
-  if (side.size === 1) {
-    throw new Error('Un lado de a uno no se lee como pareja acá todavía: falta migrar este camino a Side.')
-  }
-  return { a: side.a, b: side.b }
-}
+// S38 (verify-report ronda 12): `pairFromRow` era una copia local a mano de
+// `pairOf ∘ sideOfRow`, byte por byte idéntica a la de `db/read.ts` y
+// `db/matchday.ts`. `core/pair-compat.ts` la exporta ahora como la ÚNICA
+// excepción del bloque "Deliberadamente NO exportado" (core/index.ts) — un
+// solo lugar, un solo mensaje, para las tres.
 
 /** The matchday at `number` of one discipline's own calendar, or null when it does not exist or is not CLOSED. */
 export async function closedHistory(

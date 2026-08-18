@@ -10,7 +10,7 @@
  * of its own: RLS is what keeps a stranger from reading a season that is not
  * theirs, and that only holds if the query actually runs as the caller.
  */
-import { seasonStatusOf, sideOfRow } from '@/core'
+import { pairFromRow, seasonStatusOf } from '@/core'
 import type {
   Award,
   DisciplineId,
@@ -735,26 +735,11 @@ export async function awardsOf(supabase: Client, seasonId: string): Promise<Map<
 
 // ── helpers privados, compartidos por matchdayDetail y closedHistoryAll ─────
 
-/**
- * W36/S34 (verify-report ronda 10/11): retira la copia local de
- * `requirePartner` — `sideOfRow` (core/side.ts) es el hogar único. Separa las
- * dos fallas que `requirePartner` fusionaba en una: una fila `pair_size=2`
- * sin `entry_b` es dato roto (tira ahí, con SU mensaje); un lado de uno
- * legítimo (`pair_size=1`) arma un `Side` sin tirar — recién acá, que
- * `pairsAndMatchesOf` todavía sólo entiende `Pair` (alimenta `MatchdayDetail`/
- * `PlayedMatchday`, leídos por `app/**` como `Pair`, sin migrar hasta PR19,
- * design #3801 PUNTO 4), es donde hace falta migrar este camino a `Side`.
- * `sideOf`/`pairOf` (core/pair-compat.ts) no se importan desde `db/`: ese
- * adaptador es interno de `core/` (core/index.ts, "Deliberadamente NO
- * exportado") — este chequeo hace lo mismo que `pairOf` a mano.
- */
-function pairFromRow(pairSize: SideSize, entryA: string, entryB: string | null): Pair {
-  const side = sideOfRow(pairSize, entryA, entryB)
-  if (side.size === 1) {
-    throw new Error('Un lado de a uno no se lee como pareja acá todavía: falta migrar este camino a Side.')
-  }
-  return { a: side.a, b: side.b }
-}
+// S38 (verify-report ronda 12): `pairFromRow` era una copia local a mano de
+// `pairOf ∘ sideOfRow`, byte por byte idéntica a la de `db/matchday.ts` y
+// `db/season.ts`. `core/pair-compat.ts` la exporta ahora como la ÚNICA
+// excepción del bloque "Deliberadamente NO exportado" (core/index.ts) — un
+// solo lugar, un solo mensaje, para las tres.
 
 /** Las parejas y los partidos de la fecha, con los sets de cada partido ordenados por `set_number`. */
 async function pairsAndMatchesOf(

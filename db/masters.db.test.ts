@@ -310,6 +310,31 @@ describe('the masters', () => {
   })
 })
 
+// ── W39 (verify-report ronda 12): el Masters es estructuralmente de a dos ──
+
+describe('generateMastersPairs pair_size guard (W39)', () => {
+  it('rejects a MASTERS matchday of a pair_size=1 discipline with an honest message, before touching pairs', async () => {
+    const admin = await createTestUser()
+    const filler = await fillerPlayers(8)
+    const { seasonId, disciplineId } = await createSeason({
+      admin,
+      squad: filler,
+      disciplines: [{ kind: 'FIFA', pairSize: 1 }],
+    })
+    const db = adminClient()
+    const { data: matchday, error: matchdayError } = await db
+      .from('matchdays')
+      .insert({ season_id: seasonId, discipline_id: disciplineId, number: 1, kind: 'MASTERS', pair_size: 1 })
+      .select('id')
+      .single()
+    if (matchdayError || matchday === null) throw new Error(matchdayError?.message)
+
+    await expect(generateMastersPairs(admin.client, matchday.id)).rejects.toThrow(
+      'El Masters se juega de a parejas: una disciplina de a uno no lo arma.',
+    )
+  })
+})
+
 // ── N1 (verify-report ronda 2): create_masters resuelve la disciplina ──────
 
 describe('create_masters discipline resolution (N1)', () => {

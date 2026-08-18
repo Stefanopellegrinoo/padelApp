@@ -160,6 +160,19 @@ describe('db/read', () => {
       const header = await seasonHeader(member.client, seasonId)
       expect(header.isAdmin).toBe(false)
     })
+
+    // W21 (verify-report ronda 6): reemplaza `db/read.unit.test.ts`, que
+    // fabricaba su propio input (`'0.50' as unknown as number`) y sólo
+    // probaba que `Number()` funciona. Esto lee `weight` de una fila REAL
+    // vía PostgREST — el dato real es `number` (JSON sin comillas), no
+    // string; el "gotcha" que PR12 documentó no existe. Este test sí se
+    // rompería si PostgREST cambiara esa serialización algún día.
+    it('reads disciplines.weight as a real number, not a string', async () => {
+      const header = await seasonHeader(admin.client, seasonId)
+      const weight = header.disciplines[0]?.weight
+      expect(typeof weight).toBe('number')
+      expect(weight).toBe(1)
+    })
   })
 
   describe('seasonRules', () => {
@@ -469,6 +482,10 @@ describe('db/read', () => {
       // no una lista vacía: lo que prueba es que RLS bloquea la tabla
       // `awards` para el extraño aunque conozca los ids de matchday.
       expect(await seasonSquadOf(stranger.client, seasonId)).toEqual([])
+      // W19 (verify-report ronda 6): `seasonSquadMembersOf` (PR12b slice 2)
+      // es la única de las tres lectoras nuevas de temporada entera que
+      // faltaba acá — mismo criterio que sus hermanas, mismo hueco que W16.
+      expect(await seasonSquadMembersOf(stranger.client, seasonId)).toEqual([])
       const realMatchdays = await seasonMatchdaysOf(admin.client, seasonId)
       expect(await seasonAwardsOf(stranger.client, realMatchdays)).toEqual(new Map())
     })

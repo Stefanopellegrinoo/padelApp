@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { previousContext, type MatchdayHistory } from './history'
 import { members, pair, single } from './side'
-import type { Award, Pair, Side } from './types'
+import type { Award, Side } from './types'
 
 function history(sides: Side[], champion: Side | null): MatchdayHistory {
   const awards: Award[] = []
@@ -14,14 +14,6 @@ function history(sides: Side[], champion: Side | null): MatchdayHistory {
   })
   return { sides, awards }
 }
-
-/**
- * `PreviousContext` sigue hablando `Pair` (defensores y parejas previas son
- * restricciones DEL SORTEO de parejas), así que las esperanzas se escriben en
- * esa forma aunque la historia entre como `Side`.
- */
-const asPair = (side: Side): Pair | null =>
-  side.size === 2 ? { a: side.a, b: side.b } : null
 
 const A = pair('p1', 'p2')
 const B = pair('p3', 'p4')
@@ -38,14 +30,12 @@ describe('previousContext', () => {
 
   it('the defenders are the pair that collected position 1', () => {
     const context = previousContext(history([A, B, C], B), null)
-    expect(context.defenders).toEqual(asPair(B))
+    expect(context.defenders).toEqual(B)
     expect(context.defendersAlreadyRepeated).toBe(false)
   })
 
   it('returns every pair from the previous matchday', () => {
-    expect(previousContext(history([A, B, C], A), null).previousPairs).toEqual(
-      [A, B, C].map(asPair),
-    )
+    expect(previousContext(history([A, B, C], A), null).previousPairs).toEqual([A, B, C])
   })
 
   it('marks them as already repeated if they were also together two matchdays ago', () => {
@@ -67,19 +57,19 @@ describe('previousContext', () => {
   it('never returns a guest-only pair, even when it topped the table', () => {
     const guests = pair('g1', 'g2')
     const context = previousContext(history([guests, A, B], A), null)
-    expect(context.defenders).toEqual(asPair(A))
+    expect(context.defenders).toEqual(A)
   })
 
   it('finds a mixed champion pair by its tournament teammate', () => {
     const mixed = pair('p1', 'g1')
     const context = previousContext(history([mixed, B], mixed), null)
-    expect(context.defenders).toEqual(asPair(mixed))
+    expect(context.defenders).toEqual(mixed)
   })
 
   it('has no defenders if the previous matchday never closed', () => {
     const context = previousContext({ sides: [A, B], awards: [] }, null)
     expect(context.defenders).toBeNull()
-    expect(context.previousPairs).toEqual([A, B].map(asPair))
+    expect(context.previousPairs).toEqual([A, B])
   })
 
   it('fails if two pairs claim position 1', () => {

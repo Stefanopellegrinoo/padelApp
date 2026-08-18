@@ -1,7 +1,5 @@
-import { samePair } from './pairing'
-import { pairOf } from './pair-compat'
-import { members } from './side'
-import type { Award, Pair, Side } from './types'
+import { members, sameSide } from './side'
+import type { Award, Side } from './types'
 
 /** One closed matchday, as it was stored. */
 export interface MatchdayHistory {
@@ -13,9 +11,9 @@ export interface MatchdayHistory {
 
 /** What the draw of the next matchday needs to know about the ones before it. */
 export interface PreviousContext {
-  defenders: Pair | null
+  defenders: Side | null
   defendersAlreadyRepeated: boolean
-  previousPairs: Pair[]
+  previousPairs: Side[]
 }
 
 /**
@@ -41,21 +39,21 @@ export function previousContext(
   }
 
   const defenders = championsOf(last)
-  // `PreviousContext` sigue hablando `Pair` A PROPOSITO: defensores, repetición
-  // y parejas previas son restricciones DEL SORTEO, y el sorteo de a uno no
-  // tiene ninguna (`buildSides` con `sideSize === 1` ignora las tres enteras,
-  // core/pairing.ts). Con una historia de lados de uno esto devuelve el mismo
-  // triple neutro que `last === null` — que es exactamente lo que el guard de
-  // C19 hardcodea en `pairingContextFor`, ahora derivado en vez de repetido.
-  const previousPairs = pairsOnly(last.sides)
+  // Defensores, repetición y parejas previas son restricciones DEL SORTEO DE
+  // PAREJAS, y el sorteo de a uno no tiene ninguna (`buildSides` con
+  // `sideSize === 1` las ignora enteras, core/pairing.ts). Por eso los lados de
+  // uno se filtran: con una historia de a uno esto devuelve el mismo triple
+  // neutro que `last === null`, que es lo que el guard de C19 hardcodea en
+  // `pairingContextFor` — ahora derivado en vez de repetido.
+  const previousPairs = duosOnly(last.sides)
   const alreadyRepeated =
-    defenders !== null && pairsOnly(beforeLast?.sides ?? []).some((pair) => samePair(pair, defenders))
+    defenders !== null && duosOnly(beforeLast?.sides ?? []).some((side) => sameSide(side, defenders))
 
   return { defenders, defendersAlreadyRepeated: alreadyRepeated, previousPairs }
 }
 
 /**
- * Los lados de dos, como `Pair`. Un lado de uno no es una pareja y se cae acá.
+ * Sólo los lados de dos. Un lado de uno no es una pareja y se cae acá.
  *
  * S43 (verify-report ronda 13): filtrar en silencio es lo contrario del
  * criterio que S37 impuso en `sideOfRow` —que TIRA cuando la forma no cierra—,
@@ -67,8 +65,8 @@ export function previousContext(
  * lo rechaza la FK), y las dos entradas de `previousContext` salen del mismo
  * `discipline_id`. O sea: o vienen todos de uno, o todos de dos.
  */
-function pairsOnly(sides: readonly Side[]): Pair[] {
-  return sides.filter((side) => side.size === 2).map(pairOf)
+function duosOnly(sides: readonly Side[]): Side[] {
+  return sides.filter((side) => side.size === 2)
 }
 
 /**
@@ -76,7 +74,7 @@ function pairsOnly(sides: readonly Side[]): Pair[] {
  * awards. A pair made only of guests collects no award, so it can never come out
  * of here — which is the rule, not an accident.
  */
-function championsOf(matchday: MatchdayHistory): Pair | null {
+function championsOf(matchday: MatchdayHistory): Side | null {
   const winners = new Set(
     matchday.awards.filter((award) => award.position === 1).map((award) => award.entryId),
   )
@@ -103,5 +101,5 @@ function championsOf(matchday: MatchdayHistory): Pair | null {
   // a uno no hay con quién repetir. Devolver `null` acá es la misma respuesta
   // que da el caso "no hubo fecha anterior", que es la correcta.
   if (champion === undefined || champion.size === 1) return null
-  return pairOf(champion)
+  return champion
 }

@@ -55,12 +55,6 @@ export type Side =
   | { readonly size: 1; readonly a: EntryId }
   | { readonly size: 2; readonly a: EntryId; readonly b: EntryId }
 
-/** @deprecated Reemplazado por `Side`. Vive hasta PR19, junto con `core/pair-compat.ts`. */
-export interface Pair {
-  a: EntryId
-  b: EntryId
-}
-
 export interface SetScore {
   gamesA: number
   gamesB: number

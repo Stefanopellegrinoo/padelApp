@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { defaultConfig, type SeasonConfig } from '@/core'
+import { defaultConfig, pair, type SeasonConfig } from '@/core'
 import { matchdayContextFor, pairingContextFor } from './matchday'
 import { adminClient } from './test/admin'
 import { createSeason } from './test/factories'
@@ -261,9 +261,9 @@ describe('pairingContextFor', () => {
 
     const context = await pairingContextFor(admin.client, matchdayId)
 
-    expect(context.input.defenders).toEqual({ a: p1, b: p2 })
+    expect(context.input.defenders).toEqual(pair(p1, p2))
     expect(context.input.defendersAlreadyRepeated).toBe(false)
-    expect(context.input.previousPairs).toEqual([{ a: p1, b: p2 }])
+    expect(context.input.previousPairs).toEqual([pair(p1, p2)])
   })
 
   it('marks defendersAlreadyRepeated when the pair carried over two matchdays', async () => {
@@ -285,7 +285,7 @@ describe('pairingContextFor', () => {
 
     const context = await pairingContextFor(admin.client, matchdayId)
 
-    expect(context.input.defenders).toEqual({ a: p1, b: p2 })
+    expect(context.input.defenders).toEqual(pair(p1, p2))
     expect(context.input.defendersAlreadyRepeated).toBe(true)
   })
 
@@ -346,7 +346,7 @@ describe('pairingContextFor', () => {
 
     const context = await pairingContextFor(admin.client, matchdayId)
 
-    expect(context.input.fixedPairs).toEqual([{ a: guest, b: partner }])
+    expect(context.input.fixedPairs).toEqual([pair(guest, partner)])
   })
 
   it('ignores absent players', async () => {

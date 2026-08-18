@@ -39,8 +39,8 @@ export function partnerOf(side: Side, entryId: EntryId): EntryId | null {
  * ronda 9): `{ size: row.pair_size as SideSize, a, b }` compila limpio y, si
  * `pair_size` es 1, el `b` de la fila queda adentro del objeto sin que nadie
  * pueda leerlo — se pierde en silencio. `sideOfRow` cierra ese agujero: tira
- * si la forma no cierra, igual que `pairOf` (pair-compat.ts) con un lado de
- * uno.
+ * si la forma no cierra. (Hasta PR19 lo mismo hacía `pairOf`, que murió con
+ * `Pair` y `core/pair-compat.ts`.)
  */
 export function sideOfRow(size: SideSize, a: EntryId, b: EntryId | null): Side {
   if (size === 1) {

@@ -8,6 +8,7 @@ import {
   mastersQualifiers,
   members,
   previousContext,
+  pair,
   sideOfRow,
   snapshotForMatchday,
   type Award,
@@ -15,7 +16,6 @@ import {
   type EntryId,
   type MatchFormat,
   type MatchResult,
-  type Pair,
   type PairingInput,
   type SeasonConfig,
   type SetScore,
@@ -172,11 +172,12 @@ export async function pairingContextFor(
       defendersAlreadyRepeated,
       previousPairs,
       guestIds: guests.map((guest) => guest.entryId),
-      // Las parejas trabadas ya vienen con la forma de `Pair`: por eso
-      // `pair_locks` es una tabla de dos columnas y no un agrupador. No hay
-      // nada que convertir, y no hay una función de armado que se pueda
-      // equivocar al hacerlo.
-      fixedPairs: locks,
+      // `pair_locks` es una tabla de DOS columnas, no un agrupador: una traba
+      // es siempre de dos por construcción del schema. Desde PR19 el tipo es
+      // `Side`, así que se construye con `pair()` en vez de pasar la fila
+      // cruda — el constructor pone el discriminante y `requireDuo`
+      // (core/pairing.ts) rechazaría cualquier cosa que llegara mal formada.
+      fixedPairs: locks.map((lock) => pair(lock.a, lock.b)),
     },
   }
 }

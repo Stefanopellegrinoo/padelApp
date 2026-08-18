@@ -325,6 +325,40 @@ describe('disciplineConfig / updateDisciplineConfig (PR 5, REQ-D2-1)', () => {
     expect(await disciplineConfig(admin.client, soloId)).toEqual({ config: nextSolo, pairSize: 1 })
   })
 
+  /*
+   * S46 (verify-report ronda 14). Un update de PostgREST que no toca ninguna
+   * fila NO es un error: `saveDisciplineConfig` no tiene chequeo de admin
+   * propio, se apoya en RLS, y un participante que NO organiza pasa el
+   * `select` de `disciplineConfig` (`disciplines_read` usa `is_participant`)
+   * y después su update matchea 0 filas contra `disciplines_write` (que usa
+   * `is_season_admin`). Sin `count: 'exact'` la pantalla le decía que guardó
+   * y al recargar volvía la config vieja.
+   *
+   * Mismo defecto y mismo remedio que `setMatchdayDate` (db/matchday.ts), que
+   * ya lo tenía documentado — esta función era la que faltaba.
+   */
+  it('a un participante que no organiza le avisa que no guardó, en vez de mentirle (S46)', async () => {
+    const admin = await createTestUser()
+    const member = await createTestUser()
+    const { seasonId, disciplineId } = await createSeason({
+      admin,
+      squad: [member.playerId],
+      config: defaultConfig(8),
+    })
+    // `createSeason` con `squad: [member.playerId]` ya le siembra el asiento
+    // atado a su player, así que `is_participant` da true sin reclamar nada:
+    // ve la disciplina (`disciplines_read`) y no la puede escribir
+    // (`disciplines_write`). Ése es exactamente el hueco de S46.
+    const antes = await disciplineConfig(admin.client, disciplineId)
+    const otra = { ...defaultConfig(8), regularMatchdays: 14 }
+
+    await expect(updateDisciplineConfig(member.client, disciplineId, otra)).rejects.toThrow(
+      /sólo puede hacerlo quien organiza/,
+    )
+    // Y no guardó nada, que es la mitad que el mensaje tenía que dejar de tapar.
+    expect(await disciplineConfig(admin.client, disciplineId)).toEqual(antes)
+  })
+
   it('sigue exigiendo la aritmética de parejas donde el lado es de dos (C20, no-regresión)', async () => {
     const admin = await createTestUser()
     const { disciplineId } = await createSeason({ admin })

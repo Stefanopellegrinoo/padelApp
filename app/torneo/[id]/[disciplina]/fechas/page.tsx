@@ -28,14 +28,6 @@ interface ChampionInfo {
 }
 
 /**
- * Partidos ganados-perdidos y diferencia de games del lado campeón, dentro de
- * esa fecha puntual. No pasa por `computeStandings` —pide
- * `SeasonConfig` y el snapshot de desempate, que esta pantalla de lectura no
- * trae— porque el campeón ya lo dice `seasonAwardsOf`; sólo falta sumar sus propios
- * partidos, el mismo tally que hace `computeStandings` puertas adentro pero
- * para una sola pareja.
- */
-/**
  * Clave estable de un lado, de uno o de dos: el orden de los miembros no
  * importa. N30 (verify-report ronda 13): esta pantalla usaba
  * `members(side).join('-')` (sin ordenar, otro separador) mientras
@@ -53,6 +45,14 @@ function sideNames(side: Side, nameById: ReadonlyMap<string, string>): string {
     .join(' & ')
 }
 
+/**
+ * Partidos ganados-perdidos y diferencia de games del lado campeón, dentro de
+ * esa fecha puntual. No pasa por `computeStandings` —pide `SeasonConfig` y el
+ * snapshot de desempate, que esta pantalla de lectura no trae— porque el
+ * campeón ya lo dice `seasonAwardsOf`; sólo falta sumar sus propios partidos,
+ * el mismo tally que hace `computeStandings` puertas adentro pero para un
+ * solo lado.
+ */
 function championRecord(matches: MatchResult[], champion: Side): string {
   let won = 0
   let lost = 0

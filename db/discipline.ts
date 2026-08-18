@@ -58,6 +58,15 @@ export async function disciplineConfig(
  * exactamente la clase de bug por la que `DisciplineId` está branded (N2,
  * ronda 2). Leerlo cuesta un SELECT por guardado en una pantalla de admin;
  * `disciplineConfig`, justo arriba, ya trae la fila que hace falta.
+ *
+ * S46 (verify-report ronda 14): `count: 'exact'` por el mismo motivo que
+ * `setMatchdayDate` (`db/matchday.ts:198-200`) — un update que no toca ninguna
+ * fila NO es un error en PostgREST. `saveDisciplineConfig` no tiene chequeo de
+ * admin propio, se apoya en RLS, y un participante que NO organiza pasa el
+ * `select` de `disciplineConfig` (`disciplines_read` usa `is_participant`) y
+ * después su update matchea 0 filas contra `disciplines_write` (que usa
+ * `is_season_admin`). Sin esto la pantalla le decía que guardó y al recargar
+ * volvía la config vieja.
  */
 export async function updateDisciplineConfig(
   supabase: Client,
@@ -66,12 +75,15 @@ export async function updateDisciplineConfig(
 ): Promise<void> {
   const { pairSize } = await disciplineConfig(supabase, disciplineId)
   assertValidConfig(config, pairSize)
-  const { error } = await supabase
+  const { error, count } = await supabase
     .from('disciplines')
-    .update({ config: config as unknown as Json })
+    .update({ config: config as unknown as Json }, { count: 'exact' })
     .eq('id', disciplineId)
   if (error) {
     throw new EdgeError(`No se pudo actualizar la configuración de la disciplina: ${error.message}`)
+  }
+  if (count === 0) {
+    throw new EdgeError('No se pudo guardar el formato: sólo puede hacerlo quien organiza.')
   }
 }
 

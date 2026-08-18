@@ -565,8 +565,14 @@ describe('closeMatchday', () => {
    * wrapper TS `closeMatchday()` queda para 18b/19 (mismo corte que el test
    * de arriba). Esto es lo que W34 describía como "todavía no puede": hoy
    * puede, de punta a punta.
+   *
+   * C19 (verify-report ronda 12): una sola fecha no alcanza para probar el
+   * lifecycle — `closedHistory` sólo entra en juego cuando existe una fecha
+   * CERRADA antes en el calendario de la disciplina, así que el bug recién
+   * aparece desde la fecha 2. Este test cierra la fecha 1 y después arma y
+   * abre la fecha 2, ejercitando el mismo camino que recorre cada draw real.
    */
-  it('cierra una fecha de a uno entera armada por el flujo real: draw → asistencia → resultados → close', async () => {
+  it('cierra la fecha 1 de una disciplina de a uno, y arma y abre la fecha 2 sin romperse (C19)', async () => {
     const admin = await createTestUser()
     const filler = await fillerPlayers(8)
     const config: SeasonConfig = { ...defaultConfig(8), points: [8, 7, 6, 5, 4, 3, 2, 1] }
@@ -587,16 +593,30 @@ describe('closeMatchday', () => {
       position: index + 1,
       points: config.points[index] ?? 0,
     }))
-    const { error } = await admin.client.rpc('close_matchday', {
+    const { error: closeError } = await admin.client.rpc('close_matchday', {
       p_matchday: matchdayId,
       p_awards: awards,
     })
 
-    expect(error).toBeNull()
+    expect(closeError).toBeNull()
     expect(await matchdayStatus(matchdayId)).toBe('CLOSED')
     const stored = await awardsOf(matchdayId)
     expect(stored).toHaveLength(8)
     expect(new Set(stored.map((row) => row.entry_id))).toEqual(new Set(entryIds))
+
+    // C19: con la fecha 1 CLOSED, el draw de la fecha 2 pasa por
+    // `pairingContextFor` → `closedHistory(discipline, 1)` — exactamente el
+    // camino que moría antes de este fix.
+    const matchday2Id = await createMatchday(admin.client, seasonId, '2026-08-17')
+    await markAllPlaying(admin, matchday2Id, entryIds)
+
+    await generatePairs(admin.client, matchday2Id)
+    await openMatchday(admin.client, matchday2Id)
+
+    const pairs2 = await pairsOf(matchday2Id)
+    expect(pairs2).toHaveLength(8)
+    expect(pairs2.every((pair) => pair.entry_b === null)).toBe(true)
+    expect(await matchdayStatus(matchday2Id)).toBe('OPEN')
   })
 
   it('rejects a direct RPC call when a match still has no result loaded', async () => {

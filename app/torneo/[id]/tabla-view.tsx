@@ -105,7 +105,12 @@ export function TablaView({ header, discipline, entries, matchdays, awardsByMatc
 
   return (
     <div className="flex flex-col gap-3 pt-4">
-      <Volver href="/torneos" label="Mis torneos" />
+      {/* W20 (verify-report ronda 6): esta Tabla es por-disciplina, no la
+          raíz — "volver" tiene que subir a la tabla global del torneo
+          (`/torneo/{id}`), la única otra pantalla donde enciende la misma
+          pestaña "Tabla" (`nav.tsx`). Antes apuntaba a "Mis torneos",
+          heredado de cuando ESTA vista era la raíz. */}
+      <Volver href={`/torneo/${header.id}`} label="Tabla general" />
       <header className="flex items-start justify-between">
         <div>
           {estado !== null && (

@@ -179,6 +179,12 @@ export async function frozenPointsOf(
   return new Map((data ?? []).map((row) => [row.entry_id, row.points]))
 }
 
+/** Una disciplina a crear junto con la temporada. `config` es obligatoria: cada disciplina puede declarar la suya, no hereda de la temporada. */
+export interface NewSeasonDiscipline {
+  kind?: 'PADEL' | 'FIFA'
+  config: SeasonConfig
+}
+
 export interface NewSeason {
   name: string
   /** Un nombre por asiento, en el orden que va a ser el orden inicial de desempate. */
@@ -189,6 +195,21 @@ export interface NewSeason {
    * organiza sin jugar. Es un índice sobre `squadNames`, no un nombre.
    */
   mySeatIndex?: number | null
+  /**
+   * Una fila de `disciplines` por elemento — `position` sale del ÍNDICE de
+   * este array, escrito EXPLÍCITO, nunca el default `0` de la columna
+   * (contrato S13, auditoría ronda 5): un insert donde dos filas comparten
+   * `position` Y `created_at` empata la clave de orden que `disciplineSlugs`
+   * (core/discipline-slug.ts) usa para no colisionar dos disciplinas del
+   * mismo `kind`. El orden de este array ES el orden del slug — el wizard
+   * multi-disciplina (PR11a, pendiente) crea las disciplinas en el orden en
+   * que las quiere ver sloggeadas.
+   *
+   * Por defecto una sola PADEL con `config`: el comportamiento de siempre,
+   * para el único caller de producción que existe hoy
+   * (`app/torneos/nuevo/actions.ts`, todavía sin wizard multi-disciplina).
+   */
+  disciplines?: NewSeasonDiscipline[]
 }
 
 /**
@@ -210,17 +231,21 @@ export interface NewSeason {
  */
 export async function createSeason(
   supabase: Client,
-  { name, squadNames, config, mySeatIndex = null }: NewSeason,
+  { name, squadNames, config, mySeatIndex = null, disciplines }: NewSeason,
 ): Promise<{ seasonId: string; inviteToken: string }> {
+  const disciplineSpecs = disciplines ?? [{ kind: 'PADEL' as const, config }]
   assertValidConfig(config)
+  for (const spec of disciplineSpecs) {
+    assertValidConfig(spec.config)
+    if (squadNames.length !== spec.config.squadSize) {
+      throw new EdgeError(
+        `El plantel tiene ${squadNames.length} nombres y la configuración de ${spec.kind ?? 'PADEL'} dice ${spec.config.squadSize}.`,
+      )
+    }
+  }
 
   const trimmed = name.trim()
   if (trimmed.length === 0) throw new EdgeError('El torneo necesita un nombre.')
-  if (squadNames.length !== config.squadSize) {
-    throw new EdgeError(
-      `El plantel tiene ${squadNames.length} nombres y la configuración dice ${config.squadSize}.`,
-    )
-  }
   if (mySeatIndex !== null && (mySeatIndex < 0 || mySeatIndex >= squadNames.length)) {
     throw new EdgeError('El asiento que elegiste no está en el plantel.')
   }
@@ -251,19 +276,27 @@ export async function createSeason(
     throw new EdgeError(`No se pudo crear el torneo: ${seasonError?.message}`)
   }
 
-  // Una temporada nace con exactamente una disciplina PADEL con su misma
-  // config — el mismo backfill 1:1 que hizo 0015_disciplines.sql para las
-  // temporadas que ya existían. El wizard multi-disciplina (PR 11) es el que
-  // deja elegir más de una; hasta entonces toda temporada nueva necesita
-  // ésta para que `createMatchday` pueda resolver su `discipline_id`.
-  const { data: discipline, error: disciplineError } = await supabase
-    .from('disciplines')
-    .insert({ season_id: season.id, kind: 'PADEL', config: config as unknown as Json })
-    .select('id')
-    .single()
-  if (disciplineError !== null || discipline === null) {
-    await supabase.from('seasons').delete().eq('id', season.id)
-    throw new EdgeError(`No se pudo crear la disciplina del torneo: ${disciplineError?.message}`)
+  // Una fila de `disciplines` por spec, `position` = índice del array —
+  // nunca el default de la columna (ver el comentario de `disciplines` en
+  // `NewSeason`, contrato S13). Sin `disciplines` explícito esto crea la
+  // misma PADEL única de siempre, mismo comportamiento pre-PR11.
+  const disciplineRows: { id: string }[] = []
+  for (const [index, spec] of disciplineSpecs.entries()) {
+    const { data: discipline, error: disciplineError } = await supabase
+      .from('disciplines')
+      .insert({
+        season_id: season.id,
+        kind: spec.kind ?? 'PADEL',
+        config: spec.config as unknown as Json,
+        position: index,
+      })
+      .select('id')
+      .single()
+    if (disciplineError !== null || discipline === null) {
+      await supabase.from('seasons').delete().eq('id', season.id)
+      throw new EdgeError(`No se pudo crear la disciplina del torneo: ${disciplineError?.message}`)
+    }
+    disciplineRows.push(discipline)
   }
 
   const { data: entryRows, error: entriesError } = await supabase
@@ -287,23 +320,27 @@ export async function createSeason(
     )
   }
 
-  // Cada asiento entra a la disciplina recién creada con el MISMO
-  // seed_position que en `entries` — no hay nada más que decidir con una sola
-  // disciplina. `discipline_entries` (PR 7) es la fuente real del orden desde
-  // acá en más; sin este insert, un torneo creado DESPUÉS de esta migración
-  // nacería con la disciplina vacía aunque `entries` tenga todo el plantel.
+  // Cada asiento entra a TODAS las disciplinas recién creadas, con el mismo
+  // seed_position que en `entries`. Decisión de este slice (REQ-D1-3/D1-4):
+  // el plantel es compartido a nivel torneo y por default juega todo — no
+  // hay pantalla de "quién juega qué" en este wizard todavía (PR13 la agrega
+  // para sumar una disciplina en curso). `discipline_entries` (PR 7) es la
+  // fuente real del orden; sin este insert, un torneo nuevo nacería con sus
+  // disciplinas vacías aunque `entries` tenga todo el plantel.
   if (entryRows.length > 0) {
     const { error: seatsError } = await supabase.from('discipline_entries').insert(
-      entryRows.map((row) => ({
-        discipline_id: discipline.id,
-        entry_id: row.id,
-        season_id: season.id,
-        seed_position: row.seed_position,
-      })),
+      disciplineRows.flatMap((discipline) =>
+        entryRows.map((row) => ({
+          discipline_id: discipline.id,
+          entry_id: row.id,
+          season_id: season.id,
+          seed_position: row.seed_position,
+        })),
+      ),
     )
     if (seatsError !== null) {
       await supabase.from('seasons').delete().eq('id', season.id)
-      throw new EdgeError(`No se pudo asignar el plantel a la disciplina: ${seatsError.message}`)
+      throw new EdgeError(`No se pudo asignar el plantel a las disciplinas: ${seatsError.message}`)
     }
   }
 

@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { describe, expect, it } from 'vitest'
-import { defaultConfig, type SeasonConfig } from '@/core'
+import { defaultConfig, members, type SeasonConfig } from '@/core'
 import {
   addGuest,
   cancelMatchday,
@@ -368,7 +368,7 @@ describe('cancelMatchday', () => {
 
     await generatePairs(admin.client, matchdayId)
     const inPairs = new Set(
-      (await matchdayDetail(admin.client, matchdayId)).pairs.flatMap((pair) => [pair.a, pair.b]),
+      (await matchdayDetail(admin.client, matchdayId)).sides.flatMap((side) => [...members(side)]),
     )
     expect(await pairsOf(matchdayId)).not.toHaveLength(0)
     expect(inPairs.has(guestId)).toBe(true)

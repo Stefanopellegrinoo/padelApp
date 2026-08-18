@@ -1,6 +1,5 @@
-import { pairOf, sideOf } from './pair-compat'
 import { members, sameSide } from './side'
-import type { EntryId, MatchResult, Pair, PairStanding, SeasonConfig, Side } from './types'
+import type { EntryId, MatchResult, SeasonConfig, Side, SideStanding } from './types'
 
 /**
  * Ephemeral tally for a single matchday's computation — never persisted,
@@ -26,23 +25,21 @@ interface Tally {
  * the head to head is circular and resolves nothing, and without a final cut
  * three pairs would be left arguing over first place.
  *
- * The boundary sits at `sideOf`/`pairOf` (design #3801, PUNTO 4 fila 14,
- * "Borde: pairOf en el retorno"): `MatchResult`/`PairStanding` stay Pair-shaped
- * because their other producers/consumers (core/awards.ts, core/masters.ts,
- * db/**, app/**) have not migrated yet — that migration is PR17+ per the
- * design's own file-by-file table. Internally this function works entirely
- * on `Side` via `sameSide`/`members`, so `bestPlayerRank` and the tally
- * lookup are already correct for a one-member side, ready for the day a real
- * one flows in without this file changing again.
+ * El límite `sideOf`/`pairOf` que esta función tenía en la entrada y en el
+ * retorno SE FUE (PR18b): `MatchResult`/`SideStanding` hablan `Side`, así que
+ * un lado de uno entra y sale con su forma. Por dentro no cambió una línea —
+ * ya trabajaba entera sobre `Side` vía `sameSide`/`members` desde PR15, y por
+ * eso `bestPlayerRank` y la búsqueda de tally salieron correctas para un lado
+ * de un miembro sin tocarlas.
  */
 export function computeStandings(
-  pairs: Pair[],
+  sides: Side[],
   matches: MatchResult[],
   config: SeasonConfig,
   snapshot: EntryId[],
-): PairStanding[] {
-  const tallies = pairs.map<Tally>((pair) => ({
-    side: sideOf(pair),
+): SideStanding[] {
+  const tallies = sides.map<Tally>((side) => ({
+    side,
     played: 0,
     won: 0,
     setsWon: 0,
@@ -56,8 +53,8 @@ export function computeStandings(
 
   for (const match of matches) {
     if (match.sets.length === 0) continue // not played yet
-    const left = find(sideOf(match.pairA))
-    const right = find(sideOf(match.pairB))
+    const left = find(match.sideA)
+    const right = find(match.sideB)
     if (left === undefined || right === undefined) continue
 
     let setsA = 0
@@ -126,7 +123,7 @@ export function computeStandings(
   })
 
   return sorted.map((tally, index) => ({
-    pair: pairOf(tally.side),
+    side: tally.side,
     played: tally.played,
     won: tally.won,
     setsDiff: tally.setsWon - tally.setsLost,
@@ -156,10 +153,8 @@ function compareObjective(left: Tally, right: Tally, usesSetsDiff: boolean): num
 function headToHead(left: Side, right: Side, matches: MatchResult[]): number {
   for (const match of matches) {
     if (match.sets.length === 0) continue
-    const matchLeft = sideOf(match.pairA)
-    const matchRight = sideOf(match.pairB)
-    const leftIsA = sameSide(matchLeft, left) && sameSide(matchRight, right)
-    const leftIsB = sameSide(matchLeft, right) && sameSide(matchRight, left)
+    const leftIsA = sameSide(match.sideA, left) && sameSide(match.sideB, right)
+    const leftIsB = sameSide(match.sideA, right) && sameSide(match.sideB, left)
     if (!leftIsA && !leftIsB) continue
 
     let setsA = 0

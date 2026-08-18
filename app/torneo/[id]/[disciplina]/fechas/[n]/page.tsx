@@ -5,16 +5,19 @@ import {
   computeAwards,
   computeRanking,
   computeStandings,
+  includes,
   mastersChampion,
   mastersQualifiers,
+  members,
+  pair,
   previousContext,
   resolveDisciplineBySlug,
-  samePair,
+  sameSide,
   snapshotForMatchday,
   type MatchResult,
-  type Pair,
-  type PairStanding,
   type SeasonConfig,
+  type Side,
+  type SideStanding,
 } from '@/core'
 import {
   attendancesOf,
@@ -41,8 +44,9 @@ interface PageProps {
   params: Promise<{ id: string; disciplina: string; n: string }>
 }
 
-function pairKey(pair: Pair): string {
-  return [pair.a, pair.b].sort().join('~')
+/** Clave estable de un lado, de uno o de dos: el orden de los miembros no importa. */
+function sideKey(side: Side): string {
+  return [...members(side)].sort().join('~')
 }
 
 function totalGames(match: MatchResult): [number, number] {
@@ -74,8 +78,8 @@ function matchWinner(match: MatchResult): 'A' | 'B' | null {
  * games) de a pares consecutivos: el patrón del handoff describe exactamente el
  * caso de "empataron en partidos ganados, cortó la diferencia de games".
  */
-function tiebreakNote(standings: PairStanding[], config: SeasonConfig, nameOf: Map<string, string>): string | null {
-  const label = (pair: Pair) => `${nameOf.get(pair.a) ?? '?'} & ${nameOf.get(pair.b) ?? '?'}`
+function tiebreakNote(standings: SideStanding[], config: SeasonConfig, nameOf: Map<string, string>): string | null {
+  const label = (side: Side) => sideLabel(side, nameOf)
   const usesSetsDiff = config.matchFormat.setsToWin > 1
 
   for (let i = 1; i < standings.length; i++) {
@@ -86,7 +90,7 @@ function tiebreakNote(standings: PairStanding[], config: SeasonConfig, nameOf: M
     if (usesSetsDiff && better.setsDiff !== worse.setsDiff) continue
 
     if (better.gamesDiff !== worse.gamesDiff) {
-      return `${label(worse.pair)} quedaron ${worse.position}° por diferencia de games: empataron en partidos ganados con ${label(better.pair)}.`
+      return `${label(worse.side)} quedaron ${worse.position}° por diferencia de games: empataron en partidos ganados con ${label(better.side)}.`
     }
 
     // ponytail: con todo empatado (partidos ganados y diferencia de games) el
@@ -95,9 +99,20 @@ function tiebreakNote(standings: PairStanding[], config: SeasonConfig, nameOf: M
     // No hay copy contractual para ese caso puntual y no ocurre con el formato
     // a un set por defecto (sin empates posibles); si hiciera falta, se
     // exporta el criterio exacto desde `core/standings.ts`.
-    return `${label(worse.pair)} quedaron ${worse.position}° por el desempate de la fecha: empataron en partidos ganados y en diferencia de games con ${label(better.pair)}.`
+    return `${label(worse.side)} quedaron ${worse.position}° por el desempate de la fecha: empataron en partidos ganados y en diferencia de games con ${label(better.side)}.`
   }
   return null
+}
+
+/**
+ * El nombre de un lado: los dos nombres unidos con `&` cuando es una pareja, y
+ * el nombre solo cuando la disciplina se juega de a uno — donde "Fulano &
+ * undefined" era exactamente lo que salía antes de que `Side` existiera.
+ */
+function sideLabel(side: Side, nameOf: ReadonlyMap<string, string>): string {
+  return members(side)
+    .map((entryId) => nameOf.get(entryId) ?? '?')
+    .join(' & ')
 }
 
 /**
@@ -140,7 +155,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
   const entries = await entriesOf(supabase, seasonId, matchday.disciplineId)
 
   const nameOf = new Map(entries.map((entry) => [entry.id, entry.displayName]))
-  const pairName = (pair: Pair) => `${nameOf.get(pair.a) ?? '?'} & ${nameOf.get(pair.b) ?? '?'}`
+  const sideName = (side: Side) => sideLabel(side, nameOf)
 
   const kicker =
     matchday.status === 'DRAFT'
@@ -210,6 +225,13 @@ export default async function FechaDetailPage({ params }: PageProps) {
 
     const { defenders, defendersAlreadyRepeated } = previousContext(lastHistory, beforeLastHistory)
     const effectiveDefenders = defenders !== null && !defendersAlreadyRepeated ? defenders : null
+    // Los defensores llegan como `Pair` porque son una restricción DEL SORTEO
+    // de parejas (core/history.ts): en una disciplina de a uno no hay con quién
+    // repetir, así que `previousContext` devuelve `null` y ningún lado se marca
+    // como defensor. Se sube a `Side` una vez para comparar con `sameSide`, en
+    // vez de angostar en cada uso.
+    const defendingSide: Side | null =
+      effectiveDefenders === null ? null : pair(effectiveDefenders.a, effectiveDefenders.b)
 
     // Sin fila de asistencia es "viene": el admin arma la fecha con todos y
     // descuenta a los que avisaron. `seedAttendances` —que corre en cada action,
@@ -262,11 +284,11 @@ export default async function FechaDetailPage({ params }: PageProps) {
         }
       })
 
-    const draftPairs: DraftPairVM[] = detail.pairs.map((pair) => ({
-      key: pairKey(pair),
-      names: pairName(pair),
-      defending: effectiveDefenders !== null && samePair(pair, effectiveDefenders),
-      withGuest: detail.guestIds.includes(pair.a) || detail.guestIds.includes(pair.b),
+    const draftPairs: DraftPairVM[] = detail.sides.map((side) => ({
+      key: sideKey(side),
+      names: sideName(side),
+      defending: defendingSide !== null && sameSide(side, defendingSide),
+      withGuest: members(side).some((entryId) => detail.guestIds.includes(entryId)),
     }))
 
     body = (
@@ -311,11 +333,13 @@ export default async function FechaDetailPage({ params }: PageProps) {
     ])
 
     const snapshot = snapshotForMatchday(matchdayNumber, seedOrder, awardsByMatchday, config)
-    const standings = computeStandings(detail.pairs, detail.matches, config, snapshot)
+    const standings = computeStandings(detail.sides, detail.matches, config, snapshot)
 
     const { defenders, defendersAlreadyRepeated } = previousContext(lastHistory, beforeLastHistory)
     const effectiveDefenders = defenders !== null && !defendersAlreadyRepeated ? defenders : null
-    const isDefendingPair = (pair: Pair) => effectiveDefenders !== null && samePair(pair, effectiveDefenders)
+    const defendingSide: Side | null =
+      effectiveDefenders === null ? null : pair(effectiveDefenders.a, effectiveDefenders.b)
+    const isDefendingSide = (side: Side) => defendingSide !== null && sameSide(side, defendingSide)
 
     // El Masters no reparte puntos, así que tampoco se calculan: `computeAwards`
     // devolvería un reparto que no existe en `awards` y que nadie escribió.
@@ -334,7 +358,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
       const four = mastersQualifiers(ranking)
       const winsOf = (entryId: string) =>
         standings
-          .filter((row) => row.pair.a === entryId || row.pair.b === entryId)
+          .filter((row) => includes(row.side, entryId))
           .reduce((total, row) => total + row.won, 0)
 
       const championId = mastersChampion(four, detail.matches)
@@ -360,16 +384,16 @@ export default async function FechaDetailPage({ params }: PageProps) {
       const roundMatches = detail.matches.filter((match) => match.round === roundNumber)
       const playingKeys = new Set<string>()
       for (const match of roundMatches) {
-        playingKeys.add(pairKey(match.pairA))
-        playingKeys.add(pairKey(match.pairB))
+        playingKeys.add(sideKey(match.sideA))
+        playingKeys.add(sideKey(match.sideB))
       }
       // La pareja libre existe en una fecha de 5 parejas, donde una descansa por
       // ronda. En el Masters no descansa nadie: son 6 "parejas" que son las tres
       // combinaciones de los mismos 4 jugadores, y cada ronda juega una sola,
       // así que "la que no juega" son cuatro y nombrar una es mentir.
-      const restingPair = isMasters
+      const restingSide = isMasters
         ? undefined
-        : detail.pairs.find((pair) => !playingKeys.has(pairKey(pair)))
+        : detail.sides.find((side) => !playingKeys.has(sideKey(side)))
       const loadedCount = roundMatches.filter((match) => match.sets.length > 0).length
 
       const matches: RoundMatchVM[] = roundMatches.map((match, index) => {
@@ -378,8 +402,8 @@ export default async function FechaDetailPage({ params }: PageProps) {
         return {
           key: `${roundNumber}-${index}`,
           matchId: match.id,
-          pairAName: pairName(match.pairA),
-          pairBName: pairName(match.pairB),
+          pairAName: sideName(match.sideA),
+          pairBName: sideName(match.sideB),
           scoreA: match.sets.length === 0 ? '–' : String(gamesA),
           scoreB: match.sets.length === 0 ? '–' : String(gamesB),
           winner,
@@ -391,7 +415,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
         totalCount: roundMatches.length,
         loadedCount,
         complete: roundMatches.length > 0 && loadedCount === roundMatches.length,
-        restingPairName: restingPair !== undefined ? pairName(restingPair) : null,
+        restingPairName: restingSide !== undefined ? sideName(restingSide) : null,
         matches,
       }
     })
@@ -431,8 +455,8 @@ export default async function FechaDetailPage({ params }: PageProps) {
         (candidate) => candidate.status === 'CLOSED' && candidate.number > matchday.number,
       ) && !ownMatchdays.some((candidate) => candidate.status === 'OPEN' && candidate.id !== matchday.id)
 
-    const hasGuest = (pair: Pair) => detail.guestIds.includes(pair.a) || detail.guestIds.includes(pair.b)
-    const anyGuestInTable = status === 'CLOSED' && standings.some((row) => hasGuest(row.pair))
+    const hasGuest = (side: Side) => members(side).some((entryId) => detail.guestIds.includes(entryId))
+    const anyGuestInTable = status === 'CLOSED' && standings.some((row) => hasGuest(row.side))
     const note = status === 'CLOSED' ? tiebreakNote(standings, config, nameOf) : null
 
     // Sumar invitado (spec Capability 3) sólo existe con la fecha CLOSED:
@@ -460,7 +484,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
     // `sumar-state.ts`, que es pura y por eso tiene tests: acá adentro no los
     // podía tener, y su predicado ya se escribió mal una vez.
     const guestsForPromotion: GuestPromoteVM[] = canPromote
-      ? guestsToPromote({ guestIds: detail.guestIds, pairs: detail.pairs, frozenPoints, nameOf })
+      ? guestsToPromote({ guestIds: detail.guestIds, sides: detail.sides, frozenPoints, nameOf })
       : []
     // La lista de asientos es sólo para el select de "antes de quién" de esa
     // tarjeta: sin invitados que sumar no hay tarjeta, y armarla es trabajo al
@@ -476,16 +500,16 @@ export default async function FechaDetailPage({ params }: PageProps) {
     body = (
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap gap-1.5">
-          {detail.pairs.map((pair) => {
-            const defending = isDefendingPair(pair)
+          {detail.sides.map((side) => {
+            const defending = isDefendingSide(side)
             return (
               <span
-                key={pairKey(pair)}
+                key={sideKey(side)}
                 className={`rounded-full px-3 py-1.5 text-[11.5px] font-[750] ${
                   defending ? 'bg-ok-bg text-up' : 'bg-chip text-muted'
                 }`}
               >
-                {pairName(pair)}
+                {sideName(side)}
                 {defending ? ' · Defensora' : ''}
               </span>
             )
@@ -517,7 +541,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
               <span className="text-right">Pts</span>
             </div>
             {standings.map((row, index) => {
-              const guestInRow = status === 'CLOSED' && hasGuest(row.pair)
+              const guestInRow = status === 'CLOSED' && hasGuest(row.side)
               // La columna son "los puntos que se llevó cada jugador"
               // (`ui-screens.md` §9), y en la pareja del invitado los dos no se
               // llevan lo mismo: el invitado 0 y su compañero lo que le tocó.
@@ -526,20 +550,28 @@ export default async function FechaDetailPage({ params }: PageProps) {
               // la pareja que ganaba la fecha 3-0 aparecía sin puntos abajo de
               // otra con un partido ganado — contradiciendo la nota que está dos
               // líneas más abajo, "su compañero sí". Lo encontró la Task 14.
+              // El primer miembro del lado que tenga award manda: en la pareja
+              // del invitado los dos no cobran lo mismo (el invitado 0), y en un
+              // lado de uno hay un solo miembro y es el suyo. `members` recorre
+              // los que haya, así que la regla es la misma para las dos formas.
               const pts =
                 status === 'OPEN'
                   ? '—'
-                  : String(pointsByEntry.get(row.pair.a) ?? pointsByEntry.get(row.pair.b) ?? 0)
+                  : String(
+                      members(row.side)
+                        .map((entryId) => pointsByEntry.get(entryId))
+                        .find((points) => points !== undefined) ?? 0,
+                    )
               const diff = row.gamesDiff
               return (
                 <div
-                  key={pairKey(row.pair)}
+                  key={sideKey(row.side)}
                   className={`grid grid-cols-[1fr_34px_44px_44px] items-center gap-2 px-3 py-2 text-[13.5px] ${
                     index > 0 ? 'border-t border-line' : ''
                   }`}
                 >
                   <span className="flex items-center gap-1.5 font-bold">
-                    {pairName(row.pair)}
+                    {sideName(row.side)}
                     {guestInRow && (
                       <span className="shrink-0 rounded-full border border-line px-1.5 py-0.5 text-[9px] font-extrabold text-muted">
                         Invitado

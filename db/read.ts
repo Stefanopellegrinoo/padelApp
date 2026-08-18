@@ -10,17 +10,17 @@
  * of its own: RLS is what keeps a stranger from reading a season that is not
  * theirs, and that only holds if the query actually runs as the caller.
  */
-import { pairFromRow, seasonStatusOf } from '@/core'
+import { seasonStatusOf, sideOfRow } from '@/core'
 import type {
   Award,
   DisciplineId,
   EntryId,
   MatchResult,
-  Pair,
   PlayedMatchday,
   SeasonConfig,
   SeasonStatus,
   SetScore,
+  Side,
   SideSize,
 } from '@/core'
 import type { Client } from './client'
@@ -145,7 +145,8 @@ export interface MatchdaySummary {
 
 export interface MatchdayDetail {
   matchday: MatchdaySummary
-  pairs: Pair[]
+  /** Los lados de la fecha, de uno o de dos según la disciplina. */
+  sides: Side[]
   matches: MatchWithId[]
   guestIds: EntryId[]
 }
@@ -672,10 +673,10 @@ export async function matchdayDetail(supabase: Client, matchdayId: string): Prom
   if (matchdayError) throw new EdgeError(`No se pudo leer la fecha: ${matchdayError.message}`)
   if (matchdayRow === null) throw new EdgeError('La fecha no existe.')
 
-  const { pairs, matches } = await pairsAndMatchesOf(supabase, matchdayId)
+  const { sides, matches } = await pairsAndMatchesOf(supabase, matchdayId)
   const guestIds = await guestIdsOf(supabase, matchdayId)
 
-  return { matchday: toMatchdaySummary(matchdayRow), pairs, matches, guestIds }
+  return { matchday: toMatchdaySummary(matchdayRow), sides, matches, guestIds }
 }
 
 /** Every CLOSED regular matchday of the season's own discipline, in number order. The Masters is excluded: it is not part of the championship's played history. */
@@ -693,8 +694,8 @@ export async function closedHistoryAll(supabase: Client, seasonId: string): Prom
 
   const history: PlayedMatchday[] = []
   for (const row of data ?? []) {
-    const { pairs, matches } = await pairsAndMatchesOf(supabase, row.id)
-    history.push({ number: row.number, pairs, matches })
+    const { sides, matches } = await pairsAndMatchesOf(supabase, row.id)
+    history.push({ number: row.number, sides, matches })
   }
   return history
 }
@@ -735,27 +736,27 @@ export async function awardsOf(supabase: Client, seasonId: string): Promise<Map<
 
 // ── helpers privados, compartidos por matchdayDetail y closedHistoryAll ─────
 
-// S38 (verify-report ronda 12): `pairFromRow` era una copia local a mano de
-// `pairOf ∘ sideOfRow`, byte por byte idéntica a la de `db/matchday.ts` y
-// `db/season.ts`. `core/pair-compat.ts` la exporta ahora como la ÚNICA
-// excepción del bloque "Deliberadamente NO exportado" (core/index.ts) — un
-// solo lugar, un solo mensaje, para las tres.
+// W40 (verify-report ronda 12) CERRADO acá: hasta PR18b este lector componía
+// `pairFromRow`, que TIRABA con una fila `pair_size=1` — o sea, una fecha de a
+// uno se podía jugar y cerrar en la base pero ninguna pantalla de su
+// disciplina la podía dibujar. `sideOfRow` devuelve el lado con su forma real,
+// así que el dato que 18a habilitó escribir ahora también se puede leer.
 
-/** Las parejas y los partidos de la fecha, con los sets de cada partido ordenados por `set_number`. */
+/** Los lados y los partidos de la fecha, con los sets de cada partido ordenados por `set_number`. */
 async function pairsAndMatchesOf(
   supabase: Client,
   matchdayId: string,
-): Promise<{ pairs: Pair[]; matches: MatchWithId[] }> {
+): Promise<{ sides: Side[]; matches: MatchWithId[] }> {
   const { data: pairRows, error: pairsError } = await supabase
     .from('pairs')
     .select('id, entry_a, entry_b, pair_size')
     .eq('matchday_id', matchdayId)
   if (pairsError) throw new EdgeError(`No se pudieron leer las parejas: ${pairsError.message}`)
 
-  const pairById = new Map(
+  const sideById = new Map(
     (pairRows ?? []).map((row) => [
       row.id,
-      pairFromRow(row.pair_size as SideSize, row.entry_a, row.entry_b),
+      sideOfRow(row.pair_size as SideSize, row.entry_a, row.entry_b),
     ]),
   )
 
@@ -786,17 +787,17 @@ async function pairsAndMatchesOf(
   }
 
   const matches: MatchWithId[] = (matchRows ?? []).map((row) => {
-    const pairA = pairById.get(row.pair_a)
-    const pairB = pairById.get(row.pair_b)
-    if (pairA === undefined || pairB === undefined) {
+    const sideA = sideById.get(row.pair_a)
+    const sideB = sideById.get(row.pair_b)
+    if (sideA === undefined || sideB === undefined) {
       throw new Error(
         `El partido ${row.id} referencia una pareja que no está en la fecha. Esto es un bug.`,
       )
     }
-    return { id: row.id, round: row.round, pairA, pairB, sets: setsByMatch.get(row.id) ?? [] }
+    return { id: row.id, round: row.round, sideA, sideB, sets: setsByMatch.get(row.id) ?? [] }
   })
 
-  return { pairs: [...pairById.values()], matches }
+  return { sides: [...sideById.values()], matches }
 }
 
 async function guestIdsOf(supabase: Client, matchdayId: string): Promise<EntryId[]> {

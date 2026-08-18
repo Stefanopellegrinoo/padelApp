@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { computeAwards } from './awards'
 import { defaultConfig } from './config'
-import type { Pair, PairStanding, SeasonConfig } from './types'
+import { pair } from './side'
+import type { Side, SideStanding, SeasonConfig } from './types'
 
 const CONFIG: SeasonConfig = {
   squadSize: 12,
@@ -12,8 +13,8 @@ const CONFIG: SeasonConfig = {
   tiebreakSnapshotEvery: 3,
 }
 
-function standing(a: string, b: string, position: number): PairStanding {
-  return { pair: { a, b }, played: 3, won: 0, setsDiff: 0, gamesDiff: 0, position }
+function standing(a: string, b: string, position: number): SideStanding {
+  return { side: pair(a, b), played: 3, won: 0, setsDiff: 0, gamesDiff: 0, position }
 }
 
 describe('computeAwards', () => {
@@ -96,11 +97,9 @@ describe('computeAwards', () => {
   })
 })
 
-const pair = (a: string, b: string): Pair => ({ a, b })
-
-const table = (pairs: Pair[]): PairStanding[] =>
-  pairs.map((p, index) => ({
-    pair: p,
+const table = (sides: Side[]): SideStanding[] =>
+  sides.map((p, index) => ({
+    side: p,
     played: 0,
     won: 0,
     setsDiff: 0,
@@ -177,7 +176,7 @@ describe('computeAwards — guests', () => {
 describe('computeAwards — el teorema de la promoción (spec 3.1)', () => {
   // Pareja 1: p1 (plantel) y g1 (invitado). Pareja 2: p2 y p3, plantel las dos.
   // CONFIG.points = [10, 7, 5, 3, 2, 1] — literal del archivo, no derivado.
-  const standings: PairStanding[] = [standing('p1', 'g1', 1), standing('p2', 'p3', 2)]
+  const standings: SideStanding[] = [standing('p1', 'g1', 1), standing('p2', 'p3', 2)]
 
   it('con g1 invitado —el comportamiento real de close_matchday—, p1 se lleva 10 puntos y g1 no tiene award', () => {
     const awards = computeAwards(standings, CONFIG, ['g1'])
@@ -217,7 +216,7 @@ describe('computeAwards — el teorema de la promoción (spec 3.1)', () => {
   // que hace visible ese filtro — y de paso demuestra el contraejemplo por el
   // que `promote_guest` (0014_promote_guest.sql) REFUSA ese caso en vez de
   // saltearlo: ahí copiar el award congelado NO es lo que un recálculo daría.
-  const conParejaInvitada: PairStanding[] = [
+  const conParejaInvitada: SideStanding[] = [
     standing('p1', 'p2', 1),
     standing('g1', 'g2', 2),
     standing('p3', 'p4', 3),

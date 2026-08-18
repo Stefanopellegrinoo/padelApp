@@ -228,7 +228,7 @@ describe('db/read', () => {
     it('a closed matchday brings pairs, matches and full sets', async () => {
       const detail = await matchdayDetail(member.client, matchday1Id)
       expect(detail.matchday.status).toBe('CLOSED')
-      expect(detail.pairs).toHaveLength(4)
+      expect(detail.sides).toHaveLength(4)
       expect(detail.matches.length).toBeGreaterThan(0)
       expect(detail.matches.every((match) => match.sets.length > 0)).toBe(true)
       expect(detail.guestIds).toEqual([])
@@ -237,7 +237,7 @@ describe('db/read', () => {
     it('a draft matchday brings empty pairs without blowing up', async () => {
       const detail = await matchdayDetail(member.client, matchday2Id)
       expect(detail.matchday.status).toBe('DRAFT')
-      expect(detail.pairs).toEqual([])
+      expect(detail.sides).toEqual([])
       expect(detail.matches).toEqual([])
       expect(detail.guestIds).toEqual([guestEntryId])
     })

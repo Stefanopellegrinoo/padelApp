@@ -66,16 +66,24 @@ export interface SetScore {
   gamesB: number
 }
 
+/**
+ * `sideA`/`sideB` y no `pairA`/`pairB` (design #3801, "Renombrado desde
+ * pairA/pairB: fuerza al compilador por cada consumidor"): el rename no es
+ * cosmético, es lo que obliga a cada lector a declarar en su línea exacta qué
+ * hace ahí un lado de uno. Un cambio de tipo solo dejaría compilando a la
+ * mitad de los consumidores que indexan `.b` sin angostar.
+ */
 export interface MatchResult {
   round: number
-  pairA: Pair
-  pairB: Pair
+  sideA: Side
+  sideB: Side
   /** Empty while the match has not been played. */
   sets: SetScore[]
 }
 
-export interface PairStanding {
-  pair: Pair
+/** Una fila de la tabla del día. Su identidad es el LADO, de uno o de dos. */
+export interface SideStanding {
+  side: Side
   played: number
   won: number
   setsDiff: number

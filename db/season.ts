@@ -1,4 +1,4 @@
-import { pairFromRow } from '@/core'
+import { sideOfRow } from '@/core'
 import type { Award, DisciplineId, EntryId, MatchdayHistory, SeasonConfig, SideSize } from '@/core'
 import type { Database, Json } from './database.types'
 import { EdgeError } from './errors'
@@ -121,11 +121,6 @@ export async function awardsBefore(
   return result
 }
 
-// S38 (verify-report ronda 12): `pairFromRow` era una copia local a mano de
-// `pairOf ∘ sideOfRow`, byte por byte idéntica a la de `db/read.ts` y
-// `db/matchday.ts`. `core/pair-compat.ts` la exporta ahora como la ÚNICA
-// excepción del bloque "Deliberadamente NO exportado" (core/index.ts) — un
-// solo lugar, un solo mensaje, para las tres.
 
 /** The matchday at `number` of one discipline's own calendar, or null when it does not exist or is not CLOSED. */
 export async function closedHistory(
@@ -155,8 +150,12 @@ export async function closedHistory(
   if (awardsError) throw new EdgeError(`No se pudieron leer los premios: ${awardsError.message}`)
 
   return {
-    pairs: (pairs ?? []).map((row) =>
-      pairFromRow(row.pair_size as SideSize, row.entry_a, row.entry_b),
+    // W40 CERRADO (ver `db/read.ts: pairsAndMatchesOf`): antes esto componía
+    // `pairFromRow`, que TIRABA con una fila `pair_size=1`. Ese throw es el
+    // que C19 tuvo que esquivar con un guard en `pairingContextFor`; ahora la
+    // historia de una disciplina de a uno se lee de verdad.
+    sides: (pairs ?? []).map((row) =>
+      sideOfRow(row.pair_size as SideSize, row.entry_a, row.entry_b),
     ),
     awards: (awards ?? []).map((row) => ({
       entryId: row.entry_id,

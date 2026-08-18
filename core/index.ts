@@ -46,7 +46,7 @@ export type {
 // error de compilación. `core/pair-compat.ts` (sideOf/pairOf) es el
 // adaptador temporal que migra `Pair` a `Side` un archivo a la vez — no se
 // exporta acá a propósito, ver el bloque "Deliberadamente NO exportado".
-export { single, pair, members, includes, partnerOf, sameSide } from './side'
+export { single, pair, members, includes, partnerOf, sameSide, sideOfRow } from './side'
 
 // ── Season configuration ─────────────────────────────────────────────────────
 // `validateConfig` RETURNS its problems in Spanish, it never throws — so it

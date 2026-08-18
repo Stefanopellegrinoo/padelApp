@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { single, pair, members, includes, partnerOf, sameSide } from './side'
+import { single, pair, members, includes, partnerOf, sameSide, sideOfRow } from './side'
 
 describe('single', () => {
   it('builds a side of one', () => {
@@ -75,5 +75,24 @@ describe('sameSide', () => {
 
   it('two sides of two with a different member are not the same', () => {
     expect(sameSide(pair('a', 'b'), pair('a', 'z'))).toBe(false)
+  })
+})
+
+// S28 (verify-report ronda 9): con un discriminante VARIABLE (no un literal)
+// `{ size: row.pair_size as SideSize, a: row.entry_a, b: row.entry_b }`
+// compila limpio y, si `pair_size` es 1, pierde el `b` de la fila en
+// silencio — exactamente la forma del mapper que va a leer `pairs`.
+// `sideOfRow` es el único borde por el que un `Side` puede nacer de una fila.
+describe('sideOfRow', () => {
+  it('builds a side of one, ignoring a stray b', () => {
+    expect(sideOfRow(1, 'a', null)).toEqual({ size: 1, a: 'a' })
+  })
+
+  it('builds a side of two when b is present', () => {
+    expect(sideOfRow(2, 'a', 'b')).toEqual({ size: 2, a: 'a', b: 'b' })
+  })
+
+  it('throws when a side of two has no b: the row is broken', () => {
+    expect(() => sideOfRow(2, 'a', null)).toThrow(/segundo miembro/)
   })
 })

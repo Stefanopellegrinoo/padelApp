@@ -1,4 +1,5 @@
-import type { Pair, Side } from './types'
+import { sideOfRow } from './side'
+import type { EntryId, Pair, Side, SideSize } from './types'
 
 /**
  * Adaptador TEMPORAL, nacido junto con `Side` (PR14) y BORRADO en PR19, junto
@@ -24,4 +25,18 @@ export function pairOf(side: Side): Pair {
     throw new Error('Un lado de a uno no se lee como pareja. Falta migrar este consumidor a Side.')
   }
   return { a: side.a, b: side.b }
+}
+
+/**
+ * S38 (verify-report ronda 12): el hogar único de `pairOf ∘ sideOfRow` — la
+ * ÚNICA excepción exportada de este archivo, por `db/`: `db/read.ts`,
+ * `db/matchday.ts` y `db/season.ts` reescribían esto a mano, byte por byte
+ * (mismo mensaje incluido), en vez de importar `sideOfRow` (ya exportado) y
+ * narrowear con `pairOf` (no exportado — límite real, `db/` no debe construir
+ * un `Side` a mano). `pairFromRow` es la respuesta a "¿cómo lee `db/` una
+ * fila cruda como `Pair`?" sin perforar ese límite: nace y muere con el
+ * mismo `pairOf` (BORRADO en PR19, ver el comentario de arriba).
+ */
+export function pairFromRow(size: SideSize, a: EntryId, b: EntryId | null): Pair {
+  return pairOf(sideOfRow(size, a, b))
 }

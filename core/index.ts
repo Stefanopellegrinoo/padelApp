@@ -47,6 +47,11 @@ export type {
 // adaptador temporal que migra `Pair` a `Side` un archivo a la vez — no se
 // exporta acá a propósito, ver el bloque "Deliberadamente NO exportado".
 export { single, pair, members, includes, partnerOf, sameSide, sideOfRow } from './side'
+// `pairFromRow` es la ÚNICA excepción de ese bloque (S38, verify-report ronda
+// 12): el hogar único de `pairOf ∘ sideOfRow` que `db/` necesita para leer
+// una fila cruda como `Pair` sin reescribir esa composición a mano tres
+// veces. Nace y muere con `pair-compat.ts` — BORRADO en PR19 junto con `Pair`.
+export { pairFromRow } from './pair-compat'
 
 // ── Season configuration ─────────────────────────────────────────────────────
 // `validateConfig` RETURNS its problems in Spanish, it never throws — so it
@@ -58,8 +63,10 @@ export { validateConfig, defaultConfig, pointsErrors } from './config'
 // ── Building a matchday ──────────────────────────────────────────────────────
 // `buildSides` (PR16, design PUNTO 5) is the Side-native entry point: with
 // `sideSize=2` it is `buildPairs` unmodified, mapped through `sideOf`.
-// `buildPairs`/`PairingInput` stay exported — `db/matchday.ts` still calls
-// them directly until PR18 migrates that caller.
+// `buildPairs`/`PairingInput` stay exported for `core/`-internal callers and
+// tests (`buildSides` itself, `core/pairing.test.ts`) — N27 (verify-report
+// ronda 12): `db/matchday.ts` no llama `buildPairs` directo desde PR18a, sólo
+// `buildSides`/`type PairingInput`.
 export type { PairingInput, SideBuildInput } from './pairing'
 export { buildPairs, buildSides, samePair } from './pairing'
 export { buildFixture } from './fixture'
@@ -132,5 +139,11 @@ export { tallyPlayers, partnerRecords, bestPair } from './playerstats'
  *                                   with `Pair` itself. Only files inside
  *                                   `core/` migrating one producer/consumer
  *                                   at a time should import it, and only
- *                                   from `./pair-compat` directly.
+ *                                   from `./pair-compat` directly. The one
+ *                                   exception is `pairFromRow` (S38,
+ *                                   verify-report ronda 12), exported above
+ *                                   — the composed `pairOf ∘ sideOfRow` that
+ *                                   `db/` needs to read a raw row as `Pair`
+ *                                   without hand-writing that narrowing three
+ *                                   times.
  */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { defaultConfig } from '@/core'
+import { defaultConfig, partnerOf } from '@/core'
 import {
   addGuest,
   closeMatchday,
@@ -155,11 +155,14 @@ async function closedMatchdayWithLooseGuest(
   await nameGuest(admin.client, guestId, 'Invitado suelto de test')
 
   await generatePairs(admin.client, matchdayId)
-  const pair = (await matchdayDetail(admin.client, matchdayId)).pairs.find(
-    (p) => p.a === guestId || p.b === guestId,
+  const side = (await matchdayDetail(admin.client, matchdayId)).sides.find(
+    (candidate) => candidate.a === guestId || (candidate.size === 2 && candidate.b === guestId),
   )
-  if (pair === undefined) throw new Error('El invitado no quedó en ninguna pareja.')
-  const partnerId = pair.a === guestId ? pair.b : pair.a
+  if (side === undefined) throw new Error('El invitado no quedó en ninguna pareja.')
+  // Esta factory arma una temporada de PÁDEL, así que el compañero existe;
+  // `partnerOf` devolvería `null` en una de a uno y ahí este helper no aplica.
+  const partnerId = partnerOf(side, guestId)
+  if (partnerId === null) throw new Error('El invitado jugó solo: esta factory arma pádel.')
 
   await openMatchday(admin.client, matchdayId)
   await playAllMatches(admin, matchdayId)
@@ -430,7 +433,7 @@ describe('promoteGuest — la traba de armado no puede sobrevivir a la promoció
     await setAttendance(admin.client, matchdayId, entryIds[0]!, 'PLAYING')
     await generatePairs(admin.client, matchdayId)
 
-    expect((await matchdayDetail(admin.client, matchdayId)).pairs).toHaveLength(4)
+    expect((await matchdayDetail(admin.client, matchdayId)).sides).toHaveLength(4)
   })
 })
 

@@ -6,6 +6,7 @@ import { computeAwards } from './awards'
 import { computeRanking } from './ranking'
 import { snapshotForMatchday } from './snapshots'
 import { defaultConfig } from './config'
+import { sideOf } from './pair-compat'
 import type { Award, MatchResult, Pair, SeasonConfig } from './types'
 
 const SQUAD = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8']
@@ -47,16 +48,25 @@ function playMatchday(
       // slot, and buildPairs always puts the table leader in pair 0, so pair 0 wins
       // every match of every matchday. The simulated season is deliberately
       // lopsided — fine for what these tests check, not a realistic season.
-      matches.push({ round, pairA, pairB, sets: [{ gamesA: 4, gamesB: left < right ? 1 : 2 }] })
+      matches.push({
+        round,
+        sideA: sideOf(pairA),
+        sideB: sideOf(pairB),
+        sets: [{ gamesA: 4, gamesB: left < right ? 1 : 2 }],
+      })
     }
     round++
   }
 
-  const standings = computeStandings(pairs, matches, config, snapshot)
+  // `buildPairs` (no `buildSides`) sigue devolviendo `Pair[]`: este test
+  // simula una temporada de PÁDEL de punta a punta, y su valor es justamente
+  // que la aritmética de a dos no se movió un bit con la migración a `Side`.
+  const standings = computeStandings(pairs.map(sideOf), matches, config, snapshot)
   const awards = computeAwards(standings, config, [])
   const winner = standings[0]
   if (winner === undefined) throw new Error('la fecha no produjo tabla')
-  return { pairs, awards, champion: winner.pair }
+  if (winner.side.size !== 2) throw new Error('una fecha de pádel no produce lados de uno')
+  return { pairs, awards, champion: { a: winner.side.a, b: winner.side.b } }
 }
 
 describe('a full matchday, end to end', () => {

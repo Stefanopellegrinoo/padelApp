@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { pair, single } from '@/core'
 import { guestsToPromote, type GuestPromotionInput } from './sumar-state'
 
 const nombres = new Map([
@@ -12,7 +13,7 @@ const nombres = new Map([
 function fecha(partial: Partial<GuestPromotionInput> = {}): GuestPromotionInput {
   return {
     guestIds: ['invi'],
-    pairs: [],
+    sides: [],
     frozenPoints: new Map<string, number>(),
     nameOf: nombres,
     ...partial,
@@ -23,7 +24,7 @@ describe('guestsToPromote', () => {
   it('ofrece el botón con los puntos congelados de su compañero', () => {
     const [invitado] = guestsToPromote(
       fecha({
-        pairs: [{ a: 'ana', b: 'invi' }],
+        sides: [pair('ana', 'invi')],
         frozenPoints: new Map([['ana', 5]]),
       }),
     )
@@ -40,7 +41,7 @@ describe('guestsToPromote', () => {
     const [invitado] = guestsToPromote(
       fecha({
         guestIds: ['invi', 'invi2'],
-        pairs: [{ a: 'invi', b: 'invi2' }],
+        sides: [pair('invi', 'invi2')],
         frozenPoints: new Map([['ana', 5]]),
       }),
     )
@@ -51,7 +52,7 @@ describe('guestsToPromote', () => {
   it('refusa al que nunca quedó en una pareja de la fecha', () => {
     const [invitado] = guestsToPromote(
       fecha({
-        pairs: [{ a: 'ana', b: 'beto' }],
+        sides: [pair('ana', 'beto')],
         frozenPoints: new Map([['ana', 5]]),
       }),
     )
@@ -78,18 +79,18 @@ describe('guestsToPromote', () => {
 
     const [cobraPrimero] = guestsToPromote(
       fecha({
-        pairs: [
-          { a: 'ana', b: 'invi' },
-          { a: 'invi', b: 'invi2' },
+        sides: [
+          pair('ana', 'invi'),
+          pair('invi', 'invi2'),
         ],
         frozenPoints,
       }),
     )
     const [cobraSegundo] = guestsToPromote(
       fecha({
-        pairs: [
-          { a: 'invi', b: 'invi2' },
-          { a: 'ana', b: 'invi' },
+        sides: [
+          pair('invi', 'invi2'),
+          pair('ana', 'invi'),
         ],
         frozenPoints,
       }),
@@ -114,17 +115,17 @@ describe('guestsToPromote', () => {
    */
   it('con dos parejas que cobraron distinto, promete los puntos de la primera', () => {
     const pairs = [
-      { a: 'ana', b: 'invi' },
-      { a: 'invi', b: 'beto' },
+      pair('ana', 'invi'),
+      pair('invi', 'beto'),
     ]
     const frozenPoints = new Map([
       ['ana', 5],
       ['beto', 9],
     ])
 
-    const [invitado] = guestsToPromote(fecha({ pairs, frozenPoints }))
+    const [invitado] = guestsToPromote(fecha({ sides: pairs, frozenPoints }))
     // Y al revés, para que la aserción no acierte por simetría de los valores.
-    const [alReves] = guestsToPromote(fecha({ pairs: [...pairs].reverse(), frozenPoints }))
+    const [alReves] = guestsToPromote(fecha({ sides: [...pairs].reverse(), frozenPoints }))
 
     expect(invitado).toEqual({
       entryId: 'invi',
@@ -145,7 +146,7 @@ describe('guestsToPromote', () => {
   it('trata un award de 0 puntos como award, no como ausencia', () => {
     const [invitado] = guestsToPromote(
       fecha({
-        pairs: [{ a: 'ana', b: 'invi' }],
+        sides: [pair('ana', 'invi')],
         frozenPoints: new Map([['ana', 0]]),
       }),
     )
@@ -162,9 +163,9 @@ describe('guestsToPromote', () => {
     const estados = guestsToPromote(
       fecha({
         guestIds: ['invi', 'invi2'],
-        pairs: [
-          { a: 'ana', b: 'invi' },
-          { a: 'beto', b: 'cami' },
+        sides: [
+          pair('ana', 'invi'),
+          pair('beto', 'cami'),
         ],
         frozenPoints: new Map([
           ['ana', 3],
@@ -179,5 +180,37 @@ describe('guestsToPromote', () => {
 
   it('sin invitados no devuelve nada', () => {
     expect(guestsToPromote(fecha({ guestIds: [] }))).toEqual([])
+  })
+})
+
+/**
+ * PR18b: en una disciplina de a uno el invitado ES su propio lado. No hay
+ * compañero de quien copiar puntos, y `promote_guest` HOY lo rechaza — su
+ * guard de "¿el compañero cobró?" da TRUE con `entry_b` nulo, misma lógica de
+ * tres valores que C17 (W35, verify-report ronda 10). Ofrecer el botón ahí
+ * sería el rebote garantizado que esta pantalla existe para no ofrecer.
+ *
+ * PR18c (slice D re-especificada) es la que hace que la base acepte esa
+ * promoción; cuando aterrice, estos dos tests son los que cambian.
+ */
+describe('guestsToPromote con lados de uno (pair_size=1)', () => {
+  it('no ofrece la tarjeta al invitado que jugó solo', () => {
+    const promovibles = guestsToPromote(
+      fecha({ sides: [single('invi'), single('ana')], frozenPoints: new Map([['ana', 5]]) }),
+    )
+    expect(promovibles).toEqual([])
+  })
+
+  it('el que jugó solo no tapa al que sí tiene compañero en un torneo mixto', () => {
+    const promovibles = guestsToPromote(
+      fecha({
+        guestIds: ['invi', 'invi2'],
+        sides: [single('invi'), pair('ana', 'invi2')],
+        frozenPoints: new Map([['ana', 7]]),
+      }),
+    )
+    expect(promovibles).toEqual([
+      { entryId: 'invi2', name: 'Otro invitado', estado: 'PUEDE', partnerPoints: 7 },
+    ])
   })
 })

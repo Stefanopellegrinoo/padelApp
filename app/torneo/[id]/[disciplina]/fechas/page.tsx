@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { MASTERS_SIZE, resolveDisciplineBySlug, samePair, type Award, type MatchResult, type Pair } from '@/core'
+import { MASTERS_SIZE, members, resolveDisciplineBySlug, sameSide, type Award, type MatchResult, type Side } from '@/core'
 import {
   entriesOf,
   matchdayDetail,
@@ -28,21 +28,28 @@ interface ChampionInfo {
 }
 
 /**
- * Partidos ganados-perdidos y diferencia de games de la pareja campeona,
- * dentro de esa fecha puntual. No pasa por `computeStandings` —pide
+ * Partidos ganados-perdidos y diferencia de games del lado campeón, dentro de
+ * esa fecha puntual. No pasa por `computeStandings` —pide
  * `SeasonConfig` y el snapshot de desempate, que esta pantalla de lectura no
  * trae— porque el campeón ya lo dice `seasonAwardsOf`; sólo falta sumar sus propios
  * partidos, el mismo tally que hace `computeStandings` puertas adentro pero
  * para una sola pareja.
  */
-function championRecord(matches: MatchResult[], champion: Pair): string {
+/** Los nombres del lado unidos con `&`: uno solo cuando la disciplina es de a uno. */
+function sideNames(side: Side, nameById: ReadonlyMap<string, string>): string {
+  return members(side)
+    .map((entryId) => nameById.get(entryId) ?? '?')
+    .join(' & ')
+}
+
+function championRecord(matches: MatchResult[], champion: Side): string {
   let won = 0
   let lost = 0
   let gamesFor = 0
   let gamesAgainst = 0
   for (const match of matches) {
-    const isA = samePair(match.pairA, champion)
-    const isB = !isA && samePair(match.pairB, champion)
+    const isA = sameSide(match.sideA, champion)
+    const isB = !isA && sameSide(match.sideB, champion)
     if (!isA && !isB) continue
 
     let setsA = 0
@@ -117,13 +124,13 @@ export default async function FechasPage({ params }: PageProps) {
     const championEntryIds = (awardsByNumber.get(matchday.number) ?? [])
       .filter((award) => award.position === 1)
       .map((award) => award.entryId)
-    const championPair = detail.pairs.find(
-      (pair) => championEntryIds.includes(pair.a) || championEntryIds.includes(pair.b),
+    const championSide = detail.sides.find((side) =>
+      members(side).some((entryId) => championEntryIds.includes(entryId)),
     )
-    if (championPair === undefined) return null
+    if (championSide === undefined) return null
 
-    const names = `${nameById.get(championPair.a) ?? '?'} & ${nameById.get(championPair.b) ?? '?'}`
-    return { names, record: championRecord(detail.matches, championPair) }
+    const names = sideNames(championSide, nameById)
+    return { names, record: championRecord(detail.matches, championSide) }
   }
 
   const remainingForMasters = Math.max(0, discipline.config.regularMatchdays - closedMatchdays.length)
@@ -236,9 +243,9 @@ export default async function FechasPage({ params }: PageProps) {
 
               {inProgress && openDetail !== null && (
                 <div className="mt-2 flex flex-col gap-1">
-                  {openDetail.pairs.map((pair) => (
-                    <p key={`${pair.a}-${pair.b}`} className="text-[13.5px] font-bold">
-                      {nameById.get(pair.a) ?? '?'} & {nameById.get(pair.b) ?? '?'}
+                  {openDetail.sides.map((side) => (
+                    <p key={members(side).join('-')} className="text-[13.5px] font-bold">
+                      {sideNames(side, nameById)}
                     </p>
                   ))}
                 </div>

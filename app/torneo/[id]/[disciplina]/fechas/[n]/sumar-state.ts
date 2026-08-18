@@ -5,7 +5,8 @@
  * que la suite pura no puede importar ni uno ni otro.
  */
 
-import type { Pair } from '@/core'
+import { partnerOf } from '@/core'
+import type { Side } from '@/core'
 
 /**
  * Los tres estados en los que puede estar un invitado de una fecha cerrada, y
@@ -49,8 +50,8 @@ export type GuestPromoteVM = { entryId: string; name: string } & (
 export interface GuestPromotionInput {
   /** Los invitados de ESTA fecha (`matchdayDetail`). */
   guestIds: string[]
-  /** Las parejas de ESTA fecha. */
-  pairs: Pair[]
+  /** Los lados de ESTA fecha, de uno o de dos según la disciplina. */
+  sides: Side[]
   /** Los awards CONGELADOS de esta fecha, por entry. Ausente = no cobró. */
   frozenPoints: ReadonlyMap<string, number>
   nameOf: ReadonlyMap<string, string>
@@ -81,16 +82,30 @@ export interface GuestPromotionInput {
  */
 export function guestsToPromote({
   guestIds,
-  pairs,
+  sides,
   frozenPoints,
   nameOf,
 }: GuestPromotionInput): GuestPromoteVM[] {
   return guestIds.map((guestId) => {
     const name = nameOf.get(guestId) ?? '?'
-    const partnersPoints = pairs
-      .filter((candidate) => candidate.a === guestId || candidate.b === guestId)
-      .map((pair) => frozenPoints.get(pair.a === guestId ? pair.b : pair.a))
-    if (partnersPoints.length === 0) return { entryId: guestId, name, estado: 'SIN_PAREJA' }
+    // `partnerOf` en vez de `pair.a === guestId ? pair.b : pair.a` — ESTE es el
+    // sitio que el design (#3801, decisión #1) nombra como el motivo de que
+    // `Side` sea una unión discriminada: con un lado de uno, esa expresión
+    // devolvía `undefined` en silencio y `frozenPoints.get(undefined)` daba
+    // "no cobró". `partnerOf` devuelve `null` con tipo, y el compilador obliga
+    // a decidir qué hacer con él, que es lo de abajo.
+    const partners = sides
+      .filter((side) => side.a === guestId || (side.size === 2 && side.b === guestId))
+      .map((side) => partnerOf(side, guestId))
+    if (partners.length === 0) return { entryId: guestId, name, estado: 'SIN_PAREJA' }
+    // ponytail: un invitado que jugó SOLO (disciplina `pair_size=1`) no tiene
+    // compañero de quien copiar, y `promote_guest` hoy lo RECHAZA — su guard
+    // de "¿el compañero cobró?" da TRUE con `entry_b` nulo (W35, verify-report
+    // ronda 10). Ofrecer el botón acá sería el rebote garantizado que esta
+    // pantalla existe para no ofrecer. Sale de la lista hasta PR18c, que es la
+    // que hace que la base acepte esa promoción (slice D re-especificada).
+    if (partners.some((partnerId) => partnerId === null)) return null
+    const partnersPoints = partners.map((partnerId) => frozenPoints.get(partnerId ?? ''))
     if (partnersPoints.some((points) => points === undefined)) {
       return { entryId: guestId, name, estado: 'PAREJA_INVITADA' }
     }
@@ -101,5 +116,5 @@ export function guestsToPromote({
     // de la PRIMERA pareja — que es lo único que este `[0]` afirma, y lo pinnea
     // "con dos parejas que cobraron distinto" en `sumar-state.unit.test.ts`.
     return { entryId: guestId, name, estado: 'PUEDE', partnerPoints: partnersPoints[0]! }
-  })
+  }).filter((row): row is GuestPromoteVM => row !== null)
 }

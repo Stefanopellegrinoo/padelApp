@@ -36,7 +36,7 @@ export type {
   Pair,
   SetScore,
   MatchResult,
-  PairStanding,
+  SideStanding,
   Award,
   RankingRow,
 } from './types'
@@ -46,12 +46,12 @@ export type {
 // error de compilación. `core/pair-compat.ts` (sideOf/pairOf) es el
 // adaptador temporal que migra `Pair` a `Side` un archivo a la vez — no se
 // exporta acá a propósito, ver el bloque "Deliberadamente NO exportado".
+// `db/` construye sus lados con `sideOfRow` y ya no necesita bajarlos a
+// `Pair`: `pairFromRow` (S38, verify-report ronda 12) era la ÚNICA excepción
+// exportada de `pair-compat.ts` y murió con PR18b, que dejó a `db/read.ts`,
+// `db/matchday.ts` y `db/season.ts` hablando `Side` de punta a punta. El
+// bloque "Deliberadamente NO exportado" vuelve a estar entero.
 export { single, pair, members, includes, partnerOf, sameSide, sideOfRow } from './side'
-// `pairFromRow` es la ÚNICA excepción de ese bloque (S38, verify-report ronda
-// 12): el hogar único de `pairOf ∘ sideOfRow` que `db/` necesita para leer
-// una fila cruda como `Pair` sin reescribir esa composición a mano tres
-// veces. Nace y muere con `pair-compat.ts` — BORRADO en PR19 junto con `Pair`.
-export { pairFromRow } from './pair-compat'
 
 // ── Season configuration ─────────────────────────────────────────────────────
 // `validateConfig` RETURNS its problems in Spanish, it never throws — so it
@@ -139,11 +139,7 @@ export { tallyPlayers, partnerRecords, bestPair } from './playerstats'
  *                                   with `Pair` itself. Only files inside
  *                                   `core/` migrating one producer/consumer
  *                                   at a time should import it, and only
- *                                   from `./pair-compat` directly. The one
- *                                   exception is `pairFromRow` (S38,
- *                                   verify-report ronda 12), exported above
- *                                   — the composed `pairOf ∘ sideOfRow` that
- *                                   `db/` needs to read a raw row as `Pair`
- *                                   without hand-writing that narrowing three
- *                                   times.
+ *                                   from `./pair-compat` directly. Sin
+ *                                   excepciones desde PR18b: `pairFromRow`
+ *                                   fue la única y ya no tiene consumidores.
  */

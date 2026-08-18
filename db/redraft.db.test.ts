@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { defaultConfig, type Pair, type SeasonConfig } from '@/core'
+import { defaultConfig, members, type SeasonConfig, type Side } from '@/core'
 import {
   closeMatchday,
   createMasters,
@@ -137,7 +137,7 @@ async function buildOpenMatchday(
   return { admin, seasonId, squad, matchdayId }
 }
 
-const sortPairs = (pairs: Pair[]): Pair[] => [...pairs].sort((left, right) => left.a.localeCompare(right.a))
+const sortSides = (sides: Side[]): Side[] => [...sides].sort((left, right) => left.a.localeCompare(right.a))
 
 /** Los premios de una fecha, indexados por la posición del jugador en el plantel en vez de por su entry_id: dos temporadas nunca comparten entries, pero comparten seed_position. */
 function awardsBySeed(
@@ -213,14 +213,14 @@ describe('redraftMatchday', () => {
     if (firstMatch === undefined) throw new Error('Falta un partido de test.')
     await saveResult(admin.client, firstMatch.id, [{ gamesA: 4, gamesB: 1 }])
 
-    const pairsBefore = sortPairs((await matchdayDetail(admin.client, matchdayId)).pairs)
+    const pairsBefore = sortSides((await matchdayDetail(admin.client, matchdayId)).sides)
     const matchesBefore = (await matchdayDetail(admin.client, matchdayId)).matches
     const attendancesBefore = await attendancesOf(admin.client, matchdayId)
 
     await redraftMatchday(admin.client, matchdayId)
 
     const detailAfter = await matchdayDetail(admin.client, matchdayId)
-    expect(sortPairs(detailAfter.pairs)).toEqual(pairsBefore)
+    expect(sortSides(detailAfter.sides)).toEqual(pairsBefore)
     expect(detailAfter.matches).toEqual(matchesBefore)
     expect(await attendancesOf(admin.client, matchdayId)).toEqual(attendancesBefore)
   })
@@ -260,7 +260,7 @@ describe('redraftMatchday', () => {
     await openMatchday(admin.client, matchdayId)
 
     expect(await matchdayStatus(matchdayId)).toBe('OPEN')
-    const playing = new Set((await matchdayDetail(admin.client, matchdayId)).pairs.flatMap((pair) => [pair.a, pair.b]))
+    const playing = new Set((await matchdayDetail(admin.client, matchdayId)).sides.flatMap((side) => [...members(side)]))
     for (const entryId of dropped) expect(playing.has(entryId)).toBe(false)
   })
 
@@ -276,7 +276,7 @@ describe('redraftMatchday', () => {
 
     expect(await matchdayStatus(matchdayId)).toBe('OPEN')
     const detailAfter = await matchdayDetail(admin.client, matchdayId)
-    expect(sortPairs(detailAfter.pairs)).toEqual(sortPairs(detailBefore.pairs))
+    expect(sortSides(detailAfter.sides)).toEqual(sortSides(detailBefore.sides))
     expect(detailAfter.matches).toEqual(detailBefore.matches)
   })
 
@@ -341,7 +341,7 @@ describe('redraftMatchday', () => {
     expect(await matchdayStatus(matchdayId)).toBe('OPEN')
 
     const playing = new Set(
-      (await matchdayDetail(admin.client, matchdayId)).pairs.flatMap((pair) => [pair.a, pair.b]),
+      (await matchdayDetail(admin.client, matchdayId)).sides.flatMap((side) => [...members(side)]),
     )
     expect(playing.has(dropped)).toBe(false)
     expect(playing.has(guestId)).toBe(true)
@@ -379,6 +379,6 @@ describe('redraftMatchday', () => {
 
     expect(await matchdayStatus(mastersId)).toBe('DRAFT')
     await generateMastersPairs(admin.client, mastersId)
-    expect((await matchdayDetail(admin.client, mastersId)).pairs).toHaveLength(6)
+    expect((await matchdayDetail(admin.client, mastersId)).sides).toHaveLength(6)
   })
 })

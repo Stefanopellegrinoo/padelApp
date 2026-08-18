@@ -7,7 +7,6 @@ import {
   mastersFixture,
   mastersQualifiers,
   members,
-  pairFromRow,
   previousContext,
   sideOfRow,
   snapshotForMatchday,
@@ -140,14 +139,14 @@ export async function pairingContextFor(
   // C19 (verify-report ronda 12): con un lado de uno, `buildSides` (design
   // PUNTO 5) ignora `defenders`/`previousPairs`/`fixedPairs` enteros — no hay
   // compañero que defender ni pareja que repetir. Antes de este guard,
-  // `closedHistory` corría igual y calculaba ese dato descartado; su segunda
-  // consulta lee `pairs` de la fecha CERRADA anterior con `pairFromRow`, que
-  // todavía tira para `pair_size=1` (bloqueado hasta que sus consumidores
-  // Pair-only migren a Side, PR18b). El resultado era que ninguna disciplina
-  // de a uno llegaba a la fecha 2: la fecha 1 se armaba, se abría, se jugaba
-  // y se cerraba, y recién ahí el draw de la fecha 2 rompía. Estos son los
-  // mismos valores neutros que `previousContext` ya devuelve cuando no hay
-  // fecha anterior (core/history.ts) — no una invención de este guard.
+  // `closedHistory` corría igual y calculaba ese dato descartado, y encima
+  // TIRABA: leía `pairs` de la fecha CERRADA anterior con `pairFromRow`, que
+  // no sabía leer un `pair_size=1`. Ninguna disciplina de a uno llegaba a la
+  // fecha 2. Ese throw ya no existe (W40, PR18b: `closedHistory` devuelve
+  // `Side[]`), así que este guard queda por su OTRO motivo, que sigue en pie:
+  // ahorrarse dos consultas cuyo resultado se descarta entero. Los valores
+  // neutros son los mismos que `previousContext` devuelve para una historia
+  // de lados de uno (core/history.ts) — no una invención de acá.
   const { defenders, defendersAlreadyRepeated, previousPairs } =
     pairSize === 1
       ? { defenders: null, defendersAlreadyRepeated: false, previousPairs: [] }
@@ -640,12 +639,11 @@ export async function generateMastersPairs(supabase: Client, matchdayId: string)
 
   // Las 6 parejas van en el orden del fixture, y los partidos las nombran por
   // índice: pareja 0 contra 1 en la ronda 1, 2 contra 3 en la 2, y así.
-  // `insertPairs` ahora pide `Side[]` (PR18a): el Masters es SIEMPRE
-  // `size: 2` (`assertValidConfig(config, 2)` arriba, sin excepción), así que
-  // el literal es correcto y no una inferencia — `sideOf`/`pair-compat.ts` no
-  // se importa acá (core-internal, ver el comentario de `pairFromRow`).
-  const pairs = fixture.flatMap((match) => [match.pairA, match.pairB])
-  const sides: Side[] = pairs.map((pair) => ({ size: 2, a: pair.a, b: pair.b }))
+  // `insertPairs` pide `Side[]` (PR18a) y desde PR18b `mastersFixture` ya los
+  // devuelve como `Side` de dos: el literal `{ size: 2 }` que había acá lo
+  // construye ahora `pair()` adentro de `core/masters.ts`, donde vive la razón
+  // (el Masters SIEMPRE se juega de a parejas).
+  const sides = fixture.flatMap((match) => [match.sideA, match.sideB])
   const stored = await insertPairs(supabase, matchdayId, sides)
 
   const matches = fixture.map((_, index) => {
@@ -724,14 +722,14 @@ export async function closeMatchday(supabase: Client, matchdayId: string): Promi
   // sobre quién viene HOY en vez de sobre quiénes jugaron, y previousContext
   // podría tirar por un problema de la fecha anterior mientras cerrás ésta.
   const { matchday, config, guests, snapshot } = await matchdayContextFor(supabase, matchdayId)
-  const { pairs, matches } = await resultsOf(supabase, matchdayId)
+  const { sides, matches } = await resultsOf(supabase, matchdayId)
 
   for (const match of matches) {
     const problem = matchError(match.sets, config.matchFormat)
     if (problem !== null) throw new EdgeError(problem)
   }
 
-  const standings = computeStandings(pairs, matches, config, snapshot)
+  const standings = computeStandings(sides, matches, config, snapshot)
   // El Masters define al campeón del año, no reparte puntos (spec 2.7), y
   // `close_matchday` rechaza un `p_awards` no vacío cuando kind = 'MASTERS'.
   // Sin esta rama el Masters no se puede cerrar: `computeAwards` devolvería seis
@@ -944,12 +942,6 @@ async function insertMatches(supabase: Client, rows: MatchRow[]): Promise<void> 
   if (error) throw new EdgeError(`No se pudo guardar el fixture: ${error.message}`)
 }
 
-// S38 (verify-report ronda 12): `pairFromRow` era una copia local a mano de
-// `pairOf ∘ sideOfRow`, byte por byte idéntica a la de `db/read.ts` y
-// `db/season.ts`. `core/pair-compat.ts` la exporta ahora como la ÚNICA
-// excepción del bloque "Deliberadamente NO exportado" (core/index.ts) — un
-// solo lugar, un solo mensaje, para las tres.
-
 /**
  * Los `entry_id` de cada pareja de la fecha, sin importar la aridad: sólo se
  * usa para el chequeo de conjunto de `openMatchday` (¿quién está en una
@@ -970,21 +962,29 @@ async function pairEntryIds(supabase: Client, matchdayId: string): Promise<strin
   ])
 }
 
-/** Las parejas y los partidos de la fecha, con los sets de cada partido ordenados por `set_number`. */
+/**
+ * Los lados y los partidos de la fecha, con los sets de cada partido ordenados
+ * por `set_number`.
+ *
+ * W40 CERRADO acá igual que en `db/read.ts`: componía `pairFromRow`, que
+ * tiraba con una fila `pair_size=1`, así que `closeMatchday()` —el wrapper TS,
+ * no el RPC— no podía cerrar una fecha de a uno. `sideOfRow` devuelve el lado
+ * con su forma y `computeStandings` ya lo tabula (S39).
+ */
 async function resultsOf(
   supabase: Client,
   matchdayId: string,
-): Promise<{ pairs: Pair[]; matches: MatchResult[] }> {
+): Promise<{ sides: Side[]; matches: MatchResult[] }> {
   const { data: pairRows, error: pairsError } = await supabase
     .from('pairs')
     .select('id, entry_a, entry_b, pair_size')
     .eq('matchday_id', matchdayId)
   if (pairsError) throw new EdgeError(`No se pudieron leer las parejas: ${pairsError.message}`)
 
-  const pairById = new Map(
+  const sideById = new Map(
     (pairRows ?? []).map((row) => [
       row.id,
-      pairFromRow(row.pair_size as SideSize, row.entry_a, row.entry_b),
+      sideOfRow(row.pair_size as SideSize, row.entry_a, row.entry_b),
     ]),
   )
 
@@ -1015,17 +1015,17 @@ async function resultsOf(
   }
 
   const matches: MatchResult[] = (matchRows ?? []).map((row) => {
-    const pairA = pairById.get(row.pair_a)
-    const pairB = pairById.get(row.pair_b)
-    if (pairA === undefined || pairB === undefined) {
+    const sideA = sideById.get(row.pair_a)
+    const sideB = sideById.get(row.pair_b)
+    if (sideA === undefined || sideB === undefined) {
       throw new Error(
         `El partido ${row.id} referencia una pareja que no está en la fecha. Esto es un bug.`,
       )
     }
-    return { round: row.round, pairA, pairB, sets: setsByMatch.get(row.id) ?? [] }
+    return { round: row.round, sideA, sideB, sets: setsByMatch.get(row.id) ?? [] }
   })
 
-  return { pairs: [...pairById.values()], matches }
+  return { sides: [...sideById.values()], matches }
 }
 
 /** El `matchFormat` de la configuración de la temporada dueña de este partido. */

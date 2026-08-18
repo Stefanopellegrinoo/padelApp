@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { defaultConfig, type SeasonConfig } from '@/core'
+import { defaultConfig, pair, type SeasonConfig } from '@/core'
 import {
   cancelMatchday,
   createMatchday,
@@ -397,10 +397,10 @@ describe('lecturas de producción scopeadas por disciplina, no por temporada (C4
     await insertPair(fifaMd, seasonId, c, d)
 
     const padelHistory = await closedHistory(admin.client, padelId, 1)
-    expect(padelHistory?.pairs).toEqual([{ a, b }])
+    expect(padelHistory?.sides).toEqual([pair(a, b)])
 
     const fifaHistory = await closedHistory(admin.client, fifaId, 1)
-    expect(fifaHistory?.pairs).toEqual([{ a: c, b: d }])
+    expect(fifaHistory?.sides).toEqual([pair(c, d)])
   })
 
   it('matchdaysOf no duplica la fecha 1 cuando hay dos disciplinas', async () => {
@@ -437,7 +437,7 @@ describe('lecturas de producción scopeadas por disciplina, no por temporada (C4
 
     const history = await closedHistoryAll(admin.client, seasonId)
     expect(history).toHaveLength(1)
-    expect(history[0]?.pairs).toEqual([{ a, b }])
+    expect(history[0]?.sides).toEqual([pair(a, b)])
   })
 
   it('awardsOf trae sólo los premios de la disciplina por defecto', async () => {

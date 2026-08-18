@@ -1,15 +1,15 @@
 import { describe, it, expect } from 'vitest'
 import { computeStandings } from './standings'
-import { single } from './side'
-import type { MatchResult, Pair, SeasonConfig, Side } from './types'
+import { pair, single } from './side'
+import type { MatchResult, SeasonConfig, Side } from './types'
 
 const SNAPSHOT = ['a1', 'a2', 'b1', 'b2', 'c1', 'c2', 'd1', 'd2']
 
-const PAIRS: Pair[] = [
-  { a: 'a1', b: 'a2' },
-  { a: 'b1', b: 'b2' },
-  { a: 'c1', b: 'c2' },
-  { a: 'd1', b: 'd2' },
+const PAIRS: Side[] = [
+  pair('a1', 'a2'),
+  pair('b1', 'b2'),
+  pair('c1', 'c2'),
+  pair('d1', 'd2'),
 ]
 
 const CONFIG: SeasonConfig = {
@@ -25,11 +25,11 @@ function match(left: number, right: number, gamesA: number, gamesB: number): Mat
   const pairA = PAIRS[left]
   const pairB = PAIRS[right]
   if (pairA === undefined || pairB === undefined) throw new Error('bad test fixture')
-  return { round: 1, pairA, pairB, sets: [{ gamesA, gamesB }] }
+  return { round: 1, sideA: pairA, sideB: pairB, sets: [{ gamesA, gamesB }] }
 }
 
 function order(standings: ReturnType<typeof computeStandings>): string[] {
-  return standings.map((row) => row.pair.a)
+  return standings.map((row) => row.side.a)
 }
 
 describe('computeStandings', () => {
@@ -53,8 +53,8 @@ describe('computeStandings', () => {
       match(2, 3, 4, 2),
     ]
     const standings = computeStandings(PAIRS, matches, CONFIG, SNAPSHOT)
-    expect(standings[0]?.pair.a).toBe('a1')
-    expect(standings[1]?.pair.a).toBe('b1')
+    expect(standings[0]?.side.a).toBe('a1')
+    expect(standings[1]?.side.a).toBe('b1')
   })
 
   it('breaks a two-way tie on the head to head when games difference is equal', () => {
@@ -67,8 +67,8 @@ describe('computeStandings', () => {
     const standings = computeStandings(PAIRS, matches, CONFIG, SNAPSHOT)
     expect(standings[0]?.won).toBe(standings[1]?.won)
     expect(standings[0]?.gamesDiff).toBe(standings[1]?.gamesDiff)
-    expect(standings[0]?.pair.a).toBe('b1')
-    expect(standings[1]?.pair.a).toBe('a1')
+    expect(standings[0]?.side.a).toBe('b1')
+    expect(standings[1]?.side.a).toBe('a1')
   })
 
   it('falls back to the snapshot on a three-way tie, where the head to head is circular', () => {
@@ -80,7 +80,7 @@ describe('computeStandings', () => {
     ]
     const standings = computeStandings(PAIRS, matches, CONFIG, SNAPSHOT)
     // Circular head to head resolves nothing, so the snapshot cuts: a1 < b1 < c1.
-    expect(standings.map((row) => row.pair.a)).toEqual(['a1', 'b1', 'c1', 'd1'])
+    expect(standings.map((row) => row.side.a)).toEqual(['a1', 'b1', 'c1', 'd1'])
   })
 
   it('gives the same order no matter how the pairs arrive', () => {
@@ -90,7 +90,7 @@ describe('computeStandings', () => {
     ]
     const straight = computeStandings(PAIRS, matches, CONFIG, SNAPSHOT)
     const reversed = computeStandings([...PAIRS].reverse(), matches, CONFIG, SNAPSHOT)
-    expect(reversed.map((row) => row.pair.a)).toEqual(straight.map((row) => row.pair.a))
+    expect(reversed.map((row) => row.side.a)).toEqual(straight.map((row) => row.side.a))
   })
 
   it('always produces a total order: no two pairs share a position', () => {
@@ -108,8 +108,8 @@ describe('computeStandings', () => {
   it('counts played, won and games difference per pair', () => {
     const matches = [match(0, 1, 4, 2)]
     const standings = computeStandings(PAIRS, matches, CONFIG, SNAPSHOT)
-    const rowA = standings.find((row) => row.pair.a === 'a1')
-    const rowB = standings.find((row) => row.pair.a === 'b1')
+    const rowA = standings.find((row) => row.side.a === 'a1')
+    const rowB = standings.find((row) => row.side.a === 'b1')
     expect(rowA?.played).toBe(1)
     expect(rowA?.won).toBe(1)
     expect(rowA?.gamesDiff).toBe(2)
@@ -121,7 +121,7 @@ describe('computeStandings', () => {
     const pairA = PAIRS[0]
     const pairB = PAIRS[1]
     if (pairA === undefined || pairB === undefined) throw new Error('bad test fixture')
-    const matches: MatchResult[] = [{ round: 1, pairA, pairB, sets: [] }]
+    const matches: MatchResult[] = [{ round: 1, sideA: pairA, sideB: pairB, sets: [] }]
     const standings = computeStandings(PAIRS, matches, CONFIG, SNAPSHOT)
     expect(standings.every((row) => row.played === 0)).toBe(true)
   })
@@ -137,8 +137,8 @@ describe('computeStandings', () => {
     const matches: MatchResult[] = [
       {
         round: 1,
-        pairA,
-        pairB,
+        sideA: pairA,
+        sideB: pairB,
         sets: [
           { gamesA: 6, gamesB: 4 },
           { gamesA: 3, gamesB: 6 },
@@ -147,17 +147,13 @@ describe('computeStandings', () => {
       },
     ]
     const standings = computeStandings(PAIRS, matches, multiSet, SNAPSHOT)
-    const rowA = standings.find((row) => row.pair.a === 'a1')
+    const rowA = standings.find((row) => row.side.a === 'a1')
     expect(rowA?.won).toBe(1)
     expect(rowA?.setsDiff).toBe(1)
   })
 
   it('ranks six pairs as happily as four', () => {
-    const sixPairs: Pair[] = [
-      ...PAIRS,
-      { a: 'e1', b: 'e2' },
-      { a: 'f1', b: 'f2' },
-    ]
+    const sixPairs: Side[] = [...PAIRS, pair('e1', 'e2'), pair('f1', 'f2')]
     const standings = computeStandings(sixPairs, [], CONFIG, [...SNAPSHOT, 'e1', 'e2', 'f1', 'f2'])
     expect(standings).toHaveLength(6)
     expect(standings.map((row) => row.position)).toEqual([1, 2, 3, 4, 5, 6])

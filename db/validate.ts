@@ -164,14 +164,27 @@ export function assertLocksAndGuests(
  * positions to pay. With a squad of eight and a visiting pair, eight players
  * plus two guests make five sides and only four values exist.
  *
- * A lock made of two guests is the only kind of side that does not get paid, so
- * it is the only one subtracted. A lock of guest plus squad player does get
- * paid — the partner played and earned it.
+ * Un lado NO COBRA cuando TODOS sus miembros son invitados — la misma
+ * definición que usa `computeAwards` (`championshipMembers`), y la única que
+ * no depende de la aridad. Cómo se cuentan esos lados sí depende:
+ *
+ *   · de a DOS, un lock de dos invitados es exactamente un lado sin pagar, y
+ *     un lock de invitado + alguien del plantel SÍ cobra (el compañero jugó y
+ *     se lo ganó), así que sólo se restan los locks de dos invitados;
+ *   · de a UNO, cada invitado ES su propio lado y ninguno cobra, así que se
+ *     restan TODOS los invitados. Los locks no significan nada acá:
+ *     `buildSides` con `sideSize === 1` ignora `fixedPairs` entero.
  *
  * C16 (verify-report ronda 9): dividía siempre por 2 — el guard que existe
  * justo para avisar "faltan valores de puntos" ANTES del sorteo quedaba
  * ciego con `sideSize=1` y encima imprimía una FRACCIÓN en el mensaje
  * ("4.5 parejas") con un headcount impar.
+ *
+ * W41 (verify-report ronda 13): C16 arregló el divisor y dejó el sustraendo.
+ * Con `sideSize=1` restaba UN lado por lock donde son DOS, así que un plantel
+ * completo de a uno más una pareja invitada rebotaba con un número inflado en
+ * uno — y `addGuestPair` es hoy el único camino para sumar un invitado a una
+ * fecha de a uno, así que ese camino quedaba muerto.
  */
 export function assertPointsCoverMatchday(
   present: readonly string[],
@@ -181,10 +194,11 @@ export function assertPointsCoverMatchday(
   sideSize: SideSize,
 ): void {
   const isGuest = new Set(guests.map((guest) => guest.entryId))
-  const guestOnlyPairs = locks.filter(
-    (lock) => isGuest.has(lock.a) && isGuest.has(lock.b),
-  ).length
-  const championshipSides = present.length / sideSize - guestOnlyPairs
+  const unpaidSides =
+    sideSize === 1
+      ? guests.filter((guest) => present.includes(guest.entryId)).length
+      : locks.filter((lock) => isGuest.has(lock.a) && isGuest.has(lock.b)).length
+  const championshipSides = present.length / sideSize - unpaidSides
 
   if (championshipSides > config.points.length) {
     throw new EdgeError(

@@ -187,6 +187,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
       <MastersDraft
         seasonId={seasonId}
         matchdayId={matchday.id}
+        disciplina={disciplina}
         matchdayNumber={matchday.number}
         qualifiers={qualifiers}
         generated={detail.matches.length > 0}
@@ -272,6 +273,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
       <Armado
         seasonId={seasonId}
         matchdayId={matchday.id}
+        disciplina={disciplina}
         matchdayNumber={matchday.number}
         seats={seats}
         looseGuests={looseGuests}
@@ -400,7 +402,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
     // `reopen_matchday` lo vuelve a verificar y su mensaje es el que se muestra.
     const cargaContext =
       header.isAdmin && status === 'OPEN'
-        ? { seasonId, matchdayId: matchday.id, matchdayNumber: matchday.number, format: config.matchFormat }
+        ? { seasonId, matchdayId: matchday.id, disciplina, matchdayNumber: matchday.number, format: config.matchFormat }
         : null
     const remainingMatches = detail.matches.filter((match) => match.sets.length === 0).length
     // Para los dos avisos destructivos del pie: "Volver al armado" (spec: no
@@ -580,6 +582,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
             context={{
               seasonId,
               matchdayId: matchday.id,
+              disciplina,
               matchdayNumber: matchday.number,
               format: config.matchFormat,
             }}

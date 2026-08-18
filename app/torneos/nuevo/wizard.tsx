@@ -6,10 +6,15 @@ import { useState, useTransition } from 'react'
 import { MAX_PLAYERS, MIN_PLAYERS, type SeasonConfig } from '@/core'
 import { createTournament } from './actions'
 import {
+  DISCIPLINE_KINDS,
+  DISCIPLINE_LABELS,
   STEPPERS,
+  type DisciplineKind,
   type Squad,
   addMySeat,
+  buildDisciplines,
   configFor,
+  disciplinesWarning,
   filledCount,
   formatErrors,
   moveSeat,
@@ -18,9 +23,10 @@ import {
   squadWarning,
   submitSeats,
   summaryOf,
+  toggleDiscipline,
 } from './wizard-state'
 
-const TITLES = ['Nombre', 'El plantel', 'Orden inicial', 'Formato', 'Listo']
+const TITLES = ['Nombre y disciplinas', 'El plantel', 'Orden inicial', 'Formato', 'Listo']
 const HELP = [
   'Como lo llaman en el grupo. Se puede cambiar después.',
   'Tipeá los nombres del grupo, de 8 a 12. Después compartís un link y cada uno elige el suyo. No hace falta que vayan todos a todas las fechas.',
@@ -142,6 +148,10 @@ export function Wizard({ myName }: { myName: string }) {
     mySeat: myName.trim().length === 0 ? null : 0,
   }))
   const [config, setConfig] = useState<SeasonConfig>(() => configFor(MIN_PLAYERS))
+  // Pádel marcado de entrada: sin tocar nada, el torneo nace igual que
+  // siempre (una sola PADEL) — el checkbox no es una regresión, es el mismo
+  // default de antes de PR11 hecho explícito.
+  const [disciplines, setDisciplines] = useState<DisciplineKind[]>(['PADEL'])
   const [error, setError] = useState<string | null>(null)
   const [leaving, setLeaving] = useState(false)
   const [created, setCreated] = useState<{ seasonId: string; inviteToken: string } | null>(null)
@@ -151,6 +161,7 @@ export function Wizard({ myName }: { myName: string }) {
   const filled = filledCount(names)
   const warning = squadWarning(names)
   const errors = formatErrors(config)
+  const disciplineWarning = disciplinesWarning(disciplines)
 
   const setSquad = (next: Squad) => {
     setSquadState(next)
@@ -158,7 +169,7 @@ export function Wizard({ myName }: { myName: string }) {
   }
 
   const blocked =
-    (step === 0 && name.trim().length === 0) ||
+    (step === 0 && (name.trim().length === 0 || disciplineWarning !== null)) ||
     (step === 1 && warning !== null) ||
     (step === 3 && errors.length > 0)
 
@@ -175,10 +186,12 @@ export function Wizard({ myName }: { myName: string }) {
   const submit = () => {
     setError(null)
     startTransition(async () => {
+      const builtConfig = { ...config, squadSize: filled }
       const result = await createTournament({
         name,
         ...submitSeats(squad),
-        config: { ...config, squadSize: filled },
+        config: builtConfig,
+        disciplines: buildDisciplines(disciplines, builtConfig),
       })
       if (!result.ok) {
         setError(result.error)
@@ -228,12 +241,34 @@ export function Wizard({ myName }: { myName: string }) {
 
       <div className="flex flex-1 flex-col gap-3">
         {step === 0 && (
-          <input
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            placeholder="Los Jueves 2026"
-            className="rounded-field border-[1.5px] border-accent bg-surface p-[15px] text-[17px] font-[750] outline-none placeholder:font-medium placeholder:text-muted"
-          />
+          <>
+            <input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Los Jueves 2026"
+              className="rounded-field border-[1.5px] border-accent bg-surface p-[15px] text-[17px] font-[750] outline-none placeholder:font-medium placeholder:text-muted"
+            />
+            <fieldset className="flex flex-col gap-2">
+              <legend className="text-[11.5px] font-extrabold uppercase tracking-[.14em] text-muted">
+                Disciplinas
+              </legend>
+              {DISCIPLINE_KINDS.map((kind) => (
+                <label
+                  key={kind}
+                  className="flex items-center gap-2.5 rounded-field border-[1.5px] border-line bg-surface p-3.5 text-[14.5px] font-[700]"
+                >
+                  <input
+                    type="checkbox"
+                    checked={disciplines.includes(kind)}
+                    onChange={() => setDisciplines(toggleDiscipline(disciplines, kind))}
+                    className="h-5 w-5 shrink-0 accent-accent"
+                  />
+                  {DISCIPLINE_LABELS[kind]}
+                </label>
+              ))}
+            </fieldset>
+            {disciplineWarning !== null && <Aviso>{disciplineWarning}</Aviso>}
+          </>
         )}
 
         {step === 1 && (

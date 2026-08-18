@@ -44,15 +44,16 @@ async function addLock(seasonId: string, matchdayId: string, a: string, b: strin
   if (error) throw new Error(error.message)
 }
 
-// `entry_b: string | null` desde 0028 (REQ-D5-1): la fila real ya lo permite,
-// aunque esta suite sólo ejercita pádel (pair_size=2, siempre no-nulo).
+// `entry_b: string | null` desde 0028 (REQ-D5-1). `pair_size` se agrega acá
+// (PR18a) para el test de una disciplina de a uno más abajo: el resto de esta
+// suite sigue ejercitando sólo pádel (pair_size=2, siempre no-nulo).
 async function pairsOf(
   matchdayId: string,
-): Promise<Array<{ id: string; entry_a: string; entry_b: string | null }>> {
+): Promise<Array<{ id: string; entry_a: string; entry_b: string | null; pair_size: number }>> {
   const db = adminClient()
   const { data, error } = await db
     .from('pairs')
-    .select('id, entry_a, entry_b')
+    .select('id, entry_a, entry_b, pair_size')
     .eq('matchday_id', matchdayId)
   if (error) throw new Error(error.message)
   return data ?? []
@@ -196,12 +197,21 @@ describe('generatePairs', () => {
     expect(mixedPair).toBe(true)
   })
 
-  // W34 (verify-report ronda 10): `insertPairs` todavía no escribe `pair_size`
-  // (es trabajo de PR15/PR17, buildSides es el primer productor de un lado de
-  // uno real). En una disciplina pair_size=1, el default de columna (2) choca
-  // con `pairs_matchday_size` y, sin traducir, el string crudo de Postgres
-  // llegaba tal cual al toast de armado.
-  it('un string de Postgres no le llega al jugador cuando la disciplina todavía no puede armar parejas de a uno', async () => {
+  /**
+   * PR18a: reescribe el test de W34 (verify-report ronda 10), no lo borra.
+   * Aquel test probaba que `insertPairs` (que todavía no mandaba `pair_size`)
+   * traducía el rebote de `pairs_matchday_size` a un mensaje de usuario en vez
+   * de dejar pasar el string crudo de Postgres. Esta PR hace que `insertPairs`
+   * MANDE `pair_size` (vía `buildSides`) — el rebote que aquel test esperaba
+   * ya no ocurre, así que "todavía no puede armar parejas automáticamente" se
+   * volvió una mentira. Confirmado por ejecución antes de este rewrite: contra
+   * el código nuevo, la promesa vieja `rejects.toThrow(...)` fallaba con
+   * "promise resolved undefined instead of rejecting" — la prueba de que el
+   * comportamiento cambió, no sólo el texto. Esto es comportamiento NUEVO
+   * (RED real, no un refactor behaviour-preserving): antes de este slice,
+   * `generatePairs` moría acá para toda disciplina pair_size=1; ahora arma.
+   */
+  it('arma sola una disciplina de a uno: cada presente es su propio lado', async () => {
     const admin = await createTestUser()
     const filler = await fillerPlayers(8)
     // squadSize/pairSize = 8 valores de puntos, no los 4 de defaultConfig(8)
@@ -216,9 +226,23 @@ describe('generatePairs', () => {
     const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
     await markAllPlaying(admin, matchdayId, entryIds)
 
-    await expect(generatePairs(admin.client, matchdayId)).rejects.toThrow(
-      'Una disciplina de a uno todavía no puede armar parejas automáticamente.',
-    )
+    await generatePairs(admin.client, matchdayId)
+
+    const pairs = await pairsOf(matchdayId)
+    // 8 presentes, sideSize=1: 8 lados, cada uno de un solo miembro. La FK
+    // `pairs_side_shape` (0028) ya lo exige del lado de la base; esto lo
+    // confirma en la fila real, por ejecución.
+    expect(pairs).toHaveLength(8)
+    expect(pairs.every((pair) => pair.pair_size === 1)).toBe(true)
+    expect(pairs.every((pair) => pair.entry_b === null)).toBe(true)
+    expect(new Set(pairs.map((pair) => pair.entry_a))).toEqual(new Set(entryIds))
+
+    const matches = await matchesOf(matchdayId)
+    // Round robin de 8 lados: C(8,2) = 28 partidos en 7 rondas — misma
+    // aritmética que "con 12 guarda 6 parejas y 15 partidos en 5 rondas"
+    // arriba, sólo que acá los "lados" son personas, no parejas.
+    expect(matches).toHaveLength(28)
+    expect(new Set(matches.map((match) => match.round)).size).toBe(7)
   })
 })
 

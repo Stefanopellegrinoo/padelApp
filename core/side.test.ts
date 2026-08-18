@@ -95,4 +95,12 @@ describe('sideOfRow', () => {
   it('throws when a side of two has no b: the row is broken', () => {
     expect(() => sideOfRow(2, 'a', null)).toThrow(/segundo miembro/)
   })
+
+  // S37 (verify-report ronda 12): la rama size===1 tapaba sólo la mitad del
+  // agujero que este describe documenta arriba — tiraba con size=2/b=null,
+  // pero descartaba un `b` en silencio con size=1/b!==null. Simétrico con el
+  // test de arriba.
+  it('throws when a side of one carries a stray b: the row is broken', () => {
+    expect(() => sideOfRow(1, 'a', 'b')).toThrow(/segundo miembro/)
+  })
 })

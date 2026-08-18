@@ -43,7 +43,13 @@ export function partnerOf(side: Side, entryId: EntryId): EntryId | null {
  * uno.
  */
 export function sideOfRow(size: SideSize, a: EntryId, b: EntryId | null): Side {
-  if (size === 1) return { size: 1, a }
+  if (size === 1) {
+    // S37 (verify-report ronda 12): simétrico con la rama de abajo — antes
+    // descartaba un `b` que sobraba EN SILENCIO, exactamente el modo de falla
+    // que este constructor existe para cerrar (comentario de arriba).
+    if (b !== null) throw new Error('Un lado de a uno con segundo miembro. La fila está rota.')
+    return { size: 1, a }
+  }
   if (b === null) throw new Error('Un lado de a dos sin segundo miembro. La fila está rota.')
   return { size: 2, a, b }
 }

@@ -15,7 +15,7 @@ import {
   syncGuestSeat,
 } from './matchday'
 import { promoteGuest } from './entries'
-import { entriesOf, matchdayDetail, pairLocksOf } from './read'
+import { entriesOf, matchdayDetail, pairLocksOf, seasonSquadMembersOf } from './read'
 import { defaultDisciplineId } from './season'
 import { adminClient } from './test/admin'
 import { createSeason } from './test/factories'
@@ -711,5 +711,17 @@ describe('promoteGuest — discipline_entries de la disciplina de la fecha, no l
     // no del lado de la default (padel) — ahí es donde S23 mordía.
     expect((await entriesOf(admin.client, seasonId, fifaId)).some((entry) => entry.id === guestId)).toBe(true)
     expect((await entriesOf(admin.client, seasonId, padelId)).some((entry) => entry.id === guestId)).toBe(false)
+
+    // C14 (verify-report ronda 8): lo de arriba es exactamente lo que hace que
+    // Ajustes → Plantel pierda a esta persona — `ajustes/page.tsx:50` llama
+    // `entriesOf(seasonId)` SIN disciplineId, que cae en la disciplina por
+    // defecto (padel acá), igual que la aserción de arriba. Lo que Plantel
+    // necesita es `seasonSquadMembersOf` (temporada entera, sin pasar por
+    // discipline_entries), y para no perder a quién ya reclamó su asiento
+    // ("Este soy yo"/"Desvincular") esa función tiene que traer `playerId`.
+    const roster = await seasonSquadMembersOf(admin.client, seasonId)
+    const promoted = roster.find((member) => member.id === guestId)
+    expect(promoted).toBeDefined()
+    expect(promoted?.playerId).toBeNull()
   })
 })

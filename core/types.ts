@@ -23,10 +23,14 @@ export interface MatchFormat {
 }
 
 export interface SeasonConfig {
-  /** Squad size, not matchday size. Even, between MIN_PLAYERS and MAX_PLAYERS. */
+  /**
+   * Squad size, not matchday size. Between MIN_PLAYERS and MAX_PLAYERS.
+   * Even only when the discipline's side size is 2 (N21, verify-report
+   * ronda 9) — with sideSize=1 an odd squad is perfectly playable.
+   */
   squadSize: number
   matchFormat: MatchFormat
-  /** Exactly squadSize / 2 values, strictly descending, all above zero. */
+  /** Exactly squadSize / sideSize values, strictly descending, all above zero (N21, verify-report ronda 9). */
   points: number[]
   regularMatchdays: number
   countBestOf: number

@@ -586,10 +586,11 @@ export async function seasonSquadOf(supabase: Client, seasonId: string): Promise
   return (data ?? []).map((row) => row.id)
 }
 
-/** Una fila de `seasonSquadMembersOf`: el id que necesita `computeRanking` más el nombre que la pantalla dibuja. */
+/** Una fila de `seasonSquadMembersOf`: el id que necesita `computeRanking`, el nombre que la pantalla dibuja, y el dueño del asiento (o `null` si nadie lo reclamó). */
 export interface SquadMember {
   id: EntryId
   displayName: string
+  playerId: string | null
 }
 
 /**
@@ -598,16 +599,22 @@ export interface SquadMember {
  * el id — algo que `entriesOf` sí trae pero filtrado a UNA disciplina
  * (exactamente lo que esta pantalla no puede hacer). `seasonSquadOf` se deja
  * intacto: `torneos/page.tsx` sólo necesita los ids.
+ *
+ * `playerId` (C14, verify-report ronda 8) se sumó para que "Plantel" en
+ * Ajustes pueda usar esta función en vez de `entriesOf(seasonId)` sin
+ * disciplina — esa llamada caía en la disciplina por defecto y perdía a
+ * cualquier SQUAD promovido desde otra (`db/read.ts:419`). Acá no hay ese
+ * problema: no se pasa por `discipline_entries`.
  */
 export async function seasonSquadMembersOf(supabase: Client, seasonId: string): Promise<SquadMember[]> {
   const { data, error } = await supabase
     .from('entries')
-    .select('id, display_name')
+    .select('id, display_name, player_id')
     .eq('season_id', seasonId)
     .eq('kind', 'SQUAD')
     .order('seed_position', { ascending: true })
   if (error) throw new EdgeError(`No se pudo leer el plantel: ${error.message}`)
-  return (data ?? []).map((row) => ({ id: row.id, displayName: row.display_name }))
+  return (data ?? []).map((row) => ({ id: row.id, displayName: row.display_name, playerId: row.player_id }))
 }
 
 /**

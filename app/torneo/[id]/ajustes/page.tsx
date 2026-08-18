@@ -1,7 +1,6 @@
 import { redirect } from 'next/navigation'
 import { disciplineSlugs, validateConfig } from '@/core'
 import {
-  entriesOf,
   matchdaysOf,
   myEntryId,
   playerNames,
@@ -45,32 +44,31 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
   const { error: renameError } = await searchParams
   const supabase = await serverClient()
 
-  const [header, entries, rules, myEntry, matchdays, squadMembers] = await Promise.all([
+  const [header, rules, myEntry, matchdays, squadMembers] = await Promise.all([
     seasonHeader(supabase, seasonId),
-    entriesOf(supabase, seasonId),
     seasonRules(supabase, seasonId),
     myEntryId(supabase, seasonId),
     matchdaysOf(supabase, seasonId),
-    // Temporada ENTERA, no la disciplina por defecto — el candidato a
-    // "Agregar disciplina" es cualquier asiento de la temporada (REQ-D1-3),
-    // no sólo quien ya juega la disciplina que `entriesOf` resuelve acá arriba.
+    // Temporada ENTERA, no la disciplina por defecto (C14, verify-report
+    // ronda 8): "Plantel" administra el asiento de la TEMPORADA (renombrar,
+    // reclamar, sacar), no el de una disciplina — usar `entriesOf(seasonId)`
+    // sin disciplina caía en la disciplina por defecto y perdía a cualquier
+    // SQUAD promovido desde otra. Mismo criterio que ya usaba
+    // "+ Agregar disciplina" (REQ-D1-3): cualquier asiento de la temporada.
     seasonSquadMembersOf(supabase, seasonId),
   ])
   if (!header.isAdmin) redirect(`/torneo/${seasonId}`)
   const discipline = primaryDiscipline(header)
   const slugs = disciplineSlugs(header.disciplines)
 
-  const squad = entries
-    .filter((entry) => entry.kind === 'SQUAD')
-    .sort((a, b) => a.seedPosition - b.seedPosition)
   const owners = await playerNames(
     supabase,
-    squad.map((entry) => entry.playerId).filter((playerId): playerId is string => playerId !== null),
+    squadMembers.map((member) => member.playerId).filter((playerId): playerId is string => playerId !== null),
   )
-  const seats: SeatVM[] = squad.map((entry) => ({
-    entryId: entry.id,
-    name: entry.displayName,
-    ownerName: entry.playerId === null ? null : (owners.get(entry.playerId) ?? null),
+  const seats: SeatVM[] = squadMembers.map((member) => ({
+    entryId: member.id,
+    name: member.displayName,
+    ownerName: member.playerId === null ? null : (owners.get(member.playerId) ?? null),
   }))
 
   // El desajuste entre los asientos que hay y los que dice la config se reporta

@@ -9,12 +9,33 @@ interface NavItem {
   isActive: (pathname: string) => boolean
 }
 
+/**
+ * Segmentos de primer nivel de esta sección que NO son un slug de
+ * disciplina. `kind` sólo puede ser `'padel'`/`'fifa'` (con sufijo `-N`,
+ * `core/discipline-slug.ts`), así que nunca colisiona con ninguno de estos —
+ * alcanza con excluirlos para reconocer la ruta por-disciplina de la Tabla
+ * (PR12b slice 1) sin traer la lista real de disciplinas hasta acá.
+ */
+const NON_DISCIPLINE_SEGMENTS = new Set(['fechas', 'stats', 'reglas', 'ajustes', 'jugador'])
+
 export function TorneoNav({ seasonId }: { seasonId: string }) {
   const pathname = usePathname()
   const base = `/torneo/${seasonId}`
 
   const items: NavItem[] = [
-    { label: 'Tabla', href: base, isActive: (path) => path === base },
+    {
+      label: 'Tabla',
+      href: base,
+      // La ruta por-disciplina (`${base}/{slug}`) también es la Tabla — ver
+      // NON_DISCIPLINE_SEGMENTS arriba. La raíz (`base`) sigue siendo Tabla
+      // hasta slice 2.
+      isActive: (path) => {
+        if (path === base) return true
+        const match = /^\/([^/]+)$/.exec(path.slice(base.length))
+        const segment = match?.[1]
+        return segment !== undefined && !NON_DISCIPLINE_SEGMENTS.has(segment)
+      },
+    },
     {
       label: 'Fechas',
       href: `${base}/fechas`,

@@ -9,6 +9,13 @@ import { createTestUser, type TestUser } from './test/users'
 // No va a db/test/factories.ts: esa lista de archivos es la del plan, y estos
 // armadores sólo le sirven al cierre de una fecha.
 
+// `entry_b` es `string | null` en la fila real (0028, REQ-D5-1); esta suite
+// sólo ejercita pádel (pair_size=2, siempre con segundo miembro).
+function requirePartner(entryB: string | null): string {
+  if (entryB === null) throw new Error('Pareja sin segundo miembro en un test que sólo espera pádel.')
+  return entryB
+}
+
 async function fillerPlayers(count: number): Promise<string[]> {
   const db = adminClient()
   const ids: string[] = []
@@ -50,9 +57,11 @@ async function markAllPlaying(admin: TestUser, matchdayId: string, entryIds: str
   }
 }
 
+// `entry_b: string | null` desde 0028 (REQ-D5-1): la fila real ya lo permite,
+// aunque esta suite sólo ejercita pádel (pair_size=2, siempre no-nulo).
 async function pairsOf(
   matchdayId: string,
-): Promise<Array<{ id: string; entry_a: string; entry_b: string }>> {
+): Promise<Array<{ id: string; entry_a: string; entry_b: string | null }>> {
   const db = adminClient()
   const { data, error } = await db
     .from('pairs')
@@ -273,7 +282,7 @@ describe('closeMatchday', () => {
     const awards = await awardsOf(matchdayId)
     const pointsOf = new Map(awards.map((award) => [award.entry_id, award.points]))
     for (const pair of pairs) {
-      expect(pointsOf.get(pair.entry_a)).toBe(pointsOf.get(pair.entry_b))
+      expect(pointsOf.get(pair.entry_a)).toBe(pointsOf.get(requirePartner(pair.entry_b)))
     }
   })
 

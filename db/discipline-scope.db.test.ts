@@ -36,9 +36,19 @@ async function insertMatchday(
   status: 'DRAFT' | 'OPEN' | 'CLOSED',
 ): Promise<string> {
   const db = adminClient()
+  // `matchdays_discipline_size` (0028, REQ-D5-1) exige que `pair_size` de la
+  // fecha coincida con el de SU disciplina — este helper crea fechas para
+  // disciplinas pair_size=1 (W30, C15 abajo) y pair_size=2 (el resto), así
+  // que no puede confiar en el default de columna (2).
+  const { data: discipline, error: disciplineError } = await db
+    .from('disciplines')
+    .select('pair_size')
+    .eq('id', disciplineId)
+    .single()
+  if (disciplineError || discipline === null) throw new Error(disciplineError?.message)
   const { data, error } = await db
     .from('matchdays')
-    .insert({ season_id: seasonId, discipline_id: disciplineId, number, status })
+    .insert({ season_id: seasonId, discipline_id: disciplineId, number, status, pair_size: discipline.pair_size })
     .select('id')
     .single()
   if (error || data === null) throw new Error(error?.message)
@@ -66,11 +76,13 @@ async function disciplineStatus(disciplineId: string): Promise<string> {
   return data.status
 }
 
-async function insertPair(matchdayId: string, seasonId: string, a: string, b: string): Promise<void> {
+// `b: null` para un lado de uno (`pairs_side_shape`, 0028): `pair_size` se
+// deriva de la forma que el propio caller pide, mismo criterio que el check.
+async function insertPair(matchdayId: string, seasonId: string, a: string, b: string | null): Promise<void> {
   const db = adminClient()
   const { error } = await db
     .from('pairs')
-    .insert({ matchday_id: matchdayId, season_id: seasonId, entry_a: a, entry_b: b })
+    .insert({ matchday_id: matchdayId, season_id: seasonId, entry_a: a, entry_b: b, pair_size: b === null ? 1 : 2 })
   if (error) throw new Error(error.message)
 }
 
@@ -498,9 +510,13 @@ describe('syncGuestSeat no inventa un invitado en una disciplina de a uno (C15)'
     for (const entryId of entryIds) {
       await setAttendance(admin.client, matchdayId, entryId, 'PLAYING')
     }
-    const [a, b] = entryIds
-    if (a === undefined || b === undefined) throw new Error('Faltan asientos.')
-    await insertPair(matchdayId, seasonId, a, b)
+    const [a] = entryIds
+    if (a === undefined) throw new Error('Falta un asiento.')
+    // Lado de uno real (pair_size=1, entry_b null) — antes de 0028 esto se
+    // representaba con un segundo entry_b prestado porque la columna era
+    // `not null`; ahora la fila se puede escribir con la forma que le
+    // corresponde a esta disciplina.
+    await insertPair(matchdayId, seasonId, a, null)
 
     await syncGuestSeat(admin.client, matchdayId)
 

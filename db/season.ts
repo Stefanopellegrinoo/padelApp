@@ -120,6 +120,20 @@ export async function awardsBefore(
   return result
 }
 
+/**
+ * `pairs.entry_b` es `string | null` desde 0028 (REQ-D5-1, PR14 slice C):
+ * `pairs_side_shape` es la garantía real, esto sólo la hace explícita acá.
+ * Nada produce todavía un lado de uno (PR15, `buildSides`) — un null en
+ * este camino sería un bug de otra parte. Muere en PR17, cuando
+ * `closedHistory` migra de `Pair` a `Side` (design #3801, PUNTO 4).
+ */
+function requirePartner(entryB: string | null): string {
+  if (entryB === null) {
+    throw new Error('Una pareja sin segundo miembro llegó a un camino que todavía sólo entiende parejas de a dos.')
+  }
+  return entryB
+}
+
 /** The matchday at `number` of one discipline's own calendar, or null when it does not exist or is not CLOSED. */
 export async function closedHistory(
   supabase: Client,
@@ -148,7 +162,7 @@ export async function closedHistory(
   if (awardsError) throw new EdgeError(`No se pudieron leer los premios: ${awardsError.message}`)
 
   return {
-    pairs: (pairs ?? []).map((row) => ({ a: row.entry_a, b: row.entry_b })),
+    pairs: (pairs ?? []).map((row) => ({ a: row.entry_a, b: requirePartner(row.entry_b) })),
     awards: (awards ?? []).map((row) => ({
       entryId: row.entry_id,
       position: row.position,

@@ -245,6 +245,14 @@ export async function createMatchday(
     throw new EdgeError('No se pudo leer la disciplina de la temporada.')
   }
 
+  // `matchdays_discipline_size` (0028, REQ-D5-1) exige que `pair_size` de la
+  // fecha coincida con el de SU disciplina — sin esto, el default de columna
+  // (2) rechazaría cada fecha nueva de una disciplina pair_size=1 con una
+  // violación de FK, no con un mensaje de usuario. `disciplineId` es un
+  // `string` crudo acá (parámetro público, todavía sin marcar en el origen);
+  // la FK de arriba es la que de verdad lo valida contra `disciplines`.
+  const { pairSize } = await disciplineConfig(supabase, resolvedDisciplineId as DisciplineId)
+
   const { data: last, error: lastError } = await supabase
     .from('matchdays')
     .select('number')
@@ -257,7 +265,13 @@ export async function createMatchday(
 
   const { data, error } = await supabase
     .from('matchdays')
-    .insert({ season_id: seasonId, discipline_id: resolvedDisciplineId, number, played_on: playedOn })
+    .insert({
+      season_id: seasonId,
+      discipline_id: resolvedDisciplineId,
+      number,
+      played_on: playedOn,
+      pair_size: pairSize,
+    })
     .select('id')
     .single()
   if (error !== null) {
@@ -867,6 +881,21 @@ async function insertMatches(supabase: Client, rows: MatchRow[]): Promise<void> 
   if (error) throw new EdgeError(`No se pudo guardar el fixture: ${error.message}`)
 }
 
+/**
+ * `pairs.entry_b` es `string | null` desde 0028 (REQ-D5-1, PR14 slice C):
+ * `pairs_side_shape` es la garantía real, esto sólo la hace explícita acá.
+ * Nada produce todavía un lado de uno (PR15, `buildSides`, es el primer
+ * productor) — un null en este camino sería un bug de otra parte, no un
+ * caso normal a absorber en silencio. Muere en PR17, cuando `pairEntryIds`/
+ * `resultsOf` migran de `Pair` a `Side` (design #3801, PUNTO 4).
+ */
+function requirePartner(entryB: string | null): string {
+  if (entryB === null) {
+    throw new Error('Una pareja sin segundo miembro llegó a un camino que todavía sólo entiende parejas de a dos.')
+  }
+  return entryB
+}
+
 /** Los dos `entry_id` de cada pareja de la fecha. */
 async function pairEntryIds(supabase: Client, matchdayId: string): Promise<string[][]> {
   const { data, error } = await supabase
@@ -874,7 +903,7 @@ async function pairEntryIds(supabase: Client, matchdayId: string): Promise<strin
     .select('entry_a, entry_b')
     .eq('matchday_id', matchdayId)
   if (error) throw new EdgeError(`No se pudieron leer las parejas: ${error.message}`)
-  return (data ?? []).map((row) => [row.entry_a, row.entry_b])
+  return (data ?? []).map((row) => [row.entry_a, requirePartner(row.entry_b)])
 }
 
 /** Las parejas y los partidos de la fecha, con los sets de cada partido ordenados por `set_number`. */
@@ -889,7 +918,7 @@ async function resultsOf(
   if (pairsError) throw new EdgeError(`No se pudieron leer las parejas: ${pairsError.message}`)
 
   const pairById = new Map(
-    (pairRows ?? []).map((row) => [row.id, { a: row.entry_a, b: row.entry_b }]),
+    (pairRows ?? []).map((row) => [row.id, { a: row.entry_a, b: requirePartner(row.entry_b) }]),
   )
 
   const { data: matchRows, error: matchesError } = await supabase

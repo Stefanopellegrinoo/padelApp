@@ -44,9 +44,11 @@ async function addLock(seasonId: string, matchdayId: string, a: string, b: strin
   if (error) throw new Error(error.message)
 }
 
+// `entry_b: string | null` desde 0028 (REQ-D5-1): la fila real ya lo permite,
+// aunque esta suite sólo ejercita pádel (pair_size=2, siempre no-nulo).
 async function pairsOf(
   matchdayId: string,
-): Promise<Array<{ id: string; entry_a: string; entry_b: string }>> {
+): Promise<Array<{ id: string; entry_a: string; entry_b: string | null }>> {
   const db = adminClient()
   const { data, error } = await db
     .from('pairs')

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { computeStandings } from './standings'
-import type { MatchResult, Pair, SeasonConfig } from './types'
+import { single } from './side'
+import type { MatchResult, Pair, SeasonConfig, Side } from './types'
 
 const SNAPSHOT = ['a1', 'a2', 'b1', 'b2', 'c1', 'c2', 'd1', 'd2']
 
@@ -175,5 +176,87 @@ describe('computeStandings', () => {
     const input = [...PAIRS]
     computeStandings(input, matches, CONFIG, SNAPSHOT)
     expect(input).toEqual(PAIRS)
+  })
+})
+
+/**
+ * S39 (verify-report ronda 12): hasta acá `computeStandings` no tenía UN SOLO
+ * test con lados de uno. La tabla del día de una disciplina `pair_size=1` no la
+ * calculaba ni la verificaba nada — el `full_matchday_proof` de `db/` arma su
+ * payload de awards por posición de asiento, no derivado de resultados.
+ *
+ * Estos tests se escriben ANTES de mover el límite público de `Pair` a `Side`,
+ * a propósito: son el RED que obliga al cambio, no la ceremonia que lo sigue.
+ * La aritmética es la misma que la del bloque de arriba (partidos ganados →
+ * diferencia de games → resultado directo → snapshot); lo único que cambia es
+ * que cada lado es una persona.
+ */
+const SOLOS: Side[] = [single('p1'), single('p2'), single('p3'), single('p4')]
+const SOLO_SNAPSHOT = ['p1', 'p2', 'p3', 'p4']
+
+function soloMatch(left: number, right: number, gamesA: number, gamesB: number): MatchResult {
+  const sideA = SOLOS[left]
+  const sideB = SOLOS[right]
+  if (sideA === undefined || sideB === undefined) throw new Error('bad test fixture')
+  return { round: 1, sideA, sideB, sets: [{ gamesA, gamesB }] }
+}
+
+describe('computeStandings con lados de uno (pair_size=1)', () => {
+  it('ordena por partidos ganados, igual que de a dos', () => {
+    // p1 gana 3, p2 gana 2, p3 gana 1, p4 gana 0.
+    const matches = [
+      soloMatch(0, 1, 4, 2), soloMatch(0, 2, 4, 1), soloMatch(0, 3, 4, 0),
+      soloMatch(1, 2, 4, 2), soloMatch(1, 3, 4, 1),
+      soloMatch(2, 3, 4, 3),
+    ]
+    const standings = computeStandings(SOLOS, matches, CONFIG, SOLO_SNAPSHOT)
+    expect(standings.map((row) => row.side.a)).toEqual(['p1', 'p2', 'p3', 'p4'])
+    expect(standings.map((row) => row.position)).toEqual([1, 2, 3, 4])
+  })
+
+  it('cada fila sigue siendo un lado de uno, no una pareja a medio armar', () => {
+    // La garantía que `pairOf` rompía: la fila que sale tiene la MISMA forma
+    // que entró. Con el límite viejo esto devolvía `{ a, b: undefined }`.
+    const standings = computeStandings(SOLOS, [], CONFIG, SOLO_SNAPSHOT)
+    expect(standings).toHaveLength(4)
+    expect(standings.every((row) => row.side.size === 1)).toBe(true)
+  })
+
+  it('corta un empate de dos por el resultado directo entre los dos jugadores', () => {
+    // p1 y p2 ganan 2 y quedan los dos +4 de games. p2 le ganó a p1 4-1, así
+    // que el cruce directo —`sameSide` sobre un lado de uno— tiene que cortar.
+    const matches = [
+      soloMatch(0, 1, 1, 4), soloMatch(0, 2, 4, 0), soloMatch(0, 3, 4, 1),
+      soloMatch(1, 2, 4, 1), soloMatch(1, 3, 2, 4),
+      soloMatch(2, 3, 4, 2),
+    ]
+    const standings = computeStandings(SOLOS, matches, CONFIG, SOLO_SNAPSHOT)
+    expect(standings[0]?.won).toBe(standings[1]?.won)
+    expect(standings[0]?.gamesDiff).toBe(standings[1]?.gamesDiff)
+    expect(standings[0]?.side.a).toBe('p2')
+    expect(standings[1]?.side.a).toBe('p1')
+  })
+
+  it('cuenta jugados, ganados y diferencia de games por jugador', () => {
+    const standings = computeStandings(SOLOS, [soloMatch(0, 1, 4, 2)], CONFIG, SOLO_SNAPSHOT)
+    const rowA = standings.find((row) => row.side.a === 'p1')
+    const rowB = standings.find((row) => row.side.a === 'p2')
+    expect(rowA?.played).toBe(1)
+    expect(rowA?.won).toBe(1)
+    expect(rowA?.gamesDiff).toBe(2)
+    expect(rowB?.won).toBe(0)
+    expect(rowB?.gamesDiff).toBe(-2)
+  })
+
+  it('con 9 jugadores impares tabula los 9: la paridad es de las parejas, no de la tabla', () => {
+    // REQ-D5-2: un plantel impar es perfectamente jugable de a uno. La tabla
+    // no puede tener un agujero por eso.
+    const nine = Array.from({ length: 9 }, (_, index) => single(`s${index + 1}`))
+    const standings = computeStandings(nine, [], CONFIG, nine.map((side) => side.a))
+    expect(standings).toHaveLength(9)
+    expect(standings.map((row) => row.position)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9])
+    // Sin esto el test pasaba en RED: con la lista de partidos vacía, largo y
+    // posiciones salen bien aunque cada fila sea una pareja a medio armar.
+    expect(standings.map((row) => row.side.a)).toEqual(nine.map((side) => side.a))
   })
 })

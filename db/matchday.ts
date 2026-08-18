@@ -136,10 +136,24 @@ export async function pairingContextFor(
   const ranking = computeRanking(awardsByMatchday, seedOrder, config, snapshot)
   const points = new Map(ranking.map((row) => [row.entryId, row.points]))
 
-  const { defenders, defendersAlreadyRepeated, previousPairs } = previousContext(
-    await closedHistory(supabase, matchday.discipline_id, matchday.number - 1),
-    await closedHistory(supabase, matchday.discipline_id, matchday.number - 2),
-  )
+  // C19 (verify-report ronda 12): con un lado de uno, `buildSides` (design
+  // PUNTO 5) ignora `defenders`/`previousPairs`/`fixedPairs` enteros — no hay
+  // compañero que defender ni pareja que repetir. Antes de este guard,
+  // `closedHistory` corría igual y calculaba ese dato descartado; su segunda
+  // consulta lee `pairs` de la fecha CERRADA anterior con `pairFromRow`, que
+  // todavía tira para `pair_size=1` (bloqueado hasta que sus consumidores
+  // Pair-only migren a Side, PR18b). El resultado era que ninguna disciplina
+  // de a uno llegaba a la fecha 2: la fecha 1 se armaba, se abría, se jugaba
+  // y se cerraba, y recién ahí el draw de la fecha 2 rompía. Estos son los
+  // mismos valores neutros que `previousContext` ya devuelve cuando no hay
+  // fecha anterior (core/history.ts) — no una invención de este guard.
+  const { defenders, defendersAlreadyRepeated, previousPairs } =
+    pairSize === 1
+      ? { defenders: null, defendersAlreadyRepeated: false, previousPairs: [] }
+      : previousContext(
+          await closedHistory(supabase, matchday.discipline_id, matchday.number - 1),
+          await closedHistory(supabase, matchday.discipline_id, matchday.number - 2),
+        )
 
   const present = [
     ...(await playingEntryIds(supabase, matchdayId)),

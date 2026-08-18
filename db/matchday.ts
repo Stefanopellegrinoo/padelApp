@@ -868,8 +868,21 @@ async function insertPairs(
       // traducir, el string crudo de Postgres llegaba tal cual al toast de
       // armado. Mismo patrón que `removeSeat` (entries.ts:166) y
       // `createMatchday` (matchday.ts:281): código conocido antes del genérico.
+      //
+      // S35 (verify-report ronda 11): `error?.code === '23503'` a secas
+      // atrapaba las OTRAS cuatro FK de este insert (matchday/season, entry_a,
+      // entry_b, season_id), no sólo `pairs_matchday_size` — dos admins sobre
+      // el mismo torneo de PADEL, uno con una lectura vieja del plantel,
+      // podían leer el mensaje de "disciplina de a uno" en un torneo sin
+      // ninguna. Se mira el nombre de la constraint, que Postgres ya manda en
+      // `error.message`. Las otras cuatro son lecturas viejas (alguien tocó
+      // el plantel o la fecha mientras se armaba): mensaje genérico y honesto,
+      // no cinco mensajes a medida para carreras que nadie vio todavía.
       if (error?.code === '23503') {
-        throw new EdgeError('Una disciplina de a uno todavía no puede armar parejas automáticamente.')
+        if (error.message.includes('pairs_matchday_size')) {
+          throw new EdgeError('Una disciplina de a uno todavía no puede armar parejas automáticamente.')
+        }
+        throw new EdgeError('El plantel o la fecha cambiaron mientras armabas las parejas. Volvé a intentar.')
       }
       throw new EdgeError(`No se pudo guardar una pareja: ${error?.message}`)
     }

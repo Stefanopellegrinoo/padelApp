@@ -15,6 +15,30 @@
 -- completo de tabla no puede correr adentro de la transacción de otro
 -- `alter table`. `matchdays` no tiene ese volumen (una fecha por temporada
 -- por número), así que su FK nueva se valida directo, sin partir el archivo.
+--
+-- C18 (verify-report ronda 10, sdd-apply de cierre): si alguien armó una
+-- fecha de una disciplina `pair_size=1` ENTRE el deploy de slice A (que ya
+-- permite crear esa disciplina) y el de esta slice, `generatePairs` corrió
+-- por el camino viejo (sin `pairs.pair_size`, `entry_b` siempre no nulo) y
+-- metió una pareja de DOS miembros en esa fecha. El backfill de abajo DERIVA
+-- bien —esa fila pasa a `pair_size=1` porque su disciplina lo es—, y eso la
+-- vuelve una violación de `pairs_side_shape` que revienta `0029` a mitad de
+-- deploy, con un mensaje que no nombra fila ni fecha, dejando la constraint
+-- `NOT VALID` para siempre. Guarda de despliegue, mismo idioma que `0016`
+-- (discipline_id) y `0023` (conteo de discipline_entries): falla ACÁ, antes
+-- de tocar nada, nombrando el problema.
+do $$
+begin
+  if exists (
+    select 1
+      from public.pairs p
+      join public.matchdays m on m.id = p.matchday_id
+      join public.disciplines d on d.id = m.discipline_id
+     where d.pair_size = 1 and p.entry_b is not null
+  ) then
+    raise exception 'Hay parejas de dos miembros en una disciplina de a uno. Rearmá esas fechas antes de aplicar 0028.';
+  end if;
+end $$;
 
 -- ── matchdays.pair_size ──────────────────────────────────────────────────
 alter table public.matchdays add column pair_size int not null default 2 check (pair_size in (1, 2));

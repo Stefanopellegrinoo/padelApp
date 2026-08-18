@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { validateConfig } from '@/core'
+import { disciplineSlugs, validateConfig } from '@/core'
 import {
   entriesOf,
   matchdaysOf,
@@ -8,10 +8,12 @@ import {
   primaryDiscipline,
   seasonHeader,
   seasonRules,
+  seasonSquadMembersOf,
 } from '@/db/read'
 import { serverClient } from '@/db/server'
 import { renameTournament } from './actions'
 import { CopiarLink } from './copiar'
+import { Disciplinas } from './disciplinas'
 import { EliminarTorneo } from './eliminar'
 import { Formato } from './formato'
 import { Plantel, type SeatVM } from './plantel'
@@ -43,15 +45,20 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
   const { error: renameError } = await searchParams
   const supabase = await serverClient()
 
-  const [header, entries, rules, myEntry, matchdays] = await Promise.all([
+  const [header, entries, rules, myEntry, matchdays, squadMembers] = await Promise.all([
     seasonHeader(supabase, seasonId),
     entriesOf(supabase, seasonId),
     seasonRules(supabase, seasonId),
     myEntryId(supabase, seasonId),
     matchdaysOf(supabase, seasonId),
+    // Temporada ENTERA, no la disciplina por defecto — el candidato a
+    // "Agregar disciplina" es cualquier asiento de la temporada (REQ-D1-3),
+    // no sólo quien ya juega la disciplina que `entriesOf` resuelve acá arriba.
+    seasonSquadMembersOf(supabase, seasonId),
   ])
   if (!header.isAdmin) redirect(`/torneo/${seasonId}`)
   const discipline = primaryDiscipline(header)
+  const slugs = disciplineSlugs(header.disciplines)
 
   const squad = entries
     .filter((entry) => entry.kind === 'SQUAD')
@@ -127,6 +134,11 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
             </span>
           </a>
 
+          <a href="#disciplinas" className={`${ROW} border-t border-line`}>
+            <span className={LABEL}>Disciplinas</span>
+            <span className={VALUE}>{header.disciplines.length} ›</span>
+          </a>
+
           <div className={`${ROW} border-t border-line`}>
             <span className={LABEL}>Link de invitación</span>
             <CopiarLink token={header.inviteToken} />
@@ -152,6 +164,15 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
 
       <Plantel seasonId={seasonId} seats={seats} canTakeSeat={myEntry === null} />
       <Formato seasonId={seasonId} disciplineId={discipline.id} config={discipline.config} />
+      <Disciplinas
+        seasonId={seasonId}
+        disciplines={header.disciplines.map((candidate) => ({
+          id: candidate.id,
+          kind: candidate.kind,
+          slug: slugs.get(candidate.id) ?? candidate.kind.toLowerCase(),
+        }))}
+        squad={squadMembers.map((member) => ({ entryId: member.id, name: member.displayName }))}
+      />
       <Reglas seasonId={seasonId} text={rules.text} />
 
       {/* Acá estaba "Cerrar sesión", que no es de esta pantalla: es de la

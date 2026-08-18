@@ -12,6 +12,8 @@
  * reinterpretation of it.
  */
 import { samePair } from './pairing'
+import { sideOf } from './pair-compat'
+import { members } from './side'
 import type { EntryId, MatchResult, Pair } from './types'
 
 /** One matchday's roster of pairs and the matches actually played within it. */
@@ -87,9 +89,12 @@ export function tallyPlayers(
 
   for (const matchday of history) {
     const presentToday = new Set<EntryId>()
+    // `members(sideOf(pair))` instead of `pair.a`/`pair.b`: pure enumeration,
+    // order never matters here, so this reads the same for a side of any
+    // size. `pair` stays Pair-shaped until PR18 — `sideOf` always yields
+    // `size: 2`, so the result is identical to before.
     for (const pair of matchday.pairs) {
-      presentToday.add(pair.a)
-      presentToday.add(pair.b)
+      for (const entryId of members(sideOf(pair))) presentToday.add(entryId)
     }
     for (const entryId of presentToday) tallyOf(entryId).matchdaysPlayed++
 
@@ -97,14 +102,14 @@ export function tallyPlayers(
       if (match.sets.length === 0) continue // not played yet
       const { gamesA, gamesB, winner } = matchOutcome(match)
 
-      for (const entryId of [match.pairA.a, match.pairA.b]) {
+      for (const entryId of members(sideOf(match.pairA))) {
         const tally = tallyOf(entryId)
         tally.matchesPlayed++
         tally.gamesFor += gamesA
         tally.gamesAgainst += gamesB
         if (winner === 'A') tally.matchesWon++
       }
-      for (const entryId of [match.pairB.a, match.pairB.b]) {
+      for (const entryId of members(sideOf(match.pairB))) {
         const tally = tallyOf(entryId)
         tally.matchesPlayed++
         tally.gamesFor += gamesB

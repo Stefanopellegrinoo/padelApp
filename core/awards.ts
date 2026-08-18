@@ -1,3 +1,5 @@
+import { sideOf } from './pair-compat'
+import { members } from './side'
 import type { Award, EntryId, PairStanding, SeasonConfig } from './types'
 
 /**
@@ -18,8 +20,13 @@ export function computeAwards(
   guestIds: readonly EntryId[],
 ): Award[] {
   const guests = new Set(guestIds)
+  // `members(sideOf(row.pair))` instead of `[row.pair.a, row.pair.b]` (design
+  // #3801, PUNTO 4 fila 16): a one-member side pays its single member, the
+  // natural generalization of "both members of a pair get the same points" —
+  // not a new rule. `row.pair` is still Pair-shaped until PR18, so `sideOf`
+  // always yields `size: 2` here and this is byte-for-byte the old behavior.
   const championshipMembers = (row: PairStanding): EntryId[] =>
-    [row.pair.a, row.pair.b].filter((entryId) => !guests.has(entryId))
+    members(sideOf(row.pair)).filter((entryId) => !guests.has(entryId))
 
   // computeStandings already hands these over in order; sorting a copy by
   // position keeps the result honest for any other caller.

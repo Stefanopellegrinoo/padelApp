@@ -4,6 +4,8 @@ import { addGuest, closeMatchday, createMatchday, generatePairs, openMatchday, s
 import { adminClient } from './test/admin'
 import { createSeason } from './test/factories'
 import { createTestUser, type TestUser } from './test/users'
+import { closedHistoryAll, matchdayDetail } from './read'
+import { closedHistory } from './season'
 
 // ── scaffolding local a este archivo ────────────────────────────────────────
 // No va a db/test/factories.ts: esa lista de archivos es la del plan, y estos
@@ -613,6 +615,67 @@ describe('closeMatchday', () => {
     expect(pairs2).toHaveLength(8)
     expect(pairs2.every((pair) => pair.entry_b === null)).toBe(true)
     expect(await matchdayStatus(matchday2Id)).toBe('OPEN')
+  })
+
+  /**
+   * W40 (verify-report ronda 12) — el otro lado de C19, y el que quedó SIN
+   * PROBAR hasta acá: 18a habilitó ESCRIBIR una fecha de a uno que ninguna
+   * lectura podía devolver. `pairsAndMatchesOf` (db/read.ts), `resultsOf`
+   * (db/matchday.ts) y `closedHistory` (db/season.ts) componían `pairFromRow`,
+   * que tiraba con `pair_size=1`.
+   *
+   * Este test recorre las TRES lecturas sobre una fecha de a uno cerrada, y la
+   * cierra con el wrapper TS `closeMatchday()` —no con el RPC directo, que es
+   * lo que hace `full_matchday_proof`— porque ese wrapper es el que pasa por
+   * `resultsOf` + `computeStandings` + `computeAwards`. O sea: prueba de punta
+   * a punta que la tabla del día de una disciplina de a uno se calcula, se
+   * graba y se lee.
+   */
+  it('cierra una fecha de a uno con el wrapper TS y las tres lecturas la devuelven (W40)', async () => {
+    const admin = await createTestUser()
+    const filler = await fillerPlayers(8)
+    const config: SeasonConfig = { ...defaultConfig(8), points: [8, 7, 6, 5, 4, 3, 2, 1] }
+    const { seasonId, entryIds, disciplineId } = await createSeason({
+      admin,
+      squad: filler,
+      disciplines: [{ kind: 'FIFA', pairSize: 1, config }],
+    })
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
+    await markAllPlaying(admin, matchdayId, entryIds)
+    await generatePairs(admin.client, matchdayId)
+    await openMatchday(admin.client, matchdayId)
+    // El de `pair_a` gana siempre: con el round robin completo eso deja un
+    // orden total y estricto, así que la tabla del día no se resuelve por
+    // desempate y el primero es el que ganó de verdad — que es justo lo que
+    // S39 decía que ningún test comprobaba.
+    await playAllMatches(admin, matchdayId, (pairA) => pairA)
+
+    // 1) `resultsOf` + `computeStandings` + `computeAwards`, por el wrapper.
+    await closeMatchday(admin.client, matchdayId)
+    expect(await matchdayStatus(matchdayId)).toBe('CLOSED')
+    const stored = await awardsOf(matchdayId)
+    expect(stored).toHaveLength(8)
+    expect(new Set(stored.map((row) => row.entry_id))).toEqual(new Set(entryIds))
+    // Los 8 puntos de la config se repartieron enteros y sin repetir: cada
+    // jugador es su propio lado, así que hay 8 posiciones pagas y no 4.
+    expect([...stored.map((row) => row.points)].sort((a, b) => b - a)).toEqual(config.points)
+
+    // 2) `matchdayDetail` (db/read.ts) — el que alimenta la pantalla de fecha.
+    const detail = await matchdayDetail(admin.client, matchdayId)
+    expect(detail.sides).toHaveLength(8)
+    expect(detail.sides.every((side) => side.size === 1)).toBe(true)
+    expect(new Set(detail.sides.map((side) => side.a))).toEqual(new Set(entryIds))
+    expect(detail.matches).toHaveLength(28)
+    expect(detail.matches.every((match) => match.sideA.size === 1 && match.sideB.size === 1)).toBe(true)
+
+    // 3) `closedHistory` (db/season.ts) — el que alimenta el draw siguiente,
+    // y `closedHistoryAll` (db/read.ts) — el que alimenta /stats y /jugador.
+    const history = await closedHistory(admin.client, disciplineId, 1)
+    expect(history?.sides).toHaveLength(8)
+    expect(history?.sides.every((side) => side.size === 1)).toBe(true)
+    const all = await closedHistoryAll(admin.client, seasonId)
+    expect(all).toHaveLength(1)
+    expect(all[0]?.sides.every((side) => side.size === 1)).toBe(true)
   })
 
   it('rejects a direct RPC call when a match still has no result loaded', async () => {

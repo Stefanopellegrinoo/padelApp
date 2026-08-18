@@ -2,7 +2,6 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import type { ReactNode } from 'react'
 import {
-  computeAwards,
   computeRanking,
   computeStandings,
   includes,
@@ -338,14 +337,17 @@ export default async function FechaDetailPage({ params }: PageProps) {
       awardsBefore(supabase, matchday.disciplineId, matchdayNumber),
       closedHistory(supabase, matchday.disciplineId, matchdayNumber - 1),
       closedHistory(supabase, matchday.disciplineId, matchdayNumber - 2),
-      // Los awards CONGELADOS de ESTA fecha, para la tarjeta de "Sumar
-      // invitado" de más abajo. `canPromote` NO sabe si hay invitados —eso lo
-      // contesta `detail`, que resuelve en este mismo `Promise.all`—, así que
-      // esto sale en TODA fecha cerrada que abra quien organiza, tenga o no
-      // invitados. Es un viaje de ida y vuelta, no tres: por eso no es
-      // `closedHistory`, cuyas otras dos consultas acá son plata tirada (el
-      // estado ya está probado por `canPromote`, y las parejas se descartan).
-      canPromote ? frozenPointsOf(supabase, matchday.id) : Promise.resolve(new Map<string, number>()),
+      // Los awards CONGELADOS de ESTA fecha. Alimentan DOS cosas: la tarjeta
+      // de "Sumar invitado" y —desde C21, verify-report ronda 14— la columna
+      // de puntos de la tabla del día. Por eso la condición ya no es
+      // `canPromote` (admin) sino la fecha cerrada: cualquiera que mire una
+      // fecha cerrada necesita estos puntos, no sólo quien organiza.
+      // Es un viaje de ida y vuelta, no tres: por eso no es `closedHistory`,
+      // cuyas otras dos consultas acá son plata tirada (las parejas se
+      // descartan y el estado ya lo sabemos).
+      status === 'CLOSED' && !isMasters
+        ? frozenPointsOf(supabase, matchday.id)
+        : Promise.resolve(new Map<string, number>()),
     ])
 
     const snapshot = snapshotForMatchday(matchdayNumber, seedOrder, awardsByMatchday, config)
@@ -357,12 +359,30 @@ export default async function FechaDetailPage({ params }: PageProps) {
       effectiveDefenders === null ? null : pair(effectiveDefenders.a, effectiveDefenders.b)
     const isDefendingSide = (side: Side) => defendingSide !== null && sameSide(side, defendingSide)
 
-    // El Masters no reparte puntos, así que tampoco se calculan: `computeAwards`
-    // devolvería un reparto que no existe en `awards` y que nadie escribió.
-    const pointsByEntry =
-      status === 'CLOSED' && !isMasters
-        ? new Map(computeAwards(standings, config, detail.guestIds).map((award) => [award.entryId, award.points]))
-        : new Map<string, number>()
+    // Los puntos de la fecha cerrada son los CONGELADOS, no un recálculo.
+    //
+    // C21 (verify-report ronda 14): acá se llamaba a `computeAwards` con los
+    // `guestIds` de HOY. Mientras el conjunto de lados que cobran no cambiara
+    // después del cierre las dos fuentes coincidían — y PR18c es lo primero en
+    // toda la cadena que hace que cambie. Al promover al invitado que jugó
+    // solo, sale de `guestIds`, su lado pasa a cobrar, quedan 9 lados pagos
+    // contra 8 valores de puntos y `computeAwards` tira un `Error` PELADO (no
+    // `EdgeError`) que el server action re-tira: error boundary de Next, sin
+    // mensaje, sobre la pantalla desde la que se acababa de tocar el botón.
+    // `validateConfig` exige el largo exacto de `points`, así que no hay
+    // holgura posible: pasaba siempre, no era un borde.
+    //
+    // Leer los congelados es la fuente correcta POR DEFINICIÓN, no un parche:
+    // son lo que la fecha repartió, y una fecha cerrada no vuelve a repartir.
+    // Es el mismo argumento que ya estaba escrito para la tarjeta de promoción
+    // veinte líneas más abajo —"leer `awards` hoy no cambia lo que se ve,
+    // cambia DE QUÉ DEPENDE lo que se ve"— que resultó ser cierto también acá.
+    // De paso cierra W43 y saca la posibilidad de que esta tabla contradiga a
+    // la de la temporada, que lee `awards`.
+    //
+    // El Masters queda en cero como antes: no reparte puntos (spec 2.7), así
+    // que no tiene filas en `awards` y `frozenPointsOf` ni se consulta.
+    const pointsByEntry = frozenPoints
 
     // El campeón del año. Los partidos ganados por jugador salen de `standings`
     // —cada pareja del Masters juega una vez, así que sumar las tres parejas de

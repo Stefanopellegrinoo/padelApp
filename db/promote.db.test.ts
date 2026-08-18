@@ -16,7 +16,7 @@ import {
 } from './matchday'
 import { promoteGuest } from './entries'
 import { entriesOf, matchdayDetail, pairLocksOf, seasonSquadMembersOf } from './read'
-import { defaultDisciplineId } from './season'
+import { defaultDisciplineId, frozenPointsOf } from './season'
 import { adminClient } from './test/admin'
 import { createSeason } from './test/factories'
 import { createTestUser, type TestUser } from './test/users'
@@ -818,6 +818,42 @@ describe('promoteGuest — disciplina de a uno: se promueve, sin copiar nada (PR
     const after = await awardsOf(matchdayId)
     expect(after.some((row) => row.entry_id === guestId)).toBe(false)
     expect(after).toEqual(before)
+  })
+
+  /*
+   * C21 (verify-report ronda 14). Promover funcionaba y la PANTALLA de esa
+   * fecha moría en el render siguiente: `page.tsx` recalculaba los puntos del
+   * día con `computeAwards` sobre los `guestIds` de HOY, y al salir el
+   * promovido de esa lista quedaban 9 lados pagos contra 8 valores de puntos.
+   *
+   * Este test recorre la secuencia y afirma sobre la fuente que la pantalla
+   * lee AHORA: los `awards` congelados. Si alguien vuelve a recalcular, los
+   * números de acá siguen bien pero la pantalla se cae — por eso el test
+   * afirma además que el conjunto de asientos que cobran NO cambió con la
+   * promoción, que es exactamente la premisa que el recálculo rompía.
+   */
+  it('después de promover, los puntos congelados de la fecha no se mueven (C21)', async () => {
+    const { admin, matchdayId, guestId, squadEntryIds } = await closedSoloMatchdayWithGuest()
+    const antes = await frozenPointsOf(admin.client, matchdayId)
+    expect([...antes.keys()].sort()).toEqual([...squadEntryIds].sort())
+
+    await promoteGuest(admin.client, guestId)
+
+    const despues = await frozenPointsOf(admin.client, matchdayId)
+    // Mismos asientos y mismos puntos: el promovido no aparece y a los 8 que
+    // cobraron no se les movió un punto. Un recálculo con los `guestIds` de
+    // hoy daría 9 lados pagos y no podría siquiera producirse.
+    expect([...despues.keys()].sort()).toEqual([...antes.keys()].sort())
+    for (const [entryId, points] of antes) {
+      expect(despues.get(entryId)).toBe(points)
+    }
+
+    // Y la fecha se sigue pudiendo LEER entera, que es lo que la pantalla hace
+    // antes de dibujar: con 9 lados y 8 valores de puntos, cualquier camino
+    // que recalcule el reparto acá revienta.
+    const detail = await matchdayDetail(admin.client, matchdayId)
+    expect(detail.sides).toHaveLength(9)
+    expect(detail.guestIds).toEqual([])
   })
 
   it('de a DOS sigue refusando la pareja toda invitada (no-regresión de spec 3.2)', async () => {

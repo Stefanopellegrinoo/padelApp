@@ -1,7 +1,7 @@
 'use client'
 
 import { useOptimistic, useState, useTransition } from 'react'
-import { MAX_PLAYERS, MIN_PLAYERS } from '@/core'
+import { MAX_PLAYERS, MIN_PLAYERS, type SideSize } from '@/core'
 import { initials } from '@/app/format'
 import {
   addGuestPair,
@@ -13,7 +13,7 @@ import {
   toggleAttendance,
   type WriteResult,
 } from './actions'
-import { applySeatTick, type SeatVM } from './armado-state'
+import { applySeatTick, matchdayShape, type SeatVM } from './armado-state'
 import { BorrarFecha } from './borrar'
 
 // `SeatVM` vive en `armado-state.ts` —con el reducer que lo usa— y se re-exporta
@@ -42,11 +42,49 @@ export interface DraftPairVM {
   withGuest: boolean
 }
 
+/**
+ * El vocabulario de la disciplina. Un lado de uno no es "una pareja" y su
+ * fecha no tiene "parejas invitadas": son jugadores invitados que juegan
+ * solos, igual que todos.
+ */
+function words(sideSize: SideSize) {
+  return sideSize === 1
+    ? {
+        sides: 'jugadores',
+        guestSection: 'Jugadores invitados',
+        guestNote:
+          'Juegan solos, como todos, y no suman puntos para el campeonato. Entran de a dos.',
+        addGuest: '+ Agregar 2 invitados',
+        removeGuest: 'Sacar los dos invitados',
+        draw: 'Ordenar jugadores',
+        drawn: 'Orden de la fecha',
+        drawNote: 'Juegan todos contra todos, en el orden de la tabla.',
+      }
+    : {
+        sides: 'parejas',
+        guestSection: 'Parejas invitadas',
+        guestNote:
+          'Juegan juntos y no suman puntos para el campeonato: es un amistoso adentro de la fecha.',
+        addGuest: '+ Agregar pareja invitada',
+        removeGuest: 'Sacar la pareja invitada',
+        draw: 'Generar parejas',
+        drawn: 'Parejas',
+        drawNote:
+          'Los defensores quedan fijos. El resto se arma cruzando la tabla: 1° con último, 2° con anteúltimo, y así.',
+      }
+}
+
 interface ArmadoProps {
   seasonId: string
   matchdayId: string
   /** El slug de la URL desde la que se abrió esta fecha (W28) — lo necesita `BorrarFecha` para volver a la lista correcta. */
   disciplina: string
+  /**
+   * Cuántas entries hacen un lado en ESTA disciplina. Sin esto la pantalla
+   * hardcodeaba 2 en las dos puntas (S31): pedía un invitado para emparejar
+   * donde no hay a quién emparejar, y dividía el plantel por 2.
+   */
+  sideSize: SideSize
   matchdayNumber: number
   /** El plantel en orden de siembra. Los invitados van aparte: son un asiento de esta fecha, no del torneo. */
   seats: SeatVM[]
@@ -83,6 +121,7 @@ export function Armado({
   seasonId,
   matchdayId,
   disciplina,
+  sideSize,
   matchdayNumber,
   seats,
   looseGuests,
@@ -141,39 +180,30 @@ export function Armado({
   }
 
   const confirmed = optimisticSeats.filter((seat) => seat.playing).length
-  const guestCount = looseGuests.length + guestPairs.length * 2
-  // Mientras el tilde vuela, `confirmed` ya es el nuevo y `guestCount` sigue
-  // siendo el viejo: el asiento del invitado lo decide `syncGuestSeat` en el
-  // servidor y no se adivina. TODO lo que mezcla esos dos —`size`,
-  // `eventualSize`, la banda de paridad, y los avisos de "no alcanza" / "entran
-  // hasta N"— puede leer un número que no existe en ningún momento.
+  // Mientras el tilde vuela, `confirmed` ya es el nuevo y la cuenta de
+  // invitados sigue siendo la vieja: el asiento del invitado lo decide
+  // `syncGuestSeat` en el servidor y no se adivina. TODO lo que mezcla esos
+  // dos —`size`, `eventualSize`, la banda de paridad, y los avisos de "no
+  // alcanza" / "entran hasta N"— puede leer un número que no existe en ningún
+  // momento.
   //
   // Con 11 confirmados y un invitado sin nombre, tildar al 12° daba
   // `eventualSize` 13 y encendía "Son 12 y entran hasta 12" — falso y además
   // contradictorio consigo mismo. Nada derivado del tamaño se muestra hasta que
   // el servidor confirme.
   const sizeSettled = !seatPending
-  // El tamaño de la fecha es el plantel confirmado MÁS los invitados: una pareja
-  // invitada suma dos jugadores de verdad y el panel tiene que decirlo, o dice
-  // "la fecha es de 8" con diez personas adentro.
-  const size = confirmed + guestCount
-
-  // La línea de "son impares" describe al invitado suelto que `syncGuestSeat`
-  // agrega, y ése se decide por la paridad del PLANTEL: la pareja invitada suma
-  // dos y no la cambia. Se muestra sólo cuando todavía no hay ningún suelto, que
-  // es exactamente el momento que la frase explica.
-  //
-  // ponytail: queda un caso que esto no dibuja — plantel par con un invitado
-  // suelto YA NOMBRADO, que `syncGuestSeat` conserva a propósito. Ahí la fecha
-  // es impar; lo agarra `assertMatchdaySize` al generar, con su mensaje, y se
-  // sale borrándole el nombre al invitado o sumándole una pareja.
-  const needsLooseGuest = confirmed % 2 !== 0 && looseGuests.length === 0
-
-  // Los bloqueos se miden sobre el tamaño que la fecha VA a tener, contando el
-  // suelto que todavía no está. Por eso 7 confirmados no bloquea: van a ser 8.
-  const eventualSize = size + (needsLooseGuest ? 1 : 0)
-  const tooFew = eventualSize < MIN_PLAYERS
-  const tooMany = eventualSize > MAX_PLAYERS
+  // Toda la aritmética vive en `armado-state.ts`, condicionada por `sideSize`
+  // (S31): acá estaba suelta con el 2 hardcodeado en las dos puntas, y por eso
+  // una disciplina de a uno pedía un invitado para emparejar y mostraba media
+  // pareja. Tiene test propio; adentro de esta pantalla no lo podía tener.
+  const shape = matchdayShape({
+    confirmed,
+    looseGuests: looseGuests.length,
+    guestPairs: guestPairs.length,
+    sideSize,
+  })
+  const { size, sides, matches, complete, needsLooseGuest, eventualSize, tooFew, tooMany } = shape
+  const label = words(sideSize)
   const guestUnnamed = [
     ...looseGuests.map((guest) => guest.name),
     ...guestPairs.flatMap((pair) => [pair.a.name, pair.b.name]),
@@ -198,9 +228,13 @@ export function Armado({
             <p className="mt-2 rounded-field bg-warn-bg px-3 py-2 text-center text-[12.5px] font-bold">
               Son impares. Se suma 1 invitado y la fecha queda de {eventualSize}.
             </p>
-          ) : size % 2 === 0 ? (
+          ) : complete ? (
+            // Los partidos se muestran porque son el costo real de la fecha, y
+            // de a uno crecen distinto: 12 jugadores son 66 partidos donde 12
+            // de a dos son 15. Ese número es el que hace pedir el formato de
+            // grupos (REQ-D8-1, PR21), que es la salida a W32.
             <p className="mt-2 text-center text-[12.5px] font-[600] text-muted">
-              La fecha es de {size} · {size / 2} parejas
+              La fecha es de {size} · {sides} {label.sides} · {matches} partidos
             </p>
           ) : (
             <p className="mt-2 rounded-field bg-warn-bg px-3 py-2 text-center text-[12.5px] font-bold">
@@ -275,13 +309,14 @@ export function Armado({
       ))}
 
       <section className="flex flex-col gap-2">
-        <h2 className={`${STEP_TITLE} border-b border-line pb-2`}>Parejas invitadas</h2>
+        <h2 className={`${STEP_TITLE} border-b border-line pb-2`}>{label.guestSection}</h2>
 
         {guestPairs.map((pair) => (
           <ParejaInvitada
             key={pair.lockId}
             pair={pair}
             pending={pending}
+            removeLabel={label.removeGuest}
             onName={(entryId, name) =>
               run(() => saveGuestName(seasonId, matchdayId, matchdayNumber, entryId, name))
             }
@@ -299,9 +334,16 @@ export function Armado({
           />
         ))}
 
-        <p className="text-[11.5px] font-[600] text-muted">
-          Juegan juntos y no suman puntos para el campeonato: es un amistoso adentro de la fecha.
-        </p>
+        {/* ponytail: `addGuestPair` no tiene guard de `pairSize` y suma los
+            invitados de a DOS incluso donde no hay parejas — con `sideSize=1`
+            el lock que los traba lo ignora `buildSides` entero (su propio
+            comentario: "a constraint on a pairing that never happens
+            constrains nothing"), así que quedan dos invitados jugando solos.
+            No revienta y hoy es el ÚNICO camino para sumar un invitado a una
+            fecha de a uno, así que el copy lo dice en vez de esconderlo. El
+            arreglo real es una action de un invitado suelto; va en su propia
+            rebanada, no acá. */}
+        <p className="text-[11.5px] font-[600] text-muted">{label.guestNote}</p>
 
         <button
           type="button"
@@ -309,13 +351,13 @@ export function Armado({
           onClick={() => run(() => addGuestPair(seasonId, matchdayId, matchdayNumber))}
           className="rounded-field border-[1.5px] border-line p-3 text-[13.5px] font-extrabold"
         >
-          + Agregar pareja invitada
+          {label.addGuest}
         </button>
       </section>
 
       {pairs.length > 0 && (
         <section className="flex flex-col gap-2">
-          <h2 className={`${STEP_TITLE} border-b border-line pb-2`}>Parejas</h2>
+          <h2 className={`${STEP_TITLE} border-b border-line pb-2`}>{label.drawn}</h2>
           {pairs.map((pair, index) => (
             <div
               key={pair.key}
@@ -337,10 +379,7 @@ export function Armado({
               )}
             </div>
           ))}
-          <p className="text-[11.5px] font-[600] text-muted">
-            Los defensores quedan fijos. El resto se arma cruzando la tabla: 1° con último, 2° con
-            anteúltimo, y así.
-          </p>
+          <p className="text-[11.5px] font-[600] text-muted">{label.drawNote}</p>
         </section>
       )}
 
@@ -376,7 +415,7 @@ export function Armado({
             pairs.length > 0 ? 'border-[1.5px] border-line' : 'flex-1 text-center'
           } ${!canDraw ? 'bg-chip text-muted' : pairs.length > 0 ? '' : 'bg-accent text-accent-text'}`}
         >
-          {pairs.length > 0 ? 'Regenerar' : 'Generar parejas'}
+          {pairs.length > 0 ? 'Regenerar' : label.draw}
         </button>
 
         {pairs.length > 0 && (
@@ -410,11 +449,14 @@ export function Armado({
 function ParejaInvitada({
   pair,
   pending,
+  removeLabel,
   onName,
   onRemove,
 }: {
   pair: GuestPairVM
   pending: boolean
+  /** "Sacar la pareja invitada" o "Sacar los dos invitados", según la aridad. */
+  removeLabel: string
   onName: (entryId: string, name: string) => void
   onRemove: () => void
 }) {
@@ -457,7 +499,7 @@ function ParejaInvitada({
           type="button"
           disabled={pending}
           onClick={onRemove}
-          aria-label="Sacar la pareja invitada"
+          aria-label={removeLabel}
           className="absolute top-0 right-0 flex h-11 w-11 items-center justify-center"
         >
           <span className="flex h-7 w-7 items-center justify-center rounded-full bg-chip text-[15px] font-extrabold text-muted">

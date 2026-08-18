@@ -31,8 +31,11 @@ describe('disciplines', () => {
     expect(row?.id).toBe(disciplineId)
     expect(row?.kind).toBe('PADEL')
     expect(row?.status).toBe('SETUP')
-    // numeric(4,2) viaja como string por PostgREST (riesgo documentado en el diseño).
-    expect(Number(row?.weight)).toBe(1)
+    // W21 (verify-report ronda 6): dato crudo de PostgREST, sin `Number()` a
+    // propósito — `numeric(4,2)` YA llega `number`, esto es la prueba de eso
+    // (con el wrapper el assert nunca podría detectar lo contrario).
+    expect(row?.weight).toBe(1)
+    expect(typeof row?.weight).toBe('number')
     expect(row?.pair_size).toBe(2)
     expect(row?.allows_draw).toBe(false)
     expect(row?.has_masters).toBe(true)

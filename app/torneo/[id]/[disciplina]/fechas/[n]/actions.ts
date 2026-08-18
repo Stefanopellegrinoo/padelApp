@@ -187,7 +187,9 @@ export async function buildMasters(seasonId: string, playedOn: string): Promise<
   try {
     const supabase = await serverClient()
     await createMasters(supabase, seasonId, playedOn)
-    revalidatePath(`/torneo/${seasonId}/fechas`)
+    // 'layout': PR13c movió la lista a `[disciplina]/fechas`, y esta acción no
+    // conoce el slug — mismo criterio que `inDraft`/`onMatchday` más abajo.
+    revalidatePath(`/torneo/${seasonId}`, 'layout')
     return { ok: true }
   } catch (error) {
     if (error instanceof EdgeError) return { ok: false, error: error.message }
@@ -254,9 +256,14 @@ export async function cancelTheMatchday(seasonId: string, matchdayId: string): P
     throw error
   }
 
-  revalidatePath(`/torneo/${seasonId}/fechas`)
-  revalidatePath(`/torneo/${seasonId}`)
+  // 'layout' cubre la lista (bajo `[disciplina]/`) y la tabla en un solo
+  // llamado — mismo criterio que `inDraft`/`onMatchday` más arriba.
+  revalidatePath(`/torneo/${seasonId}`, 'layout')
   revalidatePath('/torneos')
+  // PR13c slice B: redirige al stub sin disciplina (`app/torneo/[id]/fechas/page.tsx`),
+  // que reenvía a la disciplina [0] de la temporada — no necesariamente ÉSTA.
+  // Esta acción no conoce el slug de la URL desde la que se llamó (`BorrarFecha`
+  // no lo recibe todavía); documentado como pendiente en `apply-progress`.
   redirect(`/torneo/${seasonId}/fechas`)
 }
 

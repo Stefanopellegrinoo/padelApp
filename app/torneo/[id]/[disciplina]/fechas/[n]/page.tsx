@@ -419,10 +419,15 @@ export default async function FechaDetailPage({ params }: PageProps) {
     // La tercera guarda —la fecha siguiente en DRAFT— se deja pasar a propósito:
     // si está vacía, `reopen_matchday` la borra y sigue, que es exactamente el
     // caso para el que se escribió; si tiene datos, su mensaje es el correcto.
+    // W13 (verify-report ronda 5): `matchdays` es de TODA la temporada
+    // (`seasonMatchdaysOf`), pero `reopen_matchday` (0018) filtra sus dos
+    // guardas por `discipline_id` — una fecha OPEN o CLOSED de OTRA
+    // disciplina no debe apagar el botón acá.
+    const ownMatchdays = matchdays.filter((candidate) => candidate.disciplineId === matchday.disciplineId)
     const isLastClosed =
-      !matchdays.some(
+      !ownMatchdays.some(
         (candidate) => candidate.status === 'CLOSED' && candidate.number > matchday.number,
-      ) && !matchdays.some((candidate) => candidate.status === 'OPEN' && candidate.id !== matchday.id)
+      ) && !ownMatchdays.some((candidate) => candidate.status === 'OPEN' && candidate.id !== matchday.id)
 
     const hasGuest = (pair: Pair) => detail.guestIds.includes(pair.a) || detail.guestIds.includes(pair.b)
     const anyGuestInTable = status === 'CLOSED' && standings.some((row) => hasGuest(row.pair))

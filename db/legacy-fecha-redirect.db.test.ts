@@ -81,4 +81,19 @@ describe('legacyFechaRedirectTarget', () => {
     const target = await legacyFechaRedirectTarget(admin.client, { seasonId, n: '99' })
     expect(target).toBeNull()
   })
+
+  // W16 (verify-report ronda 5): los 4 tests de arriba corrían todos como
+  // `admin.client` — cero cobertura del extraño / no-participante, que es
+  // exactamente el input que produce el `EdgeError` sin atrapar de W15. Este
+  // test documenta ese throw (hoy: rechaza — el `try/catch` que lo atrapa
+  // vive en `middleware.ts`, no acá; esta función sigue siendo la fuente de
+  // verdad de "no se puede leer la temporada").
+  it('rejects for a stranger who cannot see the season — the input W15 needs middleware to catch', async () => {
+    const admin = await createTestUser()
+    const { seasonId, disciplineId } = await createSeason({ admin })
+    await insertMatchday(seasonId, disciplineId, 2)
+    const stranger = await createTestUser()
+
+    await expect(legacyFechaRedirectTarget(stranger.client, { seasonId, n: '2' })).rejects.toThrow()
+  })
 })

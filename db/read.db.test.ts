@@ -25,6 +25,7 @@ import {
   publicRules,
   seasonAdminName,
   seasonHeader,
+  seasonMatchdaysOf,
   seasonRules,
 } from './read'
 import { adminClient } from './test/admin'
@@ -347,6 +348,12 @@ describe('db/read', () => {
 
       expect(await entriesOf(stranger.client, seasonId)).toEqual([])
       expect(await matchdaysOf(stranger.client, seasonId)).toEqual([])
+      // W16 (verify-report ronda 5): `seasonMatchdaysOf` (PR 10) es una
+      // lectura nueva de temporada entera y no tenía test de RLS propio —
+      // su gemela `matchdaysOf` sí, arriba. No pasa por `defaultDisciplineId`
+      // (a diferencia de `matchdaysOf`): filtra directo por `season_id`, y
+      // RLS devuelve 0 filas para quien no participa, sin error.
+      expect(await seasonMatchdaysOf(stranger.client, seasonId)).toEqual([])
 
       await expect(matchdayDetail(stranger.client, matchday1Id)).rejects.toThrow()
 

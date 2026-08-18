@@ -136,11 +136,15 @@ function PromoteGuestCard({
   // saltea los lados hechos sólo de invitados, así que no cobró nada. La base
   // lo promueve igual (`0031_promote_guest_single_side.sql`, W35) justamente
   // porque no hay nada que copiar NI posiciones ajenas que correr.
-  const puntos =
+  // W47 (verify-report ronda 15): la frase mandaba a "actualizar Formato" y
+  // ese control NO EXISTE — Formato deja cambiar los valores que hay, no
+  // agregar uno. De a uno eso dejaba la temporada sin salida por pantalla.
+  // Ahora `promote_guest` (0032) agrega el casillero solo, con 0, así que la
+  // frase describe lo que pasa en vez de pedir algo imposible.
+  const copy =
     guest.estado === 'JUGO_SOLO'
-      ? 'Jugó solo, así que esta fecha no le dejó puntos y no se lleva ninguno.'
-      : `Se lleva los ${guest.partnerPoints} puntos que le tocaron a su pareja en esta fecha.`
-  const copy = `Pasa a ser uno más del plantel. ${puntos} Las demás fechas no se tocan. El plantel queda con un asiento más del que dice Formato —hay que actualizarlo antes de sortear la próxima fecha— y esto no se deshace: como ya jugó ésta, Ajustes › Plantel no lo va a dejar sacar.`
+      ? `Pasa a ser uno más del plantel. Jugó solo, así que esta fecha no le dejó puntos y no se lleva ninguno. Las demás fechas no se tocan. Se suma un puesto a la lista de puntos, en 0: cambialo en Ajustes › Formato si querés que ese lugar pague. Esto no se deshace: como ya jugó esta fecha, Ajustes › Plantel no lo va a dejar sacar.`
+      : `Pasa a ser uno más del plantel. Se lleva los ${guest.partnerPoints} puntos que le tocaron a su pareja en esta fecha. Las demás fechas no se tocan. El plantel queda con un asiento más del que dice Formato —revisalo antes de sortear la próxima fecha— y esto no se deshace: como ya jugó ésta, Ajustes › Plantel no lo va a dejar sacar.`
 
   return (
     <form

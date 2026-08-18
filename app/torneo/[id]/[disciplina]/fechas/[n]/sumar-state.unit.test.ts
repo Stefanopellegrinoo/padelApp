@@ -184,24 +184,40 @@ describe('guestsToPromote', () => {
 })
 
 /**
- * PR18b: en una disciplina de a uno el invitado ES su propio lado. No hay
- * compañero de quien copiar puntos, y `promote_guest` HOY lo rechaza — su
- * guard de "¿el compañero cobró?" da TRUE con `entry_b` nulo, misma lógica de
- * tres valores que C17 (W35, verify-report ronda 10). Ofrecer el botón ahí
- * sería el rebote garantizado que esta pantalla existe para no ofrecer.
+ * En una disciplina de a uno el invitado ES su propio lado. No hay compañero
+ * de quien copiar puntos, y `computeAwards` saltea los lados hechos sólo de
+ * invitados, así que no tiene fila en `awards`.
  *
- * PR18c (slice D re-especificada) es la que hace que la base acepte esa
- * promoción; cuando aterrice, estos dos tests son los que cambian.
+ * PR18b lo sacaba de la lista entera, porque `promote_guest` lo rechazaba: su
+ * guard de "¿el compañero cobró?" daba TRUE con `entry_b` nulo (W35,
+ * verify-report ronda 10). **PR18c cambió eso**: la base ahora saltea ese
+ * guard y la copia cuando `pair_size = 1`, y la promoción procede.
+ *
+ * Por eso el estado no es `PUEDE`: `PUEDE` promete los puntos que se le van a
+ * copiar del compañero, y acá no se copia nada. `JUGO_SOLO` es "se puede
+ * sumar, y no se lleva puntos de esta fecha" — que es distinto de no poder, y
+ * distinto de poder con puntos. Meterlo en `PUEDE` con `partnerPoints: 0`
+ * habría sido mentir con un número: 0 es un award real desde
+ * `0010_points_can_be_zero.sql`, no la ausencia de uno.
  */
 describe('guestsToPromote con lados de uno (pair_size=1)', () => {
-  it('no ofrece la tarjeta al invitado que jugó solo', () => {
+  it('el que jugó solo se puede sumar, y la tarjeta dice que no trae puntos', () => {
     const promovibles = guestsToPromote(
       fecha({ sides: [single('invi'), single('ana')], frozenPoints: new Map([['ana', 5]]) }),
     )
-    expect(promovibles).toEqual([])
+    expect(promovibles).toEqual([{ entryId: 'invi', name: 'Invitado', estado: 'JUGO_SOLO' }])
   })
 
-  it('el que jugó solo no tapa al que sí tiene compañero en un torneo mixto', () => {
+  it('no promete puntos ajenos aunque otro lado de la fecha haya cobrado', () => {
+    // `ana` cobró 5 jugando sola. El invitado no hereda eso: no fue su
+    // compañera, fue su rival.
+    const [invitado] = guestsToPromote(
+      fecha({ sides: [single('invi'), single('ana')], frozenPoints: new Map([['ana', 5]]) }),
+    )
+    expect(invitado).not.toHaveProperty('partnerPoints')
+  })
+
+  it('en un torneo mixto cada invitado recibe el estado de SU lado', () => {
     const promovibles = guestsToPromote(
       fecha({
         guestIds: ['invi', 'invi2'],
@@ -210,6 +226,7 @@ describe('guestsToPromote con lados de uno (pair_size=1)', () => {
       }),
     )
     expect(promovibles).toEqual([
+      { entryId: 'invi', name: 'Invitado', estado: 'JUGO_SOLO' },
       { entryId: 'invi2', name: 'Otro invitado', estado: 'PUEDE', partnerPoints: 7 },
     ])
   })

@@ -427,4 +427,19 @@ describe('addDiscipline (PR 13, REQ-D1-2)', () => {
     )
     expect(await squadSeedOrder(admin.client, partialId)).toEqual([a, c])
   })
+
+  // C13 (verify-report ronda 7): `config.squadSize` no se comparaba contra
+  // los asientos realmente sembrados — mismo agujero que `createSeason`
+  // (db/season.ts:240) ya tapa para el wizard.
+  it('rechaza una config cuyo squadSize no coincide con los asientos sembrados (C13)', async () => {
+    const admin = await createTestUser()
+    const { seasonId, entryIds } = await createSeason({
+      admin,
+      squad: [admin.playerId, ...(await fillerPlayers(9))], // 10 asientos
+    })
+
+    await expect(
+      addDiscipline(admin.client, seasonId, { kind: 'PADEL', config: defaultConfig(10) }, entryIds.slice(0, 9)),
+    ).rejects.toThrow()
+  })
 })

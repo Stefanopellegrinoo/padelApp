@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { defaultConfig } from '@/core'
+import { computeGlobalRanking, computeRanking, defaultConfig } from '@/core'
 import type { Database } from './database.types'
 import {
   addGuest,
@@ -28,6 +28,7 @@ import {
   seasonHeader,
   seasonMatchdaysOf,
   seasonRules,
+  seasonSquadMembersOf,
   seasonSquadOf,
 } from './read'
 import { adminClient } from './test/admin'
@@ -272,6 +273,14 @@ describe('db/read', () => {
       await db.from('discipline_entries').delete().eq('discipline_id', fifaId).eq('entry_id', firstEntryId)
       expect(await seasonSquadOf(owner.client, multiId)).toEqual(entryIds)
 
+      // `seasonSquadMembersOf` (PR12b slice 2, tabla global): mismo criterio
+      // que `seasonSquadOf` — no lo excluye por no jugar FIFA — más el nombre,
+      // que la tabla global necesita para dibujar la fila y `seasonSquadOf`
+      // (sólo ids) no trae.
+      const members = await seasonSquadMembersOf(owner.client, multiId)
+      expect(members.map((member) => member.id)).toEqual(entryIds)
+      expect(members.every((member) => member.displayName.length > 0)).toBe(true)
+
       // Mismo número (1) en las dos: REQ-D3-2 lo permite, y es el caso que C10
       // (verify-report ronda 5) probó que el redirect legacy desempataba mal —
       // `seasonAwardsOf` lo desambigua por `disciplineId`, no por `number` solo.
@@ -300,6 +309,40 @@ describe('db/read', () => {
       const seasonAwards = await seasonAwardsOf(owner.client, matchdays)
       expect(seasonAwards.get(padelId)?.get(1)).toHaveLength(entryIds.length)
       expect(seasonAwards.get(fifaId)?.get(1)).toHaveLength(entryIds.length)
+    })
+  })
+
+  // Slice 2 de PR12b (root -> tabla global): con UNA sola disciplina en
+  // weight=1 —el caso de toda temporada real hoy, incluida PnP-1000— la
+  // tabla global tiene que dar EXACTAMENTE la misma gente y los mismos
+  // puntos que la Tabla por-disciplina (`entriesOf` + `computeRanking`
+  // directo, lo que usa `[disciplina]/page.tsx`). Números reales, no
+  // razonados: éste es el fixture de `beforeAll` (fecha 1 CLOSED, 8 en el
+  // plantel).
+  describe('tabla global de una temporada de una sola disciplina', () => {
+    it('da la misma gente y los mismos puntos que la tabla de esa disciplina', async () => {
+      const header = await seasonHeader(member.client, seasonId)
+      const discipline = header.disciplines[0]
+      if (discipline === undefined) throw new Error('La temporada no tiene disciplina.')
+
+      const matchdays = await seasonMatchdaysOf(member.client, seasonId)
+      const seasonAwards = await seasonAwardsOf(member.client, matchdays)
+      const awardsOfDiscipline = seasonAwards.get(discipline.id) ?? new Map()
+
+      const disciplineSquad = (await entriesOf(member.client, seasonId, discipline.id))
+        .filter((entry) => entry.kind === 'SQUAD')
+        .map((entry) => entry.id)
+      const perDiscipline = computeRanking(awardsOfDiscipline, disciplineSquad, discipline.config, [])
+
+      const members = await seasonSquadMembersOf(member.client, seasonId)
+      const global = computeGlobalRanking([
+        { weight: discipline.weight, ranking: computeRanking(awardsOfDiscipline, members.map((m) => m.id), discipline.config, []) },
+      ])
+
+      expect(members.map((member) => member.id).sort()).toEqual([...disciplineSquad].sort())
+      expect(new Map(global.map((row) => [row.entryId, row.points]))).toEqual(
+        new Map(perDiscipline.map((row) => [row.entryId, row.points])),
+      )
     })
   })
 

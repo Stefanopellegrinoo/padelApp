@@ -25,12 +25,23 @@ export interface Defenders {
  * Nada de esto se guarda (spec 3.3): sale de los `awards` congelados, igual
  * que `previousContext` en `core/history.ts`. Quien ya repitió gastó su
  * defensa y no vuelve a aparecer.
+ *
+ * W42 (verify-report ronda 13): con `sideSize === 1` NO HAY defensores, y esto
+ * lo tiene que decir la pantalla porque el sorteo ya lo dice. Defender el
+ * título es una restricción del sorteo DE PAREJAS —`buildSides` con
+ * `sideSize === 1` ignora `defenders` entero, y `pairingContextFor` ni
+ * siquiera lo calcula (C19)—, así que anunciar "Repiten" sobre un jugador
+ * solo promete una regla que después no se aplica. Misma decisión y mismo
+ * motivo que `championsOf` en `core/history.ts`, que devuelve `null` para un
+ * lado de uno: las dos derivaciones tienen que contestar lo mismo.
  */
 export function defendersOf(
   closedRegular: readonly ClosedMatchdayAwards[],
   nameOf: ReadonlyMap<string, string>,
-  _sideSize: SideSize,
+  sideSize: SideSize,
 ): Defenders | null {
+  if (sideSize === 1) return null
+
   const sorted = [...closedRegular].sort((a, b) => b.number - a.number)
   const last = sorted[0]
   const beforeLast = sorted[1]

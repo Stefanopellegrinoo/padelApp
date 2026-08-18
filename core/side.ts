@@ -1,4 +1,4 @@
-import type { EntryId, Side } from './types'
+import type { EntryId, Side, SideSize } from './types'
 
 /** Un lado de a uno — FIFA 1v1, o cualquier disciplina con `pairSize: 1`. */
 export function single(a: EntryId): Side {
@@ -30,6 +30,22 @@ export function partnerOf(side: Side, entryId: EntryId): EntryId | null {
   if (side.a === entryId) return side.b
   if (side.b === entryId) return side.a
   return null
+}
+
+/**
+ * El único constructor de borde: donde un `Side` nace de una fila cruda (una
+ * fila de `pairs`, por ejemplo). Con un discriminante VARIABLE (`row.pair_size`,
+ * no un literal) el excess-property check de TS no dispara (S28, verify-report
+ * ronda 9): `{ size: row.pair_size as SideSize, a, b }` compila limpio y, si
+ * `pair_size` es 1, el `b` de la fila queda adentro del objeto sin que nadie
+ * pueda leerlo — se pierde en silencio. `sideOfRow` cierra ese agujero: tira
+ * si la forma no cierra, igual que `pairOf` (pair-compat.ts) con un lado de
+ * uno.
+ */
+export function sideOfRow(size: SideSize, a: EntryId, b: EntryId | null): Side {
+  if (size === 1) return { size: 1, a }
+  if (b === null) throw new Error('Un lado de a dos sin segundo miembro. La fila está rota.')
+  return { size: 2, a, b }
 }
 
 /** Si dos lados son el mismo lado — mismo tamaño, mismas entries, el orden de a/b no importa en un par. */

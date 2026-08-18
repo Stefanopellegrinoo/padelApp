@@ -50,6 +50,10 @@ export async function updateDisciplineConfig(
 export interface NewDiscipline {
   kind?: 'PADEL' | 'FIFA'
   config: SeasonConfig
+  /** Mismo contrato que `NewSeasonDiscipline` (db/season.ts): elegido al crear, no derivado de `kind`. Sin especificar, 2. */
+  pairSize?: 1 | 2
+  /** Mismo contrato que `NewSeasonDiscipline`. Sin especificar, false. */
+  allowsDraw?: boolean
 }
 
 /**
@@ -102,6 +106,8 @@ export async function addDiscipline(
       kind: spec.kind ?? 'PADEL',
       config: spec.config as unknown as Json,
       position: (maxRow?.position ?? -1) + 1,
+      pair_size: spec.pairSize ?? 2,
+      allows_draw: spec.allowsDraw ?? false,
     })
     .select('id')
     .single()

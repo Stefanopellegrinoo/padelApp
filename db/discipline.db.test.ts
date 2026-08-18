@@ -432,6 +432,31 @@ describe('addDiscipline (PR 13, REQ-D1-2)', () => {
     expect(await squadSeedOrder(admin.client, partialId)).toEqual(subset)
   })
 
+  // PR14 slice A — mismo contrato que createSeason: addDiscipline también
+  // puede declarar pair_size/allows_draw explícitos al sumar una disciplina
+  // a un torneo en curso (REQ-D2-1, decisión #5).
+  it('acepta pair_size/allows_draw explícitos al agregar una disciplina', async () => {
+    const admin = await createTestUser()
+    const { seasonId } = await createSeason({
+      admin,
+      squad: [admin.playerId, ...(await fillerPlayers(7))],
+    })
+
+    const fifaId = await addDiscipline(admin.client, seasonId, {
+      kind: 'FIFA',
+      config: defaultConfig(8),
+      pairSize: 1,
+      allowsDraw: true,
+    })
+
+    const { data } = await adminClient()
+      .from('disciplines')
+      .select('pair_size, allows_draw')
+      .eq('id', fifaId)
+      .single()
+    expect(data).toEqual({ pair_size: 1, allows_draw: true })
+  })
+
   // C13 (verify-report ronda 7): `config.squadSize` no se comparaba contra
   // los asientos realmente sembrados — mismo agujero que `createSeason`
   // (db/season.ts:240) ya tapa para el wizard.

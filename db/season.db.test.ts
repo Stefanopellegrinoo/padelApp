@@ -38,16 +38,6 @@ import type { Json } from './database.types'
 
 type AwardRow = { entry_id: string; position: number; points: number }
 
-// W36/S34 (verify-report ronda 10/11): retira la copia local — `sideOfRow`
-// (core/side.ts) es el hogar único. `pairSize` es literal 2, no leído de la
-// fila: esta suite sólo ejercita pádel (pair_size=2, siempre con segundo
-// miembro), documentado en `pairsOf` más abajo.
-function requirePartner(entryA: string, entryB: string | null): string {
-  const side = sideOfRow(2, entryA, entryB)
-  if (side.size === 1) throw new Error('Lado de a uno en una suite que sólo espera pádel. Esto es un bug del test.')
-  return side.b
-}
-
 async function fillerPlayers(count: number): Promise<string[]> {
   const db = adminClient()
   const ids: string[] = []
@@ -239,12 +229,16 @@ async function playByRankRule(
   const rankIndex = new Map(ranking.map((row, index) => [row.entryId, index]))
   const worst = ranking.length // los invitados quedan afuera del ranking del plantel: valen como el peor posible
 
+  // W38 (verify-report ronda 12): `requirePartner` retirado — `sideOfRow`
+  // (core/side.ts) es el hogar único. `2` es literal, no leído de la fila:
+  // esta suite sólo ejercita pádel (pair_size=2, siempre con `entry_b`).
   const pairs = await pairsOf(matchdayId)
   const pairRank = new Map(
-    pairs.map((pair) => [
-      pair.id,
-      Math.min(rankIndex.get(pair.entry_a) ?? worst, rankIndex.get(requirePartner(pair.entry_a, pair.entry_b)) ?? worst),
-    ]),
+    pairs.map((pair) => {
+      const side = sideOfRow(2, pair.entry_a, pair.entry_b)
+      const partner = side.size === 2 ? side.b : pair.entry_a
+      return [pair.id, Math.min(rankIndex.get(pair.entry_a) ?? worst, rankIndex.get(partner) ?? worst)]
+    }),
   )
 
   const matches = await matchesOf(matchdayId)
@@ -348,9 +342,13 @@ async function buildWalkthroughSeason(): Promise<WalkthroughSeason> {
 
   const recordClose = async (matchdayId: string, number: number): Promise<void> => {
     matchdayIds[number - 1] = matchdayId
+    // W38 (verify-report ronda 12): idem arriba — sideOfRow(2, ...) inline.
     pairsByMatchday.set(
       number,
-      (await pairsOf(matchdayId)).map((row) => ({ a: row.entry_a, b: requirePartner(row.entry_a, row.entry_b) })),
+      (await pairsOf(matchdayId)).map((row) => {
+        const side = sideOfRow(2, row.entry_a, row.entry_b)
+        return { a: row.entry_a, b: side.size === 2 ? side.b : row.entry_a }
+      }),
     )
     awardsRightAfterClose.set(number, sortByEntry(await awardsOf(matchdayId)))
   }

@@ -2,8 +2,8 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import type { DisciplineId, SeasonConfig } from '@/core'
-import { updateDisciplineConfig } from '@/db/discipline'
+import { defaultConfig, type DisciplineId, type SeasonConfig } from '@/core'
+import { addDiscipline, updateDisciplineConfig } from '@/db/discipline'
 import { addSquadSeat, claimOwnSeat, removeSeat, renameSeat, unlinkSeat } from '@/db/entries'
 import { EdgeError } from '@/db/errors'
 import { deleteSeason, renameSeason, updateSeasonRules } from '@/db/season'
@@ -134,6 +134,29 @@ export async function saveConfig(
 ): Promise<WriteResult> {
   return onSeason(seasonId, async (supabase) => {
     await updateDisciplineConfig(supabase, disciplineId, config)
+  })
+}
+
+/**
+ * Suma una disciplina a un torneo YA EN CURSO (REQ-D1-2). A diferencia del
+ * wizard —una fila por `kind`, decisión #3823— acá NO se filtra el `kind` ya
+ * presente: un segundo PADEL es exactamente el caso que habilita el ordinal
+ * de `core/discipline-slug.ts` (`padel`, `padel-2`).
+ *
+ * `config` sale de `defaultConfig(entryIds.length)`: el tamaño real del
+ * plantel elegido, no el de la temporada entera si el admin destildó a
+ * alguien (REQ-D1-4, solape parcial). Si queda impar o por debajo del
+ * mínimo, `assertValidConfig` (adentro de `addDiscipline`) lo rechaza con el
+ * mismo mensaje en español que ya usa Formato — no hace falta duplicar esa
+ * validación acá.
+ */
+export async function addDisciplineToSeason(
+  seasonId: string,
+  kind: 'PADEL' | 'FIFA',
+  entryIds: string[],
+): Promise<WriteResult> {
+  return onSeason(seasonId, async (supabase) => {
+    await addDiscipline(supabase, seasonId, { kind, config: defaultConfig(entryIds.length) }, entryIds)
   })
 }
 

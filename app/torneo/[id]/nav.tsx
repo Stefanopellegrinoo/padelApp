@@ -18,9 +18,23 @@ interface NavItem {
  */
 const NON_DISCIPLINE_SEGMENTS = new Set(['fechas', 'stats', 'reglas', 'ajustes', 'jugador'])
 
-export function TorneoNav({ seasonId }: { seasonId: string }) {
+interface TorneoNavProps {
+  seasonId: string
+  /** Disciplina [0] de la temporada — a dónde va "Fechas" cuando la URL actual no trae ninguna (PR13c slice B). */
+  defaultDisciplineSlug: string
+}
+
+export function TorneoNav({ seasonId, defaultDisciplineSlug }: TorneoNavProps) {
   const pathname = usePathname()
   const base = `/torneo/${seasonId}`
+
+  // La disciplina bajo la URL actual, si la hay — mismo criterio que "Tabla"
+  // (abajo) pero sin anclar el final: cubre `${base}/{slug}` Y
+  // `${base}/{slug}/fechas/{n}`. `null` en Tabla global, Ajustes, Stats y
+  // Reglas, donde "Fechas" cae a `defaultDisciplineSlug`.
+  const pathSegment = /^\/([^/]+)/.exec(pathname.slice(base.length))?.[1]
+  const currentDisciplineSlug =
+    pathSegment !== undefined && !NON_DISCIPLINE_SEGMENTS.has(pathSegment) ? pathSegment : null
 
   const items: NavItem[] = [
     {
@@ -38,7 +52,10 @@ export function TorneoNav({ seasonId }: { seasonId: string }) {
     },
     {
       label: 'Fechas',
-      href: `${base}/fechas`,
+      // PR13c slice B (C12): la lista vive bajo `${base}/{disciplina}/fechas`
+      // desde ahora — a la disciplina de la pantalla actual si hay una, si no
+      // a la [0] de la temporada.
+      href: `${base}/${currentDisciplineSlug ?? defaultDisciplineSlug}/fechas`,
       // W14 (verify-report ronda 5): la ruta de una fecha lleva la disciplina
       // en el medio (`${base}/{disciplina}/fechas/{n}`, PR 10) — `startsWith`
       // ya no la agarra. `includes` sobre lo que sigue de `base` la vuelve a

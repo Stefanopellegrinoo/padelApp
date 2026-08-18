@@ -2,8 +2,9 @@ import { execFileSync } from 'node:child_process'
 import { describe, it, expect } from 'vitest'
 import { defaultConfig } from '@/core'
 import { createMatchday, matchdayContextFor } from './matchday'
-import { disciplineConfig, updateDisciplineConfig } from './discipline'
-import { derivedSeasonStatus } from './read'
+import { addDiscipline, disciplineConfig, updateDisciplineConfig } from './discipline'
+import { awardsOf, derivedSeasonStatus } from './read'
+import { squadSeedOrder } from './season'
 import { adminClient } from './test/admin'
 import { createSeason } from './test/factories'
 import { createTestUser } from './test/users'
@@ -303,5 +304,127 @@ describe('la config editada llega al motor de puntajes (C5, verify-report ronda 
     const context = await matchdayContextFor(admin.client, matchdayId)
     expect(context.config.points).toEqual([100, 60, 30, 10])
     expect(context.config.regularMatchdays).toBe(42)
+  })
+})
+
+// ── PR 13 — S19 (verify-report ronda 6): (season_id, position) único ───────
+// El caso real nunca choca (`createSeason` escribe `position` explícito
+// desde S13), así que el índice se prueba armando la colisión a mano: es la
+// única forma de ejercitar `disciplines_season_position` (0027) sin esperar
+// a que un bug futuro la reproduzca sola.
+describe('disciplines_season_position (S19, 0027)', () => {
+  it('rechaza una segunda disciplina con el mismo (season_id, position)', async () => {
+    const admin = await createTestUser()
+    const { seasonId } = await createSeason({ admin }) // PADEL en position 0
+
+    const { error } = await adminClient()
+      .from('disciplines')
+      .insert({ season_id: seasonId, kind: 'FIFA', config: {}, position: 0 } as never)
+
+    expect(error?.code).toBe('23505')
+  })
+})
+
+// ── PR 13 — addDiscipline (REQ-D1-2) ────────────────────────────────────────
+async function fillerPlayers(count: number): Promise<string[]> {
+  const db = adminClient()
+  const ids: string[] = []
+  for (let i = 0; i < count; i++) {
+    const { data, error } = await db
+      .from('players')
+      .insert({ display_name: `Relleno de test ${Date.now()}-${i}-${Math.random()}` })
+      .select('id')
+      .single()
+    if (error || data === null) throw new Error(error?.message)
+    ids.push(data.id)
+  }
+  return ids
+}
+
+async function insertMatchday(
+  seasonId: string,
+  disciplineId: string,
+  number: number,
+  status: 'OPEN' | 'CLOSED',
+): Promise<string> {
+  const { data, error } = await adminClient()
+    .from('matchdays')
+    .insert({ season_id: seasonId, discipline_id: disciplineId, number, status })
+    .select('id')
+    .single()
+  if (error || data === null) throw new Error(error?.message)
+  return data.id
+}
+
+async function insertAward(
+  matchdayId: string,
+  seasonId: string,
+  entryId: string,
+  position: number,
+  points: number,
+): Promise<void> {
+  const { error } = await adminClient()
+    .from('awards')
+    .insert({ matchday_id: matchdayId, season_id: seasonId, entry_id: entryId, position, points })
+  if (error) throw new Error(error.message)
+}
+
+describe('addDiscipline (PR 13, REQ-D1-2)', () => {
+  it('crea la disciplina en SETUP con position explícito, sin tocar la existente (awards intactos, D3-1 simultánea)', async () => {
+    const admin = await createTestUser()
+    const { seasonId, disciplineId: padelId, entryIds } = await createSeason({
+      admin,
+      squad: [admin.playerId, ...(await fillerPlayers(7))], // MIN_PLAYERS = 8
+    })
+    const [a, b] = entryIds
+    if (a === undefined || b === undefined) throw new Error('Faltan asientos.')
+    const db = adminClient()
+    await db.from('disciplines').update({ status: 'ACTIVE' }).eq('id', padelId)
+
+    // pádel ACTIVE, 2 fechas cerradas con awards, una tercera abierta (D3-1).
+    const md1 = await insertMatchday(seasonId, padelId, 1, 'CLOSED')
+    await insertAward(md1, seasonId, a, 1, 10)
+    await insertAward(md1, seasonId, b, 2, 6)
+    const md2 = await insertMatchday(seasonId, padelId, 2, 'CLOSED')
+    await insertAward(md2, seasonId, a, 1, 10)
+    const mdOpen = await insertMatchday(seasonId, padelId, 3, 'OPEN')
+    const awardsBefore = await awardsOf(admin.client, seasonId)
+
+    const fifaId = await addDiscipline(admin.client, seasonId, { kind: 'FIFA', config: defaultConfig(8) })
+
+    // pádel: bit a bit igual — nada de esto lo tocó addDiscipline.
+    expect(await awardsOf(admin.client, seasonId)).toEqual(awardsBefore)
+    const { data: padelRow } = await db.from('disciplines').select('status').eq('id', padelId).single()
+    expect(padelRow?.status).toBe('ACTIVE')
+    const { data: mdOpenRow } = await db.from('matchdays').select('status').eq('id', mdOpen).single()
+    expect(mdOpenRow?.status, 'REQ-D3-1: la OPEN de pádel sigue OPEN mientras se suma FIFA').toBe('OPEN')
+
+    // FIFA: nueva, SETUP, position explícito (nunca el default 0 — S19).
+    const { data: fifaRow } = await db.from('disciplines').select('status, position').eq('id', fifaId).single()
+    expect(fifaRow?.status).toBe('SETUP')
+    expect(fifaRow?.position).toBe(1)
+  })
+
+  it('siembra discipline_entries: todo el plantel por default, un subconjunto si se pasa entryIds (REQ-D1-4)', async () => {
+    const admin = await createTestUser()
+    const { seasonId, entryIds } = await createSeason({
+      admin,
+      squad: [admin.playerId, ...(await fillerPlayers(7))], // MIN_PLAYERS = 8
+    })
+    const [a, , c] = entryIds
+    if (a === undefined || c === undefined) throw new Error('Faltan asientos.')
+    const db = adminClient()
+
+    const allId = await addDiscipline(admin.client, seasonId, { kind: 'FIFA', config: defaultConfig(8) })
+    expect(await squadSeedOrder(admin.client, allId)).toEqual(entryIds)
+
+    await db.from('disciplines').delete().eq('id', allId)
+    const partialId = await addDiscipline(
+      admin.client,
+      seasonId,
+      { kind: 'FIFA', config: defaultConfig(8) },
+      [a, c],
+    )
+    expect(await squadSeedOrder(admin.client, partialId)).toEqual([a, c])
   })
 })

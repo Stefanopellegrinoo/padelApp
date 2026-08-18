@@ -10,7 +10,7 @@
  * of its own: RLS is what keeps a stranger from reading a season that is not
  * theirs, and that only holds if the query actually runs as the caller.
  */
-import { seasonStatusOf } from '@/core'
+import { seasonStatusOf, sideOfRow } from '@/core'
 import type {
   Award,
   DisciplineId,
@@ -736,17 +736,24 @@ export async function awardsOf(supabase: Client, seasonId: string): Promise<Map<
 // ── helpers privados, compartidos por matchdayDetail y closedHistoryAll ─────
 
 /**
- * `pairs.entry_b` es `string | null` desde 0028 (REQ-D5-1, PR14 slice C):
- * `pairs_side_shape` es la garantía real, esto sólo la hace explícita acá.
- * Nada produce todavía un lado de uno (PR15, `buildSides`) — un null en
- * este camino sería un bug de otra parte. Muere en PR17, cuando
- * `pairsAndMatchesOf` migra de `Pair` a `Side` (design #3801, PUNTO 4).
+ * W36/S34 (verify-report ronda 10/11): retira la copia local de
+ * `requirePartner` — `sideOfRow` (core/side.ts) es el hogar único. Separa las
+ * dos fallas que `requirePartner` fusionaba en una: una fila `pair_size=2`
+ * sin `entry_b` es dato roto (tira ahí, con SU mensaje); un lado de uno
+ * legítimo (`pair_size=1`) arma un `Side` sin tirar — recién acá, que
+ * `pairsAndMatchesOf` todavía sólo entiende `Pair` (alimenta `MatchdayDetail`/
+ * `PlayedMatchday`, leídos por `app/**` como `Pair`, sin migrar hasta PR19,
+ * design #3801 PUNTO 4), es donde hace falta migrar este camino a `Side`.
+ * `sideOf`/`pairOf` (core/pair-compat.ts) no se importan desde `db/`: ese
+ * adaptador es interno de `core/` (core/index.ts, "Deliberadamente NO
+ * exportado") — este chequeo hace lo mismo que `pairOf` a mano.
  */
-function requirePartner(entryB: string | null): string {
-  if (entryB === null) {
-    throw new Error('Una pareja sin segundo miembro llegó a un camino que todavía sólo entiende parejas de a dos.')
+function pairFromRow(pairSize: SideSize, entryA: string, entryB: string | null): Pair {
+  const side = sideOfRow(pairSize, entryA, entryB)
+  if (side.size === 1) {
+    throw new Error('Un lado de a uno no se lee como pareja acá todavía: falta migrar este camino a Side.')
   }
-  return entryB
+  return { a: side.a, b: side.b }
 }
 
 /** Las parejas y los partidos de la fecha, con los sets de cada partido ordenados por `set_number`. */
@@ -756,12 +763,15 @@ async function pairsAndMatchesOf(
 ): Promise<{ pairs: Pair[]; matches: MatchWithId[] }> {
   const { data: pairRows, error: pairsError } = await supabase
     .from('pairs')
-    .select('id, entry_a, entry_b')
+    .select('id, entry_a, entry_b, pair_size')
     .eq('matchday_id', matchdayId)
   if (pairsError) throw new EdgeError(`No se pudieron leer las parejas: ${pairsError.message}`)
 
   const pairById = new Map(
-    (pairRows ?? []).map((row) => [row.id, { a: row.entry_a, b: requirePartner(row.entry_b) }]),
+    (pairRows ?? []).map((row) => [
+      row.id,
+      pairFromRow(row.pair_size as SideSize, row.entry_a, row.entry_b),
+    ]),
   )
 
   const { data: matchRows, error: matchesError } = await supabase

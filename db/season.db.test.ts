@@ -3,6 +3,7 @@ import {
   computeRanking,
   defaultConfig,
   samePair,
+  sideOfRow,
   snapshotForMatchday,
   type DisciplineId,
   type Pair,
@@ -37,11 +38,14 @@ import type { Json } from './database.types'
 
 type AwardRow = { entry_id: string; position: number; points: number }
 
-// `entry_b` es `string | null` en la fila real (0028, REQ-D5-1); esta suite
-// sólo ejercita pádel (pair_size=2, siempre con segundo miembro).
-function requirePartner(entryB: string | null): string {
-  if (entryB === null) throw new Error('Pareja sin segundo miembro en un test que sólo espera pádel.')
-  return entryB
+// W36/S34 (verify-report ronda 10/11): retira la copia local — `sideOfRow`
+// (core/side.ts) es el hogar único. `pairSize` es literal 2, no leído de la
+// fila: esta suite sólo ejercita pádel (pair_size=2, siempre con segundo
+// miembro), documentado en `pairsOf` más abajo.
+function requirePartner(entryA: string, entryB: string | null): string {
+  const side = sideOfRow(2, entryA, entryB)
+  if (side.size === 1) throw new Error('Lado de a uno en una suite que sólo espera pádel. Esto es un bug del test.')
+  return side.b
 }
 
 async function fillerPlayers(count: number): Promise<string[]> {
@@ -239,7 +243,7 @@ async function playByRankRule(
   const pairRank = new Map(
     pairs.map((pair) => [
       pair.id,
-      Math.min(rankIndex.get(pair.entry_a) ?? worst, rankIndex.get(requirePartner(pair.entry_b)) ?? worst),
+      Math.min(rankIndex.get(pair.entry_a) ?? worst, rankIndex.get(requirePartner(pair.entry_a, pair.entry_b)) ?? worst),
     ]),
   )
 
@@ -346,7 +350,7 @@ async function buildWalkthroughSeason(): Promise<WalkthroughSeason> {
     matchdayIds[number - 1] = matchdayId
     pairsByMatchday.set(
       number,
-      (await pairsOf(matchdayId)).map((row) => ({ a: row.entry_a, b: requirePartner(row.entry_b) })),
+      (await pairsOf(matchdayId)).map((row) => ({ a: row.entry_a, b: requirePartner(row.entry_a, row.entry_b) })),
     )
     awardsRightAfterClose.set(number, sortByEntry(await awardsOf(matchdayId)))
   }

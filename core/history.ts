@@ -1,4 +1,6 @@
 import { samePair } from './pairing'
+import { sideOf } from './pair-compat'
+import { members } from './side'
 import type { Award, Pair } from './types'
 
 /** One closed matchday, as it was stored. */
@@ -60,8 +62,11 @@ function championsOf(matchday: MatchdayHistory): Pair | null {
     return null
   }
 
-  const champions = matchday.pairs.filter(
-    (pair) => winners.has(pair.a) || winners.has(pair.b),
+  // `members(sideOf(pair))` instead of `pair.a`/`pair.b`: "does a winner sit
+  // on this side" doesn't care about arity, and `pair` stays Pair-shaped
+  // until PR18 — `sideOf` always yields `size: 2`, identical to before.
+  const champions = matchday.pairs.filter((pair) =>
+    members(sideOf(pair)).some((entryId) => winners.has(entryId)),
   )
   if (champions.length !== 1) {
     throw new Error(

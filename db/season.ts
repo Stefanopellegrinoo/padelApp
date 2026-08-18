@@ -183,6 +183,16 @@ export async function frozenPointsOf(
 export interface NewSeasonDiscipline {
   kind?: 'PADEL' | 'FIFA'
   config: SeasonConfig
+  /**
+   * 1 (lados de a uno) o 2 (parejas), elegido al configurar la disciplina —
+   * NO derivado de `kind` (decisión de producto #5: FIFA es 1v1 Y 2v2). Sin
+   * especificar, 2: el pádel de siempre. Identidad y forma de la disciplina:
+   * `0015_disciplines.sql` revoca su UPDATE a propósito — se fija acá, al
+   * crear, y no se edita después.
+   */
+  pairSize?: 1 | 2
+  /** Si esta disciplina admite empates (decisión #7). Sin especificar, false: el pádel de siempre. Misma inmutabilidad que `pairSize`. */
+  allowsDraw?: boolean
 }
 
 export interface NewSeason {
@@ -289,6 +299,8 @@ export async function createSeason(
         kind: spec.kind ?? 'PADEL',
         config: spec.config as unknown as Json,
         position: index,
+        pair_size: spec.pairSize ?? 2,
+        allows_draw: spec.allowsDraw ?? false,
       })
       .select('id')
       .single()

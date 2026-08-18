@@ -9,6 +9,10 @@ export interface DisciplineSpec {
   kind?: 'PADEL' | 'FIFA'
   config?: SeasonConfig
   weight?: number
+  /** Mismo contrato que `NewSeasonDiscipline`/`NewDiscipline` (PR14 slice A): elegido al crear, no derivado de `kind`. Sin especificar, default de columna (2). */
+  pairSize?: 1 | 2
+  /** Mismo contrato. Sin especificar, default de columna (false). */
+  allowsDraw?: boolean
 }
 
 interface CreateSeasonOptions {
@@ -63,6 +67,8 @@ export async function createSeason({
         config: (spec.config ?? config) as unknown as Json,
         position: index,
         ...(spec.weight === undefined ? {} : { weight: spec.weight }),
+        ...(spec.pairSize === undefined ? {} : { pair_size: spec.pairSize }),
+        ...(spec.allowsDraw === undefined ? {} : { allows_draw: spec.allowsDraw }),
       })
       .select('id')
       .single()

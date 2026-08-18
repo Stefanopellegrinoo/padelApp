@@ -141,6 +141,37 @@ describe('createSeason con múltiples disciplinas (REQ-D1-1, contrato S13)', () 
     ).rejects.toThrow()
   })
 
+  // PR14 slice A — pair_size/allows_draw se declaran AL CREAR, no se derivan
+  // de `kind` (decisión #5: FIFA es 1v1 O 2v2, elegido al configurar la
+  // disciplina). Sin especificar, siguen siendo 2/false — el pádel de
+  // siempre, y lo que ya asertaba `discipline.db.test.ts` para el caso sin
+  // `disciplines` explícito.
+  it('pair_size y allows_draw se persisten por disciplina, sin heredar de kind (REQ-D2-1)', async () => {
+    const admin = await createTestUser()
+    const config = defaultConfig(8)
+    const { seasonId } = await createSeason(admin.client, {
+      name: 'Formas mixtas',
+      squadNames: squadNames(8),
+      config,
+      disciplines: [
+        { kind: 'PADEL', config },
+        { kind: 'FIFA', config, pairSize: 1, allowsDraw: true },
+      ],
+    })
+
+    const db = adminClient()
+    const { data } = await db
+      .from('disciplines')
+      .select('kind, pair_size, allows_draw')
+      .eq('season_id', seasonId)
+      .order('position', { ascending: true })
+
+    expect(data).toEqual([
+      { kind: 'PADEL', pair_size: 2, allows_draw: false },
+      { kind: 'FIFA', pair_size: 1, allows_draw: true },
+    ])
+  })
+
   // Compat: el único caller de producción (`app/torneos/nuevo/actions.ts`)
   // todavía no pasa `disciplines` — el wizard multi-disciplina es PR11a,
   // fuera de este slice. Tiene que seguir viendo exactamente el mismo

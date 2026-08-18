@@ -407,8 +407,13 @@ async function main() {
 
   // ================= 8) Pestañas de la nav =================
   await page.goto(closeBase, { waitUntil: 'networkidle' })
+  // W27 (verify-report ronda 8): "Fechas" ya no es `${closeBase}/fechas` (el
+  // stub) — el href real es discipline-scoped (`${base}/{slug}/fechas`). Se
+  // lee del DOM en vez de asumir el slug: robusto sin importar cuál sea la
+  // disciplina por defecto de la temporada sembrada.
+  const fechasHref = await page.getByRole('link', { name: 'Fechas' }).first().getAttribute('href')
   const tabs = [
-    ['Fechas', `${closeBase}/fechas`],
+    ['Fechas', new URL(fechasHref ?? `${closeBase}/fechas`, closeBase).toString()],
     ['Stats', `${closeBase}/stats`],
     ['Reglas', `${closeBase}/reglas`],
     ['Tabla', closeBase],

@@ -9,16 +9,6 @@ import { createTestUser, type TestUser } from './test/users'
 // No va a db/test/factories.ts: esa lista de archivos es la del plan, y estos
 // armadores sólo le sirven al cierre de una fecha.
 
-// W36/S34 (verify-report ronda 10/11): retira la copia local — `sideOfRow`
-// (core/side.ts) es el hogar único. `pairSize` es literal 2, no leído de la
-// fila: esta suite sólo ejercita pádel (pair_size=2, siempre con segundo
-// miembro), documentado en `pairsOf` más abajo.
-function requirePartner(entryA: string, entryB: string | null): string {
-  const side = sideOfRow(2, entryA, entryB)
-  if (side.size === 1) throw new Error('Lado de a uno en una suite que sólo espera pádel. Esto es un bug del test.')
-  return side.b
-}
-
 async function fillerPlayers(count: number): Promise<string[]> {
   const db = adminClient()
   const ids: string[] = []
@@ -310,7 +300,12 @@ describe('closeMatchday', () => {
     const awards = await awardsOf(matchdayId)
     const pointsOf = new Map(awards.map((award) => [award.entry_id, award.points]))
     for (const pair of pairs) {
-      expect(pointsOf.get(pair.entry_a)).toBe(pointsOf.get(requirePartner(pair.entry_a, pair.entry_b)))
+      // W38 (verify-report ronda 12): `requirePartner` retirado — `sideOfRow`
+      // (core/side.ts) es el hogar único. `2` es literal, no leído de la fila:
+      // esta suite sólo ejercita pádel (pair_size=2, siempre con `entry_b`).
+      const side = sideOfRow(2, pair.entry_a, pair.entry_b)
+      const partner = side.size === 2 ? side.b : pair.entry_a
+      expect(pointsOf.get(pair.entry_a)).toBe(pointsOf.get(partner))
     }
   })
 

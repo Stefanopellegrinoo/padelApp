@@ -1,14 +1,13 @@
 import Link from 'next/link'
-import { computeRanking, snapshotForMatchday, type EntryId } from '@/core'
+import { computeGlobalRanking, computeRanking, type DisciplineRanking } from '@/core'
 import type { Client } from '@/db/client'
 import {
-  awardsOf,
-  entriesOf,
-  matchdaysOf,
   myEntryId,
   mySeasons,
   playerNames,
-  primaryDiscipline,
+  seasonAwardsOf,
+  seasonMatchdaysOf,
+  seasonSquadOf,
   type SeasonHeader,
 } from '@/db/read'
 import { serverClient } from '@/db/server'
@@ -46,47 +45,74 @@ interface SeasonCard {
  *
  * La lección del Plan 3 fue que una función de datos con forma de pantalla es
  * la que después le falta justo lo que la siguiente pantalla necesita. Esto son
- * cuatro lecturas que ya existen, compuestas para este caso.
+ * lecturas que ya existen, compuestas para este caso.
  *
- * ponytail: nueve consultas por temporada (medido con `pg_stat_statements`,
- * verify-report ronda 4, S10) — no cuatro, que es lo que este comentario decía
- * antes de esa medición. `defaultDisciplineId` sola se paga tres veces
- * (`entriesOf`, `matchdaysOf`, `awardsOf` la resuelven cada una por su
- * cuenta). Con las 1 a 3 temporadas que tiene cualquiera de este grupo sigue
- * siendo gratis; si alguien llegara a veinte, acá hay que mirar — y el primer
- * ahorro es resolver la disciplina UNA vez acá y pasarla, no tres.
+ * "Mi posición" es la de la TABLA GLOBAL (REQ-D9-1/2): suma, por persona, los
+ * puntos de cada disciplina × su `weight` — con una sola disciplina y
+ * `weight=1` (el caso de hoy) da exactamente lo mismo que antes. Por eso lee
+ * `seasonSquadOf`/`seasonAwardsOf` (temporada entera, TODAS las disciplinas)
+ * y no `entriesOf`/`awardsOf` (una disciplina puntual): la global necesita el
+ * plantel y los premios de cada una para sumarlos ponderados, no sólo los de
+ * la default.
+ *
+ * ponytail: sin criterio de desempate propio para el global — `computeRanking`
+ * se llama con snapshot vacío (mismo mecanismo que ya usa `computeGlobalRanking`
+ * internamente): sólo importa el `.points` de cada fila, nunca su orden.
+ * Alcanza mientras nadie necesite ver POR QUÉ dos personas empatan en la
+ * global; si hace falta, ahí se suma un criterio explícito.
+ *
+ * Consultas por temporada — REMEDIDO con `pg_stat_statements` para esta PR,
+ * misma técnica que S10 (verify-report ronda 4): con una fecha cerrada real
+ * (el caso que importa: una temporada con puntos, no una recién creada),
+ * ANTES daba **10** (S10 midió 9 contra una temporada SIN fecha cerrada
+ * todavía — `awardsOf` corta antes de su 3ª consulta cuando no hay ninguna
+ * CLOSED; con una sí la hay, y las cuentas de acá arriba, defaultDisciplineId
+ * ×3 incluido, dan 10 parejo). DESPUÉS da **5**: `seasonSquadOf` (1) +
+ * `seasonMatchdaysOf` (1, sin resolver disciplina por defecto) +
+ * `seasonAwardsOf` (1, ya con las fechas resueltas) + `myEntryId` (2). No hay
+ * fan-out por disciplina: las dos lecturas de temporada entera traen TODAS
+ * las disciplinas en una sola consulta cada una, sin importar cuántas haya —
+ * mejora, no regresión, y el número no crece con la cantidad de disciplinas.
  */
 async function cardFor(supabase: Client, header: SeasonHeader): Promise<SeasonCard> {
-  const [entries, matchdays, awardsByMatchday, viewerEntryId] = await Promise.all([
-    entriesOf(supabase, header.id),
-    matchdaysOf(supabase, header.id),
-    awardsOf(supabase, header.id),
+  const [squad, matchdays, viewerEntryId] = await Promise.all([
+    seasonSquadOf(supabase, header.id),
+    seasonMatchdaysOf(supabase, header.id),
     myEntryId(supabase, header.id),
   ])
+  const seasonAwards = await seasonAwardsOf(supabase, matchdays)
 
-  const seedOrder: EntryId[] = entries
-    .filter((entry) => entry.kind === 'SQUAD')
-    .sort((left, right) => left.seedPosition - right.seedPosition)
-    .map((entry) => entry.id)
+  const perDiscipline: DisciplineRanking[] = header.disciplines.map((discipline) => ({
+    weight: discipline.weight,
+    ranking: computeRanking(seasonAwards.get(discipline.id) ?? new Map(), squad, discipline.config, []),
+  }))
+  const ranking = computeGlobalRanking(perDiscipline)
 
-  const closedCount = matchdays.filter(
+  // Antes de que cierre la primera fecha de CUALQUIER disciplina, todos están
+  // en cero: mismo criterio que la Tabla de una disciplina — no mostrar un
+  // "1°" que no dice nada todavía.
+  const anyClosed = matchdays.some(
     (matchday) => matchday.kind === 'REGULAR' && matchday.status === 'CLOSED',
-  ).length
-  const activeNumber = Math.min(closedCount + 1, header.regularMatchdays)
-  const config = primaryDiscipline(header).config
-  const snapshot = snapshotForMatchday(activeNumber, seedOrder, awardsByMatchday, config)
-  const ranking = computeRanking(awardsByMatchday, seedOrder, config, snapshot)
-
+  )
   const index = ranking.findIndex((row) => row.entryId === viewerEntryId)
-  const live = matchdays.find((matchday) => matchday.status !== 'CLOSED') ?? null
+
+  // "Próxima fecha" queda igual que antes (de la disciplina primaria): con
+  // más de una disciplina puede haber más de una fecha viva a la vez
+  // (REQ-D3-1) y elegir CUÁL mostrar acá es una decisión de UI que REQ-D9 no
+  // pide — fuera del corte de esta PR.
+  const primaryDisciplineId = header.disciplines[0]?.id
+  const live =
+    matchdays.find(
+      (matchday) => matchday.disciplineId === primaryDisciplineId && matchday.status !== 'CLOSED',
+    ) ?? null
 
   return {
     id: header.id,
     name: header.name,
     status: header.status,
     estado: ESTADO[header.status] ?? '',
-    position: closedCount === 0 || index < 0 ? null : index + 1,
-    squadSize: seedOrder.length,
+    position: !anyClosed || index < 0 ? null : index + 1,
+    squadSize: squad.length,
     nextMatchday: live?.playedOn ?? null,
   }
 }

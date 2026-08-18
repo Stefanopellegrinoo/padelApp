@@ -24,6 +24,16 @@
 -- volver NULL el resultado de la fila entera— y es el mismo idioma que ya
 -- usan `open_matchday`/`reopen_matchday` (0019) y `promote_guest` (0025) para
 -- lo mismo. El resto de la función (0019:75-162) no cambia una línea.
+--
+-- N25 (verify-report ronda 11): la forma nueva tiene un segundo efecto, no
+-- documentado hasta acá. Con `NOT IN`, un premio sin `entryId` o con
+-- `entryId: null` daba `NULL not in (…)` = NULL —el guard no disparaba— y el
+-- payload seguía hasta el `insert into awards`, que reventaba con un `23502`
+-- crudo. Con `NOT EXISTS`, ese mismo NULL no matchea ninguna fila y el guard
+-- dispara el mensaje en castellano de arriba. Es una mejora (más estricto,
+-- mejor mensaje), no una regresión: el camino de la app nunca lo alcanza
+-- (`computeAwards` siempre setea `entryId`), sólo un payload de RPC armado a
+-- mano.
 create or replace function public.close_matchday(p_matchday uuid, p_awards jsonb)
 returns void
 language plpgsql

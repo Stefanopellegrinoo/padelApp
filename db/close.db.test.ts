@@ -118,11 +118,12 @@ async function matchdayStatus(matchdayId: string): Promise<string> {
 }
 
 // ── C17 (verify-report ronda 10) ────────────────────────────────────────────
-// Producción todavía no puede escribir un `pairs` de `pair_size=1` (W34:
-// `insertPairs` no manda esa columna, así que `generatePairs` muere contra
-// `pairs_matchday_size`). El escenario se arma con service_role, igual que
-// `pairs-side-shape.db.test.ts` — es el único camino que hoy puede crear la
-// fila legal que este test necesita.
+// N26 (verify-report ronda 12): PR18a hizo que `insertPairs` SÍ escriba una
+// fila `pair_size=1` (`generatePairs` ya arma sola una disciplina de a uno,
+// ver `full_matchday_proof` más abajo y `db/generate.db.test.ts`) — este
+// helper con service_role sigue siendo el más corto para ESTE test puntual:
+// arma la fecha con un solo `insert` en vez de todo el pipeline real
+// (asistencia/draw/apertura) que el escenario de G6/C17 de abajo no necesita.
 async function insertOpenSingleMatchday(seasonId: string, disciplineId: string, number: number): Promise<string> {
   const db = adminClient()
   const { data, error } = await db

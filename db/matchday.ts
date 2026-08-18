@@ -566,7 +566,7 @@ export async function generatePairs(supabase: Client, matchdayId: string): Promi
   }
 
   // `buildSides` (PR16, wired here — PR18a): con `sideSize=2` es `buildPairs`
-  // sin cambios, mapeado a `Side` vía `sideOf`; con `sideSize=1` cada
+  // sin cambios (desde PR19 ya devuelve `Side[]` solo); con `sideSize=1` cada
   // presente es su propio lado. `pairSize` sale del mismo `pairingContextFor`
   // que ya trae `input` — ningún select nuevo.
   const { input, pairSize } = await pairingContextFor(supabase, matchdayId)

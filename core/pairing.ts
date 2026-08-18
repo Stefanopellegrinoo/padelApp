@@ -1,18 +1,25 @@
 import { allMatchings } from './matchings'
 import { orderByPoints } from './order'
-import { members, sameSide, single } from './side'
+import { members, sameSide, single, type Duo } from './side'
 import type { EntryId, Side, SideSize } from './types'
 
-/** Un lado de DOS. El sorteo de parejas no sabe hacer otra cosa. */
-type Duo = Extract<Side, { size: 2 }>
-
 /**
- * PR19: `Pair` ya no existe, así que `defenders`/`previousPairs`/`fixedPairs`
- * son `Side`. Eso vuelve REPRESENTABLE un lado de uno donde antes el tipo lo
- * impedía, y `buildSides` recibe el mismo objeto para las dos aridades — así
- * que el chequeo tiene que ser de runtime y no de tipos. Falla ruidoso y
- * nombrando la causa, en vez de dejar que `undefined` se filtre hasta un
- * mensaje que habla de un asiento fantasma.
+ * PR19 borró `Pair`, así que `defenders`/`previousPairs`/`fixedPairs` pasaron a
+ * ser lados. Eso volvió REPRESENTABLE un lado de uno donde antes el tipo lo
+ * impedía, y el RED de PR19 midió que `defenders` con un lado de uno **no
+ * tiraba nada**: `present.includes(defenders.b)` con `b` inexistente da
+ * `false`, así que la pareja defensora desaparecía del sorteo en silencio.
+ *
+ * W50 (verify-report ronda 15): el informe de PR19 afirmaba que "el compilador
+ * no puede atrapar el caso". **Era falso**, y la causa era que `pair()`
+ * devolvía `Side` a secas. Con `Duo` en los tres campos y `pair(): Duo`, el
+ * compilador rechaza `single(...)` en cada call site — chequeo en compilación,
+ * que le gana a uno de runtime.
+ *
+ * `requireDuo` se queda igual, y no es ceremonia: es lo único que atraparía un
+ * `as` o una fila cruda que entre por fuera del tipo, y el modo de falla que
+ * cubre es SILENCIOSO (la defensora desaparece sin que nadie se entere), que es
+ * justo donde no corresponde ahorrar.
  */
 function requireDuo(side: Side, what: string): Duo {
   if (side.size === 1) {
@@ -40,10 +47,10 @@ export interface PairingInput {
    * guest-only pair takes no championship position. Null when there was
    * none.
    */
-  defenders: Side | null
+  defenders: Duo | null
   /** True when the defenders already played their one repeat. */
   defendersAlreadyRepeated: boolean
-  previousPairs: Side[]
+  previousPairs: Duo[]
   /**
    * This matchday's guests, in the order the admin wants them. They all sit at
    * the tail of the pool, keeping that order among themselves.
@@ -59,10 +66,10 @@ export interface PairingInput {
    * together. The defenders are NOT listed here: they have their own rule,
    * which can dissolve them.
    */
-  fixedPairs: Side[]
+  fixedPairs: Duo[]
 }
 
-export function buildPairs(input: PairingInput): Side[] {
+export function buildPairs(input: PairingInput): Duo[] {
   const {
     present,
     points,
@@ -161,9 +168,9 @@ export function buildSides(input: SideBuildInput): Side[] {
  */
 function resolveSettled(
   present: EntryId[],
-  defenders: Side | null,
+  defenders: Duo | null,
   alreadyRepeated: boolean,
-  fixedPairs: Side[],
+  fixedPairs: Duo[],
 ): Duo[] {
   const settled: Duo[] = []
   const taken = new Set<EntryId>()
@@ -206,7 +213,7 @@ function resolveSettled(
  */
 function resolveDefenders(
   present: EntryId[],
-  defenders: Side | null,
+  defenders: Duo | null,
   alreadyRepeated: boolean,
 ): Duo | null {
   if (defenders === null) return null
@@ -249,7 +256,7 @@ function orderPool(
  * a balanced pair adds up to n+1, so the further each pair strays from that
  * sum, the worse the draw.
  */
-function imbalance(matching: Side[], position: Map<EntryId, number>, idealSum: number): number {
+function imbalance(matching: readonly Duo[], position: Map<EntryId, number>, idealSum: number): number {
   let total = 0
   for (const side of matching) {
     const sum = members(side).reduce((acc, entryId) => acc + (position.get(entryId) ?? 0), 0)

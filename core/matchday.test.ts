@@ -6,7 +6,7 @@ import { computeAwards } from './awards'
 import { computeRanking } from './ranking'
 import { snapshotForMatchday } from './snapshots'
 import { defaultConfig } from './config'
-import { members, sameSide } from './side'
+import { members, sameSide, type Duo } from './side'
 import type { Award, MatchResult, SeasonConfig, Side } from './types'
 
 const SQUAD = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8']
@@ -17,11 +17,11 @@ function playMatchday(
   present: string[],
   points: Map<string, number>,
   snapshot: string[],
-  previousPairs: Side[],
-  defenders: Side | null,
+  previousPairs: Duo[],
+  defenders: Duo | null,
   defendersAlreadyRepeated: boolean,
   config: SeasonConfig,
-): { pairs: Side[]; awards: Award[]; champion: Side } {
+): { pairs: Duo[]; awards: Award[]; champion: Duo } {
   const pairs = buildPairs({
     present,
     points,
@@ -130,7 +130,7 @@ describe('a full matchday, end to end', () => {
   })
 
   it('never repeats a pair from the immediately previous matchday', () => {
-    let previousPairs: Side[] = []
+    let previousPairs: Duo[] = []
     let points = new Map<string, number>()
     const everyAward: Award[][] = []
 
@@ -150,7 +150,7 @@ describe('a full matchday, end to end', () => {
 
   it('builds a ranking that adds up across a whole season', () => {
     const everyAward: Award[][] = []
-    let previousPairs: Side[] = []
+    let previousPairs: Duo[] = []
     let points = new Map<string, number>()
 
     for (let matchday = 1; matchday <= 10; matchday++) {
@@ -184,7 +184,7 @@ describe('a full matchday, end to end', () => {
   it('replays a whole season identically', () => {
     const run = () => {
       const everyAward: Award[][] = []
-      let previousPairs: Side[] = []
+      let previousPairs: Duo[] = []
       let points = new Map<string, number>()
       for (let matchday = 1; matchday <= 5; matchday++) {
         const snapshot = snapshotForMatchday(

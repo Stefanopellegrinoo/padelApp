@@ -126,6 +126,16 @@ export async function claimOwnSeat(
 }
 
 /** Cambia el nombre del asiento. No toca `player_id`: renombrar no desvincula. */
+/**
+ * Cambia el nombre de un asiento.
+ *
+ * `count: 'exact'` por el mismo motivo que `setMatchdayDate` (W49,
+ * verify-report ronda 15): un update que no toca ninguna fila NO es un error
+ * en PostgREST. Estas escrituras se apoyan en RLS y no chequean admin por su
+ * cuenta, así que a un participante que no organiza le decían que guardó y al
+ * recargar volvía el valor viejo. La ronda 15 lo midió con un participante
+ * real en las cuatro.
+ */
 export async function renameSeat(
   supabase: Client,
   entryId: string,
@@ -134,17 +144,36 @@ export async function renameSeat(
   const name = displayName.trim()
   if (name.length === 0) throw new EdgeError('El asiento necesita un nombre.')
 
-  const { error } = await supabase
+  const { error, count } = await supabase
     .from('entries')
-    .update({ display_name: name })
+    .update({ display_name: name }, { count: 'exact' })
     .eq('id', entryId)
   if (error !== null) throw new EdgeError(`No se pudo cambiar el nombre: ${error.message}`)
+  if (count === 0) {
+    throw new EdgeError('No se pudo cambiar el nombre: sólo puede hacerlo quien organiza.')
+  }
 }
 
-/** Suelta el asiento de quien lo reclamó, dejándolo libre para otro. El nombre se queda. */
+/**
+ * Suelta el asiento de quien lo reclamó, dejándolo libre para otro. El nombre
+ * se queda.
+ *
+ * `count: 'exact'` por el mismo motivo que `setMatchdayDate` (W49,
+ * verify-report ronda 15): un update que no toca ninguna fila NO es un error
+ * en PostgREST. Estas escrituras se apoyan en RLS y no chequean admin por su
+ * cuenta, así que a un participante que no organiza le decían que guardó y al
+ * recargar volvía el valor viejo. La ronda 15 lo midió con un participante
+ * real en las cuatro.
+ */
 export async function unlinkSeat(supabase: Client, entryId: string): Promise<void> {
-  const { error } = await supabase.from('entries').update({ player_id: null }).eq('id', entryId)
+  const { error, count } = await supabase
+    .from('entries')
+    .update({ player_id: null }, { count: 'exact' })
+    .eq('id', entryId)
   if (error !== null) throw new EdgeError(`No se pudo desvincular el asiento: ${error.message}`)
+  if (count === 0) {
+    throw new EdgeError('No se pudo desvincular el asiento: sólo puede hacerlo quien organiza.')
+  }
 }
 
 /**

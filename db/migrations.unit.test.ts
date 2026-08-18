@@ -25,16 +25,36 @@ import { describe, expect, it } from 'vitest'
 const DIR = join(process.cwd(), 'supabase/migrations')
 
 /**
- * Migraciones YA APLICADAS que definen más de una función. No se pueden
- * cambiar —están en `schema_migrations` de producción— y por eso se listan en
- * vez de arreglarse. **Esta lista es la que hay que mirar antes de copiar una
- * restatement**: son exactamente los archivos donde cortar "hasta el final"
- * arrastra una función de más.
+ * Migraciones YA APLICADAS que definen más de una función. Casi todas son de
+ * SCHEMA (RLS, moves, grants) y agrupar varias ahí era razonable; el problema
+ * no es que existan, es que **no se pueden cambiar** —están en
+ * `schema_migrations` de producción— y por eso se congelan acá en vez de
+ * arreglarse.
+ *
+ * **Esta lista es la que hay que mirar antes de copiar una restatement**: son
+ * exactamente los archivos donde cortar "hasta el final del archivo" arrastra
+ * una función de más.
  *
  * `0025` es la que mordió: define `promote_guest` y, 20 líneas más abajo, un
- * `drop`+`create` de `season_invite` que `0026` ya había reemplazado.
+ * `drop`+`create` de `season_invite` que `0026` ya había reemplazado. Copiarla
+ * entera para escribir `0031` revirtió `0026` en silencio.
+ *
+ * **La regla de acá en adelante es una función por migración.** Cualquier
+ * archivo nuevo que defina dos rompe el test de abajo, y el de más abajo
+ * impide que la salida sea agrandar la lista sin que alguien lo piense.
  */
-const HISTORICAS_CON_VARIAS = new Set(['0025_promote_guest_discipline_entries.sql'])
+const HISTORICAS_CON_VARIAS = new Set([
+  '0002_rls.sql',
+  '0004_claim_seat.sql',
+  '0005_matchday_moves.sql',
+  '0007_write_screens.sql',
+  '0013_squad_seat_position.sql',
+  '0016_matchday_scope.sql',
+  '0018_reopen_cancel_scoped.sql',
+  '0019_discipline_status_moves.sql',
+  '0023_discipline_entries.sql',
+  '0025_promote_guest_discipline_entries.sql',
+])
 
 /** `create function`, `create or replace function` y `drop function`, a comienzo de línea. */
 const DEFINITION = /^\s*(create\s+(or\s+replace\s+)?function|drop\s+function)\s+(?:if\s+exists\s+)?([\w."]+)/gim
@@ -53,15 +73,26 @@ describe('migraciones — una restatement toca una sola función', () => {
   })
 
   /*
-   * El nombre de una migración de restatement nombra la función que restatea.
-   * Ésas son las que se escriben copiando la versión viva, y las únicas donde
-   * el corte "hasta el final del archivo" es un riesgo real. Las migraciones
-   * de schema (DDL, backfills, grants) pueden tocar varias y no aplican.
+   * S48 (verify-report ronda 15): esto filtraba por una lista de nombres de
+   * función conocidos y miraba 6 de 30 archivos — una restatement de CUALQUIER
+   * otra función pasaba inadvertida (la auditoría lo probó con una sonda
+   * `0099_reopen_matchday_*` que definía dos y no la cazó).
+   *
+   * Ahora el criterio es estructural y no de nombre: una migración que define
+   * una sola función ES una restatement, y ninguna puede definir más de una.
+   * Las que definen varias son las históricas de la lista de arriba, que no se
+   * pueden cambiar. Cero regex de nombres, cero archivos sin mirar.
    */
-  const RESTATEMENTS = files.filter((name) => /promote_guest|close_matchday|season_invite|create_masters/.test(name))
+  const RESTATEMENTS = files.filter(
+    (name) => definedFunctions(readFileSync(join(DIR, name), 'utf8')).length > 0,
+  )
 
-  it('las migraciones de restatement existen y se reconocen por nombre', () => {
-    expect(RESTATEMENTS.length).toBeGreaterThan(0)
+  it('mira TODAS las migraciones que definen funciones, no una lista de nombres', () => {
+    // S48 (verify-report ronda 15): antes filtraba por nombres de función
+    // conocidos y miraba 6 de 30 archivos, así que una restatement de
+    // cualquier otra función pasaba inadvertida — la auditoría lo probó con
+    // una sonda que definía dos y no la cazó.
+    expect(RESTATEMENTS.length).toBeGreaterThan(15)
   })
 
   for (const name of RESTATEMENTS.filter((file) => !HISTORICAS_CON_VARIAS.has(file))) {

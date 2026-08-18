@@ -393,10 +393,22 @@ describe('the squad seats', () => {
     const seatId = entryIds[1]!
 
     await expect(addSquadSeat(player.client, seasonId, 'Colado')).rejects.toThrow()
-    // Un update o un delete que RLS filtra no es un error: no afecta ninguna
-    // fila. Por eso se asierta sobre el estado, no sobre el throw.
-    await renameSeat(player.client, seatId, 'Robado')
-    await unlinkSeat(player.client, entryIds[0]!)
+
+    // W49 (verify-report ronda 15): ANTES estas dos no tiraban. Un update que
+    // RLS filtra no afecta ninguna fila y eso NO es un error en PostgREST, así
+    // que a quien no organiza se le decía que guardó y al recargar volvía el
+    // valor viejo. Con `count: 'exact'` avisan, que es lo que la pantalla
+    // necesita para no mentir.
+    await expect(renameSeat(player.client, seatId, 'Robado')).rejects.toThrow(
+      /sólo puede hacerlo quien organiza/,
+    )
+    await expect(unlinkSeat(player.client, entryIds[0]!)).rejects.toThrow(
+      /sólo puede hacerlo quien organiza/,
+    )
+    // ponytail: `removeSeat` es un DELETE y sigue sin avisar — mismo defecto,
+    // no medido por la ronda 15 (que nombró cuatro updates). Se deja como
+    // estaba en vez de cambiarlo a ojo; el estado de abajo prueba que tampoco
+    // borra nada.
     await removeSeat(player.client, seatId)
 
     const seats = await entriesOf(admin.client, seasonId)

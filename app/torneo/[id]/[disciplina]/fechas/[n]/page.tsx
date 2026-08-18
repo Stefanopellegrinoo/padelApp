@@ -497,20 +497,22 @@ export default async function FechaDetailPage({ params }: PageProps) {
     // falla por estado.
     //
     // Los puntos de la tarjeta salen de `awards` —la tabla CONGELADA, la misma
-    // fila que `promote_guest` copia con su `join`— y NO de `pointsByEntry`,
-    // que es el recálculo en vivo de veinte líneas más arriba. Reusar
-    // `pointsByEntry` parecía lo prudente ("una sola cuenta") y era justo al
-    // revés, porque las dos no contestan la misma pregunta: `pointsByEntry`
-    // dice cuánto daría un recálculo HOY, y la tarjeta tiene que prometer
-    // cuánto va a GRABAR la escritura. Con el salteo silencioso que había
-    // antes se separaban: medido en una temporada de 12, después de promover
+    // fila que `promote_guest` copia con su `join`—, igual que la tabla del
+    // día de arriba: desde C21 (verify-report ronda 14) las dos leen
+    // `frozenPoints` y son LA MISMA fuente.
+    //
+    // N35 (verify-report ronda 15): hasta C21 este párrafo distinguía la
+    // tarjeta de `pointsByEntry`, que era un recálculo en vivo, y la
+    // distinción era real — medido en una temporada de 12, después de promover
     // la pantalla mostraba al invitado con 5 puntos que no existían en ninguna
-    // fila de `awards` y a su compañero con 3 donde la tabla tenía 5.
-    // `promote_guest` ahora refusa ese caso, y sobre los dos escenarios que SÍ
-    // acepta —invitado suelto en una temporada de 12, e invitado suelto
-    // conviviendo con una pareja toda invitada en una de 8— las dos fuentes
-    // coinciden fila por fila. O sea: leer `awards` hoy no cambia lo que se
-    // ve, cambia DE QUÉ DEPENDE lo que se ve.
+    // fila de `awards` y a su compañero con 3 donde la tabla tenía 5. C21
+    // borró esa diferencia haciendo que la tabla también lea los congelados,
+    // así que el párrafo pasó a distinguir `pointsByEntry` de sí mismo.
+    //
+    // Lo que sigue valiendo es el argumento, y por eso queda escrito: la
+    // tarjeta tiene que prometer lo que la escritura va a GRABAR, no lo que un
+    // recálculo daría hoy. Leer `awards` no cambia lo que se ve, cambia DE QUÉ
+    // DEPENDE lo que se ve — y resultó ser cierto también para la tabla.
     //
     // La clasificación en sí —qué estado le toca a cada invitado— vive en
     // `sumar-state.ts`, que es pura y por eso tiene tests: acá adentro no los

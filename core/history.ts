@@ -1,4 +1,4 @@
-import { members, sameSide } from './side'
+import { members, sameSide, type Duo } from './side'
 import type { Award, Side } from './types'
 
 /** One closed matchday, as it was stored. */
@@ -11,9 +11,9 @@ export interface MatchdayHistory {
 
 /** What the draw of the next matchday needs to know about the ones before it. */
 export interface PreviousContext {
-  defenders: Side | null
+  defenders: Duo | null
   defendersAlreadyRepeated: boolean
-  previousPairs: Side[]
+  previousPairs: Duo[]
 }
 
 /**
@@ -65,8 +65,8 @@ export function previousContext(
  * lo rechaza la FK), y las dos entradas de `previousContext` salen del mismo
  * `discipline_id`. O sea: o vienen todos de uno, o todos de dos.
  */
-function duosOnly(sides: readonly Side[]): Side[] {
-  return sides.filter((side) => side.size === 2)
+function duosOnly(sides: readonly Side[]): Duo[] {
+  return sides.filter((side): side is Duo => side.size === 2)
 }
 
 /**
@@ -74,7 +74,7 @@ function duosOnly(sides: readonly Side[]): Side[] {
  * awards. A pair made only of guests collects no award, so it can never come out
  * of here — which is the rule, not an accident.
  */
-function championsOf(matchday: MatchdayHistory): Side | null {
+function championsOf(matchday: MatchdayHistory): Duo | null {
   const winners = new Set(
     matchday.awards.filter((award) => award.position === 1).map((award) => award.entryId),
   )

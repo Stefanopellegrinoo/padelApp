@@ -31,6 +31,12 @@ export interface DisciplineHeader {
   id: DisciplineId
   kind: 'PADEL' | 'FIFA'
   config: SeasonConfig
+  /**
+   * `disciplines.weight` ya convertido a `number` (REQ-D9-1/2, tabla global).
+   * PostgREST devuelve `numeric(4,2)` como string — `toDisciplineHeader` es
+   * el ÚNICO lugar que hace `Number(...)`; de acá para adentro es number limpio.
+   */
+  weight: number
 }
 
 export interface SeasonHeader {
@@ -153,6 +159,15 @@ interface DisciplineHeaderRow {
   season_id: string
   kind: string
   config: unknown
+  /**
+   * `database.types.ts` (generado) declara esto `number`, pero PostgREST
+   * serializa un `numeric` como STRING en el JSON real — el generador de
+   * tipos de Supabase no lo refleja. El tipo de acá miente igual que el
+   * generado a propósito, para no forzar un cast en cada call site del
+   * `.select()`; `toDisciplineHeader` es el único lugar que no le cree al
+   * tipo y convierte de verdad.
+   */
+  weight: number
 }
 
 interface MatchdayRow {
@@ -171,11 +186,15 @@ async function currentUserId(supabase: Client): Promise<string | null> {
   return data.user?.id ?? null
 }
 
-function toDisciplineHeader(row: DisciplineHeaderRow): DisciplineHeader {
+export function toDisciplineHeader(row: DisciplineHeaderRow): DisciplineHeader {
   return {
     id: row.id as DisciplineId,
     kind: row.kind as 'PADEL' | 'FIFA',
     config: row.config as unknown as SeasonConfig,
+    // Number(...) EN ESTE ÚNICO LUGAR (gotcha de PR12, ver DisciplineHeaderRow.weight):
+    // Number(1) === 1, así que un valor ya numérico (default, tests directos
+    // a la base) no cambia. `db/read.unit.test.ts` prueba el caso real.
+    weight: Number(row.weight),
   }
 }
 
@@ -211,7 +230,7 @@ function toMatchdaySummary(row: MatchdayRow): MatchdaySummary {
 }
 
 const SEASON_HEADER_COLUMNS = 'id, name, status, created_by, invite_token'
-const DISCIPLINE_HEADER_COLUMNS = 'id, season_id, kind, config'
+const DISCIPLINE_HEADER_COLUMNS = 'id, season_id, kind, config, weight'
 
 /** Every season where the caller has a seat — admin or squad. RLS does the filtering; this only shapes the rows. */
 export async function mySeasons(supabase: Client): Promise<SeasonHeader[]> {

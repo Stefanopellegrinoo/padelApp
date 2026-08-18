@@ -54,7 +54,19 @@ export function previousContext(
   return { defenders, defendersAlreadyRepeated: alreadyRepeated, previousPairs }
 }
 
-/** Los lados de dos, como `Pair`. Un lado de uno no es una pareja y se cae acá. */
+/**
+ * Los lados de dos, como `Pair`. Un lado de uno no es una pareja y se cae acá.
+ *
+ * S43 (verify-report ronda 13): filtrar en silencio es lo contrario del
+ * criterio que S37 impuso en `sideOfRow` —que TIRA cuando la forma no cierra—,
+ * y la asimetría es deliberada porque acá el silencio no puede perder nada:
+ * una historia con lados MIXTOS es inalcanzable, y lo impide la BASE, no un
+ * `if`. `pairs_matchday_size` clava cada fila de `pairs` al `pair_size` de su
+ * fecha, `matchdays_discipline_size` impide que una disciplina cambie de
+ * aridad con fechas ya creadas (probado con un `update` real en la ronda 13:
+ * lo rechaza la FK), y las dos entradas de `previousContext` salen del mismo
+ * `discipline_id`. O sea: o vienen todos de uno, o todos de dos.
+ */
 function pairsOnly(sides: readonly Side[]): Pair[] {
   return sides.filter((side) => side.size === 2).map(pairOf)
 }

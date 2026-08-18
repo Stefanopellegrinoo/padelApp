@@ -18,7 +18,12 @@ export function TorneoNav({ seasonId }: { seasonId: string }) {
     {
       label: 'Fechas',
       href: `${base}/fechas`,
-      isActive: (path) => path.startsWith(`${base}/fechas`),
+      // W14 (verify-report ronda 5): la ruta de una fecha lleva la disciplina
+      // en el medio (`${base}/{disciplina}/fechas/{n}`, PR 10) — `startsWith`
+      // ya no la agarra. `includes` sobre lo que sigue de `base` la vuelve a
+      // encender sin abrir la pestaña de otra sección (ninguna `kind` se
+      // llama "fechas").
+      isActive: (path) => path.startsWith(base) && path.slice(base.length).includes('/fechas'),
     },
     { label: 'Stats', href: `${base}/stats`, isActive: (path) => path.startsWith(`${base}/stats`) },
     {

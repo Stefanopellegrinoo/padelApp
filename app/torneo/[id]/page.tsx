@@ -1,9 +1,10 @@
 import Link from 'next/link'
-import { MASTERS_SIZE, rankingWithMovement, snapshotForMatchday, type EntryId } from '@/core'
-import { awardsOf, entriesOf, matchdaysOf, primaryDiscipline, seasonHeader } from '@/db/read'
+import { computeGlobalRanking, computeRanking, disciplineSlugs, type DisciplineRanking } from '@/core'
+import { seasonAwardsOf, seasonHeader, seasonMatchdaysOf, seasonSquadMembersOf } from '@/db/read'
 import { serverClient } from '@/db/server'
-import { initials, matchdayDay } from '@/app/format'
-import { Desempate, type StandingsRow, type TiebreakEntry } from './desempate'
+import { DISCIPLINE_LABELS } from '@/app/torneos/nuevo/wizard-state'
+import { initials } from '@/app/format'
+import { Desempate, type StandingsRow } from './desempate'
 import { Volver } from './volver'
 
 interface PageProps {
@@ -11,135 +12,91 @@ interface PageProps {
 }
 
 /**
- * Tabla — home del torneo. Sección 7 del handoff.
+ * Tabla global — home del torneo desde PR12b slice 2/2 (REQ-D9). Hasta acá la
+ * raíz mostraba la Tabla de la disciplina por defecto (ahora en
+ * `[disciplina]/page.tsx`, PR12b slice 1); esta pantalla suma los puntos de
+ * CADA disciplina × su `weight` y muestra a TODO el plantel de la temporada
+ * — decisión de producto (engram #3796): "tabla global = suma de todas las
+ * disciplinas", y elegida explícitamente sobre mostrar sólo "mi posición".
  *
- * "Próxima fecha" y "Campeones defensores" se dibujan sólo cuando hay datos
- * reales que mostrar: sin fechas creadas (torneo recién armado) ninguna de
- * las dos aparece, que es exactamente el estado "tabla en cero, sin
- * defensores" que pide la tarea.
+ * Por disciplina, no una — `computeRanking` se llama UNA VEZ POR disciplina
+ * con SU PROPIO `config` (cada una puede tener su propio "mejores N de M") y
+ * recién ahí se suman los resultados (`computeGlobalRanking`, PR12). Un solo
+ * `computeRanking` con un config compartido aplicaría el corte de la
+ * disciplina primaria a las demás — el mismo error que slice 1 evitó con
+ * `discipline.config.regularMatchdays` en vez de `header.regularMatchdays`.
+ *
+ * Lee `seasonSquadMembersOf`/`seasonMatchdaysOf`/`seasonAwardsOf` (temporada
+ * entera) — no `entriesOf`/`matchdaysOf`/`awardsOf`/`primaryDiscipline`
+ * (disciplina por defecto): esos dejarían afuera a quien no juega esa
+ * disciplina en particular. Todo squad member recibe una fila aunque nunca
+ * haya sumado un punto: `computeRanking` ya arma una fila por cada id de
+ * `squad` que se le pase (medido en `core/ranking.test.ts`, "includes every
+ * squad member even if they never played" / "gives a player with no awards
+ * zero points") — y acá se le pasa SIEMPRE el plantel de la temporada
+ * entera, no el de una disciplina, así que nadie queda afuera del global.
+ *
+ * "Próxima fecha" y "Campeones defensores" no aparecen acá: son conceptos
+ * por-disciplina (cada una se juega el día que quiera, decisión #3796) sin
+ * versión agregable entre calendarios independientes — viven en la Tabla de
+ * cada disciplina. Tampoco hay corte de Masters (`has_masters` también es
+ * por-disciplina): `mastersCutoff` se pasa fuera de rango a propósito.
+ *
+ * DEUDA ACEPTADA (presupuesto de línea): `Desempate` siempre dibuja el botón
+ * "Orden de desempate ⇅" — acá no hay snapshot ni cadencia de refresco que
+ * explicar (mismo motivo que arriba), así que se le pasa `tiebreakOrder`
+ * vacío. Tocarlo (un prop opcional `showTiebreak` para ocultar el botón
+ * cuando no aplica) es ~15L en `desempate.tsx`, evaluado y afuera de esta
+ * PR por presupuesto. Ningún jugador puntual queda mal representado — no
+ * hay `tiedWithEntryId` acá, así que ninguna fila abre el sheet; sólo el
+ * botón superior, y quien lo toque ve una lista vacía en vez de nada.
  */
-export default async function TablaPage({ params }: PageProps) {
+export default async function TablaGlobalPage({ params }: PageProps) {
   const { id: seasonId } = await params
   const supabase = await serverClient()
 
-  const [header, entries, matchdays, awardsByMatchday] = await Promise.all([
+  const [header, matchdays, squad] = await Promise.all([
     seasonHeader(supabase, seasonId),
-    entriesOf(supabase, seasonId),
-    matchdaysOf(supabase, seasonId),
-    awardsOf(supabase, seasonId),
+    seasonMatchdaysOf(supabase, seasonId),
+    seasonSquadMembersOf(supabase, seasonId),
   ])
-  // `disciplines.config` es la fuente real desde PR 5 — `seasonHeader` ya la
-  // trae, así que no hace falta una segunda consulta (C5, verify-report
-  // ronda 3: `seasons.config` quedó sin escritor y podía divergir).
-  const config = primaryDiscipline(header).config
+  const seasonAwards = await seasonAwardsOf(supabase, matchdays)
 
-  const squadEntries = entries
-    .filter((entry) => entry.kind === 'SQUAD')
-    .sort((a, b) => a.seedPosition - b.seedPosition)
-  const nameOf = new Map(squadEntries.map((entry) => [entry.id, entry.displayName]))
-  const seedOrder: EntryId[] = squadEntries.map((entry) => entry.id)
+  const squadIds = squad.map((member) => member.id)
+  const nameOf = new Map(squad.map((member) => [member.id, member.displayName]))
 
-  const regularMatchdays = matchdays.filter((matchday) => matchday.kind === 'REGULAR')
-  const closedRegular = regularMatchdays.filter((matchday) => matchday.status === 'CLOSED')
-  const activeMatchdayNumber = Math.min(closedRegular.length + 1, header.regularMatchdays)
-  // SETUP: la temporada existe pero nadie abrió su primera fecha todavía
-  // (0005_matchday_moves.sql: "la temporada arranca cuando se abre su primera
-  // fecha"). El prototipo nunca mockeó ese estado —la lista de chips de
-  // estado del README (línea 42) no trae una Tabla vacía— así que no hay copy
-  // contractual para él: `estado` queda en `null` y el kicker no se dibuja,
-  // el mismo criterio que esta pantalla ya usa con "Próxima fecha" y
-  // "Campeones defensores".
-  const estado = header.status === 'FINISHED' ? 'terminado' : header.status === 'SETUP' ? null : 'en curso'
-
-  const snapshot = snapshotForMatchday(activeMatchdayNumber, seedOrder, awardsByMatchday, config)
-  const ranking = rankingWithMovement(awardsByMatchday, seedOrder, config, snapshot)
-
-  // Antes de cerrar la primera fecha todos están en cero: es un empate que no
-  // dice nada, así que el chip ⓘ no tiene sentido hasta que haya una fecha jugada.
-  const hasClosedMatchday = closedRegular.length > 0
+  const perDiscipline: DisciplineRanking[] = header.disciplines.map((discipline) => ({
+    weight: discipline.weight,
+    ranking: computeRanking(seasonAwards.get(discipline.id) ?? new Map(), squadIds, discipline.config, []),
+  }))
+  const ranking = computeGlobalRanking(perDiscipline)
 
   const rows: StandingsRow[] = ranking.map((row, index) => {
-    const previous = ranking[index - 1]
-    const next = ranking[index + 1]
-    const tiedWithEntryId =
-      previous !== undefined && previous.points === row.points
-        ? previous.entryId
-        : (next !== undefined && next.points === row.points ? next.entryId : null)
     const displayName = nameOf.get(row.entryId) ?? ''
     return {
       entryId: row.entryId,
       displayName,
       initials: initials(displayName),
-      position: row.position,
+      position: index + 1,
       points: row.points,
-      movement: row.movement,
-      tiedWithEntryId: hasClosedMatchday ? tiedWithEntryId : null,
+      // Sin "fecha anterior" que comparar en un ranking multi-disciplina sin
+      // cadencia común, y sin desempate propio (ver doc de `Desempate` arriba).
+      movement: null,
+      tiedWithEntryId: null,
     }
   })
 
-  const tiebreakOrder: TiebreakEntry[] = snapshot.map((entryId) => ({
-    entryId,
-    displayName: nameOf.get(entryId) ?? '',
-  }))
-
-  const refreshes = Math.floor((activeMatchdayNumber - 1) / config.tiebreakSnapshotEvery)
-  const asOfMatchday = refreshes === 0 ? null : refreshes * config.tiebreakSnapshotEvery
-  const nextRefreshMatchday = (refreshes + 1) * config.tiebreakSnapshotEvery
-
-  // Sólo puede haber una fecha regular sin cerrar a la vez (constraint de base):
-  // esa es "la próxima fecha", tanto si todavía se está armando (DRAFT) como
-  // si ya se está jugando (OPEN).
-  const liveMatchday = regularMatchdays.find((matchday) => matchday.status !== 'CLOSED') ?? null
-
-  const sortedClosed = [...closedRegular].sort((a, b) => b.number - a.number)
-  const last = sortedClosed[0]
-  const beforeLast = sortedClosed[1]
-  const lastWinnerIds =
-    last !== undefined
-      ? (awardsByMatchday.get(last.number) ?? [])
-          .filter((award) => award.position === 1)
-          .map((award) => award.entryId)
-      : []
-  const beforeLastWinnerIds = new Set(
-    beforeLast !== undefined
-      ? (awardsByMatchday.get(beforeLast.number) ?? [])
-          .filter((award) => award.position === 1)
-          .map((award) => award.entryId)
-      : [],
-  )
-  // Ganaron dos fechas seguidas los mismos dos jugadores: ya jugaron sus 2
-  // fechas como pareja defensora (spec 2.5, tope de una defensa) y en la
-  // próxima se separan sí o sí. No hay copy contractual para "0 defensas", así
-  // que directamente no se muestra la tarjeta.
-  const alreadyRepeated =
-    lastWinnerIds.length > 0 &&
-    lastWinnerIds.length === beforeLastWinnerIds.size &&
-    lastWinnerIds.every((entryId) => beforeLastWinnerIds.has(entryId))
-
-  const defenders =
-    last !== undefined && lastWinnerIds.length > 0 && !alreadyRepeated
-      ? { matchdayNumber: last.number, names: lastWinnerIds.map((entryId) => nameOf.get(entryId) ?? '') }
-      : null
+  const slugOf = disciplineSlugs(header.disciplines)
 
   return (
     <div className="flex flex-col gap-3 pt-4">
-      {/* La Tabla es la raíz del torneo: es la única de las cuatro pestañas
-          desde la que se sube, y sube a Mis torneos. */}
       <Volver href="/torneos" label="Mis torneos" />
       <header className="flex items-start justify-between">
-        <div>
-          {estado !== null && (
-            <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
-              Fecha {activeMatchdayNumber} de {header.regularMatchdays} · {estado}
-            </p>
-          )}
-          <h1 className="text-[26px] font-extrabold tracking-[-.03em]">{header.name}</h1>
-        </div>
+        <h1 className="text-[26px] font-extrabold tracking-[-.03em]">{header.name}</h1>
         {header.isAdmin && (
           <Link
             href={`/torneo/${seasonId}/ajustes`}
             aria-label="Ajustes"
-            // 36px: el botón circular del header del marco común del handoff.
             className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-chip text-[18px]"
           >
             ⚙
@@ -147,40 +104,31 @@ export default async function TablaPage({ params }: PageProps) {
         )}
       </header>
 
-      {liveMatchday !== null && (
-        <div className="rounded-card bg-accent p-4 text-accent-text">
-          <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] opacity-75">
-            Próxima fecha
-          </p>
-          <p className="text-[21px] font-extrabold">
-            Fecha {liveMatchday.number}
-            {liveMatchday.playedOn !== null ? ` · ${matchdayDay(liveMatchday.playedOn)}` : ''}
-          </p>
-        </div>
-      )}
-
-      {defenders !== null && (
-        <div className="flex items-center justify-between gap-3 rounded-card border border-line bg-surface p-4">
-          <div>
-            <p className="text-[15px] font-extrabold">{defenders.names.join(' y ')}</p>
-            <p className="text-[12px] font-[550] text-muted">
-              Ganaron la fecha {defenders.matchdayNumber} · les queda 1 defensa
-            </p>
-          </div>
-          <span className="shrink-0 rounded-full bg-ok-bg px-2.5 py-1 text-[10.5px] font-extrabold text-up">
-            Repiten
-          </span>
-        </div>
-      )}
+      <div className="flex flex-col gap-2">
+        {header.disciplines.map((discipline) => (
+          <Link
+            key={discipline.id}
+            href={`/torneo/${seasonId}/${slugOf.get(discipline.id)}`}
+            className="flex items-center justify-between rounded-card border border-line bg-surface p-4"
+          >
+            <p className="text-[15px] font-extrabold">Tabla de {DISCIPLINE_LABELS[discipline.kind]}</p>
+            <span className="text-muted">›</span>
+          </Link>
+        ))}
+      </div>
 
       <Desempate
         seasonId={seasonId}
         rows={rows}
-        mastersCutoff={MASTERS_SIZE}
-        tiebreakOrder={tiebreakOrder}
-        tiebreakSnapshotEvery={config.tiebreakSnapshotEvery}
-        asOfMatchday={asOfMatchday}
-        nextRefreshMatchday={nextRefreshMatchday}
+        // Fuera de rango a propósito: el corte de Masters es por-disciplina.
+        mastersCutoff={rows.length + 1}
+        // Sin snapshot ni desempate propio acá (ver doc de arriba) — el botón
+        // "Orden de desempate" de `Desempate` queda inerte, no falso: ninguna
+        // fila tiene `tiedWithEntryId`, así que nunca abre con datos de nadie.
+        tiebreakOrder={[]}
+        tiebreakSnapshotEvery={0}
+        asOfMatchday={null}
+        nextRefreshMatchday={0}
       />
     </div>
   )

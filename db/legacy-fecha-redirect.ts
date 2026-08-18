@@ -2,7 +2,11 @@ import { disciplineSlugs } from '@/core'
 import type { Client } from './client'
 import { seasonHeader, seasonMatchdaysOf } from './read'
 
-const LEGACY_FECHA_PATH = /^\/torneo\/([^/]+)\/fechas\/([^/]+)\/?$/
+// W15 (verify-report ronda 5): `n` sólo dígitos. `/fechas/reglas` matcheaba
+// antes ("reglas" cumple `[^/]+`) y colaba una fecha vieja pública al camino
+// legacy con el cliente anon — acá es donde corresponde cortarlo: es la
+// definición de qué ES una fecha vieja, no un caso aparte en el parse.
+const LEGACY_FECHA_PATH = /^\/torneo\/([^/]+)\/fechas\/([0-9]+)\/?$/
 
 export interface LegacyFechaPath {
   seasonId: string
@@ -43,7 +47,22 @@ export async function legacyFechaRedirectTarget(
     seasonHeader(supabase, legacy.seasonId),
     seasonMatchdaysOf(supabase, legacy.seasonId),
   ])
-  const matchday = matchdays.find((candidate) => candidate.number === matchdayNumber)
+  // C10 (verify-report ronda 5): `number` es único por disciplina, no por
+  // temporada (REQ-D3-2) — dos disciplinas pueden compartir "fecha 2", y ese
+  // empate es un estado LEGÍTIMO, no un agujero de integridad. Buscar sólo
+  // por número sin desempate deja el destino sin definir, y el 308 es
+  // PERMANENTE (cacheado por el browser, RFC 7538): la disciplina equivocada
+  // queda pegada. El bookmark legacy es, por construcción, anterior a
+  // cualquier segunda disciplina — recorrer `header.disciplines` EN ORDEN
+  // (ya llega `position, created_at`) y quedarse con la primera que tenga
+  // esa fecha reproduce la intención del link viejo de forma determinística.
+  const matchday = header.disciplines
+    .map((discipline) =>
+      matchdays.find(
+        (candidate) => candidate.number === matchdayNumber && candidate.disciplineId === discipline.id,
+      ),
+    )
+    .find((candidate) => candidate !== undefined)
   if (matchday === undefined) return null
 
   const slug = disciplineSlugs(header.disciplines).get(matchday.disciplineId)

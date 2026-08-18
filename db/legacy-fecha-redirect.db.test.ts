@@ -50,20 +50,28 @@ describe('legacyFechaRedirectTarget', () => {
     })
     const [firstPadelId, secondPadelId] = disciplineIds
     if (firstPadelId === undefined || secondPadelId === undefined) throw new Error('setup incompleto')
-    await insertMatchday(seasonId, firstPadelId, 3)
+    // Orden de INSERCIÓN a propósito invertido respecto del orden de
+    // DISCIPLINA (`position`): la fila de `secondPadelId` (position=1) se
+    // graba primero. Un desempate que dependiera del orden físico/de
+    // inserción de `matchdays` (el bug de C10) resolvería acá a
+    // `secondPadelId` — el fix real usa el orden de `header.disciplines`
+    // (`position, created_at`), no el de inserción, así que el resultado
+    // correcto sigue siendo `firstPadelId` pase lo que pase con `matchdays`.
     await insertMatchday(seasonId, secondPadelId, 3)
+    await insertMatchday(seasonId, firstPadelId, 3)
 
     const target = await legacyFechaRedirectTarget(admin.client, { seasonId, n: '3' })
-    // `number` es único por disciplina (REQ-D3-2): con dos "fecha 3" en la
-    // misma temporada, `legacyFechaRedirectTarget` no puede distinguir cuál
-    // quiso el bookmark viejo — Postgres no garantiza un orden estable entre
-    // dos filas empatadas en `number` sin una clave de desempate, así que
-    // CUÁL de las dos gana no está definido (se vio en la práctica: cambió
-    // entre corridas). Lo único garantizado es que resuelve a una disciplina
-    // VÁLIDA de esta temporada, nunca null ni un slug inventado — es
-    // exactamente el borde que la ruta NUEVA resuelve de verdad, al llevar
-    // la disciplina explícita en la URL en vez de inferirla.
-    expect([`/torneo/${seasonId}/padel/fechas/3`, `/torneo/${seasonId}/padel-2/fechas/3`]).toContain(target)
+    // C10 (verify-report ronda 5): `number` es único por disciplina
+    // (REQ-D3-2), no por temporada — con dos "fecha 3" en la misma
+    // temporada, el desempate ya NO es "cualquier disciplina válida": la
+    // primera del orden de la temporada (`position, created_at`) gana,
+    // porque es la que existía cuando el bookmark viejo se guardó. La
+    // factory inserta cada disciplina en su propio insert con `position:
+    // index` (arriba, ver `db/test/factories.ts`), así que `firstPadelId`
+    // queda en `position=0` — determinístico, no un empate real de la
+    // factory (ese es el riesgo S13 de `createSeason` en PRODUCCIÓN, que
+    // inserta N filas en un solo statement; no aplica acá).
+    expect(target).toBe(`/torneo/${seasonId}/padel/fechas/3`)
   })
 
   it('returns null when the matchday does not exist — nothing to redirect to', async () => {

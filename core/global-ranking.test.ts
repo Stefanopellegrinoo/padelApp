@@ -52,6 +52,16 @@ describe('computeGlobalRanking', () => {
     expect(global.find((r) => r.entryId === 'e2')?.points).toBe(9)
   })
 
+  // W17 (verify-report ronda 6): `weight` es `numeric(4,2)` — 0.33 es un
+  // valor legal y su producto en punto flotante NO es exacto
+  // (10*0.33 === 3.3000000000000003 en JS). El único ejemplo de la spec
+  // (0.5) es exacto en binario y no lo detecta.
+  it('rounds the weighted total to two decimals instead of leaking float noise', () => {
+    const disciplines: DisciplineRanking[] = [{ weight: 0.33, ranking: [row('e1', 10)] }]
+    const global = computeGlobalRanking(disciplines)
+    expect(global.find((r) => r.entryId === 'e1')?.points).toBe(3.3)
+  })
+
   it('orders the result by global points, highest first', () => {
     const disciplines: DisciplineRanking[] = [
       { weight: 1, ranking: [row('e1', 5), row('e2', 9), row('e3', 1)] },

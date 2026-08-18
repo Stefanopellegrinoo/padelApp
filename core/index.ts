@@ -65,6 +65,10 @@ export { computeAwards } from './awards'
 export { computeRanking } from './ranking'
 export { snapshotForMatchday } from './snapshots'
 
+// ── La tabla global (REQ-D9-1/2): suma ponderada de cada disciplina ─────────
+export type { DisciplineRanking, GlobalRankingRow } from './global-ranking'
+export { computeGlobalRanking } from './global-ranking'
+
 // El estado real de un torneo con más de una disciplina: DERIVADO, nunca
 // leído de una sola columna. `seasons.status` sigue en dual-write hasta el
 // contract (PR 27).

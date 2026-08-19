@@ -38,8 +38,18 @@ import { describe, expect, it } from 'vitest'
  * S58: el regex de W52 pasó de exigir paréntesis a `\bcomputeAwards\b`, así que
  * una MENCIÓN de la palabra en un string lo ponía rojo (medido: 1 failed con
  * `const zz = 'ver computeAwards(x) en el historial'`). El falso positivo no
- * había desaparecido, se había mudado. El assert mira sólo las líneas de
- * `import`, que es lo que el comentario de abajo ya declaraba como intención.
+ * había desaparecido, se había mudado.
+ *
+ * W60 (verify-report ronda 18): el arreglo de S58 fue angostar el assert a las
+ * líneas `^import … from …`, y eso cambió un falso positivo ruidoso por un
+ * falso negativo SILENCIOSO. Medido en los dos builds sobre el archivo real:
+ * `const { computeAwards } = await import('@/core')` y
+ * `const zzCore = require('@/core'); zzCore.computeAwards` se ponían ROJOS
+ * antes del angostamiento y pasaban VERDES después — un import dinámico no
+ * pasa por una línea `^import … from`, y una llamada suelta tampoco. La
+ * detección volvió a ser ancha —todo el fuente ejecutable— sacándole los
+ * literales de string, que era lo único que producía el falso positivo de S58.
+ * Gana las dos, así que no hay que elegir.
  */
 
 /** El fuente sin comentarios de línea ni de bloque: lo que de verdad se ejecuta. */
@@ -48,15 +58,22 @@ function sinComentarios(source: string): string {
 }
 
 /**
- * Sólo los `import ... from '...'` del fuente sin comentarios.
+ * El fuente sin comentarios y sin literales de string: lo que de verdad se
+ * ejecuta, menos el texto que sólo se muestra.
  *
- * ponytail: un `import 'efecto-secundario'` (sin `from`) haría que el match se
- * estire hasta el `from` siguiente y se mire de más. No hay ninguno en los
- * archivos que este test cubre, y el error posible es un falso POSITIVO ruidoso,
- * no un falso negativo silencioso. Si aparece uno, cortar por línea.
+ * ponytail: es un blanqueo por regex, no un parser de TypeScript, y el techo es
+ * un falso NEGATIVO acotado a una línea. Un apóstrofo suelto en texto JSX borra
+ * hasta la comilla siguiente de esa línea, y `sinComentarios` ya corta en un
+ * `//` que viva adentro de un string (una URL). Medido hoy sobre los dos
+ * archivos cubiertos: CERO líneas con comillas simples impares, y los tokens
+ * que este test mira (`frozenTableRows`, `orderMoved`, `frozenPointsOf`,
+ * `computeAwards`) aparecen la misma cantidad de veces antes y después de
+ * blanquear. Se acepta el techo porque esto es una RED, no una prueba: cuando
+ * falla de más deja pasar algo raro, nunca afirma que la pantalla esté bien. Si
+ * alguna vez hace falta precisión de verdad, el reemplazo es un parser.
  */
-function soloImports(source: string): string {
-  return (sinComentarios(source).match(/^import\b[\s\S]*?\bfrom\b[^\n]*/gm) ?? []).join('\n')
+function sinStrings(source: string): string {
+  return sinComentarios(source).replace(/'[^'\n]*'|"[^"\n]*"|`[^`]*`/g, ' ')
 }
 
 const PAGE = join(
@@ -86,13 +103,20 @@ describe('la pantalla de una fecha no recalcula sus puntos', () => {
     ['page.tsx', PAGE],
     ['tabla-congelada.ts', TABLA],
   ] as const) {
-    it(`${nombre} no importa computeAwards, ni con alias`, () => {
-      // El import es el cuello de botella: cualquier forma de llamarla —directa,
-      // renombrada, o guardada en una variable— tiene que pasar por acá.
+    it(`${nombre} no nombra computeAwards en código, ni con alias ni por import dinámico`, () => {
+      // Lo que se mira es la MENCIÓN de la palabra fuera de un string, en todo
+      // el fuente ejecutable. Cualquier forma de llegar a ella la nombra al
+      // menos una vez: el import directo, el renombrado (`as repartir`), el
+      // dinámico (`await import('@/core')`), el `require` con acceso por
+      // propiedad, y hasta una llamada suelta sin import.
+      //
+      // W60: NO se mira sólo la línea de `import`. Se probó y perdía los dos
+      // últimos casos en silencio; el detalle está en el bloque de arriba.
+      //
       // `computeAwards` reparte según los `guestIds` de HOY, y después de
       // promover un invitado ese conjunto cambia. Quien reparte es
       // `closeMatchday`, una sola vez; la pantalla lee.
-      expect(soloImports(readFileSync(archivo, 'utf8'))).not.toMatch(/\bcomputeAwards\b/)
+      expect(sinStrings(readFileSync(archivo, 'utf8'))).not.toMatch(/\bcomputeAwards\b/)
     })
   }
 
@@ -108,24 +132,28 @@ describe('la pantalla de una fecha no recalcula sus puntos', () => {
     // deliberado: sin una mención real en el archivo, el assert de arriba pasa
     // por vacío y nadie se entera.
     expect(source).toMatch(/\bcomputeAwards\b/)
-    expect(soloImports(source)).not.toMatch(/\bcomputeAwards\b/)
+    expect(sinStrings(source)).not.toMatch(/\bcomputeAwards\b/)
   })
 
-  it('caza el alias en el import y no se rompe con un string ni con un import comentado', () => {
+  it('caza el alias y el import dinámico, y no se rompe con un string ni con un import comentado', () => {
     // S59: éste es sintético por necesidad —`page.tsx` no puede a la vez
-    // importarla y no importarla— pero ya no es una tautología. Cada mitad falla
+    // nombrarla y no nombrarla— pero ya no es una tautología. Cada mitad falla
     // contra una versión anterior del chequeo:
     //   · el alias, contra el regex de llamada de antes de W52
+    //   · el dinámico, contra el `soloImports` de S58 (W60)
     //   · el string, contra el `\bcomputeAwards\b` sobre todo el fuente (S58)
     //   · el import comentado adentro del bloque, si se saca `sinComentarios`
     const conAlias = `import { computeAwards as repartir } from '@/core'\nconst p = repartir(a, b, c)\n`
-    expect(soloImports(conAlias)).toMatch(/\bcomputeAwards\b/)
+    expect(sinStrings(conAlias)).toMatch(/\bcomputeAwards\b/)
+
+    const dinamico = `const { computeAwards } = await import('@/core')\n`
+    expect(sinStrings(dinamico)).toMatch(/\bcomputeAwards\b/)
 
     const enUnString = `import { members } from '@/core'\nconst zz = 'ver computeAwards(x) en el historial'\n`
-    expect(soloImports(enUnString)).not.toMatch(/\bcomputeAwards\b/)
+    expect(sinStrings(enUnString)).not.toMatch(/\bcomputeAwards\b/)
 
     const comentadoAdentro = `import {\n  /* computeAwards, */\n  members,\n} from '@/core'\n`
-    expect(soloImports(comentadoAdentro)).not.toMatch(/\bcomputeAwards\b/)
+    expect(sinStrings(comentadoAdentro)).not.toMatch(/\bcomputeAwards\b/)
   })
 
   it('lee los puntos congelados', () => {

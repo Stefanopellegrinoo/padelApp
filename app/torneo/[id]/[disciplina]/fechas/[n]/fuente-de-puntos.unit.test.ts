@@ -137,4 +137,35 @@ describe('la pantalla de una fecha no recalcula sus puntos', () => {
     // cinco líneas más arriba, del lado que protege contra C21.
     expect(sinComentarios(source)).toMatch(/frozenPointsOf\s*\(/)
   })
+
+  it('usa el orden congelado y gatea el pie con las MISMAS filas', () => {
+    // W59 (verify-report ronda 18): la ronda 17 extrajo el criterio de orden a
+    // `tabla-congelada.ts` y le puso 6 tests buenos, pero extraer mueve el
+    // riesgo al PUNTO DE UNIÓN, y ahí no había nada. Medido por la auditoría
+    // sobre el archivo real, suite entera: tres ediciones de UNA línea en
+    // `page.tsx` reabren W55, W56 y W57 EN PANTALLA y pasaban 459/459.
+    //   · `const tableRows = standings`                        → W55 y W57
+    //   · `const note = status === 'CLOSED' ? tiebreakNote(…)` → W56
+    //   · `orderMoved(standings.map((r) => ({ ...r })), …)`    → W56
+    //
+    // Mismo defecto que W58 —cubrir un lado y no el gemelo— y mismo remedio que
+    // el assert de `frozenPointsOf` de acá arriba: no prueban que la pantalla
+    // esté bien, prueban que no dejó de hacer las dos cosas que la arreglaron.
+    //
+    // Los ARGUMENTOS van pinchados, no sólo el nombre, porque los dos contratos
+    // son de IDENTIDAD DE FILA: `frozenTableRows` devuelve los mismos objetos y
+    // `orderMoved` es `drawn[index] !== row`. Colar un `.map((r) => ({ ...r }))`
+    // en cualquiera de los dos lados deja el nombre intacto, da "se movió"
+    // siempre, y el pie desaparece de TODA fecha cerrada. Ésa es la sonda L, y
+    // contra un regex de sólo el nombre pasa verde.
+    //
+    // ponytail: pinchar los nombres de las variables se rompe si alguien las
+    // renombra. El error posible es un falso POSITIVO ruidoso —el test se pone
+    // rojo y se lee este comentario—, que es el lado correcto del que
+    // equivocarse para un chequeo estático.
+    expect(sinComentarios(source)).toMatch(
+      /frozenTableRows\s*\(\s*standings\s*,\s*frozenPoints\s*\)/,
+    )
+    expect(sinComentarios(source)).toMatch(/orderMoved\s*\(\s*standings\s*,\s*tableRows\s*\)/)
+  })
 })

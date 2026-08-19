@@ -756,7 +756,10 @@ export async function closeMatchday(supabase: Client, matchdayId: string): Promi
     if (problem !== null) throw new EdgeError(problem)
   }
 
-  const standings = computeStandings(sides, matches, config, snapshot)
+  // `matchday.allows_draw` por lo MISMO que el `matchError` de arriba: es el
+  // valor congelado en la fecha. Cerrar una fecha vieja tiene que tabularla
+  // con la regla con la que se jugó, no con la que la disciplina tenga hoy.
+  const standings = computeStandings(sides, matches, config, snapshot, matchday.allows_draw)
   // El Masters define al campeón del año, no reparte puntos (spec 2.7), y
   // `close_matchday` rechaza un `p_awards` no vacío cuando kind = 'MASTERS'.
   // Sin esta rama el Masters no se puede cerrar: `computeAwards` devolvería seis

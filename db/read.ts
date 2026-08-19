@@ -141,6 +141,15 @@ export interface MatchdaySummary {
   playedOn: string | null
   /** Para que quien ya tiene esta fila no tenga que resolver la disciplina de nuevo (`awardsBefore`/`closedHistory` la piden). */
   disciplineId: DisciplineId
+  /**
+   * Si un empate es un resultado legal en ESTA fecha. Sale de `matchdays`, no
+   * de la disciplina, y a propósito: `matchdays_discipline_draw` es `on update
+   * no action`, así que una vez creada la fecha la disciplina ya no puede
+   * cambiarlo. Es el valor CONGELADO, y una fecha vieja se tiene que poder
+   * releer con la misma regla con la que se jugó. Mismo criterio que
+   * `closeMatchday`, que ya juzgaba los resultados con `matchday.allows_draw`.
+   */
+  allowsDraw: boolean
 }
 
 export interface MatchdayDetail {
@@ -182,6 +191,7 @@ interface MatchdayRow {
   status: string
   played_on: string | null
   discipline_id: string
+  allows_draw: boolean
 }
 
 /** `null` for an anonymous or logged-out caller — never throws, so a stranger's read still resolves to "nothing theirs" instead of blowing up. */
@@ -234,6 +244,7 @@ function toMatchdaySummary(row: MatchdayRow): MatchdaySummary {
     //Única marca de esta función: de acá en más `disciplineId` es
     // `DisciplineId`, no `string` a secas.
     disciplineId: row.discipline_id as DisciplineId,
+    allowsDraw: row.allows_draw,
   }
 }
 
@@ -537,7 +548,7 @@ export async function matchdaysOf(supabase: Client, seasonId: string): Promise<M
   if (disciplineId === null) return []
   const { data, error } = await supabase
     .from('matchdays')
-    .select('id, number, kind, status, played_on, discipline_id')
+    .select('id, number, kind, status, played_on, discipline_id, allows_draw')
     .eq('discipline_id', disciplineId)
     .order('number', { ascending: true })
   if (error) throw new EdgeError(`No se pudieron leer las fechas: ${error.message}`)
@@ -565,7 +576,7 @@ export async function matchdaysOf(supabase: Client, seasonId: string): Promise<M
 export async function seasonMatchdaysOf(supabase: Client, seasonId: string): Promise<MatchdaySummary[]> {
   const { data, error } = await supabase
     .from('matchdays')
-    .select('id, number, kind, status, played_on, discipline_id')
+    .select('id, number, kind, status, played_on, discipline_id, allows_draw')
     .eq('season_id', seasonId)
     .order('number', { ascending: true })
   if (error) throw new EdgeError(`No se pudieron leer las fechas: ${error.message}`)
@@ -667,7 +678,7 @@ export async function seasonAwardsOf(
 export async function matchdayDetail(supabase: Client, matchdayId: string): Promise<MatchdayDetail> {
   const { data: matchdayRow, error: matchdayError } = await supabase
     .from('matchdays')
-    .select('id, number, kind, status, played_on, discipline_id')
+    .select('id, number, kind, status, played_on, discipline_id, allows_draw')
     .eq('id', matchdayId)
     .maybeSingle()
   if (matchdayError) throw new EdgeError(`No se pudo leer la fecha: ${matchdayError.message}`)

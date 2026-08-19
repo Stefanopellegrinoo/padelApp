@@ -925,3 +925,64 @@ describe('promoteGuest — disciplina de a uno: se promueve, sin copiar nada (PR
     expect((await entryRow(guestA)).kind).toBe('GUEST')
   })
 })
+
+/*
+ * S57 (verify-report ronda 17). `0033` agregó dos guards que devuelven una
+ * frase en castellano cuando `disciplines.config` está corrupta, y la auditoría
+ * midió la matriz de siete casos: seis pasaron a mensaje legible y UNO seguía
+ * dando el error crudo de Postgres —`invalid input syntax for type integer:
+ * "ocho"`— porque el cast `(config ->> 'squadSize')::int` del `select … into`
+ * revienta ANTES de que el guard pueda mirar nada. Al admin le llegaba como
+ * "Referencia: NNNN".
+ *
+ * Falla segura en las dos versiones (la config queda intacta), así que es
+ * cosmético — pero es la última fila de la matriz sin mensaje, y la matriz
+ * entera no está en ningún test. Ésta sí.
+ */
+describe('promoteGuest — una config corrupta se explica en castellano (S57, W54)', () => {
+  async function corromper(seasonId: string, patch: Record<string, unknown>): Promise<void> {
+    const service = adminClient()
+    const { data } = await service
+      .from('disciplines')
+      .select('id, config')
+      .eq('season_id', seasonId)
+      .single()
+    const config = { ...(data?.config as Record<string, unknown>), ...patch }
+    await service
+      .from('disciplines')
+      .update({ config: config as never })
+      .eq('id', data?.id ?? '')
+  }
+
+  async function configOf(seasonId: string): Promise<unknown> {
+    const service = adminClient()
+    const { data } = await service.from('disciplines').select('config').eq('season_id', seasonId).single()
+    return data?.config
+  }
+
+  it('squadSize que no es un número se explica, en vez de filtrar el error de Postgres', async () => {
+    const { admin, seasonId, guestId } = await closedSoloMatchdayWithGuest()
+    await corromper(seasonId, { squadSize: 'ocho' })
+    const rota = await configOf(seasonId)
+
+    await expect(promoteGuest(admin.client, guestId)).rejects.toThrow(
+      /no dice de cuántos es el plantel/,
+    )
+
+    // Falla segura: la config queda como estaba, rota pero sin empeorar.
+    expect(await configOf(seasonId)).toEqual(rota)
+    expect((await entryRow(guestId)).kind).toBe('GUEST')
+  })
+
+  it('points que no es una lista se explica igual (no-regresión de W54)', async () => {
+    const { admin, seasonId, guestId } = await closedSoloMatchdayWithGuest()
+    await corromper(seasonId, { points: 5 })
+    const rota = await configOf(seasonId)
+
+    await expect(promoteGuest(admin.client, guestId)).rejects.toThrow(
+      /la lista de puntos no es una lista/,
+    )
+
+    expect(await configOf(seasonId)).toEqual(rota)
+  })
+})

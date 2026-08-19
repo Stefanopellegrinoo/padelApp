@@ -1,11 +1,13 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import type { MatchFormat } from '@/core'
+import type { MatchFormat, SetScore } from '@/core'
 import {
   MAX_GOAL_DIGITS,
   chooseLoserGames,
   chooseWinner,
+  goalsError,
+  goalsRejected,
   isComplete,
   loserGamesOptions,
   openScoreSet,
@@ -48,11 +50,14 @@ function Goles({
   side,
   value,
   disabled,
+  invalid,
   onChange,
 }: {
   side: string
   value: string
   disabled: boolean
+  /** Lo escrito ya no puede ser un marcador. Lo decide `goalsRejected`. */
+  invalid: boolean
   onChange: (next: string) => void
 }) {
   return (
@@ -66,10 +71,89 @@ function Goles({
         value={value}
         disabled={disabled}
         aria-label={`Goles de ${side}`}
+        aria-invalid={invalid || undefined}
         onChange={(event) => onChange(event.target.value)}
-        className="h-[52px] w-full rounded-field bg-chip px-3 text-center text-[20px] font-extrabold outline-none transition-opacity disabled:opacity-45"
+        // El `focus-visible:ring` es S72 (verify-report ronda 21): el
+        // `outline-none` dejaba el panel 100% operable por teclado y sin que se
+        // viera dónde estabas (medido: `outlineStyle: none`, `boxShadow:
+        // none`). Va SÓLO acá: `outline-none` está en 19 inputs de 11 archivos
+        // y ninguno tiene reemplazo — eso es deuda de a11y previa, y arreglarla
+        // entera es otra tarea, no un renglón de ésta.
+        className={`h-[52px] w-full rounded-field bg-chip px-3 text-center text-[20px] font-extrabold outline-none transition-opacity focus-visible:ring-2 focus-visible:ring-accent-link disabled:opacity-45 ${
+          invalid ? 'ring-1 ring-live' : ''
+        }`}
       />
     </label>
+  )
+}
+
+/**
+ * El panel del marcador abierto: dos números y un botón de guardar.
+ *
+ * Exportado y afuera de `Carga` para poder RENDERIZARLO en la suite: el panel
+ * vive detrás del estado que abre "Cargar resultado", así que sin clicks no se
+ * llega. Las dos cosas que la ronda 21 encontró abriéndolo en un navegador —el
+ * botón que se apaga sin decir por qué y el foco invisible— son atributos y
+ * clases del DOM que ninguna función pura puede ver.
+ *
+ * No opina sobre si el par es LEGAL para la disciplina: un `0-0` donde no se
+ * admiten empates lo rechaza `matchError` del lado del servidor y el mensaje
+ * vuelve por el `WriteResult`. Lo que explica este panel es lo otro: lo que ni
+ * siquiera es un marcador.
+ */
+export function PanelGoles({
+  pairAName,
+  pairBName,
+  goals,
+  pending,
+  onChange,
+  onSave,
+}: {
+  pairAName: string
+  pairBName: string
+  goals: { a: string; b: string }
+  pending: boolean
+  onChange: (next: { a: string; b: string }) => void
+  onSave: (set: SetScore) => void
+}) {
+  const draft = openScoreSet(goals.a, goals.b)
+  const problem = goalsError(goals.a, goals.b)
+
+  return (
+    <div className="flex flex-col gap-2">
+      <p className={PROMPT}>{pending ? 'Guardando…' : 'Goles'}</p>
+      <div className="flex items-start gap-2">
+        <Goles
+          side={pairAName}
+          value={goals.a}
+          disabled={pending}
+          invalid={goalsRejected(goals.a)}
+          onChange={(next) => onChange({ ...goals, a: next })}
+        />
+        <Goles
+          side={pairBName}
+          value={goals.b}
+          disabled={pending}
+          invalid={goalsRejected(goals.b)}
+          onChange={(next) => onChange({ ...goals, b: next })}
+        />
+      </div>
+      {problem !== null && <p className={ERROR_NOTE}>{problem}</p>}
+      {/* Deshabilitado sólo mientras falte un número. Si el par no es legal
+          para la disciplina —un `0-0` sin empates— el botón deja guardar y el
+          mensaje lo escribe `matchError`, que es donde vive esa regla: una
+          segunda copia acá serían dos verdades para sincronizar. */}
+      <button
+        type="button"
+        disabled={pending || draft === null}
+        onClick={() => {
+          if (draft !== null) onSave(draft)
+        }}
+        className="flex min-h-[44px] w-full items-center justify-center rounded-field bg-accent px-3 text-[13.5px] font-extrabold text-accent-text transition-opacity disabled:opacity-45"
+      >
+        Guardar resultado
+      </button>
+    </div>
   )
 }
 
@@ -111,10 +195,7 @@ export function Carga({
   const [pending, startTransition] = useTransition()
   const { seasonId, matchdayNumber, format } = context
 
-  const draft = openScoreSet(goals.a, goals.b)
-
-  const saveOpenScore = () => {
-    if (draft === null) return
+  const saveOpenScore = (draft: SetScore) => {
     setError(null)
     startTransition(async () => {
       const result = await saveMatchResult(seasonId, matchdayNumber, matchId, [draft])
@@ -169,35 +250,14 @@ export function Carga({
       </button>
 
       {state !== null && format.openScore && (
-        <div className="flex flex-col gap-2">
-          <p className={PROMPT}>{pending ? 'Guardando…' : 'Goles'}</p>
-          <div className="flex items-start gap-2">
-            <Goles
-              side={pairAName}
-              value={goals.a}
-              disabled={pending}
-              onChange={(next) => setGoals((current) => ({ ...current, a: next }))}
-            />
-            <Goles
-              side={pairBName}
-              value={goals.b}
-              disabled={pending}
-              onChange={(next) => setGoals((current) => ({ ...current, b: next }))}
-            />
-          </div>
-          {/* Deshabilitado sólo mientras falte un número. Si el par no es legal
-              para la disciplina —un `0-0` sin empates— el botón deja guardar y
-              el mensaje lo escribe `matchError`, que es donde vive esa regla:
-              una segunda copia acá serían dos verdades para sincronizar. */}
-          <button
-            type="button"
-            disabled={pending || draft === null}
-            onClick={saveOpenScore}
-            className="flex min-h-[44px] w-full items-center justify-center rounded-field bg-accent px-3 text-[13.5px] font-extrabold text-accent-text transition-opacity disabled:opacity-45"
-          >
-            Guardar resultado
-          </button>
-        </div>
+        <PanelGoles
+          pairAName={pairAName}
+          pairBName={pairBName}
+          goals={goals}
+          pending={pending}
+          onChange={setGoals}
+          onSave={saveOpenScore}
+        />
       )}
 
       {state !== null && !format.openScore && (

@@ -10,8 +10,9 @@ import {
   MIN_PLAYERS,
   defaultConfig,
   disciplineProfile,
-  formatLabel,
+  formatsLabel,
   pointsErrors,
+  type MatchFormat,
   type SeasonConfig,
 } from '@/core'
 
@@ -61,6 +62,33 @@ export const STEPPERS: Stepper[] = [
     max: 6,
   },
 ]
+
+/**
+ * Los steppers que gobiernan algo para ESTE conjunto de formatos.
+ *
+ * Con marcador abierto "Sets por partido" y "Games por set" no deciden nada
+ * —`setError` los ignora, `matchError` no los exige y `usesSetsDiff` los
+ * apaga— y encima el segundo se anuncia con "A 4 games el resultado se carga
+ * en dos toques", que es JUSTO la máquina que esa disciplina no monta. Es la
+ * misma clase de mentira que el copy que decía "1 set a 4 games" en una liga de
+ * goles (W47, W51, W56, W63).
+ *
+ * Toma una lista de formatos y no un `openScore` suelto porque las dos
+ * pantallas que dibujan estos steppers preguntan cosas distintas: Ajustes edita
+ * la config de UNA disciplina, y el paso 4 del wizard edita la de la TEMPORADA,
+ * compartida por todas las marcadas. Con Pádel y FIFA marcados esos dos
+ * steppers siguen gobernando la mitad de pádel, así que se van sólo cuando
+ * NINGUNA de las disciplinas usa sets. Una función y no dos filtros: W63 nació
+ * exactamente de que Ajustes filtrara y el wizard no.
+ *
+ * Sin disciplinas se dibujan los cinco: "nadie usa sets" no es cierto cuando no
+ * hay nadie, y el paso 1 no deja continuar sin marcar al menos una.
+ */
+export function steppersFor(formats: readonly MatchFormat[]): Stepper[] {
+  const usesSets = formats.length === 0 || formats.some((format) => !format.openScore)
+  if (usesSets) return STEPPERS
+  return STEPPERS.filter((row) => row.key !== 'setsToWin' && row.key !== 'gamesPerSet')
+}
 
 /**
  * Las disciplinas que el paso 1 puede marcar. REQ-D1-1: checkboxes por kind,
@@ -269,6 +297,10 @@ export function formatErrors(config: SeasonConfig): string[] {
  * esa frase describe la mitad pádel del torneo y MIENTE sobre la otra mitad.
  * Con una sola disciplina el resumen dice exactamente lo mismo que siempre —el
  * prefijo aparece recién cuando hay dos cosas distintas que nombrar.
+ *
+ * Esa regla la escribe `formatsLabel` (`core/narrate.ts`) y no este archivo:
+ * Reglas y Ajustes tenían el mismo problema con los mismos datos (W64,
+ * verify-report ronda 21) y tres copias de la misma frase es como nació W64.
  */
 export function summaryOf(
   name: string,
@@ -276,19 +308,17 @@ export function summaryOf(
   config: SeasonConfig,
   picked: readonly DisciplineKind[],
 ): Array<{ key: string; value: string }> {
-  const formats = picked.map((kind) => ({
-    kind,
-    label: formatLabel(disciplineProfile(kind, config).config.matchFormat),
-  }))
-  const only = formats.length === 1 ? formats[0] : undefined
   return [
     { key: 'Nombre', value: name },
     { key: 'Jugadores', value: String(filledCount(names)) },
     {
       key: 'Formato',
-      value:
-        only?.label ??
-        formats.map((row) => `${DISCIPLINE_LABELS[row.kind]}: ${row.label}`).join(' · '),
+      value: formatsLabel(
+        picked.map((kind) => ({
+          label: DISCIPLINE_LABELS[kind],
+          matchFormat: disciplineProfile(kind, config).config.matchFormat,
+        })),
+      ),
     },
     { key: 'Puntos', value: config.points.join(' · ') },
     { key: 'Fechas', value: String(config.regularMatchdays) },

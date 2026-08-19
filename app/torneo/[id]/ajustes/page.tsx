@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
-import { disciplineSlugs, formatLabel, validateConfig } from '@/core'
+import { DISCIPLINE_LABELS } from '@/app/torneos/nuevo/wizard-state'
+import { disciplineSlugs, formatsLabel, validateConfig } from '@/core'
 import {
   matchdaysOf,
   myEntryId,
@@ -82,11 +83,18 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
         // `DisciplineHeader` ya trae `pair_size` del mismo select que `config`.
         validateConfig({ ...discipline.config, squadSize: seats.length }, discipline.pairSize)
 
-  // `formatLabel` y no `{setsToWin} set a {gamesPerSet}` escrito acá: esa
-  // línea decía "1 set a 4" sobre una disciplina que se juega a goles, y
-  // además ponía "set" en singular siempre (con `setsToWin: 3` leía "3 set a
-  // 4"). Es la misma etiqueta que muestran Reglas y el resumen del wizard.
-  const formatoLabel = formatLabel(discipline.config.matchFormat)
+  // `formatsLabel` sobre TODAS las disciplinas y no `formatLabel` sobre la
+  // [0]: esta fila decía "1 set a 4 games" en un torneo que tiene una mitad
+  // que se juega a goles (W64, verify-report ronda 21). Con una sola
+  // disciplina dice exactamente lo que decía. Es la misma etiqueta que
+  // muestran Reglas y el resumen del wizard — antes eran tres copias, y ésa es
+  // la razón por la que las tres mentían igual.
+  const formatoLabel = formatsLabel(
+    header.disciplines.map((candidate) => ({
+      label: DISCIPLINE_LABELS[candidate.kind],
+      matchFormat: candidate.config.matchFormat,
+    })),
+  )
   // CLOSED y no todas: lo que el modal tiene que poner en juego es lo que ya se
   // jugó, no una fecha en DRAFT que no cuesta nada volver a abrir.
   const playedCount = matchdays.filter((matchday) => matchday.status === 'CLOSED').length

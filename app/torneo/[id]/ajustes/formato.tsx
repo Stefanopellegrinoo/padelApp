@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import type { DisciplineId, SeasonConfig } from '@/core'
-import { STEPPERS } from '@/app/torneos/nuevo/wizard-state'
+import { steppersFor } from '@/app/torneos/nuevo/wizard-state'
 import { saveConfig } from './actions'
 
 /**
@@ -14,8 +14,9 @@ import { saveConfig } from './actions'
  * segundo recién existe ahora, y el disparador para extraer el componente
  * compartido es un tercero o un cambio que haya que hacer en los dos.
  *
- * `STEPPERS` sí se importa en vez de copiarse: son los labels, las ayudas y los
- * topes, y las dos pantallas TIENEN que decir lo mismo.
+ * `steppersFor` sí se importa en vez de copiarse: son los labels, las ayudas,
+ * los topes Y cuáles corresponden, y las dos pantallas TIENEN que decir lo
+ * mismo. Copiar el criterio en vez de compartirlo es lo que produjo W63.
  *
  * Guarda a cada toque. `updateDisciplineConfig` corre `assertValidConfig`
  * antes de escribir, así que un estado intermedio inválido —bajar las fechas
@@ -81,19 +82,15 @@ export function Formato({
       </div>
 
       <div className="overflow-hidden rounded-[14px] border border-line bg-surface">
-        {/* Con marcador abierto, "Sets por partido" y "Games por set" no
-            gobiernan nada: `setError` los ignora y `matchError` no los exige
-            (`db/validate.ts`). Dejarlos dibujados es la misma clase de mentira
-            que el copy que decía "1 set a 4 games" en una liga de goles — y
-            encima uno de los dos se anuncia con "A 4 games el resultado se
-            carga en dos toques", que es justo la máquina que esta disciplina
-            NO usa. Se van de la pantalla, no de la config: el jsonb los sigue
-            teniendo porque `MatchFormat` los declara obligatorios. */}
-        {STEPPERS.filter(
-          (row) =>
-            !config.matchFormat.openScore ||
-            (row.key !== 'setsToWin' && row.key !== 'gamesPerSet'),
-        ).map((row, index) => (
+        {/* Cuáles se dibujan lo decide `steppersFor`, no un filtro escrito acá:
+            esta pantalla filtraba y el paso 4 del wizard no, y ésa es
+            exactamente la grieta por la que una liga de solo FIFA seguía
+            leyendo "A 4 games el resultado se carga en dos toques" (W63,
+            verify-report ronda 21). Acá la config es de UNA disciplina, así que
+            la lista de formatos tiene un solo elemento. Se van de la pantalla,
+            no de la config: el jsonb los sigue teniendo porque `MatchFormat`
+            los declara obligatorios. */}
+        {steppersFor([config.matchFormat]).map((row, index) => (
           <div
             key={row.key}
             className={`flex min-h-[56px] items-center justify-between gap-2 px-3 py-2 ${index > 0 ? 'border-t border-line' : ''}`}

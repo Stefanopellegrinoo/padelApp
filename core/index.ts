@@ -103,7 +103,7 @@ export { mastersQualifiers, mastersFixture, mastersChampion } from './masters'
 // ── The rules page ───────────────────────────────────────────────────────────
 // Generated from the config, so it can never disagree with what the app does.
 export type { RulesSection } from './narrate'
-export { formatLabel, narrateRules } from './narrate'
+export { formatLabel, formatsLabel, narrateRules } from './narrate'
 
 // ── Reading the season back ──────────────────────────────────────────────────
 // What the read-only screens need on top of the ranking. All derived, nothing

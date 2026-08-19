@@ -17,6 +17,35 @@ export function formatLabel(format: MatchFormat): string {
   return `${setWord} a ${format.gamesPerSet} games`
 }
 
+/**
+ * La línea de "formato de partido" de un TORNEO, que puede tener más de una
+ * disciplina y —desde PR20 rebanada D2— más de un formato.
+ *
+ * W64 (verify-report ronda 21): hasta D2 todas las disciplinas de una
+ * temporada compartían `matchFormat`, así que una sola frase era verdad y
+ * Reglas y Ajustes narraban `primaryDiscipline(header)` sin mentir. D2 hizo que
+ * cada disciplina naciera con la forma de marcador de su `kind`, y ese mismo
+ * día un torneo de pádel + FIFA pasó a decirle al grupo "1 set a 4 games" sobre
+ * una mitad que se juega a goles.
+ *
+ * Se agrupa por FORMATO y no por disciplina: dos Pádel de la misma temporada
+ * (que la app arma desde PR13) no son dos cosas que nombrar, y con un solo
+ * formato la frase es exactamente la de siempre, sin prefijo. El prefijo
+ * aparece recién cuando hay dos cosas distintas que decir — el mismo criterio
+ * que ya usaba `summaryOf` en el paso 5 del wizard.
+ *
+ * El `label` de cada disciplina lo pone quien llama: acá adentro no vive el
+ * nombre que la UI le da a un `kind`.
+ */
+export function formatsLabel(
+  disciplines: readonly { label: string; matchFormat: MatchFormat }[],
+): string {
+  const rows = disciplines.map((row) => ({ label: row.label, format: formatLabel(row.matchFormat) }))
+  const distinct = [...new Set(rows.map((row) => row.format))]
+  if (distinct.length <= 1) return distinct[0] ?? ''
+  return rows.map((row) => `${row.label}: ${row.format}`).join(' · ')
+}
+
 export interface RulesSection {
   title: string
   body: string

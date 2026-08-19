@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { DISCIPLINE_LABELS } from '@/app/torneos/nuevo/wizard-state'
 import { primaryDiscipline, publicRules, seasonAdminName, seasonHeader, seasonRules } from '@/db/read'
 import { serverClient } from '@/db/server'
 import { RulesBody } from './rules-body'
@@ -50,6 +51,12 @@ export default async function ReglasPage({ params }: ReglasPageProps) {
         <RulesBody
           seasonId={id}
           config={rules.config}
+          // Una sola entrada, y es todo lo que esta rama tiene:
+          // `season_public_rules` (0022) devuelve la config de la disciplina
+          // por defecto y ni siquiera su `kind`, así que no hay a quién
+          // nombrar — con una sola la etiqueta no se usa. Sale byte a byte
+          // como salía.
+          formats={[{ label: '', matchFormat: rules.config.matchFormat }]}
           adminName={rules.adminName}
           rulesText={rules.text}
           isAdmin={false}
@@ -72,6 +79,14 @@ export default async function ReglasPage({ params }: ReglasPageProps) {
     <RulesBody
       seasonId={id}
       config={primaryDiscipline(header).config}
+      // La fila de formato mira TODAS las disciplinas, no la [0]: desde PR20
+      // rebanada D2 cada una nace con la forma de marcador de su kind, y un
+      // torneo de pádel + FIFA le decía al grupo "1 set a 4 games" sobre una
+      // mitad que se juega a goles (W64, verify-report ronda 21).
+      formats={header.disciplines.map((discipline) => ({
+        label: DISCIPLINE_LABELS[discipline.kind],
+        matchFormat: discipline.config.matchFormat,
+      }))}
       adminName={adminName}
       rulesText={rules.text}
       isAdmin={header.isAdmin}

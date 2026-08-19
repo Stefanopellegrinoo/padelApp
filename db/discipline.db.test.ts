@@ -180,17 +180,28 @@ describe('derivedSeasonStatus (PR 3)', () => {
 // insert manual de `seasons` (acá o en otro seed) no vuelva a dejar una
 // temporada huérfana en silencio.
 describe('REQ-NR-4 — ninguna temporada se queda sin disciplina', () => {
+  // La pregunta la contesta la BASE, con un left join y `count: 'exact'`, y no
+  // dos selects cruzados en JavaScript.
+  //
+  // Esa versión anterior traía `seasons.id` y `disciplines.season_id` enteros y
+  // los cruzaba acá. PostgREST corta CADA select en 1000 filas por default y no
+  // avisa: la suite comparte una base que no se resetea entre corridas, y en
+  // cuanto pasó ese techo (medido: 1447 temporadas y 1635 disciplinas, 0
+  // huérfanas de verdad) el cruce empezó a comparar dos listas truncadas y a
+  // reportar 248 huérfanas que no existen. Un tripwire que se vuelve falso
+  // positivo con el uso es peor que no tener tripwire: enseña a ignorarlo.
+  //
+  // `!left` + `.is('disciplines', null)` es "temporadas sin ninguna
+  // disciplina" resuelto del lado de Postgres, y `head: true` no trae filas,
+  // así que no hay página que se pueda cortar.
   it('count(seasons sin disciplinas) = 0', async () => {
     const db = adminClient()
-    const { data: seasons, error: seasonsError } = await db.from('seasons').select('id')
-    if (seasonsError) throw new Error(seasonsError.message)
-
-    const { data: disciplineRows, error: disciplinesError } = await db.from('disciplines').select('season_id')
-    if (disciplinesError) throw new Error(disciplinesError.message)
-
-    const seasonsWithDiscipline = new Set((disciplineRows ?? []).map((row) => row.season_id))
-    const orphaned = (seasons ?? []).filter((season) => !seasonsWithDiscipline.has(season.id))
-    expect(orphaned).toHaveLength(0)
+    const { count, error } = await db
+      .from('seasons')
+      .select('id, disciplines!left(id)', { count: 'exact', head: true })
+      .is('disciplines', null)
+    if (error) throw new Error(error.message)
+    expect(count).toBe(0)
   })
 })
 

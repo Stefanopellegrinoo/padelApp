@@ -52,7 +52,11 @@ export { single, pair, members, includes, partnerOf, sameSide, sideOfRow } from 
 // only protects callers who actually read the result. Call it at every edge.
 // Skipping it is not merely untidy: `tiebreakSnapshotEvery: 0` makes the
 // snapshot chain loop forever.
-export { validateConfig, defaultConfig, pointsErrors } from './config'
+// `disciplineProfile` es la ÚNICA fuente de "con qué marcador nace una
+// disciplina de este tipo": la usan los dos caminos que crean una (el wizard y
+// "+ Agregar disciplina" de Ajustes), que antes armaban los dos su config con
+// `defaultConfig` y hacían nacer una liga de FIFA siendo pádel con otro nombre.
+export { validateConfig, defaultConfig, disciplineProfile, pointsErrors } from './config'
 
 // ── Building a matchday ──────────────────────────────────────────────────────
 // `buildSides` (PR16, design PUNTO 5) is the Side-native entry point: with
@@ -72,7 +76,10 @@ export type { MatchdayHistory, PreviousContext } from './history'
 export { previousContext } from './history'
 
 // ── Scoring a matchday ───────────────────────────────────────────────────────
-export { computeStandings } from './standings'
+// `usesSetsDiff` sale a la superficie porque el criterio lo comparten tres
+// lugares —la tabla, la frase del desempate de la fecha y la página de Reglas—
+// y eran tres copias de `setsToWin > 1`. Arreglar una sola las hacía discrepar.
+export { computeStandings, usesSetsDiff } from './standings'
 export { computeAwards } from './awards'
 
 // ── The season ───────────────────────────────────────────────────────────────
@@ -96,7 +103,7 @@ export { mastersQualifiers, mastersFixture, mastersChampion } from './masters'
 // ── The rules page ───────────────────────────────────────────────────────────
 // Generated from the config, so it can never disagree with what the app does.
 export type { RulesSection } from './narrate'
-export { narrateRules } from './narrate'
+export { formatLabel, narrateRules } from './narrate'
 
 // ── Reading the season back ──────────────────────────────────────────────────
 // What the read-only screens need on top of the ranking. All derived, nothing

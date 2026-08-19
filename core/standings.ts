@@ -1,5 +1,26 @@
 import { members, sameSide } from './side'
-import type { EntryId, MatchResult, SeasonConfig, Side, SideStanding } from './types'
+import type { EntryId, MatchFormat, MatchResult, SeasonConfig, Side, SideStanding } from './types'
+
+/**
+ * Si la tabla del día corta por diferencia de SETS antes de llegar a la
+ * diferencia de games.
+ *
+ * Exportada porque no la usa sólo `computeStandings`: la pantalla de la fecha
+ * arma con ella la frase del desempate (`tiebreakNote`) y la página de Reglas
+ * la narra (`describeTiebreak`). Eran TRES copias de `setsToWin > 1` en tres
+ * archivos, y arreglar una sola las hacía discrepar — que es peor que dejar
+ * las tres igual de viejas.
+ *
+ * Con marcador abierto es siempre `false`, y no por convención: un partido de
+ * goles es UN resultado, así que hay exactamente un "set" y `setsDiff`
+ * degenera en `ganados − perdidos`. Eso es una segunda opinión sobre el
+ * criterio que ya corrió primero (`won`), y encima tapa la diferencia de gol,
+ * que es el desempate real de una liga de fútbol. Un empate es donde las dos
+ * cuentas se separan: suma a `played` sin sumar a ninguno de los dos.
+ */
+export function usesSetsDiff(format: MatchFormat): boolean {
+  return !format.openScore && format.setsToWin > 1
+}
 
 /**
  * Ephemeral tally for a single matchday's computation — never persisted,
@@ -87,19 +108,17 @@ export function computeStandings(
   const bestPlayerRank = (side: Side): number =>
     Math.min(...members(side).map((entryId) => snapshotRank.get(entryId) ?? OUTSIDE))
 
-  const usesSetsDiff = config.matchFormat.setsToWin > 1
+  const bySetsDiff = usesSetsDiff(config.matchFormat)
 
   // Step one: the objective criteria, which are transitive and safe to sort with.
-  const byObjective = [...tallies].sort((left, right) =>
-    compareObjective(left, right, usesSetsDiff),
-  )
+  const byObjective = [...tallies].sort((left, right) => compareObjective(left, right, bySetsDiff))
 
   // Step two: group whatever came out exactly level.
   const groups: Tally[][] = []
   for (const tally of byObjective) {
     const current = groups[groups.length - 1]
     const head = current?.[0]
-    if (current !== undefined && head !== undefined && compareObjective(head, tally, usesSetsDiff) === 0) {
+    if (current !== undefined && head !== undefined && compareObjective(head, tally, bySetsDiff) === 0) {
       current.push(tally)
     } else {
       groups.push([tally])
@@ -133,9 +152,9 @@ export function computeStandings(
 }
 
 /** Matches won, then sets difference when the format has more than one set, then games. */
-function compareObjective(left: Tally, right: Tally, usesSetsDiff: boolean): number {
+function compareObjective(left: Tally, right: Tally, bySetsDiff: boolean): number {
   if (right.won !== left.won) return right.won - left.won
-  if (usesSetsDiff) {
+  if (bySetsDiff) {
     const leftSets = left.setsWon - left.setsLost
     const rightSets = right.setsWon - right.setsLost
     if (rightSets !== leftSets) return rightSets - leftSets

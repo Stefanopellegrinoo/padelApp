@@ -196,4 +196,35 @@ describe('la pantalla de una fecha no recalcula sus puntos', () => {
     )
     expect(sinComentarios(source)).toMatch(/orderMoved\s*\(\s*standings\s*,\s*tableRows\s*\)/)
   })
+
+  // PR20 rebanada B. `MatchdaySummary.allowsDraw` tiene UN SOLO consumidor en
+  // todo el repo —esta línea— y nada lo miraba: la cuarta vez que extraer o
+  // generalizar deja el punto de unión sin red (W59, el aviso de D1, W66, y
+  // ahora esto).
+  //
+  // Lo que se pierde si se mis-wirea es exactamente el bug que la rebanada vino
+  // a cerrar: con un `false` fijo, la tabla del día de una liga de FIFA vuelve
+  // a pagar lo mismo por un empate que por una derrota, y `npm test` no se
+  // entera porque `computeStandings` y `tiebreakNote` siguen bien testeados
+  // cada uno por su lado.
+  //
+  // Va por FUENTE y no renderizando porque `page.tsx` es un server component
+  // `async` de ~700 líneas que abre el cliente de Supabase y ramifica en cuatro
+  // estados de fecha: montarlo pediría mockear ocho lectores para pinchar un
+  // argumento. El techo, declarado: falso POSITIVO si alguien renombra
+  // `detail`, `config` o `snapshot` — el lado correcto del que equivocarse.
+  it('le pasa a la tabla el allows_draw CONGELADO de la fecha, no un booleano fijo', () => {
+    expect(sinComentarios(source)).toMatch(
+      /computeStandings\s*\(\s*detail\.sides\s*,\s*detail\.matches\s*,\s*config\s*,\s*snapshot\s*,\s*matchday\.allowsDraw\s*,?\s*\)/,
+    )
+  })
+
+  // El error de la ronda 18, que la 22 ya tuvo que corregir una vez: pinchar el
+  // NOMBRE no alcanza, porque un mis-wire lo conserva intacto. Queda escrito
+  // como test y no como comentario.
+  it('y pinchar sólo el nombre no serviría: el mis-wire lo conserva', () => {
+    const misWire = 'const standings = computeStandings(detail.sides, detail.matches, config, snapshot, false)'
+    expect(misWire).toMatch(/computeStandings\s*\(/)
+    expect(misWire).not.toMatch(/,\s*matchday\.allowsDraw\s*,?\s*\)/)
+  })
 })

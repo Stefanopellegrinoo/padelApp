@@ -166,7 +166,7 @@ describe('pairingContextFor', () => {
     //   mejores 2 (countBestOf: 2): A = 20, B = 14 — gana A claramente.
     const config: SeasonConfig = {
       squadSize: 8,
-      matchFormat: { setsToWin: 1, gamesPerSet: 4, tieBreak: true },
+      matchFormat: { setsToWin: 1, gamesPerSet: 4, tieBreak: true, openScore: false },
       points: [10, 7, 5, 1],
       regularMatchdays: 4,
       countBestOf: 2,

@@ -20,6 +20,23 @@ export interface MatchFormat {
   setsToWin: number
   gamesPerSet: number
   tieBreak: boolean
+  /**
+   * Sin marcador objetivo: cualquier par de enteros >= 0 es legal (goles FIFA).
+   * `3-1`, `0-0`, `2-2`. No hay tope de games ni "quién ganó", y el partido es
+   * UN resultado, no una serie de sets — `setsToWin`, `gamesPerSet` y
+   * `tieBreak` describen un set de pádel y NO se leen cuando esto es `true`.
+   *
+   * OBLIGATORIO y sin default a propósito (decisión #3933, y la lección de
+   * `pair_size` en PR18a y `allows_draw` en W61, dos veces la misma trampa): un
+   * campo nuevo con default permisivo esconde a los escritores que no lo
+   * escriben. Sin default, `tsc` marca cada literal de `MatchFormat` que falta
+   * y obliga a decidir en la línea exacta.
+   *
+   * El empate es una regla ORTOGONAL y vive aparte, en `disciplines.allows_draw`:
+   * `match_sets_no_draw` (0034) lo sigue exigiendo del lado de la base, así que
+   * un marcador abierto SIN empates rechaza un `0-0` igual.
+   */
+  openScore: boolean
 }
 
 export interface SeasonConfig {

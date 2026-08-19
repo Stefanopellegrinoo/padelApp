@@ -9,9 +9,9 @@ import {
   startLoad,
 } from './carga-state'
 
-const ONE_SET_TO_4: MatchFormat = { setsToWin: 1, gamesPerSet: 4, tieBreak: true }
-const TWO_SETS_TO_6: MatchFormat = { setsToWin: 2, gamesPerSet: 6, tieBreak: true }
-const NO_TIEBREAK: MatchFormat = { setsToWin: 1, gamesPerSet: 4, tieBreak: false }
+const ONE_SET_TO_4: MatchFormat = { setsToWin: 1, gamesPerSet: 4, tieBreak: true, openScore: false }
+const TWO_SETS_TO_6: MatchFormat = { setsToWin: 2, gamesPerSet: 6, tieBreak: true, openScore: false }
+const NO_TIEBREAK: MatchFormat = { setsToWin: 1, gamesPerSet: 4, tieBreak: false, openScore: false }
 
 /** The two taps of one set, from an empty load. */
 function play(winner: 'A' | 'B', loserGames: number, format: MatchFormat) {

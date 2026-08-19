@@ -49,9 +49,23 @@ export function setError(set: SetScore, format: MatchFormat, allowsDraw: boolean
   if (!Number.isInteger(gamesA) || !Number.isInteger(gamesB) || gamesA < 0 || gamesB < 0) {
     return 'Los games tienen que ser números enteros y no negativos.'
   }
+  // El empate es una regla ORTOGONAL al marcador abierto y se decide acá, para
+  // los dos caminos: `match_sets_no_draw` (0034) lo sigue exigiendo del lado de
+  // la base con `check (allows_draw or games_a <> games_b)`. Si `openScore`
+  // aflojara el empate por su cuenta, la app aceptaría un `0-0` que la base
+  // rechaza y el mensaje legible se cambiaría por una violación de constraint.
   if (gamesA === gamesB && !allowsDraw) {
-    return `Un set no puede terminar ${gamesA} a ${gamesB}: en padel no hay empates.`
+    return format.openScore
+      ? `Un partido no puede terminar ${gamesA} a ${gamesB}: esta disciplina no admite empates.`
+      : `Un set no puede terminar ${gamesA} a ${gamesB}: en padel no hay empates.`
   }
+
+  // Marcador abierto: no hay número objetivo. Cualquier par de enteros >= 0 es
+  // legal —`3-1`, `0-0`, `7-2`— y eso es todo lo que queda por decir después de
+  // los dos guards de arriba, que son bordes de confianza y NO se aflojan.
+  // `gamesPerSet` y `tieBreak` describen un set de pádel y no significan nada
+  // en un marcador de goles.
+  if (format.openScore) return null
 
   const { gamesPerSet, tieBreak } = format
   const winner = Math.max(gamesA, gamesB)
@@ -89,6 +103,16 @@ export function matchError(
     if (problem !== null) return problem
   }
 
+  // Un marcador abierto es UN PARTIDO, no una serie de sets: el resultado es el
+  // par de números y ahí termina. No hay `setsToWin` que exigir ni ganador que
+  // declarar — un `0-0` está tan terminado como un `3-1`, y quién ganó lo
+  // deduce quien tabula, no quien valida.
+  if (format.openScore) {
+    return sets.length === 1
+      ? null
+      : `Un partido con marcador abierto se carga con un solo resultado, no ${sets.length}.`
+  }
+
   let wonA = 0
   let wonB = 0
   for (const set of sets) {
@@ -104,16 +128,23 @@ export function matchError(
   const sets_ = setsToWin === 1 ? 'set' : 'sets'
 
   // Un partido EMPATADO no lo cierra nadie, así que `setsToWin` no se puede
-  // exigir: se exige que se hayan jugado los sets que el formato define.
+  // exigir. Pero un empate sólo TERMINA el partido cuando el formato es de UN
+  // set: ahí se jugó todo lo que había para jugar. Con `setsToWin > 1` se juega
+  // hasta que alguien LLEGUE a N, así que un 1-1 en un partido a 2 sets está a
+  // mitad de camino y no cierra nada.
   //
-  // ponytail: el techo es que un empate a mitad de camino (1-1 en un partido a
-  // 2 sets, que en pádel seguiría con un tercero) queda declarado terminado.
-  // Hoy es inalcanzable —la única disciplina con empates que el modelo de
-  // formato puede expresar es de un solo set (ver `MatchFormat`, sin
-  // `openScore` todavía)— y se resuelve cuando el formato sepa distinguir
-  // "partido a N sets" de "partido a un marcador abierto".
+  // W62 (verify-report ronda 20): esto antes devolvía `null` para ese 1-1
+  // —dando por terminado un partido sin terminar, que es la clase de cosa que
+  // congela puntos mal—, amparado en un comentario que declaraba el caso
+  // "inalcanzable porque el modelo de formato sólo puede expresar disciplinas
+  // de un solo set". Medido, era falso: `validateConfig` acepta `setsToWin: 2`
+  // sobre una disciplina con empates devolviendo `[]`, y `config` SÍ está en el
+  // grant de UPDATE de `authenticated`. Ese mismo comentario nombraba a
+  // `openScore` como su resolución, y acá está: el modelo ya distingue "partido
+  // a N sets" de "partido a un marcador abierto", el segundo se fue arriba con
+  // su propio `return`, y a éste le queda decir la verdad sobre el primero.
   if (allowsDraw && wonA === wonB) {
-    return sets.length === setsToWin
+    return setsToWin === 1 && sets.length === 1
       ? null
       : `El partido se define en ${setsToWin} ${sets_}: ${sets.length} no lo cierra.`
   }

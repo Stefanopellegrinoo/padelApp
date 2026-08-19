@@ -22,9 +22,14 @@ import type {
  * Con marcador abierto es siempre `false`, y no por convención: un partido de
  * goles es UN resultado, así que hay exactamente un "set" y `setsDiff`
  * degenera en `ganados − perdidos`. Eso es una segunda opinión sobre el
- * criterio que ya corrió primero (`won`), y encima tapa la diferencia de gol,
- * que es el desempate real de una liga de fútbol. Un empate es donde las dos
- * cuentas se separan: suma a `played` sin sumar a ninguno de los dos.
+ * criterio que ya corrió primero (los puntos del día), y encima tapa la
+ * diferencia de gol, que es el desempate real de una liga de fútbol.
+ *
+ * (La frase que había acá decía que un empate "suma a `played` sin sumar a
+ * ninguno de los dos". Era cierta cuando el primer criterio era `won` a secas
+ * y dejó de serlo con PR20 rebanada B: desde REQ-D6-2 un empate suma a
+ * `drawn` y paga. Corregida acá y no comentada aparte — mismo criterio que
+ * N48, la frase falsa vive EN EL CÓDIGO y ahí se arregla.)
  */
 export function usesSetsDiff(format: MatchFormat): boolean {
   return !format.openScore && format.setsToWin > 1
@@ -71,8 +76,20 @@ interface Tally {
 }
 
 /**
- * The matchday table. Ranks pairs by matches won, then games difference, then
- * the head to head between the tied pairs, and finally the snapshot.
+ * The matchday table. Ranks sides by the day's POINTS, then games difference,
+ * then the head to head between the tied sides, and finally the snapshot.
+ *
+ * "Puntos del día" y no "partidos ganados" desde PR20 rebanada B (REQ-D6-2).
+ * No es un criterio nuevo encima del viejo: es el MISMO, generalizado. Sin
+ * empates permitidos `dayPoints === won` por álgebra, así que una disciplina
+ * de pádel ordena exactamente igual que antes.
+ *
+ * `allowsDraw` es OBLIGATORIO y sin default, por la misma razón que en
+ * `setError`/`matchError` (W61) y que `openScore` en `MatchFormat` (D1): un
+ * default permisivo esconde a los llamadores que no lo pasan. Sin default,
+ * `tsc` marca cada call site y obliga a decidir en la línea exacta de quién
+ * sale ese booleano — que no es una pregunta menor, porque la respuesta
+ * correcta es el valor CONGELADO en la fecha y no el de la disciplina de hoy.
  *
  * That last step almost never fires, but it has to exist: in a three-way 2-2-2
  * the head to head is circular and resolves nothing, and without a final cut

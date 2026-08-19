@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { type Dispatch, type SetStateAction, useState, useTransition } from 'react'
 import type { MatchFormat, SetScore } from '@/core'
 import {
   MAX_GOAL_DIGITS,
@@ -113,7 +113,16 @@ export function PanelGoles({
   pairBName: string
   goals: { a: string; b: string }
   pending: boolean
-  onChange: (next: { a: string; b: string }) => void
+  /**
+   * El setter entero, no `(next) => void`: los dos campos se actualizan con la
+   * forma FUNCIONAL, que es la que estaba antes de que este panel saliera a
+   * componente. Con `onChange({ ...goals, a: next })` el `goals` es el de la
+   * clausura de ESTE render; hoy da igual —un campo por evento, y cada
+   * `onChange` es su propio render— pero el día que un `onPaste` toque los dos
+   * en el mismo tick, el segundo pisa al primero. El techo se cierra acá y no
+   * en un comentario que avise (N50).
+   */
+  onChange: Dispatch<SetStateAction<{ a: string; b: string }>>
   onSave: (set: SetScore) => void
 }) {
   const draft = openScoreSet(goals.a, goals.b)
@@ -128,14 +137,14 @@ export function PanelGoles({
           value={goals.a}
           disabled={pending}
           invalid={goalsRejected(goals.a)}
-          onChange={(next) => onChange({ ...goals, a: next })}
+          onChange={(next) => onChange((current) => ({ ...current, a: next }))}
         />
         <Goles
           side={pairBName}
           value={goals.b}
           disabled={pending}
           invalid={goalsRejected(goals.b)}
-          onChange={(next) => onChange({ ...goals, b: next })}
+          onChange={(next) => onChange((current) => ({ ...current, b: next }))}
         />
       </div>
       {problem !== null && <p className={ERROR_NOTE}>{problem}</p>}

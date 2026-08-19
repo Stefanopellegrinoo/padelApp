@@ -61,7 +61,7 @@ function playMatchday(
   // `buildPairs` (no `buildSides`) sigue devolviendo `Side[]`: este test
   // simula una temporada de PÁDEL de punta a punta, y su valor es justamente
   // que la aritmética de a dos no se movió un bit con la migración a `Side`.
-  const standings = computeStandings(pairs, matches, config, snapshot)
+  const standings = computeStandings(pairs, matches, config, snapshot, false)
   const awards = computeAwards(standings, config, [])
   const winner = standings[0]
   if (winner === undefined) throw new Error('la fecha no produjo tabla')

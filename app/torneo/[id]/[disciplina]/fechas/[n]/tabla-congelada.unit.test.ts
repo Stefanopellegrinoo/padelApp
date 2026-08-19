@@ -22,7 +22,7 @@ import { frozenTableRows, orderMoved } from './tabla-congelada'
 const puntos = new Map<string, { position: number; points: number }>()
 
 function standing(side: Side, position: number): SideStanding {
-  return { side, played: 4, won: 0, setsDiff: 0, gamesDiff: 0, position }
+  return { side, played: 4, won: 0, drawn: 0, dayPoints: 0, setsDiff: 0, gamesDiff: 0, position }
 }
 
 /** Los puntos de las filas dibujadas, en el orden en que se dibujan, salteando a quien no cobró. */

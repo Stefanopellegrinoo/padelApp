@@ -14,7 +14,7 @@ const CONFIG: SeasonConfig = {
 }
 
 function standing(a: string, b: string, position: number): SideStanding {
-  return { side: pair(a, b), played: 3, won: 0, setsDiff: 0, gamesDiff: 0, position }
+  return { side: pair(a, b), played: 3, won: 0, drawn: 0, dayPoints: 0, setsDiff: 0, gamesDiff: 0, position }
 }
 
 describe('computeAwards', () => {
@@ -107,6 +107,8 @@ describe('computeAwards', () => {
       side: single(id),
       played: 0,
       won: 0,
+      drawn: 0,
+      dayPoints: 0,
       setsDiff: 0,
       gamesDiff: 0,
       position: index + 1,
@@ -132,6 +134,8 @@ const table = (sides: Side[]): SideStanding[] =>
     side: p,
     played: 0,
     won: 0,
+    drawn: 0,
+    dayPoints: 0,
     setsDiff: 0,
     gamesDiff: 0,
     position: index + 1,

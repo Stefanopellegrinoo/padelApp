@@ -165,6 +165,21 @@ export async function closedHistory(
 }
 
 /**
+ * Un premio congelado: lo que la fecha repartió, con su puesto.
+ *
+ * W55 (verify-report ronda 16): traía sólo `points`, y con eso la pantalla
+ * mostraba los puntos congelados en filas ORDENADAS EN VIVO — el orden sale de
+ * `computeStandings`, cuyo desempate depende del snapshot, y el snapshot
+ * depende de `discipline_entries`, que PROMOVER cambia. Resultado medido: la
+ * tabla mostraba al primero con 6 puntos y al segundo con 8. El `position`
+ * congelado es lo que hace que orden y puntos no se puedan contradecir.
+ */
+export interface FrozenAward {
+  position: number
+  points: number
+}
+
+/**
  * Los puntos CONGELADOS de una fecha, por asiento: la tabla `awards` tal cual
  * quedó al cerrarla, que es la MISMA fila que `promote_guest` copia.
  *
@@ -177,13 +192,15 @@ export async function closedHistory(
 export async function frozenPointsOf(
   supabase: Client,
   matchdayId: string,
-): Promise<Map<EntryId, number>> {
+): Promise<Map<EntryId, FrozenAward>> {
   const { data, error } = await supabase
     .from('awards')
-    .select('entry_id, points')
+    .select('entry_id, position, points')
     .eq('matchday_id', matchdayId)
   if (error) throw new EdgeError(`No se pudieron leer los premios: ${error.message}`)
-  return new Map((data ?? []).map((row) => [row.entry_id, row.points]))
+  return new Map(
+    (data ?? []).map((row) => [row.entry_id, { position: row.position, points: row.points }]),
+  )
 }
 
 /** Una disciplina a crear junto con la temporada. `config` es obligatoria: cada disciplina puede declarar la suya, no hereda de la temporada. */

@@ -154,7 +154,7 @@ describe('summaryOf', () => {
 
   // PR20 rebanada D2: con FIFA marcado, "1 set a 4 games" describe la mitad
   // pádel del torneo y MIENTE sobre la otra mitad. Es la misma clase de copy
-  // que ya costó W47, W51 y W56.
+  //Que ya costó W47, W51 y W56.
   it('nombra el formato de cada disciplina cuando hay más de una', () => {
     const rows = summaryOf('Los Jueves 2026', Array(8).fill('Jugador'), configFor(8), [
       'PADEL',
@@ -243,7 +243,7 @@ describe('toggleDiscipline', () => {
     expect(toggleDiscipline(['PADEL', 'FIFA'], 'PADEL')).toEqual(['FIFA'])
   })
 
-  // El orden de toque ES el contrato (11b/PR10): se vuelve `position` y de ahí
+  //El orden de toque ES el contrato (11b/PR10): se vuelve `position` y de ahí
   // el ordinal del slug. No hay un orden "correcto" por kind.
   it('keeps the touch order, not a fixed one', () => {
     expect(toggleDiscipline(['FIFA'], 'PADEL')).toEqual(['FIFA', 'PADEL'])
@@ -288,7 +288,7 @@ describe('buildDisciplines', () => {
     ])
   })
 
-  // El contrato de 11b/PR10: el orden de este array ES el orden de creación,
+  //El contrato de 11b/PR10: el orden de este array ES el orden de creación,
   // que se vuelve `position` (createSeason lo escribe explícito) y de ahí el
   // ordinal del slug (padel/padel-2). Tocar FIFA antes que Pádel tiene que dar
   // FIFA primero, no importa el orden en que aparecen los checkboxes en pantalla.
@@ -330,7 +330,7 @@ describe('submitSeats', () => {
 })
 
 /**
- * W63 (verify-report ronda 21): el paso 4 de una liga que NO tiene pádel
+ *El paso 4 de una liga que NO tiene pádel
  * dibujaba "Sets por partido" y "Games por set", y el segundo se anuncia con
  * "A 4 games el resultado se carga en dos toques" — justo la máquina que una
  * disciplina de marcador abierto no monta.

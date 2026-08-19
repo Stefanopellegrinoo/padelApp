@@ -8,7 +8,7 @@ export interface SluggableDiscipline {
 
 /**
  * El slug de cada disciplina de una temporada, DERIVADO — no hay columna
- * `slug` (ninguna migración en esta PR, REQ-NR-5 no la pide). Collision-free
+ *`slug` (ninguna migración en esta PR, REQ-NR-5 no la pide). Collision-free
  * por construcción: el sufijo es el ordinal de esa `kind` dentro de la
  * lista, y la lista siempre llega en el mismo orden (`position, created_at`,
  * el criterio ya establecido en `db/read.ts: seasonHeader`). `kind` solo
@@ -18,7 +18,7 @@ export interface SluggableDiscipline {
  * Sin sufijo la primera vez de cada kind: hoy toda temporada tiene una sola
  * disciplina (Fase 1), y la URL nueva queda `padel`, no `padel-1`.
  *
- * ponytail: el slug se corre si se reordenan disciplinas del mismo `kind`
+ *Nota: el slug se corre si se reordenan disciplinas del mismo `kind`
  * (`position` es editable, ver 0015_disciplines.sql). No hay UI de reorden
  * todavía — si aparece, esto necesita una columna `slug` persistida, no antes.
  */
@@ -38,7 +38,7 @@ export function disciplineSlugs<T extends SluggableDiscipline>(
 
 /**
  * La disciplina de la temporada cuyo slug derivado es éste. `undefined`
- * cubre los dos casos que REQ-NR-5 le deja a la ruta: un slug que no existe
+ *Cubre los dos casos que REQ-NR-5 le deja a la ruta: un slug que no existe
  * (`'basquet'`) y uno de otra temporada — acá nunca calza porque `disciplines`
  * ya llega scopeada a UNA temporada (`seasonHeader`), así que "otra
  * temporada" y "no existe" son el mismo `undefined` para quien llama.

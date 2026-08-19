@@ -325,7 +325,7 @@ describe('buildSides — sideSize 1 (design PUNTO 5, decisión #5/#6)', () => {
     expect(sides.map((side) => side.a).sort()).toEqual(['p1', 'p2', 'p3'])
   })
 
-  // REQ-D5-2: headcount parity is a rule of the PAIR, not the squad. With
+  //REQ-D5-2: headcount parity is a rule of the PAIR, not the squad. With
   // sideSize=1 there is nothing to pair, so an odd count is not an error.
   it('accepts an odd headcount', () => {
     const present = ['p1', 'p2', 'p3', 'p4', 'p5']
@@ -388,7 +388,7 @@ describe('buildSides — sideSize 1 (design PUNTO 5, decisión #5/#6)', () => {
  */
 describe('buildSides — un lado de uno donde se juega de a dos (PR19)', () => {
   /*
-   * W50 (verify-report ronda 15): la primera versión de estos tests pasaba
+   *La primera versión de estos tests pasaba
    * `single(...)` directo, y el informe de PR19 afirmaba que "el compilador no
    * puede atrapar el caso". **Era falso** — la causa era que `pair()` devolvía
    * `Side` a secas. Con `Duo` en los tres campos, estos mismos tests dejaron de

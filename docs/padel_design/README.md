@@ -8,7 +8,7 @@ El problema que resuelve: hoy esto se lleva en una planilla y un grupo de WhatsA
 
 13 pantallas, todas en un solo prototipo navegable.
 
-> ## ⚠️ Los prototipos muestran el caso de 8 — la app soporta 8, 10 y 12
+> ## Nota: Los prototipos muestran el caso de 8 — la app soporta 8, 10 y 12
 >
 > Los archivos `.dc.html` de este bundle se generaron sobre una versión anterior
 > del formato, donde el plantel era **fijo en 8** y el invitado **reemplazaba** a
@@ -28,7 +28,7 @@ El problema que resuelve: hoy esto se lleva en una planilla y un grupo de WhatsA
 > **Impacto visual real:** casi ninguno. Colores, tipografía, espaciado, radios,
 > componentes y comportamiento valen tal cual — una lista de 8 filas y una de 12
 > se ven igual. Sólo **dos** pantallas necesitan un layout distinto, y están
-> marcadas abajo con 🔁: el **paso 4 del wizard** (6 valores de puntos no entran
+> marcadas abajo con : el **paso 4 del wizard** (6 valores de puntos no entran
 > en 4 columnas) y la **Fecha en juego** (15 partidos no entran en el layout de 6).
 
 ## About the Design Files
@@ -173,7 +173,7 @@ Marco común de todas las pantallas internas:
 
 **Paso 3 — Orden inicial**: lista reordenable. Cada fila: handle ⠿, número, nombre 15px/700, y dos botones cuadrados de 34px (↑ ↓) con fondo `chip` radio 9px. En producción usar drag & drop nativo, manteniendo las flechas como alternativa accesible. Ayuda: "Ordenalos del mejor al peor. Es el criterio que corta los empates hasta que haya fechas jugadas, y de ahí salen las primeras parejas."
 
-**Paso 4 — Formato** 🔁 *(el bloque de puntos cambia de layout respecto del prototipo)*:
+**Paso 4 — Formato**  *(el bloque de puntos cambia de layout respecto del prototipo)*:
 
 - **Puntos por posición** — el prototipo los dibuja como **4 columnas**, y eso no escala: un plantel de 12 necesita **6 valores**, y seis columnas en 342px útiles dan 57px cada una, sin lugar para el valor más los dos botones.
   **Pasan a filas**, que es el patrón que este mismo paso ya usa más abajo: una fila por posición, `1°` a la izquierda (13px/800 `muted`, ancho fijo 28px), valor 20px/800 al centro, − / + de 34px a la derecha. Alto de fila 56px, separadas por 1px `line`. Funciona igual con 4 filas que con 6, y ya no hay que reflowear nada.
@@ -274,7 +274,7 @@ Header: kicker según estado ("Armando · sólo vos la ves" / "En juego · jueve
   - Nota: "Los defensores quedan fijos. El resto se arma cruzando la tabla: 1° con último, 2° con anteúltimo, y así."
   - Pie: "Regenerar" (borde 1.5px `line`) + "Confirmar fecha" (`accent`, flex 1).
 
-#### 9b. Open (en juego) 🔁 *(el layout de partidos cambia respecto del prototipo)*
+#### 9b. Open (en juego)  *(el layout de partidos cambia respecto del prototipo)*
 
 **Por qué cambia.** El prototipo dibuja 3 rondas × 2 partidos = 6, y entran de una. Pero el fixture depende de cuántas parejas haya:
 

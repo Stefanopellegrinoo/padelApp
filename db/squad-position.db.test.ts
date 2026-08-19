@@ -32,13 +32,13 @@ async function fillerPlayers(count: number): Promise<string[]> {
 
 // Capability 2 (spec: "Ubicar al que llega en el orden de desempate"). Vive en
 // su propio archivo y no en `db/entries.db.test.ts`: sumarle estos tests lo
-// dejaba en 746 líneas contra un techo de 800 (200-400 típico) en CLAUDE.md, y
+//Dejaba en 746 líneas contra un techo de 800 (200-400 típico), y
 // esta capability es un `describe` autocontenido con su propio scaffolding.
 //
 // El caso "al final, sin elegir nada" NO se repite acá: ya está cubierto en
 // `db/entries.db.test.ts` por "adds a seat after the last one in the seed
 // order", que llama a `addSquadSeat` con el cuarto argumento omitido, o sea
-// exactamente el default `null` (ponytail: reuse, no lo repito).
+//Exactamente el default `null` (Nota: reuse, no lo repito).
 /**
  * SQL crudo contra la Postgres local, adentro del contenedor del stack de
  * Supabase (`supabase_db_<project_id>`; el project_id es "padelApp", vive en
@@ -69,7 +69,7 @@ function localSql(sql: string): string {
 
 /**
  * El plantel de la temporada, en el orden que devuelve `entriesOf` (el lector
- * de producción): desde C6 (verify-report ronda 3) es el mismo orden que
+ *De producción): desde C6 es el mismo orden que
  * `discipline_entries` para SQUAD, no el dual-write de `entries.seed_position`.
  */
 async function squadInSeedOrder(user: TestUser, seasonId: string) {
@@ -232,7 +232,7 @@ describe('addSquadSeat colocando el nuevo asiento (spec 2.1, 2.2, 2.4, 2.5, 2.6)
     expect(after.filter((e) => e.id !== newId).map((e) => e.id)).toEqual(withHole.map((e) => e.id))
   })
 
-  // C6, verify-report ronda 3 — `squadSeedOrder` (db/season.ts) es la función
+  //, — `squadSeedOrder` (db/season.ts) es la función
   // que de verdad alimenta el sorteo y el desempate de cada fecha
   // (`matchdayContextFor` -> `snapshotForMatchday`): hasta esta tanda seguía
   // leyendo `entries.seed_position`, que desde PR 7 es dual-write tail-only.
@@ -261,7 +261,7 @@ describe('addSquadSeat colocando el nuevo asiento (spec 2.1, 2.2, 2.4, 2.5, 2.6)
     expect(seedOrder.indexOf(newId)).toBe(2)
   })
 
-  // Complemento del test de arriba, mismo hallazgo (C6, verify-report ronda
+  //Complemento del test de arriba, mismo hallazgo (C6, ronda
   // 3), otro lector: `entriesOf` (db/read.ts) es lo que alimenta la pantalla
   // de Plantel (`app/torneo/[id]/ajustes/page.tsx`) y media docena más.
   // Hasta esta tanda seguía devolviendo `entries.seed_position` para SQUAD —
@@ -295,13 +295,13 @@ describe('addSquadSeat colocando el nuevo asiento (spec 2.1, 2.2, 2.4, 2.5, 2.6)
     )
   })
 
-  // C9, verify-report ronda 4: el fallback `?? row.seed_position` mezclaba dos
+  //,: el fallback `?? row.seed_position` mezclaba dos
   // numeraciones independientes — `entries.seed_position` es de LA TEMPORADA
   // (dual-write tail-only desde PR 7), `discipline_entries.seed_position` es
   // de LA DISCIPLINA — y con solape parcial entre disciplinas producía
   // posiciones colisionadas. Inalcanzable hoy por la UI (una sola disciplina
   // por temporada), pero ya reproducible a mano con `add_squad_seat
-  // p_disciplines`, mismo patrón que W6 (attendances-discipline-fk).
+  //P_disciplines`, mismo patrón que W6 (attendances-discipline-fk).
   it('entriesOf sin disciplineId explícito no mezcla las dos numeraciones con plantel de solape parcial', async () => {
     const admin = await createTestUser()
     const { seasonId, disciplineIds } = await buildSeasonScene({
@@ -342,7 +342,7 @@ describe('addSquadSeat colocando el nuevo asiento (spec 2.1, 2.2, 2.4, 2.5, 2.6)
     expect(new Set(positions).size).toBe(positions.length)
   })
 
-  // C8, verify-report ronda 4: la pantalla de una fecha necesita el orden de
+  //,: la pantalla de una fecha necesita el orden de
   // SU disciplina, no el de la default (`entriesOf` la resolvía siempre por
   // dentro, sin forma de que el caller opine). `disciplineId` ahora es un
   // parámetro explícito.

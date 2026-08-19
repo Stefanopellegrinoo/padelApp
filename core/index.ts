@@ -18,7 +18,7 @@
 // matches exist because there are exactly four players.
 export { MIN_PLAYERS, MAX_PLAYERS, MASTERS_SIZE, MASTERS_MATCHES } from './constants'
 
-// ── El slug de una disciplina en la URL (PR 10, REQ-NR-5) ────────────────────
+//── El slug de una disciplina en la URL (PR 10, REQ-NR-5) ────────────────────
 // Derivado, no persistido: no hay columna `slug`.
 export type { SluggableDiscipline } from './discipline-slug'
 export { disciplineSlugs, resolveDisciplineBySlug } from './discipline-slug'
@@ -40,7 +40,7 @@ export type {
   RankingRow,
 } from './types'
 
-// ── Un lado de 1 o 2 (decisión de producto #5, REQ-D5-1/2) ──────────────────
+//── Un lado de 1 o 2 (decisión de producto #5, REQ-D5-1/2) ──────────────────
 // `Side` es una unión discriminada: leer `.b` sin angostar `size` a `2` es
 // error de compilación. **PR19 borró `Pair`, `sideOf`, `pairOf` y
 // `core/pair-compat.ts` enteros**: ya no hay adaptador ni tipo paralelo, y
@@ -62,7 +62,7 @@ export { validateConfig, defaultConfig, disciplineProfile, pointsErrors } from '
 // `buildSides` (PR16, design PUNTO 5) is the Side-native entry point: with
 // `sideSize=2` it is `buildPairs`, que desde PR19 ya devuelve `Side[]` solo.
 // `buildPairs`/`PairingInput` stay exported for `core/`-internal callers and
-// tests (`buildSides` itself, `core/pairing.test.ts`) — N27 (verify-report
+//Tests (`buildSides` itself, `core/pairing.test.ts`) — N27 (
 // ronda 12): `db/matchday.ts` no llama `buildPairs` directo desde PR18a, sólo
 // `buildSides`/`type PairingInput`.
 export type { PairingInput, SideBuildInput } from './pairing'
@@ -86,7 +86,7 @@ export { computeAwards } from './awards'
 export { computeRanking } from './ranking'
 export { snapshotForMatchday } from './snapshots'
 
-// ── La tabla global (REQ-D9-1/2): suma ponderada de cada disciplina ─────────
+//── La tabla global (REQ-D9-1/2): suma ponderada de cada disciplina ─────────
 export type { DisciplineRanking, GlobalRankingRow } from './global-ranking'
 export { computeGlobalRanking } from './global-ranking'
 

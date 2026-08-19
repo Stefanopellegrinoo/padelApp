@@ -40,13 +40,13 @@ describe('assertValidConfig', () => {
     }
   })
 
-  // REQ-D2-2 (W24): un plantel impar es válido con sideSize=1 — la paridad
+  //REQ-D2-2: un plantel impar es válido con sideSize=1 — la paridad
   // es una regla de la pareja, no del plantel. 9, no 7 como en el GIVEN del
   // spec: MIN_PLAYERS=8 sigue siendo un piso compartido (PUNTO 3 del
   // design, afuera de esta tanda), y 7 tropezaría con él sin decir nada
   // sobre la paridad.
   //
-  // `points` tiene 9 valores, no 4 (C16, verify-report ronda 9): con
+  //`points` tiene 9 valores, no 4: con
   // sideSize=1 `expectedPoints` es `squadSize / sideSize`, no siempre
   // `squadSize / 2` — 9 presentes de a uno son 9 lados. Sigue aislando SÓLO
   // la paridad: el fixture de antes (4 valores) satisfacía la fórmula
@@ -134,14 +134,13 @@ describe('matchError', () => {
   })
 })
 
-// ── W61 (verify-report ronda 19), REQ-D6-1 del lado de la app ───────────────
 // La FK de `0034` deja PERSISTIR el empate; estas dos funciones son el otro
 // guard que lo rechazaba, y lo hacían sin mirar la disciplina. `allowsDraw` no
 // tiene default a propósito: el compilador obliga a decidir en cada llamada.
 //
 // El formato es `gamesPerSet: 2` porque con marcador CERRADO el empate legal
 // es el que llega al corte: con tie-break el set termina en `gamesPerSet`
-// exacto, así que el único empate representable es `N-N` (S68, verify-report
+//Exacto, así que el único empate representable es `N-N` (S68, 
 // ronda 20 — la regla es para cualquier `gamesPerSet`, no sólo el 2, y el
 // formato de pádel por defecto ya admite un `4-4`; sin tie-break no hay
 // ninguno).
@@ -201,7 +200,7 @@ describe('assertMatchdaySize', () => {
     expect(() => assertMatchdaySize(players(9), 2)).toThrow(/de a pares/)
   })
 
-  // REQ-D5-2: FIFA (sideSize=1) con 7 presentes no tiene error de paridad —
+  //REQ-D5-2: FIFA (sideSize=1) con 7 presentes no tiene error de paridad —
   // cada presente es su propio lado.
   it('accepts an odd number on a side of one (REQ-D5-2)', () => {
     expect(() => assertMatchdaySize(players(9), 1)).not.toThrow()
@@ -302,10 +301,10 @@ describe('assertPointsCoverMatchday', () => {
     expect(() => assertPointsCoverMatchday(present, guests, locks, config, 2)).toThrow(EdgeError)
   })
 
-  // C16 (verify-report ronda 9): dividía siempre por 2 — con sideSize=1, 10
+  //Dividía siempre por 2 — con sideSize=1, 10
   // presentes son 10 lados, no 5, y el guard que existe para avisar "faltan
   // valores de puntos" ANTES del sorteo quedaba ciego.
-  it('divides by the real side size, not always by 2 (C16)', () => {
+  it('divides by the real side size, not always by 2', () => {
     const tenPoints = { ...config, points: [10, 9, 8, 7, 6, 5, 4, 3, 2, 1] }
     expect(() => assertPointsCoverMatchday(players(10), [], [], tenPoints, 1)).not.toThrow()
     expect(() => assertPointsCoverMatchday(players(10), [], [], config, 1)).toThrow(
@@ -314,13 +313,13 @@ describe('assertPointsCoverMatchday', () => {
   })
 
   /*
-   * W41 (verify-report ronda 13). C16 arregló el DIVISOR y dejó el
+   *. C16 arregló el DIVISOR y dejó el
    * SUSTRAENDO: un lock de dos invitados se restaba como UN lado que no cobra,
    * sea cual sea la aridad. De a dos eso es exacto — los dos invitados son un
    * lado solo. De a uno son DOS lados, porque cada invitado juega solo
    * (`buildSides` con `sideSize === 1` ignora `fixedPairs` entero).
    *
-   * La consecuencia medida por la auditoría: plantel de 8 de a uno con los 8
+   *La consecuencia medida por la: plantel de 8 de a uno con los 8
    * valores de puntos + una pareja invitada rebotaba con "La fecha deja 9
    * competidores... sólo 8 posiciones". Son 8 competidores, no 9. Y como
    * `addGuestPair` es HOY el único camino para sumar un invitado a una fecha
@@ -329,7 +328,7 @@ describe('assertPointsCoverMatchday', () => {
    */
   const soloConfig = { ...config, points: [8, 7, 6, 5, 4, 3, 2, 1] } // 8 valores
 
-  it('un lock de dos invitados son DOS lados sin pagar cuando se juega de a uno (W41)', () => {
+  it('un lock de dos invitados son DOS lados sin pagar cuando se juega de a uno', () => {
     // 8 del plantel + 2 invitados trabados = 10 lados, 8 del torneo.
     const present = [...players(8), 'g1', 'g2']
     const guests: GuestSeat[] = [
@@ -340,7 +339,7 @@ describe('assertPointsCoverMatchday', () => {
     expect(() => assertPointsCoverMatchday(present, guests, locks, soloConfig, 1)).not.toThrow()
   })
 
-  it('el mensaje cuenta los competidores reales, no uno de más (W41)', () => {
+  it('el mensaje cuenta los competidores reales, no uno de más', () => {
     // Un invitado más de los que la lista de puntos aguanta: 9 del plantel + 2
     // invitados = 9 competidores contra 8 posiciones. Tiene que decir 9, no 10.
     const present = [...players(9), 'g1', 'g2']
@@ -354,7 +353,7 @@ describe('assertPointsCoverMatchday', () => {
     )
   })
 
-  it('de a uno un invitado no cobra aunque nadie lo haya trabado (W41)', () => {
+  it('de a uno un invitado no cobra aunque nadie lo haya trabado', () => {
     // Sin lock: de a uno el lock no significa nada igual, cada invitado ES su
     // propio lado y ninguno cobra. Restar por locks dejaba esto sin contar.
     const present = [...players(8), 'g1']
@@ -457,7 +456,6 @@ describe('setError / matchError con openScore (marcador abierto)', () => {
   })
 })
 
-// ── W62 (verify-report ronda 20) ────────────────────────────────────────────
 //
 // `matchError` daba por TERMINADO un partido empatado a mitad de camino: 1-1
 // en sets en un formato a 2, que en pádel seguiría con un tercero. El
@@ -486,7 +484,7 @@ describe('W62 — un empate a mitad de camino no cierra el partido', () => {
     expect(matchError(sets, twoSets, true)).toMatch(/no lo cierra/)
   })
 
-  // El pin del otro lado: `REQ-D6-1` (el 2-2 que dejó andando la rebanada C)
+  //El pin del otro lado: `REQ-D6-1` (el 2-2 que dejó andando la rebanada C)
   // no se mueve. Con `setsToWin: 1` se jugó todo lo que había para jugar.
   it('pero un set empatado en un formato a UN set sí cierra (REQ-D6-1)', () => {
     const oneSet: MatchFormat = { setsToWin: 1, gamesPerSet: 2, tieBreak: true, openScore: false }

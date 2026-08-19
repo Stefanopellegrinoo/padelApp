@@ -16,7 +16,7 @@ import { saveConfig } from './actions'
  *
  * `steppersFor` sí se importa en vez de copiarse: son los labels, las ayudas,
  * los topes Y cuáles corresponden, y las dos pantallas TIENEN que decir lo
- * mismo. Copiar el criterio en vez de compartirlo es lo que produjo W63.
+ *Mismo. Copiar el criterio en vez de compartirlo es lo que produjo W63.
  *
  * Guarda a cada toque. `updateDisciplineConfig` corre `assertValidConfig`
  * antes de escribir, así que un estado intermedio inválido —bajar las fechas
@@ -86,7 +86,7 @@ export function Formato({
             esta pantalla filtraba y el paso 4 del wizard no, y ésa es
             exactamente la grieta por la que una liga de solo FIFA seguía
             leyendo "A 4 games el resultado se carga en dos toques" (W63,
-            verify-report ronda 21). Acá la config es de UNA disciplina, así que
+            ). Acá la config es de UNA disciplina, así que
             la lista de formatos tiene un solo elemento. Se van de la pantalla,
             no de la config: el jsonb los sigue teniendo porque `MatchFormat`
             los declara obligatorios. */}

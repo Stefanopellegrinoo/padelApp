@@ -16,7 +16,7 @@ interface TablaViewProps {
 
 /**
  * La Tabla de una disciplina — shaping + presentación, extraída de
- * `page.tsx` (PR12b, slice 1/2 de REQ-D9) para que `[disciplina]/page.tsx`
+ *`page.tsx` (PR12b, slice 1/2 de REQ-D9) para que `[disciplina]/page.tsx`
  * la reuse tal cual. La raíz de la temporada (`page.tsx`) TODAVÍA no la
  * importa a propósito — sigue con su propia copia, apuntando a la disciplina
  * por defecto — porque slice 2 la reemplaza por la tabla global; ahí sí pasa
@@ -78,7 +78,7 @@ export function TablaView({ header, discipline, entries, matchdays, awardsByMatc
 
   const liveMatchday = regularMatchdays.find((matchday) => matchday.status !== 'CLOSED') ?? null
 
-  // W42 (verify-report ronda 13): la derivación vive en `tabla-state.ts`, con
+  //La derivación vive en `tabla-state.ts`, con
   // test propio, y ahora recibe `pairSize` — de a uno no hay defensores, y
   // esta pantalla los anunciaba igual sobre un jugador solo.
   const defenders = defendersOf(
@@ -92,7 +92,7 @@ export function TablaView({ header, discipline, entries, matchdays, awardsByMatc
 
   return (
     <div className="flex flex-col gap-3 pt-4">
-      {/* W20 (verify-report ronda 6): esta Tabla es por-disciplina, no la
+      {/*Esta Tabla es por-disciplina, no la
           raíz — "volver" tiene que subir a la tabla global del torneo
           (`/torneo/{id}`), la única otra pantalla donde enciende la misma
           pestaña "Tabla" (`nav.tsx`). Antes apuntaba a "Mis torneos",

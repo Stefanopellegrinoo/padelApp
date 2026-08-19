@@ -3,7 +3,6 @@ import { adminClient } from './test/admin'
 import { createSeason } from './test/factories'
 import { createTestUser } from './test/users'
 
-// ── REQ-D6-1 (PR20 rebanada A, design #3801 PUNTO 6) ────────────────────────
 // Persistir un partido empatado sólo si `disciplines.allows_draw = true`;
 // seguir rechazándolo si es `false`. `match_sets` sólo conoce `match_id`, así
 // que `allows_draw` viaja `disciplines → matchdays → matches → match_sets`,

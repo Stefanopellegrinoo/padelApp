@@ -27,7 +27,7 @@ import { BorrarFecha } from './borrar'
 export interface CargaContext {
   seasonId: string
   matchdayId: string
-  /** El slug de la URL desde la que se abrió esta fecha (W28) — lo necesita `BorrarFecha` para volver a la lista correcta. */
+  /** El slug de la URL desde la que se abrió esta fecha — lo necesita `BorrarFecha` para volver a la lista correcta. */
   disciplina: string
   matchdayNumber: number
   format: MatchFormat
@@ -73,7 +73,7 @@ function Goles({
         aria-label={`Goles de ${side}`}
         aria-invalid={invalid || undefined}
         onChange={(event) => onChange(event.target.value)}
-        // El `focus-visible:ring` es S72 (verify-report ronda 21): el
+        //El `focus-visible:ring` es S72: el
         // `outline-none` dejaba el panel 100% operable por teclado y sin que se
         // viera dónde estabas (medido: `outlineStyle: none`, `boxShadow:
         // none`). Va SÓLO acá: `outline-none` está en 19 inputs de 11 archivos
@@ -168,7 +168,7 @@ export function PanelGoles({
  * línea de COMPORTAMIENTO** en PR20 rebanada D2, y sus tests son el pin.
  *
  * La frase decía "no cambió una línea" a secas, y eso era literalmente falso
- * (N48, verify-report ronda 21): los dos `<p>` de acá abajo sí se reescribieron
+ *Los dos `<p>` de acá abajo sí se reescribieron
  * para usar la constante `PROMPT`. La sustancia se sostiene y está medida —el
  * HTML servido es byte a byte idéntico contra `f43d626`, porque la cadena de
  * clases de `PROMPT` es la misma que estaba inline—, pero una frase de más es

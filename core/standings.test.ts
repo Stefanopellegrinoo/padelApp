@@ -176,7 +176,7 @@ describe('computeStandings', () => {
 })
 
 /**
- * S39 (verify-report ronda 12): hasta acá `computeStandings` no tenía UN SOLO
+ *Hasta acá `computeStandings` no tenía UN SOLO
  * test con lados de uno. La tabla del día de una disciplina `pair_size=1` no la
  * calculaba ni la verificaba nada — el `full_matchday_proof` de `db/` arma su
  * payload de awards por posición de asiento, no derivado de resultados.
@@ -245,7 +245,7 @@ describe('computeStandings con lados de uno (pair_size=1)', () => {
   })
 
   it('con 9 jugadores impares tabula los 9: la paridad es de las parejas, no de la tabla', () => {
-    // REQ-D5-2: un plantel impar es perfectamente jugable de a uno. La tabla
+    //REQ-D5-2: un plantel impar es perfectamente jugable de a uno. La tabla
     // no puede tener un agujero por eso.
     const nine = Array.from({ length: 9 }, (_, index) => single(`s${index + 1}`))
     const standings = computeStandings(nine, [], CONFIG, nine.map((side) => side.a))

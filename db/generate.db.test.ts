@@ -44,7 +44,7 @@ async function addLock(seasonId: string, matchdayId: string, a: string, b: strin
   if (error) throw new Error(error.message)
 }
 
-// `entry_b: string | null` desde 0028 (REQ-D5-1). `pair_size` se agrega acá
+//`entry_b: string | null` desde 0028 (REQ-D5-1). `pair_size` se agrega acá
 // (PR18a) para el test de una disciplina de a uno más abajo: el resto de esta
 // suite sigue ejercitando sólo pádel (pair_size=2, siempre no-nulo).
 async function pairsOf(
@@ -198,7 +198,7 @@ describe('generatePairs', () => {
   })
 
   /**
-   * PR18a: reescribe el test de W34 (verify-report ronda 10), no lo borra.
+   *PR18a: reescribe el test de W34, no lo borra.
    * Aquel test probaba que `insertPairs` (que todavía no mandaba `pair_size`)
    * traducía el rebote de `pairs_matchday_size` a un mensaje de usuario en vez
    * de dejar pasar el string crudo de Postgres. Esta PR hace que `insertPairs`
@@ -215,7 +215,7 @@ describe('generatePairs', () => {
     const admin = await createTestUser()
     const filler = await fillerPlayers(8)
     // squadSize/pairSize = 8 valores de puntos, no los 4 de defaultConfig(8)
-    // (pensada para pair_size=2) — si no, C16 (assertPointsCoverMatchday)
+    //(pensada para pair_size=2) — si no, C16 (assertPointsCoverMatchday)
     // corta antes de llegar al camino que este test quiere ejercitar.
     const config: SeasonConfig = { ...defaultConfig(8), points: [8, 7, 6, 5, 4, 3, 2, 1] }
     const { seasonId, entryIds } = await createSeason({

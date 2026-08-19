@@ -125,7 +125,7 @@ async function createWalkthroughSeason(
   if (openSeatEntryId === undefined) throw new Error('Falta el asiento libre de test.')
   return {
     seasonId: season.id,
-    // Único cast de esta función (N2): esta temporada no pasa por
+    //Único cast de esta función: esta temporada no pasa por
     // db/test/factories.ts, así que nace su propio DisciplineId acá.
     disciplineId: discipline.id as DisciplineId,
     entryIds,
@@ -140,7 +140,7 @@ async function markPlaying(admin: TestUser, matchdayId: string, entryIds: string
   }
 }
 
-// `entry_b: string | null` desde 0028 (REQ-D5-1): la fila real ya lo permite,
+//`entry_b: string | null` desde 0028 (REQ-D5-1): la fila real ya lo permite,
 // aunque esta suite sólo ejercita pádel (pair_size=2, siempre no-nulo).
 async function pairsOf(
   matchdayId: string,
@@ -231,7 +231,7 @@ async function playByRankRule(
   const rankIndex = new Map(ranking.map((row, index) => [row.entryId, index]))
   const worst = ranking.length // los invitados quedan afuera del ranking del plantel: valen como el peor posible
 
-  // W38 (verify-report ronda 12): `requirePartner` retirado — `sideOfRow`
+  //`requirePartner` retirado — `sideOfRow`
   // (core/side.ts) es el hogar único. `2` es literal, no leído de la fila:
   // esta suite sólo ejercita pádel (pair_size=2, siempre con `entry_b`).
   const pairs = await pairsOf(matchdayId)
@@ -344,7 +344,7 @@ async function buildWalkthroughSeason(): Promise<WalkthroughSeason> {
 
   const recordClose = async (matchdayId: string, number: number): Promise<void> => {
     matchdayIds[number - 1] = matchdayId
-    // W38 (verify-report ronda 12): idem arriba — sideOfRow(2, ...) inline.
+    //Idem arriba — sideOfRow(2,...) inline.
     pairsByMatchday.set(
       number,
       (await pairsOf(matchdayId)).map((row) => {

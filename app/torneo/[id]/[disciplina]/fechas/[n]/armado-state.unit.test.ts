@@ -60,10 +60,10 @@ describe('applySeatTick', () => {
 })
 
 /**
- * S31 (verify-report ronda 9): `armado.tsx` tenía `confirmed % 2` y
+ *`armado.tsx` tenía `confirmed % 2` y
  * `{size / 2} parejas` hardcodeados — los espejos en la pantalla de los bugs
  * de aridad que la base ya tiene arreglados (`assertMatchdaySize` condiciona
- * la paridad por `sideSize` desde PR14/W24). Con una disciplina de a uno, esa
+ *La paridad por `sideSize` desde PR14/W24). Con una disciplina de a uno, esa
  * pantalla pedía un invitado que no hace falta y dividía por 2 un número que
  * no se divide.
  *
@@ -73,8 +73,8 @@ describe('applySeatTick', () => {
  *
  * `matches` es nuevo y no es cosmético: la pantalla decía "La fecha es de 12"
  * sin que nadie pudiera saber que eso son 66 partidos de a uno contra 15 de a
- * dos. Ese es el número que hace pedir el formato de grupos (REQ-D8-1, PR21),
- * que es la respuesta real al techo — W32 NO se cierra con una constante.
+ *Dos. Ese es el número que hace pedir el formato de grupos (REQ-D8-1, PR21),
+ *Que es la respuesta real al techo — W32 NO se cierra con una constante.
  */
 describe('matchdayShape', () => {
   describe('de a dos (pair_size=2)', () => {
@@ -137,16 +137,16 @@ describe('matchdayShape', () => {
     })
 
     it('cuenta los partidos que la fecha va a tener de verdad', () => {
-      // El número que W32 nombra y la pantalla nunca mostró: 12 de a uno son
+      //El número que W32 nombra y la pantalla nunca mostró: 12 de a uno son
       // 66 partidos donde 12 de a dos son 15.
       expect(matchdayShape({ confirmed: 8, looseGuests: 0, guestPairs: 0, sideSize: 1 }).matches).toBe(28)
       expect(matchdayShape({ confirmed: 12, looseGuests: 0, guestPairs: 0, sideSize: 1 }).matches).toBe(66)
       expect(matchdayShape({ confirmed: 12, looseGuests: 0, guestPairs: 0, sideSize: 2 }).matches).toBe(15)
     })
 
-    it('una pareja invitada suma dos jugadores que juegan solos (S42)', () => {
-      // S42 (verify-report ronda 13): la matriz tenía `guestPairs` sólo con
-      // `sideSize: 2`. Este es el caso que produjo W41 — el servidor rechazaba
+    it('una pareja invitada suma dos jugadores que juegan solos', () => {
+      //La matriz tenía `guestPairs` sólo con
+      //`sideSize: 2`. Este es el caso que produjo W41 — el servidor rechazaba
       // esta misma fecha mientras la pantalla la mostraba armable.
       const shape = matchdayShape({ confirmed: 8, looseGuests: 0, guestPairs: 1, sideSize: 1 })
       expect(shape.size).toBe(10)
@@ -154,16 +154,16 @@ describe('matchdayShape', () => {
       expect(shape.matches).toBe(45)
       expect(shape.complete).toBe(true)
       expect(shape.needsLooseGuest).toBe(false)
-      // Y el servidor tiene que estar de acuerdo: con W41 arreglado,
+      //Y el servidor tiene que estar de acuerdo: con W41 arreglado,
       // `assertPointsCoverMatchday` cuenta 8 competidores del torneo para esta
       // misma fecha —los 2 invitados son dos lados que no cobran—, así que la
-      // pantalla y la base dicen lo mismo. Antes de W41 el botón estaba
+      //Pantalla y la base dicen lo mismo. Antes de W41 el botón estaba
       // habilitado y el sorteo rebotaba.
       expect(shape.tooMany).toBe(false)
     })
 
     it('respeta el mismo piso y el mismo techo que la base enforcea hoy', () => {
-      // `assertMatchdaySize` no condiciona MIN/MAX por `sideSize` (W32 sigue
+      //`assertMatchdaySize` no condiciona MIN/MAX por `sideSize` (W32 sigue
       // abierto, reasignado a PR21/grupos): la pantalla no puede prometer un
       // límite distinto del que el servidor va a aplicar.
       expect(matchdayShape({ confirmed: 7, looseGuests: 0, guestPairs: 0, sideSize: 1 }).tooFew).toBe(true)

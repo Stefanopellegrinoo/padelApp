@@ -1,17 +1,16 @@
 -- ── close_matchday (restatement de 0019_discipline_status_moves.sql:75-162) ─
--- C17 (verify-report ronda 10, sdd-apply de cierre sobre `pr14c-side-ddl`):
 -- el guard de autorización de premios usaba
 --   (award ->> 'entryId')::uuid not in (
 --     select entry_a from pairs where matchday_id = p_matchday
 --     union
 --     select entry_b from pairs where matchday_id = p_matchday)
--- `0028` (REQ-D5-1) volvió `entry_b` nullable. Con una sola fila `pair_size=1`
+--`0028` (REQ-D5-1) volvió `entry_b` nullable. Con una sola fila `pair_size=1`
 -- legal en la fecha, el `union` trae una fila NULL, y `X NOT IN (conjunto con
 -- NULL)` es NULL —nunca TRUE— para CUALQUIER `X`. El `where` no matchea, el
 -- `exists` da false, y el `raise` queda inalcanzable para la fecha ENTERA:
 -- quien organiza puede pagar puntos de campeonato a cualquier asiento del
--- plantel que no jugó, en silencio. Medido de punta a punta (verify-report
--- ronda 10, C17): control pádel rechaza con el mensaje de siempre; el mismo
+--Plantel que no jugó, en silencio. Medido de punta a punta (
+--Ronda 10, C17): control pádel rechaza con el mensaje de siempre; el mismo
 -- premio sobre una fecha de a uno con dos singles legales quedaba ACEPTADO.
 --
 -- Se reemplaza `not in (select ... union select ...)` por un `not exists`
@@ -19,13 +18,13 @@
 -- No es sólo el parche de este bug puntual: un `IN`/`NOT IN` de Postgres es
 -- NULL en cuanto el conjunto de la derecha contiene un NULL sin matchear, así
 -- que cualquier columna nullable futura que entre a este guard por la misma
--- puerta reproduciría C17. `NOT EXISTS` no tiene ese modo de falla —una fila
+--Puerta reproduciría C17. `NOT EXISTS` no tiene ese modo de falla —una fila
 -- con `entry_b is null` simplemente no aporta un match por esa columna, sin
 -- volver NULL el resultado de la fila entera— y es el mismo idioma que ya
 -- usan `open_matchday`/`reopen_matchday` (0019) y `promote_guest` (0025) para
 -- lo mismo. El resto de la función (0019:75-162) no cambia una línea.
 --
--- N25 (verify-report ronda 11): la forma nueva tiene un segundo efecto, no
+--La forma nueva tiene un segundo efecto, no
 -- documentado hasta acá. Con `NOT IN`, un premio sin `entryId` o con
 -- `entryId: null` daba `NULL not in (…)` = NULL —el guard no disparaba— y el
 -- payload seguía hasta el `insert into awards`, que reventaba con un `23502`
@@ -73,7 +72,7 @@ begin
   -- sin este control, un admin paga puntos a un jugador que ni jugó esta
   -- fecha (o a cualquier uuid inventado). Sólo entra quien está en alguna
   -- pareja de la fecha que se está cerrando. `not exists` correlacionado,
-  -- no `not in` sobre un `union`: ver comentario de cabecera (C17).
+  --No `not in` sobre un `union`: ver comentario de cabecera.
   if exists (
     select 1
       from jsonb_array_elements(p_awards) as award

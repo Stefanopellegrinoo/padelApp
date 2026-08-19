@@ -13,7 +13,7 @@ import { adminClient } from './test/admin'
 import { createSeason } from './test/factories'
 import { createTestUser, type TestUser } from './test/users'
 
-// ── W61 (verify-report ronda 19) — la cadena de `allows_draw` contra los
+//── W61 — la cadena de `allows_draw` contra los
 // ESCRITORES DE PRODUCCIÓN, no contra inserts de test ────────────────────────
 //
 // `0034` agregó `matchdays.allows_draw`, `matches.allows_draw` y
@@ -50,7 +50,7 @@ import { createTestUser, type TestUser } from './test/users'
  * tiene que seguir andando por el camino CERRADO. El marcador abierto tiene su
  * propio archivo (`db/open-score.db.test.ts`).
  *
- * S68 (verify-report ronda 20) de paso: el techo estaba declarado más chico
+ *De paso: el techo estaba declarado más chico
  * que el real. La regla medida no es "sólo el 2-2 de un set a 2" sino `N-N`
  * para cualquier `gamesPerSet` CON tie-break —el formato de pádel por defecto
  * ya admite un `4-4`— y ningún empate sin él.
@@ -226,11 +226,11 @@ describe('la cadena de allows_draw contra los escritores de producción (W61, RE
     expect(data).toEqual({ allows_draw: true, pair_size: 2, kind: 'MASTERS' })
   })
 
-  // S40 (verify-report ronda 12, re-medida por la 19): la MISMA línea de insert
+  //La MISMA línea de insert
   // de `create_masters` tampoco escribe `pair_size`, así que sobre una
   // disciplina de a uno muere con `matchdays_discipline_size` desde `0028`.
   // Dos cadenas rotas en el mismo insert; se cierran juntas.
-  it('create_masters escribe pair_size de su disciplina (S40)', async () => {
+  it('create_masters escribe pair_size de su disciplina', async () => {
     const admin = await createTestUser()
     const players = await fillerPlayers(8)
     const { seasonId, disciplineId } = await createSeason({
@@ -255,7 +255,7 @@ describe('la cadena de allows_draw contra los escritores de producción (W61, RE
 })
 
 // ── El pin de no-regresión: el pádel no se movió un milímetro ────────────────
-// REQ-NR-1 (los mismos awards con la config por defecto) y REQ-NR-2 (la fecha
+//REQ-NR-1 (los mismos awards con la config por defecto) y REQ-NR-2 (la fecha
 // sigue jugable de punta a punta). Ninguno de estos tres manda `allows_draw` a
 // ningún lado: dependen sólo de los defaults, así que corren SIN CAMBIOS antes
 // y después del arreglo, igual que el pin que dejó la rebanada A.

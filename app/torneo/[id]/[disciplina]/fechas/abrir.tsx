@@ -8,7 +8,7 @@ import { openNextMatchday } from '../../actions'
  * Hoy, en el `YYYY-MM-DD` que pide `<input type="date">`, armado con los
  * componentes locales: `toISOString()` es UTC y con huso negativo devuelve ayer.
  *
- * ponytail: el default lo calcula quien renderiza primero, así que con el
+ *Nota: el default lo calcula quien renderiza primero, así que con el
  * servidor en otro huso que el navegador el picker puede arrancar un día
  * corrido. Corriendo local son la misma máquina. Si algún día se despliega en
  * UTC, el arreglo es calcularlo en un efecto después de montar.

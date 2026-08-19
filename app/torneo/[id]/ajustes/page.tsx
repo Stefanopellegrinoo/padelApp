@@ -50,12 +50,12 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
     seasonRules(supabase, seasonId),
     myEntryId(supabase, seasonId),
     matchdaysOf(supabase, seasonId),
-    // Temporada ENTERA, no la disciplina por defecto (C14, verify-report
+    //Temporada ENTERA, no la disciplina por defecto (C14, 
     // ronda 8): "Plantel" administra el asiento de la TEMPORADA (renombrar,
     // reclamar, sacar), no el de una disciplina — usar `entriesOf(seasonId)`
     // sin disciplina caía en la disciplina por defecto y perdía a cualquier
     // SQUAD promovido desde otra. Mismo criterio que ya usaba
-    // "+ Agregar disciplina" (REQ-D1-3): cualquier asiento de la temporada.
+    //"+ Agregar disciplina" (REQ-D1-3): cualquier asiento de la temporada.
     seasonSquadMembersOf(supabase, seasonId),
   ])
   if (!header.isAdmin) redirect(`/torneo/${seasonId}`)
@@ -79,13 +79,13 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
   const mismatch =
     seats.length === discipline.config.squadSize
       ? []
-      : // `discipline.pairSize` real desde W30 (verify-report ronda 9):
+      : // `discipline.pairSize` real desde W30:
         // `DisciplineHeader` ya trae `pair_size` del mismo select que `config`.
         validateConfig({ ...discipline.config, squadSize: seats.length }, discipline.pairSize)
 
   // `formatsLabel` sobre TODAS las disciplinas y no `formatLabel` sobre la
   // [0]: esta fila decía "1 set a 4 games" en un torneo que tiene una mitad
-  // que se juega a goles (W64, verify-report ronda 21). Con una sola
+  //Que se juega a goles. Con una sola
   // disciplina dice exactamente lo que decía. Es la misma etiqueta que
   // muestran Reglas y el resumen del wizard — antes eran tres copias, y ésa es
   // la razón por la que las tres mentían igual.

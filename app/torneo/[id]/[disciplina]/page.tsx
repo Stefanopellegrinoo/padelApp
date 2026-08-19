@@ -9,7 +9,7 @@ interface PageProps {
 }
 
 /**
- * Tabla de UNA disciplina (PR12b, slice 1/2 de REQ-D9). Hasta esta PR la
+ *Tabla de UNA disciplina (PR12b, slice 1/2 de REQ-D9). Hasta esta PR la
  * Tabla vivía sólo en la raíz de la temporada (`/torneo/[id]`), atada a la
  * disciplina por defecto; esta ruta le da a cada disciplina su propia URL
  * estable, dejando la raíz libre para que slice 2 la convierta en la tabla

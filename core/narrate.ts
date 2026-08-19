@@ -21,7 +21,7 @@ export function formatLabel(format: MatchFormat): string {
  * La línea de "formato de partido" de un TORNEO, que puede tener más de una
  * disciplina y —desde PR20 rebanada D2— más de un formato.
  *
- * W64 (verify-report ronda 21): hasta D2 todas las disciplinas de una
+ *Hasta D2 todas las disciplinas de una
  * temporada compartían `matchFormat`, así que una sola frase era verdad y
  * Reglas y Ajustes narraban `primaryDiscipline(header)` sin mentir. D2 hizo que
  * cada disciplina naciera con la forma de marcador de su `kind`, y ese mismo

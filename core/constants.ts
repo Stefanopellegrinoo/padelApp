@@ -5,7 +5,7 @@ export const MIN_PLAYERS = 8
  * More than this and a matchday runs too many matches for an afternoon —
  * true for sides of two (12 players ⇒ 6 pairs ⇒ 15 round-robin matches).
  *
- * W32 (verify-report ronda 9): the UNIT this protects is matches, not
+ *The UNIT this protects is matches, not
  * players, and it changes with `sideSize` — 12 players are 12 sides at
  * `sideSize=1`, which is 66 matches, not 15. Left unconditioned on purpose:
  * the per-discipline ceiling is design PUNTO 3 (`DisciplineConfig.maxPlayers`),

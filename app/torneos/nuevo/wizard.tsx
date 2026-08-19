@@ -133,7 +133,7 @@ function Stepper({
  *
  * Vive afuera de `Wizard` —y exportado— para poder RENDERIZARLO en la suite
  * unitaria: `step` es estado interno del wizard y sin clicks no se llega hasta
- * acá. W63 (verify-report ronda 21) fue una mentira de este paso que ningún
+ *Acá. W63 fue una mentira de este paso que ningún
  * test podía ver, en un proyecto que ya se comió cinco problemas de pantalla.
  *
  * Cuáles steppers dibuja lo decide `steppersFor`, la MISMA función que usa
@@ -163,8 +163,7 @@ export function PasoFormato({
         Son los puntos de cada posición de la fecha. Si una fecha la juegan menos parejas, se usan
         los primeros de la lista — ganar siempre suma {config.points[0] ?? 0}.
       </p>
-      {/* 🔁 El handoff dibujaba los puntos en 4 columnas y no escala: un
-          plantel de 12 necesita 6 valores y no entran a lo ancho. Filas. */}
+      {/* Filas verticales para soportar planteles grandes con múltiples valores de puntos. */}
       <div className="overflow-hidden rounded-[14px] border border-line">
         {config.points.map((value, index) => (
           <div

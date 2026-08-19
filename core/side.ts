@@ -40,7 +40,7 @@ export function partnerOf(side: Side, entryId: EntryId): EntryId | null {
 /**
  * El único constructor de borde: donde un `Side` nace de una fila cruda (una
  * fila de `pairs`, por ejemplo). Con un discriminante VARIABLE (`row.pair_size`,
- * no un literal) el excess-property check de TS no dispara (S28, verify-report
+ *No un literal) el excess-property check de TS no dispara (S28, 
  * ronda 9): `{ size: row.pair_size as SideSize, a, b }` compila limpio y, si
  * `pair_size` es 1, el `b` de la fila queda adentro del objeto sin que nadie
  * pueda leerlo — se pierde en silencio. `sideOfRow` cierra ese agujero: tira
@@ -49,7 +49,7 @@ export function partnerOf(side: Side, entryId: EntryId): EntryId | null {
  */
 export function sideOfRow(size: SideSize, a: EntryId, b: EntryId | null): Side {
   if (size === 1) {
-    // S37 (verify-report ronda 12): simétrico con la rama de abajo — antes
+    //Simétrico con la rama de abajo — antes
     // descartaba un `b` que sobraba EN SILENCIO, exactamente el modo de falla
     // que este constructor existe para cerrar (comentario de arriba).
     if (b !== null) throw new Error('Un lado de a uno con segundo miembro. La fila está rota.')

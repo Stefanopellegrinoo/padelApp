@@ -1,4 +1,4 @@
--- ── W61 (verify-report ronda 19) + S40 (ronda 12, re-medida por la 19):
+--── W61 + S40 (ronda 12, re-medida por la 19):
 -- `create_masters` inserta en `matchdays` sin `pair_size` NI `allows_draw`, y
 -- las dos columnas están atadas a su disciplina por una FK compuesta ────────
 --
@@ -9,8 +9,8 @@
 -- las dos columnas caen en su default (`2` y `false`) y la fila rebota contra
 -- la FK apenas la disciplina no es un pádel de a dos sin empates:
 --
---   disciplina pair_size = 1    → violates FK "matchdays_discipline_size"  (S40)
---   disciplina allows_draw = t  → violates FK "matchdays_discipline_draw"  (W61)
+-- Disciplina pair_size = 1 → violates FK "matchdays_discipline_size"
+-- Disciplina allows_draw = t → violates FK "matchdays_discipline_draw"
 --
 -- Es la MISMA línea rota dos veces, medido contra la base ejerciendo la
 -- función real. Se cierran juntas porque separarlas dejaría la segunda
@@ -28,7 +28,7 @@
 --
 -- Restatement quirúrgica: sólo cambia esa lectura y ese insert; el resto de la
 -- función es byte a byte igual a `0021_create_masters_discipline_tiebreak.sql`
--- (y el criterio de desempate `order by position, created_at limit 1` que N1
+--(y el criterio de desempate `order by position, created_at limit 1` que N1
 -- introdujo ahí sigue intacto). `0021` define UNA sola función —verificado con
 -- `rg '^create( or replace)? function|^drop function'` antes de copiar, que es
 -- la trampa que `0025` le tendió a `0031`—, así que copiarla entera no
@@ -87,7 +87,7 @@ begin
   -- frena crearlo con otra fecha sin cerrar. Los dos levantan 23505; el borde
   -- de TypeScript traduce ese código a un mensaje que se pueda leer.
   --
-  -- `pair_size` y `allows_draw` van EXPLÍCITOS (W61/S40): son las dos mitades
+  --`pair_size` y `allows_draw` van EXPLÍCITOS: son las dos mitades
   -- variables de `matchdays_discipline_size` y `matchdays_discipline_draw`.
   insert into public.matchdays (season_id, discipline_id, number, kind, played_on, pair_size, allows_draw)
   values (p_season, v_discipline, v_number, 'MASTERS', p_played_on, v_pair_size, v_allows_draw)

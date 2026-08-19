@@ -56,7 +56,7 @@ async function createOpenSeason(
     entryIds.push(entry.id)
   }
 
-  // Cada asiento SQUAD entra también a la disciplina (W8, verify-report ronda
+  //Cada asiento SQUAD entra también a la disciplina (W8, ronda
   // 3): sin esto un asiento de este scaffold queda sin fila en
   // discipline_entries y `seedAttendances` (que lee discipline_entries desde
   // PR 8) lo trata como si no jugara nada.
@@ -337,7 +337,7 @@ describe('season_invite', () => {
     expect(data?.[0]?.disciplines).toEqual(['PADEL'])
   })
 
-  // W10, verify-report ronda 4: el picker seguía ordenando por
+  //,: el picker seguía ordenando por
   // `entries.seed_position` (temporada, dual-write tail-only desde PR 7), no
   // por el orden real de `discipline_entries` (disciplina) — "antes de Juan"
   // quedaba bien guardado en la base y mal mostrado en la pantalla de Unirse.

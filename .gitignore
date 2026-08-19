@@ -1,11 +1,31 @@
+# Dependencies and build
 node_modules/
 .next/
 dist/
-*.log
-.env
-.env.local
-.DS_Store
-supabase/.temp/
-next-env.d.ts
+coverage/
 *.tsbuildinfo
+next-env.d.ts
+
+# Environment and secrets
+.env
+.env*.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs and OS
+*.log
+.DS_Store
+Thumbs.db
+
+# Supabase local
+supabase/.temp/
+supabase/.branches/
+
+# Tools, IDE, Vercel
+.vercel/
+.claude/
+.atl/
+.superpowers/
+docs/superpowers/
 .ux/

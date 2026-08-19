@@ -115,9 +115,9 @@ async function matchIdsOf(matchdayId: string): Promise<string[]> {
 /**
  * Juega y cierra la temporada regular entera para dejarla lista para el Masters.
  *
- * `disciplineId` es opcional: todos los llamadores salvo el de N1 (heap
+ *`disciplineId` es opcional: todos los llamadores salvo el de N1 (heap
  * invertido, dos disciplinas) usan `buildScene()`, de una sola disciplina —
- * ahí omitirlo sigue sin ser ambiguo (S26, guarda de `createMatchday`).
+ *Ahí omitirlo sigue sin ser ambiguo (S26, guarda de `createMatchday`).
  */
 async function playRegularSeason(
   admin: TestUser,
@@ -245,7 +245,7 @@ describe('the masters', () => {
     expect(count).toBe(0)
     expect((await seasonHeader(admin.client, seasonId)).status).toBe('FINISHED')
 
-    // C1 (0019_discipline_status_moves.sql): cerrar el Masters termina TAMBIÉN
+    //(0019_discipline_status_moves.sql): cerrar el Masters termina TAMBIÉN
     // la disciplina que lo jugó, mismo trinquete que seasons.status de arriba.
     const { data: discipline, error } = await db
       .from('disciplines')
@@ -256,7 +256,7 @@ describe('the masters', () => {
     expect(discipline.status).toBe('FINISHED')
   })
 
-  // C1 (0019_discipline_status_moves.sql): reabrir el Masters revierte
+  //(0019_discipline_status_moves.sql): reabrir el Masters revierte
   // disciplines.status a ACTIVE, gemelo del trinquete ya probado en
   // db/season.db.test.ts para seasons.status.
   it('reopening the masters returns disciplines.status to ACTIVE', async () => {
@@ -312,9 +312,8 @@ describe('the masters', () => {
   })
 })
 
-// ── W39 (verify-report ronda 12): el Masters es estructuralmente de a dos ──
 
-describe('generateMastersPairs pair_size guard (W39)', () => {
+describe('generateMastersPairs pair_size guard', () => {
   it('rejects a MASTERS matchday of a pair_size=1 discipline with an honest message, before touching pairs', async () => {
     const admin = await createTestUser()
     const filler = await fillerPlayers(8)
@@ -337,9 +336,8 @@ describe('generateMastersPairs pair_size guard (W39)', () => {
   })
 })
 
-// ── N1 (verify-report ronda 2): create_masters resuelve la disciplina ──────
 
-describe('create_masters discipline resolution (N1)', () => {
+describe('create_masters discipline resolution', () => {
   // 0016_matchday_scope.sql:85 resolvía `v_discipline` con un
   // `select ... into` SIN `order by` ni `limit`: con una sola disciplina por
   // temporada (el tripwire de 0015) daba siempre lo mismo por casualidad,

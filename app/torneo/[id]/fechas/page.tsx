@@ -10,12 +10,12 @@ interface PageProps {
 
 /**
  * `/torneo/{id}/fechas` sin disciplina — la ruta que esta pantalla tenía
- * hasta que C12 (verify-report ronda 7) la movió bajo `[disciplina]/fechas`
- * (REQ-D3-1/2): contaba las fechas de la disciplina por DEFECTO nada más, y
+ *Hasta que C12 la movió bajo `[disciplina]/fechas`
+ *(REQ-D3-1/2): contaba las fechas de la disciplina por DEFECTO nada más, y
  * con 2+ disciplinas mentía ("10 FECHAS · 1 JUGADAS" medido, 1 disciplina
  * jugada de 2).
  *
- * Se deja un redirect, no un 404: a diferencia de `/fechas/{n}` (REQ-NR-5,
+ *Se deja un redirect, no un 404: a diferencia de `/fechas/{n}` (REQ-NR-5,
  * bookmark real de PnP-1000, resuelto en `middleware.ts` con 308), esta URL
  * sin número no tiene un requisito de no-regresión que la respalde, así que
  * no hace falta el mismo mecanismo — pero `cancelTheMatchday`

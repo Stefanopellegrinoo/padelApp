@@ -22,7 +22,7 @@ describe('parseLegacyFechaPath', () => {
     expect(parseLegacyFechaPath('/torneo/abc-123/ajustes')).toBeNull()
   })
 
-  // W15 (verify-report ronda 5): `LEGACY_FECHA_PATH` matcheaba CUALQUIER
+  //`LEGACY_FECHA_PATH` matcheaba CUALQUIER
   // segmento final, incluido "reglas" (`isPrivatePath` la trata como
   // pública) — colaba una URL pública al camino legacy con el cliente anon
   // y tiraba un 500. `n` ahora exige dígitos: esta ruta ya no es "una fecha

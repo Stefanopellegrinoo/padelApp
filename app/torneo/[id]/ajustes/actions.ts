@@ -138,14 +138,14 @@ export async function saveConfig(
 }
 
 /**
- * Suma una disciplina a un torneo YA EN CURSO (REQ-D1-2). A diferencia del
+ *Suma una disciplina a un torneo YA EN CURSO (REQ-D1-2). A diferencia del
  * wizard —una fila por `kind`, decisión #3823— acá NO se filtra el `kind` ya
  * presente: un segundo PADEL es exactamente el caso que habilita el ordinal
  * de `core/discipline-slug.ts` (`padel`, `padel-2`).
  *
  * `config` sale de `defaultConfig(entryIds.length)`: el tamaño real del
  * plantel elegido, no el de la temporada entera si el admin destildó a
- * alguien (REQ-D1-4, solape parcial). Si queda impar o por debajo del
+ *Alguien (REQ-D1-4, solape parcial). Si queda impar o por debajo del
  * mínimo, `assertValidConfig` (adentro de `addDiscipline`) lo rechaza con el
  * mismo mensaje en español que ya usa Formato — no hace falta duplicar esa
  * validación acá.

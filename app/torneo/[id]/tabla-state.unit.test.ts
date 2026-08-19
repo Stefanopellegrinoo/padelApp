@@ -47,22 +47,22 @@ describe('defendersOf', () => {
   })
 
   /*
-   * W42 (verify-report ronda 13). Esta derivación no miraba `pairSize`, así
+   *. Esta derivación no miraba `pairSize`, así
    * que la Tabla de una disciplina de a uno anunciaba "Ganaron la fecha 2 ·
    * les queda 1 defensa / Repiten" sobre un jugador solo — verificado en HTML
-   * real por la auditoría.
+   *Real por la.
    *
    * La regla del campeón que defiende es una restricción DEL SORTEO DE
    * PAREJAS: `pairingContextFor` hardcodea `defenders: null` con `pairSize=1`
-   * (C19) y `buildSides` con `sideSize===1` ignora `defenders` entero. La
+   *Y `buildSides` con `sideSize===1` ignora `defenders` entero. La
    * pantalla prometía una regla que el sorteo no aplica, y un admin que lea
    * "Repiten" va a reportar un bug del sorteo que no existe.
    */
-  it('de a uno no hay defensores: nadie tiene con quién repetir (W42)', () => {
+  it('de a uno no hay defensores: nadie tiene con quién repetir', () => {
     expect(defendersOf([closed(2, ['a1']), closed(1, ['b1'])], nameOf, 1)).toBeNull()
   })
 
-  it('de a uno tampoco los hay con una sola fecha cerrada (W42)', () => {
+  it('de a uno tampoco los hay con una sola fecha cerrada', () => {
     expect(defendersOf([closed(1, ['a1'])], nameOf, 1)).toBeNull()
   })
 })

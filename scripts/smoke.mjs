@@ -118,7 +118,7 @@ async function main() {
 
   // ── 5. Abrir la fecha 1 ────────────────────────────────────────────────────
   heading('Abrir la fecha 1')
-  // S27 (verify-report ronda 8): antes apuntaba al stub sin disciplina —
+  //Antes apuntaba al stub sin disciplina —
   // pasaba (el meta refresh de 1s alcanza a resolver antes de `networkidle`)
   // pero el `200` que `check()` asertaba era el del stub, no el de la lista.
   // El wizard de este script crea una sola disciplina PADEL (sin picker de

@@ -157,7 +157,7 @@ describe('el marcador abierto: dos números tipeados', () => {
 })
 
 /**
- * S74 (verify-report ronda 21): tipear `abc`, `-5`, `1.5` o —lo más natural del
+ *Tipear `abc`, `-5`, `1.5` o —lo más natural del
  * mundo— `3-1` en el primer campo deja el texto a la vista y "Guardar
  * resultado" muerto, sin decir por qué. El rechazo del servidor sí se explica;
  * el del cliente no explicaba nada.
@@ -175,7 +175,7 @@ describe('goalsRejected', () => {
     expect(goalsRejected('-5')).toBe(true)
     expect(goalsRejected('1.5')).toBe(true)
     // El `3-1` en un solo campo: es "el resultado", y es el error que la
-    // auditoría nombró como el más probable de todos.
+    // Nombró como el más probable de todos.
     expect(goalsRejected('3-1')).toBe(true)
     // Cuatro dígitos sólo llegan pegando por fuera del `maxLength`, pero
     // llegan: el panel los rechaza y ahora también lo dice.

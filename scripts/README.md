@@ -76,7 +76,7 @@ las Server Actions de Next 15 no tienen forma soportada de devolver un header
 con ese número en la respuesta. El harness sigue midiendo lo suyo
 —`T_first_visible_change_ms`, que es del lado del cliente y no depende de la
 latencia inyectada—; la cuenta de consultas se lee a ojo en la Terminal 1,
-una interacción a la vez (ver el `ponytail:` en `traced` sobre tráfico
+una interacción a la vez (ver el `Nota: ` en `traced` sobre tráfico
 concurrente).
 
 `SUPABASE_TRACE_MS` es inerte sin el env var, y **imposible** de prender en

@@ -52,7 +52,7 @@ export function goalsRejected(text: string): boolean {
  * Por qué "Guardar resultado" está apagado, o `null` si no hay nada que
  * explicar.
  *
- * S74 (verify-report ronda 21): tipear `abc`, `-5`, `1.5` o —lo más natural del
+ *Tipear `abc`, `-5`, `1.5` o —lo más natural del
  * mundo— `3-1` en el primer campo dejaba el texto a la vista y el botón muerto,
  * sin mensaje, sin borde y sin `aria-invalid`. El rechazo del SERVIDOR sí se
  * explica (`matchError` vuelve por el `WriteResult` y la pantalla lo dibuja);
@@ -154,7 +154,7 @@ export function loserGamesOptions(format: MatchFormat): number[] {
 /**
  * Si el partido ya se puede guardar. Es `matchError` y no una segunda opinión.
  *
- * `allowsDraw: false` fijo, y NO es un stub (W61, verify-report ronda 19): la
+ *`allowsDraw: false` fijo, y NO es un stub: la
  * máquina de dos toques no puede PRODUCIR un empate. `chooseWinner` pide
  * `'A' | 'B'` y `chooseLoserGames` le da al ganador `format.gamesPerSet` y al
  * perdedor un número de `loserGamesOptions`, que va de 0 a `gamesPerSet - 1`.

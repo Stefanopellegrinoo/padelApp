@@ -30,10 +30,22 @@ export function Formato({
   seasonId,
   disciplineId,
   config,
+  disciplineLabel,
 }: {
   seasonId: string
   disciplineId: DisciplineId
   config: SeasonConfig
+  /**
+   * De qué disciplina es el formato que este panel edita, o `null` cuando el
+   * torneo tiene una sola y no hay nada que desambiguar.
+   *
+   * W65: la fila de arriba nombra el formato de TODAS las disciplinas desde
+   * que se cerró W64, y este panel siempre editó la [0]. La fila decía la
+   * verdad del torneo y el control no decía cuál era su alcance, que es W64
+   * corrido una capa para abajo. No abre camino a la segunda disciplina —eso
+   * es superficie nueva, y sigue sin existir—: sólo deja de disfrazarlo.
+   */
+  disciplineLabel: string | null
 }) {
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -62,7 +74,11 @@ export function Formato({
 
   return (
     <section id="formato" className="flex flex-col gap-2 scroll-mt-4">
-      <h2 className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">Formato</h2>
+      {/* Una sola interpolación y no `Formato{sufijo}`: con una sola disciplina
+          el título tiene que salir como el mismo nodo de texto de siempre. */}
+      <h2 className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
+        {disciplineLabel === null ? 'Formato' : `Formato · ${disciplineLabel}`}
+      </h2>
 
       <div className="overflow-hidden rounded-[14px] border border-line bg-surface">
         {config.points.map((value, index) => (

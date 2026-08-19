@@ -173,7 +173,15 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
       ))}
 
       <Plantel seasonId={seasonId} seats={seats} canTakeSeat={myEntry === null} />
-      <Formato seasonId={seasonId} disciplineId={discipline.id} config={discipline.config} />
+      {/* El panel edita la disciplina [0] y nada más, así que dice cuál es
+          cuando hay más de una (W65). La fila de arriba sigue nombrando el
+          formato de todas: achicarla revertiría W64 en esta pantalla. */}
+      <Formato
+        seasonId={seasonId}
+        disciplineId={discipline.id}
+        config={discipline.config}
+        disciplineLabel={header.disciplines.length > 1 ? DISCIPLINE_LABELS[discipline.kind] : null}
+      />
       <Disciplinas
         seasonId={seasonId}
         disciplines={header.disciplines.map((candidate) => ({

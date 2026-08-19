@@ -38,6 +38,7 @@ import { DiaDeLaFecha } from './dia'
 import { MastersDraft, type QualifierVM } from './masters'
 import { SumarInvitado, type GuestPromoteVM, type SumarSeatVM } from './sumar'
 import { guestsToPromote } from './sumar-state'
+import { frozenTableRows } from './tabla-congelada'
 
 interface PageProps {
   params: Promise<{ id: string; disciplina: string; n: string }>
@@ -382,23 +383,12 @@ export default async function FechaDetailPage({ params }: PageProps) {
 
     // W55 (verify-report ronda 16): las filas de una fecha CERRADA se ordenan
     // por el puesto CONGELADO, no por el que `computeStandings` calcula hoy.
-    //
-    // El orden en vivo depende del snapshot de desempate, el snapshot depende
-    // de `discipline_entries`, y PROMOVER un invitado escribe ahí — así que
-    // después de promover la tabla podía reordenarse mientras los puntos
-    // seguían congelados. Medido: el primero mostraba 6 puntos y el segundo 8.
-    // Es la misma clase que C21 del otro lado — ahí eran los puntos los que se
-    // recalculaban, acá era el orden.
+    // El criterio vive en `tabla-congelada.ts` —módulo puro, testeable— porque
+    // entró sin una sola aserción y de ahí salieron W56 y W57.
     //
     // PG y Dif se siguen tomando de `standings`: salen de los resultados, que
     // una fecha cerrada ya no cambia.
-    const OUTSIDE = Number.MAX_SAFE_INTEGER
-    const frozenPositionOf = (side: Side): number =>
-      Math.min(...members(side).map((entryId) => frozenPoints.get(entryId)?.position ?? OUTSIDE))
-    const tableRows =
-      status === 'CLOSED'
-        ? [...standings].sort((left, right) => frozenPositionOf(left.side) - frozenPositionOf(right.side))
-        : standings
+    const tableRows = status === 'CLOSED' ? frozenTableRows(standings, frozenPoints) : standings
 
     // El campeón del año. Los partidos ganados por jugador salen de `standings`
     // —cada pareja del Masters juega una vez, así que sumar las tres parejas de

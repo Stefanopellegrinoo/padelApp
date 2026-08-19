@@ -388,7 +388,15 @@ export default async function FechaDetailPage({ params }: PageProps) {
     //
     // PG y Dif se siguen tomando de `standings`: salen de los resultados, que
     // una fecha cerrada ya no cambia.
-    const tableRows = status === 'CLOSED' ? frozenTableRows(standings, frozenPoints) : standings
+    //
+    // S60: la condición es la MISMA que la de la carga de `frozenPoints` de
+    // arriba, `!isMasters` incluido. El Masters no reparte puntos (spec 2.7),
+    // así que su Map llega vacío y el orden se preservaba igual — pero por la
+    // estabilidad de `Array.prototype.sort`, una garantía que ningún test fijaba
+    // y ningún comentario mencionaba. Que las dos condiciones digan lo mismo
+    // saca la asimetría que parecía un olvido.
+    const tableRows =
+      status === 'CLOSED' && !isMasters ? frozenTableRows(standings, frozenPoints) : standings
 
     // El campeón del año. Los partidos ganados por jugador salen de `standings`
     // —cada pareja del Masters juega una vez, así que sumar las tres parejas de

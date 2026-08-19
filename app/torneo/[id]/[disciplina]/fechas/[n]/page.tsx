@@ -86,7 +86,7 @@ function tiebreakNote(
   sideSize: SideSize,
 ): string | null {
   const label = (side: Side) => sideLabel(side, nameOf)
-  // S41 (verify-report ronda 13): el slice anterior normalizó "parejas"→
+  //El slice anterior normalizó "parejas"→
   // "jugadores" en cinco lugares y dejó éste, que es el único texto largo de
   // la pantalla — "Jugador de test 3 QUEDARON 3° ... EMPATARON en partidos
   // ganados" sobre una persona sola.
@@ -112,7 +112,7 @@ function tiebreakNote(
       return `${label(worse.side)} ${quedaron} ${worse.position}° por ${scoreDiff}: ${empataron} en partidos ganados con ${label(better.side)}.`
     }
 
-    // ponytail: con todo empatado (partidos ganados y diferencia de games) el
+    //Nota: con todo empatado (partidos ganados y diferencia de games) el
     // corte real pasa por el resultado directo o, en un triple empate, por el
     // snapshot — ambos viven adentro de `computeStandings` y no se reexponen.
     // No hay copy contractual para ese caso puntual y no ocurre con el formato
@@ -150,12 +150,12 @@ export default async function FechaDetailPage({ params }: PageProps) {
     seasonMatchdaysOf(supabase, seasonId),
   ])
 
-  // REQ-NR-5: slug desconocido, o de otra temporada — mismo `notFound()` que
+  //REQ-NR-5: slug desconocido, o de otra temporada — mismo `notFound()` que
   // `jugador/[entryId]/page.tsx` usa para un `entryId` que no resuelve.
   const discipline = resolveDisciplineBySlug(header.disciplines, disciplina)
   if (discipline === undefined) notFound()
 
-  // `number` es único por disciplina (REQ-D3-2), no por temporada: con dos
+  //`number` es único por disciplina (REQ-D3-2), no por temporada: con dos
   // disciplinas del mismo `kind` (Fase 2) puede haber una "fecha 2" de cada
   // una, y buscar sólo por número sin la disciplina de la URL sería
   // ambiguo — se quedaría con la primera que matchee, no necesariamente la
@@ -165,7 +165,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
   )
   if (matchday === undefined) throw new EdgeError('La fecha no existe.')
 
-  // C8, verify-report ronda 4: `entriesOf` sin `disciplineId` explícito
+  //,: `entriesOf` sin `disciplineId` explícito
   // resolvía la disciplina por dentro (`defaultDisciplineId`), que no tiene
   // por qué ser la de ESTA fecha — el desempate del día se armaba con el
   // plantel equivocado apenas hubiera más de una disciplina por temporada
@@ -344,7 +344,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
       closedHistory(supabase, matchday.disciplineId, matchdayNumber - 1),
       closedHistory(supabase, matchday.disciplineId, matchdayNumber - 2),
       // Los awards CONGELADOS de ESTA fecha. Alimentan DOS cosas: la tarjeta
-      // de "Sumar invitado" y —desde C21, verify-report ronda 14— la columna
+      //De "Sumar invitado" y —desde C21, — la columna
       // de puntos de la tabla del día. Por eso la condición ya no es
       // `canPromote` (admin) sino la fecha cerrada: cualquiera que mire una
       // fecha cerrada necesita estos puntos, no sólo quien organiza.
@@ -366,7 +366,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
 
     // Los puntos de la fecha cerrada son los CONGELADOS, no un recálculo.
     //
-    // C21 (verify-report ronda 14): acá se llamaba a `computeAwards` con los
+    //Acá se llamaba a `computeAwards` con los
     // `guestIds` de HOY. Mientras el conjunto de lados que cobran no cambiara
     // después del cierre las dos fuentes coincidían — y PR18c es lo primero en
     // toda la cadena que hace que cambie. Al promover al invitado que jugó
@@ -382,22 +382,22 @@ export default async function FechaDetailPage({ params }: PageProps) {
     // Es el mismo argumento que ya estaba escrito para la tarjeta de promoción
     // veinte líneas más abajo —"leer `awards` hoy no cambia lo que se ve,
     // cambia DE QUÉ DEPENDE lo que se ve"— que resultó ser cierto también acá.
-    // De paso cierra W43 y saca la posibilidad de que esta tabla contradiga a
+    //De paso cierra W43 y saca la posibilidad de que esta tabla contradiga a
     // la de la temporada, que lee `awards`.
     //
     // El Masters queda en cero como antes: no reparte puntos (spec 2.7), así
     // que no tiene filas en `awards` y `frozenPointsOf` ni se consulta.
     const pointsByEntry = frozenPoints
 
-    // W55 (verify-report ronda 16): las filas de una fecha CERRADA se ordenan
+    //Las filas de una fecha CERRADA se ordenan
     // por el puesto CONGELADO, no por el que `computeStandings` calcula hoy.
     // El criterio vive en `tabla-congelada.ts` —módulo puro, testeable— porque
-    // entró sin una sola aserción y de ahí salieron W56 y W57.
+    //Entró sin una sola aserción y de ahí salieron W56 y W57.
     //
     // PG y Dif se siguen tomando de `standings`: salen de los resultados, que
     // una fecha cerrada ya no cambia.
     //
-    // S60: la condición es la MISMA que la de la carga de `frozenPoints` de
+    //La condición es la MISMA que la de la carga de `frozenPoints` de
     // arriba, `!isMasters` incluido. El Masters no reparte puntos (spec 2.7),
     // así que su Map llega vacío y el orden se preservaba igual — pero por la
     // estabilidad de `Array.prototype.sort`, una garantía que ningún test fijaba
@@ -503,7 +503,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
     // La tercera guarda —la fecha siguiente en DRAFT— se deja pasar a propósito:
     // si está vacía, `reopen_matchday` la borra y sigue, que es exactamente el
     // caso para el que se escribió; si tiene datos, su mensaje es el correcto.
-    // W13 (verify-report ronda 5): `matchdays` es de TODA la temporada
+    //`matchdays` es de TODA la temporada
     // (`seasonMatchdaysOf`), pero `reopen_matchday` (0018) filtra sus dos
     // guardas por `discipline_id` — una fecha OPEN o CLOSED de OTRA
     // disciplina no debe apagar el botón acá.
@@ -515,7 +515,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
 
     const hasGuest = (side: Side) => members(side).some((entryId) => detail.guestIds.includes(entryId))
     const anyGuestInTable = status === 'CLOSED' && standings.some((row) => hasGuest(row.side))
-    // W56 (verify-report ronda 17): el pie describe el orden que la tabla
+    //El pie describe el orden que la tabla
     // DIBUJA, o no se dibuja. `tiebreakNote` sale de `standings` e imprime
     // `worse.position`, el puesto que `computeStandings` calcula hoy; desde que
     // la tabla se ordena por el puesto congelado las dos fuentes se pueden
@@ -540,14 +540,14 @@ export default async function FechaDetailPage({ params }: PageProps) {
     //
     // Los puntos de la tarjeta salen de `awards` —la tabla CONGELADA, la misma
     // fila que `promote_guest` copia con su `join`—, igual que la tabla del
-    // día de arriba: desde C21 (verify-report ronda 14) las dos leen
+    //Día de arriba: desde C21 las dos leen
     // `frozenPoints` y son LA MISMA fuente.
     //
-    // N35 (verify-report ronda 15): hasta C21 este párrafo distinguía la
+    //Hasta C21 este párrafo distinguía la
     // tarjeta de `pointsByEntry`, que era un recálculo en vivo, y la
     // distinción era real — medido en una temporada de 12, después de promover
     // la pantalla mostraba al invitado con 5 puntos que no existían en ninguna
-    // fila de `awards` y a su compañero con 3 donde la tabla tenía 5. C21
+    //Fila de `awards` y a su compañero con 3 donde la tabla tenía 5. C21
     // borró esa diferencia haciendo que la tabla también lea los congelados,
     // así que el párrafo pasó a distinguir `pointsByEntry` de sí mismo.
     //

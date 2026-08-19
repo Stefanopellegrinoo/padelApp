@@ -1,7 +1,7 @@
 export type SeasonStatus = 'SETUP' | 'ACTIVE' | 'FINISHED'
 
 /**
- * El estado de la temporada, DERIVADO del de sus disciplinas (REQ-D3-3).
+ *El estado de la temporada, DERIVADO del de sus disciplinas (REQ-D3-3).
  * `seasons.status` sigue existiendo hasta el contract (PR 27, dual-write),
  * pero ya no es la fuente de verdad para un torneo con más de una disciplina.
  *

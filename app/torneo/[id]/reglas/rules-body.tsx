@@ -30,7 +30,7 @@ const ROWS: Array<{
   // La ÚNICA fila que puede diferir entre las disciplinas de un torneo: los
   // puntos, las fechas y el desempate son de la temporada, el marcador no
   // (`disciplineProfile`, PR20 rebanada D2). Por eso es la única que recibe la
-  // lista entera — W64, verify-report ronda 21.
+  //Lista entera — W64,.
   { title: 'Formato de partido', section: 'La fecha', value: (_c, formats) => formatsLabel(formats) },
   {
     title: 'Cómo se arman las parejas',
@@ -68,7 +68,7 @@ export interface RulesBodyProps {
   /**
    * El formato de CADA disciplina del torneo. Con una sola la pantalla dice
    * exactamente lo de siempre; con dos formatos distintos los nombra a los dos
-   * (W64, verify-report ronda 21).
+   *.
    *
    * La rama sin sesión pasa una sola entrada y no puede pasar más: lee por
    * `season_public_rules` (0022), que devuelve la config de la disciplina por

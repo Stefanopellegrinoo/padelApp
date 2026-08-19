@@ -209,5 +209,5 @@ grant  execute on function public.season_invite(text) to authenticated;
 
 -- claim_seat (0004_claim_seat.sql) NO cambia: reclamar un asiento es del
 -- TORNEO, no de una disciplina — entries sigue siendo el plantel compartido
--- (REQ-D1-3), y discipline_entries no tiene ninguna noción de "quién lo
+--(REQ-D1-3), y discipline_entries no tiene ninguna noción de "quién lo
 -- reclamó".

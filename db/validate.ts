@@ -35,11 +35,11 @@ export function assertValidConfig(config: SeasonConfig, sideSize: SideSize): voi
 /**
  * Null when the set could have been played, a Spanish reason when it could not.
  *
- * `allowsDraw` es OBLIGATORIO y no tiene default (W61, verify-report ronda 19,
+ *`allowsDraw` es OBLIGATORIO y no tiene default (W61,,
  * y design #3801 `validaciones generalizadas`: `setError(set, format,
  * allowsDraw)`). Un default `false` compilaría en todos los call sites de hoy y
  * dejaría a cualquiera futuro rechazando empates sin enterarse — que es
- * EXACTAMENTE la asimetría que N44 describe para las columnas con default y la
+ *EXACTAMENTE la asimetría que N44 describe para las columnas con default y la
  * que produjo este bug dos veces (`pair_size` en PR18a, `allows_draw` acá). Sin
  * default, el compilador obliga a decidir en cada llamada.
  */
@@ -133,7 +133,7 @@ export function matchError(
   // hasta que alguien LLEGUE a N, así que un 1-1 en un partido a 2 sets está a
   // mitad de camino y no cierra nada.
   //
-  // W62 (verify-report ronda 20): esto antes devolvía `null` para ese 1-1
+  //Esto antes devolvía `null` para ese 1-1
   // —dando por terminado un partido sin terminar, que es la clase de cosa que
   // congela puntos mal—, amparado en un comentario que declaraba el caso
   // "inalcanzable porque el modelo de formato sólo puede expresar disciplinas
@@ -159,11 +159,11 @@ export function matchError(
 }
 
 /**
- * `sideSize` condiciona la paridad (W24, REQ-D5-2): con `sideSize=1` cada
+ *`sideSize` condiciona la paridad (W24, REQ-D5-2): con `sideSize=1` cada
  * presente es su propio lado, así que un headcount impar no le falta nada a
  * nadie. El piso/techo sigue sin condicionar: es cantidad, no paridad, y
- * REQ-D2-2 no lo toca directamente. Pero el TECHO (`MAX_PLAYERS`) mide
- * partidos, no jugadores (W32, verify-report ronda 9), y esa unidad SÍ
+ *REQ-D2-2 no lo toca directamente. Pero el TECHO (`MAX_PLAYERS`) mide
+ *Partidos, no jugadores, y esa unidad SÍ
  * cambia con `sideSize` — dejarlo sin condicionar es deuda documentada, no
  * una decisión cerrada (ver el comentario de `MAX_PLAYERS`).
  */
@@ -240,12 +240,12 @@ export function assertLocksAndGuests(
  *     restan TODOS los invitados. Los locks no significan nada acá:
  *     `buildSides` con `sideSize === 1` ignora `fixedPairs` entero.
  *
- * C16 (verify-report ronda 9): dividía siempre por 2 — el guard que existe
+ *Dividía siempre por 2 — el guard que existe
  * justo para avisar "faltan valores de puntos" ANTES del sorteo quedaba
  * ciego con `sideSize=1` y encima imprimía una FRACCIÓN en el mensaje
  * ("4.5 parejas") con un headcount impar.
  *
- * W41 (verify-report ronda 13): C16 arregló el divisor y dejó el sustraendo.
+ *Arregló el divisor y dejó el sustraendo.
  * Con `sideSize=1` restaba UN lado por lock donde son DOS, así que un plantel
  * completo de a uno más una pareja invitada rebotaba con un número inflado en
  * uno — y `addGuestPair` es hoy el único camino para sumar un invitado a una

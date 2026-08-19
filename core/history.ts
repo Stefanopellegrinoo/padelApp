@@ -43,7 +43,7 @@ export function previousContext(
   // PAREJAS, y el sorteo de a uno no tiene ninguna (`buildSides` con
   // `sideSize === 1` las ignora enteras, core/pairing.ts). Por eso los lados de
   // uno se filtran: con una historia de a uno esto devuelve el mismo triple
-  // neutro que `last === null`, que es lo que el guard de C19 hardcodea en
+  //Neutro que `last === null`, que es lo que el guard de C19 hardcodea en
   // `pairingContextFor` — ahora derivado en vez de repetido.
   const previousPairs = duosOnly(last.sides)
   const alreadyRepeated =
@@ -55,8 +55,8 @@ export function previousContext(
 /**
  * Sólo los lados de dos. Un lado de uno no es una pareja y se cae acá.
  *
- * S43 (verify-report ronda 13): filtrar en silencio es lo contrario del
- * criterio que S37 impuso en `sideOfRow` —que TIRA cuando la forma no cierra—,
+ *Filtrar en silencio es lo contrario del
+ *Criterio que S37 impuso en `sideOfRow` —que TIRA cuando la forma no cierra—,
  * y la asimetría es deliberada porque acá el silencio no puede perder nada:
  * una historia con lados MIXTOS es inalcanzable, y lo impide la BASE, no un
  * `if`. `pairs_matchday_size` clava cada fila de `pairs` al `pair_size` de su

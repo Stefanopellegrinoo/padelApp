@@ -6,7 +6,7 @@ import { RulesBody } from './rules-body'
 
 /**
  * Reglas es la pantalla que se comparte con el grupo, y la fila "Formato de
- * partido" es la que W64 (verify-report ronda 21) encontró mintiendo: un
+ *Partido" es la que W64 encontró mintiendo: un
  * torneo con pádel Y FIFA decía "1 set a 4 games" porque narraba
  * `primaryDiscipline(header)` y nada más.
  *
@@ -41,7 +41,7 @@ describe('Reglas — la fila de formato', () => {
   })
 
   /**
-   * W64: desde PR20 rebanada D2 cada disciplina nace con la forma de marcador
+   *Desde PR20 rebanada D2 cada disciplina nace con la forma de marcador
    * de su kind, así que un torneo puede tener DOS formatos. Una sola línea
    * dejó de ser verdad ese día.
    */

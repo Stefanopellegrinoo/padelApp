@@ -75,7 +75,7 @@ export async function createSeason({
     if (disciplineError || discipline === null) {
       throw new Error(`No se pudo crear la disciplina de test: ${disciplineError?.message}`)
     }
-    // Único cast de este archivo (N2): acá nace el `DisciplineId` que
+    //Único cast de este archivo: acá nace el `DisciplineId` que
     // consume el resto de la suite de tests.
     disciplineIds.push(discipline.id as DisciplineId)
   }
@@ -107,7 +107,7 @@ export async function createSeason({
   // de la temporada, con el mismo `seed_position` que tiene en `entries` —
   // mismo criterio que el backfill de 0023_discipline_entries.sql. Así los
   // ~215 casos que ya usan `squad` + `disciplines` de a una siguen viendo el
-  // plantel sin tocarse; el solape parcial entre disciplinas (REQ-D1-4) se
+  //Plantel sin tocarse; el solape parcial entre disciplinas (REQ-D1-4) se
   // arma a mano, fuera de esta factory, cuando un test lo necesita.
   if (entryIds.length > 0 && disciplineIds.length > 0) {
     const { error: seatsError } = await db.from('discipline_entries').insert(

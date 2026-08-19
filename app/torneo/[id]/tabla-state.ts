@@ -26,11 +26,11 @@ export interface Defenders {
  * que `previousContext` en `core/history.ts`. Quien ya repitió gastó su
  * defensa y no vuelve a aparecer.
  *
- * W42 (verify-report ronda 13): con `sideSize === 1` NO HAY defensores, y esto
+ *Con `sideSize === 1` NO HAY defensores, y esto
  * lo tiene que decir la pantalla porque el sorteo ya lo dice. Defender el
  * título es una restricción del sorteo DE PAREJAS —`buildSides` con
  * `sideSize === 1` ignora `defenders` entero, y `pairingContextFor` ni
- * siquiera lo calcula (C19)—, así que anunciar "Repiten" sobre un jugador
+ *Siquiera lo calcula—, así que anunciar "Repiten" sobre un jugador
  * solo promete una regla que después no se aplica. Misma decisión y mismo
  * motivo que `championsOf` en `core/history.ts`, que devuelve `null` para un
  * lado de uno: las dos derivaciones tienen que contestar lo mismo.

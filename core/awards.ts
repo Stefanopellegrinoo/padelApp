@@ -34,7 +34,7 @@ export function computeAwards(
     .filter((row) => championshipMembers(row).length > 0)
 
   if (paying.length > config.points.length) {
-    // S44 (verify-report ronda 14): decía "parejas" siempre. En una disciplina
+    //Decía "parejas" siempre. En una disciplina
     // de a uno eso manda a buscar un bug de parejas donde no las hay — y este
     // mensaje es el único rastro que queda en un log cuando el reparto no
     // cierra. La aridad sale de las propias filas, sin parámetro nuevo.

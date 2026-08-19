@@ -10,7 +10,7 @@ ningún otro lado: si este documento se pierde, hay que redescubrirlo.
 | | |
 |---|---|
 | **Código en GitHub** | [`Stefanopellegrinoo/padelApp`](https://github.com/Stefanopellegrinoo/padelApp), **privado**. `main` es la rama por defecto. También están subidas las tres ramas de plan que nombra `estado.md` |
-| **Base de producción** | Supabase Cloud, proyecto **`padelApp`** — ref `yttmhxcdnjknobiccvsp`, región `sa-east-1` (São Paulo), plan free |
+| **Base de producción** | Supabase Cloud, proyecto **`padelApp`** — ref `<tu-proyecto-ref>`, región `sa-east-1` (São Paulo), plan free |
 | **Las 10 migraciones** | Aplicadas y verificadas con SQL: 10 tablas, **las 10 con RLS**, 21 políticas, 15 funciones `security definer` |
 | **La base está vacía** | 0 usuarios, 0 temporadas, y **sin el usuario del seed** — `supabase/seed.sql` nunca corre contra la nube |
 | **El trigger de alta** | Probado **en producción**: un alta de prueba creó su `players` con el nombre del metadata. Después se borró |
@@ -20,8 +20,8 @@ ningún otro lado: si este documento se pierde, hay que redescubrirlo.
 ## Las dos variables, y por qué son sólo dos
 
 ```
-NEXT_PUBLIC_SUPABASE_URL=https://yttmhxcdnjknobiccvsp.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl0dG1oeGNkbmprbm9iaWNjdnNwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY0NzIyNDMsImV4cCI6MjEwMjA0ODI0M30.tLM2Z1OgZtdvzxBHwvcSyjR6kMkyZZSNPyRDy9wSsgM
+NEXT_PUBLIC_SUPABASE_URL=https://<tu-proyecto-ref>.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<tu-anon-key>
 ```
 
 **La `service_role` key NO va al hosting.** Verificado: `SUPABASE_SERVICE_ROLE_KEY`
@@ -86,7 +86,7 @@ intercambia el code por sesión. Falta sólo la credencial.
 - En **URI de redireccionamiento autorizados**, estas dos:
 
   ```
-  https://yttmhxcdnjknobiccvsp.supabase.co/auth/v1/callback
+  https://<tu-proyecto-ref>.supabase.co/auth/v1/callback
   http://localhost:54321/auth/v1/callback
   ```
 

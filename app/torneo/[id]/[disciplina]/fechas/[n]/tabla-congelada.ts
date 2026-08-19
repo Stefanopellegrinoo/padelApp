@@ -6,7 +6,7 @@
  *
  * **Acá se decide el ORDEN, nunca el REPARTO.** `computeAwards` no se importa
  * ni se llama desde este módulo: quien reparte es `closeMatchday`, una sola
- * vez, y una fecha cerrada no vuelve a repartir (C21, verify-report ronda 14).
+ *Vez, y una fecha cerrada no vuelve a repartir.
  * Lo fija `fuente-de-puntos.unit.test.ts`, que mira los imports de este archivo
  * además de los de `page.tsx`.
  */
@@ -29,14 +29,14 @@ function frozenPositionOf(row: SideStanding, frozen: ReadonlyMap<EntryId, ConPue
 /**
  * Las filas de la tabla de una fecha CERRADA, en el orden en que se dibujan.
  *
- * W55 (verify-report ronda 16): el orden sale del puesto CONGELADO, no del que
+ *El orden sale del puesto CONGELADO, no del que
  * `computeStandings` calcula hoy. El orden en vivo depende del snapshot de
  * desempate, el snapshot depende de `discipline_entries`, y PROMOVER un
  * invitado escribe ahí — así que después de promover la tabla podía reordenarse
  * mientras los puntos seguían congelados. Medido: el primero mostraba 6 puntos
  * y el segundo 8.
  *
- * W57 (verify-report ronda 17): **el lado que no cobra puntos conserva su LUGAR
+ ***el lado que no cobra puntos conserva su LUGAR
  * DEPORTIVO.** Se reordenan entre sí sólo los lados que TIENEN premio; los que
  * no lo tienen se quedan en el índice donde `computeStandings` los puso. Antes
  * un lado sin premio valía `Number.MAX_SAFE_INTEGER` y se iba al fondo, así que
@@ -70,7 +70,7 @@ export function frozenTableRows(
 /**
  * ¿La tabla dibuja un orden distinto del que `computeStandings` calcula hoy?
  *
- * W56 (verify-report ronda 17): el pie de la tabla —"Fulano quedó 2° por
+ *El pie de la tabla —"Fulano quedó 2° por
  * diferencia de games"— sale de `computeStandings` y es el ÚNICO ordinal que el
  * usuario ve, porque la tabla no imprime puestos. Cuando el orden congelado
  * mueve las filas, el pie afirma un puesto que la tabla desmiente tres

@@ -1,7 +1,7 @@
 -- PR 18c (torneo-multi-disciplina, slice D re-especificada) ────────────────
 --
 -- ── promote_guest: restatement #2/3 — un lado de uno no tiene compañero ────
--- W35 (verify-report ronda 10) midió `promote_guest` contra una disciplina
+--Midió `promote_guest` contra una disciplina
 -- `pair_size = 1` con la fecha CERRADA y encontró que el design se equivocaba
 -- en las dos puntas. El design decía que la copia final traía 0 filas EN
 -- SILENCIO y proponía agregar un `raise` para que fallara ruidoso. La medición
@@ -18,7 +18,7 @@
 --
 -- y con un lado de uno `pr.entry_b` es NULL, así que `a.entry_id = NULL` no
 -- matchea NUNCA, `not exists` da TRUE y el guard concluye "no cobró". Es la
--- misma lógica de tres valores que C17 (verify-report ronda 10) con el
+--Misma lógica de tres valores que C17 con el
 -- resultado OPUESTO: acá el NULL cae del lado conservador y refusa de más.
 --
 -- Delta contra 0025, y nada más:
@@ -45,7 +45,7 @@
 -- CUIDADO al re-copiar de 0025: ese archivo define DOS funciones —
 -- `promote_guest` y, 20 líneas más abajo, un `drop`+`create` de
 -- `season_invite`— y la segunda fue REEMPLAZADA por
--- `0026_season_invite_discipline_order.sql` (W10, el orden por
+--`0026_season_invite_discipline_order.sql` (W10, el orden por
 -- `discipline_entries`). Copiar "desde `promote_guest` hasta el final del
 -- archivo" arrastra la versión vieja de `season_invite` y revierte 0026 en
 -- silencio: el typecheck, el build y 305 de los 306 tests siguen en verde y
@@ -112,7 +112,7 @@ begin
   end if;
 
   -- Saltea con un lado de uno: no hay compañero de quien preguntar, y este
-  -- `case` devolvería NULL (W35). Ver la cabecera del archivo.
+  --`case` devolvería NULL. Ver la cabecera del archivo.
   if v_pair_size <> 1 and exists (
     select 1
       from public.pairs pr

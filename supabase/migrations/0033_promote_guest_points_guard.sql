@@ -1,13 +1,13 @@
 -- Cierre de ronda 16 (torneo-multi-disciplina) ─────────────────────────────
 --
 -- ── promote_guest: dos guards sobre el casillero que 0032 agrega ───────────
--- W54 (verify-report ronda 16): `0032` hacía `v_points || to_jsonb(0)` sin
+--`0032` hacía `v_points || to_jsonb(0)` sin
 -- mirar qué era `v_points`. Con `points` ausente, null o un objeto, el `||` de
 -- jsonb no se queja: escribe `[null,0]` o `[{},0]`, o sea una config que
 -- `validateConfig` después rechaza entera — incluido cualquier intento de
--- arreglarla desde Ajustes. Medido por la auditoría.
+--Arreglarla desde Ajustes. Medido por la.
 --
--- W51: el guard de 12 (`MAX_PLAYERS`) decía "Sacá a alguien antes de sumar",
+--El guard de 12 (`MAX_PLAYERS`) decía "Sacá a alguien antes de sumar",
 -- y los doce asientos rebotan al intentar sacarlos porque ya jugaron
 -- (`removeSeat` refusa con "ya jugó alguna fecha"). Mandaba a una salida que
 -- no existe. El mensaje nuevo nombra lo que sí se puede hacer.
@@ -82,7 +82,7 @@ begin
   end if;
 
   -- Saltea con un lado de uno: no hay compañero de quien preguntar, y este
-  -- `case` devolvería NULL (W35). Ver la cabecera del archivo.
+  --`case` devolvería NULL. Ver la cabecera del archivo.
   if v_pair_size <> 1 and exists (
     select 1
       from public.pairs pr
@@ -140,7 +140,7 @@ begin
   -- sideSize)`), y el 0 ya significa "de aca para abajo no se suma"
   -- (`pointsErrors`). Lo que trababa la temporada nunca fue una regla de
   -- reparto: era el LARGO. Sin esto, promover dejaba 9 jugadores contra 8
-  -- valores, la fecha siguiente no se podia sortear y —C22, verify-report
+  --Valores, la fecha siguiente no se podia sortear y —C22, 
   -- ronda 15— reabrir ESTA borraba los 8 premios y despues no dejaba cerrar.
   --
   -- Cambia a proposito la convencion de "agregar un asiento no toca squadSize
@@ -152,17 +152,17 @@ begin
   -- plantel—, asi que la lista sigue alcanzando; medido en la ronda 15
   -- (promover → reabrir → re-cerrar da 8 premios, perfecto).
   if v_pair_size = 1 then
-    -- S57 (verify-report ronda 17): esto leia `(config ->> 'squadSize')::int` y
+    --Esto leia `(config ->> 'squadSize')::int` y
     -- el cast reventaba ACA, antes de que el guard de abajo pudiera mirar nada
     -- — con `squadSize = "ocho"` el admin recibia `invalid input syntax for
-    -- type integer: "ocho"`, la ultima de las siete filas de la matriz de W54
+    --Type integer: "ocho"`, la ultima de las siete filas de la matriz de W54
     -- que le llegaba como "Referencia: NNNN". Se lee como jsonb, se chequea el
     -- tipo, y recien despues se castea.
     select config -> 'squadSize', config -> 'points'
       into v_squad_raw, v_points
       from public.disciplines where id = v_discipline for update;
 
-    -- W54: `||` sobre un jsonb que no es array no se queja — escribe
+    --`||` sobre un jsonb que no es array no se queja — escribe
     -- `[null,0]` o `[{},0]` y deja una config que `validateConfig` rechaza
     -- entera, incluido cualquier intento de arreglarla desde Ajustes. La
     -- config sale de `validateConfig` en todos los caminos de escritura, asi
@@ -181,7 +181,7 @@ begin
     -- plantel arriba del techo y `validateConfig` rechazaria la config entera
     -- —incluido cualquier intento de arreglarla desde Ajustes.
     --
-    -- W51 (verify-report ronda 16): el mensaje decia "Sacá a alguien antes de
+    --El mensaje decia "Sacá a alguien antes de
     -- sumar" y los doce asientos rebotan al intentarlo, porque ya jugaron
     -- (`removeSeat`: "ya jugó alguna fecha"). Mandaba a una salida que no
     -- existe. Ahora nombra la unica que si: el invitado se queda invitado.

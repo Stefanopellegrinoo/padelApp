@@ -7,8 +7,8 @@ import { PanelGoles } from './carga'
  * El panel de marcador abierto, RENDERIZADO.
  *
  * Las dos cosas que la ronda 21 encontró abriéndolo en un navegador —que el
- * botón se apaga sin decir por qué (S74) y que no se ve dónde está el foco
- * (S72)— no las puede ver un test sobre la función que valida: son atributos y
+ *Botón se apaga sin decir por qué y que no se ve dónde está el foco
+ *No las puede ver un test sobre la función que valida: son atributos y
  * clases del DOM. Por eso esto renderiza el JSX y mira el HTML.
  *
  * Lo que NO cubre: la interacción. Acá no se tipea ni se clickea; lo que se
@@ -27,7 +27,7 @@ function html(a: string, b: string): string {
   )
 }
 
-describe('panel de goles — por qué el botón está apagado (S74)', () => {
+describe('panel de goles — por qué el botón está apagado', () => {
   it('mientras se tipea no reta a nadie', () => {
     expect(html('', '')).not.toContain('un número entero por lado')
     expect(html('3', '')).not.toContain('un número entero por lado')
@@ -52,7 +52,7 @@ describe('panel de goles — por qué el botón está apagado (S74)', () => {
   })
 })
 
-describe('panel de goles — el foco se ve (S72)', () => {
+describe('panel de goles — el foco se ve', () => {
   /**
    * `outline-none` sin nada que lo reemplace deja el panel operable por teclado
    * y sin indicador de foco (WCAG 2.4.7). Medido en el navegador:

@@ -2,7 +2,7 @@ import { disciplineSlugs } from '@/core'
 import type { Client } from './client'
 import { seasonHeader, seasonMatchdaysOf } from './read'
 
-// W15 (verify-report ronda 5): `n` sólo dígitos. `/fechas/reglas` matcheaba
+//`n` sólo dígitos. `/fechas/reglas` matcheaba
 // antes ("reglas" cumple `[^/]+`) y colaba una fecha vieja pública al camino
 // legacy con el cliente anon — acá es donde corresponde cortarlo: es la
 // definición de qué ES una fecha vieja, no un caso aparte en el parse.
@@ -14,7 +14,7 @@ export interface LegacyFechaPath {
 }
 
 /**
- * REQ-NR-5: `/torneo/{id}/fechas/{n}` — la URL vieja de una fecha puntual,
+ *REQ-NR-5: `/torneo/{id}/fechas/{n}` — la URL vieja de una fecha puntual,
  * sin disciplina. `null` para cualquier otra cosa: la ruta nueva
  * (`/{id}/{disciplina}/fechas/{n}`), la lista (`/{id}/fechas`, sin número) o
  * cualquier otra pantalla del torneo — todas siguen de largo sin tocar la
@@ -47,8 +47,8 @@ export async function legacyFechaRedirectTarget(
     seasonHeader(supabase, legacy.seasonId),
     seasonMatchdaysOf(supabase, legacy.seasonId),
   ])
-  // C10 (verify-report ronda 5): `number` es único por disciplina, no por
-  // temporada (REQ-D3-2) — dos disciplinas pueden compartir "fecha 2", y ese
+  //`number` es único por disciplina, no por
+  //Temporada (REQ-D3-2) — dos disciplinas pueden compartir "fecha 2", y ese
   // empate es un estado LEGÍTIMO, no un agujero de integridad. Buscar sólo
   // por número sin desempate deja el destino sin definir, y el 308 es
   // PERMANENTE (cacheado por el browser, RFC 7538): la disciplina equivocada

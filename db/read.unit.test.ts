@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { toDisciplineHeader } from './read'
 
 /**
- * `Number(row.weight)` en `toDisciplineHeader` (W21, `verify-report` ronda
+ *`Number(row.weight)` en `toDisciplineHeader` (W21, `` ronda
  * 6): medido contra PostgREST real, `disciplines.weight` YA llega como
  * `number` — el "PostgREST serializa numeric como string" que este archivo
  * afirmaba antes no existe. El `Number()` es un cinturón inofensivo para

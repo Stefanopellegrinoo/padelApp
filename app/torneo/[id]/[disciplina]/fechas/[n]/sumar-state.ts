@@ -32,7 +32,7 @@ import type { Side } from '@/core'
  *                        que no hubo compañero que cobrara. SE PUEDE sumar
  *                        —`promote_guest` saltea el guard del compañero y la
  *                        copia con `pair_size = 1` desde
- *                        `0031_promote_guest_single_side.sql`, W35— pero NO
+ * `0031_promote_guest_single_side.sql`, W35— pero NO
  *                        se lleva puntos de esta fecha, y por eso no lleva
  *                        `partnerPoints`: no hay ninguno que prometer.
  *                        Sumarlo no le mueve la posición a nadie, que es
@@ -111,7 +111,7 @@ export function guestsToPromote({
     if (partners.length === 0) return { entryId: guestId, name, estado: 'SIN_PAREJA' }
     // Jugó solo: `partnerOf` devolvió `null` porque el lado es de uno, no
     // porque falte un dato. La base acepta esta promoción desde
-    // `0031_promote_guest_single_side.sql` (PR18c, W35) y no copia nada — el
+    //`0031_promote_guest_single_side.sql` y no copia nada — el
     // invitado no cobró, y sumarlo no le mueve la posición a nadie.
     if (partners.some((partnerId) => partnerId === null)) {
       return { entryId: guestId, name, estado: 'JUGO_SOLO' }

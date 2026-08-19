@@ -1,4 +1,4 @@
--- ── N1 (verify-report ronda 2): create_masters resolvía la disciplina con la
+--── N1: create_masters resolvía la disciplina con la
 -- TERCERA instancia del mismo bug, y la peor de las tres porque falla EN
 -- SILENCIO ────────────────────────────────────────────────────────────────
 --

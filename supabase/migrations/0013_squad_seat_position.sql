@@ -77,7 +77,7 @@
 -- ES la autorización completa — DEFINER salta RLS, así que sin ese chequeo
 -- cualquier autenticado movería el plantel de cualquier temporada.
 --
--- ponytail: dos admins agregando a la vez en la misma temporada leen el mismo
+--Nota: dos admins agregando a la vez en la misma temporada leen el mismo
 -- `max(seed_position)` y calculan el mismo `v_park`, así que el segundo corre
 -- la cola con un `v_park` que se le quedó viejo apenas el primero commiteó. Lo
 -- único que está PROBADO acá es que si eso levanta una excepción —23505 es lo

@@ -97,7 +97,7 @@ describe('previousContext', () => {
    * restricción del sorteo de PAREJAS, y de a uno no hay con quién repetir.
    * `previousContext` devuelve el mismo triple neutro que para "no hubo fecha
    * anterior", que es lo que `buildSides` con `sideSize === 1` ya ignoraba
-   * entero (core/pairing.ts) y lo que el guard de C19 hardcodeaba en
+   *Entero (core/pairing.ts) y lo que el guard de C19 hardcodeaba en
    * `pairingContextFor`.
    */
   it('una fecha de a uno no deja defensores ni parejas previas', () => {

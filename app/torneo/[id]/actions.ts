@@ -16,7 +16,7 @@ export type WriteResult = { ok: true } | { ok: false; error: string }
  * del insert. La pantalla dibuja ese mismo número, pero como etiqueta, no
  * como dato.
  *
- * `disciplineId` explícito (PR13c slice B, C12): antes de este cambio el
+ *`disciplineId` explícito (PR13c slice B, C12): antes de este cambio el
  * único caller de producción pasaba 3 argumentos y `createMatchday` resolvía
  * siempre `defaultDisciplineId`, así que la segunda disciplina de una
  * temporada no tenía forma de abrir una fecha propia.

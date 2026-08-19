@@ -30,7 +30,7 @@ export function mastersQualifiers(ranking: RankingRow[]): MastersFour {
  * El Masters se juega SIEMPRE de a parejas: son las tres formas de repartir
  * los mismos cuatro clasificados. Por eso `pair()` con literal `size: 2` y no
  * un `Side` de tamaño variable — una disciplina de a uno no arma Masters, y
- * `generateMastersPairs` la corta antes con su propio guard (W39, ronda 12).
+ *`generateMastersPairs` la corta antes con su propio guard (W39, ronda 12).
  */
 export function mastersFixture(four: MastersFour): Array<{ sideA: Side; sideB: Side }> {
   const [one, two, three, fourth] = four

@@ -40,7 +40,7 @@ const RETRY_DELAY_MS = 300
  * una vez, en el único lugar por el que pasan todas las lecturas: el `fetch`
  * del cliente de Supabase.
  *
- * ponytail: un solo reintento, con una espera fija de 300ms. Si esto no
+ *Nota: un solo reintento, con una espera fija de 300ms. Si esto no
  * alcanza y hace falta un segundo reintento o backoff, ya no es un problema
  * de timing sino de la máquina bajo esa carga, y hay que mirar eso primero.
  */
@@ -101,7 +101,7 @@ function traced(fetchFn: typeof withFreshTokenRetry, delayMs: number): typeof wi
     if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs))
     const response = await fetchFn(input, init)
     const path = typeof input === 'string' ? input : input.toString()
-    // ponytail: la cuenta asume consultas SECUENCIALES, una a la vez — si dos
+    //Nota: la cuenta asume consultas SECUENCIALES, una a la vez — si dos
     // requests corren en paralelo se entrelazan y el número de la última línea
     // deja de ser exacto. Correcto para leer el costo de UN tilde a la vez,
     // que es para lo que sirve; para tráfico concurrente hace falta un id por

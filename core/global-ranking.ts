@@ -5,7 +5,7 @@ import type { EntryId, RankingRow } from './types'
  * Una disciplina, tal como la tabla global la necesita: sus propias filas de
  * `computeRanking` (sin tocar) más el `weight` de `disciplines` — ya
  * `number` desde que sale de PostgREST (`db/read.ts: toDisciplineHeader`
- * hace un `Number()` de cinturón, ver W21 en `verify-report`; no convierte
+ *Hace un `Number()` de cinturón, ver W21 en ``; no convierte
  * nada en la práctica).
  */
 export interface DisciplineRanking {
@@ -19,13 +19,13 @@ export interface GlobalRankingRow {
 }
 
 /**
- * REQ-D9-1/D9-2: la tabla global suma, por persona, los puntos de cada
+ *REQ-D9-1/D9-2: la tabla global suma, por persona, los puntos de cada
  * disciplina × su `weight` (default 1). `weight=0` hace que esa disciplina
  * aporte cero al global SIN tocar sus propias filas — `ranking` sólo se lee,
  * nunca se muta, así que "su tabla propia sigue mostrando sus puntos reales"
  * es gratis: es el mismo array que ya tenía el caller.
  *
- * Desempate (W18, `verify-report` ronda 6): la spec no define uno para el
+ *Desempate (W18, `` ronda 6): la spec no define uno para el
  * global, así que se reusa `orderByPoints` con snapshot vacío — mismo
  * mecanismo que `computeRanking` para el caso sin snapshot, que cae al
  * orden de `order` (primera aparición). Eso NO es "orden de llegada" al
@@ -50,7 +50,7 @@ export function computeGlobalRanking(disciplines: readonly DisciplineRanking[]):
         points.set(row.entryId, 0)
         order.push(row.entryId)
       }
-      // W17 (verify-report ronda 6): `weight` es `numeric(4,2)`, dos
+      //`weight` es `numeric(4,2)`, dos
       // decimales es su precisión real — `points * weight` en punto
       // flotante puede ensuciar esa segunda posición (10*0.33 !== 3.3 en
       // JS). Redondear en cada acumulación, no sólo al mostrar, evita que

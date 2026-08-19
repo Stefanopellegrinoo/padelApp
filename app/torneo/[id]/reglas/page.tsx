@@ -82,7 +82,7 @@ export default async function ReglasPage({ params }: ReglasPageProps) {
       // La fila de formato mira TODAS las disciplinas, no la [0]: desde PR20
       // rebanada D2 cada una nace con la forma de marcador de su kind, y un
       // torneo de pádel + FIFA le decía al grupo "1 set a 4 games" sobre una
-      // mitad que se juega a goles (W64, verify-report ronda 21).
+      //Mitad que se juega a goles.
       formats={header.disciplines.map((discipline) => ({
         label: DISCIPLINE_LABELS[discipline.kind],
         matchFormat: discipline.config.matchFormat,

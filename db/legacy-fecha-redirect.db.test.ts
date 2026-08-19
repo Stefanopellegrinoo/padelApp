@@ -4,7 +4,7 @@ import { adminClient } from './test/admin'
 import { createSeason } from './test/factories'
 import { createTestUser } from './test/users'
 
-// ── PR 10 — REQ-NR-5 ─────────────────────────────────────────────────────────
+//── PR 10 — REQ-NR-5 ─────────────────────────────────────────────────────────
 // `legacyFechaRedirectTarget` es lo que decide A CUÁL disciplina redirige la
 // URL vieja. El caso que importa de verdad es el de dos disciplinas del MISMO
 // kind (Fase 2: "dos disciplinas de pádel"): ahí es donde un slug basado sólo
@@ -53,7 +53,7 @@ describe('legacyFechaRedirectTarget', () => {
     // Orden de INSERCIÓN a propósito invertido respecto del orden de
     // DISCIPLINA (`position`): la fila de `secondPadelId` (position=1) se
     // graba primero. Un desempate que dependiera del orden físico/de
-    // inserción de `matchdays` (el bug de C10) resolvería acá a
+    //Inserción de `matchdays` (el bug de C10) resolvería acá a
     // `secondPadelId` — el fix real usa el orden de `header.disciplines`
     // (`position, created_at`), no el de inserción, así que el resultado
     // correcto sigue siendo `firstPadelId` pase lo que pase con `matchdays`.
@@ -61,15 +61,15 @@ describe('legacyFechaRedirectTarget', () => {
     await insertMatchday(seasonId, firstPadelId, 3)
 
     const target = await legacyFechaRedirectTarget(admin.client, { seasonId, n: '3' })
-    // C10 (verify-report ronda 5): `number` es único por disciplina
-    // (REQ-D3-2), no por temporada — con dos "fecha 3" en la misma
+    //`number` es único por disciplina
+    //(REQ-D3-2), no por temporada — con dos "fecha 3" en la misma
     // temporada, el desempate ya NO es "cualquier disciplina válida": la
     // primera del orden de la temporada (`position, created_at`) gana,
     // porque es la que existía cuando el bookmark viejo se guardó. La
     // factory inserta cada disciplina en su propio insert con `position:
     // index` (arriba, ver `db/test/factories.ts`), así que `firstPadelId`
     // queda en `position=0` — determinístico, no un empate real de la
-    // factory (ese es el riesgo S13 de `createSeason` en PRODUCCIÓN, que
+    //Factory (ese es el riesgo S13 de `createSeason` en PRODUCCIÓN, que
     // inserta N filas en un solo statement; no aplica acá).
     expect(target).toBe(`/torneo/${seasonId}/padel/fechas/3`)
   })
@@ -82,9 +82,9 @@ describe('legacyFechaRedirectTarget', () => {
     expect(target).toBeNull()
   })
 
-  // W16 (verify-report ronda 5): los 4 tests de arriba corrían todos como
+  //Los 4 tests de arriba corrían todos como
   // `admin.client` — cero cobertura del extraño / no-participante, que es
-  // exactamente el input que produce el `EdgeError` sin atrapar de W15. Este
+  //Exactamente el input que produce el `EdgeError` sin atrapar de W15. Este
   // test documenta ese throw (hoy: rechaza — el `try/catch` que lo atrapa
   // vive en `middleware.ts`, no acá; esta función sigue siendo la fuente de
   // verdad de "no se puede leer la temporada").

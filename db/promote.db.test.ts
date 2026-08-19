@@ -241,7 +241,7 @@ describe('promoteGuest — spec 3.1: se copia el award congelado del compañero'
 })
 
 /**
- * Arma la fecha del incidente C1: 8 del plantel presentes + una PAREJA
+ *Arma la fecha del incidente C1: 8 del plantel presentes + una PAREJA
  * INVITADA trabada = 5 parejas, y `defaultConfig(8)` sólo tiene 4 valores de
  * puntos. Es legal justamente porque `computeAwards` excluye a la pareja toda
  * invitada de las posiciones que pagan; promover a uno de sus dos integrantes
@@ -313,7 +313,7 @@ describe('promoteGuest — spec 3.2: pareja toda invitada, se REFUSA', () => {
  * Este estado no lo produce la app: `generatePairs` borra las `pairs` de la
  * fecha antes de insertar (db/matchday.ts:458), así que `buildPairs` nunca mete
  * un entry en dos parejas. Se arma a mano —igual que el test del `unique` de
- * más abajo— porque está adentro del contrato que `promote_guest` dice
+ *Más abajo— porque está adentro del contrato que `promote_guest` dice
  * defender, y medido contra la base el guard viejo lo dejaba pasar: promoción
  * exitosa, y después la página tirando "La fecha tiene 6 parejas del torneo
  * pero la lista de puntos sólo tiene 4 valores."
@@ -655,15 +655,15 @@ describe('promoteGuest — el unique de awards protege contra una pareja duplica
   })
 })
 
-// ── S23 (verify-report ronda 7) — discipline_entries de LA FECHA, no la default
+//── S23 — discipline_entries de LA FECHA, no la default
 // `promote_guest` (0025_promote_guest_discipline_entries.sql) ya siembra la
 // disciplina de la fecha en la que jugó el invitado, no la default — la
-// siembra estaba bien desde el restatement de esa migración, pero C12
+//Siembra estaba bien desde el restatement de esa migración, pero C12
 // bloqueaba llegar a este escenario (no se podía abrir una fecha fuera de la
-// default). Con C12 cerrado, esto ya es alcanzable: se prueba de punta a
+//Default). Con C12 cerrado, esto ya es alcanzable: se prueba de punta a
 // punta, con `entriesOf` (la misma función que lee "Plantel" en Ajustes) del
 // lado de la disciplina correcta y del lado de la default.
-describe('promoteGuest — discipline_entries de la disciplina de la fecha, no la default (S23)', () => {
+describe('promoteGuest — discipline_entries de la disciplina de la fecha, no la default', () => {
   it('un invitado promovido desde una fecha FIFA entra a discipline_entries de FIFA, no de la default PADEL', async () => {
     const squad = await fillerPlayers(8)
     const admin = await createTestUser()
@@ -712,11 +712,11 @@ describe('promoteGuest — discipline_entries de la disciplina de la fecha, no l
     expect(padelSeat).toBeNull()
 
     // Misma función que arma "Plantel" en Ajustes: aparece del lado de FIFA,
-    // no del lado de la default (padel) — ahí es donde S23 mordía.
+    //No del lado de la default (padel) — ahí es donde S23 mordía.
     expect((await entriesOf(admin.client, seasonId, fifaId)).some((entry) => entry.id === guestId)).toBe(true)
     expect((await entriesOf(admin.client, seasonId, padelId)).some((entry) => entry.id === guestId)).toBe(false)
 
-    // C14 (verify-report ronda 8): lo de arriba es exactamente lo que hace que
+    //Lo de arriba es exactamente lo que hace que
     // Ajustes → Plantel pierda a esta persona — `ajustes/page.tsx:50` llama
     // `entriesOf(seasonId)` SIN disciplineId, que cae en la disciplina por
     // defecto (padel acá), igual que la aserción de arriba. Lo que Plantel
@@ -730,11 +730,11 @@ describe('promoteGuest — discipline_entries de la disciplina de la fecha, no l
   })
 })
 
-// ── PR18c — slice D re-especificada (W35, verify-report ronda 10) ────────────
+//── PR18c — slice D re-especificada ────────────
 //
 // El design (#3801) traía un "HALLAZGO NUEVO" que decía que `promote_guest`
 // con `pair_size=1` sobre una fecha CERRADA copiaba 0 puntos EN SILENCIO, y
-// proponía agregar un `raise` para que fallara ruidoso. W35 midió eso contra
+//Proponía agregar un `raise` para que fallara ruidoso. W35 midió eso contra
 // la función real y encontró que la premisa era FALSA en las dos puntas: ya
 // falla ruidoso, y falla por el guard EQUIVOCADO.
 //
@@ -742,7 +742,7 @@ describe('promoteGuest — discipline_entries de la disciplina de la fecha, no l
 // guard de "¿el compañero cobró?" arma `case when pr.entry_a = p_entry then
 // pr.entry_b else pr.entry_a end`, y con un lado de uno eso da NULL, así que
 // `a.entry_id = NULL` no matchea nunca y "el compañero no cobró" sale TRUE.
-// Misma lógica de tres valores que C17, en la dirección conservadora.
+//Misma lógica de tres valores que C17, en la dirección conservadora.
 //
 // Por eso la re-especificación NO es agregar un raise: es SALTEAR el guard del
 // compañero y la copia cuando `pair_size = 1`, y dejar que la promoción
@@ -782,7 +782,7 @@ async function closedSoloMatchdayWithGuest(): Promise<{
   return { admin, seasonId, matchdayId, guestId, squadEntryIds: entryIds }
 }
 
-describe('promoteGuest — disciplina de a uno: se promueve, sin copiar nada (PR18c, W35)', () => {
+describe('promoteGuest — disciplina de a uno: se promueve, sin copiar nada', () => {
   it('el invitado que jugó solo entra al plantel en vez de rebotar contra el guard del compañero', async () => {
     const { admin, seasonId, matchdayId, guestId, squadEntryIds } =
       await closedSoloMatchdayWithGuest()
@@ -822,7 +822,7 @@ describe('promoteGuest — disciplina de a uno: se promueve, sin copiar nada (PR
   })
 
   /*
-   * C21 (verify-report ronda 14). Promover funcionaba y la PANTALLA de esa
+   *. Promover funcionaba y la PANTALLA de esa
    * fecha moría en el render siguiente: `page.tsx` recalculaba los puntos del
    * día con `computeAwards` sobre los `guestIds` de HOY, y al salir el
    * promovido de esa lista quedaban 9 lados pagos contra 8 valores de puntos.
@@ -833,7 +833,7 @@ describe('promoteGuest — disciplina de a uno: se promueve, sin copiar nada (PR
    * afirma además que el conjunto de asientos que cobran NO cambió con la
    * promoción, que es exactamente la premisa que el recálculo rompía.
    */
-  it('después de promover, los puntos congelados de la fecha no se mueven (C21)', async () => {
+  it('después de promover, los puntos congelados de la fecha no se mueven', async () => {
     const { admin, matchdayId, guestId, squadEntryIds } = await closedSoloMatchdayWithGuest()
     const antes = await frozenPointsOf(admin.client, matchdayId)
     expect([...antes.keys()].sort()).toEqual([...squadEntryIds].sort())
@@ -846,7 +846,7 @@ describe('promoteGuest — disciplina de a uno: se promueve, sin copiar nada (PR
     // hoy daría 9 lados pagos y no podría siquiera producirse.
     expect([...despues.keys()].sort()).toEqual([...antes.keys()].sort())
     for (const [entryId, award] of antes) {
-      // `toStrictEqual` y no `toBe`: desde W55 (verify-report ronda 16) el
+      //`toStrictEqual` y no `toBe`: desde W55 el
       // premio congelado es `{ position, points }` y no un número — el puesto
       // viaja con los puntos justamente para que el orden de la tabla no
       // pueda contradecirlos.
@@ -869,8 +869,8 @@ describe('promoteGuest — disciplina de a uno: se promueve, sin copiar nada (PR
    *
    * Al promover un invitado de a uno el plantel pasa de 8 a 9 y la lista se
    * queda corta, así que la fecha siguiente no se puede sortear y —peor— si se
-   * REABRE ésta, los premios se borran y no se puede volver a cerrar (C22,
-   * verify-report ronda 15).
+   *REABRE ésta, los premios se borran y no se puede volver a cerrar (C22,
+   *).
    *
    * La decisión: que la app agregue el casillero SOLA, con 0. El admin después
    * lo deja en 0 o le pone valor. Cambia a propósito la convención de que
@@ -898,8 +898,8 @@ describe('promoteGuest — disciplina de a uno: se promueve, sin copiar nada (PR
     expect({ ...despues.config, squadSize: 8, points: antes.config.points }).toEqual(antes.config)
   })
 
-  it('la fecha se puede reabrir y volver a cerrar después de promover (C22)', async () => {
-    // C22 (verify-report ronda 15): esto borraba los 8 premios y después no
+  it('la fecha se puede reabrir y volver a cerrar después de promover', async () => {
+    //Esto borraba los 8 premios y después no
     // dejaba cerrar — la fecha quedaba OPEN con cero puntos repartidos y sin
     // salida por ninguna pantalla. Con el casillero agregado, el re-cierre
     // reparte 9 premios y el noveno es 0.
@@ -927,8 +927,8 @@ describe('promoteGuest — disciplina de a uno: se promueve, sin copiar nada (PR
 })
 
 /*
- * S57 (verify-report ronda 17). `0033` agregó dos guards que devuelven una
- * frase en castellano cuando `disciplines.config` está corrupta, y la auditoría
+ *. `0033` agregó dos guards que devuelven una
+ *Frase en castellano cuando `disciplines.config` está corrupta, y la 
  * midió la matriz de siete casos: seis pasaron a mensaje legible y UNO seguía
  * dando el error crudo de Postgres —`invalid input syntax for type integer:
  * "ocho"`— porque el cast `(config ->> 'squadSize')::int` del `select … into`
@@ -939,7 +939,7 @@ describe('promoteGuest — disciplina de a uno: se promueve, sin copiar nada (PR
  * cosmético — pero es la última fila de la matriz sin mensaje, y la matriz
  * entera no está en ningún test. Ésta sí.
  */
-describe('promoteGuest — una config corrupta se explica en castellano (S57, W54)', () => {
+describe('promoteGuest — una config corrupta se explica en castellano', () => {
   async function corromper(seasonId: string, patch: Record<string, unknown>): Promise<void> {
     const service = adminClient()
     const { data } = await service

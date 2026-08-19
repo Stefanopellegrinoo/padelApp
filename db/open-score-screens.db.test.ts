@@ -100,7 +100,7 @@ describe('crear una liga de FIFA por el camino real (REQ-D2-1, decisión #3933)'
   })
 
   // El segundo camino: "+ Agregar disciplina" en Ajustes, sobre un torneo ya en
-  // curso (REQ-D1-2). La expresión es la MISMA que arma `addDisciplineToSeason`
+  //Curso (REQ-D1-2). La expresión es la MISMA que arma `addDisciplineToSeason`
   // — la server action no se puede llamar desde acá (necesita cookies y
   // `revalidatePath`), así que lo que este test fija es todo menos su spread.
   it('"+ Agregar disciplina" de Ajustes la crea igual', async () => {

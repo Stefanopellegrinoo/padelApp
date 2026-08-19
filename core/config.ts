@@ -14,7 +14,7 @@ const DEFAULT_POINTS: Record<number, number[]> = {
 /**
  * `sideSize` default 2 (el pádel de siempre — ningún caller de hoy pasa 1):
  * la tabla de puntos por default está indexada por CANTIDAD DE LADOS, no
- * siempre `squadSize / 2` (C16, verify-report ronda 9). `DEFAULT_POINTS` no
+ *Siempre `squadSize / 2`. `DEFAULT_POINTS` no
  * tiene entradas para lados de a uno todavía (PUNTO 3 del design, deuda
  * separada) — con `sideSize=1` esto devuelve `points: []` honestamente, no
  * la tabla de parejas por casualidad.
@@ -69,13 +69,13 @@ export function disciplineProfile(
 }
 
 /**
- * `sideSize` condiciona la paridad (W24, REQ-D2-2/REQ-D5-2): un plantel impar
+ *`sideSize` condiciona la paridad (W24, REQ-D2-2/REQ-D5-2): un plantel impar
  * sólo es un problema cuando un lado necesita DOS. Con `sideSize=1` cada
  * presente es su propio lado — la regla no se relaja, es INAPLICABLE.
  *
  * El piso/techo (`MIN_PLAYERS`/`MAX_PLAYERS`) sigue sin condicionar por
- * `sideSize` — es cantidad, no paridad, y REQ-D2-2 no lo toca directamente.
- * Pero el TECHO mide partidos, no jugadores (W32, verify-report ronda 9): su
+ *`sideSize` — es cantidad, no paridad, y REQ-D2-2 no lo toca directamente.
+ *Pero el TECHO mide partidos, no jugadores: su
  * unidad cambia con `sideSize` (12 jugadores son 15 partidos en parejas y 66
  * de a uno), así que dejarlo sin condicionar es DEUDA, no una corrección —
  * PUNTO 3 del design (`DisciplineConfig.maxPlayers`) todavía no tiene
@@ -97,7 +97,7 @@ export function validateConfig(config: SeasonConfig, sideSize: SideSize): string
     errors.push(`El plantel no puede pasar de ${MAX_PLAYERS} jugadores.`)
   }
 
-  // C16 (verify-report ronda 9): dividía siempre por 2, así que un 1v1
+  //Dividía siempre por 2, así que un 1v1
   // pedía la MITAD de los valores de puntos que en verdad necesita — un
   // plantel de 10 en sideSize=1 son 10 lados, no 5.
   const expectedPoints = Math.floor(squadSize / sideSize)
@@ -125,7 +125,7 @@ export function validateConfig(config: SeasonConfig, sideSize: SideSize): string
   // y ESO se corta en `db/validate.ts`, no acá. Acá sólo se deja de pedir
   // coherencia a un número muerto.
   //
-  // ponytail: el techo es que una disciplina abierta puede guardar
+  //Nota: el techo es que una disciplina abierta puede guardar
   // `gamesPerSet: 0` y, si alguien apaga `openScore` después, queda con un
   // formato que no acepta ningún resultado. Hoy ninguna pantalla escribe
   // `openScore`, así que no hay camino para llegar ahí; el día que una lo

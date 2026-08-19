@@ -27,7 +27,7 @@ export async function seasonConfig(supabase: Client, seasonId: string): Promise<
  * The squad's seed order FOR ONE DISCIPLINE. Explicit `order by`: nothing else
  * keeps it stable.
  *
- * Lee `discipline_entries`, no `entries` (C6, verify-report ronda 3):
+ *Lee `discipline_entries`, no `entries`:
  * `entries.seed_position` es dual-write tail-only desde PR 7
  * (0023_discipline_entries.sql) — `shift_seeds_up`/`add_squad_seat` ya no
  * corren el parking ahí. `discipline_entries.seed_position` es la fuente
@@ -56,12 +56,12 @@ export async function squadSeedOrder(
  * Con el tripwire `disciplines_one_per_season` caído (0018) una temporada ya
  * PUEDE tener más de una — sin esto, `createMatchday` y las lecturas
  * scopeadas por temporada rompían con PGRST116 ("multiple/0 rows") o
- * mezclaban las dos disciplinas apenas existiera una segunda (verify-report,
- * hallazgo C4). Mismo orden que `add_squad_seat` (0013/0020): `position,
+ *Mezclaban las dos disciplinas apenas existiera una segunda (,
+ *Hallazgo C4). Mismo orden que `add_squad_seat` (0013/0020): `position,
  * created_at`.
  *
  * `null` en vez de tirar: cero filas visibles puede ser "esta temporada de
- * verdad no tiene disciplina" (C3) o, igual de legítimo, "RLS le esconde la
+ *Verdad no tiene disciplina" o, igual de legítimo, "RLS le esconde la
  * fila a quien llama" (un extraño sin asiento) — `disciplines_read` (0015)
  * exige `is_participant`. Quien llama decide qué hacer con `null`: una
  * lectura que hoy devuelve `[]`/`new Map()` para un extraño sigue
@@ -77,7 +77,7 @@ export async function defaultDisciplineId(supabase: Client, seasonId: string): P
     .limit(1)
     .maybeSingle()
   if (error) throw new EdgeError(`No se pudo leer la disciplina de la temporada: ${error.message}`)
-  // Única marca de esta función (N2): de acá en más el id que circula es
+  //Única marca de esta función: de acá en más el id que circula es
   // `DisciplineId`, no `string` a secas — así lo lee todo el que lo reciba.
   return (data?.id as DisciplineId | undefined) ?? null
 }
@@ -149,9 +149,9 @@ export async function closedHistory(
   if (awardsError) throw new EdgeError(`No se pudieron leer los premios: ${awardsError.message}`)
 
   return {
-    // W40 CERRADO (ver `db/read.ts: pairsAndMatchesOf`): antes esto componía
+    //CERRADO (ver `db/read.ts: pairsAndMatchesOf`): antes esto componía
     // `pairFromRow`, que TIRABA con una fila `pair_size=1`. Ese throw es el
-    // que C19 tuvo que esquivar con un guard en `pairingContextFor`; ahora la
+    //Que C19 tuvo que esquivar con un guard en `pairingContextFor`; ahora la
     // historia de una disciplina de a uno se lee de verdad.
     sides: (pairs ?? []).map((row) =>
       sideOfRow(row.pair_size as SideSize, row.entry_a, row.entry_b),
@@ -167,7 +167,7 @@ export async function closedHistory(
 /**
  * Un premio congelado: lo que la fecha repartió, con su puesto.
  *
- * W55 (verify-report ronda 16): traía sólo `points`, y con eso la pantalla
+ *Traía sólo `points`, y con eso la pantalla
  * mostraba los puntos congelados en filas ORDENADAS EN VIVO — el orden sale de
  * `computeStandings`, cuyo desempate depende del snapshot, y el snapshot
  * depende de `discipline_entries`, que PROMOVER cambia. Resultado medido: la
@@ -232,7 +232,7 @@ export interface NewSeason {
   /**
    * Una fila de `disciplines` por elemento — `position` sale del ÍNDICE de
    * este array, escrito EXPLÍCITO, nunca el default `0` de la columna
-   * (contrato S13, auditoría ronda 5): un insert donde dos filas comparten
+   *Un insert donde dos filas comparten
    * `position` Y `created_at` empata la clave de orden que `disciplineSlugs`
    * (core/discipline-slug.ts) usa para no colisionar dos disciplinas del
    * mismo `kind`. El orden de este array ES el orden del slug — el wizard
@@ -260,7 +260,7 @@ export interface NewSeason {
  * es la misma regla escrita una sola vez y del lado que no se puede saltear. Lo
  * único que hace este borde es traducir ese error a algo que se pueda leer.
  *
- * ponytail: el rollback es best-effort. Si el delete también falla, gana el
+ *Nota: el rollback es best-effort. Si el delete también falla, gana el
  * error del insert, que es el que explica qué pasó.
  */
 export async function createSeason(
@@ -314,7 +314,7 @@ export async function createSeason(
 
   // Una fila de `disciplines` por spec, `position` = índice del array —
   // nunca el default de la columna (ver el comentario de `disciplines` en
-  // `NewSeason`, contrato S13). Sin `disciplines` explícito esto crea la
+  //`NewSeason`, contrato S13). Sin `disciplines` explícito esto crea la
   // misma PADEL única de siempre, mismo comportamiento pre-PR11.
   const disciplineRows: { id: string }[] = []
   for (const [index, spec] of disciplineSpecs.entries()) {
@@ -359,7 +359,7 @@ export async function createSeason(
   }
 
   // Cada asiento entra a TODAS las disciplinas recién creadas, con el mismo
-  // seed_position que en `entries`. Decisión de este slice (REQ-D1-3/D1-4):
+  //Seed_position que en `entries`. Decisión de este slice (REQ-D1-3/D1-4):
   // el plantel es compartido a nivel torneo y por default juega todo — no
   // hay pantalla de "quién juega qué" en este wizard todavía (PR13 la agrega
   // para sumar una disciplina en curso). `discipline_entries` (PR 7) es la
@@ -417,8 +417,8 @@ export async function deleteSeason(supabase: Client, seasonId: string): Promise<
  * Cambia el nombre del torneo. Lo dice el paso 1 del wizard: "se puede cambiar
  * después".
  *
- * `count: 'exact'` por el mismo motivo que `setMatchdayDate` (W49,
- * verify-report ronda 15): un update que no toca ninguna fila NO es un error
+ *`count: 'exact'` por el mismo motivo que `setMatchdayDate` (W49,
+ *): un update que no toca ninguna fila NO es un error
  * en PostgREST. Estas escrituras se apoyan en RLS y no chequean admin por su
  * cuenta, así que a un participante que no organiza le decían que guardó y al
  * recargar volvía el valor viejo. La ronda 15 lo midió con un participante
@@ -446,8 +446,8 @@ export async function renameSeason(
  * El texto libre del admin. Mueve el sello de última actualización, que la
  * página de reglas muestra.
  *
- * `count: 'exact'` por el mismo motivo que `setMatchdayDate` (W49,
- * verify-report ronda 15): un update que no toca ninguna fila NO es un error
+ *`count: 'exact'` por el mismo motivo que `setMatchdayDate` (W49,
+ *): un update que no toca ninguna fila NO es un error
  * en PostgREST. Estas escrituras se apoyan en RLS y no chequean admin por su
  * cuenta, así que a un participante que no organiza le decían que guardó y al
  * recargar volvía el valor viejo. La ronda 15 lo midió con un participante

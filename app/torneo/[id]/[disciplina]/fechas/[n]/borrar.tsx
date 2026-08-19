@@ -35,7 +35,7 @@ export function BorrarFecha({
 }: {
   seasonId: string
   matchdayId: string
-  /** El slug de la URL desde la que se abrió esta fecha (W28): a esa lista vuelve el borrado, no a la disciplina por defecto. */
+  /** El slug de la URL desde la que se abrió esta fecha: a esa lista vuelve el borrado, no a la disciplina por defecto. */
   disciplina: string
   loadedResults: number
 }) {

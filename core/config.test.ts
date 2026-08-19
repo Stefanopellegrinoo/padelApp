@@ -21,7 +21,7 @@ describe('validateConfig', () => {
     expect(errors).toContain('El plantel tiene que ser un número par.')
   })
 
-  // REQ-D2-2/REQ-D5-2 (W24): la paridad es una regla DE LA PAREJA, no del
+  //REQ-D2-2/REQ-D5-2: la paridad es una regla DE LA PAREJA, no del
   // plantel. Con sideSize=1 cada presente es su propio lado — no hay nada
   // que emparejar, así que un plantel impar es perfectamente jugable.
   //
@@ -29,7 +29,7 @@ describe('validateConfig', () => {
   // todavía un piso COMPARTIDO entre disciplinas (PUNTO 3 del design, sin
   // hacer en esta tanda: separar minPlayers/maxPlayers por disciplina). Un
   // 7 acá tropezaría con ese piso —gap real, ya señalado, deliberadamente
-  // afuera de W24— y taparía la señal de esta prueba. Se usa 9: impar,
+  //Afuera de W24— y taparía la señal de esta prueba. Se usa 9: impar,
   // dentro del piso/techo de hoy, aislando sólo la paridad.
   it('accepts an odd squad size when the side is a single (REQ-D2-2)', () => {
     const errors = validateConfig({ ...valid, squadSize: 9, points: [10, 7, 5, 3] }, 1)
@@ -51,10 +51,10 @@ describe('validateConfig', () => {
     expect(errors).toContain('Con un plantel de 12 hacen falta 6 valores de puntos, no 4.')
   })
 
-  // C16 (verify-report ronda 9): expectedPoints dividía siempre por 2, así
+  //ExpectedPoints dividía siempre por 2, así
   // que un 1v1 de 10 pedía la MITAD de los valores que necesita — y
   // rechazaba los 10 que un plantel de 10 lados-de-uno sí necesita.
-  it('expects one value per side, not always per pair (C16)', () => {
+  it('expects one value per side, not always per pair', () => {
     const cfg = { ...valid, squadSize: 10 }
     const tenValues = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1]
     expect(validateConfig({ ...cfg, points: tenValues }, 1)).toEqual([])
@@ -166,10 +166,10 @@ describe('defaultConfig', () => {
     expect(defaultConfig(12).points[0]).toBe(10)
   })
 
-  // C16 (verify-report ronda 9): pairCount dividía siempre por 2 — 4 lados
+  //PairCount dividía siempre por 2 — 4 lados
   // de a uno necesitan la misma tabla que 4 parejas (8 jugadores), no la
   // tabla vacía que le tocaba por casualidad.
-  it('divides by the real side size, not always by 2 (C16)', () => {
+  it('divides by the real side size, not always by 2', () => {
     expect(defaultConfig(4, 1).points).toEqual(defaultConfig(8, 2).points)
   })
 })

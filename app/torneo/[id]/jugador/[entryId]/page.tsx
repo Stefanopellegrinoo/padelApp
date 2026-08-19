@@ -191,12 +191,12 @@ export default async function JugadorPage({ params }: PageProps) {
     awardsOf(supabase, seasonId),
   ])
 
-  // La identidad se resuelve con el plantel de LA TEMPORADA (C11, verify
+  //La identidad se resuelve con el plantel de LA TEMPORADA (C11, verify
   // ronda 6): `entriesOf` sin disciplina explícita filtra por la disciplina
   // POR DEFECTO, y quien sólo juega otra disciplina (o ninguna) no aparecía
   // ahí — pero sí es clickeable desde la tabla global, que lista al plantel
   // entero. `entriesOf` se sigue usando abajo, sólo para las ESTADÍSTICAS de
-  // la disciplina por defecto (C9 no se toca).
+  //La disciplina por defecto (C9 no se toca).
   const member = squad.find((candidate) => candidate.id === entryId)
   if (member === undefined) notFound()
 

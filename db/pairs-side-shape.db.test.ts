@@ -3,7 +3,6 @@ import { adminClient } from './test/admin'
 import { createSeason } from './test/factories'
 import { createTestUser } from './test/users'
 
-// ── REQ-D5-1 (PR14 slice C, design #3801 PUNTO 1) ───────────────────────────
 // La BASE, no un `if` de aplicación, tiene que rechazar un `pairs.entry_b`
 // que no combina con el `pair_size` real de la disciplina de esa fecha.
 //

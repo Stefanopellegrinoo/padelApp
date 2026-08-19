@@ -1,4 +1,4 @@
--- PR 20 rebanada A (torneo-multi-disciplina, REQ-D6-1) ─────────────────────
+--PR 20 rebanada A (torneo-multi-disciplina, REQ-D6-1) ─────────────────────
 --
 -- Persistir un partido empatado sólo si `disciplines.allows_draw = true`;
 -- seguir rechazándolo si es `false`. `match_sets` sólo conoce `match_id`, así

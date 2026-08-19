@@ -32,7 +32,7 @@ describe('disciplines', () => {
     expect(row?.id).toBe(disciplineId)
     expect(row?.kind).toBe('PADEL')
     expect(row?.status).toBe('SETUP')
-    // W21 (verify-report ronda 6): dato crudo de PostgREST, sin `Number()` a
+    //Dato crudo de PostgREST, sin `Number()` a
     // propósito — `numeric(4,2)` YA llega `number`, esto es la prueba de eso
     // (con el wrapper el assert nunca podría detectar lo contrario).
     expect(row?.weight).toBe(1)
@@ -48,7 +48,7 @@ describe('disciplines', () => {
   // arregla reopen_matchday/cancel_matchday — nunca antes. Esta aserción
   // ("rechaza una segunda disciplina") queda reemplazada por lo opuesto en
   // db/discipline-scope.db.test.ts, que además prueba que reopen/cancel ya
-  // operan scopeadas por discipline_id (REQ-D4-3).
+  //Operan scopeadas por discipline_id (REQ-D4-3).
 
   // Sin el grant de columna, esto rebota con "permission denied for table
   // matchdays" — el mismo agujero silencioso que documenta 0002_rls.sql:236,
@@ -67,7 +67,7 @@ describe('disciplines', () => {
     expect(data?.id).toBeTypeOf('string')
   })
 
-  // W2 (0020_disciplines_grants.sql): el UPDATE de disciplines.status ya
+  //(0020_disciplines_grants.sql): el UPDATE de disciplines.status ya
   // estaba revocado (0015:69); el INSERT era a nivel tabla y lo esquivaba —
   // un admin de temporada (RLS lo deja escribir, `disciplines_write` pide
   // sólo `is_season_admin`) podía crear una disciplina ya en ACTIVE por
@@ -77,7 +77,7 @@ describe('disciplines', () => {
   // (`supabase/config.toml`: `schemas = ["public", "graphql_public"]`), así
   // que la verificación de grants en sí se hizo a mano contra la base
   // (psql), no es alcanzable desde este archivo.
-  it('un admin de temporada no puede insertar una disciplina ya en ACTIVE (W2)', async () => {
+  it('un admin de temporada no puede insertar una disciplina ya en ACTIVE', async () => {
     const admin = await createTestUser()
     const { seasonId } = await createSeason({ admin })
 
@@ -114,7 +114,7 @@ describe('matchdays.discipline_id (PR 2)', () => {
     expect(data.discipline_id).toBe(disciplineId)
   })
 
-  // W5 (0020_disciplines_grants.sql): PR 4 nunca la llamó (lee discipline_id
+  //(0020_disciplines_grants.sql): PR 4 nunca la llamó (lee discipline_id
   // del mismo `select ... for update` ya bloqueado, más seguro) y quedó
   // expuesta como RPC pública sin un solo consumidor. Se revoca, mismo
   // criterio que 0009 con handle_new_user — ver squad-position.db.test.ts
@@ -171,7 +171,6 @@ describe('derivedSeasonStatus (PR 3)', () => {
   })
 })
 
-// ── REQ-NR-4 (verify-report, hallazgo C3) ───────────────────────────────────
 // `supabase/seed.sql` insertaba la temporada demo a mano, sin su disciplina:
 // tras un `supabase db reset` limpio, crear una fecha en ese torneo rompía
 // con PGRST116 ("No se pudo leer la disciplina de la temporada"). El fix es
@@ -205,12 +204,11 @@ describe('REQ-NR-4 — ninguna temporada se queda sin disciplina', () => {
   })
 })
 
-// ── C7/W8 (verify-report ronda 3) ────────────────────────────────────────────
-// El gemelo de REQ-NR-4, un nivel más abajo: `supabase/seed.sql` dejaba el
+//El gemelo de REQ-NR-4, un nivel más abajo: `supabase/seed.sql` dejaba el
 // torneo demo con 8 `entries` SQUAD y CERO filas en `discipline_entries`
 // (setAttendance rebotaba con 23503, FK violation), y dos scaffolds de test
 // (`db/claim.db.test.ts`, `db/rls.db.test.ts`) armaban `entries` a mano sin su
-// contraparte. Medido contra la base completa, igual que REQ-NR-4, para que
+//Contraparte. Medido contra la base completa, igual que REQ-NR-4, para que
 // un futuro insert manual de `entries` (acá o en cualquier test nuevo) no
 // vuelva a dejar un asiento huérfano en silencio.
 //
@@ -240,13 +238,13 @@ function countOrphanedSquadEntries(): number {
   return Number(output.trim())
 }
 
-describe('ningún asiento SQUAD se queda sin discipline_entries (C7, W8)', () => {
+describe('ningún asiento SQUAD se queda sin discipline_entries', () => {
   it('count(entries SQUAD sin fila en discipline_entries) = 0', () => {
     expect(countOrphanedSquadEntries()).toBe(0)
   })
 })
 
-// ── PR 5 — config por disciplina (REQ-D2-1) ─────────────────────────────────
+//── PR 5 — config por disciplina (REQ-D2-1) ─────────────────────────────────
 // `disciplines.config` existe desde PR 1 (0015), pero hasta acá el único
 // escritor era `updateSeasonConfig`, que sólo toca `seasons.config` — dos
 // disciplinas de la misma temporada podían divergir sin que nada las leyera
@@ -265,7 +263,7 @@ describe('disciplineConfig / updateDisciplineConfig (PR 5, REQ-D2-1)', () => {
     const [padelId, fifaId] = disciplineIds
     if (padelId === undefined || fifaId === undefined) throw new Error('Faltan disciplinas.')
 
-    // `allowsDraw` viaja en el mismo select desde W61 (verify-report ronda 19):
+    //`allowsDraw` viaja en el mismo select desde W61:
     // es la fuente que `createMatchday` necesita para no rebotar contra
     // `matchdays_discipline_draw`, y tampoco se hereda entre disciplinas.
     expect(await disciplineConfig(admin.client, padelId)).toEqual({ config: padelConfig, pairSize: 2, allowsDraw: false })
@@ -300,7 +298,7 @@ describe('disciplineConfig / updateDisciplineConfig (PR 5, REQ-D2-1)', () => {
   })
 
   /*
-   * C20 (verify-report ronda 13). `updateDisciplineConfig` es el ÚNICO escritor
+   *. `updateDisciplineConfig` es el ÚNICO escritor
    * de `disciplines.config` y validaba con `sideSize` hardcodeado en 2. Sobre
    * una disciplina de a uno eso queda INVERTIDO: rechaza la única config válida
    * y acepta la que la deja inutilizable.
@@ -310,12 +308,12 @@ describe('disciplineConfig / updateDisciplineConfig (PR 5, REQ-D2-1)', () => {
    * toque) escribe una config que `matchdayContextFor` después rechaza: la
    * fecha no cierra, y la config no se puede volver atrás desde la misma
    * pantalla porque el escritor sigue exigiendo la aritmética de parejas.
-   * Salida sólo por SQL — estrictamente peor que C19, que dejaba cancelar.
+   *Salida sólo por SQL — estrictamente peor que C19, que dejaba cancelar.
    *
    * `validateConfig` exige `points.length === floor(squadSize / sideSize)`, así
    * que con 8 asientos de a uno la config correcta tiene 8 valores, no 4.
    */
-  it('valida con el pair_size REAL de la disciplina, no con 2 fijo (C20)', async () => {
+  it('valida con el pair_size REAL de la disciplina, no con 2 fijo', async () => {
     const admin = await createTestUser()
     const soloConfig = { ...defaultConfig(8), points: [8, 7, 6, 5, 4, 3, 2, 1] }
     const { disciplineIds } = await createSeason({
@@ -340,7 +338,7 @@ describe('disciplineConfig / updateDisciplineConfig (PR 5, REQ-D2-1)', () => {
   })
 
   /*
-   * S46 (verify-report ronda 14). Un update de PostgREST que no toca ninguna
+   *. Un update de PostgREST que no toca ninguna
    * fila NO es un error: `saveDisciplineConfig` no tiene chequeo de admin
    * propio, se apoya en RLS, y un participante que NO organiza pasa el
    * `select` de `disciplineConfig` (`disciplines_read` usa `is_participant`)
@@ -351,7 +349,7 @@ describe('disciplineConfig / updateDisciplineConfig (PR 5, REQ-D2-1)', () => {
    * Mismo defecto y mismo remedio que `setMatchdayDate` (db/matchday.ts), que
    * ya lo tenía documentado — esta función era la que faltaba.
    */
-  it('a un participante que no organiza le avisa que no guardó, en vez de mentirle (S46)', async () => {
+  it('a un participante que no organiza le avisa que no guardó, en vez de mentirle', async () => {
     const admin = await createTestUser()
     const member = await createTestUser()
     const { seasonId, disciplineId } = await createSeason({
@@ -362,7 +360,7 @@ describe('disciplineConfig / updateDisciplineConfig (PR 5, REQ-D2-1)', () => {
     // `createSeason` con `squad: [member.playerId]` ya le siembra el asiento
     // atado a su player, así que `is_participant` da true sin reclamar nada:
     // ve la disciplina (`disciplines_read`) y no la puede escribir
-    // (`disciplines_write`). Ése es exactamente el hueco de S46.
+    //(`disciplines_write`). Ése es exactamente el hueco de S46.
     const antes = await disciplineConfig(admin.client, disciplineId)
     const otra = { ...defaultConfig(8), regularMatchdays: 14 }
 
@@ -374,16 +372,16 @@ describe('disciplineConfig / updateDisciplineConfig (PR 5, REQ-D2-1)', () => {
   })
 
   /*
-   * C23 (verify-report ronda 16). La migración 0032 convirtió a la BASE en un
+   *. La migración 0032 convirtió a la BASE en un
    * segundo escritor de `disciplines.config`: al promover un invitado de a uno
    * agrega un casillero de puntos y sube `squadSize`. `updateDisciplineConfig`
    * siguió siendo un overwrite ciego del blob entero, sin saber contra qué
    * versión se editó.
    *
-   * La auditoría lo reprodujo con dos pestañas y clicks reales: Ajustes ›
+   *La lo reprodujo con dos pestañas y clicks reales: Ajustes ›
    * Formato abierto con 8 valores, otra pestaña promueve (la config pasa a 9),
    * y el primer "+" que toca el admin pisa la config con 8 — sin un solo error
-   * en pantalla. El casillero se pierde y volvemos a C22: reabrir esa fecha
+   *En pantalla. El casillero se pierde y volvemos a C22: reabrir esa fecha
    * destruye los 8 premios congelados.
    *
    * El guard compara el LARGO de `points` y `squadSize`, que son justo los dos
@@ -391,7 +389,7 @@ describe('disciplineConfig / updateDisciplineConfig (PR 5, REQ-D2-1)', () => {
    * largo ni el plantel (no tiene controles para eso), así que una diferencia
    * ahí sólo puede venir de que la fila cambió abajo.
    */
-  it('rechaza un guardado armado sobre una config que ya cambió (C23)', async () => {
+  it('rechaza un guardado armado sobre una config que ya cambió', async () => {
     const admin = await createTestUser()
     const soloConfig = { ...defaultConfig(8), points: [8, 7, 6, 5, 4, 3, 2, 1] }
     const { disciplineIds } = await createSeason({
@@ -457,13 +455,12 @@ describe('disciplineConfig / updateDisciplineConfig (PR 5, REQ-D2-1)', () => {
   })
 })
 
-// ── C5, verify-report ronda 3 ────────────────────────────────────────────────
 // `matchdayContextFor` (lo que arma `closeMatchday`) seguía resolviendo
 // `config` con `seasonConfig()` (`seasons.config`), que `updateDisciplineConfig`
 // nunca escribe desde PR 5: el admin editaba Reglas, Ajustes mostraba el valor
 // nuevo, y cerrar la fecha repartía los puntos VIEJOS en silencio.
-// `disciplineConfig` existía desde PR 5 sin un solo caller de producción (W7).
-describe('la config editada llega al motor de puntajes (C5, verify-report ronda 3)', () => {
+//`disciplineConfig` existía desde PR 5 sin un solo caller de producción.
+describe('la config editada llega al motor de puntajes', () => {
   it('matchdayContextFor recalcula con la config NUEVA después de updateDisciplineConfig', async () => {
     const admin = await createTestUser()
     const { seasonId, disciplineId } = await createSeason({ admin })
@@ -478,9 +475,9 @@ describe('la config editada llega al motor de puntajes (C5, verify-report ronda 
   })
 })
 
-// ── PR 13 — S19 (verify-report ronda 6): (season_id, position) único ───────
+//── PR 13 — S19: (season_id, position) único ───────
 // El caso real nunca choca (`createSeason` escribe `position` explícito
-// desde S13), así que el índice se prueba armando la colisión a mano: es la
+//Desde S13), así que el índice se prueba armando la colisión a mano: es la
 // única forma de ejercitar `disciplines_season_position` (0027) sin esperar
 // a que un bug futuro la reproduzca sola.
 describe('disciplines_season_position (S19, 0027)', () => {
@@ -496,7 +493,7 @@ describe('disciplines_season_position (S19, 0027)', () => {
   })
 })
 
-// ── PR 13 — addDiscipline (REQ-D1-2) ────────────────────────────────────────
+//── PR 13 — addDiscipline (REQ-D1-2) ────────────────────────────────────────
 async function fillerPlayers(count: number): Promise<string[]> {
   const db = adminClient()
   const ids: string[] = []
@@ -570,7 +567,7 @@ describe('addDiscipline (PR 13, REQ-D1-2)', () => {
     const { data: mdOpenRow } = await db.from('matchdays').select('status').eq('id', mdOpen).single()
     expect(mdOpenRow?.status, 'REQ-D3-1: la OPEN de pádel sigue OPEN mientras se suma FIFA').toBe('OPEN')
 
-    // FIFA: nueva, SETUP, position explícito (nunca el default 0 — S19).
+    //FIFA: nueva, SETUP, position explícito (nunca el default 0 — S19).
     const { data: fifaRow } = await db.from('disciplines').select('status, position').eq('id', fifaId).single()
     expect(fifaRow?.status).toBe('SETUP')
     expect(fifaRow?.position).toBe(1)
@@ -578,7 +575,7 @@ describe('addDiscipline (PR 13, REQ-D1-2)', () => {
 
   it('siembra discipline_entries: todo el plantel por default, un subconjunto si se pasa entryIds (REQ-D1-4)', async () => {
     const admin = await createTestUser()
-    // 10 asientos, no 8: la guarda de C13 exige que config.squadSize coincida
+    //10 asientos, no 8: la guarda de C13 exige que config.squadSize coincida
     // con lo sembrado, y el subconjunto no-contiguo de abajo necesita quedar
     // en un tamaño válido ({8,10,12}) distinto del total.
     const { seasonId, entryIds } = await createSeason({
@@ -603,9 +600,9 @@ describe('addDiscipline (PR 13, REQ-D1-2)', () => {
     expect(await squadSeedOrder(admin.client, partialId)).toEqual(subset)
   })
 
-  // PR14 slice A — mismo contrato que createSeason: addDiscipline también
+  //PR14 slice A — mismo contrato que createSeason: addDiscipline también
   // puede declarar pair_size/allows_draw explícitos al sumar una disciplina
-  // a un torneo en curso (REQ-D2-1, decisión #5).
+  //A un torneo en curso (REQ-D2-1, decisión #5).
   it('acepta pair_size/allows_draw explícitos al agregar una disciplina', async () => {
     const admin = await createTestUser()
     const { seasonId } = await createSeason({
@@ -613,7 +610,7 @@ describe('addDiscipline (PR 13, REQ-D1-2)', () => {
       squad: [admin.playerId, ...(await fillerPlayers(7))],
     })
 
-    // 8 valores de puntos, no los 4 de `defaultConfig(8)` (C16, verify-report
+    //8 valores de puntos, no los 4 de `defaultConfig(8)` (C16, 
     // ronda 9): con `pairSize: 1`, 8 presentes son 8 lados, no 4 parejas.
     const fifaId = await addDiscipline(admin.client, seasonId, {
       kind: 'FIFA',
@@ -630,10 +627,10 @@ describe('addDiscipline (PR 13, REQ-D1-2)', () => {
     expect(data).toEqual({ pair_size: 1, allows_draw: true })
   })
 
-  // C13 (verify-report ronda 7): `config.squadSize` no se comparaba contra
+  //`config.squadSize` no se comparaba contra
   // los asientos realmente sembrados — mismo agujero que `createSeason`
   // (db/season.ts:240) ya tapa para el wizard.
-  it('rechaza una config cuyo squadSize no coincide con los asientos sembrados (C13)', async () => {
+  it('rechaza una config cuyo squadSize no coincide con los asientos sembrados', async () => {
     const admin = await createTestUser()
     const { seasonId, entryIds } = await createSeason({
       admin,

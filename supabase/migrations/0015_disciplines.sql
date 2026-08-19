@@ -30,7 +30,7 @@ create index disciplines_by_season on public.disciplines (season_id, position);
 
 -- Backfill: cada temporada existente nace con exactamente una disciplina
 -- PADEL que hereda su config y su estado. Es un select-insert 1:1 sin join
--- que pueda multiplicar filas, así que REQ-NR-4 ("toda temporada tiene al
+--Que pueda multiplicar filas, así que REQ-NR-4 ("toda temporada tiene al
 -- menos una disciplina") queda cierto por construcción, sin verificación
 -- aparte.
 insert into public.disciplines (season_id, kind, config, status, position)

@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 /**
- * S45 (verify-report ronda 14). Al escribir
+ *. Al escribir
  * `0031_promote_guest_single_side.sql` se copió de
  * `0025_promote_guest_discipline_entries.sql` "desde `promote_guest` hasta el
  * final del archivo", y 0025 define DOS funciones: `promote_guest` y un
@@ -73,9 +73,9 @@ describe('migraciones — una restatement toca una sola función', () => {
   })
 
   /*
-   * S48 (verify-report ronda 15): esto filtraba por una lista de nombres de
+   *Esto filtraba por una lista de nombres de
    * función conocidos y miraba 6 de 30 archivos — una restatement de CUALQUIER
-   * otra función pasaba inadvertida (la auditoría lo probó con una sonda
+   *Otra función pasaba inadvertida (la lo probó con una sonda
    * `0099_reopen_matchday_*` que definía dos y no la cazó).
    *
    * Ahora el criterio es estructural y no de nombre: una migración que define
@@ -88,9 +88,9 @@ describe('migraciones — una restatement toca una sola función', () => {
   )
 
   it('mira TODAS las migraciones que definen funciones, no una lista de nombres', () => {
-    // S48 (verify-report ronda 15): antes filtraba por nombres de función
+    //Antes filtraba por nombres de función
     // conocidos y miraba 6 de 30 archivos, así que una restatement de
-    // cualquier otra función pasaba inadvertida — la auditoría lo probó con
+    //Cualquier otra función pasaba inadvertida — la lo probó con
     // una sonda que definía dos y no la cazó.
     expect(RESTATEMENTS.length).toBeGreaterThan(15)
   })

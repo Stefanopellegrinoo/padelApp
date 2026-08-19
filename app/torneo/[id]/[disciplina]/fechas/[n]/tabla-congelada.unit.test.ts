@@ -3,18 +3,18 @@ import { members, pair, single, type Side, type SideStanding } from '@/core'
 import { frozenTableRows, orderMoved } from './tabla-congelada'
 
 /**
- * W57 (verify-report ronda 17). El arreglo de W55 congeló el orden de la tabla
+ *. El arreglo de W55 congeló el orden de la tabla
  * de una fecha cerrada usando `awards.position`, con `?? Number.MAX_SAFE_INTEGER`
  * para los lados que no tienen fila en `awards`. Un lado hecho SÓLO de invitados
  * no cobra (`core/awards.ts`: "A pair made only of guests is outside the
  * championship altogether. **It keeps its place in the matchday table** but
  * consumes no paying position"), así que se iba al FONDO: la pareja de dos
  * invitados que ganó los 4 partidos con +16 pasó de PRIMERA a ÚLTIMA. Medido
- * por la auditoría con navegador real contra los dos builds, y **también con
+ *Por la con navegador real contra los dos builds, y **también con
  * `pair_size = 2`, que es el camino de producción** — el `sort` nunca estuvo
  * gateado por la aridad.
  *
- * W55 entró sin una sola aserción nueva y de ahí salieron W56 y W57. Esto es lo
+ *Entró sin una sola aserción nueva y de ahí salieron W56 y W57. Esto es lo
  * que faltaba: **la columna de puntos es monótona decreciente Y el lado sin
  * award conserva su lugar deportivo**.
  */
@@ -41,7 +41,7 @@ function columnaDePuntos(
 
 describe('frozenTableRows', () => {
   it('de a dos, la pareja de invitados que ganó todo conserva su lugar deportivo', () => {
-    // Escena medida por la auditoría (verify-report ronda 17, anexo 4f):
+    //Escena medida por la:
     // `pair_size = 2`, la pareja de dos invitados gana los 4 partidos con +16 y
     // `computeStandings` la pone PRIMERA. No tiene fila en `awards` porque
     // ninguno de los dos está en el campeonato.
@@ -68,13 +68,13 @@ describe('frozenTableRows', () => {
 
     expect(dibujadas[0]?.side).toEqual(invitados)
     expect(dibujadas.at(-1)?.side).not.toEqual(invitados)
-    // Monótona decreciente entre los que sí cobran, que es lo que W55 vino a
+    //Monótona decreciente entre los que sí cobran, que es lo que W55 vino a
     // arreglar: la fila de arriba nunca muestra menos puntos que la de abajo.
     expect(columnaDePuntos(dibujadas, frozen)).toEqual([4, 3, 2, 1])
   })
 
   it('los lados que SÍ cobran quedan en orden de puesto congelado, no del vivo', () => {
-    // No-regresión de W55: bajar `setsToWin` después de cerrar reordena
+    //No-regresión de W55: bajar `setsToWin` después de cerrar reordena
     // `computeStandings` mientras `awards` sigue congelado. Sin esto la tabla
     // mostraba al primero con 6 puntos y al segundo con 8.
     const filas = [
@@ -97,7 +97,7 @@ describe('frozenTableRows', () => {
   })
 
   it('el Masters, que no reparte puntos, deja la tabla como estaba', () => {
-    // S60: `frozenPointsOf` ni se consulta con el Masters (spec 2.7, no reparte),
+    //`frozenPointsOf` ni se consulta con el Masters (spec 2.7, no reparte),
     // así que el Map llega vacío. Hasta ahora el orden se preservaba sólo porque
     // `Array.prototype.sort` es estable desde ES2019 — una garantía que ningún
     // test fijaba.
@@ -113,7 +113,7 @@ describe('frozenTableRows', () => {
 })
 
 /**
- * W56 (verify-report ronda 17). El mismo arreglo de W55 dejó el pie de la tabla
+ *. El mismo arreglo de W55 dejó el pie de la tabla
  * leyendo el orden VIVO mientras la tabla pasó al congelado: decía "Jugador de
  * test 4 quedó 2° por diferencia de games" sobre quien la tabla dibuja PRIMERO,
  * citando como mejor a alguien que aparece dos filas más abajo. La tabla no
@@ -145,7 +145,7 @@ describe('orderMoved', () => {
   })
 
   it('un lado sin premio que conserva su lugar no cuenta como movimiento', () => {
-    // W57 dejó a los invitados donde estaban; si eso contara como movimiento, el
+    //Dejó a los invitados donde estaban; si eso contara como movimiento, el
     // pie desaparecería de toda fecha con invitados aunque diga la verdad.
     const conInvitado = [
       standing(single('invi'), 1),

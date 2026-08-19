@@ -77,11 +77,11 @@ function words(sideSize: SideSize) {
 interface ArmadoProps {
   seasonId: string
   matchdayId: string
-  /** El slug de la URL desde la que se abrió esta fecha (W28) — lo necesita `BorrarFecha` para volver a la lista correcta. */
+  /** El slug de la URL desde la que se abrió esta fecha — lo necesita `BorrarFecha` para volver a la lista correcta. */
   disciplina: string
   /**
    * Cuántas entries hacen un lado en ESTA disciplina. Sin esto la pantalla
-   * hardcodeaba 2 en las dos puntas (S31): pedía un invitado para emparejar
+   *Hardcodeaba 2 en las dos puntas: pedía un invitado para emparejar
    * donde no hay a quién emparejar, y dividía el plantel por 2.
    */
   sideSize: SideSize
@@ -193,7 +193,7 @@ export function Armado({
   // el servidor confirme.
   const sizeSettled = !seatPending
   // Toda la aritmética vive en `armado-state.ts`, condicionada por `sideSize`
-  // (S31): acá estaba suelta con el 2 hardcodeado en las dos puntas, y por eso
+  //Acá estaba suelta con el 2 hardcodeado en las dos puntas, y por eso
   // una disciplina de a uno pedía un invitado para emparejar y mostraba media
   // pareja. Tiene test propio; adentro de esta pantalla no lo podía tener.
   const shape = matchdayShape({
@@ -232,7 +232,7 @@ export function Armado({
             // Los partidos se muestran porque son el costo real de la fecha, y
             // de a uno crecen distinto: 12 jugadores son 66 partidos donde 12
             // de a dos son 15. Ese número es el que hace pedir el formato de
-            // grupos (REQ-D8-1, PR21), que es la salida a W32.
+            //Grupos (REQ-D8-1, PR21), que es la salida a W32.
             <p className="mt-2 text-center text-[12.5px] font-[600] text-muted">
               La fecha es de {size} · {sides} {label.sides} · {matches} partidos
             </p>
@@ -277,7 +277,7 @@ export function Armado({
             </span>
             <span className="flex flex-1 flex-col">
               <span className="text-[14.5px] font-bold">{seat.name}</span>
-              {/* ponytail: `attendances` no guarda quién escribió la fila, así que
+              {/*Nota: `attendances` no guarda quién escribió la fila, así que
                   "avisó" es todo ausente. Si algún día importa distinguir al que
                   avisó del que sacó el admin, es una columna nueva. */}
               {!seat.playing && <span className="text-[11.5px] font-[600] text-muted">Avisó que no va</span>}
@@ -334,7 +334,7 @@ export function Armado({
           />
         ))}
 
-        {/* ponytail: `addGuestPair` no tiene guard de `pairSize` y suma los
+        {/*Nota: `addGuestPair` no tiene guard de `pairSize` y suma los
             invitados de a DOS incluso donde no hay parejas — con `sideSize=1`
             el lock que los traba lo ignora `buildSides` entero (su propio
             comentario: "a constraint on a pairing that never happens

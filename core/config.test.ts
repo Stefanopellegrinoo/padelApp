@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { validateConfig, defaultConfig } from './config'
+import { disciplineProfile, validateConfig, defaultConfig } from './config'
 import type { SeasonConfig } from './types'
 
 const valid: SeasonConfig = {
@@ -217,5 +217,42 @@ describe('validateConfig con openScore', () => {
       2,
     )
     expect(errors.length).toBeGreaterThan(0)
+  })
+})
+
+// ── PR20 rebanada D2 — el perfil de una disciplina al NACER ──────────────────
+//
+// Hasta acá `openScore` existía en el modelo y NADA podía escribirlo: los dos
+// caminos que crean una disciplina (el wizard de `/torneos/nuevo` y el
+// "+ Agregar disciplina" de Ajustes) armaban su config con `defaultConfig`, que
+// nace en pádel. Una liga de FIFA nacía siendo pádel con otro nombre.
+//
+// Vive en `core/` y no en cada pantalla por lo mismo que `pointsErrors`: dos
+// copias de una regla son una regla y media. `allows_draw` además se fija AL
+// CREAR y no se puede editar después (`0015_disciplines.sql:70` no lo incluye
+// en el grant de UPDATE), así que una disciplina que nace mal nace mal para
+// siempre.
+describe('disciplineProfile', () => {
+  it('una disciplina de FIFA nace con marcador de goles y con empates', () => {
+    const profile = disciplineProfile('FIFA', valid)
+    expect(profile.config.matchFormat.openScore).toBe(true)
+    expect(profile.allowsDraw).toBe(true)
+  })
+
+  it('y una de pádel nace exactamente como hoy, sin tocar nada', () => {
+    const profile = disciplineProfile('PADEL', valid)
+    expect(profile.config).toEqual(valid)
+    expect(profile.allowsDraw).toBe(false)
+  })
+
+  it('no pisa el resto de la config: sólo cambia la forma del marcador', () => {
+    const profile = disciplineProfile('FIFA', valid)
+    expect(profile.config.points).toEqual(valid.points)
+    expect(profile.config.squadSize).toBe(valid.squadSize)
+    expect(profile.config.matchFormat.setsToWin).toBe(valid.matchFormat.setsToWin)
+  })
+
+  it('la config que devuelve es válida: una liga de FIFA se puede crear de verdad', () => {
+    expect(validateConfig(disciplineProfile('FIFA', valid).config, 2)).toEqual([])
   })
 })

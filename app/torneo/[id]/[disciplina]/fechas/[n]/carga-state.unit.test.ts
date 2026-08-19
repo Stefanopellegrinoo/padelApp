@@ -6,12 +6,15 @@ import {
   chooseWinner,
   isComplete,
   loserGamesOptions,
+  openScoreSet,
   startLoad,
 } from './carga-state'
 
 const ONE_SET_TO_4: MatchFormat = { setsToWin: 1, gamesPerSet: 4, tieBreak: true, openScore: false }
 const TWO_SETS_TO_6: MatchFormat = { setsToWin: 2, gamesPerSet: 6, tieBreak: true, openScore: false }
 const NO_TIEBREAK: MatchFormat = { setsToWin: 1, gamesPerSet: 4, tieBreak: false, openScore: false }
+/** FIFA: los dos números de pádel siguen puestos y NO se leen — ésa es la prueba. */
+const FIFA_OPEN: MatchFormat = { setsToWin: 1, gamesPerSet: 4, tieBreak: true, openScore: true }
 
 /** The two taps of one set, from an empty load. */
 function play(winner: 'A' | 'B', loserGames: number, format: MatchFormat) {
@@ -95,5 +98,58 @@ describe('the two-tap load', () => {
 
   it('asks who won again after every set', () => {
     expect(play('A', 1, TWO_SETS_TO_6).pendingWinner).toBeNull()
+  })
+})
+
+// ── PR20 rebanada D2 — la carga de un marcador abierto ───────────────────────
+//
+// La máquina de dos toques de arriba NO cambia una línea: es la que sirve para
+// el pádel y sus tests son el pin. Con `openScore` hace falta otra cosa
+// entera, porque la de dos toques por construcción no puede producir ni un
+// `3-1` (el ganador siempre se lleva `gamesPerSet`) ni un empate
+// (`chooseWinner` pide `'A' | 'B'`).
+//
+// Dos entradas numéricas y nada más: cualquier par de enteros >= 0 es un
+// resultado posible. Si el par no es legal para la disciplina —un `0-0` donde
+// no se admiten empates— lo dice `matchError` del lado del servidor, que es
+// donde vive esa regla. Esta función NO la duplica: una segunda opinión sobre
+// el empate son dos verdades para sincronizar.
+describe('el marcador abierto: dos números tipeados', () => {
+  it('arma un 3-1', () => {
+    expect(openScoreSet('3', '1')).toEqual({ gamesA: 3, gamesB: 1 })
+  })
+
+  it('arma un 0-0, que es el resultado más común del fútbol', () => {
+    expect(openScoreSet('0', '0')).toEqual({ gamesA: 0, gamesB: 0 })
+  })
+
+  it('no arma nada mientras falte uno de los dos lados', () => {
+    expect(openScoreSet('', '1')).toBeNull()
+    expect(openScoreSet('2', '')).toBeNull()
+    expect(openScoreSet('', '')).toBeNull()
+  })
+
+  it('no arma nada con lo que no es un entero >= 0', () => {
+    expect(openScoreSet('-1', '0')).toBeNull()
+    expect(openScoreSet('1.5', '0')).toBeNull()
+    expect(openScoreSet('dos', '0')).toBeNull()
+    expect(openScoreSet(' ', '0')).toBeNull()
+  })
+
+  it('corta en tres dígitos: `match_sets.games_a` es un `int` de Postgres', () => {
+    expect(openScoreSet('999', '0')).toEqual({ gamesA: 999, gamesB: 0 })
+    expect(openScoreSet('1000', '0')).toBeNull()
+  })
+
+  it('lo que devuelve lo acepta setError, incluido el 0-0 con empates', () => {
+    const three_one = openScoreSet('3', '1')
+    expect(three_one).not.toBeNull()
+    expect(setError(three_one!, FIFA_OPEN, true)).toBeNull()
+
+    const goalless = openScoreSet('0', '0')
+    expect(goalless).not.toBeNull()
+    expect(setError(goalless!, FIFA_OPEN, true)).toBeNull()
+    // Y sin empates lo rechaza, que es la regla ortogonal de la disciplina.
+    expect(setError(goalless!, FIFA_OPEN, false)).not.toBeNull()
   })
 })

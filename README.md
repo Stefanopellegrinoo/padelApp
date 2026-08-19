@@ -17,7 +17,11 @@ It is designed for groups that play recurring matchdays throughout the season wi
 
 ---
 
-## Tech Stack
+## The Hard Part
+
+Generating the pairs. With rotating partners across a whole season, you want people to play with different teammates as much as possible — but attendance changes every matchday, so you can't precompute the schedule. The generator looks at who played with whom recently and builds the fixtures avoiding repetitions, adapting to however many players show up.
+
+---
 
 - **Frontend**: Next.js 15 (App Router, Server Actions), React 19, Tailwind CSS
 - **Database & Auth**: PostgreSQL 17 via Supabase (Auth, RLS policies, SQL migrations)

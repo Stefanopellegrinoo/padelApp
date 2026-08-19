@@ -359,6 +359,70 @@ describe('disciplineConfig / updateDisciplineConfig (PR 5, REQ-D2-1)', () => {
     expect(await disciplineConfig(admin.client, disciplineId)).toEqual(antes)
   })
 
+  /*
+   * C23 (verify-report ronda 16). La migración 0032 convirtió a la BASE en un
+   * segundo escritor de `disciplines.config`: al promover un invitado de a uno
+   * agrega un casillero de puntos y sube `squadSize`. `updateDisciplineConfig`
+   * siguió siendo un overwrite ciego del blob entero, sin saber contra qué
+   * versión se editó.
+   *
+   * La auditoría lo reprodujo con dos pestañas y clicks reales: Ajustes ›
+   * Formato abierto con 8 valores, otra pestaña promueve (la config pasa a 9),
+   * y el primer "+" que toca el admin pisa la config con 8 — sin un solo error
+   * en pantalla. El casillero se pierde y volvemos a C22: reabrir esa fecha
+   * destruye los 8 premios congelados.
+   *
+   * El guard compara el LARGO de `points` y `squadSize`, que son justo los dos
+   * campos que la app se escribe a sí misma. Formato edita VALORES, no el
+   * largo ni el plantel (no tiene controles para eso), así que una diferencia
+   * ahí sólo puede venir de que la fila cambió abajo.
+   */
+  it('rechaza un guardado armado sobre una config que ya cambió (C23)', async () => {
+    const admin = await createTestUser()
+    const soloConfig = { ...defaultConfig(8), points: [8, 7, 6, 5, 4, 3, 2, 1] }
+    const { disciplineIds } = await createSeason({
+      admin,
+      disciplines: [{ kind: 'FIFA', pairSize: 1, config: soloConfig }],
+    })
+    const [soloId] = disciplineIds
+    if (soloId === undefined) throw new Error('Falta la disciplina de a uno.')
+
+    // Lo que la pantalla tiene en la mano cuando el admin abre Formato.
+    const loQueLaPantallaVio = (await disciplineConfig(admin.client, soloId)).config
+
+    // Mientras tanto la base crece la config, como hace `promote_guest` (0032).
+    const crecida = {
+      ...loQueLaPantallaVio,
+      squadSize: 9,
+      points: [...loQueLaPantallaVio.points, 0],
+    }
+    await updateDisciplineConfig(admin.client, soloId, crecida)
+
+    // Y recién ahora el admin toca el "+" del primer puesto, sobre lo viejo.
+    const editadoSobreLoViejo = {
+      ...loQueLaPantallaVio,
+      points: [9, ...loQueLaPantallaVio.points.slice(1)],
+    }
+    await expect(updateDisciplineConfig(admin.client, soloId, editadoSobreLoViejo)).rejects.toThrow(
+      /cambió mientras editabas/,
+    )
+
+    // Y no pisó nada: el casillero que la base agregó sigue ahí.
+    expect((await disciplineConfig(admin.client, soloId)).config).toEqual(crecida)
+  })
+
+  it('un guardado normal sobre la config vigente sigue pasando (C23, no-regresión)', async () => {
+    const admin = await createTestUser()
+    const { disciplineId } = await createSeason({ admin })
+    const vigente = (await disciplineConfig(admin.client, disciplineId)).config
+
+    // Cambiar VALORES —que es lo único que Formato hace— no toca ni el largo
+    // ni el plantel, así que tiene que pasar sin ruido.
+    const editada = { ...vigente, points: [12, ...vigente.points.slice(1)] }
+    await updateDisciplineConfig(admin.client, disciplineId, editada)
+    expect((await disciplineConfig(admin.client, disciplineId)).config).toEqual(editada)
+  })
+
   it('sigue exigiendo la aritmética de parejas donde el lado es de dos (C20, no-regresión)', async () => {
     const admin = await createTestUser()
     const { disciplineId } = await createSeason({ admin })

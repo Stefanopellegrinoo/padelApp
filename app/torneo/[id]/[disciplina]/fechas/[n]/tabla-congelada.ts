@@ -66,3 +66,29 @@ export function frozenTableRows(
     return premiada?.row ?? row
   })
 }
+
+/**
+ * ¿La tabla dibuja un orden distinto del que `computeStandings` calcula hoy?
+ *
+ * W56 (verify-report ronda 17): el pie de la tabla —"Fulano quedó 2° por
+ * diferencia de games"— sale de `computeStandings` y es el ÚNICO ordinal que el
+ * usuario ve, porque la tabla no imprime puestos. Cuando el orden congelado
+ * mueve las filas, el pie afirma un puesto que la tabla desmiente tres
+ * centímetros más arriba: decía "quedó 2°" sobre quien la tabla dibuja PRIMERO,
+ * citando como mejor a alguien dos filas más abajo. Medido con navegador real.
+ *
+ * `docs/ui-screens.md:281-282` presupone que el pie explica el orden que la
+ * tabla muestra, así que la salida honesta es no dibujarlo cuando ya no lo
+ * explica. Con el orden sin mover —el caso normal— el pie se ve igual que
+ * siempre.
+ *
+ * Compara por identidad de fila a propósito: `frozenTableRows` devuelve los
+ * MISMOS objetos, así que dos filas empatadas en todo no cuentan como
+ * movimiento por ser iguales de contenido.
+ */
+export function orderMoved(
+  live: readonly SideStanding[],
+  drawn: readonly SideStanding[],
+): boolean {
+  return live.some((row, index) => drawn[index] !== row)
+}

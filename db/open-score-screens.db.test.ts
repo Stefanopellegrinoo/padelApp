@@ -19,7 +19,7 @@ import {
   saveResult,
   setAttendance,
 } from './matchday'
-import { matchdayDetail, seasonHeader } from './read'
+import { matchdayDetail, seasonHeader, seasonMatchdaysOf } from './read'
 import { createSeason } from './season'
 import { adminClient } from './test/admin'
 import { createTestUser, type TestUser } from './test/users'
@@ -233,5 +233,39 @@ describe('jugar la liga de FIFA: un 3-1, un 0-0, y la tabla', () => {
     // Y el 3, que empató uno y ganó uno, le saca ventaja al que perdió todo.
     expect(pointsOf(3)).toEqual([3, 3])
     expect(pointsOf(2)).toEqual([1, 1])
+  })
+})
+
+// ── PR20 rebanada B — el `allows_draw` que la tabla del día va a leer ────────
+//
+// `MatchdaySummary.allowsDraw` nació en esta rebanada para que la pantalla de
+// la fecha pueda decirle a `computeStandings` si un empate paga. Su único
+// consumidor es `page.tsx`, que la suite pura no puede montar, así que sin este
+// test el lector viaja a producción sin una sola verificación — y con él viaja
+// una columna nueva en un `select` de una tabla que tiene GRANTS POR COLUMNA
+// (`0002_rls.sql:237`), que es la trampa que este repo ya pisó tres veces con
+// `discipline_id`, `pair_size` y `allows_draw` del lado del INSERT.
+//
+// Por eso el cliente es el de `admin` (rol `authenticated`) y NO `adminClient()`
+// (`service_role`): con service_role el grant no se ejerce y el test pasaría
+// igual estando el grant mal.
+describe('el allows_draw que llega a la pantalla de la fecha', () => {
+  it('una liga de FIFA lo trae en true, y una de pádel en false', async () => {
+    const { admin, seasonId, disciplineId } = await leagueFromWizard(['FIFA'])
+    const fifaMatchday = await createMatchday(admin.client, seasonId, '2026-04-02', disciplineId)
+
+    const padel = await leagueFromWizard(['PADEL'])
+    const padelMatchday = await createMatchday(
+      padel.admin.client,
+      padel.seasonId,
+      '2026-04-02',
+      padel.disciplineId,
+    )
+
+    const deFifa = await seasonMatchdaysOf(admin.client, seasonId)
+    const dePadel = await seasonMatchdaysOf(padel.admin.client, padel.seasonId)
+
+    expect(deFifa.find((row) => row.id === fifaMatchday)?.allowsDraw).toBe(true)
+    expect(dePadel.find((row) => row.id === padelMatchday)?.allowsDraw).toBe(false)
   })
 })

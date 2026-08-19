@@ -470,7 +470,7 @@ export function Wizard({ myName }: { myName: string }) {
             </div>
 
             <div className="overflow-hidden rounded-[14px] border border-line">
-              {summaryOf(name, names, config).map((row, index) => (
+              {summaryOf(name, names, config, disciplines).map((row, index) => (
                 <div
                   key={row.key}
                   className={`flex items-center justify-between gap-3 px-3 py-2.5 ${index > 0 ? 'border-t border-line' : ''}`}

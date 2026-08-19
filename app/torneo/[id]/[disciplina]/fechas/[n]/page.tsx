@@ -12,6 +12,7 @@ import {
   resolveDisciplineBySlug,
   sameSide,
   snapshotForMatchday,
+  usesSetsDiff,
   type MatchResult,
   type SeasonConfig,
   type Side,
@@ -91,17 +92,24 @@ function tiebreakNote(
   // ganados" sobre una persona sola.
   const quedaron = sideSize === 1 ? 'quedó' : 'quedaron'
   const empataron = sideSize === 1 ? 'empató' : 'empataron'
-  const usesSetsDiff = config.matchFormat.setsToWin > 1
+  // El MISMO criterio que corre `computeStandings`, importado y no copiado
+  // (PR20 rebanada D2): eran dos `setsToWin > 1` en dos archivos, y arreglar
+  // uno solo los hacía discrepar — la tabla ordenando por una cosa y la frase
+  // de abajo explicando otra.
+  const bySetsDiff = usesSetsDiff(config.matchFormat)
+  // Con marcador abierto los "games" son goles, y así es como los nombra la
+  // página de Reglas (`describeTiebreak`).
+  const scoreDiff = config.matchFormat.openScore ? 'diferencia de gol' : 'diferencia de games'
 
   for (let i = 1; i < standings.length; i++) {
     const better = standings[i - 1]
     const worse = standings[i]
     if (better === undefined || worse === undefined) continue
     if (better.won !== worse.won) continue
-    if (usesSetsDiff && better.setsDiff !== worse.setsDiff) continue
+    if (bySetsDiff && better.setsDiff !== worse.setsDiff) continue
 
     if (better.gamesDiff !== worse.gamesDiff) {
-      return `${label(worse.side)} ${quedaron} ${worse.position}° por diferencia de games: ${empataron} en partidos ganados con ${label(better.side)}.`
+      return `${label(worse.side)} ${quedaron} ${worse.position}° por ${scoreDiff}: ${empataron} en partidos ganados con ${label(better.side)}.`
     }
 
     // ponytail: con todo empatado (partidos ganados y diferencia de games) el
@@ -110,7 +118,7 @@ function tiebreakNote(
     // No hay copy contractual para ese caso puntual y no ocurre con el formato
     // a un set por defecto (sin empates posibles); si hiciera falta, se
     // exporta el criterio exacto desde `core/standings.ts`.
-    return `${label(worse.side)} ${quedaron} ${worse.position}° por el desempate de la fecha: ${empataron} en partidos ganados y en diferencia de games con ${label(better.side)}.`
+    return `${label(worse.side)} ${quedaron} ${worse.position}° por el desempate de la fecha: ${empataron} en partidos ganados y en ${scoreDiff} con ${label(better.side)}.`
   }
   return null
 }

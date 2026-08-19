@@ -81,7 +81,19 @@ export function Formato({
       </div>
 
       <div className="overflow-hidden rounded-[14px] border border-line bg-surface">
-        {STEPPERS.map((row, index) => (
+        {/* Con marcador abierto, "Sets por partido" y "Games por set" no
+            gobiernan nada: `setError` los ignora y `matchError` no los exige
+            (`db/validate.ts`). Dejarlos dibujados es la misma clase de mentira
+            que el copy que decía "1 set a 4 games" en una liga de goles — y
+            encima uno de los dos se anuncia con "A 4 games el resultado se
+            carga en dos toques", que es justo la máquina que esta disciplina
+            NO usa. Se van de la pantalla, no de la config: el jsonb los sigue
+            teniendo porque `MatchFormat` los declara obligatorios. */}
+        {STEPPERS.filter(
+          (row) =>
+            !config.matchFormat.openScore ||
+            (row.key !== 'setsToWin' && row.key !== 'gamesPerSet'),
+        ).map((row, index) => (
           <div
             key={row.key}
             className={`flex min-h-[56px] items-center justify-between gap-2 px-3 py-2 ${index > 0 ? 'border-t border-line' : ''}`}

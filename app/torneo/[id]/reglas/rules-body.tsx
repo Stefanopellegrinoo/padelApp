@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { MASTERS_SIZE, narrateRules, type SeasonConfig } from '@/core'
+import { MASTERS_SIZE, formatLabel, narrateRules, type SeasonConfig } from '@/core'
 import { RulesAccordion, type RuleRow } from './accordion'
 import { renderAdminMarkdown } from './markdown'
 
@@ -11,7 +11,7 @@ function introOf(adminName: string): string {
 /** Los seis títulos del acordeón son contractuales (handoff §12). El cuerpo de cada uno sale de
  * `narrateRules(config)` por título de sección — nunca se reescribe a mano. */
 const ROWS: Array<{ title: string; section: string; value: (config: SeasonConfig) => string }> = [
-  { title: 'Formato de partido', section: 'La fecha', value: (c) => formatMatch(c.matchFormat) },
+  { title: 'Formato de partido', section: 'La fecha', value: (c) => formatLabel(c.matchFormat) },
   {
     title: 'Cómo se arman las parejas',
     section: 'Cómo se arman las parejas',
@@ -30,11 +30,6 @@ const ROWS: Array<{ title: string; section: string; value: (config: SeasonConfig
   },
   { title: 'Masters', section: 'El Masters', value: () => `Los ${MASTERS_SIZE} primeros` },
 ]
-
-function formatMatch(format: SeasonConfig['matchFormat']): string {
-  const setWord = format.setsToWin === 1 ? '1 set' : `${format.setsToWin} sets`
-  return `${setWord} a ${format.gamesPerSet} games`
-}
 
 function rulesRowsOf(config: SeasonConfig): RuleRow[] {
   const sections = narrateRules(config)

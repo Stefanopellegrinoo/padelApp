@@ -32,6 +32,43 @@ export function defaultConfig(squadSize: number, sideSize: SideSize = 2): Season
 }
 
 /**
+ * Con qué FORMA de marcador y con qué regla de empate nace una disciplina de
+ * este tipo. Devuelve la config a escribir y el `allows_draw` de la columna,
+ * que son las dos mitades de "un partido de FIFA termina 3-1 o 0-0".
+ *
+ * Vive acá y no en cada pantalla por lo mismo que `pointsErrors`: los DOS
+ * caminos que crean una disciplina —el wizard de `/torneos/nuevo` y el
+ * "+ Agregar disciplina" de Ajustes— tienen que escribir lo mismo, y hasta
+ * esta función los dos armaban su config con `defaultConfig`, que nace en
+ * pádel. Una liga de FIFA nacía siendo pádel con otro nombre: sin marcador
+ * abierto y sin empates, o sea sin poder cargar ni un `3-1` ni un `0-0`.
+ *
+ * Se DERIVA del `kind`, y ésa es la diferencia con `pair_size`: un lado de
+ * FIFA puede ser de uno o de dos (decisión de producto #5, ver `SideSize`),
+ * pero un partido de FIFA se cuenta en goles siempre. No hay FIFA por sets.
+ *
+ * El empate viaja aparte del marcador —son dos ejes ortogonales, D1— porque
+ * la base los guarda en dos lugares distintos: `openScore` en el jsonb de la
+ * config y `allows_draw` en su propia columna, que `match_sets_no_draw`
+ * (0034) sigue exigiendo por su cuenta. Y `allows_draw` NO está en el grant
+ * de UPDATE de `disciplines` (`0015_disciplines.sql:70`): se fija al crear y
+ * ninguna pantalla lo puede corregir después, así que nacer mal es para
+ * siempre.
+ */
+export function disciplineProfile(
+  kind: 'PADEL' | 'FIFA',
+  config: SeasonConfig,
+): { config: SeasonConfig; allowsDraw: boolean } {
+  const goals = kind === 'FIFA'
+  return {
+    // Los dos sentidos, no sólo el de encender: así el resultado depende del
+    // `kind` y no de lo que traía la config que entró.
+    config: { ...config, matchFormat: { ...config.matchFormat, openScore: goals } },
+    allowsDraw: goals,
+  }
+}
+
+/**
  * `sideSize` condiciona la paridad (W24, REQ-D2-2/REQ-D5-2): un plantel impar
  * sólo es un problema cuando un lado necesita DOS. Con `sideSize=1` cada
  * presente es su propio lado — la regla no se relaja, es INAPLICABLE.

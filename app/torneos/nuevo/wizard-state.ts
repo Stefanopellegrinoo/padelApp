@@ -5,7 +5,15 @@
  * DOM y sin base. Es la única parte del paso a paso donde se puede equivocar
  * algo: el resto es dibujar.
  */
-import { MAX_PLAYERS, MIN_PLAYERS, defaultConfig, pointsErrors, type SeasonConfig } from '@/core'
+import {
+  MAX_PLAYERS,
+  MIN_PLAYERS,
+  defaultConfig,
+  disciplineProfile,
+  formatLabel,
+  pointsErrors,
+  type SeasonConfig,
+} from '@/core'
 
 /** Los rangos son medidas del handoff (§6 paso 4), no decisiones de este código. */
 export interface Stepper {
@@ -86,17 +94,25 @@ export function disciplinesWarning(picked: readonly DisciplineKind[]): string | 
  * Una fila por disciplina marcada, en el orden en que se marcaron: el mismo
  * `disciplines: NewSeasonDiscipline[]` que espera `createSeason` (PR11b).
  *
- * Comparten la MISMA config: armar una distinta por disciplina necesitaría un
- * paso nuevo por cada kind, y hoy `pair_size`/`allows_draw` todavía no son
- * editables desde ninguna pantalla (llegan en PR14+) — no hay nada distinto
- * que pedir todavía. Quien quiera otra config por disciplina la cambia después
- * en Ajustes → Formato (`updateDisciplineConfig`, PR6), que ya existe para eso.
+ * Comparten los PUNTOS, las fechas y el plantel —que es lo que el paso 4
+ * pregunta—, y cada una nace con la forma de marcador de su disciplina
+ * (`disciplineProfile`, PR20 rebanada D2). Hasta acá compartían la config
+ * entera y una liga de FIFA nacía siendo pádel con otro nombre: sin marcador
+ * abierto y sin empates, o sea sin poder cargar ni un `3-1` ni un `0-0`. No es
+ * una preferencia que el wizard pueda preguntar más adelante: `allows_draw` no
+ * está en el grant de UPDATE de `disciplines` (`0015_disciplines.sql:70`), así
+ * que la disciplina que nace sin empates no los tiene nunca más.
+ *
+ * Lo que sigue sin preguntar es `pair_size` —FIFA es 1v1 Y 2v2, decisión de
+ * producto #5— y por eso todo lo que sale de acá se juega de a dos, como hoy.
+ * Quien quiera cambiar los puntos o las fechas de una disciplina lo hace
+ * después en Ajustes → Formato (`updateDisciplineConfig`, PR6).
  */
 export function buildDisciplines(
   picked: readonly DisciplineKind[],
   config: SeasonConfig,
-): { kind: DisciplineKind; config: SeasonConfig }[] {
-  return picked.map((kind) => ({ kind, config }))
+): { kind: DisciplineKind; config: SeasonConfig; allowsDraw: boolean }[] {
+  return picked.map((kind) => ({ kind, ...disciplineProfile(kind, config) }))
 }
 
 /** Cuántos nombres del plantel están cargados de verdad. */
@@ -245,17 +261,35 @@ export function formatErrors(config: SeasonConfig): string[] {
   return errors
 }
 
-/** El resumen del paso 5, en el orden del handoff. */
+/**
+ * El resumen del paso 5, en el orden del handoff.
+ *
+ * `picked` no es decorativo: la fila "Formato" decía "1 set a 4 games" leyendo
+ * la config compartida, y desde que una liga de FIFA nace con marcador de goles
+ * esa frase describe la mitad pádel del torneo y MIENTE sobre la otra mitad.
+ * Con una sola disciplina el resumen dice exactamente lo mismo que siempre —el
+ * prefijo aparece recién cuando hay dos cosas distintas que nombrar.
+ */
 export function summaryOf(
   name: string,
   names: readonly string[],
   config: SeasonConfig,
+  picked: readonly DisciplineKind[],
 ): Array<{ key: string; value: string }> {
-  const setWord = config.matchFormat.setsToWin === 1 ? '1 set' : `${config.matchFormat.setsToWin} sets`
+  const formats = picked.map((kind) => ({
+    kind,
+    label: formatLabel(disciplineProfile(kind, config).config.matchFormat),
+  }))
+  const only = formats.length === 1 ? formats[0] : undefined
   return [
     { key: 'Nombre', value: name },
     { key: 'Jugadores', value: String(filledCount(names)) },
-    { key: 'Formato', value: `${setWord} a ${config.matchFormat.gamesPerSet} games` },
+    {
+      key: 'Formato',
+      value:
+        only?.label ??
+        formats.map((row) => `${DISCIPLINE_LABELS[row.kind]}: ${row.label}`).join(' · '),
+    },
     { key: 'Puntos', value: config.points.join(' · ') },
     { key: 'Fechas', value: String(config.regularMatchdays) },
     { key: 'Desempate', value: `cada ${config.tiebreakSnapshotEvery} fechas` },

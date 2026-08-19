@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { defaultConfig, type DisciplineId, type SeasonConfig } from '@/core'
+import { defaultConfig, disciplineProfile, type DisciplineId, type SeasonConfig } from '@/core'
 import { addDiscipline, updateDisciplineConfig } from '@/db/discipline'
 import { addSquadSeat, claimOwnSeat, removeSeat, renameSeat, unlinkSeat } from '@/db/entries'
 import { EdgeError } from '@/db/errors'
@@ -149,6 +149,12 @@ export async function saveConfig(
  * mínimo, `assertValidConfig` (adentro de `addDiscipline`) lo rechaza con el
  * mismo mensaje en español que ya usa Formato — no hace falta duplicar esa
  * validación acá.
+ *
+ * `disciplineProfile` es lo que le pone la FORMA DEL MARCADOR (PR20 rebanada
+ * D2): sin él, `defaultConfig` nace en pádel y una FIFA agregada desde acá no
+ * podía cargar ni un `3-1` ni un `0-0`. Es la misma función que usa el wizard
+ * (`buildDisciplines`) — los dos caminos que crean una disciplina escriben lo
+ * mismo o el torneo depende de por dónde entraste.
  */
 export async function addDisciplineToSeason(
   seasonId: string,
@@ -156,7 +162,12 @@ export async function addDisciplineToSeason(
   entryIds: string[],
 ): Promise<WriteResult> {
   return onSeason(seasonId, async (supabase) => {
-    await addDiscipline(supabase, seasonId, { kind, config: defaultConfig(entryIds.length) }, entryIds)
+    await addDiscipline(
+      supabase,
+      seasonId,
+      { kind, ...disciplineProfile(kind, defaultConfig(entryIds.length)) },
+      entryIds,
+    )
   })
 }
 

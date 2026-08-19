@@ -4,6 +4,8 @@ import { matchError, setError } from '@/db/validate'
 import {
   chooseLoserGames,
   chooseWinner,
+  goalsError,
+  goalsRejected,
   isComplete,
   loserGamesOptions,
   openScoreSet,
@@ -151,5 +153,50 @@ describe('el marcador abierto: dos números tipeados', () => {
     expect(setError(goalless!, FIFA_OPEN, true)).toBeNull()
     // Y sin empates lo rechaza, que es la regla ortogonal de la disciplina.
     expect(setError(goalless!, FIFA_OPEN, false)).not.toBeNull()
+  })
+})
+
+/**
+ * S74 (verify-report ronda 21): tipear `abc`, `-5`, `1.5` o —lo más natural del
+ * mundo— `3-1` en el primer campo deja el texto a la vista y "Guardar
+ * resultado" muerto, sin decir por qué. El rechazo del servidor sí se explica;
+ * el del cliente no explicaba nada.
+ */
+describe('goalsRejected', () => {
+  it('lo vacío y lo que se está tipeando NO es un rechazo', () => {
+    expect(goalsRejected('')).toBe(false)
+    expect(goalsRejected('   ')).toBe(false)
+    expect(goalsRejected('3')).toBe(false)
+    expect(goalsRejected(' 7 ')).toBe(false)
+  })
+
+  it('lo que ya no puede ser un marcador, sí', () => {
+    expect(goalsRejected('abc')).toBe(true)
+    expect(goalsRejected('-5')).toBe(true)
+    expect(goalsRejected('1.5')).toBe(true)
+    // El `3-1` en un solo campo: es "el resultado", y es el error que la
+    // auditoría nombró como el más probable de todos.
+    expect(goalsRejected('3-1')).toBe(true)
+    // Cuatro dígitos sólo llegan pegando por fuera del `maxLength`, pero
+    // llegan: el panel los rechaza y ahora también lo dice.
+    expect(goalsRejected('12345')).toBe(true)
+  })
+})
+
+describe('goalsError', () => {
+  it('no dice nada mientras no haya nada que explicar', () => {
+    expect(goalsError('', '')).toBeNull()
+    expect(goalsError('3', '')).toBeNull()
+    expect(goalsError('3', '1')).toBeNull()
+  })
+
+  it('explica el rechazo, y nombra el caso del 3-1 en un solo campo', () => {
+    const message = goalsError('3-1', '')
+    expect(message).toContain('un número entero por lado')
+    expect(message).toContain('3-1')
+  })
+
+  it('da igual de qué lado esté el error', () => {
+    expect(goalsError('', 'abc')).toBe(goalsError('abc', ''))
   })
 })

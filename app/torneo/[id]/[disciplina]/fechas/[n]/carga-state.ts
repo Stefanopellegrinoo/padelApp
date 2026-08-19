@@ -65,7 +65,21 @@ export function loserGamesOptions(format: MatchFormat): number[] {
   return Array.from({ length: Math.max(0, top + 1) }, (_, index) => index)
 }
 
-/** Si el partido ya se puede guardar. Es `matchError` y no una segunda opinión. */
+/**
+ * Si el partido ya se puede guardar. Es `matchError` y no una segunda opinión.
+ *
+ * `allowsDraw: false` fijo, y NO es un stub (W61, verify-report ronda 19): la
+ * máquina de dos toques no puede PRODUCIR un empate. `chooseWinner` pide
+ * `'A' | 'B'` y `chooseLoserGames` le da al ganador `format.gamesPerSet` y al
+ * perdedor un número de `loserGamesOptions`, que va de 0 a `gamesPerSet - 1`.
+ * Ningún camino de este módulo genera `gamesA === gamesB`, así que pasarle
+ * `true` no cambiaría un solo resultado — sólo escondería que esta pantalla
+ * todavía no sabe cargar un empate.
+ *
+ * El día que una disciplina con empates tenga pantalla de carga, la que cambia
+ * es la MÁQUINA (un tercer botón "empataron", o el marcador abierto de FIFA
+ * que el design define como `openScore`), no este `false`.
+ */
 export function isComplete(state: LoadState, format: MatchFormat): boolean {
-  return matchError(state.sets, format) === null
+  return matchError(state.sets, format, false) === null
 }

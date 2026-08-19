@@ -68,25 +68,25 @@ describe('setError — a 4-game set with tie-break', () => {
   it.each([[4, 0], [4, 1], [4, 2], [4, 3], [0, 4], [3, 4]])(
     'accepts %i-%i',
     (gamesA, gamesB) => {
-      expect(setError({ gamesA, gamesB }, format)).toBeNull()
+      expect(setError({ gamesA, gamesB }, format, false)).toBeNull()
     },
   )
 
   it('rejects 4-4, which does not win anyone the set', () => {
-    expect(setError({ gamesA: 4, gamesB: 4 }, format)).toMatch(/no hay empates/)
+    expect(setError({ gamesA: 4, gamesB: 4 }, format, false)).toMatch(/no hay empates/)
   })
 
   it('rejects 5-2, which is not a possible score in a set to 4', () => {
-    expect(setError({ gamesA: 5, gamesB: 2 }, format)).toMatch(/no es un resultado posible/)
+    expect(setError({ gamesA: 5, gamesB: 2 }, format, false)).toMatch(/no es un resultado posible/)
   })
 
   it('rejects 3-1, an unfinished set', () => {
-    expect(setError({ gamesA: 3, gamesB: 1 }, format)).not.toBeNull()
+    expect(setError({ gamesA: 3, gamesB: 1 }, format, false)).not.toBeNull()
   })
 
   it('rejects negative and non-integer games', () => {
-    expect(setError({ gamesA: -1, gamesB: 4 }, format)).not.toBeNull()
-    expect(setError({ gamesA: 4.5, gamesB: 2 }, format)).not.toBeNull()
+    expect(setError({ gamesA: -1, gamesB: 4 }, format, false)).not.toBeNull()
+    expect(setError({ gamesA: 4.5, gamesB: 2 }, format, false)).not.toBeNull()
   })
 })
 
@@ -94,11 +94,11 @@ describe('setError — no tie-break, must win by two', () => {
   const format: MatchFormat = { setsToWin: 1, gamesPerSet: 4, tieBreak: false }
 
   it.each([[4, 0], [4, 1], [4, 2], [5, 3], [6, 4]])('accepts %i-%i', (gamesA, gamesB) => {
-    expect(setError({ gamesA, gamesB }, format)).toBeNull()
+    expect(setError({ gamesA, gamesB }, format, false)).toBeNull()
   })
 
   it.each([[4, 3], [6, 3], [5, 4]])('rejects %i-%i', (gamesA, gamesB) => {
-    expect(setError({ gamesA, gamesB }, format)).not.toBeNull()
+    expect(setError({ gamesA, gamesB }, format, false)).not.toBeNull()
   })
 })
 
@@ -107,7 +107,7 @@ describe('matchError', () => {
 
   it('requires the match to be finished', () => {
     const sets = [{ gamesA: 4, gamesB: 2 }]
-    expect(matchError(sets, format)).toMatch(/no lo cierra/)
+    expect(matchError(sets, format, false)).toMatch(/no lo cierra/)
   })
 
   it('accepts 2-1 in sets when setsToWin is 2', () => {
@@ -116,7 +116,7 @@ describe('matchError', () => {
       { gamesA: 1, gamesB: 4 },
       { gamesA: 4, gamesB: 0 },
     ]
-    expect(matchError(sets, format)).toBeNull()
+    expect(matchError(sets, format, false)).toBeNull()
   })
 
   it('rejects 2-2 in sets: one too many', () => {
@@ -126,11 +126,55 @@ describe('matchError', () => {
       { gamesA: 4, gamesB: 3 },
       { gamesA: 2, gamesB: 4 },
     ]
-    expect(matchError(sets, format)).toMatch(/Sobran sets/)
+    expect(matchError(sets, format, false)).toMatch(/Sobran sets/)
   })
 
   it('rejects a match with no sets', () => {
-    expect(matchError([], format)).toMatch(/Falta cargar/)
+    expect(matchError([], format, false)).toMatch(/Falta cargar/)
+  })
+})
+
+// ── W61 (verify-report ronda 19), REQ-D6-1 del lado de la app ───────────────
+// La FK de `0034` deja PERSISTIR el empate; estas dos funciones son el otro
+// guard que lo rechazaba, y lo hacían sin mirar la disciplina. `allowsDraw` no
+// tiene default a propósito: el compilador obliga a decidir en cada llamada.
+//
+// El formato es `gamesPerSet: 2` porque es el ÚNICO donde un empate pasa la
+// validación de marcador con el modelo de hoy: con tie-break el set corta en
+// `gamesPerSet` exacto, así que el empate legal es el que llega ahí. Cuando
+// `MatchFormat` tenga `openScore` (design #3801, `tipos`) esto se relaja solo.
+describe('setError / matchError con allowsDraw', () => {
+  const format: MatchFormat = { setsToWin: 1, gamesPerSet: 2, tieBreak: true }
+
+  it('acepta un 2-2 cuando la disciplina permite empate', () => {
+    expect(setError({ gamesA: 2, gamesB: 2 }, format, true)).toBeNull()
+  })
+
+  it('sigue rechazando el MISMO 2-2 cuando no lo permite', () => {
+    expect(setError({ gamesA: 2, gamesB: 2 }, format, false)).toMatch(/no hay empates/)
+  })
+
+  it('no afloja el resto del marcador: un 3-3 no llega a un set a 2', () => {
+    expect(setError({ gamesA: 3, gamesB: 3 }, format, true)).toMatch(
+      /no es un resultado posible/,
+    )
+  })
+
+  it('un partido empatado está terminado y no le falta un set', () => {
+    expect(matchError([{ gamesA: 2, gamesB: 2 }], format, true)).toBeNull()
+  })
+
+  it('pero dos sets no cierran un partido a uno, ni empatados', () => {
+    const sets = [
+      { gamesA: 2, gamesB: 2 },
+      { gamesA: 2, gamesB: 2 },
+    ]
+    expect(matchError(sets, format, true)).toMatch(/no lo cierra/)
+  })
+
+  it('y un partido con ganador sigue midiéndose por sets ganados', () => {
+    expect(matchError([{ gamesA: 2, gamesB: 0 }], format, true)).toBeNull()
+    expect(matchError([{ gamesA: 2, gamesB: 1 }], format, true)).toBeNull()
   })
 })
 

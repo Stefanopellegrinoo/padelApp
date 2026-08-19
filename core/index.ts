@@ -103,7 +103,13 @@ export { mastersQualifiers, mastersFixture, mastersChampion } from './masters'
 // ── The rules page ───────────────────────────────────────────────────────────
 // Generated from the config, so it can never disagree with what the app does.
 export type { RulesSection } from './narrate'
-export { formatLabel, formatsLabel, narrateRules } from './narrate'
+// `formatLabel` NO sale del barrel (S77): narra UNA disciplina, y quedó sin un
+// solo consumidor de `app/` cuando las tres pantallas pasaron a `formatsLabel`
+// al cerrar W64. Publicarla es dejar abierta la puerta por la que se entra a
+// narrar un torneo de dos formatos con uno solo — que es literalmente lo que
+// fue W64. Sigue exportada de `./narrate`, para su test y para `formatsLabel`,
+// que es su único llamador.
+export { formatsLabel, narrateRules } from './narrate'
 
 // ── Reading the season back ──────────────────────────────────────────────────
 // What the read-only screens need on top of the ranking. All derived, nothing

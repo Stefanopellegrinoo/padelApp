@@ -136,7 +136,7 @@ describe('formatErrors', () => {
 
 describe('summaryOf', () => {
   it('lists the six rows of the handoff, in order', () => {
-    const rows = summaryOf('Los Jueves 2026', Array(8).fill('Jugador'), configFor(8))
+    const rows = summaryOf('Los Jueves 2026', Array(8).fill('Jugador'), configFor(8), ['PADEL'])
     expect(rows.map((row) => row.key)).toEqual([
       'Nombre',
       'Jugadores',
@@ -146,7 +146,24 @@ describe('summaryOf', () => {
       'Desempate',
     ])
     expect(rows[1]?.value).toBe('8')
+    // Con una sola disciplina el resumen dice lo mismo de siempre, sin prefijo.
     expect(rows[2]?.value).toBe('1 set a 4 games')
+  })
+
+  // PR20 rebanada D2: con FIFA marcado, "1 set a 4 games" describe la mitad
+  // pádel del torneo y MIENTE sobre la otra mitad. Es la misma clase de copy
+  // que ya costó W47, W51 y W56.
+  it('nombra el formato de cada disciplina cuando hay más de una', () => {
+    const rows = summaryOf('Los Jueves 2026', Array(8).fill('Jugador'), configFor(8), [
+      'PADEL',
+      'FIFA',
+    ])
+    expect(rows[2]?.value).toBe('Pádel: 1 set a 4 games · FIFA: Marcador de goles')
+  })
+
+  it('y una liga de sólo FIFA no promete ningún set', () => {
+    const rows = summaryOf('Liga FIFA', Array(8).fill('Jugador'), configFor(8), ['FIFA'])
+    expect(rows[2]?.value).toBe('Marcador de goles')
   })
 })
 
@@ -243,11 +260,29 @@ describe('disciplinesWarning', () => {
 })
 
 describe('buildDisciplines', () => {
-  it('gives back one row per kind picked, sharing the same config', () => {
+  // PR20 rebanada D2: las filas ya NO comparten la config palabra por palabra
+  // —comparten los puntos, las fechas y el plantel, que es lo que el paso 4
+  // pregunta— pero cada una nace con la FORMA DE MARCADOR de su disciplina.
+  // Antes de esto una liga de FIFA nacía siendo pádel con otro nombre: sin
+  // marcador abierto y sin empates, o sea sin poder cargar un `3-1` ni un
+  // `0-0`. Y `allows_draw` no se puede corregir después —`0015_disciplines.sql`
+  // no lo pone en el grant de UPDATE—, así que nacer mal era para siempre.
+  it('da una fila por kind marcado, con los puntos y las fechas del paso 4', () => {
     const config = configFor(8)
     expect(buildDisciplines(['PADEL', 'FIFA'], config)).toEqual([
-      { kind: 'PADEL', config },
-      { kind: 'FIFA', config },
+      { kind: 'PADEL', config, allowsDraw: false },
+      {
+        kind: 'FIFA',
+        config: { ...config, matchFormat: { ...config.matchFormat, openScore: true } },
+        allowsDraw: true,
+      },
+    ])
+  })
+
+  it('el pádel nace exactamente igual que hoy: sets, sin empates', () => {
+    const config = configFor(8)
+    expect(buildDisciplines(['PADEL'], config)).toEqual([
+      { kind: 'PADEL', config, allowsDraw: false },
     ])
   })
 
@@ -257,9 +292,9 @@ describe('buildDisciplines', () => {
   // FIFA primero, no importa el orden en que aparecen los checkboxes en pantalla.
   it('keeps the order the user picked, not DISCIPLINE_KINDS order', () => {
     const config = configFor(8)
-    expect(buildDisciplines(['FIFA', 'PADEL'], config)).toEqual([
-      { kind: 'FIFA', config },
-      { kind: 'PADEL', config },
+    expect(buildDisciplines(['FIFA', 'PADEL'], config).map((row) => row.kind)).toEqual([
+      'FIFA',
+      'PADEL',
     ])
   })
 

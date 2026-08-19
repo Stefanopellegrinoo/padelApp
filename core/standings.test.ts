@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeStandings } from './standings'
+import { computeStandings, usesSetsDiff } from './standings'
 import { pair, single } from './side'
 import type { MatchResult, SeasonConfig, Side } from './types'
 
@@ -254,5 +254,75 @@ describe('computeStandings con lados de uno (pair_size=1)', () => {
     // Sin esto el test pasaba en RED: con la lista de partidos vacía, largo y
     // posiciones salen bien aunque cada fila sea una pareja a medio armar.
     expect(standings.map((row) => row.side.a)).toEqual(nine.map((side) => side.a))
+  })
+})
+
+// ── PR20 rebanada D2 — el marcador abierto llega a la TABLA ──────────────────
+//
+// Decisión #3933: con `openScore` un partido es UN resultado de goles, así que
+// la "diferencia de sets" deja de ser un criterio y pasa a ser ruido. El design
+// (#3801, PUNTO 6) lo dice de la otra punta: `gamesDiff` en FIFA YA ES la
+// diferencia de gol, sin renombrar nada — lo que sobra es el escalón de sets.
+//
+// Con un marcador abierto hay exactamente un "set" por partido, así que
+// `setsDiff` degenera en `ganados − perdidos`, que es una segunda opinión sobre
+// el criterio que ya corrió primero (`won`) y que además tapa la diferencia de
+// gol. Un empate suma a `played` sin sumar a ninguno de los dos, y ahí es donde
+// las dos cuentas se separan.
+describe('computeStandings con marcador abierto', () => {
+  const OPEN_TWO_SETS: SeasonConfig = {
+    ...CONFIG,
+    matchFormat: { setsToWin: 2, gamesPerSet: 4, tieBreak: true, openScore: true },
+  }
+  const CLOSED_TWO_SETS: SeasonConfig = {
+    ...CONFIG,
+    matchFormat: { setsToWin: 2, gamesPerSet: 4, tieBreak: true, openScore: false },
+  }
+
+  // A empata con B 0-0 y le gana a C 1-0   → gana 1, pierde 0 · dif. de gol +1
+  // B empata con A, le gana a C 9-0, pierde con D 0-1 → gana 1, pierde 1 · +8
+  // Los dos ganaron UNO. Por diferencia de sets A va arriba (+1 contra 0);
+  // por diferencia de GOL va B (+8 contra +1). Sólo uno de los dos órdenes
+  // puede ser el correcto para una liga de goles.
+  const MATCHES = [
+    match(0, 1, 0, 0),
+    match(0, 2, 1, 0),
+    match(1, 2, 9, 0),
+    match(3, 1, 1, 0),
+  ]
+
+  it('corta por diferencia de gol y no por diferencia de sets', () => {
+    const standings = computeStandings(PAIRS, MATCHES, OPEN_TWO_SETS, SNAPSHOT)
+    expect(order(standings)).toEqual(['b1', 'a1', 'd1', 'c1'])
+    expect(standings[0]?.gamesDiff).toBe(8)
+  })
+
+  it('y el pádel a dos sets sigue cortando por diferencia de sets, igual que hoy', () => {
+    const standings = computeStandings(PAIRS, MATCHES, CLOSED_TWO_SETS, SNAPSHOT)
+    expect(order(standings)).toEqual(['a1', 'd1', 'b1', 'c1'])
+  })
+})
+
+// El criterio EXPORTADO, porque no lo usa sólo `computeStandings`: la pantalla
+// de la fecha arma con él la frase del desempate y la página de Reglas lo
+// narra. Eran tres copias de `setsToWin > 1` en tres archivos, y arreglar una
+// sola las hacía DISCREPAR — que es peor que dejar las tres igual de viejas.
+describe('usesSetsDiff', () => {
+  it('un marcador abierto no desempata nunca por diferencia de sets', () => {
+    expect(usesSetsDiff({ setsToWin: 2, gamesPerSet: 4, tieBreak: true, openScore: true })).toBe(
+      false,
+    )
+  })
+
+  it('un partido a más de un set, sí', () => {
+    expect(usesSetsDiff({ setsToWin: 2, gamesPerSet: 4, tieBreak: true, openScore: false })).toBe(
+      true,
+    )
+  })
+
+  it('uno a un solo set, no: con un set la diferencia de sets es el mismo dato que los ganados', () => {
+    expect(usesSetsDiff({ setsToWin: 1, gamesPerSet: 4, tieBreak: true, openScore: false })).toBe(
+      false,
+    )
   })
 })

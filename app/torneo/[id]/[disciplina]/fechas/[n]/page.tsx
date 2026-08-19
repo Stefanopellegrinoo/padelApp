@@ -38,7 +38,7 @@ import { DiaDeLaFecha } from './dia'
 import { MastersDraft, type QualifierVM } from './masters'
 import { SumarInvitado, type GuestPromoteVM, type SumarSeatVM } from './sumar'
 import { guestsToPromote } from './sumar-state'
-import { frozenTableRows } from './tabla-congelada'
+import { frozenTableRows, orderMoved } from './tabla-congelada'
 
 interface PageProps {
   params: Promise<{ id: string; disciplina: string; n: string }>
@@ -507,7 +507,23 @@ export default async function FechaDetailPage({ params }: PageProps) {
 
     const hasGuest = (side: Side) => members(side).some((entryId) => detail.guestIds.includes(entryId))
     const anyGuestInTable = status === 'CLOSED' && standings.some((row) => hasGuest(row.side))
-    const note = status === 'CLOSED' ? tiebreakNote(standings, config, nameOf, discipline.pairSize) : null
+    // W56 (verify-report ronda 17): el pie describe el orden que la tabla
+    // DIBUJA, o no se dibuja. `tiebreakNote` sale de `standings` e imprime
+    // `worse.position`, el puesto que `computeStandings` calcula hoy; desde que
+    // la tabla se ordena por el puesto congelado las dos fuentes se pueden
+    // contradecir, y el pie es el único ordinal que el usuario ve porque la
+    // tabla no imprime puestos. Medido: decía "quedó 2°" sobre quien la tabla
+    // dibuja primero, citando como mejor a alguien dos filas más abajo.
+    //
+    // Pasarle `tableRows` no alcanza —`worse.position` sigue siendo el vivo— y
+    // reescribir el ordinal sería peor: el desempate que el pie explica lo hizo
+    // `computeStandings` sobre el orden vivo, así que sobre el congelado estaría
+    // explicando una comparación que nunca ocurrió. Cuando el orden no se movió,
+    // que es el caso normal, el pie se ve igual que siempre.
+    const note =
+      status === 'CLOSED' && !orderMoved(standings, tableRows)
+        ? tiebreakNote(standings, config, nameOf, discipline.pairSize)
+        : null
 
     // Sumar invitado (spec Capability 3) sólo existe con la fecha CLOSED:
     // `promote_guest` rechaza cualquier otro estado del lado de la base, y

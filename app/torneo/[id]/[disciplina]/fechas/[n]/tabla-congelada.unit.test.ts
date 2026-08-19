@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { members, pair, single, type Side, type SideStanding } from '@/core'
-import { frozenTableRows } from './tabla-congelada'
+import { frozenTableRows, orderMoved } from './tabla-congelada'
 
 /**
  * W57 (verify-report ronda 17). El arreglo de W55 congeló el orden de la tabla
@@ -109,5 +109,54 @@ describe('frozenTableRows', () => {
     ]
 
     expect(frozenTableRows(filas, puntos)).toEqual(filas)
+  })
+})
+
+/**
+ * W56 (verify-report ronda 17). El mismo arreglo de W55 dejó el pie de la tabla
+ * leyendo el orden VIVO mientras la tabla pasó al congelado: decía "Jugador de
+ * test 4 quedó 2° por diferencia de games" sobre quien la tabla dibuja PRIMERO,
+ * citando como mejor a alguien que aparece dos filas más abajo. La tabla no
+ * imprime ordinales, así que el pie es el ÚNICO número de puesto que el usuario
+ * ve — y es el que quedó desincronizado.
+ *
+ * El pie no se dibuja cuando el orden dibujado difiere del vivo, que es
+ * exactamente cuando mentiría. Este predicado es esa condición.
+ */
+describe('orderMoved', () => {
+  const filas = [
+    standing(single('a'), 1),
+    standing(single('b'), 2),
+    standing(single('c'), 3),
+  ]
+
+  it('dice que no se movió cuando la tabla dibuja el orden vivo', () => {
+    expect(orderMoved(filas, frozenTableRows(filas, puntos))).toBe(false)
+  })
+
+  it('dice que se movió cuando el puesto congelado reordena la tabla', () => {
+    const frozen = new Map([
+      ['a', { position: 2 }],
+      ['b', { position: 1 }],
+      ['c', { position: 3 }],
+    ])
+
+    expect(orderMoved(filas, frozenTableRows(filas, frozen))).toBe(true)
+  })
+
+  it('un lado sin premio que conserva su lugar no cuenta como movimiento', () => {
+    // W57 dejó a los invitados donde estaban; si eso contara como movimiento, el
+    // pie desaparecería de toda fecha con invitados aunque diga la verdad.
+    const conInvitado = [
+      standing(single('invi'), 1),
+      standing(single('a'), 2),
+      standing(single('b'), 3),
+    ]
+    const frozen = new Map([
+      ['a', { position: 1 }],
+      ['b', { position: 2 }],
+    ])
+
+    expect(orderMoved(conInvitado, frozenTableRows(conInvitado, frozen))).toBe(false)
   })
 })

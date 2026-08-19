@@ -55,14 +55,32 @@ update public.seasons
 -- Tripwire, mismo idioma que el `do $$ ... raise exception` de 0023: un
 -- backfill silencioso a medias es peor que uno que falla. Si alguna fila tiene
 -- `matchFormat` sin `openScore` después del update, la migración no terminó.
+--
+-- Las DOS tablas, no sólo `disciplines` (S71, verify-report ronda 21). El
+-- comentario de arriba argumenta que `seasons` importa —"dejar la fuente del
+-- seed diciendo una cosa y la copia otra"— y sin embargo el único update que se
+-- verificaba era el otro. La asimetría no es teórica: medido en psql, un
+-- `matchFormat` ESCALAR (`{"matchFormat": 7}`) sobrevive el `jsonb_set`
+-- INTACTO, y en `disciplines` el tripwire lo caza mientras que en `seasons`
+-- pasaba en silencio.
 do $$
-declare v_left int;
+declare
+  v_disciplines int;
+  v_seasons     int;
 begin
-  select count(*) into v_left
+  select count(*) into v_disciplines
     from public.disciplines
    where config ? 'matchFormat'
      and not (config -> 'matchFormat' ? 'openScore');
-  if v_left <> 0 then
-    raise exception 'Backfill incompleto: % disciplinas siguen sin openScore.', v_left;
+  if v_disciplines <> 0 then
+    raise exception 'Backfill incompleto: % disciplinas siguen sin openScore.', v_disciplines;
+  end if;
+
+  select count(*) into v_seasons
+    from public.seasons
+   where config ? 'matchFormat'
+     and not (config -> 'matchFormat' ? 'openScore');
+  if v_seasons <> 0 then
+    raise exception 'Backfill incompleto: % temporadas siguen sin openScore.', v_seasons;
   end if;
 end $$;

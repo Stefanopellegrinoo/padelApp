@@ -23,6 +23,8 @@ Generating the pairs. With rotating partners across a whole season, you want peo
 
 ---
 
+## Tech Stack
+
 - **Frontend**: Next.js 15 (App Router, Server Actions), React 19, Tailwind CSS
 - **Database & Auth**: PostgreSQL 17 via Supabase (Auth, RLS policies, SQL migrations)
 - **Language**: TypeScript

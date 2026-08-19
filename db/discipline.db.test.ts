@@ -249,13 +249,16 @@ describe('disciplineConfig / updateDisciplineConfig (PR 5, REQ-D2-1)', () => {
     const fifaConfig = { ...defaultConfig(10), regularMatchdays: 6 }
     const { disciplineIds } = await createSeason({
       admin,
-      disciplines: [{ config: padelConfig }, { kind: 'FIFA', config: fifaConfig }],
+      disciplines: [{ config: padelConfig }, { kind: 'FIFA', config: fifaConfig, allowsDraw: true }],
     })
     const [padelId, fifaId] = disciplineIds
     if (padelId === undefined || fifaId === undefined) throw new Error('Faltan disciplinas.')
 
-    expect(await disciplineConfig(admin.client, padelId)).toEqual({ config: padelConfig, pairSize: 2 })
-    expect(await disciplineConfig(admin.client, fifaId)).toEqual({ config: fifaConfig, pairSize: 2 })
+    // `allowsDraw` viaja en el mismo select desde W61 (verify-report ronda 19):
+    // es la fuente que `createMatchday` necesita para no rebotar contra
+    // `matchdays_discipline_draw`, y tampoco se hereda entre disciplinas.
+    expect(await disciplineConfig(admin.client, padelId)).toEqual({ config: padelConfig, pairSize: 2, allowsDraw: false })
+    expect(await disciplineConfig(admin.client, fifaId)).toEqual({ config: fifaConfig, pairSize: 2, allowsDraw: true })
   })
 
   it('updateDisciplineConfig sólo toca la disciplina destino', async () => {
@@ -272,8 +275,8 @@ describe('disciplineConfig / updateDisciplineConfig (PR 5, REQ-D2-1)', () => {
     const nextPadelConfig = { ...padelConfig, regularMatchdays: 14 }
     await updateDisciplineConfig(admin.client, padelId, nextPadelConfig)
 
-    expect(await disciplineConfig(admin.client, padelId)).toEqual({ config: nextPadelConfig, pairSize: 2 })
-    expect(await disciplineConfig(admin.client, fifaId)).toEqual({ config: fifaConfig, pairSize: 2 })
+    expect(await disciplineConfig(admin.client, padelId)).toEqual({ config: nextPadelConfig, pairSize: 2, allowsDraw: false })
+    expect(await disciplineConfig(admin.client, fifaId)).toEqual({ config: fifaConfig, pairSize: 2, allowsDraw: false })
   })
 
   it('rechaza una config inválida antes de escribir (assertValidConfig)', async () => {
@@ -282,7 +285,7 @@ describe('disciplineConfig / updateDisciplineConfig (PR 5, REQ-D2-1)', () => {
     const broken = { ...defaultConfig(8), tiebreakSnapshotEvery: 0 }
 
     await expect(updateDisciplineConfig(admin.client, disciplineId, broken)).rejects.toThrow()
-    expect(await disciplineConfig(admin.client, disciplineId)).toEqual({ config: defaultConfig(8), pairSize: 2 })
+    expect(await disciplineConfig(admin.client, disciplineId)).toEqual({ config: defaultConfig(8), pairSize: 2, allowsDraw: false })
   })
 
   /*
@@ -314,7 +317,7 @@ describe('disciplineConfig / updateDisciplineConfig (PR 5, REQ-D2-1)', () => {
     // 1) La config CORRECTA de una disciplina de a uno se acepta.
     const nextSolo = { ...soloConfig, regularMatchdays: 14 }
     await updateDisciplineConfig(admin.client, soloId, nextSolo)
-    expect(await disciplineConfig(admin.client, soloId)).toEqual({ config: nextSolo, pairSize: 1 })
+    expect(await disciplineConfig(admin.client, soloId)).toEqual({ config: nextSolo, pairSize: 1, allowsDraw: false })
 
     // 2) La config de PAREJAS (4 valores para 8 asientos) se rechaza, y no se
     //    escribe: es la que dejaba la disciplina sin poder armar ni cerrar.
@@ -322,7 +325,7 @@ describe('disciplineConfig / updateDisciplineConfig (PR 5, REQ-D2-1)', () => {
     await expect(updateDisciplineConfig(admin.client, soloId, pairShaped)).rejects.toThrow(
       /8 valores de puntos/,
     )
-    expect(await disciplineConfig(admin.client, soloId)).toEqual({ config: nextSolo, pairSize: 1 })
+    expect(await disciplineConfig(admin.client, soloId)).toEqual({ config: nextSolo, pairSize: 1, allowsDraw: false })
   })
 
   /*
@@ -439,7 +442,7 @@ describe('disciplineConfig / updateDisciplineConfig (PR 5, REQ-D2-1)', () => {
     await expect(updateDisciplineConfig(admin.client, disciplineId, soloShaped)).rejects.toThrow(
       /4 valores de puntos/,
     )
-    expect(await disciplineConfig(admin.client, disciplineId)).toEqual({ config: defaultConfig(8), pairSize: 2 })
+    expect(await disciplineConfig(admin.client, disciplineId)).toEqual({ config: defaultConfig(8), pairSize: 2, allowsDraw: false })
   })
 })
 

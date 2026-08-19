@@ -43,7 +43,7 @@ describe('the two-tap load', () => {
         for (const loserGames of loserGamesOptions(format)) {
           const set = play(winner, loserGames, format).sets[0]
           expect(set).toBeDefined()
-          expect(setError(set!, format)).toBeNull()
+          expect(setError(set!, format, false)).toBeNull()
           // Y del lado correcto: quien ganó tiene más games que quien perdió.
           expect(winner === 'A' ? set!.gamesA > set!.gamesB : set!.gamesB > set!.gamesA).toBe(true)
         }
@@ -54,7 +54,7 @@ describe('the two-tap load', () => {
   it('closes the match on the first set when the format asks for one', () => {
     const state = play('A', 0, ONE_SET_TO_4)
     expect(isComplete(state, ONE_SET_TO_4)).toBe(true)
-    expect(matchError(state.sets, ONE_SET_TO_4)).toBeNull()
+    expect(matchError(state.sets, ONE_SET_TO_4, false)).toBeNull()
   })
 
   it('needs two sets from the same side when the format asks for two', () => {

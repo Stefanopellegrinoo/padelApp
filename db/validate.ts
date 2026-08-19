@@ -32,14 +32,24 @@ export function assertValidConfig(config: SeasonConfig, sideSize: SideSize): voi
   if (errors.length > 0) throw new EdgeError(errors.join(' '))
 }
 
-/** Null when the set could have been played, a Spanish reason when it could not. */
-export function setError(set: SetScore, format: MatchFormat): string | null {
+/**
+ * Null when the set could have been played, a Spanish reason when it could not.
+ *
+ * `allowsDraw` es OBLIGATORIO y no tiene default (W61, verify-report ronda 19,
+ * y design #3801 `validaciones generalizadas`: `setError(set, format,
+ * allowsDraw)`). Un default `false` compilaría en todos los call sites de hoy y
+ * dejaría a cualquiera futuro rechazando empates sin enterarse — que es
+ * EXACTAMENTE la asimetría que N44 describe para las columnas con default y la
+ * que produjo este bug dos veces (`pair_size` en PR18a, `allows_draw` acá). Sin
+ * default, el compilador obliga a decidir en cada llamada.
+ */
+export function setError(set: SetScore, format: MatchFormat, allowsDraw: boolean): string | null {
   const { gamesA, gamesB } = set
 
   if (!Number.isInteger(gamesA) || !Number.isInteger(gamesB) || gamesA < 0 || gamesB < 0) {
     return 'Los games tienen que ser números enteros y no negativos.'
   }
-  if (gamesA === gamesB) {
+  if (gamesA === gamesB && !allowsDraw) {
     return `Un set no puede terminar ${gamesA} a ${gamesB}: en padel no hay empates.`
   }
 
@@ -62,27 +72,51 @@ export function setError(set: SetScore, format: MatchFormat): string | null {
   return null
 }
 
-/** Null when the match is a finished, legal match for the format. */
-export function matchError(sets: readonly SetScore[], format: MatchFormat): string | null {
+/**
+ * Null when the match is a finished, legal match for the format.
+ *
+ * `allowsDraw` obligatorio por la misma razón que en `setError`.
+ */
+export function matchError(
+  sets: readonly SetScore[],
+  format: MatchFormat,
+  allowsDraw: boolean,
+): string | null {
   if (sets.length === 0) return 'Falta cargar el resultado de este partido.'
 
   for (const set of sets) {
-    const problem = setError(set, format)
+    const problem = setError(set, format, allowsDraw)
     if (problem !== null) return problem
   }
 
   let wonA = 0
   let wonB = 0
   for (const set of sets) {
-    // setError already ruled out a draw, so one of the two always took it.
+    // Con `allowsDraw` un set puede quedar sin dueño; sin él, `setError` ya
+    // descartó el empate y la tercera rama es inalcanzable.
     if (set.gamesA > set.gamesB) wonA++
-    else wonB++
+    else if (set.gamesB > set.gamesA) wonB++
   }
 
   const { setsToWin } = format
   const winner = Math.max(wonA, wonB)
   const loser = Math.min(wonA, wonB)
   const sets_ = setsToWin === 1 ? 'set' : 'sets'
+
+  // Un partido EMPATADO no lo cierra nadie, así que `setsToWin` no se puede
+  // exigir: se exige que se hayan jugado los sets que el formato define.
+  //
+  // ponytail: el techo es que un empate a mitad de camino (1-1 en un partido a
+  // 2 sets, que en pádel seguiría con un tercero) queda declarado terminado.
+  // Hoy es inalcanzable —la única disciplina con empates que el modelo de
+  // formato puede expresar es de un solo set (ver `MatchFormat`, sin
+  // `openScore` todavía)— y se resuelve cuando el formato sepa distinguir
+  // "partido a N sets" de "partido a un marcador abierto".
+  if (allowsDraw && wonA === wonB) {
+    return sets.length === setsToWin
+      ? null
+      : `El partido se define en ${setsToWin} ${sets_}: ${sets.length} no lo cierra.`
+  }
 
   if (winner !== setsToWin) {
     return `El partido se define en ${setsToWin} ${sets_}: ${wonA}-${wonB} no lo cierra.`

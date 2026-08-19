@@ -269,7 +269,15 @@ export async function createMatchday(
   // violación de FK, no con un mensaje de usuario. `disciplineId` es un
   // `string` crudo acá (parámetro público, todavía sin marcar en el origen);
   // la FK de arriba es la que de verdad lo valida contra `disciplines`.
-  const { pairSize } = await disciplineConfig(supabase, resolvedDisciplineId as DisciplineId)
+  //
+  // W61 (verify-report ronda 19): `matchdays_discipline_draw` (0034, REQ-D6-1)
+  // es la MISMA trampa con `allows_draw`, y `0034` la reintrodujo seis líneas
+  // más abajo, en este mismo `.insert()`, con el párrafo de arriba ya escrito.
+  // Las dos columnas salen de la misma fila y del mismo select.
+  const { pairSize, allowsDraw } = await disciplineConfig(
+    supabase,
+    resolvedDisciplineId as DisciplineId,
+  )
 
   const { data: last, error: lastError } = await supabase
     .from('matchdays')
@@ -289,6 +297,7 @@ export async function createMatchday(
       number,
       played_on: playedOn,
       pair_size: pairSize,
+      allows_draw: allowsDraw,
     })
     .select('id')
     .single()
@@ -592,7 +601,13 @@ export async function generatePairs(supabase: Client, matchdayId: string): Promi
           `El fixture nombró la pareja ${left} o ${right} y sólo hay ${stored.length}. Esto es un bug.`,
         )
       }
-      return { matchday_id: matchdayId, round: index + 1, pair_a: pairA, pair_b: pairB }
+      return {
+        matchday_id: matchdayId,
+        round: index + 1,
+        pair_a: pairA,
+        pair_b: pairB,
+        allows_draw: matchday.allows_draw,
+      }
     }),
   )
   await insertMatches(supabase, matches)
@@ -653,7 +668,13 @@ export async function generateMastersPairs(supabase: Client, matchdayId: string)
     if (pairA === undefined || pairB === undefined) {
       throw new Error(`Faltan parejas para el partido ${index + 1} del Masters. Esto es un bug.`)
     }
-    return { matchday_id: matchdayId, round: index + 1, pair_a: pairA, pair_b: pairB }
+    return {
+      matchday_id: matchdayId,
+      round: index + 1,
+      pair_a: pairA,
+      pair_b: pairB,
+      allows_draw: matchday.allows_draw,
+    }
   })
   await insertMatches(supabase, matches)
 }
@@ -726,7 +747,12 @@ export async function closeMatchday(supabase: Client, matchdayId: string): Promi
   const { sides, matches } = await resultsOf(supabase, matchdayId)
 
   for (const match of matches) {
-    const problem = matchError(match.sets, config.matchFormat)
+    // `matchday.allows_draw`, no la disciplina: es el valor CONGELADO en la
+    // fecha (`matchdays_discipline_draw` es `on update no action`, así que
+    // una vez creada la fecha la disciplina ya no puede cambiarlo). Cerrar
+    // tiene que juzgar los resultados con la misma regla con la que se
+    // guardaron, no con la de hoy.
+    const problem = matchError(match.sets, config.matchFormat, matchday.allows_draw)
     if (problem !== null) throw new EdgeError(problem)
   }
 
@@ -783,8 +809,8 @@ export async function saveResult(
   matchId: string,
   sets: SetScore[],
 ): Promise<void> {
-  const format = await matchFormatOf(supabase, matchId)
-  const problem = matchError(sets, format)
+  const { format, allowsDraw } = await matchFormatOf(supabase, matchId)
+  const problem = matchError(sets, format, allowsDraw)
   if (problem !== null) throw new EdgeError(problem)
 
   // La política match_sets_write ya exige que la fecha esté OPEN: acá alcanza
@@ -794,11 +820,17 @@ export async function saveResult(
     throw new EdgeError(`No se pudo guardar el resultado: ${deleteError.message}`)
   }
 
+  // W61 (verify-report ronda 19): `match_sets_match_draw` (0034) exige que
+  // `allows_draw` coincida con el del PARTIDO. Sin mandarlo, el default de
+  // columna (`false`) rebotaba cada resultado de una disciplina con empates
+  // —medido incluso con un 4-2, que no es empate ninguno—, o sea el guard no
+  // protegía nada y mataba todo.
   const rows = sets.map((set, index) => ({
     match_id: matchId,
     set_number: index + 1,
     games_a: set.gamesA,
     games_b: set.gamesB,
+    allows_draw: allowsDraw,
   }))
   const { error: insertError } = await supabase.from('match_sets').insert(rows)
   if (insertError !== null) {
@@ -935,6 +967,21 @@ interface MatchRow {
   round: number
   pair_a: string
   pair_b: string
+  /**
+   * W61 (verify-report ronda 19). `matches_matchday_draw` (0034) exige que
+   * coincida con el de SU fecha; sin mandarlo, el default de columna (`false`)
+   * rebota cada fixture de una disciplina con empates — y lo hace DESPUÉS de
+   * que `insertPairs` ya escribió los lados, dejando la fecha con parejas y
+   * sin partidos (medido: `pairs=4, matches=0`) sin transacción que lo
+   * envuelva.
+   *
+   * Va OBLIGATORIO en esta interfaz, no como opcional con default: el `Insert`
+   * generado en `db/database.types.ts` lo declara opcional porque la columna
+   * tiene default, así que el typecheck NO puede cazar a un escritor que se lo
+   * olvide (N44). Exigirlo acá es la única red de compilación posible, y es la
+   * que faltaba las dos veces que este bug apareció.
+   */
+  allows_draw: boolean
 }
 
 /** Inserta el fixture. */
@@ -1029,11 +1076,24 @@ async function resultsOf(
   return { sides: [...sideById.values()], matches }
 }
 
-/** El `matchFormat` de la configuración de la temporada dueña de este partido. */
-async function matchFormatOf(supabase: Client, matchId: string): Promise<MatchFormat> {
+/**
+ * El `matchFormat` de la configuración de la disciplina dueña de este partido,
+ * MÁS su `allows_draw`.
+ *
+ * `allows_draw` sale de la fila de `matches`, no de la disciplina, y es a
+ * propósito: es el valor que `match_sets_match_draw` va a verificar contra
+ * ESTE partido. La cadena de FK compuestas garantiza que sean el mismo
+ * (`matches → matchdays → disciplines`), así que leerlo del partido no es una
+ * segunda fuente de verdad — es la MISMA, un salto más cerca, y sin un select
+ * extra: ya se estaba leyendo esta fila.
+ */
+async function matchFormatOf(
+  supabase: Client,
+  matchId: string,
+): Promise<{ format: MatchFormat; allowsDraw: boolean }> {
   const { data: match, error: fetchError } = await supabase
     .from('matches')
-    .select('matchday_id')
+    .select('matchday_id, allows_draw')
     .eq('id', matchId)
     .maybeSingle()
   if (fetchError) throw new EdgeError(`No se pudo leer el partido: ${fetchError.message}`)
@@ -1041,5 +1101,5 @@ async function matchFormatOf(supabase: Client, matchId: string): Promise<MatchFo
 
   const matchday = await requireMatchday(supabase, match.matchday_id)
   const { config } = await disciplineConfig(supabase, matchday.discipline_id)
-  return config.matchFormat
+  return { format: config.matchFormat, allowsDraw: match.allows_draw }
 }

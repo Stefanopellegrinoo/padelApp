@@ -4,10 +4,16 @@ import type { Json } from './database.types'
 import { EdgeError } from './errors'
 import { assertValidConfig } from './validate'
 
-/** `disciplineConfig`'s return: la config Y el `pair_size` real, del mismo select. */
+/** `disciplineConfig`'s return: la config Y el `pair_size`/`allows_draw` reales, del mismo select. */
 export interface DisciplineConfigRow {
   config: SeasonConfig
   pairSize: SideSize
+  /**
+   * El `allows_draw` real de la disciplina (W61, verify-report ronda 19),
+   * leído del mismo select que ya trae `config` y `pair_size` — ningún select
+   * nuevo, misma razón por la que `pairSize` vive acá desde W30.
+   */
+  allowsDraw: boolean
 }
 
 /**
@@ -31,14 +37,18 @@ export async function disciplineConfig(
 ): Promise<DisciplineConfigRow> {
   const { data, error } = await supabase
     .from('disciplines')
-    .select('config, pair_size')
+    .select('config, pair_size, allows_draw')
     .eq('id', disciplineId)
     .maybeSingle()
   if (error) {
     throw new EdgeError(`No se pudo leer la configuración de la disciplina: ${error.message}`)
   }
   if (data === null) throw new EdgeError('La disciplina no existe.')
-  return { config: data.config as unknown as SeasonConfig, pairSize: data.pair_size as SideSize }
+  return {
+    config: data.config as unknown as SeasonConfig,
+    pairSize: data.pair_size as SideSize,
+    allowsDraw: data.allows_draw,
+  }
 }
 
 /**

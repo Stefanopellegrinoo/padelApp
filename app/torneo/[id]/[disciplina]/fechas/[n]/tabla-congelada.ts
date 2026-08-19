@@ -18,21 +18,51 @@ interface ConPuesto {
   position: number
 }
 
+/** El puesto congelado de un lado, o `null` si no cobró: no es un puesto grande, es ninguno. */
+function frozenPositionOf(row: SideStanding, frozen: ReadonlyMap<EntryId, ConPuesto>): number | null {
+  const puestos = members(row.side)
+    .map((entryId) => frozen.get(entryId)?.position)
+    .filter((puesto): puesto is number => puesto !== undefined)
+  return puestos.length > 0 ? Math.min(...puestos) : null
+}
+
 /**
- * W55 (verify-report ronda 16): las filas de una fecha CERRADA se ordenan por
- * el puesto CONGELADO, no por el que `computeStandings` calcula hoy.
+ * Las filas de la tabla de una fecha CERRADA, en el orden en que se dibujan.
  *
- * El orden en vivo depende del snapshot de desempate, el snapshot depende de
- * `discipline_entries`, y PROMOVER un invitado escribe ahí — así que después de
- * promover la tabla podía reordenarse mientras los puntos seguían congelados.
- * Medido: el primero mostraba 6 puntos y el segundo 8.
+ * W55 (verify-report ronda 16): el orden sale del puesto CONGELADO, no del que
+ * `computeStandings` calcula hoy. El orden en vivo depende del snapshot de
+ * desempate, el snapshot depende de `discipline_entries`, y PROMOVER un
+ * invitado escribe ahí — así que después de promover la tabla podía reordenarse
+ * mientras los puntos seguían congelados. Medido: el primero mostraba 6 puntos
+ * y el segundo 8.
+ *
+ * W57 (verify-report ronda 17): **el lado que no cobra puntos conserva su LUGAR
+ * DEPORTIVO.** Se reordenan entre sí sólo los lados que TIENEN premio; los que
+ * no lo tienen se quedan en el índice donde `computeStandings` los puso. Antes
+ * un lado sin premio valía `Number.MAX_SAFE_INTEGER` y se iba al fondo, así que
+ * la pareja de dos invitados que ganó los 4 partidos con +16 quedaba ÚLTIMA con
+ * `PG=4` y `Dif=+16` impresos en su propia fila — y también con `pair_size = 2`,
+ * que es el camino de producción. Es exactamente lo que `core/awards.ts` ya
+ * decía en prosa: "A pair made only of guests … keeps its place in the matchday
+ * table but consumes no paying position".
  */
 export function frozenTableRows(
   rows: readonly SideStanding[],
   frozen: ReadonlyMap<EntryId, ConPuesto>,
 ): SideStanding[] {
-  const OUTSIDE = Number.MAX_SAFE_INTEGER
-  const frozenPositionOf = (row: SideStanding): number =>
-    Math.min(...members(row.side).map((entryId) => frozen.get(entryId)?.position ?? OUTSIDE))
-  return [...rows].sort((left, right) => frozenPositionOf(left) - frozenPositionOf(right))
+  const conPuesto = rows
+    .map((row) => ({ row, position: frozenPositionOf(row, frozen) }))
+    .filter((fila): fila is { row: SideStanding; position: number } => fila.position !== null)
+    .sort((left, right) => left.position - right.position)
+
+  let siguiente = 0
+  return rows.map((row) => {
+    if (frozenPositionOf(row, frozen) === null) return row
+    const premiada = conPuesto[siguiente]
+    siguiente += 1
+    // `?? row` es inalcanzable: `conPuesto` tiene exactamente una entrada por
+    // fila con premio, y acá se consume una por cada una. Está para no mentirle
+    // al tipo con un `!` bajo `noUncheckedIndexedAccess`.
+    return premiada?.row ?? row
+  })
 }

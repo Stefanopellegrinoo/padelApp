@@ -140,10 +140,24 @@ async function squadSeatsOf(seasonId: string): Promise<string[]> {
  * es que el 1 los ganó por más goles. Y tiene adentro los dos marcadores que
  * el modelo de pádel no podía expresar: un `3-1` y un `0-0`.
  *
- *   0: gana 1-0 y 1-0, empata 0-0   → 2 ganados, dif. +2
- *   1: pierde 0-1, gana 3-1 y 4-0   → 2 ganados, dif. +5
- *   3: empata 0-0, pierde 0-4, gana 1-0 → 1 ganado
- *   2: pierde los tres              → 0 ganados
+ *   0: gana 1-0 y 1-0, empata 0-0       → 2 ganados, 1 empatado, dif. +2 → 7 pts
+ *   1: pierde 0-1, gana 3-1 y 4-0       → 2 ganados, 0 empatados, dif. +5 → 6 pts
+ *   3: empata 0-0, pierde 0-4, gana 1-0 → 1 ganado,  1 empatado, dif. −3 → 4 pts
+ *   2: pierde los tres                  → 0 ganados                      → 0 pts
+ *
+ * ── PR20 rebanada B: este plan CAMBIÓ de significado ──────────────────────
+ *
+ * Hasta acá el empate no valía nada, así que 0 y 1 llegaban los dos con 2
+ * ganados y lo único que los separaba era la diferencia de gol: 1 arriba.
+ * Con `REQ-D6-2` el empate paga 1, y el lado 0 —que no perdió NINGUNO— le
+ * pasa al 1, que perdió uno, aunque el 1 tenga mejor diferencia de gol. Es
+ * exactamente lo que hace toda liga de fútbol, y es el síntoma que se vio en
+ * pantalla: la pareja del 0-0 terminaba sin crédito.
+ *
+ * Lo que este plan YA NO ejercita es el corte por diferencia de gol, porque
+ * ahora los cuatro lados llegan con puntos distintos. Dicho en voz alta, no
+ * escondido: ese criterio lo fija `core/standings.test.ts` ("corta por
+ * diferencia de gol y no por diferencia de sets").
  */
 const PLAN: Record<string, [number, number]> = {
   '0-1': [1, 0],
@@ -155,7 +169,7 @@ const PLAN: Record<string, [number, number]> = {
 }
 
 describe('jugar la liga de FIFA: un 3-1, un 0-0, y la tabla', () => {
-  it('carga los goles por la pantalla, cierra la fecha y reparte por diferencia de gol', async () => {
+  it('carga los goles por la pantalla, cierra la fecha, y el invicto gana aunque empate', async () => {
     const { admin, seasonId, disciplineId } = await leagueFromWizard(['FIFA'])
 
     const matchdayId = await createMatchday(admin.client, seasonId, '2026-03-05', disciplineId)
@@ -211,10 +225,12 @@ describe('jugar la liga de FIFA: un 3-1, un 0-0, y la tabla', () => {
       return members(side).map((entryId) => pointsByEntry.get(entryId))
     }
 
-    // Los lados 0 y 1 ganaron LOS DOS dos partidos: si esto sale al revés, la
-    // tabla no está mirando la diferencia de gol.
-    expect(pointsOf(1)).toEqual([10, 10])
-    expect(pointsOf(0)).toEqual([6, 6])
+    // El lado 0 ganó DOS y empató uno; el 1 ganó dos y perdió uno, con mejor
+    // diferencia de gol. Gana el invicto: si esto sale al revés, el empate
+    // volvió a valer lo mismo que una derrota (REQ-D6-2), que es el bug.
+    expect(pointsOf(0)).toEqual([10, 10])
+    expect(pointsOf(1)).toEqual([6, 6])
+    // Y el 3, que empató uno y ganó uno, le saca ventaja al que perdió todo.
     expect(pointsOf(3)).toEqual([3, 3])
     expect(pointsOf(2)).toEqual([1, 1])
   })

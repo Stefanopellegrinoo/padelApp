@@ -105,8 +105,13 @@ export async function updateDisciplineConfig(
     config.points.length !== vigente.points.length ||
     config.squadSize !== vigente.squadSize
   ) {
+    // N40 (verify-report ronda 17): el mensaje decía "—alguien sumó un jugador
+    // al plantel—". El guard dispara ante CUALQUIER diferencia de largo o de
+    // `squadSize`, en cualquier dirección; hoy la causa es cierta sólo porque
+    // el único escritor automático suma, y el `ponytail:` de arriba dice que va
+    // a haber más. Sin la causa dice lo mismo y no envejece.
     throw new EdgeError(
-      'La configuración cambió mientras editabas —alguien sumó un jugador al plantel—. Recargá la pantalla y volvé a aplicar el cambio.',
+      'La configuración cambió mientras editabas. Recargá la pantalla y volvé a aplicar el cambio.',
     )
   }
   const { error, count } = await supabase

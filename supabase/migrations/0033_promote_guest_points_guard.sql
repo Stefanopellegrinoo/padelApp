@@ -36,6 +36,7 @@ declare
   v_disc_at    int;
   v_pair_size  int;
   v_squad      int;
+  v_squad_raw  jsonb;
   v_points     jsonb;
 begin
   select season_id, matchday_id, kind, display_name
@@ -151,8 +152,14 @@ begin
   -- plantel—, asi que la lista sigue alcanzando; medido en la ronda 15
   -- (promover → reabrir → re-cerrar da 8 premios, perfecto).
   if v_pair_size = 1 then
-    select (config ->> 'squadSize')::int, config -> 'points'
-      into v_squad, v_points
+    -- S57 (verify-report ronda 17): esto leia `(config ->> 'squadSize')::int` y
+    -- el cast reventaba ACA, antes de que el guard de abajo pudiera mirar nada
+    -- — con `squadSize = "ocho"` el admin recibia `invalid input syntax for
+    -- type integer: "ocho"`, la ultima de las siete filas de la matriz de W54
+    -- que le llegaba como "Referencia: NNNN". Se lee como jsonb, se chequea el
+    -- tipo, y recien despues se castea.
+    select config -> 'squadSize', config -> 'points'
+      into v_squad_raw, v_points
       from public.disciplines where id = v_discipline for update;
 
     -- W54: `||` sobre un jsonb que no es array no se queja — escribe
@@ -163,9 +170,10 @@ begin
     if v_points is null or jsonb_typeof(v_points) <> 'array' then
       raise exception 'La configuración de la disciplina está rota: la lista de puntos no es una lista.';
     end if;
-    if v_squad is null then
+    if v_squad_raw is null or jsonb_typeof(v_squad_raw) <> 'number' then
       raise exception 'La configuración de la disciplina está rota: no dice de cuántos es el plantel.';
     end if;
+    v_squad := (v_squad_raw #>> '{}')::int;
 
     -- 12 es MAX_PLAYERS (`core/constants.ts`). Duplicado a proposito y con
     -- tripwire: `core/constants.test.ts` fija el valor, asi que cambiarlo alla

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatLabel, narrateRules } from './narrate'
+import { formatLabel, formatsLabel, narrateRules } from './narrate'
 import { MASTERS_MATCHES, MASTERS_SIZE } from './constants'
 import type { SeasonConfig } from './types'
 
@@ -178,5 +178,42 @@ describe('formatLabel', () => {
 
   it('no nombra ningún set cuando el marcador es abierto', () => {
     expect(formatLabel({ ...CONFIG.matchFormat, openScore: true })).toBe('Marcador de goles')
+  })
+})
+
+// W64 (verify-report ronda 21). Antes de PR20 rebanada D2 todas las
+// disciplinas de una temporada compartían `matchFormat`, así que UNA línea de
+// formato era verdad. D2 hizo posibles dos formatos en el mismo torneo y por
+// eso convirtió esa frase en falsa: Reglas y Ajustes narraban
+// `primaryDiscipline(header)` y le decían al grupo "1 set a 4 games" sobre un
+// torneo que tiene una mitad que se juega a goles.
+describe('formatsLabel', () => {
+  const PADEL = CONFIG.matchFormat
+  const FIFA = { ...CONFIG.matchFormat, openScore: true }
+
+  it('con un solo formato dice lo de siempre, sin prefijo', () => {
+    expect(formatsLabel([{ label: 'Pádel', matchFormat: PADEL }])).toBe('1 set a 4 games')
+  })
+
+  it('con dos formatos nombra los dos y de quién es cada uno', () => {
+    expect(
+      formatsLabel([
+        { label: 'Pádel', matchFormat: PADEL },
+        { label: 'FIFA', matchFormat: FIFA },
+      ]),
+    ).toBe('Pádel: 1 set a 4 games · FIFA: Marcador de goles')
+  })
+
+  it('dos disciplinas del mismo formato no son dos cosas que nombrar', () => {
+    expect(
+      formatsLabel([
+        { label: 'Pádel', matchFormat: PADEL },
+        { label: 'Pádel', matchFormat: PADEL },
+      ]),
+    ).toBe('1 set a 4 games')
+  })
+
+  it('sin disciplinas no inventa una frase', () => {
+    expect(formatsLabel([])).toBe('')
   })
 })

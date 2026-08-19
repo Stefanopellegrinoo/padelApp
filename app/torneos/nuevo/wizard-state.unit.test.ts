@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { defaultConfig, validateConfig } from '@/core'
 import {
+  STEPPERS,
   type Squad,
   addMySeat,
   buildDisciplines,
@@ -12,6 +13,7 @@ import {
   removeSeatAt,
   resizeConfig,
   squadWarning,
+  steppersFor,
   submitSeats,
   summaryOf,
   toggleDiscipline,
@@ -324,5 +326,40 @@ describe('submitSeats', () => {
   it('trims the names it sends', () => {
     const squad = { names: ['  Colo  ', ' Nacho '], mySeat: 0 }
     expect(submitSeats(squad).squadNames).toEqual(['Colo', 'Nacho'])
+  })
+})
+
+/**
+ * W63 (verify-report ronda 21): el paso 4 de una liga que NO tiene pádel
+ * dibujaba "Sets por partido" y "Games por set", y el segundo se anuncia con
+ * "A 4 games el resultado se carga en dos toques" — justo la máquina que una
+ * disciplina de marcador abierto no monta.
+ *
+ * El criterio NO es el de Ajustes. Allá la config es de UNA disciplina y
+ * alcanza con `openScore`; acá es de la TEMPORADA y la comparten todas las
+ * marcadas, así que los steppers se van sólo cuando NINGUNA usa sets.
+ */
+describe('steppersFor', () => {
+  const PADEL = configFor(8).matchFormat
+  const FIFA = { ...PADEL, openScore: true }
+
+  it('con sets dibuja los cinco', () => {
+    expect(steppersFor([PADEL]).map((row) => row.key)).toEqual(STEPPERS.map((row) => row.key))
+  })
+
+  it('sin sets se van los dos que no gobiernan nada', () => {
+    expect(steppersFor([FIFA]).map((row) => row.key)).toEqual([
+      'regularMatchdays',
+      'countBestOf',
+      'tiebreakSnapshotEvery',
+    ])
+  })
+
+  it('alcanza con que UNA use sets para que sigan estando', () => {
+    expect(steppersFor([PADEL, FIFA]).map((row) => row.key)).toEqual(STEPPERS.map((row) => row.key))
+  })
+
+  it('sin disciplinas no saca nada: no hay "nadie usa sets" sin nadie', () => {
+    expect(steppersFor([])).toEqual(STEPPERS)
   })
 })

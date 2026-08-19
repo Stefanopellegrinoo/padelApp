@@ -6,7 +6,7 @@ import type { Side, SideStanding, SeasonConfig } from './types'
 
 const CONFIG: SeasonConfig = {
   squadSize: 12,
-  matchFormat: { setsToWin: 1, gamesPerSet: 4, tieBreak: true },
+  matchFormat: { setsToWin: 1, gamesPerSet: 4, tieBreak: true, openScore: false },
   points: [10, 7, 5, 3, 2, 1],
   regularMatchdays: 10,
   countBestOf: 8,

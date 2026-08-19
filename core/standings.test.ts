@@ -14,7 +14,7 @@ const PAIRS: Side[] = [
 
 const CONFIG: SeasonConfig = {
   squadSize: 8,
-  matchFormat: { setsToWin: 1, gamesPerSet: 4, tieBreak: true },
+  matchFormat: { setsToWin: 1, gamesPerSet: 4, tieBreak: true, openScore: false },
   points: [10, 6, 3, 1],
   regularMatchdays: 10,
   countBestOf: 8,
@@ -129,7 +129,7 @@ describe('computeStandings', () => {
   it('adds a sets difference step when a match needs more than one set', () => {
     const multiSet: SeasonConfig = {
       ...CONFIG,
-      matchFormat: { setsToWin: 2, gamesPerSet: 6, tieBreak: true },
+      matchFormat: { setsToWin: 2, gamesPerSet: 6, tieBreak: true, openScore: false },
     }
     const pairA = PAIRS[0]
     const pairB = PAIRS[1]

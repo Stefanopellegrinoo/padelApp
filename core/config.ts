@@ -23,7 +23,7 @@ export function defaultConfig(squadSize: number, sideSize: SideSize = 2): Season
   const sideCount = squadSize / sideSize
   return {
     squadSize,
-    matchFormat: { setsToWin: 1, gamesPerSet: 4, tieBreak: true },
+    matchFormat: { setsToWin: 1, gamesPerSet: 4, tieBreak: true, openScore: false },
     points: DEFAULT_POINTS[sideCount] ?? [],
     regularMatchdays: 10,
     countBestOf: 8,
@@ -71,15 +71,40 @@ export function validateConfig(config: SeasonConfig, sideSize: SideSize): string
   }
   errors.push(...pointsErrors(points))
 
-  if (matchFormat.setsToWin < 1) {
-    errors.push(
-      'Los sets para ganar un partido tienen que ser al menos 1: con 0, ningún partido podría terminar.',
-    )
-  }
-  if (matchFormat.gamesPerSet < 1) {
-    errors.push(
-      'Los games por set tienen que ser al menos 1: con 0, la página de reglas describiría un set que no existe.',
-    )
+  // Con marcador abierto no hay set ni número objetivo, así que estos dos
+  // números NO SE LEEN: `setError` ignora `gamesPerSet`/`tieBreak` y
+  // `matchError` no exige `setsToWin` (ver `db/validate.ts`). Exigir que sean
+  // válidos sería rechazar una config de FIFA por dos valores que nadie va a
+  // mirar.
+  //
+  // Se IGNORAN, no se exigen ausentes: `MatchFormat` los declara obligatorios
+  // (design #3801, `tipos`) y volverlos irrepresentables pediría una unión
+  // discriminada, que obligaría a narrowing en los ~8 lectores de
+  // `setsToWin`/`gamesPerSet` — la mayoría pantallas, fuera del alcance del
+  // modelo.
+  //
+  // OJO con la lectura fácil: este `if` NO es lo que habilita el `0-0`. Lo que
+  // hacía imposible un `0-0` era `setError` exigiendo `winner === gamesPerSet`,
+  // y ESO se corta en `db/validate.ts`, no acá. Acá sólo se deja de pedir
+  // coherencia a un número muerto.
+  //
+  // ponytail: el techo es que una disciplina abierta puede guardar
+  // `gamesPerSet: 0` y, si alguien apaga `openScore` después, queda con un
+  // formato que no acepta ningún resultado. Hoy ninguna pantalla escribe
+  // `openScore`, así que no hay camino para llegar ahí; el día que una lo
+  // ofrezca, o valida el formato completo igual, o el cambio de `openScore`
+  // pasa por su propia validación.
+  if (!matchFormat.openScore) {
+    if (matchFormat.setsToWin < 1) {
+      errors.push(
+        'Los sets para ganar un partido tienen que ser al menos 1: con 0, ningún partido podría terminar.',
+      )
+    }
+    if (matchFormat.gamesPerSet < 1) {
+      errors.push(
+        'Los games por set tienen que ser al menos 1: con 0, la página de reglas describiría un set que no existe.',
+      )
+    }
   }
 
   if (regularMatchdays < 1) {

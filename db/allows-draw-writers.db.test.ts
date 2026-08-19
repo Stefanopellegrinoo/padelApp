@@ -44,16 +44,21 @@ import { createTestUser, type TestUser } from './test/users'
  * empate sólo pasa esa validación cuando los dos llegan a `gamesPerSet`, o sea
  * `gamesPerSet = 2` y un 2-2.
  *
- * ponytail: el techo es el modelo de formato, no este test — `MatchFormat` no
- * tiene todavía el `openScore` que el design (#3801, `tipos`) define para FIFA
- * ("cualquier par de enteros >= 0 es legal"). Hasta que exista, un 2-2 en un
- * set a 2 es el ÚNICO empate representable. Cuando `openScore` aterrice, este
- * helper se reemplaza por él y el resto del archivo no cambia.
+ * `openScore: false` A PROPÓSITO, y por eso este helper NO se reemplazó cuando
+ * `openScore` aterrizó (PR20 rebanada D1): lo que este archivo prueba es la
+ * cadena de FK de `allows_draw` contra los escritores reales, y esa cadena
+ * tiene que seguir andando por el camino CERRADO. El marcador abierto tiene su
+ * propio archivo (`db/open-score.db.test.ts`).
+ *
+ * S68 (verify-report ronda 20) de paso: el techo estaba declarado más chico
+ * que el real. La regla medida no es "sólo el 2-2 de un set a 2" sino `N-N`
+ * para cualquier `gamesPerSet` CON tie-break —el formato de pádel por defecto
+ * ya admite un `4-4`— y ningún empate sin él.
  */
 function drawConfig(): SeasonConfig {
   return {
     ...defaultConfig(8),
-    matchFormat: { setsToWin: 1, gamesPerSet: 2, tieBreak: true },
+    matchFormat: { setsToWin: 1, gamesPerSet: 2, tieBreak: true, openScore: false },
     regularMatchdays: 1,
     countBestOf: 1,
   }

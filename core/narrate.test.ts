@@ -5,7 +5,7 @@ import type { SeasonConfig } from './types'
 
 const CONFIG: SeasonConfig = {
   squadSize: 12,
-  matchFormat: { setsToWin: 1, gamesPerSet: 4, tieBreak: true },
+  matchFormat: { setsToWin: 1, gamesPerSet: 4, tieBreak: true, openScore: false },
   points: [10, 7, 5, 3, 2, 1],
   regularMatchdays: 10,
   countBestOf: 8,
@@ -86,7 +86,7 @@ describe('narrateRules', () => {
   it('describes a multi-set format when configured that way', () => {
     const bestOfThree = {
       ...CONFIG,
-      matchFormat: { setsToWin: 2, gamesPerSet: 6, tieBreak: true },
+      matchFormat: { setsToWin: 2, gamesPerSet: 6, tieBreak: true, openScore: false },
     }
     expect(bodyOf(bestOfThree, 'La fecha')).toContain('6 games')
   })
@@ -101,7 +101,7 @@ describe('narrateRules', () => {
   it('orders tiebreakers as sets-difference then games-difference when multi-set', () => {
     const bestOfThree = {
       ...CONFIG,
-      matchFormat: { setsToWin: 2, gamesPerSet: 6, tieBreak: true },
+      matchFormat: { setsToWin: 2, gamesPerSet: 6, tieBreak: true, openScore: false },
     }
     const body = bodyOf(bestOfThree, 'Los desempates')
     const setsPhrase = 'corta la diferencia de sets'
@@ -116,7 +116,7 @@ describe('narrateRules', () => {
   it('omits sets-difference tiebreaker when the format is single-set', () => {
     const singleSet = {
       ...CONFIG,
-      matchFormat: { setsToWin: 1, gamesPerSet: 4, tieBreak: true },
+      matchFormat: { setsToWin: 1, gamesPerSet: 4, tieBreak: true, openScore: false },
     }
     const body = bodyOf(singleSet, 'Los desempates')
     expect(body).not.toContain('corta la diferencia de sets')

@@ -63,7 +63,7 @@ describe('assertValidConfig', () => {
 })
 
 describe('setError — a 4-game set with tie-break', () => {
-  const format: MatchFormat = { setsToWin: 1, gamesPerSet: 4, tieBreak: true }
+  const format: MatchFormat = { setsToWin: 1, gamesPerSet: 4, tieBreak: true, openScore: false }
 
   it.each([[4, 0], [4, 1], [4, 2], [4, 3], [0, 4], [3, 4]])(
     'accepts %i-%i',
@@ -91,7 +91,7 @@ describe('setError — a 4-game set with tie-break', () => {
 })
 
 describe('setError — no tie-break, must win by two', () => {
-  const format: MatchFormat = { setsToWin: 1, gamesPerSet: 4, tieBreak: false }
+  const format: MatchFormat = { setsToWin: 1, gamesPerSet: 4, tieBreak: false, openScore: false }
 
   it.each([[4, 0], [4, 1], [4, 2], [5, 3], [6, 4]])('accepts %i-%i', (gamesA, gamesB) => {
     expect(setError({ gamesA, gamesB }, format, false)).toBeNull()
@@ -103,7 +103,7 @@ describe('setError — no tie-break, must win by two', () => {
 })
 
 describe('matchError', () => {
-  const format: MatchFormat = { setsToWin: 2, gamesPerSet: 4, tieBreak: true }
+  const format: MatchFormat = { setsToWin: 2, gamesPerSet: 4, tieBreak: true, openScore: false }
 
   it('requires the match to be finished', () => {
     const sets = [{ gamesA: 4, gamesB: 2 }]
@@ -139,12 +139,18 @@ describe('matchError', () => {
 // guard que lo rechazaba, y lo hacían sin mirar la disciplina. `allowsDraw` no
 // tiene default a propósito: el compilador obliga a decidir en cada llamada.
 //
-// El formato es `gamesPerSet: 2` porque es el ÚNICO donde un empate pasa la
-// validación de marcador con el modelo de hoy: con tie-break el set corta en
-// `gamesPerSet` exacto, así que el empate legal es el que llega ahí. Cuando
-// `MatchFormat` tenga `openScore` (design #3801, `tipos`) esto se relaja solo.
+// El formato es `gamesPerSet: 2` porque con marcador CERRADO el empate legal
+// es el que llega al corte: con tie-break el set termina en `gamesPerSet`
+// exacto, así que el único empate representable es `N-N` (S68, verify-report
+// ronda 20 — la regla es para cualquier `gamesPerSet`, no sólo el 2, y el
+// formato de pádel por defecto ya admite un `4-4`; sin tie-break no hay
+// ninguno).
+//
+// `openScore: false` A PROPÓSITO: este bloque describe el marcador de pádel y
+// tiene que seguir describiéndolo. El camino abierto está más abajo, en su
+// propio `describe`.
 describe('setError / matchError con allowsDraw', () => {
-  const format: MatchFormat = { setsToWin: 1, gamesPerSet: 2, tieBreak: true }
+  const format: MatchFormat = { setsToWin: 1, gamesPerSet: 2, tieBreak: true, openScore: false }
 
   it('acepta un 2-2 cuando la disciplina permite empate', () => {
     expect(setError({ gamesA: 2, gamesB: 2 }, format, true)).toBeNull()

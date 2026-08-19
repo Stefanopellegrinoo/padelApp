@@ -4,7 +4,7 @@ import type { SeasonConfig } from './types'
 
 const valid: SeasonConfig = {
   squadSize: 12,
-  matchFormat: { setsToWin: 1, gamesPerSet: 4, tieBreak: true },
+  matchFormat: { setsToWin: 1, gamesPerSet: 4, tieBreak: true, openScore: false },
   points: [10, 7, 5, 3, 2, 1],
   regularMatchdays: 10,
   countBestOf: 8,
@@ -171,5 +171,51 @@ describe('defaultConfig', () => {
   // tabla vacía que le tocaba por casualidad.
   it('divides by the real side size, not always by 2 (C16)', () => {
     expect(defaultConfig(4, 1).points).toEqual(defaultConfig(8, 2).points)
+  })
+})
+
+// ── PR20 rebanada D1 — `validateConfig` entiende el marcador abierto ─────────
+//
+// Con `openScore: true` no hay set ni número objetivo, así que `setsToWin` y
+// `gamesPerSet` no los lee NADIE (ver `db/validate.ts`). Exigir que sean
+// válidos sería rechazar una config de FIFA por dos valores muertos.
+//
+// OJO: este `describe` NO es lo que habilita el `0-0`. Lo que lo hacía
+// imposible era `setError` exigiendo `winner === gamesPerSet`; eso se corta en
+// `db/validate.ts`. Acá sólo se deja de pedir coherencia a un número que nadie
+// mira.
+describe('validateConfig con openScore', () => {
+  const dead = { setsToWin: 0, gamesPerSet: 0, tieBreak: false }
+
+  it('ignora setsToWin y gamesPerSet cuando el marcador es abierto', () => {
+    expect(
+      validateConfig({ ...valid, matchFormat: { ...dead, openScore: true } }, 2),
+    ).toEqual([])
+  })
+
+  it('y los sigue exigiendo, palabra por palabra, cuando no lo es (REQ-NR-1)', () => {
+    const errors = validateConfig({ ...valid, matchFormat: { ...dead, openScore: false } }, 2)
+    expect(errors).toContain(
+      'Los sets para ganar un partido tienen que ser al menos 1: con 0, ningún partido podría terminar.',
+    )
+    expect(errors).toContain(
+      'Los games por set tienen que ser al menos 1: con 0, la página de reglas describiría un set que no existe.',
+    )
+  })
+
+  // El default es el pádel de siempre. Si esto se da vuelta, una temporada
+  // nueva nace con marcador abierto sin que nadie lo haya pedido.
+  it('defaultConfig nace con el marcador cerrado', () => {
+    expect(defaultConfig(8).matchFormat.openScore).toBe(false)
+  })
+
+  // El resto de la config NO se afloja: `openScore` habla del marcador, no de
+  // los puntos ni del plantel.
+  it('no afloja nada más de la config', () => {
+    const errors = validateConfig(
+      { ...valid, points: [], matchFormat: { ...dead, openScore: true } },
+      2,
+    )
+    expect(errors.length).toBeGreaterThan(0)
   })
 })

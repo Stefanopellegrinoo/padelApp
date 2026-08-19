@@ -38,6 +38,43 @@ export function openScoreSet(goalsA: string, goalsB: string): SetScore | null {
 }
 
 /**
+ * Si lo que hay escrito en un lado ya se puede descartar como marcador.
+ *
+ * Lo vacío NO cuenta: mientras el campo está en blanco no hay nada que
+ * reprocharle a nadie, sólo falta un número. Lo que cuenta es texto que ya no
+ * puede llegar a ser un marcador por más que se siga tipeando.
+ */
+export function goalsRejected(text: string): boolean {
+  return text.trim().length > 0 && parseGoals(text) === null
+}
+
+/**
+ * Por qué "Guardar resultado" está apagado, o `null` si no hay nada que
+ * explicar.
+ *
+ * S74 (verify-report ronda 21): tipear `abc`, `-5`, `1.5` o —lo más natural del
+ * mundo— `3-1` en el primer campo dejaba el texto a la vista y el botón muerto,
+ * sin mensaje, sin borde y sin `aria-invalid`. El rechazo del SERVIDOR sí se
+ * explica (`matchError` vuelve por el `WriteResult` y la pantalla lo dibuja);
+ * el del cliente no explicaba nada.
+ *
+ * No dice nada cuando lo único que falta es terminar de escribir: un panel que
+ * te reta por tener un campo vacío antes de que llegues al segundo es peor que
+ * uno callado.
+ *
+ * El caso del `3-1` en un solo campo se nombra a propósito, con ese ejemplo: es
+ * "el resultado", es lo que alguien escribe sin pensarlo, y saber que el
+ * marcador va partido en dos es justamente lo que hay que contar.
+ */
+export function goalsError(goalsA: string, goalsB: string): string | null {
+  if (!goalsRejected(goalsA) && !goalsRejected(goalsB)) return null
+  return (
+    `Va un número entero por lado, de hasta ${MAX_GOAL_DIGITS} dígitos. ` +
+    `Un 3-1 se carga como 3 en un lado y 1 en el otro.`
+  )
+}
+
+/**
  * Sólo dígitos: el `-`, el `.` y el vacío son "todavía no", no un cero. El
  * largo del `GOALS` de arriba y `MAX_GOAL_DIGITS` son el mismo número escrito
  * dos veces —el `maxLength` del campo sale del segundo— y por eso están

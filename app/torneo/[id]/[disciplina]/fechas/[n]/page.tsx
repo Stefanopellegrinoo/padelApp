@@ -105,11 +105,21 @@ function tiebreakNote(
     const better = standings[i - 1]
     const worse = standings[i]
     if (better === undefined || worse === undefined) continue
-    if (better.won !== worse.won) continue
+    // `dayPoints`, no `won`: es el PRIMER criterio real del sort desde PR20
+    // rebanada B. Mirar `won` acá dejaba a la frase explicando un escalón que
+    // ya no es el que ordena — con empates, dos lados con los mismos ganados
+    // pueden estar separados por puntos, y la frase diría que empataron.
+    if (better.dayPoints !== worse.dayPoints) continue
     if (bySetsDiff && better.setsDiff !== worse.setsDiff) continue
 
+    // Nivelados en PUNTOS no es lo mismo que nivelados en partidos ganados:
+    // uno pudo ganar uno y el otro empatar tres. Sin empates permitidos
+    // `dayPoints === won`, así que esto es siempre "partidos ganados" y el
+    // pádel no cambia una letra — verificado, no supuesto.
+    const nivelados = better.won === worse.won ? 'partidos ganados' : 'puntos de la fecha'
+
     if (better.gamesDiff !== worse.gamesDiff) {
-      return `${label(worse.side)} ${quedaron} ${worse.position}° por ${scoreDiff}: ${empataron} en partidos ganados con ${label(better.side)}.`
+      return `${label(worse.side)} ${quedaron} ${worse.position}° por ${scoreDiff}: ${empataron} en ${nivelados} con ${label(better.side)}.`
     }
 
     //Nota: con todo empatado (partidos ganados y diferencia de games) el
@@ -118,7 +128,7 @@ function tiebreakNote(
     // No hay copy contractual para ese caso puntual y no ocurre con el formato
     // a un set por defecto (sin empates posibles); si hiciera falta, se
     // exporta el criterio exacto desde `core/standings.ts`.
-    return `${label(worse.side)} ${quedaron} ${worse.position}° por el desempate de la fecha: ${empataron} en partidos ganados y en ${scoreDiff} con ${label(better.side)}.`
+    return `${label(worse.side)} ${quedaron} ${worse.position}° por el desempate de la fecha: ${empataron} en ${nivelados} y en ${scoreDiff} con ${label(better.side)}.`
   }
   return null
 }
@@ -357,7 +367,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
     ])
 
     const snapshot = snapshotForMatchday(matchdayNumber, seedOrder, awardsByMatchday, config)
-    const standings = computeStandings(detail.sides, detail.matches, config, snapshot)
+    const standings = computeStandings(detail.sides, detail.matches, config, snapshot, matchday.allowsDraw)
 
     const { defenders, defendersAlreadyRepeated } = previousContext(lastHistory, beforeLastHistory)
     const effectiveDefenders = defenders !== null && !defendersAlreadyRepeated ? defenders : null

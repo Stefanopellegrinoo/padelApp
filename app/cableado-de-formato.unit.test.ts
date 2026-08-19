@@ -138,6 +138,53 @@ describe('Ajustes — la página entera', () => {
   })
 })
 
+/** El panel que edita el formato, tal cual sale al HTML. */
+function panelDeFormato(html: string): string {
+  return /<section id="formato"[\s\S]*?<\/section>/.exec(html)?.[0] ?? ''
+}
+
+describe('Ajustes — el panel de Formato dice de qué disciplina habla', () => {
+  /**
+   *La fila de arriba anuncia el formato de LAS DOS disciplinas y su
+   * `href="#formato"` ancla a un `<Formato>` alimentado con
+   * `primaryDiscipline(header)`, que edita y guarda la disciplina [0] y nada
+   * más. Antes de la ronda 21 la fila y el panel decían lo mismo; nombrar los
+   * dos formatos arregló la fila y dejó el CONTROL narrando otro alcance. Es
+   * W64 corrido una capa para abajo.
+   *
+   * El arreglo es que el panel diga de cuál habla, no que la fila diga menos:
+   * achicar la fila revierte W64 en Ajustes, que la ronda 22 verificó cerrado
+   * en pantalla. Y no se abre camino a la segunda disciplina: eso sería
+   * superficie nueva.
+   */
+  it('con pádel primero nombra Pádel, y son sus cinco steppers los que dibuja', async () => {
+    const panel = panelDeFormato(await ajustes(PADEL_Y_FIFA))
+    expect(panel).toContain('>Formato · Pádel</h2>')
+    expect(panel).toContain('Sets por partido')
+  })
+
+  /**
+   * La mitad que prueba que el nombre SIGUE a la disciplina que el panel
+   * edita, en vez de ser un 'Pádel' escrito a mano: con FIFA en la posición
+   * [0] el panel edita FIFA, y no dibuja los steppers de sets.
+   */
+  it('con FIFA primero nombra FIFA, y no dibuja los steppers de sets', async () => {
+    const panel = panelDeFormato(
+      await ajustes([disciplina('d1', 'FIFA', FIFA), disciplina('d2', 'PADEL', PADEL)]),
+    )
+    expect(panel).toContain('>Formato · FIFA</h2>')
+    expect(panel).not.toContain('Sets por partido')
+  })
+
+  /**
+   * PIN de no-regresión: un torneo de UNA sola disciplina —o sea todos los que
+   * existen hoy— no gana un sufijo. No hay de qué desambiguar.
+   */
+  it('con una sola disciplina el panel dice exactamente lo de siempre', async () => {
+    expect(panelDeFormato(await ajustes(SOLO_PADEL))).toContain('>Formato</h2>')
+  })
+})
+
 describe('el paso 4 del wizard — el cableado que ningún render alcanza', () => {
   const fuente = sinComentarios(
     readFileSync(join(process.cwd(), 'app/torneos/nuevo/wizard.tsx'), 'utf8'),

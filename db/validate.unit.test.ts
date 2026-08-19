@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { defaultConfig, type MatchFormat } from '@/core'
+import { defaultConfig, validateConfig, type MatchFormat } from '@/core'
 import { EdgeError } from './errors'
 import {
   assertValidConfig,
@@ -380,5 +380,110 @@ describe('assertGuestsNamed', () => {
   it('accepts when everyone has a name', () => {
     const guests: GuestSeat[] = [{ entryId: 'g1', displayName: 'Juan' }]
     expect(() => assertGuestsNamed(guests)).not.toThrow()
+  })
+})
+
+// ── PR20 rebanada D1 — MARCADOR ABIERTO (decisión #3933, design #3801 `tipos`)
+//
+// Un partido de FIFA se carga con goles: cualquier par de enteros >= 0. Sin
+// número objetivo, sin tope de games, sin "quién ganó". `3-1`, `0-0` y `2-2`
+// son resultados legales del MISMO formato — que es exactamente lo que el
+// modelo de pádel NO puede expresar (ronda 20, medido: "podés tener empates o
+// podés tener un rango de marcadores, nunca las dos cosas").
+describe('setError / matchError con openScore (marcador abierto)', () => {
+  // `gamesPerSet: 4` y `tieBreak: true` siguen ahí porque `MatchFormat` los
+  // declara obligatorios — y son EXACTAMENTE los dos que hoy prohíben un 3-1
+  // (con tie-break el set corta en `gamesPerSet` exacto). Que el 3-1 pase con
+  // estos mismos números es la prueba de que el camino abierto no los lee.
+  const fifa: MatchFormat = { setsToWin: 1, gamesPerSet: 4, tieBreak: true, openScore: true }
+  const padel: MatchFormat = { setsToWin: 1, gamesPerSet: 4, tieBreak: true, openScore: false }
+
+  it.each([
+    [3, 1],
+    [0, 0],
+    [2, 2],
+    [7, 0],
+    [1, 4],
+  ])('acepta un %i-%i', (gamesA, gamesB) => {
+    expect(setError({ gamesA, gamesB }, fifa, true)).toBeNull()
+  })
+
+  it('el MISMO 3-1 sigue rebotando con el marcador de pádel, palabra por palabra', () => {
+    expect(setError({ gamesA: 3, gamesB: 1 }, padel, true)).toBe(
+      'En un set a 4 games con tie-break, 3-1 no es un resultado posible.',
+    )
+  })
+
+  it('no afloja los enteros ni los negativos: eso es un borde de confianza', () => {
+    expect(setError({ gamesA: -1, gamesB: 0 }, fifa, true)).not.toBeNull()
+    expect(setError({ gamesA: 2.5, gamesB: 1 }, fifa, true)).not.toBeNull()
+  })
+
+  // El empate es una regla ORTOGONAL al marcador abierto, y tiene que serlo:
+  // `match_sets_no_draw` (0034) lo sigue exigiendo del lado de la base
+  // (`check (allows_draw or games_a <> games_b)`). Si `openScore` aflojara el
+  // empate por su cuenta, la app aceptaría algo que la base rechaza y el
+  // mensaje legible se cambiaría por una violación de constraint.
+  it('el empate lo sigue decidiendo allowsDraw, no openScore', () => {
+    expect(setError({ gamesA: 0, gamesB: 0 }, fifa, false)).not.toBeNull()
+    expect(setError({ gamesA: 3, gamesB: 1 }, fifa, false)).toBeNull()
+  })
+
+  it('y el rechazo del empate abierto no nombra al pádel', () => {
+    expect(setError({ gamesA: 0, gamesB: 0 }, fifa, false)).not.toMatch(/padel/)
+    expect(setError({ gamesA: 4, gamesB: 4 }, padel, false)).toMatch(/en padel no hay empates/)
+  })
+
+  it('un marcador abierto es UN partido, no una serie de sets', () => {
+    expect(matchError([{ gamesA: 3, gamesB: 1 }], fifa, true)).toBeNull()
+    expect(matchError([{ gamesA: 0, gamesB: 0 }], fifa, true)).toBeNull()
+    expect(matchError([], fifa, true)).toMatch(/Falta cargar/)
+    expect(
+      matchError(
+        [
+          { gamesA: 3, gamesB: 1 },
+          { gamesA: 1, gamesB: 0 },
+        ],
+        fifa,
+        true,
+      ),
+    ).not.toBeNull()
+  })
+})
+
+// ── W62 (verify-report ronda 20) ────────────────────────────────────────────
+//
+// `matchError` daba por TERMINADO un partido empatado a mitad de camino: 1-1
+// en sets en un formato a 2, que en pádel seguiría con un tercero. El
+// comentario que lo amparaba decía que el caso era "inalcanzable —la única
+// disciplina con empates que el modelo de formato puede expresar es de un solo
+// set—", y la ronda 20 midió que eso es FALSO: `validateConfig` acepta
+// `setsToWin: 2` sobre una disciplina con empates devolviendo `[]`, y `config`
+// SÍ está en el grant de UPDATE de `authenticated`.
+//
+// Se cierra con `openScore` porque el propio comentario lo nombraba como su
+// resolución: ahora el modelo distingue "partido a N sets" de "partido a un
+// marcador abierto", y el empate que TERMINA un partido es el del segundo
+// —o el del primero cuando N = 1, que es todo lo que hay para jugar—.
+describe('W62 — un empate a mitad de camino no cierra el partido', () => {
+  const twoSets: MatchFormat = { setsToWin: 2, gamesPerSet: 4, tieBreak: true, openScore: false }
+
+  it('la config que lo hace alcanzable pasa validateConfig sin una queja', () => {
+    expect(validateConfig({ ...defaultConfig(8), matchFormat: twoSets }, 2)).toEqual([])
+  })
+
+  it('1-1 en un partido a 2 sets NO está terminado', () => {
+    const sets = [
+      { gamesA: 4, gamesB: 0 },
+      { gamesA: 0, gamesB: 4 },
+    ]
+    expect(matchError(sets, twoSets, true)).toMatch(/no lo cierra/)
+  })
+
+  // El pin del otro lado: `REQ-D6-1` (el 2-2 que dejó andando la rebanada C)
+  // no se mueve. Con `setsToWin: 1` se jugó todo lo que había para jugar.
+  it('pero un set empatado en un formato a UN set sí cierra (REQ-D6-1)', () => {
+    const oneSet: MatchFormat = { setsToWin: 1, gamesPerSet: 2, tieBreak: true, openScore: false }
+    expect(matchError([{ gamesA: 2, gamesB: 2 }], oneSet, true)).toBeNull()
   })
 })

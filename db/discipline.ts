@@ -67,14 +67,48 @@ export async function disciplineConfig(
  * después su update matchea 0 filas contra `disciplines_write` (que usa
  * `is_season_admin`). Sin esto la pantalla le decía que guardó y al recargar
  * volvía la config vieja.
+ *
+ * C23 (verify-report ronda 16): desde `0032_promote_guest_points_slot.sql` la
+ * BASE también escribe `disciplines.config` —al promover un invitado de a uno
+ * agrega un casillero de puntos y sube `squadSize`—, y esta función era un
+ * overwrite CIEGO del blob entero. Con Formato abierto en una pestaña y una
+ * promoción en otra, el primer toque del admin pisaba el casillero recién
+ * agregado sin un solo error en pantalla, y la fecha volvía a quedar sin poder
+ * cerrarse (C22).
+ *
+ * El guard compara el LARGO de `points` y `squadSize`, que son exactamente los
+ * dos campos que la app se escribe a sí misma. Formato edita VALORES —no tiene
+ * control para agregar o sacar un puesto, ni para mover el plantel—, así que
+ * una diferencia ahí no puede venir del formulario: sólo de que la fila cambió
+ * abajo mientras estaba abierto.
+ *
+ * ponytail: es un lock optimista pobre, sobre dos campos elegidos a mano y no
+ * sobre la fila entera. Alcanza porque hoy hay UN solo escritor automático y
+ * toca esos dos campos. El día que aparezca otro que toque cualquier otra
+ * cosa, esto no lo ve — ahí corresponde una columna de versión y comparar la
+ * fila, no dos campos.
  */
 export async function updateDisciplineConfig(
   supabase: Client,
   disciplineId: DisciplineId,
   config: SeasonConfig,
 ): Promise<void> {
-  const { pairSize } = await disciplineConfig(supabase, disciplineId)
+  const { config: vigente, pairSize } = await disciplineConfig(supabase, disciplineId)
+  // La validez del payload se chequea PRIMERO, y el orden importa: una config
+  // con la cantidad equivocada de puntos y una armada sobre una fila vieja se
+  // ven iguales desde acá (las dos tienen otro largo), pero la primera es un
+  // error de contenido y merece el mensaje de `validateConfig`, que dice
+  // cuántos valores hacen falta. Con el orden al revés, ese mensaje quedaba
+  // tapado por el de concurrencia.
   assertValidConfig(config, pairSize)
+  if (
+    config.points.length !== vigente.points.length ||
+    config.squadSize !== vigente.squadSize
+  ) {
+    throw new EdgeError(
+      'La configuración cambió mientras editabas —alguien sumó un jugador al plantel—. Recargá la pantalla y volvé a aplicar el cambio.',
+    )
+  }
   const { error, count } = await supabase
     .from('disciplines')
     .update({ config: config as unknown as Json }, { count: 'exact' })

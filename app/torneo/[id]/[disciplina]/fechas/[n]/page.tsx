@@ -27,7 +27,7 @@ import {
   seasonHeader,
   seasonMatchdaysOf,
 } from '@/db/read'
-import { awardsBefore, closedHistory, frozenPointsOf } from '@/db/season'
+import { awardsBefore, closedHistory, frozenPointsOf, type FrozenAward } from '@/db/season'
 import { serverClient } from '@/db/server'
 import { EdgeError } from '@/db/errors'
 import { matchdayFull } from '@/app/format'
@@ -344,7 +344,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
       // descartan y el estado ya lo sabemos).
       status === 'CLOSED' && !isMasters
         ? frozenPointsOf(supabase, matchday.id)
-        : Promise.resolve(new Map<string, number>()),
+        : Promise.resolve(new Map<string, FrozenAward>()),
     ])
 
     const snapshot = snapshotForMatchday(matchdayNumber, seedOrder, awardsByMatchday, config)
@@ -379,6 +379,26 @@ export default async function FechaDetailPage({ params }: PageProps) {
     // El Masters queda en cero como antes: no reparte puntos (spec 2.7), así
     // que no tiene filas en `awards` y `frozenPointsOf` ni se consulta.
     const pointsByEntry = frozenPoints
+
+    // W55 (verify-report ronda 16): las filas de una fecha CERRADA se ordenan
+    // por el puesto CONGELADO, no por el que `computeStandings` calcula hoy.
+    //
+    // El orden en vivo depende del snapshot de desempate, el snapshot depende
+    // de `discipline_entries`, y PROMOVER un invitado escribe ahí — así que
+    // después de promover la tabla podía reordenarse mientras los puntos
+    // seguían congelados. Medido: el primero mostraba 6 puntos y el segundo 8.
+    // Es la misma clase que C21 del otro lado — ahí eran los puntos los que se
+    // recalculaban, acá era el orden.
+    //
+    // PG y Dif se siguen tomando de `standings`: salen de los resultados, que
+    // una fecha cerrada ya no cambia.
+    const OUTSIDE = Number.MAX_SAFE_INTEGER
+    const frozenPositionOf = (side: Side): number =>
+      Math.min(...members(side).map((entryId) => frozenPoints.get(entryId)?.position ?? OUTSIDE))
+    const tableRows =
+      status === 'CLOSED'
+        ? [...standings].sort((left, right) => frozenPositionOf(left.side) - frozenPositionOf(right.side))
+        : standings
 
     // El campeón del año. Los partidos ganados por jugador salen de `standings`
     // —cada pareja del Masters juega una vez, así que sumar las tres parejas de
@@ -518,7 +538,12 @@ export default async function FechaDetailPage({ params }: PageProps) {
     // `sumar-state.ts`, que es pura y por eso tiene tests: acá adentro no los
     // podía tener, y su predicado ya se escribió mal una vez.
     const guestsForPromotion: GuestPromoteVM[] = canPromote
-      ? guestsToPromote({ guestIds: detail.guestIds, sides: detail.sides, frozenPoints, nameOf })
+      ? guestsToPromote({
+          guestIds: detail.guestIds,
+          sides: detail.sides,
+          frozenPoints: new Map([...frozenPoints].map(([entryId, award]) => [entryId, award.points])),
+          nameOf,
+        })
       : []
     // La lista de asientos es sólo para el select de "antes de quién" de esa
     // tarjeta: sin invitados que sumar no hay tarjeta, y armarla es trabajo al
@@ -574,7 +599,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
               <span className="text-right">Dif</span>
               <span className="text-right">Pts</span>
             </div>
-            {standings.map((row, index) => {
+            {tableRows.map((row, index) => {
               const guestInRow = status === 'CLOSED' && hasGuest(row.side)
               // La columna son "los puntos que se llevó cada jugador"
               // (`ui-screens.md` §9), y en la pareja del invitado los dos no se
@@ -593,7 +618,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
                   ? '—'
                   : String(
                       members(row.side)
-                        .map((entryId) => pointsByEntry.get(entryId))
+                        .map((entryId) => pointsByEntry.get(entryId)?.points)
                         .find((points) => points !== undefined) ?? 0,
                     )
               const diff = row.gamesDiff

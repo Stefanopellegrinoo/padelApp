@@ -390,13 +390,21 @@ describe('disciplineConfig / updateDisciplineConfig (PR 5, REQ-D2-1)', () => {
     // Lo que la pantalla tiene en la mano cuando el admin abre Formato.
     const loQueLaPantallaVio = (await disciplineConfig(admin.client, soloId)).config
 
-    // Mientras tanto la base crece la config, como hace `promote_guest` (0032).
+    // Mientras tanto la base crece la config, como hace `promote_guest`
+    // (0032). Va por service_role y no por `updateDisciplineConfig`: la que
+    // escribe acá es la FUNCIÓN SQL, que no pasa por este camino — y además el
+    // guard nuevo la rechazaría, porque desde su punto de vista también sería
+    // un guardado sobre otra versión.
     const crecida = {
       ...loQueLaPantallaVio,
       squadSize: 9,
       points: [...loQueLaPantallaVio.points, 0],
     }
-    await updateDisciplineConfig(admin.client, soloId, crecida)
+    const { error: crecerError } = await adminClient()
+      .from('disciplines')
+      .update({ config: crecida as unknown as never })
+      .eq('id', soloId)
+    if (crecerError) throw new Error(crecerError.message)
 
     // Y recién ahora el admin toca el "+" del primer puesto, sobre lo viejo.
     const editadoSobreLoViejo = {

@@ -845,8 +845,12 @@ describe('promoteGuest — disciplina de a uno: se promueve, sin copiar nada (PR
     // cobraron no se les movió un punto. Un recálculo con los `guestIds` de
     // hoy daría 9 lados pagos y no podría siquiera producirse.
     expect([...despues.keys()].sort()).toEqual([...antes.keys()].sort())
-    for (const [entryId, points] of antes) {
-      expect(despues.get(entryId)).toBe(points)
+    for (const [entryId, award] of antes) {
+      // `toStrictEqual` y no `toBe`: desde W55 (verify-report ronda 16) el
+      // premio congelado es `{ position, points }` y no un número — el puesto
+      // viaja con los puntos justamente para que el orden de la tabla no
+      // pueda contradecirlos.
+      expect(despues.get(entryId)).toStrictEqual(award)
     }
 
     // Y la fecha se sigue pudiendo LEER entera, que es lo que la pantalla hace

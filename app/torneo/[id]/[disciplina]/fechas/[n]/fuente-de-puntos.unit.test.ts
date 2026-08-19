@@ -20,7 +20,19 @@ import { describe, expect, it } from 'vitest'
  * Es un chequeo estático y crudo a propósito — mismo criterio que
  * `db/migrations.unit.test.ts`, que ya demostró servir. No prueba que la
  * pantalla esté bien; prueba que no volvió a hacer la única cosa que la rompió.
+ *
+ * W52 (verify-report ronda 16): la primera versión miraba el texto crudo y era
+ * frágil por los dos lados — un COMENTARIO que mencionara `computeAwards(` la
+ * rompía (y este archivo y `page.tsx` lo mencionan mucho), y un recálculo por
+ * ALIAS (`import { computeAwards as repartir }`) se le escapaba. Ahora corre
+ * sobre el archivo SIN comentarios y mira el IMPORT, que es por donde tiene que
+ * entrar cualquier forma de llamarla.
  */
+
+/** El fuente sin comentarios de línea ni de bloque: lo que de verdad se ejecuta. */
+function sinComentarios(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ')
+}
 
 const PAGE = join(
   process.cwd(),
@@ -34,13 +46,28 @@ describe('la pantalla de una fecha no recalcula sus puntos', () => {
     expect(source.length).toBeGreaterThan(0)
   })
 
-  it('no llama a computeAwards', () => {
-    // `computeAwards` reparte según los `guestIds` de HOY. Después de promover
-    // un invitado ese conjunto cambia, y el reparto deja de coincidir con lo
-    // que la fecha grabó al cerrarse. Quien lo reparte es `closeMatchday`, una
-    // sola vez; la pantalla lee.
-    const llamadas = [...source.matchAll(/(?<![.\w])computeAwards\s*\(/g)]
-    expect(llamadas).toHaveLength(0)
+  it('no importa computeAwards, ni con alias', () => {
+    // El import es el cuello de botella: cualquier forma de llamarla —directa,
+    // renombrada, o guardada en una variable— tiene que pasar por acá.
+    // `computeAwards` reparte según los `guestIds` de HOY, y después de
+    // promover un invitado ese conjunto cambia. Quien reparte es
+    // `closeMatchday`, una sola vez; la pantalla lee.
+    expect(sinComentarios(source)).not.toMatch(/\bcomputeAwards\b/)
+  })
+
+  it('el chequeo no se rompe por un comentario que la nombre', () => {
+    // W52: la versión anterior miraba el texto crudo, así que un comentario
+    // como este —`computeAwards(standings, ...)`— la ponía en rojo. El fuente
+    // de este mismo archivo la menciona varias veces y sigue en verde.
+    const conComentario = `// computeAwards(standings, config, guestIds)\nconst x = 1\n`
+    expect(sinComentarios(conComentario)).not.toMatch(/\bcomputeAwards\b/)
+  })
+
+  it('caza un recálculo escondido detrás de un alias', () => {
+    // W52, la otra mitad: `import { computeAwards as repartir }` se le escapaba
+    // al regex de llamada. Mirando el import, no.
+    const conAlias = `import { computeAwards as repartir } from '@/core'\nconst p = repartir(a, b, c)\n`
+    expect(sinComentarios(conAlias)).toMatch(/\bcomputeAwards\b/)
   })
 
   it('lee los puntos congelados', () => {

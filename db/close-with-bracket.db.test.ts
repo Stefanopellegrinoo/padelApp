@@ -205,6 +205,31 @@ describe('closeMatchday con llave (GROUPS_KNOCKOUT, Rebanada D1)', () => {
     await expect(closeMatchday(admin.client, matchdayId)).rejects.toThrow(/resultado/)
   })
 
+  it(
+    'la RPC en sí (sin pasar por el wrapper TS) rechaza una SEMI sin jugar -- la rendija de la ' +
+      'migración es SÓLO TERCER_PUESTO, no cualquier fase de la llave',
+    async () => {
+      // El test de arriba pasa por `closeMatchday` (TS), y ahí el loop de
+      // `matchError` ya rechaza ANTES de llegar a la RPC -- no prueba el
+      // guard de la función SQL en sí. Éste llama `close_matchday` directo,
+      // mismo patrón que el resto de `close.db.test.ts` para probar guards
+      // de la RPC de forma aislada.
+      const { admin, matchdayId, matches } = await openGroupsKnockout(8, {
+        kind: 'GROUPS_KNOCKOUT',
+        groups: 2,
+        qualifiersPerGroup: 2,
+      })
+      for (const match of matches) {
+        await saveResult(admin.client, match.id, [{ gamesA: 3, gamesB: 0 }])
+      }
+      await advancePhase(admin.client, matchdayId) // GRUPO -> SEMI, sin jugarla
+
+      const { error } = await admin.client.rpc('close_matchday', { p_matchday: matchdayId, p_awards: [] })
+
+      expect(error?.message).toBe('Faltan resultados por cargar.')
+    },
+  )
+
   it('toda la fase actual jugada pero la llave sin avanzar sigue rechazando (el guard de "la final" en sí)', async () => {
     const { admin, matchdayId, matches } = await openGroupsKnockout(8, {
       kind: 'GROUPS_KNOCKOUT',

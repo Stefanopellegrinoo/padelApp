@@ -468,7 +468,16 @@ export default async function FechaDetailPage({ params }: PageProps) {
       header.isAdmin && status === 'OPEN'
         ? { seasonId, matchdayId: matchday.id, disciplina, matchdayNumber: matchday.number, format: config.matchFormat }
         : null
-    const remainingMatches = detail.matches.filter((match) => match.sets.length === 0).length
+    // Excluye un `TERCER_PUESTO` sin jugar (decisiones #3979/#3988): la RPC
+    // `close_matchday` (0041) ya tolera cerrar con ese único partido vacío, y
+    // el botón "Cerrar fecha" de más abajo tiene que estar de acuerdo — si
+    // no, queda deshabilitado para siempre con "faltan 1 partidos" aunque el
+    // servidor acepte cerrar. Mismo criterio, dos lugares: sin este espejo el
+    // guard que #3988 recién destrabó del lado de la base seguía sin poder
+    // usarse desde la pantalla.
+    const remainingMatches = detail.matches.filter(
+      (match) => match.sets.length === 0 && match.fase !== 'TERCER_PUESTO',
+    ).length
     // Para los dos avisos destructivos del pie: "Volver al armado" (spec: no
     // prometer que se conservan las parejas si ya hay algo cargado) y "Borrar
     // fecha", que nombra cuántos resultados se pierde. No sale de

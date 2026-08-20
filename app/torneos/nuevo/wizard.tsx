@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState, useTransition } from 'react'
-import { MAX_PLAYERS, MIN_PLAYERS, type SeasonConfig } from '@/core'
+import { MAX_PLAYERS, MIN_PLAYERS, type SeasonConfig, type SideSize } from '@/core'
 import { createTournament } from './actions'
 import {
   DISCIPLINE_KINDS,
@@ -25,6 +25,63 @@ import {
   summaryOf,
   toggleDiscipline,
 } from './wizard-state'
+
+const SIDE_SIZES: { value: SideSize; label: string }[] = [
+  { value: 2, label: 'Parejas' },
+  { value: 1, label: 'Individual' },
+]
+
+/**
+ * "Parejas" o "Individual" — `pairSize`, elegido al crear la disciplina y
+ * nunca editable después (`0015_disciplines.sql` revoca su UPDATE a
+ * propósito). Comparten este selector el paso 4 del wizard y "+ Agregar
+ * disciplina" de Ajustes (`disciplinas.tsx`): los mismos dos caminos que ya
+ * comparten `disciplineProfile`/`DISCIPLINE_LABELS`, y por la misma razón
+ * (`buildDisciplines`/`newDisciplineSpec`, Rebanada E) — los dos tienen que
+ * ofrecer lo mismo o el torneo depende de por dónde entraste.
+ *
+ * Exportado y separado de `Disciplinas`/`Wizard` por lo mismo que
+ * `SelectorDeFormato` (`armado.tsx`, PR21 D2): los dos guardan su estado en
+ * un `useState` que arranca cerrado/en default, y sin clicks (este repo no
+ * tiene runner E2E) la suite nunca vería el radio si viviera sólo adentro.
+ * Acá entra con el valor que quiera el test.
+ *
+ * Nace en "Parejas" (`pairSize=2`) en las dos pantallas: ningún torneo de
+ * pádel existente cambia si nadie toca este control.
+ */
+export function SelectorDeLados({
+  pairSize,
+  onChange,
+  disabled = false,
+}: {
+  pairSize: SideSize
+  onChange: (next: SideSize) => void
+  disabled?: boolean
+}) {
+  return (
+    <fieldset className="flex flex-col gap-2">
+      <legend className="text-[11.5px] font-extrabold uppercase tracking-[.14em] text-muted">
+        Lados
+      </legend>
+      {SIDE_SIZES.map(({ value, label }) => (
+        <label
+          key={value}
+          className="flex min-h-[44px] items-center gap-2.5 rounded-field border border-line p-2.5 text-[13.5px] font-[700]"
+        >
+          <input
+            type="radio"
+            name="pairSize"
+            disabled={disabled}
+            checked={pairSize === value}
+            onChange={() => onChange(value)}
+            className="h-5 w-5 shrink-0 accent-accent"
+          />
+          {label}
+        </label>
+      ))}
+    </fieldset>
+  )
+}
 
 const TITLES = ['Nombre y disciplinas', 'El plantel', 'Orden inicial', 'Formato', 'Listo']
 const HELP = [
@@ -141,17 +198,25 @@ function Stepper({
  * TEMPORADA y la comparten todas las disciplinas marcadas, así que se le pasan
  * los formatos de todas — con Pádel y FIFA marcados, "Sets por partido" y
  * "Games por set" siguen gobernando la mitad de pádel y tienen que estar.
+ *
+ * `pairSize`/`onChangePairSize` dibujan acá el radio "Lados" (Rebanada F):
+ * va antes de los puntos porque la curva que se ve depende de él (decisión
+ * #3963) — elegir Lados primero es lo que hace que esos puntos tengan sentido.
  */
 export function PasoFormato({
   config,
   picked,
   errors,
+  pairSize,
   onChange,
+  onChangePairSize,
 }: {
   config: SeasonConfig
   picked: readonly DisciplineKind[]
   errors: string[]
+  pairSize: SideSize
   onChange: (next: SeasonConfig) => void
+  onChangePairSize: (next: SideSize) => void
 }) {
   const steppers = steppersFor(
     buildDisciplines(picked, config).map((row) => row.config.matchFormat),
@@ -159,6 +224,8 @@ export function PasoFormato({
 
   return (
     <>
+      <SelectorDeLados pairSize={pairSize} onChange={onChangePairSize} />
+
       <p className="text-[13.5px] font-[550] leading-[1.5] text-muted">
         Son los puntos de cada posición de la fecha. Si una fecha la juegan menos parejas, se usan
         los primeros de la lista — ganar siempre suma {config.points[0] ?? 0}.
@@ -243,6 +310,9 @@ export function Wizard({ myName }: { myName: string }) {
     mySeat: myName.trim().length === 0 ? null : 0,
   }))
   const [config, setConfig] = useState<SeasonConfig>(() => configFor(MIN_PLAYERS))
+  // Parejas de entrada (pairSize=2): sin tocar el radio "Lados" el torneo
+  // nace igual que siempre — no-regresión de la Rebanada F.
+  const [pairSize, setPairSize] = useState<SideSize>(2)
   // Pádel marcado de entrada: sin tocar nada, el torneo nace igual que
   // siempre (una sola PADEL) — el checkbox no es una regresión, es el mismo
   // default de antes de PR11 hecho explícito.
@@ -260,7 +330,17 @@ export function Wizard({ myName }: { myName: string }) {
 
   const setSquad = (next: Squad) => {
     setSquadState(next)
-    setConfig((current) => resizeConfig(current, filledCount(next.names)))
+    setConfig((current) => resizeConfig(current, filledCount(next.names), pairSize))
+  }
+
+  // Tocar "Lados" rehace la config entera con la curva que le corresponde a
+  // ESE `sideSize` (misma idea que "Usar los defaults"): a diferencia de un
+  // cambio de plantel, acá `resizeConfig` no alcanza sola —su guarda de salida
+  // temprana mira `squadSize`, no `sideSize`, así que un plantel sin cambios
+  // la dejaría pasar de largo y la curva vieja (de parejas) quedaría pisada.
+  const changePairSize = (next: SideSize) => {
+    setPairSize(next)
+    setConfig(configFor(filled, next))
   }
 
   const blocked =
@@ -286,7 +366,7 @@ export function Wizard({ myName }: { myName: string }) {
         name,
         ...submitSeats(squad),
         config: builtConfig,
-        disciplines: buildDisciplines(disciplines, builtConfig),
+        disciplines: buildDisciplines(disciplines, builtConfig, pairSize),
       })
       if (!result.ok) {
         setError(result.error)
@@ -473,7 +553,14 @@ export function Wizard({ myName }: { myName: string }) {
         )}
 
         {step === 3 && (
-          <PasoFormato config={config} picked={disciplines} errors={errors} onChange={setConfig} />
+          <PasoFormato
+            config={config}
+            picked={disciplines}
+            errors={errors}
+            pairSize={pairSize}
+            onChange={setConfig}
+            onChangePairSize={changePairSize}
+          />
         )}
 
         {step === 4 && created !== null && (
@@ -535,7 +622,7 @@ export function Wizard({ myName }: { myName: string }) {
         {step === 3 && (
           <button
             type="button"
-            onClick={() => setConfig(configFor(filled))}
+            onClick={() => setConfig(configFor(filled, pairSize))}
             className="rounded-field border-[1.5px] border-line px-4 py-4 text-[14px] font-extrabold"
           >
             Usar los defaults

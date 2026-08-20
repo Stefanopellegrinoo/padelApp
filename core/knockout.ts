@@ -124,7 +124,7 @@ function qualifierAt(group: readonly SideStanding[] | undefined, index: number):
  * - 2 grupos: A1-B2 y B1-A2 (el cruce estándar para que los dos primeros
  *   sólo puedan verse en la final).
  * - 4 grupos: [A1-B2, C1-D2, B1-A2, D1-C2]. `nextRoundMatchups` empareja de
- *   a dos EN ORDEN ([0]+[1], [2]+[3]) — este orden dejar a A1/C1 de un lado
+ *   a dos EN ORDEN ([0]+[1], [2]+[3]) — este orden deja a A1/C1 de un lado
  *   del cuadro y a B1/D1 del otro, así que los 4 primeros quedan separados
  *   en las dos mitades y sólo pueden cruzarse en semifinal o más tarde.
  *

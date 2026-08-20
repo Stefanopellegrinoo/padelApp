@@ -168,14 +168,53 @@ async function playByRole(
 }
 
 describe('closeMatchday con llave (GROUPS_KNOCKOUT, Rebanada D1)', () => {
-  it('rechaza cerrar si la llave todavía no llegó a la final (decisión #3979: el guard sólo mira FINAL)', async () => {
+  it('un partido de GRUPO sin jugar sigue rechazando (la rendija de #3979 no se come este guard)', async () => {
     const { admin, matchdayId, matches } = await openGroupsKnockout(8, {
       kind: 'GROUPS_KNOCKOUT',
       groups: 2,
       qualifiersPerGroup: 2,
     })
-    // Toda la fase GRUPO jugada -- ningún partido sin cargar -- pero nadie
-    // llamó `advancePhase`: la llave sigue en GRUPO, nunca llegó a FINAL.
+    // Todos los partidos de grupo menos uno -- deja UNO sin cargar a
+    // propósito. La rendija de la migración 0041 es sólo TERCER_PUESTO
+    // (`m.fase <> 'TERCER_PUESTO'`); un GRUPO sin jugar sigue exigiendo
+    // resultado como siempre.
+    const [, ...rest] = matches
+    for (const match of rest) {
+      await saveResult(admin.client, match.id, [{ gamesA: 3, gamesB: 0 }])
+    }
+
+    await expect(closeMatchday(admin.client, matchdayId)).rejects.toThrow(/resultado/)
+  })
+
+  it('la fase SEMI sin jugar sigue rechazando (decisión #3979: la rendija es sólo TERCER_PUESTO)', async () => {
+    const { admin, matchdayId, matches } = await openGroupsKnockout(8, {
+      kind: 'GROUPS_KNOCKOUT',
+      groups: 2,
+      qualifiersPerGroup: 2,
+    })
+    for (const match of matches) {
+      await saveResult(admin.client, match.id, [{ gamesA: 3, gamesB: 0 }])
+    }
+    await advancePhase(admin.client, matchdayId) // GRUPO -> SEMI, sin jugarla
+
+    // El loop de validación de resultados (`closeMatchday`, db/matchday.ts)
+    // encuentra la SEMI sin jugar antes de llegar al guard de
+    // `standingsFromBracket` -- rechaza por "falta resultado", no por "la
+    // final". Sigue siendo un rechazo, que es lo que pide #3979: la rendija
+    // es sólo TERCER_PUESTO.
+    await expect(closeMatchday(admin.client, matchdayId)).rejects.toThrow(/resultado/)
+  })
+
+  it('toda la fase actual jugada pero la llave sin avanzar sigue rechazando (el guard de "la final" en sí)', async () => {
+    const { admin, matchdayId, matches } = await openGroupsKnockout(8, {
+      kind: 'GROUPS_KNOCKOUT',
+      groups: 2,
+      qualifiersPerGroup: 2,
+    })
+    // Los 12 partidos de GRUPO, todos cargados -- nadie sin resultado. Pero
+    // nadie llamó `advancePhase`: la llave sigue en GRUPO, nunca llegó a
+    // FINAL. Es el ÚNICO escenario donde el guard de `standingsFromBracket`
+    // ("la final", no el loop de resultados) es el que de verdad rechaza.
     for (const match of matches) {
       await saveResult(admin.client, match.id, [{ gamesA: 3, gamesB: 0 }])
     }
@@ -184,8 +223,8 @@ describe('closeMatchday con llave (GROUPS_KNOCKOUT, Rebanada D1)', () => {
   })
 
   it(
-    'cierra con la llave completa (tercer puesto incluido): usa la llave, no la tabla de grupos plana -- ' +
-      'el mejor de la tabla combinada no sale campeón si pierde en semis, y el 5º+ sale de la tabla combinada',
+    'cierra con TERCER_PUESTO sin jugar (decisión #3979, de punta a punta): el 3º/4º sale del ' +
+      'desempate cruzado entre grupos, no de la llave -- y el campeón no es el 1º de ningún grupo',
     async () => {
       const { admin, matchdayId, matches } = await openGroupsKnockout(8, {
         kind: 'GROUPS_KNOCKOUT',
@@ -227,8 +266,11 @@ describe('closeMatchday con llave (GROUPS_KNOCKOUT, Rebanada D1)', () => {
       // Grupo 2:
       //   E (3, +27) > F (2, +7) > G (1, -16) > H (0, -18)
       // Tabla combinada de SOLO la fase de grupos (misma `computeStandings`,
-      // TODA la fase junta -- la decisión de esta rebanada para el 5º+, ver
-      // `standingsFromBracket` en db/matchday.ts):
+      // TODA la fase junta -- la decisión de esta rebanada para el 5º+ y
+      // para el desempate de 3º/4º sin tercer puesto jugado, ver
+      // `standingsFromBracket` en db/matchday.ts. Es una CONVENCIÓN elegida,
+      // no un requisito del spec: REQ-D7-4 sólo dice "5º+ por tabla de
+      // grupos", sin decir cómo comparar entre grupos distintos):
       //   E(1º) A(2º) F(3º) B(4º) C(5º) G(6º) D(7º) H(8º)
 
       await advancePhase(admin.client, matchdayId) // GRUPO -> SEMI
@@ -237,20 +279,17 @@ describe('closeMatchday con llave (GROUPS_KNOCKOUT, Rebanada D1)', () => {
       const semis = (await matchesOf(matchdayId)).filter((match) => match.fase === 'SEMI')
       expect(semis).toHaveLength(2)
       // knockoutMatchups (2 grupos, regla de B2): [A vs F] y [E vs B].
+      // Doble sorpresa, a propósito: gana pair_b en las dos -- F elimina a
+      // A (el 1º de grupo 1), B elimina a E (el 1º de grupo 2 y el mejor de
+      // la tabla combinada de las ocho). Con las DOS sorpresas, los
+      // finalistas son F y B -- los DOS son 2º de su grupo, ninguno es 1º
+      // de nada -- y los perdedores de semis son A y E, uno de CADA grupo:
+      // recién ahí el desempate de 3º/4º sin tercer puesto necesita de
+      // verdad comparar ENTRE grupos (los dos tienen posición local 1,
+      // "empatados" si el código sólo mirara la posición dentro de su
+      // propio grupo).
       for (const semi of semis) {
-        const roleA = roles.get(semi.pair_a)
-        // A le gana a F (esperable: A es el 1º de grupo 1, F el 2º de
-        // grupo 2 -- SEMI1 = [A,F] por la regla de cruce de B2). B le gana
-        // a E (la ÚNICA sorpresa: SEMI2 = [E,B], y el 2º de grupo 1 elimina
-        // al 1º de grupo 2, el lado con la MEJOR tabla combinada de las
-        // ocho). "¿Gana pair_a?" se reduce a "¿pair_a es A o B?": en SEMI1
-        // pair_a=A (sí, gana), en SEMI2 pair_a=E (no, gana pair_b=B).
-        const winnerIsPairA = roleA === 'A' || roleA === 'B'
-        await saveResult(
-          admin.client,
-          semi.id,
-          winnerIsPairA ? [{ gamesA: 2, gamesB: 1 }] : [{ gamesA: 1, gamesB: 2 }],
-        )
+        await saveResult(admin.client, semi.id, [{ gamesA: 1, gamesB: 2 }])
       }
 
       await advancePhase(admin.client, matchdayId) // SEMI -> FINAL + TERCER_PUESTO
@@ -262,33 +301,17 @@ describe('closeMatchday con llave (GROUPS_KNOCKOUT, Rebanada D1)', () => {
         throw new Error('Faltan la final o el tercer puesto.')
       }
 
-      // FINAL: A vs B. Gana B -- el CAMPEÓN es el 2º de grupo 1, no el 1º de
-      // NINGÚN grupo. Un test donde el 1º de una tabla de grupos gana la
-      // final no distingue nada (lo pedido explícitamente: sembrar lo
-      // contrario). Además: sumando TODOS los partidos jugados (grupo +
-      // llave) sin pasar por la llave, A saca más partidos ganados que B
-      // (A nunca perdió un partido de grupo; B perdió uno, contra A) -- así
-      // que una mutación que ignore `knockoutPositions` y recalcule una
-      // tabla plana sobre TODOS los partidos también pondría a A 1º, no a
-      // B. Este test agarra las dos formas de "usar la tabla en vez de la
-      // llave", no sólo una.
+      // FINAL: F vs B. Gana B -- el CAMPEÓN es el 2º de grupo 1, no el 1º
+      // de NINGÚN grupo (la trampa pedida: un test donde el 1º de una tabla
+      // de grupos gana la final no distingue nada).
       const finalRoleA = roles.get(final.pair_a)
       const bIsPairA = finalRoleA === 'B'
       await saveResult(admin.client, final.id, bIsPairA ? [{ gamesA: 2, gamesB: 1 }] : [{ gamesA: 1, gamesB: 2 }])
 
-      // TERCER_PUESTO: F vs E (los dos perdedores de semis). Se JUEGA acá --
-      // el camino "sin jugar" de la decisión #3979 queda BLOQUEADO por el
-      // guard de la propia función SQL `close_matchday` ("Faltan resultados
-      // por cargar.", 0030), que exige un resultado para CUALQUIER fila de
-      // `matches`, TERCER_PUESTO incluido -- independiente de que el wrapper
-      // TS (`closeMatchday`, arriba) ya lo tolera. Habilitarlo pide tocar
-      // esa función (mismo patrón de restatement que 0030), fuera de alcance
-      // de esta rebanada sin confirmación -- ver `apply-progress-pr21d1`.
-      // Gana F (mejor tabla combinada de grupos entre los dos, 3º global):
-      // mismo resultado que daría el fallback si pudiera ejercitarse.
-      const thirdRoleA = roles.get(thirdPlace.pair_a)
-      const fIsPairA = thirdRoleA === 'F'
-      await saveResult(admin.client, thirdPlace.id, fIsPairA ? [{ gamesA: 2, gamesB: 0 }] : [{ gamesA: 0, gamesB: 2 }])
+      // TERCER_PUESTO queda SIN JUGAR -- el corazón de la decisión #3979,
+      // habilitado por la migración 0041. `thirdPlace` existe como fila de
+      // `matches` (registro visible de que no se jugó) pero nunca recibe
+      // un `saveResult`.
 
       await closeMatchday(admin.client, matchdayId)
 
@@ -305,25 +328,20 @@ describe('closeMatchday con llave (GROUPS_KNOCKOUT, Rebanada D1)', () => {
         return entryId === undefined ? undefined : positionByEntry.get(entryId)
       }
 
-      // 1º=B (campeón, 2º de grupo 1), 2º=A (perdió la final, era 1º de
-      // grupo 1 con el mejor récord de grupo entre los dos finalistas): la
-      // llave manda, no la tabla.
+      // 1º=B (campeón, 2º de grupo 1), 2º=F (perdió la final, 2º de grupo 2).
       expect(positionOf('B')).toBe(1)
-      expect(positionOf('A')).toBe(2)
-      // 3º/4º: el resultado REAL del tercer puesto manda (F le gana a E),
-      // aunque E tenía MEJOR tabla de grupos que F (E era 1º de grupo 2, F
-      // 2º) -- otra vez la llave manda sobre la tabla.
-      expect(positionOf('F')).toBe(3)
-      expect(positionOf('E')).toBe(4)
-      // 5º+ en el orden de la tabla COMBINADA de SOLO grupos
-      // (`standingsFromBracket`, db/matchday.ts): C, G, D, H. Si el código
-      // sólo concatenara las tablas de grupo en vez de recalcular sobre toda
-      // la fase junta (grupo 1 primero: C, D -- luego grupo 2: G, H), G y D
-      // saldrían invertidos (D 6º, G 7º) sólo por el número de su propio
-      // grupo. Acá G va 6º y D 7º porque G tiene 1 punto del día (ganó a H)
-      // y D tiene 0 (perdió los tres) -- el mismo criterio de siempre,
-      // aplicado entre los dos grupos. Este test agarra la mutación de
-      // "concatenar por grupo".
+      expect(positionOf('F')).toBe(2)
+      // 3º/4º: SIN tercer puesto jugado, decide el desempate cruzado entre
+      // grupos -- E (1º de la tabla combinada) queda 3º, A (2º de la tabla
+      // combinada) queda 4º. Los dos tienen posición LOCAL 1 en su propio
+      // grupo (cada uno ganó su grupo) -- si el código comparara sólo esa
+      // posición local, quedarían empatados y el orden dependería de un
+      // detalle arbitrario (el orden en que la base devuelve las semis).
+      // Acá el orden sale de la diferencia de gol combinada real (E +27 >
+      // A +15), determinístico.
+      expect(positionOf('E')).toBe(3)
+      expect(positionOf('A')).toBe(4)
+      // 5º+ en el orden de la tabla combinada de sólo grupos: C, G, D, H.
       expect(positionOf('C')).toBe(5)
       expect(positionOf('G')).toBe(6)
       expect(positionOf('D')).toBe(7)
@@ -336,7 +354,7 @@ describe('closeMatchday con llave (GROUPS_KNOCKOUT, Rebanada D1)', () => {
     },
   )
 
-  it('una fecha de pádel ROUND_ROBIN cierra EXACTAMENTE igual que antes (REQ-D7-4, segundo GIVEN)', async () => {
+  it('una fecha de pádel ROUND_ROBIN con un partido sin cargar sigue rechazando (la rendija no toca pádel)', async () => {
     const admin = await createTestUser()
     const players = await fillerPlayers(8)
     const { seasonId, entryIds } = await createSeason({ admin, squad: players })
@@ -345,16 +363,14 @@ describe('closeMatchday con llave (GROUPS_KNOCKOUT, Rebanada D1)', () => {
     await generatePairs(admin.client, matchdayId) // formato por default: ROUND_ROBIN
     await openMatchday(admin.client, matchdayId)
     const matches = await matchesOf(matchdayId)
-    for (const match of matches) {
+    // Deja uno sin cargar. Toda fecha de pádel cae en `fase='GRUPO'`
+    // (default de 0039, `roundRobinMatches` nunca manda `fase`) -- la
+    // rendija de 0041 (`m.fase <> 'TERCER_PUESTO'`) no la alcanza nunca.
+    const [, ...rest] = matches
+    for (const match of rest) {
       await saveResult(admin.client, match.id, [{ gamesA: 4, gamesB: 0 }])
     }
 
-    await closeMatchday(admin.client, matchdayId)
-
-    const awards = await awardsOf(matchdayId)
-    expect(awards).toHaveLength(8) // 4 parejas de 2 jugadores cada una
-    const config = defaultConfig(8)
-    const totalPoints = awards.reduce((sum, award) => sum + award.points, 0)
-    expect(totalPoints).toBe(2 * config.points.reduce((sum, points) => sum + points, 0))
+    await expect(closeMatchday(admin.client, matchdayId)).rejects.toThrow(/resultado/)
   })
 })

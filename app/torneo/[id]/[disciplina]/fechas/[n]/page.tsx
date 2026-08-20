@@ -264,6 +264,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
         guestPairs={guestPairs}
         pairs={draftPairs}
         loadedResults={detail.matches.filter((match) => match.sets.length > 0).length}
+        formato={matchday.formato}
       />
     )
   }

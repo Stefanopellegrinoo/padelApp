@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import type { SetScore } from '@/core'
+import type { MatchdayFormat, SetScore } from '@/core'
 import { EdgeError } from '@/db/errors'
 import { promoteGuest } from '@/db/entries'
 import {
@@ -23,6 +23,7 @@ import {
   seedAttendances,
   setAttendance,
   setMatchdayDate,
+  setMatchdayFormat,
   syncGuestSeat,
   unlockPair,
 } from '@/db/matchday'
@@ -330,6 +331,22 @@ export async function confirmMatchday(
 ): Promise<WriteResult> {
   return inDraft(seasonId, matchdayId, matchdayNumber, async (supabase) => {
     await openMatchday(supabase, matchdayId)
+  })
+}
+
+/**
+ * El formato elegido en el armado (REQ-D8-1): `matchdayShape` sugiere uno con
+ * `suggestFormat`, y esto guarda el que el admin haya tocado — el sugerido u
+ * otro. `setMatchdayFormat` (db/matchday.ts) rechaza tocarlo fuera de DRAFT.
+ */
+export async function changeMatchdayFormat(
+  seasonId: string,
+  matchdayId: string,
+  matchdayNumber: number,
+  formato: MatchdayFormat,
+): Promise<WriteResult> {
+  return inDraft(seasonId, matchdayId, matchdayNumber, async (supabase) => {
+    await setMatchdayFormat(supabase, matchdayId, formato)
   })
 }
 

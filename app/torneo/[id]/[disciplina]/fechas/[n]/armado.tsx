@@ -1,10 +1,11 @@
 'use client'
 
 import { useOptimistic, useState, useTransition } from 'react'
-import { MAX_PLAYERS, MIN_PLAYERS, type SideSize } from '@/core'
+import { MAX_PLAYERS, MIN_PLAYERS, type MatchdayFormat, type SideSize } from '@/core'
 import { initials } from '@/app/format'
 import {
   addGuestPair,
+  changeMatchdayFormat,
   confirmMatchday,
   drawPairs,
   removeGuestPair,
@@ -99,6 +100,8 @@ interface ArmadoProps {
    * realmente se pierde.
    */
   loadedResults: number
+  /** El `matchdays.formato` guardado hoy (REQ-D8-1) — `ROUND_ROBIN` por default hasta que se elija otro. */
+  formato: MatchdayFormat
 }
 
 const STEP_TITLE = 'text-[15px] font-extrabold tracking-[-.02em]'
@@ -128,6 +131,7 @@ export function Armado({
   guestPairs,
   pairs,
   loadedResults,
+  formato,
 }: ArmadoProps) {
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -243,6 +247,18 @@ export function Armado({
           )}
         </div>
       </section>
+
+      <SelectorDeFormato
+        formato={formato}
+        // Gateado por `sizeSettled` por el mismo motivo que la banda de
+        // arriba: mientras el tilde vuela, `eventualSize` puede leer un
+        // número que no existe en ningún momento, y con él la sugerencia
+        // podría prender y apagar el botón de grupos sin que nada haya
+        // cambiado de verdad todavía.
+        suggested={sizeSettled ? shape.suggestedFormat : formato}
+        pending={pending}
+        onChange={(next) => run(() => changeMatchdayFormat(seasonId, matchdayId, matchdayNumber, next))}
+      />
 
       <section className="flex flex-col gap-2">
         <div className="flex items-center justify-between gap-2 border-b border-line pb-2">
@@ -434,6 +450,63 @@ export function Armado({
 
       <BorrarFecha seasonId={seasonId} matchdayId={matchdayId} disciplina={disciplina} loadedResults={loadedResults} />
     </div>
+  )
+}
+
+const FORMATO_BOTON = 'flex-1 rounded-field border-[1.5px] p-3 text-[13.5px] font-extrabold'
+const FORMATO_ELEGIDO = 'border-accent bg-accent text-accent-text'
+const FORMATO_LIBRE = 'border-line'
+
+/**
+ * El selector de formato de la fecha (REQ-D8-1): `suggestFormat` propone uno
+ * — `matchdayShape.suggestedFormat`, arriba en `Armado` — y esto lo hace
+ * EDITABLE: dos botones, el elegido queda marcado, tocar el otro lo cambia.
+ *
+ * Exportado y afuera de `Armado` para poder RENDERIZARLO en la suite, mismo
+ * precedente que `PanelGoles` (`./carga.tsx`) y `PasoFormato`
+ * (`app/torneos/nuevo/wizard.tsx`): recibe `onChange` en vez de importar la
+ * action, así que la suite no arrastra `next/headers` al renderizarlo.
+ *
+ * Sólo dos botones, nunca tres: "Todos contra todos" siempre, y el de grupos
+ * únicamente cuando `suggested` es `GROUPS_KNOCKOUT` — con un plantel chico
+ * (`suggestFormat` da `ROUND_ROBIN`) no hay un `groups` sensato que ofrecer,
+ * y `knockoutMatchups` sólo sabe armar G∈{1,2,4} de todas formas.
+ */
+export function SelectorDeFormato({
+  formato,
+  suggested,
+  pending,
+  onChange,
+}: {
+  formato: MatchdayFormat
+  suggested: MatchdayFormat
+  pending: boolean
+  onChange: (formato: MatchdayFormat) => void
+}) {
+  return (
+    <section className="flex flex-col gap-2">
+      <h2 className={`${STEP_TITLE} border-b border-line pb-2`}>Formato de la fecha</h2>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() => onChange({ kind: 'ROUND_ROBIN' })}
+          className={`${FORMATO_BOTON} ${formato.kind === 'ROUND_ROBIN' ? FORMATO_ELEGIDO : FORMATO_LIBRE}`}
+        >
+          Todos contra todos
+        </button>
+        {suggested.kind === 'GROUPS_KNOCKOUT' && (
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => onChange(suggested)}
+            className={`${FORMATO_BOTON} ${formato.kind === 'GROUPS_KNOCKOUT' ? FORMATO_ELEGIDO : FORMATO_LIBRE}`}
+          >
+            {suggested.groups} grupos + llave
+          </button>
+        )}
+      </div>
+    </section>
   )
 }
 

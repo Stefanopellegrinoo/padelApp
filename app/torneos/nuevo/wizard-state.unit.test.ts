@@ -11,6 +11,7 @@ import {
   formatErrors,
   moveSeat,
   newDisciplineSpec,
+  newTournamentPayload,
   removeSeatAt,
   resizeConfig,
   squadWarning,
@@ -356,6 +357,60 @@ describe('newDisciplineSpec', () => {
     expect(spec.pairSize).toBe(1)
     expect(spec.config.points).toEqual([10, 7, 5, 3, 2, 1, 0, 0])
     expect(spec.allowsDraw).toBe(true)
+  })
+})
+
+describe('newTournamentPayload', () => {
+  // Lo que arma el submit del wizard: name + submitSeats(squad) + config con
+  // el squadSize REAL + buildDisciplines. Antes vivía inline adentro del
+  // `startTransition` de `Wizard` — puro salvo el `await createTournament`, y
+  // sin embargo intestable ahí (repite el patrón de `wizard-state.ts`,
+  // `armado-state.ts`, `carga-state.ts`, `sumar-state.ts`: sacar la lógica
+  // del `.tsx` para poder testearla sin DOM y sin base).
+  //
+  // `pairSize` es OBLIGATORIO acá (a diferencia de `buildDisciplines`): el
+  // único caller (`Wizard`) siempre tiene uno, `useState` nace en 2. Por eso
+  // el pádel de este test también lo pasa explícito — la fila que sale
+  // ahora lleva `pairSize: 2` en vez de omitir la clave, y es exactamente lo
+  // mismo que escribe la base (`addDiscipline`: `spec.pairSize ?? 2`).
+  it('arma exactamente el payload que createTournament espera, para pádel', () => {
+    const squad: Squad = { names: Array(8).fill('Jugador'), mySeat: 0 }
+    const config = configFor(8)
+    expect(newTournamentPayload('Los Jueves', squad, config, ['PADEL'], 2)).toEqual({
+      name: 'Los Jueves',
+      squadNames: squad.names,
+      mySeatIndex: 0,
+      config,
+      disciplines: buildDisciplines(['PADEL'], config, 2),
+    })
+  })
+
+  // El squadSize del payload sale del plantel REALMENTE cargado al momento
+  // de mandar, no del que traía la config (que puede estar desactualizada si
+  // el admin agregó/sacó nombres después de tocar el paso 4).
+  it('el squadSize del payload sale del plantel cargado, no el que traía la config', () => {
+    const squad: Squad = { names: [...Array(8).fill('Jugador'), '', ''], mySeat: null }
+    const staleConfig = configFor(12)
+    const payload = newTournamentPayload('X', squad, staleConfig, ['PADEL'], 2)
+    expect(payload.squadNames).toHaveLength(8)
+    expect(payload.config.squadSize).toBe(8)
+  })
+
+  // El punto de unión de la Rebanada F, en el payload REAL que cruza al
+  // server action — no sólo hasta `buildDisciplines` suelto (#3957, se
+  // pinchan los argumentos, no que la función interna acepte el parámetro).
+  it('con pairSize=1, las disciplines del payload salen con la curva de la decisión #3963', () => {
+    const squad: Squad = { names: Array(8).fill('Jugador'), mySeat: null }
+    const config = configFor(8, 1)
+    const payload = newTournamentPayload('Liga FIFA', squad, config, ['FIFA'], 1)
+    expect(payload.disciplines).toEqual([
+      {
+        kind: 'FIFA',
+        config: { ...config, matchFormat: { ...config.matchFormat, openScore: true } },
+        allowsDraw: true,
+        pairSize: 1,
+      },
+    ])
   })
 })
 

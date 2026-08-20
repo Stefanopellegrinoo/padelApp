@@ -72,6 +72,29 @@ export type Side =
   | { readonly size: 1; readonly a: EntryId }
   | { readonly size: 2; readonly a: EntryId; readonly b: EntryId }
 
+/**
+ * Orden de las fases de una fecha, de la primera a la última. `matchday_phase`
+ * (`supabase/migrations/0039_match_phase.sql`) deduce la fase actual con
+ * `array_position` sobre el MISMO array, en el MISMO orden — `TERCER_PUESTO`
+ * va ANTES de `FINAL` a propósito, porque las dos se generan juntas y el
+ * máximo tiene que dar `FINAL`. Si este array diverge del de la migración,
+ * `currentPhase` (acá) y `matchday_phase` (SQL) dejan de acordar sobre la
+ * fase de una misma fecha.
+ */
+export const PHASE_ORDER = ['GRUPO', 'OCTAVOS', 'CUARTOS', 'SEMI', 'TERCER_PUESTO', 'FINAL'] as const
+export type Phase = (typeof PHASE_ORDER)[number]
+
+/**
+ * Cómo se arma una fecha (design PUNTO 7, PR21). `ROUND_ROBIN` es el de
+ * siempre: todos contra todos, una sola fase `GRUPO`. `GROUPS_KNOCKOUT`
+ * reparte los lados en `groups` grupos y clasifica `qualifiersPerGroup` de
+ * cada uno a una llave (REQ-D8-1). Vive en `matchdays.formato`, NO en
+ * `disciplines`: se elige por fecha, no queda fijo para toda la disciplina.
+ */
+export type MatchdayFormat =
+  | { readonly kind: 'ROUND_ROBIN' }
+  | { readonly kind: 'GROUPS_KNOCKOUT'; readonly groups: number; readonly qualifiersPerGroup: number }
+
 export interface SetScore {
   gamesA: number
   gamesB: number
@@ -86,6 +109,16 @@ export interface SetScore {
  */
 export interface MatchResult {
   round: number
+  /**
+   * OBLIGATORIOS y sin default (REQ-D7-1/D7-3, design PUNTO 7) — la misma
+   * lección que `pair_size` (PR18a) y `openScore` (0037): un default
+   * permisivo esconde al escritor que no lo puebla. En la base `fase` nace
+   * `'GRUPO'` por default, pero acá el compilador obliga a decidirlo en cada
+   * literal. `grupo` sólo significa algo cuando `fase === 'GRUPO'` — la base
+   * lo fija con `matches_group_only_in_groups` (0039).
+   */
+  fase: Phase
+  grupo: number
   sideA: Side
   sideB: Side
   /** Empty while the match has not been played. */

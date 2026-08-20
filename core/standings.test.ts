@@ -25,7 +25,7 @@ function match(left: number, right: number, gamesA: number, gamesB: number): Mat
   const pairA = PAIRS[left]
   const pairB = PAIRS[right]
   if (pairA === undefined || pairB === undefined) throw new Error('bad test fixture')
-  return { round: 1, sideA: pairA, sideB: pairB, sets: [{ gamesA, gamesB }] }
+  return { round: 1, fase: 'GRUPO', grupo: 1, sideA: pairA, sideB: pairB, sets: [{ gamesA, gamesB }] }
 }
 
 function order(standings: ReturnType<typeof computeStandings>): string[] {
@@ -121,7 +121,7 @@ describe('computeStandings', () => {
     const pairA = PAIRS[0]
     const pairB = PAIRS[1]
     if (pairA === undefined || pairB === undefined) throw new Error('bad test fixture')
-    const matches: MatchResult[] = [{ round: 1, sideA: pairA, sideB: pairB, sets: [] }]
+    const matches: MatchResult[] = [{ round: 1, fase: 'GRUPO', grupo: 1, sideA: pairA, sideB: pairB, sets: [] }]
     const standings = computeStandings(PAIRS, matches, CONFIG, SNAPSHOT, false)
     expect(standings.every((row) => row.played === 0)).toBe(true)
   })
@@ -137,6 +137,8 @@ describe('computeStandings', () => {
     const matches: MatchResult[] = [
       {
         round: 1,
+        fase: 'GRUPO',
+        grupo: 1,
         sideA: pairA,
         sideB: pairB,
         sets: [
@@ -194,7 +196,7 @@ function soloMatch(left: number, right: number, gamesA: number, gamesB: number):
   const sideA = SOLOS[left]
   const sideB = SOLOS[right]
   if (sideA === undefined || sideB === undefined) throw new Error('bad test fixture')
-  return { round: 1, sideA, sideB, sets: [{ gamesA, gamesB }] }
+  return { round: 1, fase: 'GRUPO', grupo: 1, sideA, sideB, sets: [{ gamesA, gamesB }] }
 }
 
 describe('computeStandings con lados de uno (pair_size=1)', () => {

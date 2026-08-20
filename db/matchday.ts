@@ -17,6 +17,7 @@ import {
   type MatchFormat,
   type MatchResult,
   type PairingInput,
+  type Phase,
   type SeasonConfig,
   type SetScore,
   type Side,
@@ -1041,7 +1042,7 @@ async function resultsOf(
 
   const { data: matchRows, error: matchesError } = await supabase
     .from('matches')
-    .select('id, round, pair_a, pair_b')
+    .select('id, round, pair_a, pair_b, fase, grupo')
     .eq('matchday_id', matchdayId)
     .order('round', { ascending: true })
   if (matchesError) throw new EdgeError(`No se pudieron leer los partidos: ${matchesError.message}`)
@@ -1073,7 +1074,14 @@ async function resultsOf(
         `El partido ${row.id} referencia una pareja que no está en la fecha. Esto es un bug.`,
       )
     }
-    return { round: row.round, sideA, sideB, sets: setsByMatch.get(row.id) ?? [] }
+    return {
+      round: row.round,
+      fase: row.fase as Phase,
+      grupo: row.grupo,
+      sideA,
+      sideB,
+      sets: setsByMatch.get(row.id) ?? [],
+    }
   })
 
   return { sides: [...sideById.values()], matches }

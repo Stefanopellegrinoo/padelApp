@@ -34,6 +34,7 @@ export type {
   SideSize,
   Side,
   SetScore,
+  Phase,
   MatchResult,
   SideStanding,
   Award,

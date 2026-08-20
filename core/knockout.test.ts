@@ -6,6 +6,7 @@ import {
   knockoutMatchups,
   nextRoundMatchups,
   knockoutPositions,
+  suggestFormat,
 } from './knockout'
 import { pair, single } from './side'
 import type { MatchResult, Phase, Side, SideStanding } from './types'
@@ -225,5 +226,59 @@ describe('knockoutPositions', () => {
 
   it('tira si la llave no tiene exactamente un partido de FINAL', () => {
     expect(() => knockoutPositions(semis, groupTable)).toThrow(/FINAL/)
+  })
+})
+
+describe('suggestFormat', () => {
+  it('8 presentes de a dos (4 lados) sugiere round robin', () => {
+    expect(suggestFormat(8, 2)).toEqual({ kind: 'ROUND_ROBIN' })
+  })
+
+  it('8 presentes de a uno (8 lados) sugiere 2 grupos de 4 + semis + final (REQ-D8-1, GIVEN literal)', () => {
+    const format = suggestFormat(8, 1)
+    expect(format).toEqual({ kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 })
+    if (format.kind !== 'GROUPS_KNOCKOUT') throw new Error('unreachable')
+    expect(8 / format.groups).toBe(4) // "2 grupos DE 4"
+  })
+
+  it('12 lados de a uno: grupos + llave completa dan 19 partidos, no 66 (razón de W32, decisión #3863)', () => {
+    const format = suggestFormat(12, 1)
+    expect(format).toEqual({ kind: 'GROUPS_KNOCKOUT', groups: 4, qualifiersPerGroup: 2 })
+    if (format.kind !== 'GROUPS_KNOCKOUT') throw new Error('unreachable')
+
+    // 4 grupos de 3 lados, round robin dentro de cada uno: C(3,2)=3 partidos
+    // por grupo. `groupSides` (el helper que reparte lados en grupos) es de
+    // la Rebanada C1, todavía no existe — acá el reparto es manual, sólo
+    // para probar la aritmética.
+    const sidesPerGroup = 12 / format.groups
+    const groupStageMatches = format.groups * ((sidesPerGroup * (sidesPerGroup - 1)) / 2)
+    expect(groupStageMatches).toBe(12)
+
+    const groups = Array.from({ length: format.groups }, (_group, groupIndex) =>
+      Array.from({ length: sidesPerGroup }, (_seed, seedIndex) =>
+        standing(single(`g${groupIndex}-${seedIndex}`), seedIndex + 1),
+      ),
+    )
+
+    const cuartos = knockoutMatchups(groups, format.qualifiersPerGroup)
+    expect(cuartos).toHaveLength(4) // faseForCount(4) === 'CUARTOS'
+    const cuartosPlayed = cuartos.map(([sideA, sideB]) => playedMatch('CUARTOS', 1, sideA, sideB, 'A'))
+
+    const semisNext = nextRoundMatchups(cuartosPlayed)
+    expect(semisNext).toHaveLength(2) // faseForCount(2) === 'SEMI'
+    const semisPlayed = semisNext.map(([sideA, sideB]) => playedMatch('SEMI', 1, sideA, sideB, 'A'))
+
+    const finalNext = nextRoundMatchups(semisPlayed)
+    expect(finalNext).toHaveLength(1) // faseForCount(1) === 'FINAL'
+
+    const knockoutMatches = cuartos.length + semisNext.length + finalNext.length // 4 + 2 + 1 = 7
+    const total = groupStageMatches + knockoutMatches
+
+    // 12 (grupos) + 7 (llave, sin contar un eventual partido de tercer
+    // puesto opcional) = 19. Con el partido de tercer puesto serían 20 — de
+    // cualquier forma, el "~19" de la decisión #3863 se confirma con
+    // funciones REALES, lejísimos de los 66 del round robin puro que
+    // motivó W32.
+    expect(total).toBe(19)
   })
 })

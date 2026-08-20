@@ -1,13 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import {
-  currentPhase,
-  phaseIsComplete,
-  faseForCount,
-  knockoutMatchups,
-  nextRoundMatchups,
-  knockoutPositions,
-  suggestFormat,
-} from './knockout'
+import { currentPhase, phaseIsComplete, faseForCount, knockoutMatchups, nextRoundMatchups } from './knockout'
 import { pair, single } from './side'
 import type { MatchResult, Phase, Side, SideStanding } from './types'
 

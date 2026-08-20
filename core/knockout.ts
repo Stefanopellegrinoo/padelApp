@@ -5,7 +5,16 @@
  * por grupo. Este módulo es lo que sabe en qué fase está la fecha y cuándo
  * esa fase terminó — nada de esto se guarda en una columna nueva.
  */
-import { PHASE_ORDER, type MatchResult, type Phase } from './types'
+import { sameSide } from './side'
+import {
+  PHASE_ORDER,
+  type MatchResult,
+  type MatchdayFormat,
+  type Phase,
+  type Side,
+  type SideSize,
+  type SideStanding,
+} from './types'
 
 /**
  * La fase actual: la más avanzada con partidos creados (REQ-D7-3). Sin
@@ -59,4 +68,128 @@ export function faseForCount(matchups: number): Phase {
     default:
       throw new Error(`Una llave de ${matchups} partidos no es una fase conocida.`)
   }
+}
+
+function sortedByPosition(group: readonly SideStanding[]): readonly SideStanding[] {
+  return [...group].sort((left, right) => left.position - right.position)
+}
+
+/**
+ * Cuenta sets ganados por cada lado, mismo criterio que `computeStandings`
+ * (`core/standings.ts`) y `headToHead`: comparar `gamesA`/`gamesB` set a set.
+ */
+function setsTally(match: MatchResult): { setsA: number; setsB: number } {
+  let setsA = 0
+  let setsB = 0
+  for (const set of match.sets) {
+    if (set.gamesA > set.gamesB) setsA++
+    else if (set.gamesB > set.gamesA) setsB++
+  }
+  return { setsA, setsB }
+}
+
+function winnerOf(match: MatchResult): Side {
+  const { setsA, setsB } = setsTally(match)
+  if (setsA === setsB) throw new Error('Un partido de llave sin definir no tiene ganador.')
+  return setsA > setsB ? match.sideA : match.sideB
+}
+
+function loserOf(match: MatchResult): Side {
+  const { setsA, setsB } = setsTally(match)
+  if (setsA === setsB) throw new Error('Un partido de llave sin definir no tiene perdedor.')
+  return setsA > setsB ? match.sideB : match.sideA
+}
+
+/** `group[index]`, o error legible en vez de `undefined` silencioso. */
+function qualifierAt(group: readonly SideStanding[] | undefined, index: number): SideStanding {
+  const row = group?.[index]
+  if (row === undefined) {
+    throw new Error(`knockoutMatchups necesita al menos ${index + 1} clasificados en cada grupo.`)
+  }
+  return row
+}
+
+/**
+ * Arma los cruces de la primera ronda de la llave a partir de las tablas de
+ * grupo (REQ-D7-4). El design (PUNTO 7) da la FIRMA pero no la regla de
+ * cruce — no está escrita en ningún requisito. Regla elegida acá (agujero
+ * (a), surfaceado en el reporte de esta rebanada, no inventado en silencio):
+ *
+ * cruzar grupos para que los DOS primeros de dos grupos distintos no puedan
+ * encontrarse antes de la instancia que combina sus dos mitades del cuadro,
+ * y para que ningún grupo se enfrente a su propio 2º puesto en el primer
+ * cruce (evita una revancha inmediata del mismo grupo).
+ *
+ * - 1 grupo: el 1º y el 2º arman el único cruce posible (es la final).
+ * - 2 grupos: A1-B2 y B1-A2 (el cruce estándar para que los dos primeros
+ *   sólo puedan verse en la final).
+ * - 4 grupos: [A1-B2, C1-D2, B1-A2, D1-C2]. `nextRoundMatchups` empareja de
+ *   a dos EN ORDEN ([0]+[1], [2]+[3]) — este orden dejar a A1/C1 de un lado
+ *   del cuadro y a B1/D1 del otro, así que los 4 primeros quedan separados
+ *   en las dos mitades y sólo pueden cruzarse en semifinal o más tarde.
+ *
+ * Sólo soporta 2 clasificados por grupo y G∈{1,2,4} grupos (riesgo conocido
+ * del design, "knockoutMatchups sólo soporta G∈{1,2,4} y P=2"): cualquier
+ * otra combinación tira, no se tolera en silencio.
+ */
+export function knockoutMatchups(
+  groups: readonly (readonly SideStanding[])[],
+  qualifiersPerGroup: number,
+): Array<[Side, Side]> {
+  if (qualifiersPerGroup !== 2) {
+    throw new Error(`knockoutMatchups sólo arma cruces con 2 clasificados por grupo, pidieron ${qualifiersPerGroup}.`)
+  }
+  const sorted = groups.map(sortedByPosition)
+  switch (sorted.length) {
+    case 1: {
+      const group = sorted[0]
+      return [[qualifierAt(group, 0).side, qualifierAt(group, 1).side]]
+    }
+    case 2: {
+      const a = sorted[0]
+      const b = sorted[1]
+      return [
+        [qualifierAt(a, 0).side, qualifierAt(b, 1).side],
+        [qualifierAt(b, 0).side, qualifierAt(a, 1).side],
+      ]
+    }
+    case 4: {
+      const a = sorted[0]
+      const b = sorted[1]
+      const c = sorted[2]
+      const d = sorted[3]
+      return [
+        [qualifierAt(a, 0).side, qualifierAt(b, 1).side],
+        [qualifierAt(c, 0).side, qualifierAt(d, 1).side],
+        [qualifierAt(b, 0).side, qualifierAt(a, 1).side],
+        [qualifierAt(d, 0).side, qualifierAt(c, 1).side],
+      ]
+    }
+    default:
+      throw new Error(`knockoutMatchups no sabe armar cruces para ${sorted.length} grupos.`)
+  }
+}
+
+/**
+ * Arma la ronda siguiente a partir de una ronda YA JUGADA: empareja al
+ * ganador del partido `[0]` con el del `[1]`, el de `[2]` con el `[3]`, etc.
+ * El ORDEN del array de entrada es lo que define la topología del cuadro —
+ * es la misma convención que usa `knockoutMatchups` al armar la primera
+ * ronda (ver su doc).
+ */
+export function nextRoundMatchups(played: readonly MatchResult[]): Array<[Side, Side]> {
+  if (played.length % 2 !== 0) {
+    throw new Error(`Una ronda de ${played.length} partidos no arma parejas completas para la siguiente.`)
+  }
+  const winners = played.map(winnerOf)
+  const winnerAt = (index: number): Side => {
+    const side = winners[index]
+    if (side === undefined) throw new Error(`Falta el ganador del partido ${index}.`)
+    return side
+  }
+  const next: Array<[Side, Side]> = []
+  for (let index = 0; index < winners.length; index += 2) {
+    next.push([winnerAt(index), winnerAt(index + 1)])
+  }
+  return next
 }

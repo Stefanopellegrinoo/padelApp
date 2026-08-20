@@ -98,3 +98,112 @@ describe('matchdays.formato — column-grant contra authenticated (REQ-D8-1)', (
     expect(created.formato).toEqual({ kind: 'ROUND_ROBIN' })
   })
 })
+
+/**
+ * `matchdays_formato_kind` (0040) validaba SÓLO `kind` — `{"kind":
+ * "GROUPS_KNOCKOUT"}` sin `groups`/`qualifiersPerGroup` era una fila LEGAL, y
+ * con `grant update (formato)` abierto cualquier `authenticated` podía
+ * escribirla. `generatePairs` (`groupedMatches`, `db/matchday.ts`) confía en
+ * esa forma sin volver a validarla — con `groups=undefined`,
+ * `groupSides(storedSides, undefined)` no dispara su guard (`undefined < 1`
+ * es `false`), `Array.from({length: undefined})` da `[]`, y revienta DESPUÉS
+ * de haber borrado y reinsertado las parejas (S69: `generatePairs` sin
+ * transacción), con un mensaje que culpa al código ("El grupo 0 no existe.
+ * Esto es un bug.") cuando el problema es el DATO.
+ *
+ * La base RECHAZA, no un `if` de aplicación (REQ-D5-1, mismo idioma que
+ * `pairs_side_shape`): el check ahora exige la FORMA completa de
+ * `GROUPS_KNOCKOUT` — `groups` y `qualifiersPerGroup` presentes, numéricos, y
+ * dentro de lo que `knockoutMatchups` (`core/knockout.ts`) sabe armar (G∈
+ * {1,2,4}, P=2). `groups: "hola"` tiene que RECHAZAR la fila
+ * (`error.code === '23514'`, check_violation), no explotar con un error de
+ * casteo (`22P02`) — un CHECK que TIRA no es lo mismo que un CHECK que
+ * RECHAZA.
+ */
+describe('matchdays_formato_kind — GROUPS_KNOCKOUT exige su forma completa (REQ-D5-1)', () => {
+  it('rechaza GROUPS_KNOCKOUT sin groups/qualifiersPerGroup', async () => {
+    const { admin, seasonId, disciplineId } = await scene()
+
+    const { error } = await admin.client.from('matchdays').insert({
+      season_id: seasonId,
+      discipline_id: disciplineId,
+      number: 1,
+      played_on: '2026-03-05',
+      pair_size: 2,
+      allows_draw: false,
+      formato: { kind: 'GROUPS_KNOCKOUT' },
+    })
+
+    expect(error).not.toBeNull()
+    expect(error?.code).toBe('23514') // check_violation, no un permission denied ni un cast error
+  })
+
+  it('rechaza groups=3: knockoutMatchups sólo sabe armar 1, 2 o 4', async () => {
+    const { admin, seasonId, disciplineId } = await scene()
+
+    const { error } = await admin.client.from('matchdays').insert({
+      season_id: seasonId,
+      discipline_id: disciplineId,
+      number: 1,
+      played_on: '2026-03-05',
+      pair_size: 2,
+      allows_draw: false,
+      formato: { kind: 'GROUPS_KNOCKOUT', groups: 3, qualifiersPerGroup: 2 },
+    })
+
+    expect(error).not.toBeNull()
+    expect(error?.code).toBe('23514')
+  })
+
+  it('rechaza un groups no numérico SIN explotar en un error de casteo', async () => {
+    const { admin, seasonId, disciplineId } = await scene()
+
+    const { error } = await admin.client.from('matchdays').insert({
+      season_id: seasonId,
+      discipline_id: disciplineId,
+      number: 1,
+      played_on: '2026-03-05',
+      pair_size: 2,
+      allows_draw: false,
+      formato: { kind: 'GROUPS_KNOCKOUT', groups: 'hola', qualifiersPerGroup: 2 },
+    })
+
+    expect(error).not.toBeNull()
+    // check_violation (23514), NO invalid_text_representation (22P02): el
+    // check tiene que RECHAZAR el dato basura, no reventar tratando de
+    // castearlo a entero.
+    expect(error?.code).toBe('23514')
+  })
+
+  it('acepta GROUPS_KNOCKOUT con la forma completa y soportada', async () => {
+    const { admin, seasonId, disciplineId } = await scene()
+
+    const { error } = await admin.client.from('matchdays').insert({
+      season_id: seasonId,
+      discipline_id: disciplineId,
+      number: 1,
+      played_on: '2026-03-05',
+      pair_size: 2,
+      allows_draw: false,
+      formato: { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 },
+    })
+
+    expect(error).toBeNull()
+  })
+
+  it('acepta ROUND_ROBIN sin pedirle campos de grupos', async () => {
+    const { admin, seasonId, disciplineId } = await scene()
+
+    const { error } = await admin.client.from('matchdays').insert({
+      season_id: seasonId,
+      discipline_id: disciplineId,
+      number: 1,
+      played_on: '2026-03-05',
+      pair_size: 2,
+      allows_draw: false,
+      formato: { kind: 'ROUND_ROBIN' },
+    })
+
+    expect(error).toBeNull()
+  })
+})

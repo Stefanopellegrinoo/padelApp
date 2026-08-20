@@ -10,6 +10,7 @@ import {
   filledCount,
   formatErrors,
   moveSeat,
+  newDisciplineSpec,
   removeSeatAt,
   resizeConfig,
   squadWarning,
@@ -68,6 +69,22 @@ describe('the config the wizard builds', () => {
     for (const size of [8, 10, 12]) {
       expect(configFor(size)).toEqual(defaultConfig(size))
     }
+  })
+
+  // S75: `configFor`/`resizeConfig` llamaban `defaultConfig(squadSize)` y
+  // dejaban caer `sideSize` a su default 2 — con "Individual" elegido, la
+  // curva que salía era la de parejas, no la de la decisión #3963 (#3957: se
+  // pincha el ARGUMENTO, no que la función acepte el parámetro).
+  it('threads sideSize into defaultConfig instead of dropping to the pairs default (S75)', () => {
+    expect(configFor(8, 1)).toEqual(defaultConfig(8, 1))
+    expect(configFor(8, 1).points).toEqual([10, 7, 5, 3, 2, 1, 0, 0])
+  })
+
+  it('resizeConfig keeps the sideSize curve when the squad changes size', () => {
+    const eightSolo = configFor(8, 1)
+    const twelveSolo = resizeConfig(eightSolo, 12, 1)
+    expect(twelveSolo.points).toEqual(defaultConfig(12, 1).points)
+    expect(twelveSolo.points).toEqual([10, 7, 5, 3, 2, 1, 0, 0, 0, 0, 0, 0])
   })
 
   // Lo que arma el wizard tiene que pasar la validación de core/, o
@@ -302,6 +319,43 @@ describe('buildDisciplines', () => {
 
   it('gives back nothing for an empty pick', () => {
     expect(buildDisciplines([], configFor(8))).toEqual([])
+  })
+
+  // Rebanada F: el radio "Individual" tiene que llegar hasta acá como
+  // pairSize=1, y arrastrar consigo la config con la curva de la decisión
+  // #3963 (no sólo la clave "pairSize" — #3957, se pinchan los argumentos).
+  it('incluye pairSize en el retorno cuando se pasa 1, con la curva de #3963', () => {
+    const config = configFor(8, 1)
+    expect(buildDisciplines(['FIFA'], config, 1)).toEqual([
+      {
+        kind: 'FIFA',
+        config: { ...config, matchFormat: { ...config.matchFormat, openScore: true } },
+        allowsDraw: true,
+        pairSize: 1,
+      },
+    ])
+  })
+})
+
+describe('newDisciplineSpec', () => {
+  // El "+ Agregar disciplina" de Ajustes arma esto con el tamaño de SU
+  // plantel elegido (REQ-D1-4), no el de toda la temporada.
+  it('arma la config del tamaño de plantel que se le pasa', () => {
+    expect(newDisciplineSpec('PADEL', 8)).toEqual({
+      kind: 'PADEL',
+      config: defaultConfig(8),
+      allowsDraw: false,
+    })
+  })
+
+  // El punto de unión del lado de Ajustes (Rebanada F): pairSize tiene que
+  // llegar hasta acá Y la config.points tiene que ser la curva de la
+  // decisión #3963 — no sólo que la clave `pairSize` exista (#3957).
+  it('con pairSize=1 arma la curva de la decisión #3963, no la de parejas', () => {
+    const spec = newDisciplineSpec('FIFA', 8, 1)
+    expect(spec.pairSize).toBe(1)
+    expect(spec.config.points).toEqual([10, 7, 5, 3, 2, 1, 0, 0])
+    expect(spec.allowsDraw).toBe(true)
   })
 })
 

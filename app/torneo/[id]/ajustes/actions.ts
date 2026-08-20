@@ -158,14 +158,19 @@ export async function saveConfig(
  * por dentro (`buildDisciplines`) — los dos caminos que crean una disciplina
  * escriben lo mismo o el torneo depende de por dónde entraste.
  *
- * `pairSize` sin especificar nace en parejas (2), como siempre — el radio
- * "Lados" de esta pantalla es quien por fin lo puede pasar en 1.
+ * `pairSize` es OBLIGATORIO acá (a diferencia de `newDisciplineSpec`, que sí
+ * lo deja opcional para quedar general): el único caller de producción
+ * (`Disciplinas`) SIEMPRE tiene un `pairSize` —el radio "Lados" nace en 2—,
+ * así que dejarlo opcional acá sólo abriría la puerta a olvidarlo en el
+ * sitio del submit sin que nada lo marque. Con el parámetro obligatorio,
+ * olvidarlo es un error de `tsc`, no un test que haya que escribir y
+ * mantener — mismo criterio que `newTournamentPayload` (`wizard-state.ts`).
  */
 export async function addDisciplineToSeason(
   seasonId: string,
   kind: DisciplineKind,
   entryIds: string[],
-  pairSize?: SideSize,
+  pairSize: SideSize,
 ): Promise<WriteResult> {
   return onSeason(seasonId, async (supabase) => {
     await addDiscipline(supabase, seasonId, newDisciplineSpec(kind, entryIds.length, pairSize), entryIds)

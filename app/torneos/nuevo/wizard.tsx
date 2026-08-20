@@ -17,11 +17,11 @@ import {
   filledCount,
   formatErrors,
   moveSeat,
+  newTournamentPayload,
   removeSeatAt,
   resizeConfig,
   squadWarning,
   steppersFor,
-  submitSeats,
   summaryOf,
   toggleDiscipline,
 } from './wizard-state'
@@ -361,13 +361,9 @@ export function Wizard({ myName }: { myName: string }) {
   const submit = () => {
     setError(null)
     startTransition(async () => {
-      const builtConfig = { ...config, squadSize: filled }
-      const result = await createTournament({
-        name,
-        ...submitSeats(squad),
-        config: builtConfig,
-        disciplines: buildDisciplines(disciplines, builtConfig, pairSize),
-      })
+      const result = await createTournament(
+        newTournamentPayload(name, squad, config, disciplines, pairSize),
+      )
       if (!result.ok) {
         setError(result.error)
         return

@@ -278,6 +278,56 @@ export function submitSeats({ names, mySeat }: Squad): {
 }
 
 /**
+ * El payload exacto que espera `createTournament` (`./actions`), armado a
+ * partir de lo que el wizard fue juntando en sus cinco pasos.
+ *
+ * Vivía inline adentro del `startTransition` del submit de `Wizard` —puro
+ * salvo el `await` final— e intestable ahí por eso: mismo motivo por el que
+ * `wizard-state.ts`/`armado-state.ts`/`carga-state.ts`/`sumar-state.ts`
+ * existen, sacar la lógica del `.tsx` para poder probarla sin DOM y sin base.
+ *
+ * `squadSize` sale del plantel REALMENTE cargado (`submitSeats(squad)`), no
+ * del que traía `config`: la config del paso 4 puede quedar desactualizada
+ * si el admin agrega o saca nombres después de tocarla, y `buildDisciplines`
+ * tiene que ver el tamaño real para que la curva de puntos sea la correcta.
+ *
+ * `pairSize` es el punto de unión de la Rebanada F: viaja tal cual hasta
+ * `buildDisciplines`, así que elegir "Individual" llega hasta ACÁ, en el
+ * payload real que cruza al server action (#3957 — se pinchan los
+ * argumentos, no que la función interna acepte el parámetro).
+ *
+ * OBLIGATORIO acá y no opcional como en `buildDisciplines`/`newDisciplineSpec`:
+ * este único caller (`Wizard`) SIEMPRE tiene un `pairSize` (nace en 2, el
+ * `useState` no es `undefined` nunca), así que dejarlo opcional sólo abriría
+ * la puerta a olvidarlo en el sitio del submit sin que nada lo marque. Con el
+ * parámetro obligatorio, olvidarlo es un error de `tsc`, no un test que haya
+ * que escribir y mantener — más fuerte que cualquier test (verificado con
+ * mutación: sacar el argumento en `wizard.tsx` rompe `npm run typecheck`).
+ */
+export function newTournamentPayload(
+  name: string,
+  squad: Squad,
+  config: SeasonConfig,
+  picked: readonly DisciplineKind[],
+  pairSize: SideSize,
+): {
+  name: string
+  squadNames: string[]
+  mySeatIndex: number | null
+  config: SeasonConfig
+  disciplines: ReturnType<typeof buildDisciplines>
+} {
+  const seats = submitSeats(squad)
+  const builtConfig = { ...config, squadSize: seats.squadNames.length }
+  return {
+    name,
+    ...seats,
+    config: builtConfig,
+    disciplines: buildDisciplines(picked, builtConfig, pairSize),
+  }
+}
+
+/**
  * La config por defecto para un plantel de este tamaño.
  *
  * Sale de `defaultConfig` y no de la lista del handoff (§6 paso 4, "Defaults

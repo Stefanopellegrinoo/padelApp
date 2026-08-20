@@ -99,10 +99,21 @@ export { computeAwards } from './awards'
 // publicarlo deja de ser reflejo. `groupSides` sale con él por el mismo
 // motivo: es el helper que `generatePairs` usa para repartir los lados antes
 // de llamar `buildFixture` una vez por grupo (hallazgo de diseño de esta
-// rebanada, el design PUNTO 7 no lo nombraba). `currentPhase`/
-// `phaseIsComplete`/`knockoutMatchups`/`knockoutPositions` siguen AFUERA:
-// sin consumidor real todavía (llegan en C2/D1).
-export { suggestFormat, groupSides } from './knockout'
+// rebanada, el design PUNTO 7 no lo nombraba). Rebanada C2: `currentPhase`/
+// `phaseIsComplete`/`faseForCount`/`knockoutMatchups`/`nextRoundMatchups`/
+// `losingMatchup` salen ahora — `advancePhase` (`db/matchday.ts`) es su
+// primer consumidor real. `knockoutPositions` sigue AFUERA: llega recién con
+// `closeMatchday` en D1.
+export {
+  suggestFormat,
+  groupSides,
+  currentPhase,
+  phaseIsComplete,
+  faseForCount,
+  knockoutMatchups,
+  nextRoundMatchups,
+  losingMatchup,
+} from './knockout'
 
 // ── The season ───────────────────────────────────────────────────────────────
 export { computeRanking } from './ranking'

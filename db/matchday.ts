@@ -4,12 +4,19 @@ import {
   computeAwards,
   computeRanking,
   computeStandings,
+  currentPhase,
+  faseForCount,
   groupSides,
+  knockoutMatchups,
+  losingMatchup,
   mastersFixture,
   mastersQualifiers,
   members,
+  nextRoundMatchups,
+  phaseIsComplete,
   previousContext,
   pair,
+  sameSide,
   sideOfRow,
   snapshotForMatchday,
   type Award,
@@ -24,6 +31,7 @@ import {
   type SetScore,
   type Side,
   type SideSize,
+  type SideStanding,
 } from '@/core'
 import type { Database, Json } from './database.types'
 import { disciplineConfig } from './discipline'
@@ -694,6 +702,144 @@ function groupedMatches(
       }),
     )
   })
+}
+
+/**
+ * Cierra la fase actual y arma la siguiente (REQ-D7-2): la llave se genera al
+ * cerrar la fase anterior, nunca queda un partido "a definir". Sólo aplica a
+ * `formato.kind === 'GROUPS_KNOCKOUT'` — una fecha `ROUND_ROBIN` es una sola
+ * fase GRUPO de punta a punta, sin nada que avanzar.
+ *
+ * El riesgo que el design (#3801, PUNTO 7 y `riesgos`) anota desde el día
+ * uno se vuelve código acá: `computeStandings` es PURA y tabula lo que se le
+ * pase. `matchupsAfterGroups` (abajo) filtra por `fase==='GRUPO'` (ya
+ * garantizado por `inPhase`, ver más abajo) Y por `grupo===groupNumber` — sin
+ * el segundo filtro, un partido de otra fase entre los mismos dos lados
+ * (`grupo` cae siempre en 1 ahí, `matches_group_only_in_groups`, 0039) puede
+ * colarse en la tabla del grupo 1 y decidir su mano a mano.
+ */
+export async function advancePhase(supabase: Client, matchdayId: string): Promise<void> {
+  const { matchday, config, snapshot } = await matchdayContextFor(supabase, matchdayId)
+  if (matchday.status !== 'OPEN') {
+    throw new EdgeError('Sólo se puede avanzar de fase con la fecha abierta.')
+  }
+  const formato = matchday.formato as unknown as MatchdayFormat
+  if (formato.kind !== 'GROUPS_KNOCKOUT') {
+    throw new EdgeError('Esta fecha no tiene fases: se juega entera en una ronda.')
+  }
+
+  const { matches } = await resultsOf(supabase, matchdayId)
+  const phase = currentPhase(matches)
+  if (phase === null) throw new EdgeError('La fecha todavía no tiene partidos generados.')
+  if (phase === 'FINAL') throw new EdgeError('La llave ya llegó a la final: no hay fase siguiente.')
+  if (!phaseIsComplete(matches, phase)) {
+    throw new EdgeError('Todavía hay partidos sin jugar en la fase actual.')
+  }
+
+  // Sólo los partidos de la fase que se está cerrando — el primer filtro del
+  // riesgo de arriba. `matchupsAfterGroups`/`matchupsAfterKnockout` reciben
+  // YA garantizado que todo acá adentro es `fase === phase`.
+  const inPhase = matches.filter((match) => match.fase === phase)
+  const nextMatchups =
+    phase === 'GRUPO'
+      ? matchupsAfterGroups(inPhase, formato, config, snapshot, matchday.allows_draw)
+      : matchupsAfterKnockout(phase, inPhase)
+
+  const pairs = await pairsBySide(supabase, matchdayId)
+  const rows: MatchRow[] = nextMatchups.map(({ fase, sideA, sideB }) => ({
+    matchday_id: matchdayId,
+    round: 1,
+    pair_a: pairIdOf(pairs, sideA),
+    pair_b: pairIdOf(pairs, sideB),
+    allows_draw: matchday.allows_draw,
+    fase,
+    grupo: 1, // matches_group_only_in_groups (0039): sólo GRUPO puede tener grupo > 1
+  }))
+  await insertMatches(supabase, rows)
+}
+
+/**
+ * De GRUPO a la primera ronda de la llave: una tabla POR GRUPO (el filtro que
+ * hace real el riesgo del design), y `knockoutMatchups` arma los cruces.
+ */
+function matchupsAfterGroups(
+  groupMatches: readonly MatchResult[],
+  formato: Extract<MatchdayFormat, { kind: 'GROUPS_KNOCKOUT' }>,
+  config: SeasonConfig,
+  snapshot: EntryId[],
+  allowsDraw: boolean,
+): Array<{ fase: Phase; sideA: Side; sideB: Side }> {
+  const groupTables: SideStanding[][] = []
+  for (let groupNumber = 1; groupNumber <= formato.groups; groupNumber++) {
+    // El filtro que hace real el riesgo: SOLO los partidos de ESTE grupo,
+    // nunca la fase entera. `groupMatches` ya viene filtrado a `fase==='GRUPO'`
+    // por `advancePhase` — acá falta el segundo eje, `grupo`.
+    const ofGroup = groupMatches.filter((match) => match.grupo === groupNumber)
+    groupTables.push(computeStandings(uniqueSides(ofGroup), [...ofGroup], config, snapshot, allowsDraw))
+  }
+  const matchups = knockoutMatchups(groupTables, formato.qualifiersPerGroup)
+  const fase = faseForCount(matchups.length)
+  return matchups.map(([sideA, sideB]) => ({ fase, sideA, sideB }))
+}
+
+/**
+ * De una ronda de llave YA JUGADA a la siguiente: `nextRoundMatchups` empareja
+ * ganadores. Si la fase que se cierra es SEMI, la FINAL no es la única fase
+ * nueva — TERCER_PUESTO se genera en el mismo momento, con los perdedores
+ * (decisión #3979: existe aunque después nadie la juegue).
+ */
+function matchupsAfterKnockout(
+  phase: Phase,
+  played: readonly MatchResult[],
+): Array<{ fase: Phase; sideA: Side; sideB: Side }> {
+  const matchups = nextRoundMatchups(played)
+  const fase = faseForCount(matchups.length)
+  const next = matchups.map(([sideA, sideB]) => ({ fase, sideA, sideB }))
+  if (phase === 'SEMI') {
+    const [thirdSideA, thirdSideB] = losingMatchup(played)
+    next.push({ fase: 'TERCER_PUESTO', sideA: thirdSideA, sideB: thirdSideB })
+  }
+  return next
+}
+
+/** Los lados distintos que aparecen en `matches`, en orden de primera aparición. */
+function uniqueSides(matches: readonly MatchResult[]): Side[] {
+  const sides: Side[] = []
+  for (const match of matches) {
+    if (!sides.some((side) => sameSide(side, match.sideA))) sides.push(match.sideA)
+    if (!sides.some((side) => sameSide(side, match.sideB))) sides.push(match.sideB)
+  }
+  return sides
+}
+
+/**
+ * Las parejas de la fecha con su lado, para traducir el `Side` que devuelven
+ * `knockoutMatchups`/`nextRoundMatchups`/`losingMatchup` al `pair_id` que
+ * `matches.pair_a`/`pair_b` necesitan. Los lados no cambian entre fases —
+ * la llave reutiliza las MISMAS parejas de la fase de grupos, no arma unas
+ * nuevas.
+ */
+async function pairsBySide(
+  supabase: Client,
+  matchdayId: string,
+): Promise<Array<{ id: string; side: Side }>> {
+  const { data, error } = await supabase
+    .from('pairs')
+    .select('id, entry_a, entry_b, pair_size')
+    .eq('matchday_id', matchdayId)
+  if (error) throw new EdgeError(`No se pudieron leer las parejas: ${error.message}`)
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    side: sideOfRow(row.pair_size as SideSize, row.entry_a, row.entry_b),
+  }))
+}
+
+function pairIdOf(pairs: readonly { id: string; side: Side }[], side: Side): string {
+  const found = pairs.find((row) => sameSide(row.side, side))
+  if (found === undefined) {
+    throw new Error('Un lado de la llave no tiene pareja guardada en esta fecha. Esto es un bug.')
+  }
+  return found.id
 }
 
 /**

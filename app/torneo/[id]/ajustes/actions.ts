@@ -2,7 +2,8 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { defaultConfig, disciplineProfile, type DisciplineId, type SeasonConfig } from '@/core'
+import type { DisciplineId, SeasonConfig, SideSize } from '@/core'
+import { type DisciplineKind, newDisciplineSpec } from '@/app/torneos/nuevo/wizard-state'
 import { addDiscipline, updateDisciplineConfig } from '@/db/discipline'
 import { addSquadSeat, claimOwnSeat, removeSeat, renameSeat, unlinkSeat } from '@/db/entries'
 import { EdgeError } from '@/db/errors'
@@ -150,24 +151,24 @@ export async function saveConfig(
  * mismo mensaje en español que ya usa Formato — no hace falta duplicar esa
  * validación acá.
  *
- * `disciplineProfile` es lo que le pone la FORMA DEL MARCADOR (PR20 rebanada
- * D2): sin él, `defaultConfig` nace en pádel y una FIFA agregada desde acá no
- * podía cargar ni un `3-1` ni un `0-0`. Es la misma función que usa el wizard
- * (`buildDisciplines`) — los dos caminos que crean una disciplina escriben lo
- * mismo o el torneo depende de por dónde entraste.
+ * `newDisciplineSpec` es lo que le pone la FORMA DEL MARCADOR (PR20 rebanada
+ * D2) y, desde PR21 Rebanada F, los LADOS (`pairSize`): sin él, `defaultConfig`
+ * nace en pádel de a dos y una FIFA agregada desde acá no podía cargar ni un
+ * `3-1` ni un `0-0`, ni nacer de a uno. Es la misma función que usa el wizard
+ * por dentro (`buildDisciplines`) — los dos caminos que crean una disciplina
+ * escriben lo mismo o el torneo depende de por dónde entraste.
+ *
+ * `pairSize` sin especificar nace en parejas (2), como siempre — el radio
+ * "Lados" de esta pantalla es quien por fin lo puede pasar en 1.
  */
 export async function addDisciplineToSeason(
   seasonId: string,
-  kind: 'PADEL' | 'FIFA',
+  kind: DisciplineKind,
   entryIds: string[],
+  pairSize?: SideSize,
 ): Promise<WriteResult> {
   return onSeason(seasonId, async (supabase) => {
-    await addDiscipline(
-      supabase,
-      seasonId,
-      { kind, ...disciplineProfile(kind, defaultConfig(entryIds.length)) },
-      entryIds,
-    )
+    await addDiscipline(supabase, seasonId, newDisciplineSpec(kind, entryIds.length, pairSize), entryIds)
   })
 }
 

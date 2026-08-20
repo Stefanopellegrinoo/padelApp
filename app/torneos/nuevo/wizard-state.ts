@@ -14,6 +14,7 @@ import {
   pointsErrors,
   type MatchFormat,
   type SeasonConfig,
+  type SideSize,
 } from '@/core'
 
 /** Los rangos son medidas del handoff (§6 paso 4), no decisiones de este código. */
@@ -131,16 +132,48 @@ export function disciplinesWarning(picked: readonly DisciplineKind[]): string | 
  * está en el grant de UPDATE de `disciplines` (`0015_disciplines.sql:70`), así
  * que la disciplina que nace sin empates no los tiene nunca más.
  *
- * Lo que sigue sin preguntar es `pair_size` —FIFA es 1v1 Y 2v2, decisión de
- * producto #5— y por eso todo lo que sale de acá se juega de a dos, como hoy.
+ * `pairSize` —FIFA es 1v1 Y 2v2, decisión de producto #5— es OPCIONAL y sin
+ * default acá a propósito: quien no lo pasa arma parejas, como siempre
+ * (`addDiscipline`/`NewSeasonDiscipline` caen a 2 si no llega). Sólo se agrega
+ * al resultado cuando se pasa —el pádel de hoy no gana una clave `pairSize`
+ * que antes no tenía, que rompería el `toEqual` de sus propios tests.
+ * Rebanada F (decisión `decisions/alcance-desbloqueo-1v1-pr21`) es quien por
+ * fin lo pasa, desde el radio "Lados".
+ *
  * Quien quiera cambiar los puntos o las fechas de una disciplina lo hace
  * después en Ajustes → Formato (`updateDisciplineConfig`, PR6).
  */
 export function buildDisciplines(
   picked: readonly DisciplineKind[],
   config: SeasonConfig,
-): { kind: DisciplineKind; config: SeasonConfig; allowsDraw: boolean }[] {
-  return picked.map((kind) => ({ kind, ...disciplineProfile(kind, config) }))
+  pairSize?: SideSize,
+): { kind: DisciplineKind; config: SeasonConfig; allowsDraw: boolean; pairSize?: SideSize }[] {
+  return picked.map((kind) => ({
+    kind,
+    ...disciplineProfile(kind, config),
+    ...(pairSize === undefined ? {} : { pairSize }),
+  }))
+}
+
+/**
+ * La fila que arma "+ Agregar disciplina" (Ajustes, REQ-D1-2): la misma forma
+ * que una fila de `buildDisciplines`, para UNA sola disciplina y con la
+ * config del tamaño de SU plantel elegido (`headcount`, no el de toda la
+ * temporada — REQ-D1-4, solape parcial).
+ *
+ * Vive acá y no en `ajustes/actions.ts` por lo mismo que el resto de este
+ * archivo: `actions.ts` es `'use server'` y no se puede importar en la suite
+ * unitaria sin arrastrar `next/headers` (mismo precedente que
+ * `SelectorDeFormato`, PR21 D2 — un pedazo se saca a un archivo sin ese
+ * import para poder testearlo). El único tramo que queda sin test es la línea
+ * de una sola llamada que le reenvía este resultado a `addDiscipline`.
+ */
+export function newDisciplineSpec(
+  kind: DisciplineKind,
+  headcount: number,
+  pairSize?: SideSize,
+): { kind: DisciplineKind; config: SeasonConfig; allowsDraw: boolean; pairSize?: SideSize } {
+  return buildDisciplines([kind], defaultConfig(headcount, pairSize), pairSize)[0]!
 }
 
 /** Cuántos nombres del plantel están cargados de verdad. */
@@ -253,19 +286,26 @@ export function submitSeats({ names, mySeat }: Squad): {
  * está implementado, testeado, validado por `validateConfig` y usado por el
  * seed y por todos los tests contra la base. Un wizard que produjera otros
  * defaults haría que ninguna captura de pantalla coincida con ningún fixture.
+ *
+ * `sideSize` es opcional y se lo pasa tal cual a `defaultConfig` —antes se
+ * dejaba caer acá, y con `sideSize=1` la curva de puntos salía la de parejas
+ * en vez de la de la decisión #3963 (S75, cerrado en Rebanada E).
  */
-export function configFor(squadSize: number): SeasonConfig {
-  return defaultConfig(squadSize)
+export function configFor(squadSize: number, sideSize?: SideSize): SeasonConfig {
+  return defaultConfig(squadSize, sideSize)
 }
 
 /**
  * Rehace `points` cuando cambia el tamaño del plantel, **pisando** lo que el
  * admin hubiera tocado. No es una pérdida: con otro plantel hace falta otra
  * cantidad de valores, y una lista de 4 en un plantel de 12 es inválida.
+ *
+ * `sideSize` viaja igual que en `configFor` (mismo cierre de S75): sin
+ * pasarlo, la curva que sale es la de parejas.
  */
-export function resizeConfig(config: SeasonConfig, squadSize: number): SeasonConfig {
+export function resizeConfig(config: SeasonConfig, squadSize: number, sideSize?: SideSize): SeasonConfig {
   if (config.squadSize === squadSize) return config
-  return { ...config, squadSize, points: configFor(squadSize).points }
+  return { ...config, squadSize, points: configFor(squadSize, sideSize).points }
 }
 
 /**

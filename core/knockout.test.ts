@@ -3,6 +3,7 @@ import {
   currentPhase,
   phaseIsComplete,
   faseForCount,
+  groupSides,
   knockoutMatchups,
   nextRoundMatchups,
   knockoutPositions,
@@ -226,6 +227,40 @@ describe('knockoutPositions', () => {
 
   it('tira si la llave no tiene exactamente un partido de FINAL', () => {
     expect(() => knockoutPositions(semis, groupTable)).toThrow(/FINAL/)
+  })
+})
+
+describe('groupSides', () => {
+  // Hallazgo de diseño (C1.3, el design PUNTO 7 no nombraba este helper):
+  // `generatePairs` (`db/matchday.ts`) necesita repartir los lados en grupos
+  // ANTES de llamar `buildFixture` una vez por grupo. La regla es snake/
+  // serpentina, no un corte secuencial (1,2,3,4 | 5,6,7,8) — con eso el
+  // grupo 0 se quedaría con los 4 mejores seeds y el reparto no sería justo.
+  it('reparte 8 lados en 2 grupos por seed, en zigzag (snake), no en cortes secuenciales', () => {
+    const seeds = Array.from({ length: 8 }, (_unused, index) => single(`s${index + 1}`))
+
+    const groups = groupSides(seeds, 2)
+
+    // seed1→G0, seed2→G1, seed3→G1 (vuelta), seed4→G0, seed5→G0, seed6→G1,
+    // seed7→G1 (vuelta), seed8→G0. Un corte secuencial daría [1,2,3,4]/[5,6,7,8]
+    // — distinto a esto, así que el test no pasa con esa implementación más simple.
+    expect(groups).toEqual([
+      [seeds[0], seeds[3], seeds[4], seeds[7]],
+      [seeds[1], seeds[2], seeds[5], seeds[6]],
+    ])
+  })
+
+  it('es genérico: reparte cualquier tipo de item, no sólo Side', () => {
+    const items = ['a', 'b', 'c', 'd', 'e', 'f']
+    expect(groupSides(items, 3)).toEqual([
+      ['a', 'f'],
+      ['b', 'e'],
+      ['c', 'd'],
+    ])
+  })
+
+  it('tira con menos de 1 grupo', () => {
+    expect(() => groupSides([single('a')], 0)).toThrow(/0/)
   })
 })
 

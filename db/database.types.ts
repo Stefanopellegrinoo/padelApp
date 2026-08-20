@@ -409,6 +409,8 @@ export type Database = {
       matches: {
         Row: {
           allows_draw: boolean
+          fase: string
+          grupo: number
           id: string
           matchday_id: string
           pair_a: string
@@ -417,6 +419,8 @@ export type Database = {
         }
         Insert: {
           allows_draw?: boolean
+          fase?: string
+          grupo?: number
           id?: string
           matchday_id: string
           pair_a: string
@@ -425,6 +429,8 @@ export type Database = {
         }
         Update: {
           allows_draw?: boolean
+          fase?: string
+          grupo?: number
           id?: string
           matchday_id?: string
           pair_a?: string
@@ -653,6 +659,7 @@ export type Database = {
       match_is_open: { Args: { p_match: string }; Returns: boolean }
       match_season: { Args: { p_match: string }; Returns: string }
       matchday_discipline: { Args: { p_matchday: string }; Returns: string }
+      matchday_phase: { Args: { p_matchday: string }; Returns: string }
       matchday_season: { Args: { p_matchday: string }; Returns: string }
       my_player_id: { Args: never; Returns: string }
       open_matchday: { Args: { p_matchday: string }; Returns: undefined }

@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { defaultConfig, type SeasonConfig } from '@/core'
+import { defaultConfig, type MatchdayFormat, type SeasonConfig } from '@/core'
 import { addGuest, createMatchday, generatePairs, openMatchday, setAttendance } from './matchday'
 import { adminClient } from './test/admin'
+import type { Json } from './database.types'
 import { createSeason } from './test/factories'
 import { createTestUser, type TestUser } from './test/users'
 
@@ -66,6 +67,35 @@ async function matchesOf(
   const { data, error } = await db
     .from('matches')
     .select('round, pair_a, pair_b')
+    .eq('matchday_id', matchdayId)
+  if (error) throw new Error(error.message)
+  return data ?? []
+}
+
+/**
+ * Planta `formato` con `service_role`: es escenario para el test de
+ * `generatePairs` (Rebanada C1), no algo que este archivo deba ejercitar con
+ * RLS — el column-grant de `authenticated` ya tiene su propio test
+ * (`db/matchday-format.db.test.ts`). Todavía no existe ningún escritor de
+ * producción que actualice `formato` después de crear la fecha (llega en
+ * D2.2); hasta entonces, plantarlo así es el único camino.
+ */
+async function setFormato(matchdayId: string, formato: MatchdayFormat): Promise<void> {
+  const db = adminClient()
+  const { error } = await db
+    .from('matchdays')
+    .update({ formato: formato as unknown as Json })
+    .eq('id', matchdayId)
+  if (error) throw new Error(error.message)
+}
+
+async function matchesFaseGrupo(
+  matchdayId: string,
+): Promise<Array<{ fase: string; grupo: number; pair_a: string; pair_b: string }>> {
+  const db = adminClient()
+  const { data, error } = await db
+    .from('matches')
+    .select('fase, grupo, pair_a, pair_b')
     .eq('matchday_id', matchdayId)
   if (error) throw new Error(error.message)
   return data ?? []
@@ -243,6 +273,72 @@ describe('generatePairs', () => {
     // arriba, sólo que acá los "lados" son personas, no parejas.
     expect(matches).toHaveLength(28)
     expect(new Set(matches.map((match) => match.round)).size).toBe(7)
+  })
+
+  /**
+   * Rebanada C1 (REQ-D8-1, hallazgo (a) `groupSides`): con `formato.kind`
+   * `GROUPS_KNOCKOUT`, `generatePairs` reparte los lados en grupos y corre
+   * `buildFixture` una vez por grupo, en vez del round robin de siempre sobre
+   * TODOS los lados.
+   *
+   * Mismo escenario que `suggestFormat(8, 1)` sugeriría (B2, #3978: 8
+   * presentes de a uno → 2 grupos de 4) — acá el formato se PLANTA explícito
+   * con `setFormato`, no se pasa por el sugeridor (eso es D2, todavía no
+   * existe un escritor de producción para `formato`).
+   */
+  it('con formato GROUPS_KNOCKOUT reparte los lados en grupos y arma cada uno por separado', async () => {
+    const admin = await createTestUser()
+    const filler = await fillerPlayers(8)
+    const config: SeasonConfig = { ...defaultConfig(8), points: [8, 7, 6, 5, 4, 3, 2, 1] }
+    const { seasonId, entryIds } = await createSeason({
+      admin,
+      squad: filler,
+      disciplines: [{ kind: 'FIFA', pairSize: 1, config }],
+    })
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
+    await markAllPlaying(admin, matchdayId, entryIds)
+    await setFormato(matchdayId, { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 })
+
+    await generatePairs(admin.client, matchdayId)
+
+    const pairs = await pairsOf(matchdayId)
+    expect(pairs).toHaveLength(8) // el reparto en grupos no cambia cuántos lados arma
+
+    const matches = await matchesFaseGrupo(matchdayId)
+    // 2 grupos de 4 lados: C(4,2)=6 partidos por grupo, 12 en total — NO 28
+    // (el round robin de las 8 juntas, que es lo que daría si `formato` se
+    // ignorara).
+    expect(matches).toHaveLength(12)
+    expect(matches.every((match) => match.fase === 'GRUPO')).toBe(true)
+
+    // El `grupo` que sale de `groupSides` tiene que llegar hasta la fila real
+    // de `matches` (#3957, la regla de las seis veces) — no alcanza con que
+    // `fase` esté bien: si el código hardcodeara `grupo=1` para todos, este
+    // conteo lo pesca.
+    const porGrupo = new Map<number, number>()
+    for (const match of matches) {
+      porGrupo.set(match.grupo, (porGrupo.get(match.grupo) ?? 0) + 1)
+    }
+    expect(porGrupo).toEqual(new Map([[1, 6], [2, 6]]))
+
+    // El reparto es real, no una etiqueta: las parejas de cada grupo forman
+    // DOS conjuntos disjuntos de 4, cuya unión son las 8 parejas armadas —
+    // prueba que `groupSides` de verdad separó los lados, no que ambos
+    // grupos jueguen contra las mismas 8 parejas con un número distinto.
+    const idsByGrupo = new Map<number, Set<string>>()
+    for (const match of matches) {
+      const set = idsByGrupo.get(match.grupo) ?? new Set<string>()
+      set.add(match.pair_a)
+      set.add(match.pair_b)
+      idsByGrupo.set(match.grupo, set)
+    }
+    const grupo1 = idsByGrupo.get(1)
+    const grupo2 = idsByGrupo.get(2)
+    if (grupo1 === undefined || grupo2 === undefined) throw new Error('Falta un grupo en el resultado.')
+    expect(grupo1.size).toBe(4)
+    expect(grupo2.size).toBe(4)
+    expect([...grupo1].some((id) => grupo2.has(id))).toBe(false) // disjuntos
+    expect(new Set([...grupo1, ...grupo2])).toEqual(new Set(pairs.map((pair) => pair.id)))
   })
 })
 

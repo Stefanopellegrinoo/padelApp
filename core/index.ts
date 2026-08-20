@@ -102,8 +102,9 @@ export { computeAwards } from './awards'
 // rebanada, el design PUNTO 7 no lo nombraba). Rebanada C2: `currentPhase`/
 // `phaseIsComplete`/`faseForCount`/`knockoutMatchups`/`nextRoundMatchups`/
 // `losingMatchup` salen ahora — `advancePhase` (`db/matchday.ts`) es su
-// primer consumidor real. `knockoutPositions` sigue AFUERA: llega recién con
-// `closeMatchday` en D1.
+// primer consumidor real. Rebanada D1: `knockoutPositions` sale ahora —
+// `closeMatchday` (`db/matchday.ts`, `standingsFromBracket`) es su primer
+// consumidor de producción real.
 export {
   suggestFormat,
   groupSides,
@@ -113,6 +114,7 @@ export {
   knockoutMatchups,
   nextRoundMatchups,
   losingMatchup,
+  knockoutPositions,
 } from './knockout'
 
 // ── The season ───────────────────────────────────────────────────────────────

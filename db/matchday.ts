@@ -8,6 +8,7 @@ import {
   faseForCount,
   groupSides,
   knockoutMatchups,
+  knockoutPositions,
   losingMatchup,
   mastersFixture,
   mastersQualifiers,
@@ -976,6 +977,14 @@ export async function closeMatchday(supabase: Client, matchdayId: string): Promi
   const { sides, matches } = await resultsOf(supabase, matchdayId)
 
   for (const match of matches) {
+    // El partido de TERCER_PUESTO puede quedar SIN JUGAR a propósito
+    // (decisión #3979): el guard de `standingsFromBracket`, más abajo, sólo
+    // exige que la FINAL esté completa. Sin esta excepción el loop de abajo
+    // rechazaría CUALQUIER llave que se saltee ese partido con "Falta cargar
+    // el resultado", antes incluso de llegar al guard que a propósito lo
+    // permite. No-op para ROUND_ROBIN: esa fecha nunca tiene un match en fase
+    // TERCER_PUESTO (siempre 'GRUPO', REQ-D7-1).
+    if (match.fase === 'TERCER_PUESTO' && match.sets.length === 0) continue
     // `matchday.allows_draw`, no la disciplina: es el valor CONGELADO en la
     // fecha (`matchdays_discipline_draw` es `on update no action`, así que
     // una vez creada la fecha la disciplina ya no puede cambiarlo). Cerrar
@@ -988,7 +997,17 @@ export async function closeMatchday(supabase: Client, matchdayId: string): Promi
   // `matchday.allows_draw` por lo MISMO que el `matchError` de arriba: es el
   // valor congelado en la fecha. Cerrar una fecha vieja tiene que tabularla
   // con la regla con la que se jugó, no con la que la disciplina tenga hoy.
-  const standings = computeStandings(sides, matches, config, snapshot, matchday.allows_draw)
+  //
+  // `formato.kind` bifurca la posición del día (REQ-D7-4): con
+  // `GROUPS_KNOCKOUT` la arma la llave (`standingsFromBracket`); con
+  // `ROUND_ROBIN` es EXACTAMENTE el camino de siempre, sin tocar una línea
+  // (segundo GIVEN de REQ-D7-4, no-regresión) — `computeAwards`, dos líneas
+  // más abajo, no cambia de firma en ninguno de los dos casos.
+  const formato = matchday.formato as unknown as MatchdayFormat
+  const standings =
+    formato.kind === 'GROUPS_KNOCKOUT'
+      ? standingsFromBracket(matches, config, snapshot, matchday.allows_draw)
+      : computeStandings(sides, matches, config, snapshot, matchday.allows_draw)
   // El Masters define al campeón del año, no reparte puntos (spec 2.7), y
   // `close_matchday` rechaza un `p_awards` no vacío cuando kind = 'MASTERS'.
   // Sin esta rama el Masters no se puede cerrar: `computeAwards` devolvería seis
@@ -1003,6 +1022,57 @@ export async function closeMatchday(supabase: Client, matchdayId: string): Promi
     p_awards: awards as unknown as Json,
   })
   if (error !== null) throw new EdgeError(error.message)
+}
+
+/**
+ * Posición del día para una fecha `GROUPS_KNOCKOUT` (REQ-D7-4, primer
+ * GIVEN): la arma `knockoutPositions` a partir de la LLAVE, no de la tabla
+ * de grupos plana. `computeAwards` sigue recibiendo `SideStanding[]` sin
+ * cambiar de firma.
+ *
+ * Guard (decisión #3979, cerrada con el número a la vista: la curva de
+ * pádel paga 5 al 3º y 3 al 4º, dos puntos de campeonato reales): sólo
+ * exige que `FINAL` esté completa. NO exige `TERCER_PUESTO` jugado — a
+ * propósito, no un descuido. Si ese partido no se jugó, `knockoutPositions`
+ * (Rebanada B2, `core/knockout.ts`) ya hace fallback a la tabla de grupos
+ * para decidir 3º/4º.
+ *
+ * AGUJERO DE DISEÑO cerrado acá, surfaceado en el reporte de esta rebanada
+ * (`apply-progress-pr21d1`), no inventado en silencio: `knockoutPositions`
+ * pide UNA `groupTable`, pero `GROUPS_KNOCKOUT` arma G tablas, una por grupo
+ * (ver `matchupsAfterGroups`) — ninguna decide sola quién es 5º entre el 3º
+ * del grupo A y el 3º del grupo B, y el spec (REQ-D7-4) tampoco lo dice.
+ *
+ * Decisión tomada acá: se REUTILIZA `computeStandings` —la MISMA función
+ * que arma la tabla de una fecha `ROUND_ROBIN` entera— sobre TODOS los
+ * lados y TODOS los partidos de la fase `GRUPO` juntos, no separados por
+ * grupo. No es una regla nueva: es el mismo criterio de siempre (puntos del
+ * día → diferencia → mano a mano → snapshot) aplicado al universo completo
+ * de la fase de grupos, el mismo orden que hubiera salido si todos hubieran
+ * jugado entre sí. `headToHead` ya devuelve `NOT_PLAYED` para dos lados de
+ * grupos distintos que nunca se cruzaron (no inventa un resultado), así que
+ * cae al snapshot como cualquier otro empate sin cruce — el mismo mecanismo
+ * que ya resuelve empates DENTRO de un grupo. Es la misma convención que
+ * usan los torneos reales para ordenar a quien no clasificó (p.ej. "mejores
+ * terceros"): por los números de la fase de grupos, no por el número de
+ * grupo. Distinto de `matchupsAfterGroups` (Rebanada C2), que SÍ separa por
+ * grupo — ahí el objetivo es decidir quién clasifica DENTRO de su propio
+ * grupo, acá el objetivo es ordenar a TODOS entre sí.
+ */
+function standingsFromBracket(
+  matches: readonly MatchResult[],
+  config: SeasonConfig,
+  snapshot: EntryId[],
+  allowsDraw: boolean,
+): SideStanding[] {
+  const phase = currentPhase(matches)
+  if (phase !== 'FINAL' || !phaseIsComplete(matches, 'FINAL')) {
+    throw new EdgeError('La llave todavía no llegó a la final: no se puede cerrar la fecha.')
+  }
+  const groupMatches = matches.filter((match) => match.fase === 'GRUPO')
+  const bracket = matches.filter((match) => match.fase !== 'GRUPO')
+  const groupTable = computeStandings(uniqueSides(groupMatches), [...groupMatches], config, snapshot, allowsDraw)
+  return knockoutPositions(bracket, groupTable)
 }
 
 /**

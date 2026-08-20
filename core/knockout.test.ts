@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { currentPhase, phaseIsComplete, faseForCount, knockoutMatchups, nextRoundMatchups } from './knockout'
+import {
+  currentPhase,
+  phaseIsComplete,
+  faseForCount,
+  knockoutMatchups,
+  nextRoundMatchups,
+  knockoutPositions,
+} from './knockout'
 import { pair, single } from './side'
 import type { MatchResult, Phase, Side, SideStanding } from './types'
 
@@ -158,5 +165,65 @@ describe('nextRoundMatchups', () => {
       playedMatch('SEMI', 1, C1, A1, 'A'),
     ]
     expect(() => nextRoundMatchups(played)).toThrow(/3/)
+  })
+})
+
+describe('knockoutPositions', () => {
+  // decisión (b) — agujero del design: REQ-D7-4 dice a secas "3º/4º
+  // semifinalistas perdedores", pero PHASE_ORDER tiene una fase
+  // TERCER_PUESTO que el design genera junto con FINAL. Regla elegida (ver
+  // JSDoc de `thirdAndFourth` en `core/knockout.ts`): si el partido de
+  // tercer puesto se jugó, SU resultado decide 3º/4º; si no, caen al texto
+  // literal — "semifinalistas perdedores" desempatados por su posición en
+  // la fase de grupos.
+  //
+  // El ganador de la final acá es B2 —el 2º de su grupo, no el 1º— así el
+  // test no puede pasar copiando el orden de `groupTable`: prueba que la
+  // función realmente lee el resultado de la llave.
+  const A1 = pair('a1', 'a2')
+  const A2 = pair('a3', 'a4')
+  const A3 = pair('a5', 'a6')
+  const B1 = pair('b1', 'b2')
+  const B2 = pair('b3', 'b4')
+  const B3 = pair('b5', 'b6')
+
+  const groupTable = [
+    standing(A1, 1),
+    standing(A2, 2),
+    standing(A3, 3),
+    standing(B1, 1),
+    standing(B2, 2),
+    standing(B3, 3),
+  ]
+
+  const semis = [
+    playedMatch('SEMI', 1, A1, B2, 'B'), // gana B2 (el 2º de su grupo, upset)
+    playedMatch('SEMI', 1, B1, A2, 'A'), // gana B1
+  ]
+  const final = playedMatch('FINAL', 1, B2, B1, 'A') // gana B2: campeón es un 2º de grupo
+
+  it('con el partido de tercer puesto jugado, SU resultado decide 3º y 4º', () => {
+    const playoff = playedMatch('TERCER_PUESTO', 1, A1, A2, 'B') // gana A2
+    const bracket = [...semis, playoff, final]
+
+    const result = knockoutPositions(bracket, groupTable)
+
+    expect(result.map((row) => row.side)).toEqual([B2, B1, A2, A1, A3, B3])
+    expect(result.map((row) => row.position)).toEqual([1, 2, 3, 4, 5, 6])
+  })
+
+  it('sin partido de tercer puesto jugado, 3º/4º se desempatan por la tabla de grupos', () => {
+    const bracket = [...semis, final] // ningún TERCER_PUESTO en la llave
+
+    const result = knockoutPositions(bracket, groupTable)
+
+    // A1 tenía mejor posición de grupo (1) que A2 (2) — a falta del partido
+    // de tercer puesto, A1 va 3º y A2 4º: ORDEN DISTINTO al caso de arriba,
+    // prueba que el fallback es real y no una copia del otro caso.
+    expect(result.map((row) => row.side)).toEqual([B2, B1, A1, A2, A3, B3])
+  })
+
+  it('tira si la llave no tiene exactamente un partido de FINAL', () => {
+    expect(() => knockoutPositions(semis, groupTable)).toThrow(/FINAL/)
   })
 })

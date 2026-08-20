@@ -232,6 +232,24 @@ export function nextRoundMatchups(played: readonly MatchResult[]): Array<[Side, 
   return next
 }
 
+/**
+ * El cruce por el tercer puesto: los DOS perdedores de las semifinales, uno
+ * contra el otro. `nextRoundMatchups` sólo empareja GANADORES — esto es su
+ * espejo para el partido que la decisión #3979 asume que EXISTE (aunque el
+ * grupo después lo salteé): SEMI genera FINAL y TERCER_PUESTO juntas, y
+ * `advancePhase` (Rebanada C2, `db/matchday.ts`) necesita las dos.
+ */
+export function losingMatchup(played: readonly MatchResult[]): [Side, Side] {
+  if (played.length !== 2) {
+    throw new Error(`El tercer puesto necesita exactamente 2 semifinales, hay ${played.length}.`)
+  }
+  const [first, second] = played
+  if (first === undefined || second === undefined) {
+    throw new Error('Faltan las semifinales para armar el tercer puesto.')
+  }
+  return [loserOf(first), loserOf(second)]
+}
+
 function statsOf(side: Side, groupTable: readonly SideStanding[]): SideStanding {
   const row = groupTable.find((candidate) => sameSide(candidate.side, side))
   if (row === undefined) {

@@ -29,6 +29,7 @@ import {
   seasonMatchdaysOf,
 } from '@/db/read'
 import { sideLabel, tiebreakNote } from './tabla-desempate'
+import { TablaDelDia } from './tabla-del-dia'
 import { awardsBefore, closedHistory, frozenPointsOf, type FrozenAward } from '@/db/season'
 import { serverClient } from '@/db/server'
 import { EdgeError } from '@/db/errors'
@@ -554,61 +555,38 @@ export default async function FechaDetailPage({ params }: PageProps) {
         ) : (
         <div className="flex flex-col gap-2">
           <p className="text-[15px] font-extrabold tracking-[-.02em]">Tabla de la fecha</p>
-          <div className="overflow-hidden rounded-[14px] border border-line">
-            <div className="grid grid-cols-[1fr_34px_44px_44px] gap-2 bg-chip px-3 py-2 text-[9.5px] font-extrabold uppercase tracking-[.13em] text-muted">
-              <span>{discipline.pairSize === 1 ? 'Jugador' : 'Pareja'}</span>
-              <span className="text-right">PG</span>
-              <span className="text-right">Dif</span>
-              <span className="text-right">Pts</span>
-            </div>
-            {tableRows.map((row, index) => {
-              const guestInRow = status === 'CLOSED' && hasGuest(row.side)
+          <TablaDelDia
+            tituloLado={discipline.pairSize === 1 ? 'Jugador' : 'Pareja'}
+            muestraEmpates={matchday.allowsDraw}
+            filas={tableRows.map((row) => ({
+              key: sideKey(row.side),
+              nombre: sideName(row.side),
+              esInvitado: status === 'CLOSED' && hasGuest(row.side),
+              won: row.won,
+              drawn: row.drawn,
+              gamesDiff: row.gamesDiff,
               // La columna son "los puntos que se llevó cada jugador"
               // (`ui-screens.md` §9), y en la pareja del invitado los dos no se
               // llevan lo mismo: el invitado 0 y su compañero lo que le tocó.
               // El `??` resuelve eso solo, porque `computeAwards` no le escribe
               // award al invitado. Antes esta fila mostraba `0` fijo, y con eso
               // la pareja que ganaba la fecha 3-0 aparecía sin puntos abajo de
-              // otra con un partido ganado — contradiciendo la nota que está dos
-              // líneas más abajo, "su compañero sí". Lo encontró la Task 14.
+              // otra con un partido ganado — contradiciendo la nota que está
+              // más abajo, "su compañero sí". Lo encontró la Task 14.
               // El primer miembro del lado que tenga award manda: en la pareja
               // del invitado los dos no cobran lo mismo (el invitado 0), y en un
               // lado de uno hay un solo miembro y es el suyo. `members` recorre
               // los que haya, así que la regla es la misma para las dos formas.
-              const pts =
+              pts:
                 status === 'OPEN'
                   ? '—'
                   : String(
                       members(row.side)
                         .map((entryId) => pointsByEntry.get(entryId)?.points)
                         .find((points) => points !== undefined) ?? 0,
-                    )
-              const diff = row.gamesDiff
-              return (
-                <div
-                  key={sideKey(row.side)}
-                  className={`grid grid-cols-[1fr_34px_44px_44px] items-center gap-2 px-3 py-2 text-[13.5px] ${
-                    index > 0 ? 'border-t border-line' : ''
-                  }`}
-                >
-                  <span className="flex items-center gap-1.5 font-bold">
-                    {sideName(row.side)}
-                    {guestInRow && (
-                      <span className="shrink-0 rounded-full border border-line px-1.5 py-0.5 text-[9px] font-extrabold text-muted">
-                        Invitado
-                      </span>
-                    )}
-                  </span>
-                  <span className="text-right font-bold text-muted">{row.won}</span>
-                  <span className="text-right font-bold text-muted">
-                    {diff >= 0 ? '+' : ''}
-                    {diff}
-                  </span>
-                  <span className="text-right text-[17px] font-extrabold">{pts}</span>
-                </div>
-              )
-            })}
-          </div>
+                    ),
+            }))}
+          />
 
           {status === 'OPEN' && (
             <p className="text-[12.5px] font-[550] text-muted">

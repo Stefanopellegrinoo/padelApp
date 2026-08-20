@@ -219,6 +219,28 @@ describe('la pantalla de una fecha no recalcula sus puntos', () => {
     )
   })
 
+  // PR20 rebanada B, segunda parte. La tabla del día salió a `TablaDelDia` para
+  // poder renderizarla, y eso mueve el riesgo acá: el componente tiene 10 tests
+  // y el CABLEADO no tenía ninguno. Los tres argumentos son load-bearing y
+  // fallan en silencio:
+  //
+  // · `filas={tableRows...}` — con `standings` en su lugar se reabren W55 y W57
+  //   EN PANTALLA (la tabla de una fecha cerrada deja de usar el orden
+  //   congelado). Es el mismo contrato que los dos asserts de arriba, pero del
+  //   lado de quien DIBUJA; antes lo cubría el `tableRows.map` del JSX, que ya
+  //   no vive en este archivo.
+  // · `muestraEmpates={matchday.allowsDraw}` — con un `true` fijo el pádel gana
+  //   una columna de ceros que Stefano decidió que NO va; con `false` fijo, la
+  //   tabla de FIFA vuelve a no poder explicar su propio orden.
+  // · `drawn: row.drawn` — un `row.won` ahí dibuja una columna que miente, y
+  //   miente con un número plausible, que es la peor clase.
+  it('le pasa a la tabla las filas congeladas, los empates de la fecha y el drawn real', () => {
+    const fuente = sinComentarios(source)
+    expect(fuente).toMatch(/filas=\{\s*tableRows\s*\.\s*map\b/)
+    expect(fuente).toMatch(/muestraEmpates=\{\s*matchday\.allowsDraw\s*\}/)
+    expect(fuente).toMatch(/\bdrawn:\s*row\.drawn\b/)
+  })
+
   // El error de la ronda 18, que la 22 ya tuvo que corregir una vez: pinchar el
   // NOMBRE no alcanza, porque un mis-wire lo conserva intacto. Queda escrito
   // como test y no como comentario.

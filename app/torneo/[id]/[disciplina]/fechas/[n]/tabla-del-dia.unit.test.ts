@@ -31,9 +31,16 @@ function html(muestraEmpates: boolean, filas: FilaDelDia[] = FILAS): string {
   )
 }
 
-/** El texto de las celdas, fila por fila, sin markup. */
+/**
+ * El texto de las celdas, fila por fila, sin markup. Las entidades se
+ * DESESCAPAN: `renderToStaticMarkup` escribe `&amp;` y los nombres de una
+ * pareja se unen justamente con `&`.
+ */
 function celdas(markup: string): string {
-  return markup.replace(/<[^>]+>/g, '|').replace(/\|+/g, '|')
+  return markup
+    .replace(/<[^>]+>/g, '|')
+    .replace(/\|+/g, '|')
+    .replace(/&amp;/g, '&')
 }
 
 describe('la tabla del día con empates', () => {

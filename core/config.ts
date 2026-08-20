@@ -2,22 +2,67 @@ import { MAX_PLAYERS, MIN_PLAYERS } from './constants'
 import type { SeasonConfig, SideSize } from './types'
 
 /**
+ * Los seis puestos que pagan. Es la tabla de un torneo de seis parejas, y
+ * desde la decisión #3963 es TAMBIÉN la de cualquier disciplina de a uno:
+ * ganar paga 10, salir 5° paga 2, y del 7° para abajo no suma nadie.
+ */
+const PAYING_SIDES = [10, 7, 5, 3, 2, 1]
+
+/**
+ * La misma curva estirada a `sides` puestos: los seis primeros pagan y el
+ * resto va en 0.
+ *
+ * La cola de ceros no es un relleno: `isDescendingWithZeroTail` la admite a
+ * propósito y ya la describía como *"de acá para abajo no se suma, que es como
+ * un grupo dice 'sólo puntúan los primeros cuatro'"*.
+ *
+ * Es también lo único que la aritmética permite arriba de diez lados: entre 10
+ * y 1 hay diez enteros, así que con 11 o 12 no existe tabla con el ganador en
+ * 10, el último en 1 y todos distintos. Subir el techo del ganador cuando hay
+ * más gente distorsionaría el campeonato —la asistencia cambia fecha a fecha y
+ * el diseño mantiene "ganar paga 10" justamente por eso.
+ */
+function onlyTopSix(sides: number): number[] {
+  return Array.from({ length: sides }, (_, index) => PAYING_SIDES[index] ?? 0)
+}
+
+/**
  * Points for a full squad, longest first. A matchday with fewer pairs uses
  * the leading values, so winning always pays ten.
+ *
+ * Indexada por CANTIDAD DE LADOS, no de jugadores: con parejas y
+ * `MAX_PLAYERS = 12` nunca pasa de 6, y las claves 8-12 son alcanzables sólo
+ * con `sideSize = 1`. Por eso agregarlas no puede mover al pádel.
  */
 const DEFAULT_POINTS: Record<number, number[]> = {
   4: [10, 6, 3, 1],
   5: [10, 7, 5, 3, 1],
-  6: [10, 7, 5, 3, 2, 1],
+  6: PAYING_SIDES,
+  // Lados de a uno: `MIN_PLAYERS` = 8 y `MAX_PLAYERS` = 12, y un plantel impar
+  // es válido cuando cada presente es su propio lado (REQ-D5-2). 7 no aparece:
+  // con parejas serían 14 jugadores, arriba del techo.
+  8: onlyTopSix(8),
+  9: onlyTopSix(9),
+  10: onlyTopSix(10),
+  11: onlyTopSix(11),
+  12: onlyTopSix(12),
 }
 
 /**
- * `sideSize` default 2 (el pádel de siempre — ningún caller de hoy pasa 1):
- * la tabla de puntos por default está indexada por CANTIDAD DE LADOS, no
- *Siempre `squadSize / 2`. `DEFAULT_POINTS` no
- * tiene entradas para lados de a uno todavía (PUNTO 3 del design, deuda
- * separada) — con `sideSize=1` esto devuelve `points: []` honestamente, no
- * la tabla de parejas por casualidad.
+ * `sideSize` default 2 (el pádel de siempre): la tabla de puntos por default
+ * está indexada por CANTIDAD DE LADOS, no siempre `squadSize / 2`.
+ *
+ * (Este docblock decía que `DEFAULT_POINTS` "no tiene entradas para lados de a
+ * uno todavía" y que con `sideSize=1` esto devuelve `points: []`. Dejó de ser
+ * cierto con la decisión #3963: las claves 8-12 existen y son la curva de seis
+ * puestos con ceros abajo. Corregido acá, mismo criterio que N48 — la frase
+ * falsa vive en el código y ahí se arregla.)
+ *
+ * Lo que SIGUE sin existir es el camino de PANTALLA: ningún caller de hoy pasa
+ * `sideSize = 1`. Son los otros dos bloqueos del 1v1, y van con PR21 a
+ * propósito — abrir el camino antes de que existan los grupos dejaría crear
+ * una fecha de 12 de a uno, que son 66 partidos contra 15 en parejas (W32,
+ * decisión #3863).
  */
 export function defaultConfig(squadSize: number, sideSize: SideSize = 2): SeasonConfig {
   const sideCount = squadSize / sideSize

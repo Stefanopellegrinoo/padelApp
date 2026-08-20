@@ -4,7 +4,7 @@
  * server'`, así que la suite pura no lo puede importar.
  */
 
-import { MAX_PLAYERS, MIN_PLAYERS, type SideSize } from '@/core'
+import { MAX_PLAYERS, MIN_PLAYERS, suggestFormat, type MatchdayFormat, type SideSize } from '@/core'
 
 /** Un asiento del plantel, como lo dibuja el armado. */
 export interface SeatVM {
@@ -57,6 +57,14 @@ export interface MatchdayShape {
   eventualSize: number
   tooFew: boolean
   tooMany: boolean
+  /**
+   * El formato que `suggestFormat` propone para el tamaño que la fecha VA a
+   * tener (REQ-D8-1) — editable antes de armar, es el selector de
+   * `armado.tsx` el que lo hace editable, esto sólo expone la sugerencia
+   * real. Usa `eventualSize`, no `confirmed`: el suelto que falta para
+   * emparejar cuenta para la sugerencia igual que cuenta para `matches`.
+   */
+  suggestedFormat: MatchdayFormat
 }
 
 /**
@@ -111,5 +119,6 @@ export function matchdayShape({
     eventualSize,
     tooFew: eventualSize < MIN_PLAYERS,
     tooMany: eventualSize > MAX_PLAYERS,
+    suggestedFormat: suggestFormat(eventualSize, sideSize),
   }
 }

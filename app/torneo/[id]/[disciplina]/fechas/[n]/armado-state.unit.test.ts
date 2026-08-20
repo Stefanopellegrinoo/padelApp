@@ -171,4 +171,41 @@ describe('matchdayShape', () => {
       expect(matchdayShape({ confirmed: 12, looseGuests: 0, guestPairs: 0, sideSize: 1 }).tooMany).toBe(false)
     })
   })
+
+  /**
+   * REQ-D8-1: `matchdayShape` expone el `suggestedFormat` de `suggestFormat`,
+   * editable antes de armar (el selector de `armado.tsx` es lo que lo hace
+   * editable — acá sólo se fija que la SUGERENCIA que ve la pantalla es la
+   * real y no una copia). Usa `eventualSize`, no `confirmed`: el suelto que
+   * `syncGuestSeat` va a sumar para emparejar cuenta para la sugerencia igual
+   * que cuenta para `matches`.
+   */
+  describe('suggestedFormat (REQ-D8-1)', () => {
+    it('8 presentes de a uno sugieren 2 grupos + llave, el ejemplo del requisito', () => {
+      const shape = matchdayShape({ confirmed: 8, looseGuests: 0, guestPairs: 0, sideSize: 1 })
+      expect(shape.suggestedFormat).toEqual({ kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 })
+    })
+
+    it('12 de a uno sugieren 4 grupos: la salida real de W32, no 66 partidos de round robin', () => {
+      const shape = matchdayShape({ confirmed: 12, looseGuests: 0, guestPairs: 0, sideSize: 1 })
+      expect(shape.suggestedFormat).toEqual({ kind: 'GROUPS_KNOCKOUT', groups: 4, qualifiersPerGroup: 2 })
+    })
+
+    it('un plantel chico sugiere todos contra todos, de a uno o de a dos', () => {
+      expect(matchdayShape({ confirmed: 5, looseGuests: 0, guestPairs: 0, sideSize: 1 }).suggestedFormat).toEqual({
+        kind: 'ROUND_ROBIN',
+      })
+      expect(matchdayShape({ confirmed: 8, looseGuests: 0, guestPairs: 0, sideSize: 2 }).suggestedFormat).toEqual({
+        kind: 'ROUND_ROBIN',
+      })
+    })
+
+    it('cuenta el suelto que todavía no está: la sugerencia usa eventualSize, no confirmed', () => {
+      // 7 confirmados de a dos piden un suelto (eventualSize 8, 4 lados) — la
+      // sugerencia tiene que mirar esos 4 lados, no los 3 lados y pico de 7.
+      const shape = matchdayShape({ confirmed: 7, looseGuests: 0, guestPairs: 0, sideSize: 2 })
+      expect(shape.eventualSize).toBe(8)
+      expect(shape.suggestedFormat).toEqual({ kind: 'ROUND_ROBIN' })
+    })
+  })
 })

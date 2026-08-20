@@ -343,6 +343,7 @@ export type Database = {
           allows_draw: boolean
           closed_at: string | null
           discipline_id: string
+          formato: Json
           id: string
           kind: string
           number: number
@@ -355,6 +356,7 @@ export type Database = {
           allows_draw?: boolean
           closed_at?: string | null
           discipline_id: string
+          formato?: Json
           id?: string
           kind?: string
           number: number
@@ -367,6 +369,7 @@ export type Database = {
           allows_draw?: boolean
           closed_at?: string | null
           discipline_id?: string
+          formato?: Json
           id?: string
           kind?: string
           number?: number

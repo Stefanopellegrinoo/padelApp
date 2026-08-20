@@ -15,6 +15,7 @@ import {
   resolveDisciplineBySlug,
   sameSide,
   snapshotForMatchday,
+  thirdPlaceNote,
   usesSetsDiff,
   type MatchResult,
   type SeasonConfig,
@@ -524,6 +525,12 @@ export default async function FechaDetailPage({ params }: PageProps) {
         ? tiebreakNote(standings, config, nameOf, discipline.pairSize)
         : null
 
+    // Decisión #3990: el costo que quedó vivo de #3979 ("se puede cerrar sin
+    // jugar el tercer puesto") era que nadie se enteraba de que el 3º/4º salió
+    // de la tabla de grupos y no de la cancha. Sólo en la fecha CERRADA — es
+    // ahí donde se congeló ese resultado.
+    const thirdNote = status === 'CLOSED' && isGroupsKnockout ? thirdPlaceNote(detail.matches) : null
+
     // Sumar invitado (spec Capability 3) sólo existe con la fecha CLOSED:
     // `promote_guest` rechaza cualquier otro estado del lado de la base, y
     // `sumar.tsx` sólo se monta acá para no ofrecer un botón que siempre
@@ -673,6 +680,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
           )}
 
           {note !== null && <p className="text-[12.5px] font-[550] text-muted">{note}</p>}
+          {thirdNote !== null && <p className="text-[12.5px] font-[550] text-muted">{thirdNote}</p>}
         </div>
         )}
 

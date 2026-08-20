@@ -263,3 +263,21 @@ export function knockoutPositions(
     ...restRows.map((row, index) => ({ ...row, position: topRows.length + index + 1 })),
   ]
 }
+
+/**
+ * Sugerencia de formato según cuántos lados entran (REQ-D8-1) — propone, no
+ * decide: editable antes de armar. Umbrales del design (PUNTO 7).
+ *
+ * Es la salida real de W32 (decisión #3863): sin grupos, una fecha de 12
+ * jugadores de a uno son C(12,2)=66 partidos de round robin puro. Con
+ * `sides=12` entra acá en `groups: 4`, y la llave completa (grupos + cuartos
+ * + semis + final) da 19 partidos — verificado con las funciones reales en
+ * el test "12 lados de a uno..." de `core/knockout.test.ts`, no sólo en este
+ * comentario.
+ */
+export function suggestFormat(headcount: number, sideSize: SideSize): MatchdayFormat {
+  const sides = Math.floor(headcount / sideSize)
+  if (sides <= 5) return { kind: 'ROUND_ROBIN' }
+  if (sides <= 8) return { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 }
+  return { kind: 'GROUPS_KNOCKOUT', groups: 4, qualifiersPerGroup: 2 }
+}

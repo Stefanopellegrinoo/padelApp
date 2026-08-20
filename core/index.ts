@@ -89,6 +89,15 @@ export { previousContext } from './history'
 export { computeStandings, usesSetsDiff } from './standings'
 export { computeAwards } from './awards'
 
+//── Formato sugerido de una fecha (REQ-D8-1, PR21) ──────────────────────────
+// `suggestFormat` es la salida real de W32 (decisión #3863): grupos + llave
+// en vez de un techo de jugadores nuevo. `MatchdayFormat` (el tipo que
+// devuelve) sigue AFUERA del barrel a propósito, igual que `currentPhase`/
+// `phaseIsComplete`/`knockoutMatchups`/`knockoutPositions` — sin un
+// consumidor real todavía (llega en la Rebanada D2), publicarlo es
+// reflejo, no necesidad.
+export { suggestFormat } from './knockout'
+
 // ── The season ───────────────────────────────────────────────────────────────
 export { computeRanking } from './ranking'
 export { snapshotForMatchday } from './snapshots'

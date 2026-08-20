@@ -48,11 +48,16 @@ function sinComentarios(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ')
 }
 
-const escena = vi.hoisted(() => ({ disciplines: [] as DisciplineHeader[] }))
+const escena = vi.hoisted(() => ({
+  disciplines: [] as DisciplineHeader[],
+  /** `null` = nadie logueado, que es la rama pública de Reglas (S76). */
+  user: { id: 'admin' } as { id: string } | null,
+  publicFormats: [] as { kind: 'PADEL' | 'FIFA'; config: unknown }[],
+}))
 
 vi.mock('@/db/server', () => ({
   serverClient: async () => ({
-    auth: { getUser: async () => ({ data: { user: { id: 'admin' } } }) },
+    auth: { getUser: async () => ({ data: { user: escena.user } }) },
   }),
 }))
 
@@ -73,6 +78,24 @@ vi.mock('@/db/read', async (importOriginal) => {
       disciplines: escena.disciplines,
     }),
     seasonRules: async () => ({ text: '', updatedAt: null }),
+    // La rama SIN SESIÓN. `season_public_rules` (0022) devuelve la config de
+    // UNA disciplina —la de por defecto— y ni su `kind`, así que sola no
+    // alcanza para narrar un torneo con dos formatos: eso es S76.
+    // Sin disciplinas es un link muerto, que es lo que devuelve la función
+    // real cuando no encuentra temporada. Nada de `PADEL` acá: la factoría de
+    // `vi.mock` se HOISTEA y esa const todavía no existe cuando corre.
+    publicRules: async () => {
+      const primera = escena.disciplines[0]
+      if (primera === undefined) return null
+      return {
+        name: 'Torneo de prueba',
+        config: primera.config,
+        text: '',
+        updatedAt: null,
+        adminName: 'Marce',
+      }
+    },
+    publicFormats: async () => escena.publicFormats,
     seasonAdminName: async () => 'Marce',
     myEntryId: async () => null,
     matchdaysOf: async () => [],
@@ -225,5 +248,45 @@ describe('el paso 4 del wizard — el cableado que ningún render alcanza', () =
     expect(/<PasoFormato\b[^>]*\/>/.exec(misWire)?.[0] ?? '').not.toMatch(
       /\bpicked=\{disciplines\}/,
     )
+  })
+})
+
+// ── S76 / la mitad anónima de W64 ────────────────────────────────────────────
+//
+// Reglas es la ÚNICA pantalla pública del torneo, y hasta acá su rama sin
+// sesión narraba UN SOLO formato aunque el torneo tuviera dos: medido en
+// Chromium en las rondas 22 y 23, decía `1 set a 4 games` sobre un torneo de
+// pádel + FIFA. La causa es de SQL, no de pantalla: `season_public_rules`
+// (0022) devuelve la config de la disciplina por defecto y ni siquiera su
+// `kind`, y `anon` tiene `revoke all on all tables` (0009) — medido, lee 0
+// tablas y ejecuta 1 función.
+//
+// Estos tests montan la PÁGINA con `user: null`, que es la rama que ningún
+// test tocaba nunca.
+describe('Reglas SIN SESIÓN — la mitad pública, que es la que faltaba', () => {
+  it('nombra el formato de CADA disciplina cuando el torneo tiene dos', async () => {
+    escena.user = null
+    escena.publicFormats = [
+      { kind: 'PADEL', config: PADEL },
+      { kind: 'FIFA', config: FIFA },
+    ]
+    const html = await reglas(PADEL_Y_FIFA)
+    expect(html).toContain('Pádel: 1 set a 4 games')
+    expect(html).toContain('FIFA: Marcador de goles')
+  })
+
+  it('y con UNA sola sigue diciendo exactamente lo de siempre, sin prefijo', async () => {
+    escena.user = null
+    escena.publicFormats = [{ kind: 'PADEL', config: PADEL }]
+    const html = await reglas(SOLO_PADEL)
+    expect(html).toContain('1 set a 4 games')
+    expect(html).not.toContain('Pádel: 1 set a 4 games')
+  })
+
+  it('un link muerto sigue mostrando la frase de link muerto, no un error', async () => {
+    escena.user = null
+    escena.publicFormats = []
+    const html = await reglas([])
+    expect(html).toContain('necesitás el link que te pasó tu grupo')
   })
 })

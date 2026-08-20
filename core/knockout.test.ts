@@ -6,6 +6,7 @@ import {
   groupSides,
   knockoutMatchups,
   nextRoundMatchups,
+  losingMatchup,
   knockoutPositions,
   suggestFormat,
 } from './knockout'
@@ -167,6 +168,31 @@ describe('nextRoundMatchups', () => {
       playedMatch('SEMI', 1, C1, A1, 'A'),
     ]
     expect(() => nextRoundMatchups(played)).toThrow(/3/)
+  })
+})
+
+describe('losingMatchup', () => {
+  // Rebanada C2, agujero (1) del design que no estaba en PUNTO 7: SEMI genera
+  // FINAL (ganadores, `nextRoundMatchups`) Y TERCER_PUESTO (perdedores) a la
+  // vez — decisión #3979 asume que ese partido EXISTE aunque después nadie lo
+  // juegue. `nextRoundMatchups` sólo sabe de ganadores; esto es su espejo.
+  it('arma el cruce del tercer puesto con los perdedores de las dos semis', () => {
+    const A1 = pair('a1', 'a2')
+    const A2 = pair('a3', 'a4')
+    const B1 = pair('b1', 'b2')
+    const B2 = pair('b3', 'b4')
+    const played = [
+      playedMatch('SEMI', 1, A1, B2, 'A'), // pierde B2
+      playedMatch('SEMI', 1, B1, A2, 'A'), // pierde A2
+    ]
+    expect(losingMatchup(played)).toEqual([B2, A2])
+  })
+
+  it('tira si no son exactamente 2 semifinales', () => {
+    const A1 = pair('a1', 'a2')
+    const B1 = pair('b1', 'b2')
+    const played = [playedMatch('SEMI', 1, A1, B1, 'A')]
+    expect(() => losingMatchup(played)).toThrow(/2/)
   })
 })
 

@@ -1,7 +1,8 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import { PasoFormato } from './wizard'
+import type { SideSize } from '@/core'
+import { PasoFormato, SelectorDeLados } from './wizard'
 import { configFor, type DisciplineKind } from './wizard-state'
 
 /**
@@ -17,13 +18,15 @@ import { configFor, type DisciplineKind } from './wizard-state'
  * HTML. Es el mismo motor que corre en el servidor de Next; lo que no cubre es
  * la interacción (no hay clicks acá).
  */
-function html(picked: DisciplineKind[]): string {
+function html(picked: DisciplineKind[], pairSize: SideSize = 2): string {
   return renderToStaticMarkup(
     createElement(PasoFormato, {
       config: configFor(8),
       picked,
       errors: [],
+      pairSize,
       onChange: () => {},
+      onChangePairSize: () => {},
     }),
   )
 }
@@ -69,5 +72,56 @@ describe('paso 4 del wizard — los steppers que se dibujan', () => {
     const paso = html(['PADEL', 'FIFA'])
     expect(paso).toContain('Sets por partido')
     expect(paso).toContain('Games por set')
+  })
+})
+
+/**
+ * El radio "Lados" (Rebanada F, decisión `decisions/alcance-desbloqueo-1v1-pr21`).
+ *
+ * Sin clicks —este repo no tiene runner E2E ni React Testing Library, mismo
+ * límite documentado en `armado.unit.test.ts` para `SelectorDeFormato`—: se
+ * mira qué radio sale marcado para un `pairSize` dado. Que tocar el radio
+ * dispare `buildDisciplines(picked, config, pairSize)` con el argumento
+ * correcto en el submit real queda sin cubrir por esa misma razón (ver el
+ * reporte de esta rebanada). Lo que SÍ está cubierto de punta a punta es que
+ * `buildDisciplines`, recibiendo `pairSize=1`, arma la fila con la curva de
+ * la decisión #3963 (`wizard-state.unit.test.ts`).
+ */
+describe('SelectorDeLados', () => {
+  it('nace marcado en "Parejas" — no-regresión: ningún pádel existente cambia', () => {
+    const markup = renderToStaticMarkup(
+      createElement(SelectorDeLados, { pairSize: 2, onChange: () => {} }),
+    )
+    const parejas = /<input[^>]*name="pairSize"[^>]*\/>/.exec(markup)?.[0] ?? ''
+    expect(markup).toContain('Parejas')
+    expect(markup).toContain('Individual')
+    expect(parejas).toContain('checked')
+  })
+
+  it('marca "Individual" cuando pairSize=1, no "Parejas" (se pincha el argumento, #3957)', () => {
+    const markup = renderToStaticMarkup(
+      createElement(SelectorDeLados, { pairSize: 1, onChange: () => {} }),
+    )
+    const inputs = markup.match(/<input[^>]*name="pairSize"[^>]*\/>/g) ?? []
+    expect(inputs).toHaveLength(2)
+    // El primer radio es "Parejas" (value 2), el segundo "Individual" (value 1).
+    expect(inputs[0]).not.toContain('checked')
+    expect(inputs[1]).toContain('checked')
+  })
+})
+
+describe('paso 4 del wizard — el fieldset "Lados"', () => {
+  it('el paso de formato incluye el selector de Lados, en Parejas por default', () => {
+    const paso = html(['PADEL'])
+    expect(paso).toContain('Lados')
+    expect(paso).toContain('Parejas')
+    expect(paso).toContain('Individual')
+  })
+
+  it('con pairSize=1 marca "Individual" también dentro del paso de formato', () => {
+    const paso = html(['FIFA'], 1)
+    const inputs = paso.match(/<input[^>]*name="pairSize"[^>]*\/>/g) ?? []
+    expect(inputs).toHaveLength(2)
+    expect(inputs[1]).toContain('checked')
   })
 })

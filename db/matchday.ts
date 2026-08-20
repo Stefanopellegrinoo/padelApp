@@ -4,6 +4,7 @@ import {
   computeAwards,
   computeRanking,
   computeStandings,
+  groupSides,
   mastersFixture,
   mastersQualifiers,
   members,
@@ -14,6 +15,7 @@ import {
   type Award,
   type DisciplineId,
   type EntryId,
+  type MatchdayFormat,
   type MatchFormat,
   type MatchResult,
   type PairingInput,
@@ -581,7 +583,6 @@ export async function generatePairs(supabase: Client, matchdayId: string): Promi
   // que ya trae `input` — ningún select nuevo.
   const { input, pairSize } = await pairingContextFor(supabase, matchdayId)
   const sides = buildSides({ ...input, sideSize: pairSize })
-  const fixture = buildFixture(sides.length)
 
   // Deleting the pairs cascades to matches and match_sets. A DRAFT matchday
   // usually has no results to lose, but `redraft_matchday` can land one here
@@ -593,7 +594,34 @@ export async function generatePairs(supabase: Client, matchdayId: string): Promi
   await deletePairs(supabase, matchdayId)
 
   const stored = await insertPairs(supabase, matchdayId, sides)
-  const matches = fixture.flatMap((round, index) =>
+
+  //`matchday.formato` generaliza el armado (REQ-D8-1, Rebanada C1): con
+  // `ROUND_ROBIN` es EXACTAMENTE el camino de siempre, sin tocar una línea —
+  // `roundRobinMatches` no manda `fase`/`grupo` y la fila cae en el default
+  // de columna ('GRUPO'/1, 0039), igual que antes de esta rebanada
+  // (REQ-D7-1, no-regresión). Con `GROUPS_KNOCKOUT`, `groupedMatches` reparte
+  // los lados con `groupSides` (hallazgo de diseño de esta rebanada, el
+  // design PUNTO 7 no lo nombraba) y corre `buildFixture` UNA VEZ POR GRUPO —
+  // `buildFixture` (core/fixture.ts) no se toca, sigue operando sobre
+  // índices numéricos, ahora dentro de cada grupo.
+  const formato = matchday.formato as unknown as MatchdayFormat
+  const matches: MatchRow[] =
+    formato.kind === 'GROUPS_KNOCKOUT'
+      ? groupedMatches(matchdayId, matchday.allows_draw, sides, stored, formato.groups)
+      : roundRobinMatches(matchdayId, matchday.allows_draw, sides, stored)
+
+  await insertMatches(supabase, matches)
+}
+
+/** El camino de siempre: un round robin sobre TODOS los lados de la fecha. */
+function roundRobinMatches(
+  matchdayId: string,
+  allowsDraw: boolean,
+  sides: Side[],
+  stored: string[],
+): MatchRow[] {
+  const fixture = buildFixture(sides.length)
+  return fixture.flatMap((round, index) =>
     round.map(([left, right]) => {
       const pairA = stored[left]
       const pairB = stored[right]
@@ -607,11 +635,58 @@ export async function generatePairs(supabase: Client, matchdayId: string): Promi
         round: index + 1,
         pair_a: pairA,
         pair_b: pairB,
-        allows_draw: matchday.allows_draw,
+        allows_draw: allowsDraw,
       }
     }),
   )
-  await insertMatches(supabase, matches)
+}
+
+/**
+ * Reparte `sides` en `groups` grupos con `groupSides` y corre `buildFixture`
+ * una vez por grupo, con `fase='GRUPO'` y `grupo=groupIndex+1` explícitos en
+ * cada fila: es el argumento que tiene que llegar hasta la fila real de
+ * `matches`, no sólo el nombre del helper (#3957, la regla de las seis veces).
+ */
+function groupedMatches(
+  matchdayId: string,
+  allowsDraw: boolean,
+  sides: Side[],
+  stored: string[],
+  groups: number,
+): MatchRow[] {
+  const storedSides = sides.map((side, index) => {
+    const pairId = stored[index]
+    if (pairId === undefined) {
+      throw new Error(
+        `El armado por grupos nombró el lado ${index} y sólo hay ${stored.length}. Esto es un bug.`,
+      )
+    }
+    return { side, pairId }
+  })
+
+  return groupSides(storedSides, groups).flatMap((group, groupIndex) => {
+    const fixture = buildFixture(group.length)
+    return fixture.flatMap((round, index) =>
+      round.map(([left, right]) => {
+        const pairA = group[left]
+        const pairB = group[right]
+        if (pairA === undefined || pairB === undefined) {
+          throw new Error(
+            `El fixture del grupo ${groupIndex + 1} nombró la pareja ${left} o ${right} y sólo hay ${group.length}. Esto es un bug.`,
+          )
+        }
+        return {
+          matchday_id: matchdayId,
+          round: index + 1,
+          pair_a: pairA.pairId,
+          pair_b: pairB.pairId,
+          allows_draw: allowsDraw,
+          fase: 'GRUPO',
+          grupo: groupIndex + 1,
+        }
+      }),
+    )
+  })
 }
 
 /**
@@ -986,6 +1061,17 @@ interface MatchRow {
    * que faltaba las dos veces que este bug apareció.
    */
   allows_draw: boolean
+  /**
+   * Opcionales a propósito (Rebanada C1, REQ-D7-1): `roundRobinMatches` no
+   * los manda nunca, así que esa fila cae en el default de columna
+   * ('GRUPO'/1, 0039) — el mismo comportamiento que tenía este insert antes
+   * de esta rebanada. `groupedMatches` los manda siempre explícitos: `grupo`
+   * es lo que separa una fase de grupos real de "todos contra todos con otro
+   * nombre" (matches_group_only_in_groups, 0039, ya lo exige del lado de la
+   * base).
+   */
+  fase?: Phase
+  grupo?: number
 }
 
 /** Inserta el fixture. */

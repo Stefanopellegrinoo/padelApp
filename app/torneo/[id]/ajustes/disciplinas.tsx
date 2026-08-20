@@ -2,6 +2,8 @@
 
 import Link from 'next/link'
 import { useState, useTransition } from 'react'
+import type { SideSize } from '@/core'
+import { SelectorDeLados } from '@/app/torneos/nuevo/wizard'
 import { DISCIPLINE_KINDS, DISCIPLINE_LABELS, type DisciplineKind } from '@/app/torneos/nuevo/wizard-state'
 import { addDisciplineToSeason, type WriteResult } from './actions'
 
@@ -14,6 +16,110 @@ export interface DisciplineVM {
 export interface SquadMemberVM {
   entryId: string
   name: string
+}
+
+/**
+ * El formulario de "+ Agregar disciplina" (REQ-D1-2, REQ-D1-4), separado de
+ * `Disciplinas` por lo mismo que `SelectorDeFormato` (`armado.tsx`, PR21 D2):
+ * `Disciplinas` guarda `adding`/`kind`/`pairSize` en `useState` que arrancan
+ * cerrados/en default, y sin clicks (este repo no tiene runner E2E) la suite
+ * nunca lo vería abierto si viviera sólo adentro. Acá entra con el estado que
+ * quiera el test.
+ *
+ * `validSelected` recalculado acá y no recibido armado: es un derivado de
+ * `squad`/`selected` y no estado propio — recibirlo por separado abriría la
+ * puerta a que quedara desincronizado del `selected` que sí es la fuente.
+ */
+export function NuevaDisciplina({
+  kind,
+  pairSize,
+  squad,
+  selected,
+  pending,
+  onChangeKind,
+  onChangePairSize,
+  onToggle,
+  onSubmit,
+  onCancel,
+}: {
+  kind: DisciplineKind
+  pairSize: SideSize
+  squad: SquadMemberVM[]
+  selected: ReadonlySet<string>
+  pending: boolean
+  onChangeKind: (kind: DisciplineKind) => void
+  onChangePairSize: (pairSize: SideSize) => void
+  onToggle: (entryId: string) => void
+  onSubmit: () => void
+  onCancel: () => void
+}) {
+  const validSelected = [...selected].filter((id) => squad.some((member) => member.entryId === id))
+
+  return (
+    <div className="flex flex-col gap-3 rounded-field border-[1.5px] border-accent bg-surface p-3">
+      <fieldset className="flex flex-col gap-2">
+        <legend className="text-[11.5px] font-extrabold uppercase tracking-[.14em] text-muted">Tipo</legend>
+        {DISCIPLINE_KINDS.map((candidate) => (
+          <label
+            key={candidate}
+            className="flex min-h-[44px] items-center gap-2.5 rounded-field border border-line p-2.5 text-[13.5px] font-[700]"
+          >
+            <input
+              type="radio"
+              name="kind"
+              disabled={pending}
+              checked={kind === candidate}
+              onChange={() => onChangeKind(candidate)}
+              className="h-5 w-5 shrink-0 accent-accent"
+            />
+            {DISCIPLINE_LABELS[candidate]}
+          </label>
+        ))}
+      </fieldset>
+
+      <SelectorDeLados pairSize={pairSize} onChange={onChangePairSize} disabled={pending} />
+
+      <fieldset className="flex flex-col gap-1.5">
+        <legend className="text-[11.5px] font-extrabold uppercase tracking-[.14em] text-muted">
+          Quién juega ({validSelected.length})
+        </legend>
+        {squad.map((member) => (
+          <label
+            key={member.entryId}
+            className="flex min-h-[44px] items-center gap-2.5 text-[13.5px] font-[600]"
+          >
+            <input
+              type="checkbox"
+              disabled={pending}
+              checked={selected.has(member.entryId)}
+              onChange={() => onToggle(member.entryId)}
+              className="h-5 w-5 shrink-0 accent-accent"
+            />
+            {member.name}
+          </label>
+        ))}
+      </fieldset>
+
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          disabled={pending || validSelected.length === 0}
+          onClick={onSubmit}
+          className="flex min-h-[44px] flex-1 items-center justify-center rounded-field bg-accent p-[10px] text-[13.5px] font-extrabold text-accent-text disabled:opacity-45"
+        >
+          Agregar
+        </button>
+        <button
+          type="button"
+          disabled={pending}
+          onClick={onCancel}
+          className="flex min-h-[44px] flex-1 items-center justify-center rounded-field bg-chip p-[10px] text-[13.5px] font-extrabold text-muted"
+        >
+          Cancelar
+        </button>
+      </div>
+    </div>
+  )
 }
 
 /**
@@ -48,6 +154,9 @@ export function Disciplinas({
   const [error, setError] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   const [kind, setKind] = useState<DisciplineKind>('PADEL')
+  // Parejas de entrada (pairSize=2): sin tocar "Lados" esta alta nace igual
+  // que siempre — no-regresión de la Rebanada F, mismo default que el wizard.
+  const [pairSize, setPairSize] = useState<SideSize>(2)
   const [selected, setSelected] = useState<Set<string>>(() => new Set(squad.map((member) => member.entryId)))
   //El Set inicial no se resincroniza si `squad` cambia bajo el
   // formulario abierto (ej. sacar un asiento en Plantel) — derivar contra
@@ -66,7 +175,7 @@ export function Disciplinas({
   const submit = () => {
     setError(null)
     startTransition(async () => {
-      const result: WriteResult = await addDisciplineToSeason(seasonId, kind, validSelected)
+      const result: WriteResult = await addDisciplineToSeason(seasonId, kind, validSelected, pairSize)
       if (!result.ok) {
         setError(result.error)
         return
@@ -93,67 +202,18 @@ export function Disciplinas({
       </div>
 
       {adding ? (
-        <div className="flex flex-col gap-3 rounded-field border-[1.5px] border-accent bg-surface p-3">
-          <fieldset className="flex flex-col gap-2">
-            <legend className="text-[11.5px] font-extrabold uppercase tracking-[.14em] text-muted">Tipo</legend>
-            {DISCIPLINE_KINDS.map((candidate) => (
-              <label
-                key={candidate}
-                className="flex min-h-[44px] items-center gap-2.5 rounded-field border border-line p-2.5 text-[13.5px] font-[700]"
-              >
-                <input
-                  type="radio"
-                  name="kind"
-                  disabled={pending}
-                  checked={kind === candidate}
-                  onChange={() => setKind(candidate)}
-                  className="h-5 w-5 shrink-0 accent-accent"
-                />
-                {DISCIPLINE_LABELS[candidate]}
-              </label>
-            ))}
-          </fieldset>
-
-          <fieldset className="flex flex-col gap-1.5">
-            <legend className="text-[11.5px] font-extrabold uppercase tracking-[.14em] text-muted">
-              Quién juega ({validSelected.length})
-            </legend>
-            {squad.map((member) => (
-              <label
-                key={member.entryId}
-                className="flex min-h-[44px] items-center gap-2.5 text-[13.5px] font-[600]"
-              >
-                <input
-                  type="checkbox"
-                  disabled={pending}
-                  checked={selected.has(member.entryId)}
-                  onChange={() => toggle(member.entryId)}
-                  className="h-5 w-5 shrink-0 accent-accent"
-                />
-                {member.name}
-              </label>
-            ))}
-          </fieldset>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              disabled={pending || validSelected.length === 0}
-              onClick={submit}
-              className="flex min-h-[44px] flex-1 items-center justify-center rounded-field bg-accent p-[10px] text-[13.5px] font-extrabold text-accent-text disabled:opacity-45"
-            >
-              Agregar
-            </button>
-            <button
-              type="button"
-              disabled={pending}
-              onClick={() => setAdding(false)}
-              className="flex min-h-[44px] flex-1 items-center justify-center rounded-field bg-chip p-[10px] text-[13.5px] font-extrabold text-muted"
-            >
-              Cancelar
-            </button>
-          </div>
-        </div>
+        <NuevaDisciplina
+          kind={kind}
+          pairSize={pairSize}
+          squad={squad}
+          selected={selected}
+          pending={pending}
+          onChangeKind={setKind}
+          onChangePairSize={setPairSize}
+          onToggle={toggle}
+          onSubmit={submit}
+          onCancel={() => setAdding(false)}
+        />
       ) : (
         <button
           type="button"

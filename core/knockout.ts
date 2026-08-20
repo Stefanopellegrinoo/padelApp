@@ -291,6 +291,20 @@ function thirdAndFourth(bracket: readonly MatchResult[], groupTable: readonly Si
 }
 
 /**
+ * Si el 3º/4º de esta llave se resolvió por la tabla de grupos en vez de
+ * jugarse (decisión #3979, la mitad que D2 tiene que contar: #3990). MISMA
+ * regla que `thirdAndFourth` de arriba, pero expuesta sola: hay semis en la
+ * llave (si no, no hay 3º/4º que resolver de ninguna forma) y el partido de
+ * `TERCER_PUESTO` o no existe, o existe sin sets cargados.
+ */
+export function thirdPlaceByGroupTable(matches: readonly MatchResult[]): boolean {
+  const hasSemis = matches.some((match) => match.fase === 'SEMI')
+  if (!hasSemis) return false
+  const playoff = matches.find((match) => match.fase === 'TERCER_PUESTO')
+  return playoff === undefined || playoff.sets.length === 0
+}
+
+/**
  * Posición final de la fecha cuando hay llave (REQ-D7-4): 1º el ganador de
  * la final, 2º quien la pierde, 3º/4º según `thirdAndFourth` (agujero (b)
  * de arriba), y 5º en adelante en el orden que ya trae `groupTable` —

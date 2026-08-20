@@ -9,6 +9,7 @@ import {
   losingMatchup,
   knockoutPositions,
   suggestFormat,
+  thirdPlaceByGroupTable,
 } from './knockout'
 import { pair, single } from './side'
 import type { MatchResult, Phase, Side, SideStanding } from './types'
@@ -253,6 +254,37 @@ describe('knockoutPositions', () => {
 
   it('tira si la llave no tiene exactamente un partido de FINAL', () => {
     expect(() => knockoutPositions(semis, groupTable)).toThrow(/FINAL/)
+  })
+})
+
+describe('thirdPlaceByGroupTable', () => {
+  const A1 = pair('a1', 'a2')
+  const A2 = pair('a3', 'a4')
+  const B1 = pair('b1', 'b2')
+  const B2 = pair('b3', 'b4')
+
+  const semis = [
+    playedMatch('SEMI', 1, A1, B2, 'B'),
+    playedMatch('SEMI', 1, B1, A2, 'A'),
+  ]
+  const final = playedMatch('FINAL', 1, B2, B1, 'A')
+
+  it('true cuando hay semis y el tercer puesto no existe en la llave', () => {
+    expect(thirdPlaceByGroupTable([...semis, final])).toBe(true)
+  })
+
+  it('true cuando el tercer puesto existe pero nadie cargó el resultado', () => {
+    const playoff: MatchResult = { round: 1, fase: 'TERCER_PUESTO', grupo: 1, sideA: A1, sideB: A2, sets: [] }
+    expect(thirdPlaceByGroupTable([...semis, playoff, final])).toBe(true)
+  })
+
+  it('false cuando el tercer puesto se jugó de verdad', () => {
+    const playoff = playedMatch('TERCER_PUESTO', 1, A1, A2, 'B')
+    expect(thirdPlaceByGroupTable([...semis, playoff, final])).toBe(false)
+  })
+
+  it('false sin semifinales: la llave no tiene 3º/4º que resolver de ninguna forma', () => {
+    expect(thirdPlaceByGroupTable([final])).toBe(false)
   })
 })
 

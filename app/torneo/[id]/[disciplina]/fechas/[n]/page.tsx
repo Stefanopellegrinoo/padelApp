@@ -4,10 +4,13 @@ import type { ReactNode } from 'react'
 import {
   computeRanking,
   computeStandings,
+  currentPhase,
   includes,
   mastersChampion,
   mastersQualifiers,
   members,
+  phaseIsComplete,
+  PHASE_ORDER,
   previousContext,
   resolveDisciplineBySlug,
   sameSide,
@@ -38,6 +41,7 @@ import { Rondas, type RoundMatchVM, type RoundVM } from './rondas'
 import { Armado, type DraftPairVM, type GuestPairVM, type GuestVM, type SeatVM } from './armado'
 import { CierreFecha } from './carga'
 import { DiaDeLaFecha } from './dia'
+import { Llave, type LlaveMatchVM } from './llave'
 import { MastersDraft, type QualifierVM } from './masters'
 import { SumarInvitado, type GuestPromoteVM, type SumarSeatVM } from './sumar'
 import { guestsToPromote } from './sumar-state'
@@ -301,6 +305,42 @@ export default async function FechaDetailPage({ params }: PageProps) {
     const snapshot = snapshotForMatchday(matchdayNumber, seedOrder, awardsByMatchday, config)
     const standings = computeStandings(detail.sides, detail.matches, config, snapshot, matchday.allowsDraw)
 
+    // La fase y la llave (REQ-D8-1, decisión #3979): `matchday.formato` es lo
+    // que decide si esta fecha tiene fases que dibujar. `phase`/`phaseComplete`
+    // se calculan siempre —son baratos y puros— pero sólo se USAN mientras la
+    // fecha está `OPEN` y `GROUPS_KNOCKOUT`: una fecha `ROUND_ROBIN` nunca
+    // manda `fase` distinta de `GRUPO` (REQ-D7-1, no-regresión), así que acá
+    // adentro `phase` siempre da `'GRUPO'` y `canClosePhase` siempre da falso.
+    const isGroupsKnockout = matchday.formato.kind === 'GROUPS_KNOCKOUT'
+    const phase = currentPhase(detail.matches)
+    const phaseComplete = phase !== null && phaseIsComplete(detail.matches, phase)
+    const canClosePhase = header.isAdmin && isGroupsKnockout && phase !== null && phase !== 'FINAL' && phaseComplete
+    // Orden (fase, grupo, round): `matchdayDetail` sólo ordena por `round`, que
+    // vuelve a 1 en cada grupo Y en cada fase de la llave — sin este orden acá,
+    // `Llave` agruparía bien por sección pero las SECCIONES saldrían mezcladas
+    // (una semifinal antes que un grupo, por ejemplo).
+    const llaveMatches: LlaveMatchVM[] = [...detail.matches]
+      .sort((a, b) => {
+        const phaseDiff = PHASE_ORDER.indexOf(a.fase) - PHASE_ORDER.indexOf(b.fase)
+        if (phaseDiff !== 0) return phaseDiff
+        if (a.grupo !== b.grupo) return a.grupo - b.grupo
+        return a.round - b.round
+      })
+      .map((match) => {
+        const [gamesA, gamesB] = totalGames(match)
+        return {
+          key: match.id,
+          matchId: match.id,
+          fase: match.fase,
+          grupo: match.grupo,
+          sideAName: sideName(match.sideA),
+          sideBName: sideName(match.sideB),
+          scoreA: match.sets.length === 0 ? '–' : String(gamesA),
+          scoreB: match.sets.length === 0 ? '–' : String(gamesB),
+          winner: matchWinner(match),
+        }
+      })
+
     const { defenders, defendersAlreadyRepeated } = previousContext(lastHistory, beforeLastHistory)
     const effectiveDefenders = defenders !== null && !defendersAlreadyRepeated ? defenders : null
     const defendingSide = effectiveDefenders
@@ -539,7 +579,25 @@ export default async function FechaDetailPage({ params }: PageProps) {
           })}
         </div>
 
-        {totalRounds > 0 && <Rondas rounds={rounds} totalRounds={totalRounds} carga={cargaContext} />}
+        {/* GROUPS_KNOCKOUT en juego: `Llave` reemplaza a `Rondas` — agrupa por
+            fase/grupo, no por `round` (que vuelve a 1 en cada grupo y en cada
+            fase de la llave). Una fecha CERRADA sigue mostrando `Rondas`: la
+            agrupación queda rara para una llave ya jugada, pero es cosmético
+            —los datos son correctos— y arreglarlo es una rebanada aparte, no
+            D2. */}
+        {isGroupsKnockout && status === 'OPEN' ? (
+          <Llave
+            seasonId={seasonId}
+            matchdayId={matchday.id}
+            matchdayNumber={matchday.number}
+            phase={phase}
+            matches={llaveMatches}
+            canClosePhase={canClosePhase}
+            carga={cargaContext}
+          />
+        ) : (
+          totalRounds > 0 && <Rondas rounds={rounds} totalRounds={totalRounds} carga={cargaContext} />
+        )}
 
         {champion !== null ? (
           <div className="flex flex-col gap-2">

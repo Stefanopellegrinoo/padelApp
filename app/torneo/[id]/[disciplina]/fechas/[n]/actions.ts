@@ -7,6 +7,7 @@ import { EdgeError } from '@/db/errors'
 import { promoteGuest } from '@/db/entries'
 import {
   addGuest,
+  advancePhase,
   cancelMatchday,
   clearPairs,
   closeMatchday,
@@ -174,6 +175,24 @@ export async function closeTheMatchday(
 ): Promise<WriteResult> {
   return onMatchday(seasonId, matchdayNumber, async (supabase) => {
     await closeMatchday(supabase, matchdayId)
+  })
+}
+
+/**
+ * Cierra la fase actual y arma la siguiente (REQ-D7-2). Sólo tiene sentido con
+ * `formato.kind === 'GROUPS_KNOCKOUT'`: `advancePhase` tira si la fecha es
+ * `ROUND_ROBIN` o si la fase actual todavía tiene partidos sin jugar — el
+ * botón de la pantalla ya se apaga en ese caso (`phaseIsComplete`), así que
+ * llegar acá rebotando sería un bug de la pantalla, no algo que este wrapper
+ * tenga que prevenir de nuevo.
+ */
+export async function closePhase(
+  seasonId: string,
+  matchdayId: string,
+  matchdayNumber: number,
+): Promise<WriteResult> {
+  return onMatchday(seasonId, matchdayNumber, async (supabase) => {
+    await advancePhase(supabase, matchdayId)
   })
 }
 

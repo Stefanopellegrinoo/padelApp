@@ -305,6 +305,20 @@ export function thirdPlaceByGroupTable(matches: readonly MatchResult[]): boolean
 }
 
 /**
+ * Un `TERCER_PUESTO` sin jugar (decisiones #3979/#3988): la rendija exacta
+ * que `close_matchday` (0041, SQL) tolera y que `closeMatchday` (db/matchday.ts)
+ * salta en su loop de validación. Extraído porque la regla vivía repetida en
+ * los dos call sites de TypeScript — mismo remedio que `usesSetsDiff`/
+ * `scoreDiffLabel` (design #3801, decisión #12): al aparecer la tercera copia
+ * se extrae. El espejo en SQL (0041) NO se puede compartir —otra capa— pero
+ * su comentario nombra esta función para que quien toque una encuentre la
+ * otra.
+ */
+export function isUnplayedThirdPlace(match: MatchResult): boolean {
+  return match.fase === 'TERCER_PUESTO' && match.sets.length === 0
+}
+
+/**
  * Posición final de la fecha cuando hay llave (REQ-D7-4): 1º el ganador de
  * la final, 2º quien la pierde, 3º/4º según `thirdAndFourth` (agujero (b)
  * de arriba), y 5º en adelante en el orden que ya trae `groupTable` —

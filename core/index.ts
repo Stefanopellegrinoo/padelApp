@@ -105,6 +105,13 @@ export { computeAwards } from './awards'
 // primer consumidor real. Rebanada D1: `knockoutPositions` sale ahora —
 // `closeMatchday` (`db/matchday.ts`, `standingsFromBracket`) es su primer
 // consumidor de producción real.
+// `isUnplayedThirdPlace` sale ahora (refactor sobre PR21 D2, sin cambiar
+// comportamiento): la regla vivía repetida en dos call sites de TypeScript
+// (`closeMatchday` en db/matchday.ts y `remainingMatches` en
+// app/torneo/[id]/[disciplina]/fechas/[n]/page.tsx) — mismo remedio que
+// `usesSetsDiff`/`scoreDiffLabel` (design #3801, decisión #12): al aparecer
+// la tercera copia de una regla, se extrae. Los dos call sites viven fuera de
+// core/, así que hace falta el barrel — no es reflejo.
 export {
   suggestFormat,
   groupSides,
@@ -115,6 +122,7 @@ export {
   nextRoundMatchups,
   losingMatchup,
   knockoutPositions,
+  isUnplayedThirdPlace,
 } from './knockout'
 
 // ── The season ───────────────────────────────────────────────────────────────

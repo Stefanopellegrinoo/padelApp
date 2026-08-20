@@ -9,6 +9,7 @@ import {
   losingMatchup,
   knockoutPositions,
   suggestFormat,
+  isUnplayedThirdPlace,
   thirdPlaceByGroupTable,
 } from './knockout'
 import { pair, single } from './side'
@@ -285,6 +286,25 @@ describe('thirdPlaceByGroupTable', () => {
 
   it('false sin semifinales: la llave no tiene 3º/4º que resolver de ninguna forma', () => {
     expect(thirdPlaceByGroupTable([final])).toBe(false)
+  })
+})
+
+describe('isUnplayedThirdPlace', () => {
+  const A1 = pair('a1', 'a2')
+  const A2 = pair('a3', 'a4')
+
+  it('true para un TERCER_PUESTO sin sets', () => {
+    const match: MatchResult = { round: 1, fase: 'TERCER_PUESTO', grupo: 1, sideA: A1, sideB: A2, sets: [] }
+    expect(isUnplayedThirdPlace(match)).toBe(true)
+  })
+
+  it('false para un TERCER_PUESTO ya jugado', () => {
+    expect(isUnplayedThirdPlace(playedMatch('TERCER_PUESTO', 1, A1, A2, 'A'))).toBe(false)
+  })
+
+  it('false para cualquier otra fase sin jugar — la excepción es sólo del tercer puesto', () => {
+    const match: MatchResult = { round: 1, fase: 'SEMI', grupo: 1, sideA: A1, sideB: A2, sets: [] }
+    expect(isUnplayedThirdPlace(match)).toBe(false)
   })
 })
 

@@ -10,6 +10,11 @@
 -- `db/matchday.ts`). El partido vacío se queda en `matches` como registro
 -- visible de que no se jugó -- no se borra, no se inventa un resultado.
 --
+-- El espejo de esta misma regla en TypeScript es `isUnplayedThirdPlace`
+-- (`core/knockout.ts`, refactor sobre PR21 D2) -- quien toque uno de los dos
+-- lados que encuentre el otro. No se comparte código entre capas: esto es
+-- SQL y aquello es TypeScript.
+--
 -- Por qué aflojar acá un guard de producción es aceptable: el riesgo para
 -- el pádel es CERO POR CONSTRUCCIÓN, no por confianza. Una fecha
 -- ROUND_ROBIN nunca manda `fase` al armar (`roundRobinMatches`,

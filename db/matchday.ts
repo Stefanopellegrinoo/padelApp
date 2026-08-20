@@ -7,6 +7,7 @@ import {
   currentPhase,
   faseForCount,
   groupSides,
+  isUnplayedThirdPlace,
   knockoutMatchups,
   knockoutPositions,
   losingMatchup,
@@ -1013,8 +1014,10 @@ export async function closeMatchday(supabase: Client, matchdayId: string): Promi
     // rechazaría CUALQUIER llave que se saltee ese partido con "Falta cargar
     // el resultado", antes incluso de llegar al guard que a propósito lo
     // permite. No-op para ROUND_ROBIN: esa fecha nunca tiene un match en fase
-    // TERCER_PUESTO (siempre 'GRUPO', REQ-D7-1).
-    if (match.fase === 'TERCER_PUESTO' && match.sets.length === 0) continue
+    // TERCER_PUESTO (siempre 'GRUPO', REQ-D7-1). `isUnplayedThirdPlace`
+    // (core/knockout.ts) — la misma regla vive también en page.tsx
+    // (remainingMatches) y en 0041 (SQL); refactor sobre PR21 D2.
+    if (isUnplayedThirdPlace(match)) continue
     // `matchday.allows_draw`, no la disciplina: es el valor CONGELADO en la
     // fecha (`matchdays_discipline_draw` es `on update no action`, así que
     // una vez creada la fecha la disciplina ya no puede cambiarlo). Cerrar

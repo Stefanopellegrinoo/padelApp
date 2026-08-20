@@ -193,3 +193,73 @@ export function nextRoundMatchups(played: readonly MatchResult[]): Array<[Side, 
   }
   return next
 }
+
+function statsOf(side: Side, groupTable: readonly SideStanding[]): SideStanding {
+  const row = groupTable.find((candidate) => sameSide(candidate.side, side))
+  if (row === undefined) {
+    throw new Error('Un lado de la llave no aparece en la tabla de grupos.')
+  }
+  return row
+}
+
+/**
+ * Agujero (b) del design, cerrado acá — surfaceado en el reporte de esta
+ * rebanada, no inventado en silencio. `REQ-D7-4` dice a secas "3º/4º
+ * semifinalistas perdedores", pero `PHASE_ORDER` tiene una fase
+ * `TERCER_PUESTO` que el design (PUNTO 7) genera junto con `FINAL` cuando
+ * cierra `SEMI` — si existe, alguien la va a jugar.
+ *
+ * Regla elegida:
+ * - Si el partido de `TERCER_PUESTO` se JUGÓ, SU resultado decide: gana 3º,
+ *   pierde 4º. Es lo que la fase existe para resolver.
+ * - Si NO se jugó (nada en esta rebanada obliga a jugarlo — riesgo para
+ *   quien escriba el guard de `closeMatchday` en la Rebanada D1, ver
+ *   `apply-progress-pr21b2`), cae al texto LITERAL del requisito: son
+ *   "semifinalistas perdedores" a secas, desempatados por el mismo criterio
+ *   que ordena el resto de la tabla — su posición en la fase de grupos.
+ * - Sin fase SEMI en la llave (llave de 1 grupo, `knockoutMatchups` dio un
+ *   único cruce que ES la final), no hay 3º/4º que definir: no existieron
+ *   semifinalistas.
+ */
+function thirdAndFourth(bracket: readonly MatchResult[], groupTable: readonly SideStanding[]): Side[] {
+  const semis = bracket.filter((match) => match.fase === 'SEMI')
+  if (semis.length === 0) return []
+  const losers = semis.map(loserOf)
+
+  const playoff = bracket.find((match) => match.fase === 'TERCER_PUESTO')
+  if (playoff !== undefined && playoff.sets.length > 0) {
+    return [winnerOf(playoff), loserOf(playoff)]
+  }
+
+  return [...losers].sort((left, right) => statsOf(left, groupTable).position - statsOf(right, groupTable).position)
+}
+
+/**
+ * Posición final de la fecha cuando hay llave (REQ-D7-4): 1º el ganador de
+ * la final, 2º quien la pierde, 3º/4º según `thirdAndFourth` (agujero (b)
+ * de arriba), y 5º en adelante en el orden que ya trae `groupTable` —
+ * filtrando a quien ya haya salido en el top. `computeAwards` no cambia su
+ * firma: sigue recibiendo `SideStanding[]`, así que las estadísticas de
+ * fase de grupos (`played`/`won`/`dayPoints`/etc.) de cada lado viajan sin
+ * tocar — sólo `position` se reescribe con el resultado de la llave.
+ */
+export function knockoutPositions(
+  bracket: readonly MatchResult[],
+  groupTable: readonly SideStanding[],
+): SideStanding[] {
+  const finals = bracket.filter((match) => match.fase === 'FINAL')
+  if (finals.length !== 1) {
+    throw new Error(`La llave necesita exactamente un partido de FINAL, hay ${finals.length}.`)
+  }
+  const [final] = finals
+  if (final === undefined) throw new Error('La llave necesita exactamente un partido de FINAL.')
+
+  const topSides = [winnerOf(final), loserOf(final), ...thirdAndFourth(bracket, groupTable)]
+  const topRows = topSides.map((side) => statsOf(side, groupTable))
+  const restRows = groupTable.filter((row) => !topSides.some((side) => sameSide(side, row.side)))
+
+  return [
+    ...topRows.map((row, index) => ({ ...row, position: index + 1 })),
+    ...restRows.map((row, index) => ({ ...row, position: topRows.length + index + 1 })),
+  ]
+}

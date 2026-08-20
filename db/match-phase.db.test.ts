@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import { describe, it, expect } from 'vitest'
 import { defaultConfig } from '@/core'
 import { createMatchday, generatePairs, setAttendance } from './matchday'
@@ -11,6 +12,26 @@ import { createTestUser, type TestUser } from './test/users'
 // matchdays.
 
 // ── scaffolding local a este archivo, mismo criterio que generate.db.test.ts ─
+
+/**
+ * `matchday_phase` está revocada de public/anon/authenticated Y de
+ * service_role (W5, medido: ni siquiera `adminClient()` la puede invocar por
+ * PostgREST — "permission denied for function"). Mismo motivo y misma
+ * herramienta que `localSql` en squad-position.db.test.ts: para probar la
+ * DEDUCCIÓN sin pasar por ningún grant hace falta la sesión de `postgres`
+ * dentro del contenedor local, no un cliente PostgREST.
+ */
+function localSql(sql: string): string {
+  return execFileSync(
+    'docker',
+    [
+      'exec', '-i', 'supabase_db_padelApp',
+      'psql', '-U', 'postgres', '-d', 'postgres',
+      '-X', '-q', '-A', '-t', '-v', 'ON_ERROR_STOP=1', '-f', '-',
+    ],
+    { input: sql, encoding: 'utf8' },
+  )
+}
 
 async function fillerPlayers(count: number): Promise<string[]> {
   const db = adminClient()
@@ -68,14 +89,25 @@ describe('matches.fase / matches.grupo (REQ-D7-1)', () => {
 
 describe('matchday_phase (REQ-D7-3)', () => {
   it('un matchday recién armado devuelve GRUPO', async () => {
+    const { matchdayId } = await armedMatchday()
+
+    // Lo que REQ-D7-3 pide probar es la DEDUCCIÓN, no un grant — y nadie
+    // tiene el grant (W5): ni `authenticated` ni `service_role` (medido).
+    // `localSql` corre como `postgres`, afuera del ACL que PostgREST exige.
+    const output = localSql(`select public.matchday_phase('${matchdayId}'::uuid);`)
+    expect(output.trim()).toBe('GRUPO')
+  })
+
+  // Mismo patrón que discipline.db.test.ts: "matchday_discipline no es
+  // alcanzable por RPC: nadie tiene el grant". Fija la decisión de W5 acá
+  // también — si mañana alguien le devuelve el grant sin traer un
+  // consumidor real, este test se entera en rojo.
+  it('no es alcanzable por RPC desde authenticated: nadie tiene el grant', async () => {
     const { admin, matchdayId } = await armedMatchday()
 
-    // security definer, grant a `authenticated` (mismo idioma que
-    // matchday_discipline, 0016): se llama con la sesión del admin, nunca
-    // con service_role — con service_role el grant no se ejerce y el test
-    // mentiría.
     const { data, error } = await admin.client.rpc('matchday_phase', { p_matchday: matchdayId })
-    if (error) throw new Error(error.message)
-    expect(data).toBe('GRUPO')
+
+    expect(data).toBeNull()
+    expect(error?.code).toBe('42501')
   })
 })

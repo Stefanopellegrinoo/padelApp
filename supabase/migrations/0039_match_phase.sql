@@ -36,5 +36,12 @@ as $$
    limit 1
 $$;
 
-revoke execute on function public.matchday_phase(uuid) from public, anon;
-grant  execute on function public.matchday_phase(uuid) to authenticated;
+-- W5 (0020_disciplines_grants.sql): 0 consumidores de producción, 0 policies
+-- de RLS. `security definer` + `grant ... to authenticated` sin uso real es
+-- exactamente el agujero que 0020 cerró para `matchday_discipline` — con esa
+-- combinación cualquier `authenticated` aprende la fase de una fecha de una
+-- temporada donde no participa, porque RLS no la frena. Se revoca de los tres,
+-- no se dropea: la rebanada que traiga el primer consumidor real (C,
+-- `advancePhase`, si termina necesitándola en vez de leer `fase` del mismo
+-- `select` que ya tiene) le agrega el grant ahí, junto con ese consumidor.
+revoke execute on function public.matchday_phase(uuid) from public, anon, authenticated;

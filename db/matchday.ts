@@ -232,6 +232,36 @@ export async function setMatchdayDate(
 }
 
 /**
+ * Cambia el formato sugerido de una fecha (REQ-D8-1) — el primer escritor de
+ * producción del `grant update (formato)` que trajo la Rebanada C1 (0040).
+ *
+ * A diferencia de `setMatchdayDate`, el formato SÓLO se puede tocar con la
+ * fecha en `DRAFT`: "editable antes de armar" es el requisito, y `formato`
+ * deja de importar en cuanto `generatePairs` ya lo leyó para armar los
+ * partidos — cambiarlo después no reordena nada, sólo confunde con qué se
+ * arma la fecha si se vuelve a sortear.
+ */
+export async function setMatchdayFormat(
+  supabase: Client,
+  matchdayId: string,
+  formato: MatchdayFormat,
+): Promise<void> {
+  const matchday = await requireMatchday(supabase, matchdayId)
+  if (matchday.status !== 'DRAFT') {
+    throw new EdgeError('El formato sólo se cambia con la fecha en armado.')
+  }
+
+  const { error, count } = await supabase
+    .from('matchdays')
+    .update({ formato: formato as unknown as Json }, { count: 'exact' })
+    .eq('id', matchdayId)
+  if (error !== null) throw new EdgeError(`No se pudo cambiar el formato: ${error.message}`)
+  if (count === 0) {
+    throw new EdgeError('No se pudo cambiar el formato: sólo puede hacerlo quien organiza.')
+  }
+}
+
+/**
  * La siguiente fecha por número, de la disciplina que se le pasa. Escribe
  * `played_on`: la columna existe y es el dato que muestran todas las
  * pantallas.

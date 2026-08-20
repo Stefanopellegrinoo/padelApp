@@ -1,8 +1,33 @@
 import { describe, expect, it } from 'vitest'
-import type { MatchdayFormat } from '@/core'
+import { defaultConfig, type MatchdayFormat } from '@/core'
+import { createMatchday, generatePairs, openMatchday, setAttendance, setMatchdayFormat } from './matchday'
 import { adminClient } from './test/admin'
 import { createSeason } from './test/factories'
-import { createTestUser } from './test/users'
+import { createTestUser, type TestUser } from './test/users'
+
+// ── scaffolding local: los mismos armadores de `db/generate.db.test.ts`,
+// mínimos para llegar a OPEN y probar el guard "editable antes de armar".
+
+async function fillerPlayers(count: number): Promise<string[]> {
+  const db = adminClient()
+  const ids: string[] = []
+  for (let i = 0; i < count; i++) {
+    const { data, error } = await db
+      .from('players')
+      .insert({ display_name: `Relleno de test ${Date.now()}-${i}-${Math.random()}` })
+      .select('id')
+      .single()
+    if (error || data === null) throw new Error(error?.message)
+    ids.push(data.id)
+  }
+  return ids
+}
+
+async function markAllPlaying(admin: TestUser, matchdayId: string, entryIds: string[]): Promise<void> {
+  for (const entryId of entryIds) {
+    await setAttendance(admin.client, matchdayId, entryId, 'PLAYING')
+  }
+}
 
 /**
  * `matchdays.formato` (0040, REQ-D8-1) es el CUARTO column-grant de la misma
@@ -96,6 +121,58 @@ describe('matchdays.formato — column-grant contra authenticated (REQ-D8-1)', (
     if (error || created === null) throw new Error(error?.message)
 
     expect(created.formato).toEqual({ kind: 'ROUND_ROBIN' })
+  })
+})
+
+/**
+ * `setMatchdayFormat` (`db/matchday.ts`) es el PRIMER escritor de producción
+ * del `grant update (formato)`: hasta acá el `.update()` de arriba lo ejercía
+ * a mano, sin ningún caller real. Se pincha el ARGUMENTO que llega a la fila,
+ * no sólo que el update no falle (#3957, la regla de las seis veces) —los dos
+ * primeros tests eligen kinds DISTINTOS a propósito, para que copiar el
+ * default de columna no alcance para pasar los dos.
+ */
+describe('setMatchdayFormat — primer escritor de producción del grant (REQ-D8-1)', () => {
+  it('el formato elegido (GROUPS_KNOCKOUT) llega a la fila', async () => {
+    const { admin, seasonId, disciplineId } = await scene()
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-03-05', disciplineId)
+
+    await setMatchdayFormat(admin.client, matchdayId, groupsFormat)
+
+    const db = adminClient()
+    const { data, error } = await db.from('matchdays').select('formato').eq('id', matchdayId).single()
+    if (error || data === null) throw new Error(error?.message)
+    expect(data.formato).toEqual(groupsFormat)
+  })
+
+  it('elegir ROUND_ROBIN después de GROUPS_KNOCKOUT también llega — no es un default fijo', async () => {
+    const { admin, seasonId, disciplineId } = await scene()
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-03-05', disciplineId)
+    await setMatchdayFormat(admin.client, matchdayId, groupsFormat)
+
+    await setMatchdayFormat(admin.client, matchdayId, { kind: 'ROUND_ROBIN' })
+
+    const db = adminClient()
+    const { data, error } = await db.from('matchdays').select('formato').eq('id', matchdayId).single()
+    if (error || data === null) throw new Error(error?.message)
+    expect(data.formato).toEqual({ kind: 'ROUND_ROBIN' })
+  })
+
+  it('rechaza cambiar el formato con la fecha ya confirmada: "editable antes de armar"', async () => {
+    const admin = await createTestUser()
+    const players = await fillerPlayers(8)
+    const { seasonId, entryIds } = await createSeason({ admin, config: defaultConfig(8), squad: players })
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-03-05')
+    await markAllPlaying(admin, matchdayId, entryIds)
+    await generatePairs(admin.client, matchdayId)
+    await openMatchday(admin.client, matchdayId)
+
+    await expect(setMatchdayFormat(admin.client, matchdayId, groupsFormat)).rejects.toThrow(/en armado/)
+
+    const db = adminClient()
+    const { data, error } = await db.from('matchdays').select('formato').eq('id', matchdayId).single()
+    if (error || data === null) throw new Error(error?.message)
+    expect(data.formato).toEqual({ kind: 'ROUND_ROBIN' }) // no cambió
   })
 })
 

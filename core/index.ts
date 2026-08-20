@@ -35,6 +35,7 @@ export type {
   Side,
   SetScore,
   Phase,
+  MatchdayFormat,
   MatchResult,
   SideStanding,
   Award,
@@ -89,14 +90,19 @@ export { previousContext } from './history'
 export { computeStandings, usesSetsDiff } from './standings'
 export { computeAwards } from './awards'
 
-//── Formato sugerido de una fecha (REQ-D8-1, PR21) ──────────────────────────
+//── Formato sugerido y grupos de una fecha (REQ-D8-1, PR21) ─────────────────
 // `suggestFormat` es la salida real de W32 (decisión #3863): grupos + llave
-// en vez de un techo de jugadores nuevo. `MatchdayFormat` (el tipo que
-// devuelve) sigue AFUERA del barrel a propósito, igual que `currentPhase`/
-// `phaseIsComplete`/`knockoutMatchups`/`knockoutPositions` — sin un
-// consumidor real todavía (llega en la Rebanada D2), publicarlo es
-// reflejo, no necesidad.
-export { suggestFormat } from './knockout'
+// en vez de un techo de jugadores nuevo. `MatchdayFormat` (su tipo de
+// retorno, exportado arriba desde `./types`) SALE del barrel recién en esta
+// rebanada (C1): `generatePairs` (`db/matchday.ts`) ya lo lee de
+// `matchday.formato` para decidir cómo armar — es su primer consumidor real,
+// publicarlo deja de ser reflejo. `groupSides` sale con él por el mismo
+// motivo: es el helper que `generatePairs` usa para repartir los lados antes
+// de llamar `buildFixture` una vez por grupo (hallazgo de diseño de esta
+// rebanada, el design PUNTO 7 no lo nombraba). `currentPhase`/
+// `phaseIsComplete`/`knockoutMatchups`/`knockoutPositions` siguen AFUERA:
+// sin consumidor real todavía (llegan en C2/D1).
+export { suggestFormat, groupSides } from './knockout'
 
 // ── The season ───────────────────────────────────────────────────────────────
 export { computeRanking } from './ranking'

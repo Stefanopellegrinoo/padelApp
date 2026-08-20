@@ -70,6 +70,44 @@ export function faseForCount(matchups: number): Phase {
   }
 }
 
+/**
+ * Reparte `items` en `groups` grupos por SEED, en ZIGZAG (snake/serpentina):
+ * seed 1 al grupo 0, seed 2 al 1, ..., seed G al G-1 — y ahí se da vuelta: la
+ * siguiente tanda vuelve de atrás para adelante. Es el reparto de torneo
+ * estándar para que ningún grupo se quede con los mejores seeds ni con los
+ * peores; un corte secuencial (1,2,3,4 en un grupo y 5,6,7,8 en el otro)
+ * NO cumple esto.
+ *
+ * Hallazgo de diseño de esta rebanada (C1.3-C1.4): `generatePairs`
+ * (`db/matchday.ts`) necesita los lados YA repartidos en grupos para correr
+ * `buildFixture` una vez por grupo, y el design (PUNTO 7) da la firma de
+ * `generatePairs` con `GROUPS_KNOCKOUT` pero no nombra este helper.
+ *
+ * Genérico (no atado a `Side`): `generatePairs` lo usa sobre pares
+ * `{ side, pairId }` para no perder el id ya insertado de cada lado —
+ * `groupSides` en sí no necesita saber qué es un lado.
+ */
+export function groupSides<T>(items: readonly T[], groups: number): T[][] {
+  if (groups < 1) {
+    throw new Error(`No se puede repartir en ${groups} grupos.`)
+  }
+  const buckets: T[][] = Array.from({ length: groups }, () => [])
+  let index = 0
+  let direction = 1
+  for (const item of items) {
+    const bucket = buckets[index]
+    if (bucket === undefined) throw new Error(`El grupo ${index} no existe. Esto es un bug.`)
+    bucket.push(item)
+    const next = index + direction
+    if (next < 0 || next >= groups) {
+      direction = -direction
+    } else {
+      index = next
+    }
+  }
+  return buckets
+}
+
 function sortedByPosition(group: readonly SideStanding[]): readonly SideStanding[] {
   return [...group].sort((left, right) => left.position - right.position)
 }

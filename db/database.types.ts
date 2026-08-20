@@ -676,6 +676,13 @@ export type Database = {
           squad_size: number
         }[]
       }
+      season_public_formats: {
+        Args: { p_season: string }
+        Returns: {
+          config: Json
+          kind: string
+        }[]
+      }
       season_public_rules: {
         Args: { p_season: string }
         Returns: {

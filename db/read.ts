@@ -126,6 +126,19 @@ export interface PublicRules {
   adminName: string
 }
 
+/**
+ * Una disciplina vista desde afuera: su tipo y su config, nada más.
+ *
+ * `kind` va como literal y no como el `DisciplineKind` de `wizard-state`, por
+ * lo mismo que `DisciplineHeader.kind` unas líneas más arriba: `db/` no
+ * importa de `app/`. La pantalla traduce el literal a etiqueta con
+ * `DISCIPLINE_LABELS`, que es donde ese mapa vive.
+ */
+export interface PublicFormat {
+  kind: 'PADEL' | 'FIFA'
+  config: SeasonConfig
+}
+
 /** A row of `pair_locks`: the same `{ a, b }` the draw uses, plus the id `unlockPair` deletes by. */
 export interface PairLockRow {
   id: string
@@ -538,6 +551,38 @@ export async function publicRules(supabase: Client, seasonId: string): Promise<P
     updatedAt: row.rules_updated_at,
     adminName: row.admin_name,
   }
+}
+
+/**
+ * El formato de CADA disciplina del torneo, para alguien sin cuenta.
+ *
+ * La segunda —y última— lectura de este archivo que funciona sin sesión.
+ * `publicRules` de acá arriba trae los cinco campos de la pantalla pero la
+ * config de UNA sola disciplina, la de por defecto, y ni siquiera su `kind`:
+ * con eso, un torneo de pádel + FIFA le decía a un extraño "1 set a 4 games"
+ * sobre una mitad que se juega a goles (S76, la mitad anónima de W64).
+ *
+ * Va por `season_public_formats` (0038), una función NUEVA y ADITIVA:
+ * `season_public_rules` no se toca. Cambiarle el `returns table` pedía
+ * `drop function` —Postgres rechaza cambiar el tipo de retorno con `create or
+ * replace`— y el drop se lleva los grants, dejando sin superficie pública la
+ * única pantalla que se comparte por link.
+ *
+ * Devuelve `kind` y `config` y NADA más, y eso está fijado por test
+ * (`db/public-formats.db.test.ts`): un `id` de más le regalaría a `anon`
+ * claves primarias, y `anon` hoy lee **cero** tablas.
+ *
+ * Array vacío en vez de excepción para un link muerto, mismo criterio que
+ * `publicRules`.
+ */
+export async function publicFormats(supabase: Client, seasonId: string): Promise<PublicFormat[]> {
+  const { data, error } = await supabase.rpc('season_public_formats', { p_season: seasonId })
+  if (error !== null) throw new EdgeError(`No se pudieron leer los formatos: ${error.message}`)
+
+  return (data ?? []).map((row) => ({
+    kind: row.kind as 'PADEL' | 'FIFA',
+    config: row.config as unknown as SeasonConfig,
+  }))
 }
 
 export async function matchdaysOf(supabase: Client, seasonId: string): Promise<MatchdaySummary[]> {

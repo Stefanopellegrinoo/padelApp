@@ -13,6 +13,7 @@ import {
 import { serverClient } from '@/db/server'
 import { matchdayDay } from '@/app/format'
 import { AbrirFecha } from './abrir'
+import { championRecord, sideNames } from './campeon-de-la-fecha'
 // Import absoluto, no relativo: `./[n]/masters` sería válido pero ilegible
 // cruzando un segmento dinámico (mismo criterio que ya documentaba esta
 // pantalla en PR 10, cuando vivía un nivel más arriba).
@@ -36,54 +37,6 @@ interface ChampionInfo {
  */
 function sideKey(side: Side): string {
   return [...members(side)].sort().join('~')
-}
-
-/** Los nombres del lado unidos con `&`: uno solo cuando la disciplina es de a uno. */
-function sideNames(side: Side, nameById: ReadonlyMap<string, string>): string {
-  return members(side)
-    .map((entryId) => nameById.get(entryId) ?? '?')
-    .join(' & ')
-}
-
-/**
- * Partidos ganados-perdidos y diferencia de games del lado campeón, dentro de
- * esa fecha puntual. No pasa por `computeStandings` —pide `SeasonConfig` y el
- * snapshot de desempate, que esta pantalla de lectura no trae— porque el
- * campeón ya lo dice `seasonAwardsOf`; sólo falta sumar sus propios partidos,
- * el mismo tally que hace `computeStandings` puertas adentro pero para un
- * solo lado.
- */
-function championRecord(matches: MatchResult[], champion: Side): string {
-  let won = 0
-  let lost = 0
-  let gamesFor = 0
-  let gamesAgainst = 0
-  for (const match of matches) {
-    const isA = sameSide(match.sideA, champion)
-    const isB = !isA && sameSide(match.sideB, champion)
-    if (!isA && !isB) continue
-
-    let setsA = 0
-    let setsB = 0
-    let gamesA = 0
-    let gamesB = 0
-    for (const set of match.sets) {
-      gamesA += set.gamesA
-      gamesB += set.gamesB
-      if (set.gamesA > set.gamesB) setsA++
-      else if (set.gamesB > set.gamesA) setsB++
-    }
-    const championWonSets = isA ? setsA > setsB : setsB > setsA
-    const championLostSets = isA ? setsB > setsA : setsA > setsB
-    if (championWonSets) won++
-    else if (championLostSets) lost++
-    gamesFor += isA ? gamesA : gamesB
-    gamesAgainst += isA ? gamesB : gamesA
-  }
-
-  const diff = gamesFor - gamesAgainst
-  const sign = diff >= 0 ? '+' : ''
-  return `${won}–${lost} · ${sign}${diff} games`
 }
 
 export default async function FechasPage({ params }: PageProps) {
@@ -110,6 +63,9 @@ export default async function FechasPage({ params }: PageProps) {
   const awardsByNumber: Map<number, Award[]> = awardsByDiscipline.get(discipline.id) ?? new Map()
 
   const nameById = new Map(entries.map((entry) => [entry.id, entry.displayName]))
+  // Levantado afuera de `championOf`: es una función ANIDADA y el narrowing
+  // del `notFound()` de arriba no la cruza.
+  const matchFormat = discipline.config.matchFormat
   // El Masters no se dibuja como fila: esta pantalla sólo lista fechas REGULAR
   // y muestra el Masters como el bloque bloqueado del final (Task 7, Plan 3).
   const disciplineMatchdays = seasonMatchdays.filter((matchday) => matchday.disciplineId === discipline.id)
@@ -141,7 +97,18 @@ export default async function FechasPage({ params }: PageProps) {
     if (championSide === undefined) return null
 
     const names = sideNames(championSide, nameById)
-    return { names, record: championRecord(detail.matches, championSide) }
+    return {
+      names,
+      record: championRecord(
+        detail.matches,
+        championSide,
+        matchFormat,
+        // El `allows_draw` CONGELADO en la fecha, no el de la disciplina de
+        // hoy: una fecha vieja se lee con la regla con la que se jugó. Mismo
+        // criterio que la tabla del día y que `closeMatchday`.
+        matchday.allowsDraw,
+      ),
+    }
   }
 
   const remainingForMasters = Math.max(0, discipline.config.regularMatchdays - closedMatchdays.length)

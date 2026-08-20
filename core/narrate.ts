@@ -113,11 +113,36 @@ export function narrateRules(config: SeasonConfig): RulesSection[] {
   ]
 }
 
+/**
+ * Cómo se llama lo que se cuenta adentro de un partido: **goles** con marcador
+ * abierto, **games** cuando hay sets.
+ *
+ * Exportada porque no la usa sólo esta narración: la marca del campeón en la
+ * lista de fechas (`championRecord`) cuenta la misma unidad. Eran dos copias
+ * del mismo ternario y `championRecord` iba a ser la tercera — exactamente lo
+ * que pasó con `setsToWin > 1` antes de que existiera `usesSetsDiff`.
+ */
+export function scoreUnit(format: MatchFormat): 'goles' | 'games' {
+  return format.openScore ? 'goles' : 'games'
+}
+
+/**
+ * El nombre del desempate, dicho como lo dice la cancha: *"diferencia de gol"*
+ * en fútbol, *"diferencia de games"* en pádel.
+ *
+ * NO sale de `scoreUnit`: es "diferencia de **gol**", singular, y no
+ * "diferencia de goles". Dos funciones y no una porque son dos frases
+ * distintas, no una con un sustantivo adentro.
+ */
+export function scoreDiffLabel(format: MatchFormat): string {
+  return format.openScore ? 'diferencia de gol' : 'diferencia de games'
+}
+
 function describeTiebreak(format: MatchFormat, snapshotEvery: number): string {
   const setStep = usesSetsDiff(format) ? `corta la diferencia de sets, después ` : ''
   // Con marcador abierto los "games" son goles y no hay escalón de sets que
   // narrar: es el MISMO criterio que corre `computeStandings`, contado.
-  const scoreDiff = format.openScore ? 'diferencia de gol' : 'diferencia de games'
+  const scoreDiff = scoreDiffLabel(format)
   return (
     `En la tabla de la fecha, si dos parejas ganan la misma cantidad de partidos, ${setStep}` +
     `corta la ${scoreDiff}. Si empatan dos, el partido entre ellas lo decide; si empatan ` +

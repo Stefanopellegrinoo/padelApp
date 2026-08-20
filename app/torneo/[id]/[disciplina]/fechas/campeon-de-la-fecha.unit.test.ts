@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { defaultConfig, pair, type MatchFormat, type MatchResult, type Side } from '@/core'
 import { championRecord } from './campeon-de-la-fecha'
@@ -57,5 +59,44 @@ describe('championRecord donde el empate es legal', () => {
     // fecha a fecha, dos fechas de la misma liga se leerían distinto.
     const matches = [partido(A, B, 3, 1), partido(A, C, 0, 1)]
     expect(championRecord(matches, A, FIFA, true)).toBe('1–0–1 · +1 goles')
+  })
+})
+
+// ── El punto de unión ────────────────────────────────────────────────────────
+//
+// Extraer mueve el riesgo acá: el módulo queda con seis tests y el cableado con
+// ninguno. `page.tsx` (`fechas/`) es un server component `async` de ~290 líneas
+// con seis lectores; montarlo pediría mockearlos todos para pinchar dos
+// argumentos, así que va por FUENTE — mismo criterio y mismo techo declarado
+// que `fuente-de-puntos.unit.test.ts` en `fechas/[n]/`.
+//
+// Los dos argumentos fallan CALLADOS, que es lo que los hace merecer un pin:
+// un `false` fijo en `allowsDraw` devuelve el bug exacto que este archivo
+// arregla —el empate del campeón se evapora— y un `matchFormat` equivocado le
+// dice `games` a los goles. Ninguno rompe nada visible salvo que alguien juegue
+// al FIFA y cuente.
+//
+// Se pinchan los ARGUMENTOS y no el nombre: un mis-wire conserva
+// `championRecord(` intacto (medido en la ronda 18, otra vez en la 22 y otra
+// en PR20-B). Techo, declarado: falso POSITIVO si alguien renombra `detail`,
+// `matchFormat` o `championSide` — el lado correcto del que equivocarse.
+describe('el cableado de la marca del campeón', () => {
+  const source = readFileSync(
+    join(process.cwd(), 'app/torneo/[id]/[disciplina]/fechas/page.tsx'),
+    'utf8',
+  )
+  /** El fuente sin comentarios: lo que de verdad se ejecuta. */
+  const ejecutable = source.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ')
+
+  it('le pasa el formato de la disciplina y el allows_draw CONGELADO de la fecha', () => {
+    expect(ejecutable).toMatch(
+      /championRecord\(\s*detail\.matches\s*,\s*championSide\s*,\s*matchFormat\s*,\s*matchday\.allowsDraw\s*,?\s*\)/,
+    )
+  })
+
+  it('y pinchar sólo el nombre no serviría: el mis-wire lo conserva', () => {
+    const misWire = 'championRecord(detail.matches, championSide, matchFormat, false)'
+    expect(misWire).toMatch(/championRecord\(/)
+    expect(misWire).not.toMatch(/,\s*matchday\.allowsDraw\s*,?\s*\)/)
   })
 })

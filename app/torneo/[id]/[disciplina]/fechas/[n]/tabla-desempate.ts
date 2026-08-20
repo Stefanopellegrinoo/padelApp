@@ -13,7 +13,7 @@
  * cosa mientras el pie explica otra sin que nada se ponga rojo.
  */
 
-import { members, usesSetsDiff, type SeasonConfig, type Side, type SideSize, type SideStanding } from '@/core'
+import { members, scoreDiffLabel, usesSetsDiff, type SeasonConfig, type Side, type SideSize, type SideStanding } from '@/core'
 
 /**
  * El nombre de un lado: los dos nombres unidos con `&` cuando es una pareja, y
@@ -50,9 +50,9 @@ export function tiebreakNote(
   // uno solo los hacía discrepar — la tabla ordenando por una cosa y la frase
   // de abajo explicando otra.
   const bySetsDiff = usesSetsDiff(config.matchFormat)
-  // Con marcador abierto los "games" son goles, y así es como los nombra la
-  // página de Reglas (`describeTiebreak`).
-  const scoreDiff = config.matchFormat.openScore ? 'diferencia de gol' : 'diferencia de games'
+  // Importado y no copiado: la página de Reglas narra el MISMO desempate con
+  // la MISMA frase, y eran dos copias del ternario en dos archivos.
+  const scoreDiff = scoreDiffLabel(config.matchFormat)
 
   for (let i = 1; i < standings.length; i++) {
     const better = standings[i - 1]

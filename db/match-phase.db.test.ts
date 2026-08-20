@@ -1,7 +1,8 @@
 import { execFileSync } from 'node:child_process'
 import { describe, it, expect } from 'vitest'
-import { defaultConfig } from '@/core'
-import { createMatchday, generatePairs, setAttendance } from './matchday'
+import { defaultConfig, PHASE_ORDER } from '@/core'
+import { createMatchday, generatePairs, resultsOf, setAttendance } from './matchday'
+import { matchdayDetail } from './read'
 import { adminClient } from './test/admin'
 import { createSeason } from './test/factories'
 import { createTestUser, type TestUser } from './test/users'
@@ -76,6 +77,36 @@ async function matchesFaseYGrupo(
   return data ?? []
 }
 
+/**
+ * Pisa fase/grupo de DOS partidos ya armados (`fase='GRUPO', grupo=1`, el
+ * default de `armedMatchday`) con valores que el default nunca produce — uno
+ * por cada eje que `matches_group_only_in_groups` deja variar por separado.
+ * `adminClient` (service role) salta RLS para ARMAR la escena, igual que
+ * `fillerPlayers` de arriba; la lectura de abajo la hace `resultsOf`/
+ * `matchdayDetail` con el cliente real del admin (#3957: un tripwire que sólo
+ * confirma 'GRUPO'/1 —el default— pasa igual si el lector lo hardcodea; hace
+ * falta un valor que el default JAMÁS produce para que el hardcode se note).
+ */
+async function sembrarFaseYGrupoNoDefault(matchdayId: string): Promise<void> {
+  const db = adminClient()
+  const { data, error } = await db
+    .from('matches')
+    .select('id')
+    .eq('matchday_id', matchdayId)
+    .order('round', { ascending: true })
+  if (error) throw new Error(error.message)
+  const [first, second] = data ?? []
+  if (first === undefined || second === undefined) throw new Error('bad test fixture')
+
+  // `fase != 'GRUPO'` exige `grupo = 1` (matches_group_only_in_groups) — se
+  // deja el default. El segundo partido prueba el otro eje del mismo check:
+  // `grupo != 1` con `fase = 'GRUPO'`.
+  const { error: e1 } = await db.from('matches').update({ fase: 'SEMI' }).eq('id', first.id)
+  if (e1) throw new Error(e1.message)
+  const { error: e2 } = await db.from('matches').update({ grupo: 2 }).eq('id', second.id)
+  if (e2) throw new Error(e2.message)
+}
+
 describe('matches.fase / matches.grupo (REQ-D7-1)', () => {
   it('una fecha de pádel con config default arma todo en GRUPO/1', async () => {
     const { matchdayId } = await armedMatchday()
@@ -109,5 +140,64 @@ describe('matchday_phase (REQ-D7-3)', () => {
 
     expect(data).toBeNull()
     expect(error?.code).toBe('42501')
+  })
+})
+
+/**
+ * #3957 (la regla de las seis veces): `fase`/`grupo` nacen con un solo camino
+ * que los puebla — el `select` de `resultsOf`/`pairsAndMatchesOf` — y hasta
+ * D1 ningún consumidor de producción los USA todavía, así que ningún test que
+ * pase por `closeMatchday`/`matchdayDetail` de punta a punta puede notar si
+ * alguno de los dos lectores los hardcodea a `'GRUPO'`/`1`. Estos dos tests
+ * pinchan el ARGUMENTO, no el nombre: siembran un valor que el default nunca
+ * produce y comprueban que el lector lo trae de vuelta.
+ */
+describe('resultsOf y pairsAndMatchesOf leen fase/grupo de la fila, no los hardcodean', () => {
+  it('resultsOf (db/matchday.ts) devuelve el fase/grupo real de cada partido', async () => {
+    const { admin, matchdayId } = await armedMatchday()
+    await sembrarFaseYGrupoNoDefault(matchdayId)
+
+    const { matches } = await resultsOf(admin.client, matchdayId)
+
+    expect(matches.some((match) => match.fase === 'SEMI')).toBe(true)
+    expect(matches.some((match) => match.grupo === 2)).toBe(true)
+  })
+
+  it('matchdayDetail (db/read.ts, vía pairsAndMatchesOf) devuelve el mismo fase/grupo real', async () => {
+    const { admin, matchdayId } = await armedMatchday()
+    await sembrarFaseYGrupoNoDefault(matchdayId)
+
+    const detail = await matchdayDetail(admin.client, matchdayId)
+
+    expect(detail.matches.some((match) => match.fase === 'SEMI')).toBe(true)
+    expect(detail.matches.some((match) => match.grupo === 2)).toBe(true)
+  })
+})
+
+/**
+ * Las seis fases están escritas TRES veces: `PHASE_ORDER` (TypeScript), el
+ * `check` de `matches.fase` y el `array[...]` de `array_position` dentro de
+ * `matchday_phase` (las dos últimas en `0039_match_phase.sql`). Lo único que
+ * las ata hoy es un comentario. Estructural, no hardcodea la lista: lee el
+ * catálogo real de Postgres (`pg_constraint`, `pg_get_functiondef`) con
+ * `localSql`, igual que `db/migrations.unit.test.ts` lee los archivos en vez
+ * de una lista de nombres copiada a mano.
+ */
+describe('PHASE_ORDER no driftea contra la base (matches_fase_check / matchday_phase)', () => {
+  it('el check de matches.fase y el array de matchday_phase coinciden con PHASE_ORDER', () => {
+    const checkDef = localSql(`
+      select pg_get_constraintdef(oid) from pg_constraint
+       where conrelid = 'public.matches'::regclass and conname = 'matches_fase_check';
+    `)
+    const checkValues = [...checkDef.matchAll(/'(\w+)'::text/g)].map((match) => match[1])
+    expect(new Set(checkValues)).toEqual(new Set(PHASE_ORDER))
+
+    const funcDef = localSql(`select pg_get_functiondef('public.matchday_phase(uuid)'::regprocedure);`)
+    const arrayLiteral = funcDef.match(/array\[([^\]]+)\]/i)
+    if (arrayLiteral === null) {
+      throw new Error('matchday_phase ya no arma su fase con un array literal — revisar este test.')
+    }
+    const arrayValues = arrayLiteral[1]?.split(',').map((value) => value.trim().replace(/^'|'$/g, ''))
+    expect(arrayValues).toEqual([...PHASE_ORDER])
   })
 })

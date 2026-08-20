@@ -1022,8 +1022,14 @@ async function pairEntryIds(supabase: Client, matchdayId: string): Promise<strin
  * tiraba con una fila `pair_size=1`, así que `closeMatchday()` —el wrapper TS,
  * no el RPC— no podía cerrar una fecha de a uno. `sideOfRow` devuelve el lado
  * con su forma y `computeStandings` ya lo tabula (S39).
+ *
+ * Exportada (#3957, PR21 B1): `fase`/`grupo` de cada `MatchResult` tienen hoy
+ * un solo consumidor de producción — este `select` — y `closeMatchday` no los
+ * usa todavía (llega con D1), así que ningún test que pase por el wrapper
+ * público puede notar si alguien los hardcodea a `'GRUPO'`/`1`. El test de
+ * `db/match-phase.db.test.ts` llama esta función directo.
  */
-async function resultsOf(
+export async function resultsOf(
   supabase: Client,
   matchdayId: string,
 ): Promise<{ sides: Side[]; matches: MatchResult[] }> {

@@ -40,6 +40,12 @@ export type {
   Award,
   RankingRow,
 } from './types'
+// `PHASE_ORDER` sale del barrel para su test estructural
+// (`db/match-phase.db.test.ts`): las seis fases están escritas también en el
+// `check` de `matches.fase` y en el `array_position` de `matchday_phase`
+// (0039_match_phase.sql) — sin un test que las ate, las tres pueden driftear
+// en silencio.
+export { PHASE_ORDER } from './types'
 
 //── Un lado de 1 o 2 (decisión de producto #5, REQ-D5-1/2) ──────────────────
 // `Side` es una unión discriminada: leer `.b` sin angostar `size` a `2` es

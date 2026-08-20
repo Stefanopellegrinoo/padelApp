@@ -604,6 +604,13 @@ export async function generatePairs(supabase: Client, matchdayId: string): Promi
   // design PUNTO 7 no lo nombraba) y corre `buildFixture` UNA VEZ POR GRUPO —
   // `buildFixture` (core/fixture.ts) no se toca, sigue operando sobre
   // índices numéricos, ahora dentro de cada grupo.
+  //
+  // Lo que hace HONESTO este doble cast es el check `matchdays_formato_kind`
+  // (0040), no la confianza: con `GROUPS_KNOCKOUT` la base ya exige
+  // `groups`/`qualifiersPerGroup` numéricos y dentro de lo que
+  // `knockoutMatchups` sabe armar (G∈{1,2,4}, P=2) — una fila que llega hasta
+  // acá no puede tener la forma incompleta que reventaba `groupSides` con
+  // `groups=undefined` DESPUÉS de haber borrado y reinsertado las parejas.
   const formato = matchday.formato as unknown as MatchdayFormat
   const matches: MatchRow[] =
     formato.kind === 'GROUPS_KNOCKOUT'

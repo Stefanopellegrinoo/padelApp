@@ -298,7 +298,7 @@ describe('disciplineConfig / updateDisciplineConfig (PR 5, REQ-D2-1)', () => {
   })
 
   /*
-   *. `updateDisciplineConfig` es el ÚNICO escritor
+   * C20. `updateDisciplineConfig` es el ÚNICO escritor
    * de `disciplines.config` y validaba con `sideSize` hardcodeado en 2. Sobre
    * una disciplina de a uno eso queda INVERTIDO: rechaza la única config válida
    * y acepta la que la deja inutilizable.
@@ -308,7 +308,7 @@ describe('disciplineConfig / updateDisciplineConfig (PR 5, REQ-D2-1)', () => {
    * toque) escribe una config que `matchdayContextFor` después rechaza: la
    * fecha no cierra, y la config no se puede volver atrás desde la misma
    * pantalla porque el escritor sigue exigiendo la aritmética de parejas.
-   *Salida sólo por SQL — estrictamente peor que C19, que dejaba cancelar.
+   * Salida sólo por SQL — estrictamente peor que C19, que dejaba cancelar.
    *
    * `validateConfig` exige `points.length === floor(squadSize / sideSize)`, así
    * que con 8 asientos de a uno la config correcta tiene 8 valores, no 4.
@@ -338,7 +338,7 @@ describe('disciplineConfig / updateDisciplineConfig (PR 5, REQ-D2-1)', () => {
   })
 
   /*
-   *. Un update de PostgREST que no toca ninguna
+   * S46. Un update de PostgREST que no toca ninguna
    * fila NO es un error: `saveDisciplineConfig` no tiene chequeo de admin
    * propio, se apoya en RLS, y un participante que NO organiza pasa el
    * `select` de `disciplineConfig` (`disciplines_read` usa `is_participant`)
@@ -372,16 +372,16 @@ describe('disciplineConfig / updateDisciplineConfig (PR 5, REQ-D2-1)', () => {
   })
 
   /*
-   *. La migración 0032 convirtió a la BASE en un
+   * C23. La migración 0032 convirtió a la BASE en un
    * segundo escritor de `disciplines.config`: al promover un invitado de a uno
    * agrega un casillero de puntos y sube `squadSize`. `updateDisciplineConfig`
    * siguió siendo un overwrite ciego del blob entero, sin saber contra qué
    * versión se editó.
    *
-   *La lo reprodujo con dos pestañas y clicks reales: Ajustes ›
+   * La auditoría lo reprodujo con dos pestañas y clicks reales: Ajustes ›
    * Formato abierto con 8 valores, otra pestaña promueve (la config pasa a 9),
    * y el primer "+" que toca el admin pisa la config con 8 — sin un solo error
-   *En pantalla. El casillero se pierde y volvemos a C22: reabrir esa fecha
+   * en pantalla. El casillero se pierde y volvemos a C22: reabrir esa fecha
    * destruye los 8 premios congelados.
    *
    * El guard compara el LARGO de `points` y `squadSize`, que son justo los dos

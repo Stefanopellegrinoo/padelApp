@@ -45,7 +45,7 @@ import {
 
 type RawMatchdayRow = Database['public']['Tables']['matchdays']['Row']
 /**
- *`discipline_id` distinguido NOMINALMENTE de `season_id` (N2, 
+ * `discipline_id` distinguido NOMINALMENTE de `season_id` (N2,
  * ronda 2 de torneo-multi-disciplina): en la fila cruda que devuelve Supabase
  * los dos son el mismo tipo (`string`/uuid), y `awardsBefore`/`closedHistory`
  * cambiaron su 2º parámetro de "season" a "discipline" sin cambiar de tipo —
@@ -71,7 +71,7 @@ export interface MatchdayContext {
   matchday: MatchdayRow
   config: SeasonConfig
   /**
-   *El `pair_size` real de la disciplina de esta fecha (W30, 
+   * El `pair_size` real de la disciplina de esta fecha (W30,
    * ronda 9), leído del mismo `disciplineConfig` que ya trae `config` —
    * ningún select nuevo. `matchdays.pair_size` (design #3801 PUNTO 1) sigue
    * sin migrar: hasta que exista, ésta es la fuente, y es la real, no un
@@ -224,12 +224,12 @@ export async function setMatchdayDate(
  * `played_on`: la columna existe y es el dato que muestran todas las
  * pantallas.
  *
- *`disciplineId` es OPCIONAL: sin él, cae en
+ * `disciplineId` es OPCIONAL (C12): sin él, cae en
  * `defaultDisciplineId` (la primera por `position`) — el único camino que usa
  * hoy `app/torneo/[id]/actions.ts`, que todavía no deja elegir disciplina
- *(queda para el slice de UI que cierra C12 del todo). Con él explícito, la
+ * (queda para el slice de UI que cierra C12 del todo). Con él explícito, la
  * fecha queda scopeada a ESA disciplina sin tocar `defaultDisciplineId` —
- *Es lo que REQ-D3-1 necesita (dos disciplinas, cada una con su propia fecha
+ * es lo que REQ-D3-1 necesita (dos disciplinas, cada una con su propia fecha
  * sin cerrar a la vez): `matchdays_one_live` (0016) ya scopea por
  * `discipline_id`, así que dos llamadas a disciplinas distintas no compiten
  * entre sí.
@@ -457,7 +457,7 @@ export async function removeGuest(supabase: Client, entryId: string): Promise<vo
  * - con número par y un invitado YA NOMBRADO tampoco. Alguien lo puso a
  *   propósito; sacarlo porque cambió un tilde es perder un dato cargado
  *
- *La regla entera es de PAREJA, no de cantidad —
+ * C15: la regla entera es de PAREJA, no de cantidad —
  * en una disciplina `pair_size=1` cada presente YA es su propio lado, así que
  * un plantel impar no le falta nada a nadie. Antes de este guard, la función
  * escribía un GUEST fantasma (nombre vacío) y borraba el sorteo en una
@@ -914,7 +914,7 @@ async function deletePairs(supabase: Client, matchdayId: string): Promise<void> 
  * Insertando de a uno lo garantiza sin tener que reordenar nada después.
  *
  * Manda `pair_size: side.size` en cada fila (PR18a) — hasta acá el insert no
- *Lo mandaba y el default de columna (2)
+ * lo mandaba (W34) y el default de columna (2)
  * chocaba con `pairs_matchday_size` en una disciplina `pair_size=1`. `side`
  * viene de `buildSides({ sideSize: pairSize, ... })`, así que `side.size`
  * coincide siempre con el `pair_size` de la fecha — no hay un tercer valor
@@ -971,7 +971,7 @@ interface MatchRow {
   pair_a: string
   pair_b: string
   /**
-   *. `matches_matchday_draw` (0034) exige que
+   * W61. `matches_matchday_draw` (0034) exige que
    * coincida con el de SU fecha; sin mandarlo, el default de columna (`false`)
    * rebota cada fixture de una disciplina con empates — y lo hace DESPUÉS de
    * que `insertPairs` ya escribió los lados, dejando la fecha con parejas y
@@ -981,7 +981,7 @@ interface MatchRow {
    * Va OBLIGATORIO en esta interfaz, no como opcional con default: el `Insert`
    * generado en `db/database.types.ts` lo declara opcional porque la columna
    * tiene default, así que el typecheck NO puede cazar a un escritor que se lo
-   *Olvide. Exigirlo acá es la única red de compilación posible, y es la
+   * olvide (N44). Exigirlo acá es la única red de compilación posible, y es la
    * que faltaba las dos veces que este bug apareció.
    */
   allows_draw: boolean
@@ -1017,10 +1017,10 @@ async function pairEntryIds(supabase: Client, matchdayId: string): Promise<strin
  * Los lados y los partidos de la fecha, con los sets de cada partido ordenados
  * por `set_number`.
  *
- *CERRADO acá igual que en `db/read.ts`: componía `pairFromRow`, que
+ * W40 CERRADO acá igual que en `db/read.ts`: componía `pairFromRow`, que
  * tiraba con una fila `pair_size=1`, así que `closeMatchday()` —el wrapper TS,
  * no el RPC— no podía cerrar una fecha de a uno. `sideOfRow` devuelve el lado
- *Con su forma y `computeStandings` ya lo tabula.
+ * con su forma y `computeStandings` ya lo tabula (S39).
  */
 async function resultsOf(
   supabase: Client,

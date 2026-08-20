@@ -97,10 +97,10 @@ describe('computeAwards', () => {
   })
 
   /*
-   *El mensaje decía "parejas" siempre, y en una
+   * S44: el mensaje decía "parejas" siempre, y en una
    * disciplina de a uno eso manda a buscar un bug de parejas donde no las hay.
    * Es el único rastro que queda en un log cuando el reparto no cierra — la
-   *Ronda 14 lo encontró en el server.log como la firma de C21.
+   * ronda 14 lo encontró en el server.log como la firma de C21.
    */
   it('dice "competidores" y no "parejas" cuando el lado es de uno', () => {
     const solos = ['s1', 's2', 's3', 's4', 's5', 's6', 's7'].map((id, index) => ({

@@ -13,7 +13,7 @@ function squadNames(count: number): string[] {
 
 /**
  * PR11b — `createSeason` (producción, `db/season.ts`) gana un `disciplines?`
- *Opcional. REQ-D1-1: "existen 2 filas `disciplines` para la misma
+ * opcional. REQ-D1-1: "existen 2 filas `disciplines` para la misma
  * `season_id`". No hay wizard todavía que arme este input (PR11a, la
  * segunda mitad de esta PR) — estos tests ejercitan la capacidad directo,
  * como lo haría ese wizard cuando exista.

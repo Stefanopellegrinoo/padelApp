@@ -189,8 +189,8 @@ describe('guestsToPromote', () => {
  * invitados, así que no tiene fila en `awards`.
  *
  * PR18b lo sacaba de la lista entera, porque `promote_guest` lo rechazaba: su
- *Guard de "¿el compañero cobró?" daba TRUE con `entry_b` nulo (W35,
- *). **PR18c cambió eso**: la base ahora saltea ese
+ * guard de "¿el compañero cobró?" daba TRUE con `entry_b` nulo (W35).
+ * **PR18c cambió eso**: la base ahora saltea ese
  * guard y la copia cuando `pair_size = 1`, y la promoción procede.
  *
  * Por eso el estado no es `PUEDE`: `PUEDE` promete los puntos que se le van a

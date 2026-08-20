@@ -30,7 +30,7 @@ interface ChampionInfo {
 
 /**
  * Clave estable de un lado, de uno o de dos: el orden de los miembros no
- *Importa. N30: esta pantalla usaba
+ * importa. N30: esta pantalla usaba
  * `members(side).join('-')` (sin ordenar, otro separador) mientras
  * `fechas/[n]/page.tsx` usaba la versión ordenada — la misma pregunta
  * contestada de dos formas a 200 líneas de distancia.

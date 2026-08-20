@@ -44,20 +44,20 @@ interface SeasonCard {
  * Se compone acá y no en `db/read.ts` a propósito (Plan 3: una función de
  * datos con forma de pantalla es la que después le falta algo).
  *
- *"Mi posición" es la de la TABLA GLOBAL (REQ-D9-1/2): suma, por persona, los
+ * "Mi posición" es la de la TABLA GLOBAL (REQ-D9-1/2): suma, por persona, los
  * puntos de cada disciplina × su `weight` — con una sola disciplina y
  * `weight=1` (el caso de hoy) da lo mismo que antes. Por eso lee
  * `seasonSquadOf`/`seasonAwardsOf` (temporada entera) y no `entriesOf`/
  * `awardsOf` (una disciplina puntual): la global necesita el plantel y los
  * premios de CADA disciplina para sumarlos ponderados.
  *
- *Nota: sin criterio de desempate propio — `computeRanking` corre con
+ * ponytail: sin criterio de desempate propio — `computeRanking` corre con
  * snapshot vacío, sólo importa `.points`, nunca el orden. Alcanza mientras
  * nadie necesite ver POR QUÉ empatan dos personas en la global.
  *
  * Consultas por temporada, REMEDIDAS con `pg_stat_statements` (misma técnica
- *Que S10, ) contra un escenario con una fecha cerrada
- *Real: **10 antes** (S10 midió 9 sin ninguna CLOSED — `awardsOf` corta antes
+ * que S10) contra un escenario con una fecha cerrada
+ * real: **10 antes** (S10 midió 9 sin ninguna CLOSED — `awardsOf` corta antes
  * de su 3ª consulta cuando no hay ninguna) → **5 después**. Sin fan-out por
  * disciplina: las dos lecturas de temporada entera traen TODAS en una sola
  * consulta cada una — mejora, y no crece con la cantidad de disciplinas.

@@ -129,8 +129,8 @@ export async function claimOwnSeat(
 /**
  * Cambia el nombre de un asiento.
  *
- *`count: 'exact'` por el mismo motivo que `setMatchdayDate` (W49,
- *): un update que no toca ninguna fila NO es un error
+ * `count: 'exact'` por el mismo motivo que `setMatchdayDate` (W49):
+ * un update que no toca ninguna fila NO es un error
  * en PostgREST. Estas escrituras se apoyan en RLS y no chequean admin por su
  * cuenta, así que a un participante que no organiza le decían que guardó y al
  * recargar volvía el valor viejo. La ronda 15 lo midió con un participante
@@ -158,8 +158,8 @@ export async function renameSeat(
  * Suelta el asiento de quien lo reclamó, dejándolo libre para otro. El nombre
  * se queda.
  *
- *`count: 'exact'` por el mismo motivo que `setMatchdayDate` (W49,
- *): un update que no toca ninguna fila NO es un error
+ * `count: 'exact'` por el mismo motivo que `setMatchdayDate` (W49):
+ * un update que no toca ninguna fila NO es un error
  * en PostgREST. Estas escrituras se apoyan en RLS y no chequean admin por su
  * cuenta, así que a un participante que no organiza le decían que guardó y al
  * recargar volvía el valor viejo. La ronda 15 lo midió con un participante

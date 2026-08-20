@@ -47,14 +47,14 @@ describe('defendersOf', () => {
   })
 
   /*
-   *. Esta derivación no miraba `pairSize`, así
+   * W42. Esta derivación no miraba `pairSize`, así
    * que la Tabla de una disciplina de a uno anunciaba "Ganaron la fecha 2 ·
    * les queda 1 defensa / Repiten" sobre un jugador solo — verificado en HTML
-   *Real por la.
+   * real por la auditoría.
    *
    * La regla del campeón que defiende es una restricción DEL SORTEO DE
    * PAREJAS: `pairingContextFor` hardcodea `defenders: null` con `pairSize=1`
-   *Y `buildSides` con `sideSize===1` ignora `defenders` entero. La
+   * (C19) y `buildSides` con `sideSize===1` ignora `defenders` entero. La
    * pantalla prometía una regla que el sorteo no aplica, y un admin que lea
    * "Repiten" va a reportar un bug del sorteo que no existe.
    */

@@ -176,7 +176,7 @@ describe('computeStandings', () => {
 })
 
 /**
- *Hasta acá `computeStandings` no tenía UN SOLO
+ * S39: hasta acá `computeStandings` no tenía UN SOLO
  * test con lados de uno. La tabla del día de una disciplina `pair_size=1` no la
  * calculaba ni la verificaba nada — el `full_matchday_proof` de `db/` arma su
  * payload de awards por posición de asiento, no derivado de resultados.

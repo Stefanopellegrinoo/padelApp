@@ -62,10 +62,10 @@ export interface MatchdayShape {
 /**
  * La aritmética del armado, condicionada por el tamaño del lado.
  *
- *Esto vivía suelto adentro de `armado.tsx` con
+ * S31: esto vivía suelto adentro de `armado.tsx` con
  * el `2` hardcodeado en las dos puntas — `confirmed % 2` para pedir invitado y
  * `size / 2` para contar parejas. La base dejó de hacer eso en PR14
- *(`assertMatchdaySize` condiciona la paridad por `sideSize`, W24) y la
+ * (`assertMatchdaySize` condiciona la paridad por `sideSize`, W24) y la
  * pantalla quedó atrás: con una disciplina de a uno pedía un invitado que no
  * hace falta y mostraba media pareja.
  *
@@ -77,8 +77,8 @@ export interface MatchdayShape {
  * El PISO y el TECHO se quedan sin condicionar a propósito: `assertMatchdaySize`
  * (`db/validate.ts`) todavía aplica `MIN_PLAYERS`/`MAX_PLAYERS` planos para las
  * dos formas, y una pantalla que prometa un límite distinto del que el servidor
- *Va a aplicar es peor que una que no lo muestre. W32 sigue abierto y la
- *Decisión de producto es que se cierra con el formato de grupos (REQ-D8-1,
+ * va a aplicar es peor que una que no lo muestre. W32 sigue abierto y la
+ * decisión de producto es que se cierra con el formato de grupos (REQ-D8-1,
  * PR21), no con una constante nueva — por eso `matches` existe: de a uno, 12
  * jugadores son 66 partidos, y ése es el número que hace pedir ese formato.
  */

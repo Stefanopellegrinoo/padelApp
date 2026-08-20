@@ -133,7 +133,7 @@ function Stepper({
  *
  * Vive afuera de `Wizard` —y exportado— para poder RENDERIZARLO en la suite
  * unitaria: `step` es estado interno del wizard y sin clicks no se llega hasta
- *Acá. W63 fue una mentira de este paso que ningún
+ * acá. W63 fue una mentira de este paso que ningún
  * test podía ver, en un proyecto que ya se comió cinco problemas de pantalla.
  *
  * Cuáles steppers dibuja lo decide `steppersFor`, la MISMA función que usa

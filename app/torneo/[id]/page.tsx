@@ -12,7 +12,7 @@ interface PageProps {
 }
 
 /**
- *Tabla global — home del torneo desde PR12b slice 2/2 (REQ-D9). Hasta acá la
+ * Tabla global — home del torneo desde PR12b slice 2/2 (REQ-D9). Hasta acá la
  * raíz mostraba la Tabla de la disciplina por defecto (ahora en
  * `[disciplina]/page.tsx`, PR12b slice 1); esta pantalla suma los puntos de
  * CADA disciplina × su `weight` y muestra a TODO el plantel de la temporada

@@ -2,7 +2,7 @@
 export type EntryId = string
 
 /**
- *Distinto NOMINALMENTE de un season id (N2, de
+ * Distinto NOMINALMENTE de un season id (N2 de
  * torneo-multi-disciplina): son dos strings con la misma forma (uuid) pero
  * significados que no se pueden confundir sin que el compilador lo note.
  * `awardsBefore`/`closedHistory` (db/season.ts) cambiaron su 2º parámetro de
@@ -27,7 +27,7 @@ export interface MatchFormat {
    * `tieBreak` describen un set de pádel y NO se leen cuando esto es `true`.
    *
    * OBLIGATORIO y sin default a propósito (decisión #3933, y la lección de
-   *`pair_size` en PR18a y `allows_draw` en W61, dos veces la misma trampa): un
+   * `pair_size` en PR18a y `allows_draw` en W61, dos veces la misma trampa): un
    * campo nuevo con default permisivo esconde a los escritores que no lo
    * escriben. Sin default, `tsc` marca cada literal de `MatchFormat` que falta
    * y obliga a decidir en la línea exacta.
@@ -42,7 +42,7 @@ export interface MatchFormat {
 export interface SeasonConfig {
   /**
    * Squad size, not matchday size. Between MIN_PLAYERS and MAX_PLAYERS.
-   *Even only when the discipline's side size is 2 (N21, 
+   * Even only when the discipline's side size is 2 (N21,
    * ronda 9) — with sideSize=1 an odd squad is perfectly playable.
    */
   squadSize: number

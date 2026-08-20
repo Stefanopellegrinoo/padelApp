@@ -27,7 +27,7 @@ export async function seasonConfig(supabase: Client, seasonId: string): Promise<
  * The squad's seed order FOR ONE DISCIPLINE. Explicit `order by`: nothing else
  * keeps it stable.
  *
- *Lee `discipline_entries`, no `entries`:
+ * Lee `discipline_entries`, no `entries` (C6):
  * `entries.seed_position` es dual-write tail-only desde PR 7
  * (0023_discipline_entries.sql) — `shift_seeds_up`/`add_squad_seat` ya no
  * corren el parking ahí. `discipline_entries.seed_position` es la fuente
@@ -56,12 +56,12 @@ export async function squadSeedOrder(
  * Con el tripwire `disciplines_one_per_season` caído (0018) una temporada ya
  * PUEDE tener más de una — sin esto, `createMatchday` y las lecturas
  * scopeadas por temporada rompían con PGRST116 ("multiple/0 rows") o
- *Mezclaban las dos disciplinas apenas existiera una segunda (,
- *Hallazgo C4). Mismo orden que `add_squad_seat` (0013/0020): `position,
+ * mezclaban las dos disciplinas apenas existiera una segunda (
+ * hallazgo C4). Mismo orden que `add_squad_seat` (0013/0020): `position,
  * created_at`.
  *
  * `null` en vez de tirar: cero filas visibles puede ser "esta temporada de
- *Verdad no tiene disciplina" o, igual de legítimo, "RLS le esconde la
+ * verdad no tiene disciplina" (C3) o, igual de legítimo, "RLS le esconde la
  * fila a quien llama" (un extraño sin asiento) — `disciplines_read` (0015)
  * exige `is_participant`. Quien llama decide qué hacer con `null`: una
  * lectura que hoy devuelve `[]`/`new Map()` para un extraño sigue
@@ -167,7 +167,7 @@ export async function closedHistory(
 /**
  * Un premio congelado: lo que la fecha repartió, con su puesto.
  *
- *Traía sólo `points`, y con eso la pantalla
+ * W55: traía sólo `points`, y con eso la pantalla
  * mostraba los puntos congelados en filas ORDENADAS EN VIVO — el orden sale de
  * `computeStandings`, cuyo desempate depende del snapshot, y el snapshot
  * depende de `discipline_entries`, que PROMOVER cambia. Resultado medido: la
@@ -232,7 +232,7 @@ export interface NewSeason {
   /**
    * Una fila de `disciplines` por elemento — `position` sale del ÍNDICE de
    * este array, escrito EXPLÍCITO, nunca el default `0` de la columna
-   *Un insert donde dos filas comparten
+   * (contrato S13, auditoría ronda 5): un insert donde dos filas comparten
    * `position` Y `created_at` empata la clave de orden que `disciplineSlugs`
    * (core/discipline-slug.ts) usa para no colisionar dos disciplinas del
    * mismo `kind`. El orden de este array ES el orden del slug — el wizard
@@ -260,7 +260,7 @@ export interface NewSeason {
  * es la misma regla escrita una sola vez y del lado que no se puede saltear. Lo
  * único que hace este borde es traducir ese error a algo que se pueda leer.
  *
- *Nota: el rollback es best-effort. Si el delete también falla, gana el
+ * ponytail: el rollback es best-effort. Si el delete también falla, gana el
  * error del insert, que es el que explica qué pasó.
  */
 export async function createSeason(
@@ -417,8 +417,8 @@ export async function deleteSeason(supabase: Client, seasonId: string): Promise<
  * Cambia el nombre del torneo. Lo dice el paso 1 del wizard: "se puede cambiar
  * después".
  *
- *`count: 'exact'` por el mismo motivo que `setMatchdayDate` (W49,
- *): un update que no toca ninguna fila NO es un error
+ * `count: 'exact'` por el mismo motivo que `setMatchdayDate` (W49):
+ * un update que no toca ninguna fila NO es un error
  * en PostgREST. Estas escrituras se apoyan en RLS y no chequean admin por su
  * cuenta, así que a un participante que no organiza le decían que guardó y al
  * recargar volvía el valor viejo. La ronda 15 lo midió con un participante
@@ -446,8 +446,8 @@ export async function renameSeason(
  * El texto libre del admin. Mueve el sello de última actualización, que la
  * página de reglas muestra.
  *
- *`count: 'exact'` por el mismo motivo que `setMatchdayDate` (W49,
- *): un update que no toca ninguna fila NO es un error
+ * `count: 'exact'` por el mismo motivo que `setMatchdayDate` (W49):
+ * un update que no toca ninguna fila NO es un error
  * en PostgREST. Estas escrituras se apoyan en RLS y no chequean admin por su
  * cuenta, así que a un participante que no organiza le decían que guardó y al
  * recargar volvía el valor viejo. La ronda 15 lo midió con un participante

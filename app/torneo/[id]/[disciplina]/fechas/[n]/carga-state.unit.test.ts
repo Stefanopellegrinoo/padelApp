@@ -157,7 +157,7 @@ describe('el marcador abierto: dos números tipeados', () => {
 })
 
 /**
- *Tipear `abc`, `-5`, `1.5` o —lo más natural del
+ * S74: tipear `abc`, `-5`, `1.5` o —lo más natural del
  * mundo— `3-1` en el primer campo deja el texto a la vista y "Guardar
  * resultado" muerto, sin decir por qué. El rechazo del servidor sí se explica;
  * el del cliente no explicaba nada.

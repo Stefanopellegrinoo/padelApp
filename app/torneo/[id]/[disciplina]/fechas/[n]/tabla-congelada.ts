@@ -6,7 +6,7 @@
  *
  * **Acá se decide el ORDEN, nunca el REPARTO.** `computeAwards` no se importa
  * ni se llama desde este módulo: quien reparte es `closeMatchday`, una sola
- *Vez, y una fecha cerrada no vuelve a repartir.
+ * vez, y una fecha cerrada no vuelve a repartir (C21).
  * Lo fija `fuente-de-puntos.unit.test.ts`, que mira los imports de este archivo
  * además de los de `page.tsx`.
  */
@@ -29,7 +29,7 @@ function frozenPositionOf(row: SideStanding, frozen: ReadonlyMap<EntryId, ConPue
 /**
  * Las filas de la tabla de una fecha CERRADA, en el orden en que se dibujan.
  *
- *El orden sale del puesto CONGELADO, no del que
+ * W55: el orden sale del puesto CONGELADO, no del que
  * `computeStandings` calcula hoy. El orden en vivo depende del snapshot de
  * desempate, el snapshot depende de `discipline_entries`, y PROMOVER un
  * invitado escribe ahí — así que después de promover la tabla podía reordenarse
@@ -70,7 +70,7 @@ export function frozenTableRows(
 /**
  * ¿La tabla dibuja un orden distinto del que `computeStandings` calcula hoy?
  *
- *El pie de la tabla —"Fulano quedó 2° por
+ * W56: el pie de la tabla —"Fulano quedó 2° por
  * diferencia de games"— sale de `computeStandings` y es el ÚNICO ordinal que el
  * usuario ve, porque la tabla no imprime puestos. Cuando el orden congelado
  * mueve las filas, el pie afirma un puesto que la tabla desmiente tres

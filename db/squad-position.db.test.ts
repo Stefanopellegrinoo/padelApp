@@ -69,7 +69,7 @@ function localSql(sql: string): string {
 
 /**
  * El plantel de la temporada, en el orden que devuelve `entriesOf` (el lector
- *De producción): desde C6 es el mismo orden que
+ * de producción): desde C6 es el mismo orden que
  * `discipline_entries` para SQUAD, no el dual-write de `entries.seed_position`.
  */
 async function squadInSeedOrder(user: TestUser, seasonId: string) {

@@ -518,7 +518,7 @@ describe('closeMatchday', () => {
    * PR), la asistencia y los resultados pasan por los caminos TS reales
    * (`generatePairs`/`setAttendance` vía `markAllPlaying`/`saveResult`), no
    * por un insert directo en `pairs`. Antes de esta PR esto era imposible de
-   *Armar: `generatePairs` moría en la FK `pairs_matchday_size` para
+   * armar: `generatePairs` moría en la FK `pairs_matchday_size` (W34) para
    * cualquier disciplina `pair_size=1`. `closeMatchday()` (el wrapper TS) NO
    * se usa acá: sigue llamando a `computeStandings`, cuyo límite público
    * seguía `Pair` in/out hasta que `core/types.ts`/`app/**` migraron (design
@@ -560,10 +560,10 @@ describe('closeMatchday', () => {
    * los cuatro pasos por el camino real, para una disciplina `pair_size=1`.
    * `close_matchday` (el RPC) se llama directo con un payload legítimo — el
    * wrapper TS `closeMatchday()` queda para 18b/19 (mismo corte que el test
-   *De arriba). Esto es lo que W34 describía como "todavía no puede": hoy
+   * de arriba). Esto es lo que W34 describía como "todavía no puede": hoy
    * puede, de punta a punta.
    *
-   *Una sola fecha no alcanza para probar el
+   * C19: una sola fecha no alcanza para probar el
    * lifecycle — `closedHistory` sólo entra en juego cuando existe una fecha
    * CERRADA antes en el calendario de la disciplina, así que el bug recién
    * aparece desde la fecha 2. Este test cierra la fecha 1 y después arma y
@@ -617,7 +617,7 @@ describe('closeMatchday', () => {
   })
 
   /**
-   *El otro lado de C19, y el que quedó SIN
+   * W40 — el otro lado de C19, y el que quedó SIN
    * PROBAR hasta acá: 18a habilitó ESCRIBIR una fecha de a uno que ninguna
    * lectura podía devolver. `pairsAndMatchesOf` (db/read.ts), `resultsOf`
    * (db/matchday.ts) y `closedHistory` (db/season.ts) componían `pairFromRow`,

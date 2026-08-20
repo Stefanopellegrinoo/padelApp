@@ -115,9 +115,9 @@ async function matchIdsOf(matchdayId: string): Promise<string[]> {
 /**
  * Juega y cierra la temporada regular entera para dejarla lista para el Masters.
  *
- *`disciplineId` es opcional: todos los llamadores salvo el de N1 (heap
+ * `disciplineId` es opcional: todos los llamadores salvo el de N1 (heap
  * invertido, dos disciplinas) usan `buildScene()`, de una sola disciplina —
- *Ahí omitirlo sigue sin ser ambiguo (S26, guarda de `createMatchday`).
+ * ahí omitirlo sigue sin ser ambiguo (S26, guarda de `createMatchday`).
  */
 async function playRegularSeason(
   admin: TestUser,

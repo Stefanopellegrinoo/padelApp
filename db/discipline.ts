@@ -9,16 +9,16 @@ export interface DisciplineConfigRow {
   config: SeasonConfig
   pairSize: SideSize
   /**
-   *El `allows_draw` real de la disciplina,
+   * El `allows_draw` real de la disciplina (W61),
    * leído del mismo select que ya trae `config` y `pair_size` — ningún select
-   *Nuevo, misma razón por la que `pairSize` vive acá desde W30.
+   * nuevo, misma razón por la que `pairSize` vive acá desde W30.
    */
   allowsDraw: boolean
 }
 
 /**
  * La config de UNA disciplina — `disciplines.config`, no `seasons.config` —
- *MÁS `pair_size`, de la misma fila y el mismo select (W30, 
+ * MÁS `pair_size`, de la misma fila y el mismo select (W30,
  * ronda 9): antes esta función sólo traía `config` y tres call sites
  * (`matchdayContextFor`, `pairingContextFor`, `DISCIPLINE_HEADER_COLUMNS` en
  * db/read.ts) pasaban un `2` literal a `assertValidConfig`/`assertMatchdaySize`
@@ -29,7 +29,7 @@ export interface DisciplineConfigRow {
  * escribir: `updateSeasonConfig` (db/season.ts) sólo toca `seasons.config`,
  * así que dos disciplinas de la misma temporada podían divergir de la
  * temporada sin que ninguna pantalla lo viera. De acá en más ésta es la
- *Fuente real, por disciplina, sin herencia cruzada (REQ-D2-1).
+ * fuente real, por disciplina, sin herencia cruzada (REQ-D2-1).
  */
 export async function disciplineConfig(
   supabase: Client,
@@ -54,7 +54,7 @@ export async function disciplineConfig(
 /**
  * El único escritor de `disciplines.config`: `assertValidConfig` corre antes que el update, igual que `updateSeasonConfig`.
  *
- *El `sideSize` estaba HARDCODEADO en 2, y sobre
+ * C20: el `sideSize` estaba HARDCODEADO en 2, y sobre
  * una disciplina de a uno eso dejaba la validación invertida — rechazaba la
  * única config válida (8 valores de puntos para 8 asientos) y aceptaba la de
  * parejas (4), que después `matchdayContextFor` rechaza al armar y al cerrar.
@@ -65,11 +65,11 @@ export async function disciplineConfig(
  * propósito: es identidad de la disciplina, no una opción de quien llama. Con
  * un parámetro, cada call site presente y futuro puede pasar el equivocado y
  * el compilador no lo nota —`SideSize` es `1 | 2` en los dos casos—, que es
- *Exactamente la clase de bug por la que `DisciplineId` está branded (N2,
+ * exactamente la clase de bug por la que `DisciplineId` está branded (N2,
  * ronda 2). Leerlo cuesta un SELECT por guardado en una pantalla de admin;
  * `disciplineConfig`, justo arriba, ya trae la fila que hace falta.
  *
- *`count: 'exact'` por el mismo motivo que
+ * S46: `count: 'exact'` por el mismo motivo que
  * `setMatchdayDate` (`db/matchday.ts:198-200`) — un update que no toca ninguna
  * fila NO es un error en PostgREST. `saveDisciplineConfig` no tiene chequeo de
  * admin propio, se apoya en RLS, y un participante que NO organiza pasa el
@@ -78,13 +78,13 @@ export async function disciplineConfig(
  * `is_season_admin`). Sin esto la pantalla le decía que guardó y al recargar
  * volvía la config vieja.
  *
- *Desde `0032_promote_guest_points_slot.sql` la
+ * C23: desde `0032_promote_guest_points_slot.sql` la
  * BASE también escribe `disciplines.config` —al promover un invitado de a uno
  * agrega un casillero de puntos y sube `squadSize`—, y esta función era un
  * overwrite CIEGO del blob entero. Con Formato abierto en una pestaña y una
  * promoción en otra, el primer toque del admin pisaba el casillero recién
  * agregado sin un solo error en pantalla, y la fecha volvía a quedar sin poder
- *Cerrarse.
+ * cerrarse (C22).
  *
  * El guard compara el LARGO de `points` y `squadSize`, que son exactamente los
  * dos campos que la app se escribe a sí misma. Formato edita VALORES —no tiene
@@ -92,7 +92,7 @@ export async function disciplineConfig(
  * una diferencia ahí no puede venir del formulario: sólo de que la fila cambió
  * abajo mientras estaba abierto.
  *
- *Nota: es un lock optimista pobre, sobre dos campos elegidos a mano y no
+ * ponytail: es un lock optimista pobre, sobre dos campos elegidos a mano y no
  * sobre la fila entera. Alcanza porque hoy hay UN solo escritor automático y
  * toca esos dos campos. El día que aparezca otro que toque cualquier otra
  * cosa, esto no lo ve — ahí corresponde una columna de versión y comparar la
@@ -147,29 +147,29 @@ export interface NewDiscipline {
 }
 
 /**
- *Agrega una disciplina a un torneo YA EN CURSO (REQ-D1-2): el `createSeason`
+ * Agrega una disciplina a un torneo YA EN CURSO (REQ-D1-2): el `createSeason`
  * de después del wizard. No toca ninguna disciplina existente ni sus fechas
  * — es "gratis" porque `awards` queda congelado por fecha (decisión de
  * producto, #3796) y `matchdays_one_live` ya está scopeado por
- *`discipline_id` (PR 2/0016, REQ-D3-1), así que una fecha OPEN de otra
+ * `discipline_id` (PR 2/0016, REQ-D3-1), así que una fecha OPEN de otra
  * disciplina ni bloquea ni se entera de este insert.
  *
  * `position` sale de `max(position)+1` de la temporada, escrito EXPLÍCITO —
- *Mismo contrato que `createSeason` honra desde S13, ahora respaldado por el
- *Índice único `disciplines_season_position` (S19, 0027): si dos llamadas
+ * mismo contrato que `createSeason` honra desde S13, ahora respaldado por el
+ * índice único `disciplines_season_position` (S19, 0027): si dos llamadas
  * concurrentes leen el mismo máximo, la segunda falla con 23505 en vez de
  * empatar en silencio.
  *
- *Nota: esa carrera (dos admins agregando a la vez) no se resuelve acá
+ * ponytail: esa carrera (dos admins agregando a la vez) no se resuelve acá
  * —falla ruidoso, no se previene—, mismo techo aceptado que ya documenta
  * `shift_seeds_up` (0023) para el plantel. Si se vuelve más que anecdótico,
  * la solución es un advisory lock por `season_id`.
  *
  * `entryIds`, por default, es TODO el plantel SQUAD de la temporada — mismo
- *Comportamiento que `createSeason` (decisión PR11b, REQ-D1-3: "por default
+ * comportamiento que `createSeason` (decisión PR11b, REQ-D1-3: "por default
  * juega todo", sin pantalla de "quién juega qué" en el wizard). Pasar un
  * subconjunto explícito es la capacidad que la UI de Ajustes (slice 2 de
- *Esta PR) necesita para el solape PARCIAL (REQ-D1-4): esta función ya la
+ * esta PR) necesita para el solape PARCIAL (REQ-D1-4): esta función ya la
  * expone, aunque todavía no exista ninguna pantalla que la use.
  */
 export async function addDiscipline(

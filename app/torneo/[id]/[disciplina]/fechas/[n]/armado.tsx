@@ -81,7 +81,7 @@ interface ArmadoProps {
   disciplina: string
   /**
    * Cuántas entries hacen un lado en ESTA disciplina. Sin esto la pantalla
-   *Hardcodeaba 2 en las dos puntas: pedía un invitado para emparejar
+   * hardcodeaba 2 en las dos puntas (S31): pedía un invitado para emparejar
    * donde no hay a quién emparejar, y dividía el plantel por 2.
    */
   sideSize: SideSize

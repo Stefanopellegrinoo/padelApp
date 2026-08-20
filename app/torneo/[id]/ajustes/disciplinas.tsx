@@ -17,7 +17,7 @@ export interface SquadMemberVM {
 }
 
 /**
- *Agregar una disciplina a un torneo ya en curso (REQ-D1-2). El wizard sólo
+ * Agregar una disciplina a un torneo ya en curso (REQ-D1-2). El wizard sólo
  * ofrece un checkbox por `kind` (decisión #3823) — crear DOS pádel desde el
  * arranque queda fuera de ese alcance a propósito. Acá es donde la segunda
  * se suma, y por eso esta lista NO repite la restricción "una por tipo" del
@@ -27,13 +27,13 @@ export interface SquadMemberVM {
  * El plantel a elegir es `squad` (temporada ENTERA, `seasonSquadMembersOf`
  * en `ajustes/page.tsx`), no la sección "Plantel" de esta misma pantalla:
  * "Plantel" usa `entriesOf` sin `disciplineId`, que resuelve la disciplina
- *Por defecto y deja afuera a quien no la juega (C9, ronda 4) — exactamente
+ * por defecto y deja afuera a quien no la juega (C9, ronda 4) — exactamente
  * lo que este formulario no puede hacer, porque el candidato a la
- *Disciplina NUEVA es cualquiera de la temporada (REQ-D1-3).
+ * disciplina NUEVA es cualquiera de la temporada (REQ-D1-3).
  *
  * Todos preseleccionados: "por default juega todo" es el mismo criterio que
  * `createSeason` y que `addDiscipline` sin `entryIds`. Destildar antes de
- *Guardar es el solape parcial de REQ-D1-4.
+ * guardar es el solape parcial de REQ-D1-4.
  */
 export function Disciplinas({
   seasonId,

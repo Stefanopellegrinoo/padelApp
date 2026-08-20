@@ -10,7 +10,7 @@ import type { EntryId, Side, SideSize } from './types'
  * tiraba nada**: `present.includes(defenders.b)` con `b` inexistente da
  * `false`, así que la pareja defensora desaparecía del sorteo en silencio.
  *
- *El informe de PR19 afirmaba que "el compilador
+ * W50: el informe de PR19 afirmaba que "el compilador
  * no puede atrapar el caso". **Era falso**, y la causa era que `pair()`
  * devolvía `Side` a secas. Con `Duo` en los tres campos y `pair(): Duo`, el
  * compilador rechaza `single(...)` en cada call site — chequeo en compilación,

@@ -114,13 +114,13 @@ export function disciplineProfile(
 }
 
 /**
- *`sideSize` condiciona la paridad (W24, REQ-D2-2/REQ-D5-2): un plantel impar
+ * `sideSize` condiciona la paridad (W24, REQ-D2-2/REQ-D5-2): un plantel impar
  * sólo es un problema cuando un lado necesita DOS. Con `sideSize=1` cada
  * presente es su propio lado — la regla no se relaja, es INAPLICABLE.
  *
  * El piso/techo (`MIN_PLAYERS`/`MAX_PLAYERS`) sigue sin condicionar por
- *`sideSize` — es cantidad, no paridad, y REQ-D2-2 no lo toca directamente.
- *Pero el TECHO mide partidos, no jugadores: su
+ * `sideSize` — es cantidad, no paridad, y REQ-D2-2 no lo toca directamente.
+ * Pero el TECHO mide partidos, no jugadores (W32): su
  * unidad cambia con `sideSize` (12 jugadores son 15 partidos en parejas y 66
  * de a uno), así que dejarlo sin condicionar es DEUDA, no una corrección —
  * PUNTO 3 del design (`DisciplineConfig.maxPlayers`) todavía no tiene

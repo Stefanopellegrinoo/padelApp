@@ -68,14 +68,21 @@ export interface RulesBodyProps {
   /**
    * El formato de CADA disciplina del torneo. Con una sola la pantalla dice
    * exactamente lo de siempre; con dos formatos distintos los nombra a los dos
-   *.
+   * (W64).
    *
-   * La rama sin sesión pasa una sola entrada y no puede pasar más: lee por
-   * `season_public_rules` (0022), que devuelve la config de la disciplina por
-   * defecto y nada más — el resto de esta pantalla (puntos, fechas,
-   * desempates, Masters) también sale de esa única config. Cerrar esa mitad
-   * es cambiarle la firma a una función `security definer` que sirve tráfico
-   * anónimo, y eso es una migración con su propio riesgo, no un prop.
+   * La rama SIN SESIÓN también los pasa todos, desde S76: va por
+   * `season_public_formats` (`0038`), una función NUEVA y ADITIVA al lado de
+   * `season_public_rules` (`0022`). No se le cambió la firma a la vieja porque
+   * eso pide `drop function` —Postgres rechaza cambiar el tipo de retorno con
+   * `create or replace`— y el drop se lleva los grants, dejando sin superficie
+   * pública la única pantalla que se comparte por link.
+   *
+   * (Este párrafo decía "la rama sin sesión pasa una sola entrada y no puede
+   * pasar más". Dejó de ser cierto con S76 y se corrigió acá, criterio de N48:
+   * la frase falsa vive en el código.)
+   *
+   * Lo que SÍ sigue saliendo de una sola config es el RESTO de la pantalla
+   * —puntos, fechas, desempates, Masters—, que lee `config` y no `formats`.
    */
   formats: readonly FormatRow[]
   adminName: string

@@ -330,7 +330,7 @@ describe('submitSeats', () => {
 })
 
 /**
- *El paso 4 de una liga que NO tiene pádel
+ * W63: el paso 4 de una liga que NO tiene pádel
  * dibujaba "Sets por partido" y "Games por set", y el segundo se anuncia con
  * "A 4 games el resultado se carga en dos toques" — justo la máquina que una
  * disciplina de marcador abierto no monta.

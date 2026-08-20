@@ -16,7 +16,7 @@ import { saveConfig } from './actions'
  *
  * `steppersFor` sí se importa en vez de copiarse: son los labels, las ayudas,
  * los topes Y cuáles corresponden, y las dos pantallas TIENEN que decir lo
- *Mismo. Copiar el criterio en vez de compartirlo es lo que produjo W63.
+ * mismo. Copiar el criterio en vez de compartirlo es lo que produjo W63.
  *
  * Guarda a cada toque. `updateDisciplineConfig` corre `assertValidConfig`
  * antes de escribir, así que un estado intermedio inválido —bajar las fechas

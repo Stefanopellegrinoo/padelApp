@@ -14,7 +14,7 @@ export interface LegacyFechaPath {
 }
 
 /**
- *REQ-NR-5: `/torneo/{id}/fechas/{n}` — la URL vieja de una fecha puntual,
+ * REQ-NR-5: `/torneo/{id}/fechas/{n}` — la URL vieja de una fecha puntual,
  * sin disciplina. `null` para cualquier otra cosa: la ruta nueva
  * (`/{id}/{disciplina}/fechas/{n}`), la lista (`/{id}/fechas`, sin número) o
  * cualquier otra pantalla del torneo — todas siguen de largo sin tocar la

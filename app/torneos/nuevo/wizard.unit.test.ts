@@ -7,7 +7,7 @@ import { configFor, type DisciplineKind } from './wizard-state'
 /**
  * El paso 4 del wizard, RENDERIZADO — no la lógica que lo alimenta.
  *
- *Existió por la distancia entre esas dos cosas:
+ * W63 existió por la distancia entre esas dos cosas:
  * Ajustes y el wizard comparten `STEPPERS` y cada uno decide por su cuenta
  * cuáles dibuja, así que la corrección aterrizó en una pantalla y no en la
  * otra. Un test sobre la función que elige los steppers no lo hubiera cazado:
@@ -43,7 +43,7 @@ describe('paso 4 del wizard — los steppers que se dibujan', () => {
   })
 
   /**
-   *En un torneo que NO tiene pádel esos dos steppers no gobiernan nada
+   * W63: en un torneo que NO tiene pádel esos dos steppers no gobiernan nada
    * —`setError` los ignora y `usesSetsDiff` los apaga— y encima uno se anuncia
    * con "el resultado se carga en dos toques", que es JUSTO la máquina que esa
    * disciplina no monta.

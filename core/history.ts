@@ -55,8 +55,8 @@ export function previousContext(
 /**
  * Sólo los lados de dos. Un lado de uno no es una pareja y se cae acá.
  *
- *Filtrar en silencio es lo contrario del
- *Criterio que S37 impuso en `sideOfRow` —que TIRA cuando la forma no cierra—,
+ * S43: filtrar en silencio es lo contrario del
+ * criterio que S37 impuso en `sideOfRow` —que TIRA cuando la forma no cierra—,
  * y la asimetría es deliberada porque acá el silencio no puede perder nada:
  * una historia con lados MIXTOS es inalcanzable, y lo impide la BASE, no un
  * `if`. `pairs_matchday_size` clava cada fila de `pairs` al `pair_size` de su

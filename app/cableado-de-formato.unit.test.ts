@@ -168,7 +168,7 @@ function panelDeFormato(html: string): string {
 
 describe('Ajustes — el panel de Formato dice de qué disciplina habla', () => {
   /**
-   *La fila de arriba anuncia el formato de LAS DOS disciplinas y su
+   * La fila de arriba anuncia el formato de LAS DOS disciplinas y su
    * `href="#formato"` ancla a un `<Formato>` alimentado con
    * `primaryDiscipline(header)`, que edita y guarda la disciplina [0] y nada
    * más. Antes de la ronda 21 la fila y el panel decían lo mismo; nombrar los

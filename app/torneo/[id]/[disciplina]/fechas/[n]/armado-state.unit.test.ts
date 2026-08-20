@@ -60,10 +60,10 @@ describe('applySeatTick', () => {
 })
 
 /**
- *`armado.tsx` tenía `confirmed % 2` y
+ * S31: `armado.tsx` tenía `confirmed % 2` y
  * `{size / 2} parejas` hardcodeados — los espejos en la pantalla de los bugs
  * de aridad que la base ya tiene arreglados (`assertMatchdaySize` condiciona
- *La paridad por `sideSize` desde PR14/W24). Con una disciplina de a uno, esa
+ * la paridad por `sideSize` desde PR14/W24). Con una disciplina de a uno, esa
  * pantalla pedía un invitado que no hace falta y dividía por 2 un número que
  * no se divide.
  *
@@ -73,8 +73,8 @@ describe('applySeatTick', () => {
  *
  * `matches` es nuevo y no es cosmético: la pantalla decía "La fecha es de 12"
  * sin que nadie pudiera saber que eso son 66 partidos de a uno contra 15 de a
- *Dos. Ese es el número que hace pedir el formato de grupos (REQ-D8-1, PR21),
- *Que es la respuesta real al techo — W32 NO se cierra con una constante.
+ * dos. Ese es el número que hace pedir el formato de grupos (REQ-D8-1, PR21),
+ * que es la respuesta real al techo — W32 NO se cierra con una constante.
  */
 describe('matchdayShape', () => {
   describe('de a dos (pair_size=2)', () => {

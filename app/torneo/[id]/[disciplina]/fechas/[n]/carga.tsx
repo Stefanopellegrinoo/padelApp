@@ -177,7 +177,7 @@ export function PanelGoles({
  * línea de COMPORTAMIENTO** en PR20 rebanada D2, y sus tests son el pin.
  *
  * La frase decía "no cambió una línea" a secas, y eso era literalmente falso
- *Los dos `<p>` de acá abajo sí se reescribieron
+ * (N48): los dos `<p>` de acá abajo sí se reescribieron
  * para usar la constante `PROMPT`. La sustancia se sostiene y está medida —el
  * HTML servido es byte a byte idéntico contra `f43d626`, porque la cadena de
  * clases de `PROMPT` es la misma que estaba inline—, pero una frase de más es

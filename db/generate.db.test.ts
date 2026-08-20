@@ -198,7 +198,7 @@ describe('generatePairs', () => {
   })
 
   /**
-   *PR18a: reescribe el test de W34, no lo borra.
+   * PR18a: reescribe el test de W34, no lo borra.
    * Aquel test probaba que `insertPairs` (que todavía no mandaba `pair_size`)
    * traducía el rebote de `pairs_matchday_size` a un mensaje de usuario en vez
    * de dejar pasar el string crudo de Postgres. Esta PR hace que `insertPairs`

@@ -71,14 +71,14 @@ export const STEPPERS: Stepper[] = [
  * apaga— y encima el segundo se anuncia con "A 4 games el resultado se carga
  * en dos toques", que es JUSTO la máquina que esa disciplina no monta. Es la
  * misma clase de mentira que el copy que decía "1 set a 4 games" en una liga de
- *Goles.
+ * goles (W47, W51, W56, W63).
  *
  * Toma una lista de formatos y no un `openScore` suelto porque las dos
  * pantallas que dibujan estos steppers preguntan cosas distintas: Ajustes edita
  * la config de UNA disciplina, y el paso 4 del wizard edita la de la TEMPORADA,
  * compartida por todas las marcadas. Con Pádel y FIFA marcados esos dos
  * steppers siguen gobernando la mitad de pádel, así que se van sólo cuando
- *NINGUNA de las disciplinas usa sets. Una función y no dos filtros: W63 nació
+ * NINGUNA de las disciplinas usa sets. Una función y no dos filtros: W63 nació
  * exactamente de que Ajustes filtrara y el wizard no.
  *
  * Sin disciplinas se dibujan los cinco: "nadie usa sets" no es cierto cuando no
@@ -91,7 +91,7 @@ export function steppersFor(formats: readonly MatchFormat[]): Stepper[] {
 }
 
 /**
- *Las disciplinas que el paso 1 puede marcar. REQ-D1-1: checkboxes por kind,
+ * Las disciplinas que el paso 1 puede marcar. REQ-D1-1: checkboxes por kind,
  * 1 o más — no hay "+ agregar otra disciplina" acá. Dos disciplinas del MISMO
  * kind (dos Pádel) sólo se arman después, desde Ajustes (PR13): este paso
  * pregunta "qué juega el torneo", no "cuántas mesas de cada juego".
@@ -299,8 +299,8 @@ export function formatErrors(config: SeasonConfig): string[] {
  * prefijo aparece recién cuando hay dos cosas distintas que nombrar.
  *
  * Esa regla la escribe `formatsLabel` (`core/narrate.ts`) y no este archivo:
- *Reglas y Ajustes tenían el mismo problema con los mismos datos (W64,
- *) y tres copias de la misma frase es como nació W64.
+ * Reglas y Ajustes tenían el mismo problema con los mismos datos (W64)
+ * y tres copias de la misma frase es como nació W64.
  */
 export function summaryOf(
   name: string,

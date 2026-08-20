@@ -388,7 +388,7 @@ describe('buildSides — sideSize 1 (design PUNTO 5, decisión #5/#6)', () => {
  */
 describe('buildSides — un lado de uno donde se juega de a dos (PR19)', () => {
   /*
-   *La primera versión de estos tests pasaba
+   * W50: la primera versión de estos tests pasaba
    * `single(...)` directo, y el informe de PR19 afirmaba que "el compilador no
    * puede atrapar el caso". **Era falso** — la causa era que `pair()` devolvía
    * `Side` a secas. Con `Duo` en los tres campos, estos mismos tests dejaron de

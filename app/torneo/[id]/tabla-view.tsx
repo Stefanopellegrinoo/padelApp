@@ -16,7 +16,7 @@ interface TablaViewProps {
 
 /**
  * La Tabla de una disciplina — shaping + presentación, extraída de
- *`page.tsx` (PR12b, slice 1/2 de REQ-D9) para que `[disciplina]/page.tsx`
+ * `page.tsx` (PR12b, slice 1/2 de REQ-D9) para que `[disciplina]/page.tsx`
  * la reuse tal cual. La raíz de la temporada (`page.tsx`) TODAVÍA no la
  * importa a propósito — sigue con su propia copia, apuntando a la disciplina
  * por defecto — porque slice 2 la reemplaza por la tabla global; ahí sí pasa

@@ -3,12 +3,12 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 /**
- *. C21 fue un CRITICAL de pantalla —promover un
+ * W48. C21 fue un CRITICAL de pantalla —promover un
  * invitado de a uno mataba la fecha con un `Error` sin mensaje— y **ningún
- *Test del repo lo cazaba**. Lo encontró la levantando el server con
+ * test del repo lo cazaba**. Lo encontró la auditoría levantando el server con
  * sesión real. El RED que escribí para arreglarlo (`dia-state.unit.test.ts`)
  * se borró en el GREEN porque quedó tautológico, y el test de base que dejé en
- *Su lugar pasa igual contra el código roto: la lo comprobó copiando
+ * su lugar pasa igual contra el código roto: la auditoría lo comprobó copiando
  * `db/promote.db.test.ts` al árbol de `078d935` (22 passed).
  *
  * No hay runner E2E en el repo, así que nada automatizado mira el render. Lo
@@ -21,26 +21,26 @@ import { describe, expect, it } from 'vitest'
  * `db/migrations.unit.test.ts`, que ya demostró servir. No prueba que la
  * pantalla esté bien; prueba que no volvió a hacer la única cosa que la rompió.
  *
- *La primera versión miraba el texto crudo y era
+ * W52: la primera versión miraba el texto crudo y era
  * frágil por los dos lados — un COMENTARIO que mencionara `computeAwards(` la
  * rompía (y este archivo y `page.tsx` lo mencionan mucho), y un recálculo por
  * ALIAS (`import { computeAwards as repartir }`) se le escapaba. Ahora corre
  * sobre el archivo SIN comentarios y mira el IMPORT, que es por donde tiene que
  * entrar cualquier forma de llamarla.
  *
- *El `sinComentarios` de W52 se aplicó a un
- *Assert y no al gemelo. Medido por la: borrar la llamada a
+ * W58: el `sinComentarios` de W52 se aplicó a un
+ * assert y no al gemelo. Medido por la auditoría: borrar la llamada a
  * `frozenPointsOf` y dejar un comentario que la nombre pasaba VERDE (5 passed),
  * o sea la pantalla podía dejar de leer los puntos congelados —que es
- *Literalmente C21— sin que el tripwire lo viera. Los dos asserts miran el
+ * literalmente C21— sin que el tripwire lo viera. Los dos asserts miran el
  * fuente sin comentarios.
  *
- *El regex de W52 pasó de exigir paréntesis a `\bcomputeAwards\b`, así que
+ * S58: el regex de W52 pasó de exigir paréntesis a `\bcomputeAwards\b`, así que
  * una MENCIÓN de la palabra en un string lo ponía rojo (medido: 1 failed con
  * `const zz = 'ver computeAwards(x) en el historial'`). El falso positivo no
  * había desaparecido, se había mudado.
  *
- *El arreglo de S58 fue angostar el assert a las
+ * W60: el arreglo de S58 fue angostar el assert a las
  * líneas `^import … from …`, y eso cambió un falso positivo ruidoso por un
  * falso negativo SILENCIOSO. Medido en los dos builds sobre el archivo real:
  * `const { computeAwards } = await import('@/core')` y
@@ -48,7 +48,7 @@ import { describe, expect, it } from 'vitest'
  * antes del angostamiento y pasaban VERDES después — un import dinámico no
  * pasa por una línea `^import … from`, y una llamada suelta tampoco. La
  * detección volvió a ser ancha —todo el fuente ejecutable— sacándole los
- *Literales de string, que era lo único que producía el falso positivo de S58.
+ * literales de string, que era lo único que producía el falso positivo de S58.
  * Gana las dos, así que no hay que elegir.
  */
 
@@ -61,7 +61,7 @@ function sinComentarios(source: string): string {
  * El fuente sin comentarios y sin literales de string: lo que de verdad se
  * ejecuta, menos el texto que sólo se muestra.
  *
- *Nota: es un blanqueo por regex, no un parser de TypeScript, y el techo es
+ * ponytail: es un blanqueo por regex, no un parser de TypeScript, y el techo es
  * un falso NEGATIVO acotado a una línea. Un apóstrofo suelto en texto JSX borra
  * hasta la comilla siguiente de esa línea, y `sinComentarios` ya corta en un
  * `//` que viva adentro de un string (una URL). Medido hoy sobre los dos

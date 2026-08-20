@@ -33,8 +33,8 @@ export interface DisciplineHeader {
   kind: 'PADEL' | 'FIFA'
   config: SeasonConfig
   /**
-   *`disciplines.weight` (REQ-D9-1/2, tabla global) — ya `number` desde que
-   *Sale de PostgREST (W21, `` ronda 6, medido con el cliente
+   * `disciplines.weight` (REQ-D9-1/2, tabla global) — ya `number` desde que
+   * sale de PostgREST (W21, `` ronda 6, medido con el cliente
    * real; el `Number(...)` de `toDisciplineHeader` es un no-op de cinturón,
    * no una conversión real).
    */
@@ -51,7 +51,7 @@ export interface SeasonHeader {
   isAdmin: boolean
   /**
    * En orden de `position, created_at` — el mismo criterio que
-   *`defaultDisciplineId` y `create_masters` (0021). Nunca vacío: REQ-NR-4 lo
+   * `defaultDisciplineId` y `create_masters` (0021). Nunca vacío: REQ-NR-4 lo
    * garantiza, y `disciplines_read` (0015) usa el mismo gate `is_participant`
    * que `seasons_read`, así que quien ve este header ve su disciplina.
    *
@@ -81,7 +81,7 @@ export function primaryDiscipline(header: SeasonHeader): DisciplineHeader {
  * La disciplina de UNA fecha puntual — no la [0] de la temporada. PR 10 pone
  * la disciplina en la URL de `fechas/[n]`, y ese mismo cambio deja a mano
  * `matchday.disciplineId` donde antes sólo estaba `primaryDiscipline(header)`
- *Con dos disciplinas del mismo
+ *: con dos disciplinas del mismo
  * `kind` en la temporada (Fase 2), la [0] ya no es necesariamente la de ESTA
  * fecha.
  *
@@ -188,7 +188,7 @@ interface DisciplineHeaderRow {
   config: unknown
   /**
    * `database.types.ts` (generado) declara esto `number`, y el tipo NO
-   *Miente (W21, `` ronda 6, medido con el cliente real):
+   * miente (W21, `` ronda 6, medido con el cliente real):
    * PostgREST emite `numeric(4,2)` sin comillas y `Response.json()` lo
    * entrega ya como `number`. `toDisciplineHeader` igual lo pasa por
    * `Number()`, ver ahí el porqué.
@@ -320,7 +320,7 @@ export async function seasonHeader(supabase: Client, seasonId: string): Promise<
 }
 
 /**
- *El estado REAL de un torneo con más de una disciplina (REQ-D3-3):
+ * El estado REAL de un torneo con más de una disciplina (REQ-D3-3):
  * derivado de `disciplines.status`, no de `seasons.status` (que sigue
  * existiendo en dual-write hasta el contract, PR 27, pero deja de ser fuente
  * de verdad en cuanto una temporada tiene más de una disciplina).
@@ -388,11 +388,11 @@ export async function seasonRules(
  * Para un SQUAD, `disciplineId` (opcional) elige de cuál: sin él cae en
  * `defaultDisciplineId`, el mismo criterio que el resto del código hasta el
  * wizard multi-disciplina (PR 11) — la pantalla de una fecha SÍ pasa la suya
- *(`matchday.disciplineId`, C8, ).
+ * (`matchday.disciplineId`, C8).
  *
  * Un SQUAD sin fila en `discipline_entries` de esa disciplina NO PERTENECE a
  * ella y queda AFUERA de lo que devuelve esta función — ya no se lo cubre con
- *`entries.seed_position` (C9, misma ronda): esa columna es otra numeración
+ * `entries.seed_position` (C9, misma ronda): esa columna es otra numeración
  * (de LA TEMPORADA, dual-write tail-only desde PR 7) y mezclarla con
  * `discipline_entries.seed_position` (de LA DISCIPLINA) producía posiciones
  * colisionadas. Única excepción: si la disciplina no se pudo resolver
@@ -606,7 +606,7 @@ export async function matchdaysOf(supabase: Client, seasonId: string): Promise<M
  * descubierto escribiendo el test:db de PR 10 (`legacy-fecha-redirect.db.test.ts`):
  * hasta Fase 1 (una disciplina por temporada) las dos consultas daban lo
  * mismo por casualidad, y con una segunda disciplina `matchdaysOf` la deja
- *Afuera en silencio — exactamente el síntoma de C8/C9 (ronda 4) en
+ * afuera en silencio — exactamente el síntoma de C8/C9 (ronda 4) en
  * `entriesOf`, acá en `matchdaysOf`.
  *
  * `matchdaysOf` NO se toca: sus otros 4 llamadores (season overview, Mis
@@ -630,9 +630,9 @@ export async function seasonMatchdaysOf(supabase: Client, seasonId: string): Pro
 
 /**
  * El plantel SQUAD de la temporada ENTERA, sin importar qué disciplinas
- *Juega cada quien — lo que la tabla global necesita (REQ-D9) y `entriesOf`
+ * juega cada quien — lo que la tabla global necesita (REQ-D9) y `entriesOf`
  * no da: `entriesOf` deja afuera a quien no tiene fila en
- *`discipline_entries` de LA disciplina resuelta (C8/C9, ronda 4); acá nadie
+ * `discipline_entries` de LA disciplina resuelta (C8/C9, ronda 4); acá nadie
  * queda afuera porque no se pasa por esa tabla. Sumar puntos ponderados
  * (`computeRanking` por disciplina + `computeGlobalRanking`) ya deja en 0 a
  * quien no jugó una de ellas — no hace falta excluirlo acá.
@@ -662,7 +662,7 @@ export interface SquadMember {
  * (exactamente lo que esta pantalla no puede hacer). `seasonSquadOf` se deja
  * intacto: `torneos/page.tsx` sólo necesita los ids.
  *
- *`playerId` se sumó para que "Plantel" en
+ * `playerId` (C14) se sumó para que "Plantel" en
  * Ajustes pueda usar esta función en vez de `entriesOf(seasonId)` sin
  * disciplina — esa llamada caía en la disciplina por defecto y perdía a
  * cualquier SQUAD promovido desde otra (`db/read.ts:419`). Acá no hay ese
@@ -682,7 +682,7 @@ export async function seasonSquadMembersOf(supabase: Client, seasonId: string): 
 /**
  * Los awards de TODAS las fechas cerradas de la temporada, agrupados por
  * disciplina y por número de fecha adentro — versión "temporada entera" de
- *`awardsOf` (REQ-D9). Toma `matchdays` ya resueltas (`seasonMatchdaysOf`) en
+ * `awardsOf` (REQ-D9). Toma `matchdays` ya resueltas (`seasonMatchdaysOf`) en
  * vez de leerlas de nuevo: quien ya las pidió para otra cosa no paga la
  * consulta dos veces.
  */

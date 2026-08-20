@@ -50,7 +50,7 @@ import { createTestUser, type TestUser } from './test/users'
  * tiene que seguir andando por el camino CERRADO. El marcador abierto tiene su
  * propio archivo (`db/open-score.db.test.ts`).
  *
- *De paso: el techo estaba declarado más chico
+ * S68 de paso: el techo estaba declarado más chico
  * que el real. La regla medida no es "sólo el 2-2 de un set a 2" sino `N-N`
  * para cualquier `gamesPerSet` CON tie-break —el formato de pádel por defecto
  * ya admite un `4-4`— y ningún empate sin él.

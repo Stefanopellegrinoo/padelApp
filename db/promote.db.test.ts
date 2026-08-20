@@ -241,7 +241,7 @@ describe('promoteGuest — spec 3.1: se copia el award congelado del compañero'
 })
 
 /**
- *Arma la fecha del incidente C1: 8 del plantel presentes + una PAREJA
+ * Arma la fecha del incidente C1: 8 del plantel presentes + una PAREJA
  * INVITADA trabada = 5 parejas, y `defaultConfig(8)` sólo tiene 4 valores de
  * puntos. Es legal justamente porque `computeAwards` excluye a la pareja toda
  * invitada de las posiciones que pagan; promover a uno de sus dos integrantes
@@ -313,7 +313,7 @@ describe('promoteGuest — spec 3.2: pareja toda invitada, se REFUSA', () => {
  * Este estado no lo produce la app: `generatePairs` borra las `pairs` de la
  * fecha antes de insertar (db/matchday.ts:458), así que `buildPairs` nunca mete
  * un entry en dos parejas. Se arma a mano —igual que el test del `unique` de
- *Más abajo— porque está adentro del contrato que `promote_guest` dice
+ * más abajo— porque está adentro del contrato que `promote_guest` dice
  * defender, y medido contra la base el guard viejo lo dejaba pasar: promoción
  * exitosa, y después la página tirando "La fecha tiene 6 parejas del torneo
  * pero la lista de puntos sólo tiene 4 valores."
@@ -822,7 +822,7 @@ describe('promoteGuest — disciplina de a uno: se promueve, sin copiar nada', (
   })
 
   /*
-   *. Promover funcionaba y la PANTALLA de esa
+   * C21. Promover funcionaba y la PANTALLA de esa
    * fecha moría en el render siguiente: `page.tsx` recalculaba los puntos del
    * día con `computeAwards` sobre los `guestIds` de HOY, y al salir el
    * promovido de esa lista quedaban 9 lados pagos contra 8 valores de puntos.
@@ -869,8 +869,7 @@ describe('promoteGuest — disciplina de a uno: se promueve, sin copiar nada', (
    *
    * Al promover un invitado de a uno el plantel pasa de 8 a 9 y la lista se
    * queda corta, así que la fecha siguiente no se puede sortear y —peor— si se
-   *REABRE ésta, los premios se borran y no se puede volver a cerrar (C22,
-   *).
+   * REABRE ésta, los premios se borran y no se puede volver a cerrar (C22).
    *
    * La decisión: que la app agregue el casillero SOLA, con 0. El admin después
    * lo deja en 0 o le pone valor. Cambia a propósito la convención de que
@@ -927,8 +926,8 @@ describe('promoteGuest — disciplina de a uno: se promueve, sin copiar nada', (
 })
 
 /*
- *. `0033` agregó dos guards que devuelven una
- *Frase en castellano cuando `disciplines.config` está corrupta, y la 
+ * S57. `0033` agregó dos guards que devuelven una
+ * frase en castellano cuando `disciplines.config` está corrupta, y la auditoría
  * midió la matriz de siete casos: seis pasaron a mensaje legible y UNO seguía
  * dando el error crudo de Postgres —`invalid input syntax for type integer:
  * "ocho"`— porque el cast `(config ->> 'squadSize')::int` del `select … into`

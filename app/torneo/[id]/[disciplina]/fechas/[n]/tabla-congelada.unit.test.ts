@@ -3,18 +3,18 @@ import { members, pair, single, type Side, type SideStanding } from '@/core'
 import { frozenTableRows, orderMoved } from './tabla-congelada'
 
 /**
- *. El arreglo de W55 congeló el orden de la tabla
+ * W57. El arreglo de W55 congeló el orden de la tabla
  * de una fecha cerrada usando `awards.position`, con `?? Number.MAX_SAFE_INTEGER`
  * para los lados que no tienen fila en `awards`. Un lado hecho SÓLO de invitados
  * no cobra (`core/awards.ts`: "A pair made only of guests is outside the
  * championship altogether. **It keeps its place in the matchday table** but
  * consumes no paying position"), así que se iba al FONDO: la pareja de dos
  * invitados que ganó los 4 partidos con +16 pasó de PRIMERA a ÚLTIMA. Medido
- *Por la con navegador real contra los dos builds, y **también con
+ * por la auditoría con navegador real contra los dos builds, y **también con
  * `pair_size = 2`, que es el camino de producción** — el `sort` nunca estuvo
  * gateado por la aridad.
  *
- *Entró sin una sola aserción nueva y de ahí salieron W56 y W57. Esto es lo
+ * W55 entró sin una sola aserción nueva y de ahí salieron W56 y W57. Esto es lo
  * que faltaba: **la columna de puntos es monótona decreciente Y el lado sin
  * award conserva su lugar deportivo**.
  */
@@ -113,7 +113,7 @@ describe('frozenTableRows', () => {
 })
 
 /**
- *. El mismo arreglo de W55 dejó el pie de la tabla
+ * W56. El mismo arreglo de W55 dejó el pie de la tabla
  * leyendo el orden VIVO mientras la tabla pasó al congelado: decía "Jugador de
  * test 4 quedó 2° por diferencia de games" sobre quien la tabla dibuja PRIMERO,
  * citando como mejor a alguien que aparece dos filas más abajo. La tabla no

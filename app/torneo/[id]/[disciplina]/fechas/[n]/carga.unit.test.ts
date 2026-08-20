@@ -7,8 +7,8 @@ import { PanelGoles } from './carga'
  * El panel de marcador abierto, RENDERIZADO.
  *
  * Las dos cosas que la ronda 21 encontró abriéndolo en un navegador —que el
- *Botón se apaga sin decir por qué y que no se ve dónde está el foco
- *No las puede ver un test sobre la función que valida: son atributos y
+ * botón se apaga sin decir por qué (S74) y que no se ve dónde está el foco
+ * (S72)— no las puede ver un test sobre la función que valida: son atributos y
  * clases del DOM. Por eso esto renderiza el JSX y mira el HTML.
  *
  * Lo que NO cubre: la interacción. Acá no se tipea ni se clickea; lo que se

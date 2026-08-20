@@ -313,13 +313,13 @@ describe('assertPointsCoverMatchday', () => {
   })
 
   /*
-   *. C16 arregló el DIVISOR y dejó el
+   * W41. C16 arregló el DIVISOR y dejó el
    * SUSTRAENDO: un lock de dos invitados se restaba como UN lado que no cobra,
    * sea cual sea la aridad. De a dos eso es exacto — los dos invitados son un
    * lado solo. De a uno son DOS lados, porque cada invitado juega solo
    * (`buildSides` con `sideSize === 1` ignora `fixedPairs` entero).
    *
-   *La consecuencia medida por la: plantel de 8 de a uno con los 8
+   * La consecuencia medida por la auditoría: plantel de 8 de a uno con los 8
    * valores de puntos + una pareja invitada rebotaba con "La fecha deja 9
    * competidores... sólo 8 posiciones". Son 8 competidores, no 9. Y como
    * `addGuestPair` es HOY el único camino para sumar un invitado a una fecha

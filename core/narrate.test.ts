@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { formatLabel, formatsLabel, narrateRules } from './narrate'
+import { formatLabel, formatsLabel, narrateRules, thirdPlaceNote } from './narrate'
 import { MASTERS_MATCHES, MASTERS_SIZE } from './constants'
-import type { SeasonConfig } from './types'
+import { pair } from './side'
+import type { MatchResult, Phase, Side, SeasonConfig } from './types'
 
 const CONFIG: SeasonConfig = {
   squadSize: 12,
@@ -215,5 +216,36 @@ describe('formatsLabel', () => {
 
   it('sin disciplinas no inventa una frase', () => {
     expect(formatsLabel([])).toBe('')
+  })
+})
+
+// Decisión #3990: el único costo vivo que quedaba de #3979 ("se puede cerrar
+// la fecha sin jugar el tercer puesto") era que nadie se enteraba de que el
+// 3º/4º salió de la tabla de grupos y no de la cancha. Esta línea lo cuenta.
+describe('thirdPlaceNote', () => {
+  const A = pair('a1', 'a2')
+  const B = pair('b1', 'b2')
+
+  function playedMatch(fase: Phase, sideA: Side, sideB: Side): MatchResult {
+    return { round: 1, fase, grupo: 1, sideA, sideB, sets: [{ gamesA: 4, gamesB: 1 }] }
+  }
+
+  it('cuenta que el tercer puesto se definió por la tabla cuando ese partido no se jugó', () => {
+    const semis = [playedMatch('SEMI', A, B), playedMatch('SEMI', A, B)]
+    const final = playedMatch('FINAL', A, B)
+    expect(thirdPlaceNote([...semis, final])).toBe(
+      'El tercer puesto se definió por la tabla de grupos: no se jugó el partido.',
+    )
+  })
+
+  it('no dice nada cuando el tercer puesto se jugó de verdad', () => {
+    const semis = [playedMatch('SEMI', A, B), playedMatch('SEMI', A, B)]
+    const playoff = playedMatch('TERCER_PUESTO', A, B)
+    const final = playedMatch('FINAL', A, B)
+    expect(thirdPlaceNote([...semis, playoff, final])).toBeNull()
+  })
+
+  it('no dice nada sin semifinales: no hay 3º/4º que la llave tenga que explicar', () => {
+    expect(thirdPlaceNote([playedMatch('FINAL', A, B)])).toBeNull()
   })
 })

@@ -1,6 +1,7 @@
 import { MASTERS_MATCHES, MASTERS_SIZE, MAX_PLAYERS, MIN_PLAYERS } from './constants'
+import { thirdPlaceByGroupTable } from './knockout'
 import { usesSetsDiff } from './standings'
-import type { MatchFormat, SeasonConfig } from './types'
+import type { MatchFormat, MatchResult, SeasonConfig } from './types'
 
 /**
  * La etiqueta corta del formato: "1 set a 4 games", "3 sets a 4 games",
@@ -186,6 +187,19 @@ function zeroTail(points: number[]): string {
     return 'De ahí para abajo no se suma nada: en esta temporada sólo puntúa el que gana la fecha.'
   }
   return `De ahí para abajo no se suma nada: en esta temporada sólo puntúan los primeros ${paying} puestos.`
+}
+
+/**
+ * La línea de relato de la decisión #3990 (mitigación del costo aceptado en
+ * #3979): cuando el tercer puesto no se jugó y salió de la tabla de grupos en
+ * vez de la cancha, la fecha cerrada lo dice — dos jugadores se reparten 5 y
+ * 3 puntos de campeonato (curva de pádel) por una razón que la app conoce y
+ * antes no contaba. `null` cuando el partido se jugó de verdad, o cuando la
+ * llave no tuvo semifinales (no hay 3º/4º que explicar).
+ */
+export function thirdPlaceNote(matches: readonly MatchResult[]): string | null {
+  if (!thirdPlaceByGroupTable(matches)) return null
+  return 'El tercer puesto se definió por la tabla de grupos: no se jugó el partido.'
 }
 
 function ordinal(position: number): string {

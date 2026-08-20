@@ -256,3 +256,51 @@ describe('disciplineProfile', () => {
     expect(validateConfig(disciplineProfile('FIFA', valid).config, 2)).toEqual([])
   })
 })
+
+// ── El lado de UNO ya tiene tabla de puntos (decisión #3963) ─────────────────
+//
+// `DEFAULT_POINTS` sólo tenía 4, 5 y 6 lados —pensadas para parejas—, así que
+// `defaultConfig(8, 1)` devolvía `points: []` y `validateConfig` lo rechazaba
+// con "Con un plantel de 8 hacen falta 8 valores de puntos, no 0.". Era el
+// primero de los tres bloqueos del 1v1, y el único que era decisión de
+// producto.
+//
+// Stefano eligió la curva de pádel de 6 lados TAL CUAL, con ceros abajo: sólo
+// puntúan los primeros seis puestos. Con 12 en cancha, la mitad de la fecha se
+// va sin sumar — aceptado explícitamente.
+describe('DEFAULT_POINTS con lados de uno', () => {
+  it('un plantel de 8 de a uno son 8 lados y ahora tiene sus 8 valores', () => {
+    expect(defaultConfig(8, 1).points).toEqual([10, 7, 5, 3, 2, 1, 0, 0])
+  })
+
+  it('los primeros seis son EXACTAMENTE la curva de pádel de 6 lados', () => {
+    // No es "parecida": es la misma lista. Si alguien toca una, las dos tienen
+    // que moverse juntas o el mismo puesto paga distinto según la disciplina.
+    const padel = defaultConfig(12, 2).points
+    for (const squadSize of [8, 9, 10, 11, 12]) {
+      expect(defaultConfig(squadSize, 1).points.slice(0, 6)).toEqual(padel)
+    }
+  })
+
+  it('cada plantel de a uno recibe exactamente un valor por lado', () => {
+    for (const squadSize of [8, 9, 10, 11, 12]) {
+      expect(defaultConfig(squadSize, 1).points).toHaveLength(squadSize)
+    }
+  })
+
+  it('y `validateConfig` ya no las rechaza', () => {
+    for (const squadSize of [8, 9, 10, 11, 12]) {
+      expect(validateConfig(defaultConfig(squadSize, 1), 1)).toEqual([])
+    }
+  })
+
+  it('del 7° puesto para abajo no suma nadie', () => {
+    expect(defaultConfig(12, 1).points.slice(6)).toEqual([0, 0, 0, 0, 0, 0])
+  })
+
+  it('el pádel no se movió: sigue mirando 4, 5 y 6 lados', () => {
+    expect(defaultConfig(8, 2).points).toEqual([10, 6, 3, 1])
+    expect(defaultConfig(10, 2).points).toEqual([10, 7, 5, 3, 1])
+    expect(defaultConfig(12, 2).points).toEqual([10, 7, 5, 3, 2, 1])
+  })
+})

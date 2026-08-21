@@ -119,6 +119,10 @@ export { computeAwards } from './awards'
 // armado (`armado-state.ts`, `matchdayShape`) es su primer consumidor real,
 // fuera de core/ — antes prometía el número del round robin incluso con
 // grupos ya elegidos.
+// `offerableFormats` sale ahora (W75, verify-report-pr21 #4004):
+// `SelectorDeFormato` (`armado.tsx`) es su primer consumidor real — antes el
+// selector sólo dejaba aceptar o rechazar el único formato sugerido, nunca
+// elegir "otro" de verdad (REQ-D8-1).
 export {
   suggestFormat,
   groupSides,
@@ -132,6 +136,7 @@ export {
   isUnplayedThirdPlace,
   drawIsLegal,
   matchCountForFormat,
+  offerableFormats,
 } from './knockout'
 
 // ── The season ───────────────────────────────────────────────────────────────

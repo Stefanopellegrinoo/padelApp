@@ -13,6 +13,7 @@ import {
   thirdPlaceByGroupTable,
   drawIsLegal,
   matchCountForFormat,
+  offerableFormats,
 } from './knockout'
 import { pair, single } from './side'
 import type { MatchdayFormat, MatchResult, Phase, Side, SideStanding } from './types'
@@ -459,5 +460,59 @@ describe('matchCountForFormat', () => {
     const format: MatchdayFormat = { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 }
     // C(5,2) + C(4,2) = 10 + 6 = 16 de grupo, + 4 de llave = 20.
     expect(matchCountForFormat(format, 9)).toBe(20)
+  })
+})
+
+/**
+ * W75 (verify-report-pr21 #4004): el selector ofrecía "aceptar o rechazar
+ * la sugerencia" — un solo botón de grupos, el sugerido o el guardado. El
+ * spec pide "el admin elige OTRO formato", así que acá se decide de verdad
+ * cuáles son "otro formato" válido para ofrecer.
+ *
+ * Decisión de Stefano (`decisions/formatos-ofrecidos-en-el-armado`): además
+ * de "todos contra todos" (siempre), se ofrece cada `GROUPS_KNOCKOUT` de
+ * `groups ∈ {2, 4}` donde CADA grupo tenga 3 lados o más
+ * (`floor(sides/groups) >= 3`). Dos razones, no una:
+ *
+ * 1. `groups = 1` queda afuera SIEMPRE, sin excepción: un grupo + llave es
+ *    el mismo round robin de siempre más un partido extra
+ *    (`matchCountForFormat` de 1 grupo = `combinations(sides) + 1`) — nunca
+ *    ahorra nada, y `suggestFormat` tampoco lo propone jamás.
+ * 2. Un grupo de 2 lados con `qualifiersPerGroup = 2` tiene tasa de
+ *    eliminación CERO: pasan los dos, el grupo no decide nada. No es una
+ *    regla estética, es aritmética.
+ */
+describe('offerableFormats', () => {
+  it('4 lados: sólo round robin — 2 grupos daría grupos de 2, eliminación cero', () => {
+    expect(offerableFormats(4)).toEqual([{ kind: 'ROUND_ROBIN' }])
+  })
+
+  it('6 lados: round robin + 2 grupos (grupos de 3, la aritmética alcanza)', () => {
+    expect(offerableFormats(6)).toEqual([
+      { kind: 'ROUND_ROBIN' },
+      { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 },
+    ])
+  })
+
+  it('8 lados: round robin + 2 grupos, NUNCA 4 — 4 grupos de 8 lados da grupos de 2, eliminación cero', () => {
+    expect(offerableFormats(8)).toEqual([
+      { kind: 'ROUND_ROBIN' },
+      { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 },
+    ])
+  })
+
+  it('12 lados: round robin + 2 grupos + 4 grupos (grupos de 3, el mínimo que decide algo)', () => {
+    expect(offerableFormats(12)).toEqual([
+      { kind: 'ROUND_ROBIN' },
+      { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 },
+      { kind: 'GROUPS_KNOCKOUT', groups: 4, qualifiersPerGroup: 2 },
+    ])
+  })
+
+  it('nunca ofrece "1 grupo + llave": siempre es el round robin de siempre más un partido', () => {
+    for (const sides of [4, 6, 8, 12]) {
+      const formats = offerableFormats(sides)
+      expect(formats.some((format) => format.kind === 'GROUPS_KNOCKOUT' && format.groups === 1)).toBe(false)
+    }
   })
 })

@@ -431,3 +431,35 @@ export function matchCountForFormat(format: MatchdayFormat, sides: number): numb
   if (format.kind === 'ROUND_ROBIN') return combinations(sides)
   return groupStageMatchCount(sides, format.groups) + knockoutMatchCount(format.groups, format.qualifiersPerGroup)
 }
+
+/** El tamaño de grupo MÁS CHICO que deja `sides` lados en `groups` grupos (reparto zigzag de `groupSides`). */
+function smallestGroupSize(sides: number, groups: number): number {
+  return Math.floor(sides / groups)
+}
+
+/**
+ * Los formatos que el selector puede OFRECER para `sides` lados (W75,
+ * verify-report-pr21 #4004 / decisión de Stefano en
+ * `decisions/formatos-ofrecidos-en-el-armado`): `ROUND_ROBIN` siempre, más
+ * cada `GROUPS_KNOCKOUT` de `groups ∈ {2, 4}` (`knockoutMatchups` sabe armar
+ * también 1, ver abajo por qué queda afuera) donde CADA grupo tenga 3 lados o
+ * más (`smallestGroupSize(sides, groups) >= 3`).
+ *
+ * Dos razones, no una:
+ * 1. `groups = 1` queda afuera SIEMPRE, sin excepción: un grupo + llave es
+ *    el mismo round robin de siempre más un partido extra
+ *    (`matchCountForFormat` de 1 grupo = `combinations(sides) + 1`) — nunca
+ *    ahorra nada, y `suggestFormat` tampoco lo propone jamás.
+ * 2. Un grupo de 2 lados con `qualifiersPerGroup = 2` tiene tasa de
+ *    eliminación CERO: pasan los dos, el grupo no decide nada. No es una
+ *    regla estética, es aritmética.
+ */
+export function offerableFormats(sides: number): MatchdayFormat[] {
+  const formats: MatchdayFormat[] = [{ kind: 'ROUND_ROBIN' }]
+  for (const groups of [2, 4] as const) {
+    if (smallestGroupSize(sides, groups) >= 3) {
+      formats.push({ kind: 'GROUPS_KNOCKOUT', groups, qualifiersPerGroup: 2 })
+    }
+  }
+  return formats
+}

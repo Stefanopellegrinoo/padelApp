@@ -457,6 +457,57 @@ describe('closeMatchday con llave (GROUPS_KNOCKOUT, Rebanada D1)', () => {
   })
 
   /**
+   * #3989 por tercera vez (guards en serie): el guard de W79 (`closeMatchday`,
+   * TS) ahora corta el test de arriba ANTES de llegar a la RPC -- así que ese
+   * test YA NO prueba la rendija de `close_matchday` (0044, "el TERCER_PUESTO
+   * sólo queda exento con `formato.kind = 'GROUPS_KNOCKOUT'`). Medido mutando
+   * `0044` (sacándole la condición de formato, dejando sólo `m.fase =
+   * 'TERCER_PUESTO'`, restatement de 0041): `db:reset` + la suite COMPLETA
+   * queda VERDE -- ningún test cae. La rendija de 0044 es, hoy, un guard sin
+   * un solo test que lo alcance directo.
+   *
+   * Éste llama `close_matchday` DIRECTO, salteando `closeMatchday` (TS) y
+   * salteando el guard de W79 con él -- mismo patrón que "la RPC en sí" de
+   * arriba (SEMI sin jugar). Con el MISMO escenario de C31 (llave completa
+   * redrafteada a ROUND_ROBIN, TERCER_PUESTO sin jugar) pero sin pasar por el
+   * wrapper, la RPC tiene que rechazar SOLA.
+   */
+  it(
+    'la RPC en sí (sin pasar por el wrapper TS ni por el guard de W79) rechaza el TERCER_PUESTO sin ' +
+      'jugar de una llave reformateada a ROUND_ROBIN -- la rendija de 0044 es SÓLO de GROUPS_KNOCKOUT (C31/#3989)',
+    async () => {
+      const { admin, matchdayId, matches } = await openGroupsKnockout(8, {
+        kind: 'GROUPS_KNOCKOUT',
+        groups: 2,
+        qualifiersPerGroup: 2,
+      })
+      for (const match of matches) {
+        await saveResult(admin.client, match.id, [{ gamesA: 3, gamesB: 0 }])
+      }
+      await advancePhase(admin.client, matchdayId) // GRUPO -> SEMI
+      const semis = (await matchesOf(matchdayId)).filter((match) => match.fase === 'SEMI')
+      for (const semi of semis) {
+        await saveResult(admin.client, semi.id, [{ gamesA: 3, gamesB: 0 }])
+      }
+      await advancePhase(admin.client, matchdayId) // SEMI -> FINAL + TERCER_PUESTO
+      const final = (await matchesOf(matchdayId)).find((match) => match.fase === 'FINAL')
+      if (final === undefined) throw new Error('Falta la final.')
+      await saveResult(admin.client, final.id, [{ gamesA: 3, gamesB: 0 }])
+      // TERCER_PUESTO queda SIN JUGAR, igual que en el test de C31 de arriba.
+
+      await redraftMatchday(admin.client, matchdayId) // OPEN -> DRAFT, no borra matches
+      await setMatchdayFormat(admin.client, matchdayId, { kind: 'ROUND_ROBIN' }) // legal en DRAFT
+      await openMatchday(admin.client, matchdayId) // DRAFT -> OPEN, sin re-sortear
+
+      // RPC directa: el guard de W79 (`closeMatchday`, TS) no está en el
+      // camino -- lo único que puede rechazar acá es 0044.
+      const { error } = await admin.client.rpc('close_matchday', { p_matchday: matchdayId, p_awards: [] })
+
+      expect(error?.message).toBe('Faltan resultados por cargar.')
+    },
+  )
+
+  /**
    * W79 (verify-report-pr21-cierre, #4016): la mitad de C31 que 0044 no
    * cerró. A diferencia del test de arriba, ACÁ el TERCER_PUESTO SÍ se
    * juega -- la rendija de `close_matchday` (0044, "sólo con

@@ -48,15 +48,25 @@ const SIDE_SIZES: { value: SideSize; label: string }[] = [
  *
  * Nace en "Parejas" (`pairSize=2`) en las dos pantallas: ningún torneo de
  * pádel existente cambia si nadie toca este control.
+ *
+ * `name` es un prop, no un literal fijo (W76/decisión #4017): el wizard
+ * ahora monta UNA instancia POR disciplina marcada (`PasoDisciplinas`, más
+ * abajo), y dos `<input type="radio">` con el mismo `name` son UN solo grupo
+ * para el navegador — marcar "Individual" en FIFA desmarcaría "Parejas" en
+ * Pádel sin que ninguna línea de React lo pida. El default preserva a
+ * Ajustes (`disciplinas.tsx`), que sigue montando una sola instancia suelta
+ * y no pasa `name`.
  */
 export function SelectorDeLados({
   pairSize,
   onChange,
   disabled = false,
+  name = 'pairSize',
 }: {
   pairSize: SideSize
   onChange: (next: SideSize) => void
   disabled?: boolean
+  name?: string
 }) {
   return (
     <fieldset className="flex flex-col gap-2">
@@ -70,7 +80,7 @@ export function SelectorDeLados({
         >
           <input
             type="radio"
-            name="pairSize"
+            name={name}
             disabled={disabled}
             checked={pairSize === value}
             onChange={() => onChange(value)}
@@ -80,6 +90,71 @@ export function SelectorDeLados({
         </label>
       ))}
     </fieldset>
+  )
+}
+
+/**
+ * El paso 1: nombre del torneo aparte, disciplinas acá — un checkbox por
+ * `DisciplineKind` y, si está marcada, SU PROPIO `SelectorDeLados` al lado
+ * (W76/decisión #4017, cierra `verify-report-pr21-cierre` #4016).
+ *
+ * Antes había UN solo radio "Lados" en el paso 4, compartido por todas las
+ * marcadas — con dos o más, el dato se ignoraba en silencio mientras la
+ * pantalla seguía mostrando la curva de la elegida (la mentira que W76
+ * midió: FIFA en "Individual" dibujaba 8 puntos y el torneo nacía con las
+ * dos en `pair_size=2`). Con un selector por disciplina no hay ambigüedad
+ * que ignorar: cada radio manda sobre su propia fila, y la pantalla nunca
+ * promete algo que el dato no vaya a tener.
+ *
+ * Exportado y separado de `Wizard` por el mismo motivo que `PasoFormato`
+ * (Rebanada D2, PR21): `step` es estado interno y sin clicks la suite nunca
+ * llega hasta acá — entra con las props que quiera el test.
+ */
+export function PasoDisciplinas({
+  picked,
+  pairSizes,
+  warning,
+  onToggle,
+  onChangePairSize,
+}: {
+  picked: readonly DisciplineKind[]
+  pairSizes: Record<DisciplineKind, SideSize>
+  warning: string | null
+  onToggle: (kind: DisciplineKind) => void
+  onChangePairSize: (kind: DisciplineKind, next: SideSize) => void
+}) {
+  return (
+    <>
+      <fieldset className="flex flex-col gap-2">
+        <legend className="text-[11.5px] font-extrabold uppercase tracking-[.14em] text-muted">
+          Disciplinas
+        </legend>
+        {DISCIPLINE_KINDS.map((kind) => (
+          <div
+            key={kind}
+            className="flex flex-col gap-3 rounded-field border-[1.5px] border-line bg-surface p-3.5"
+          >
+            <label className="flex items-center gap-2.5 text-[14.5px] font-[700]">
+              <input
+                type="checkbox"
+                checked={picked.includes(kind)}
+                onChange={() => onToggle(kind)}
+                className="h-5 w-5 shrink-0 accent-accent"
+              />
+              {DISCIPLINE_LABELS[kind]}
+            </label>
+            {picked.includes(kind) && (
+              <SelectorDeLados
+                name={`pairSize-${kind}`}
+                pairSize={pairSizes[kind]}
+                onChange={(next) => onChangePairSize(kind, next)}
+              />
+            )}
+          </div>
+        ))}
+      </fieldset>
+      {warning !== null && <Aviso>{warning}</Aviso>}
+    </>
   )
 }
 
@@ -199,24 +274,25 @@ function Stepper({
  * los formatos de todas — con Pádel y FIFA marcados, "Sets por partido" y
  * "Games por set" siguen gobernando la mitad de pádel y tienen que estar.
  *
- * `pairSize`/`onChangePairSize` dibujan acá el radio "Lados" (Rebanada F):
- * va antes de los puntos porque la curva que se ve depende de él (decisión
- * #3963) — elegir Lados primero es lo que hace que esos puntos tengan sentido.
+ * Ya NO dibuja el radio "Lados" (W76/decisión #4017): bajó al paso 1, uno
+ * por disciplina (`PasoDisciplinas`, arriba) — con dos disciplinas pudiendo
+ * traer un `pairSize` DISTINTO cada una, un solo radio acá ya no tiene un
+ * valor único que mostrar. `config.points`, que este paso sigue editando,
+ * es siempre la curva de a dos (C29): la disciplina que elija "Individual"
+ * arma la suya aparte, sin pasar por acá — no editable a mano en el wizard,
+ * mismo límite que ya tenía cualquier disciplina fuera de la marcada `pairSize`
+ * en la versión anterior de este mismo mecanismo.
  */
 export function PasoFormato({
   config,
   picked,
   errors,
-  pairSize,
   onChange,
-  onChangePairSize,
 }: {
   config: SeasonConfig
   picked: readonly DisciplineKind[]
   errors: string[]
-  pairSize: SideSize
   onChange: (next: SeasonConfig) => void
-  onChangePairSize: (next: SideSize) => void
 }) {
   const steppers = steppersFor(
     buildDisciplines(picked, config).map((row) => row.config.matchFormat),
@@ -224,8 +300,6 @@ export function PasoFormato({
 
   return (
     <>
-      <SelectorDeLados pairSize={pairSize} onChange={onChangePairSize} />
-
       <p className="text-[13.5px] font-[550] leading-[1.5] text-muted">
         Son los puntos de cada posición de la fecha. Si una fecha la juegan menos parejas, se usan
         los primeros de la lista — ganar siempre suma {config.points[0] ?? 0}.
@@ -310,13 +384,16 @@ export function Wizard({ myName }: { myName: string }) {
     mySeat: myName.trim().length === 0 ? null : 0,
   }))
   const [config, setConfig] = useState<SeasonConfig>(() => configFor(MIN_PLAYERS))
-  // Parejas de entrada (pairSize=2): sin tocar el radio "Lados" el torneo
-  // nace igual que siempre — no-regresión de la Rebanada F.
-  const [pairSize, setPairSize] = useState<SideSize>(2)
   // Pádel marcado de entrada: sin tocar nada, el torneo nace igual que
   // siempre (una sola PADEL) — el checkbox no es una regresión, es el mismo
   // default de antes de PR11 hecho explícito.
   const [disciplines, setDisciplines] = useState<DisciplineKind[]>(['PADEL'])
+  // Parejas de entrada para las dos disciplinas (pairSize=2): sin tocar
+  // ningún radio "Lados" el torneo nace igual que siempre — no-regresión de
+  // la Rebanada F. W76/decisión #4017: UN valor POR disciplina, no uno solo
+  // para todas — "Individual" en FIFA ya no puede pisarle el dato a Pádel
+  // ni la pantalla puede mostrar un radio que el submit ignora en silencio.
+  const [pairSizes, setPairSizes] = useState<Record<DisciplineKind, SideSize>>({ PADEL: 2, FIFA: 2 })
   const [error, setError] = useState<string | null>(null)
   const [leaving, setLeaving] = useState(false)
   const [created, setCreated] = useState<{ seasonId: string; inviteToken: string } | null>(null)
@@ -330,17 +407,15 @@ export function Wizard({ myName }: { myName: string }) {
 
   const setSquad = (next: Squad) => {
     setSquadState(next)
-    setConfig((current) => resizeConfig(current, filledCount(next.names), pairSize))
+    setConfig((current) => resizeConfig(current, filledCount(next.names)))
   }
 
-  // Tocar "Lados" rehace la config entera con la curva que le corresponde a
-  // ESE `sideSize` (misma idea que "Usar los defaults"): a diferencia de un
-  // cambio de plantel, acá `resizeConfig` no alcanza sola —su guarda de salida
-  // temprana mira `squadSize`, no `sideSize`, así que un plantel sin cambios
-  // la dejaría pasar de largo y la curva vieja (de parejas) quedaría pisada.
-  const changePairSize = (next: SideSize) => {
-    setPairSize(next)
-    setConfig(configFor(filled, next))
+  // Cada radio "Lados" manda sólo sobre SU disciplina — a diferencia de la
+  // versión anterior (un solo control), tocar acá ya no rehace `config`: el
+  // paso 4 sigue siendo la curva de a dos siempre (C29), y la disciplina que
+  // elija "Individual" arma la suya aparte en `newTournamentPayload`.
+  const changePairSize = (kind: DisciplineKind, next: SideSize) => {
+    setPairSizes((current) => ({ ...current, [kind]: next }))
   }
 
   const blocked =
@@ -362,7 +437,7 @@ export function Wizard({ myName }: { myName: string }) {
     setError(null)
     startTransition(async () => {
       const result = await createTournament(
-        newTournamentPayload(name, squad, config, disciplines, pairSize),
+        newTournamentPayload(name, squad, config, disciplines, pairSizes),
       )
       if (!result.ok) {
         setError(result.error)
@@ -419,26 +494,13 @@ export function Wizard({ myName }: { myName: string }) {
               placeholder="Los Jueves 2026"
               className="rounded-field border-[1.5px] border-accent bg-surface p-[15px] text-[17px] font-[750] outline-none placeholder:font-medium placeholder:text-muted"
             />
-            <fieldset className="flex flex-col gap-2">
-              <legend className="text-[11.5px] font-extrabold uppercase tracking-[.14em] text-muted">
-                Disciplinas
-              </legend>
-              {DISCIPLINE_KINDS.map((kind) => (
-                <label
-                  key={kind}
-                  className="flex items-center gap-2.5 rounded-field border-[1.5px] border-line bg-surface p-3.5 text-[14.5px] font-[700]"
-                >
-                  <input
-                    type="checkbox"
-                    checked={disciplines.includes(kind)}
-                    onChange={() => setDisciplines(toggleDiscipline(disciplines, kind))}
-                    className="h-5 w-5 shrink-0 accent-accent"
-                  />
-                  {DISCIPLINE_LABELS[kind]}
-                </label>
-              ))}
-            </fieldset>
-            {disciplineWarning !== null && <Aviso>{disciplineWarning}</Aviso>}
+            <PasoDisciplinas
+              picked={disciplines}
+              pairSizes={pairSizes}
+              warning={disciplineWarning}
+              onToggle={(kind) => setDisciplines(toggleDiscipline(disciplines, kind))}
+              onChangePairSize={changePairSize}
+            />
           </>
         )}
 
@@ -549,14 +611,7 @@ export function Wizard({ myName }: { myName: string }) {
         )}
 
         {step === 3 && (
-          <PasoFormato
-            config={config}
-            picked={disciplines}
-            errors={errors}
-            pairSize={pairSize}
-            onChange={setConfig}
-            onChangePairSize={changePairSize}
-          />
+          <PasoFormato config={config} picked={disciplines} errors={errors} onChange={setConfig} />
         )}
 
         {step === 4 && created !== null && (
@@ -618,7 +673,7 @@ export function Wizard({ myName }: { myName: string }) {
         {step === 3 && (
           <button
             type="button"
-            onClick={() => setConfig(configFor(filled, pairSize))}
+            onClick={() => setConfig(configFor(filled))}
             className="rounded-field border-[1.5px] border-line px-4 py-4 text-[14px] font-extrabold"
           >
             Usar los defaults

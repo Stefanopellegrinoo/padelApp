@@ -316,23 +316,26 @@ export function submitSeats({ names, mySeat }: Squad): {
  * "Lados". El plantel llega siempre par acá (`squadWarning`, paso 2), así que
  * esa curva de a dos siempre existe.
  *
- * W69 (mismo payload, mismo fix): "Lados" es UN solo control para las
- * disciplinas marcadas del paso 4 — sólo es inequívoco con UNA marcada. Con
- * dos o más, aplicar el `pairSize` elegido a TODAS sería herencia cruzada
- * (REQ-D2-1, "sin herencia cruzada"): el pádel nacería 1v1 porque FIFA lo
- * pidió, sin que nadie lo haya elegido para pádel. Con dos o más marcadas se
- * ignora y todas nacen en 2 (Parejas), el default de siempre — elegir un
- * `pairSize` DISTINTO por disciplina en la misma alta es el wizard
- * multi-disciplina (PR11a), todavía sin construir; hasta que exista, la
- * salida segura es no aplicar un dato ambiguo, no adivinar a cuál de las
- * marcadas lo quiso el usuario.
+ * W69 (tanda de cierre, #4006) + W76/decisión #4017 (verify-report-pr21-cierre,
+ * #4016): "Lados" ERA un solo control para las disciplinas marcadas del paso
+ * 4 — sólo era inequívoco con UNA marcada, así que con dos o más se ignoraba
+ * y todas nacían en 2. Eso evitaba la herencia cruzada (REQ-D2-1) pero abría
+ * otra: la pantalla podía mostrar "Individual" tildado sin que el dato lo
+ * reflejara. El wizard ahora trae un selector POR disciplina (`pairSizes`,
+ * uno por cada `DisciplineKind`), así que acá cada disciplina arma SU PROPIA
+ * config con SU PROPIA curva — `picked.length` ya no importa: dos
+ * disciplinas nunca comparten `pairSize` a menos que el admin haya elegido
+ * lo mismo para las dos a propósito. `config` (el que entra y el que se
+ * devuelve como legado) sigue siendo SIEMPRE la curva de a dos (C29): el
+ * paso 4 ya no tiene un control que la cambie, ahora que "Lados" bajó al
+ * paso 1.
  */
 export function newTournamentPayload(
   name: string,
   squad: Squad,
   config: SeasonConfig,
   picked: readonly DisciplineKind[],
-  pairSize: SideSize,
+  pairSizes: Record<DisciplineKind, SideSize>,
 ): {
   name: string
   squadNames: string[]
@@ -344,19 +347,16 @@ export function newTournamentPayload(
   const squadSize = seats.squadNames.length
   const builtConfig = { ...config, squadSize }
 
-  const effectivePairSize: SideSize = picked.length === 1 ? pairSize : 2
-  const disciplineConfig: SeasonConfig =
-    effectivePairSize === pairSize
-      ? builtConfig
-      : { ...builtConfig, points: configFor(squadSize, effectivePairSize).points }
-  const legacyConfig: SeasonConfig =
-    pairSize === 2 ? builtConfig : { ...builtConfig, points: configFor(squadSize, 2).points }
-
   return {
     name,
     ...seats,
-    config: legacyConfig,
-    disciplines: buildDisciplines(picked, disciplineConfig, effectivePairSize),
+    config: builtConfig,
+    disciplines: picked.flatMap((kind) => {
+      const pairSize = pairSizes[kind]
+      const disciplineConfig: SeasonConfig =
+        pairSize === 2 ? builtConfig : { ...builtConfig, points: configFor(squadSize, pairSize).points }
+      return buildDisciplines([kind], disciplineConfig, pairSize)
+    }),
   }
 }
 

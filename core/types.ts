@@ -169,6 +169,15 @@ export interface SideStanding {
   position: number
 }
 
+/**
+ * Una porción de `Award.points`, con la razón por la que se sumó (REQ-D10-1,
+ * design #3801 PUNTO 8). Persiste 1:1 en `award_lines`.
+ */
+export interface AwardLine {
+  reason: string
+  points: number
+}
+
 export interface Award {
   entryId: EntryId
   /**
@@ -178,6 +187,15 @@ export interface Award {
    */
   position: number
   points: number
+  /**
+   * El desglose de `points`. Hoy siempre UNA línea —hay una sola fuente de
+   * puntos, la posición del día— y su suma es siempre igual a `points`
+   * (REQ-D10-1, `close_matchday` lo valida al cerrar). OBLIGATORIO y no `?`:
+   * un campo opcional es invisible para el compilador y para los tests
+   * (#3994) — acá el ripple de tipo es la señal que marca cada productor de
+   * `Award` que todavía no decide su desglose.
+   */
+  lines: AwardLine[]
 }
 
 export interface RankingRow {

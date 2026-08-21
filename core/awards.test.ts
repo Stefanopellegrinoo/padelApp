@@ -1,8 +1,15 @@
 import { describe, it, expect } from 'vitest'
 import { computeAwards } from './awards'
 import { defaultConfig } from './config'
+import { ordinal } from './narrate'
 import { pair, single } from './side'
-import type { Side, SideStanding, SeasonConfig } from './types'
+import type { AwardLine, Side, SideStanding, SeasonConfig } from './types'
+
+// Misma frase que produce `computeAwards`: si algún día cambia, este test se
+// entera por construcción y no por un literal que se desincroniza en silencio.
+const line = (position: number, points: number): AwardLine[] => [
+  { reason: `${ordinal(position)} de la fecha`, points },
+]
 
 const CONFIG: SeasonConfig = {
   squadSize: 12,
@@ -216,10 +223,31 @@ describe('computeAwards — el teorema de la promoción (spec 3.1)', () => {
     const awards = computeAwards(standings, CONFIG, ['g1'])
     // CONFIG.points[0] = 10, CONFIG.points[1] = 7: tipeados a mano, no calculados.
     expect(awards).toEqual([
-      { entryId: 'p1', position: 1, points: 10 },
-      { entryId: 'p2', position: 2, points: 7 },
-      { entryId: 'p3', position: 2, points: 7 },
+      { entryId: 'p1', position: 1, points: 10, lines: line(1, 10) },
+      { entryId: 'p2', position: 2, points: 7, lines: line(2, 7) },
+      { entryId: 'p3', position: 2, points: 7, lines: line(2, 7) },
     ])
+  })
+
+  // REQ-D10-1: hoy una sola fuente de puntos ⇒ una sola línea, con la misma
+  // suma que el total. El texto va TIPEADO A MANO acá (no vía `line()`, que
+  // reusa `ordinal` como el resto del archivo): es el único test que fija el
+  // string real, no una comparación de la función contra sí misma.
+  it('la línea del desglose dice "el 1º de la fecha" para quien salió primero', () => {
+    const awards = computeAwards(standings, CONFIG, ['g1'])
+    expect(awards.find((award) => award.entryId === 'p1')?.lines).toEqual([
+      { reason: 'el 1º de la fecha', points: 10 },
+    ])
+    expect(awards.find((award) => award.entryId === 'p2')?.lines).toEqual([
+      { reason: 'el 2º de la fecha', points: 7 },
+    ])
+  })
+
+  it('la suma de las líneas siempre da el total del award (REQ-D10-1)', () => {
+    for (const award of computeAwards(standings, CONFIG, ['g1'])) {
+      const sum = award.lines.reduce((total, l) => total + l.points, 0)
+      expect(sum).toBe(award.points)
+    }
   })
 
   // El teorema en sí: si g1 NO hubiera sido invitado —el hipotético "reabrir
@@ -233,13 +261,23 @@ describe('computeAwards — el teorema de la promoción (spec 3.1)', () => {
   it('si g1 no fuera invitado, se llevaría position 1 y 10 puntos: los mismos valores que ya tiene su pareja', () => {
     const awards = computeAwards(standings, CONFIG, [])
     const g1Award = awards.find((award) => award.entryId === 'g1')
-    expect(g1Award).toEqual({ entryId: 'g1', position: 1, points: 10 })
+    expect(g1Award).toEqual({ entryId: 'g1', position: 1, points: 10, lines: line(1, 10) })
   })
 
   it('y ningún otro award cambia entre las dos corridas: p2 y p3 siguen en position 2 con 7 puntos', () => {
     const awards = computeAwards(standings, CONFIG, [])
-    expect(awards.find((award) => award.entryId === 'p2')).toEqual({ entryId: 'p2', position: 2, points: 7 })
-    expect(awards.find((award) => award.entryId === 'p3')).toEqual({ entryId: 'p3', position: 2, points: 7 })
+    expect(awards.find((award) => award.entryId === 'p2')).toEqual({
+      entryId: 'p2',
+      position: 2,
+      points: 7,
+      lines: line(2, 7),
+    })
+    expect(awards.find((award) => award.entryId === 'p3')).toEqual({
+      entryId: 'p3',
+      position: 2,
+      points: 7,
+      lines: line(2, 7),
+    })
   })
 
   // ── el borde del teorema: dónde DEJA de valer ────────────────────────────
@@ -260,21 +298,21 @@ describe('computeAwards — el teorema de la promoción (spec 3.1)', () => {
     const awards = computeAwards(conParejaInvitada, CONFIG, ['g1', 'g2'])
     // CONFIG.points = [10, 7, 5, 3, 2, 1]. Literales tipeados a mano.
     expect(awards).toEqual([
-      { entryId: 'p1', position: 1, points: 10 },
-      { entryId: 'p2', position: 1, points: 10 },
-      { entryId: 'p3', position: 2, points: 7 },
-      { entryId: 'p4', position: 2, points: 7 },
+      { entryId: 'p1', position: 1, points: 10, lines: line(1, 10) },
+      { entryId: 'p2', position: 1, points: 10, lines: line(1, 10) },
+      { entryId: 'p3', position: 2, points: 7, lines: line(2, 7) },
+      { entryId: 'p4', position: 2, points: 7, lines: line(2, 7) },
     ])
   })
 
   it('recalculado con g1 ya en el plantel: su pareja pasa a cobrar y p3 y p4 CAEN a position 3 con 5 — el teorema no vale acá', () => {
     const awards = computeAwards(conParejaInvitada, CONFIG, ['g2'])
     expect(awards).toEqual([
-      { entryId: 'p1', position: 1, points: 10 },
-      { entryId: 'p2', position: 1, points: 10 },
-      { entryId: 'g1', position: 2, points: 7 },
-      { entryId: 'p3', position: 3, points: 5 },
-      { entryId: 'p4', position: 3, points: 5 },
+      { entryId: 'p1', position: 1, points: 10, lines: line(1, 10) },
+      { entryId: 'p2', position: 1, points: 10, lines: line(1, 10) },
+      { entryId: 'g1', position: 2, points: 7, lines: line(2, 7) },
+      { entryId: 'p3', position: 3, points: 5, lines: line(3, 5) },
+      { entryId: 'p4', position: 3, points: 5, lines: line(3, 5) },
     ])
   })
 })

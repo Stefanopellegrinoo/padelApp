@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { newTournamentPayload, type Squad } from '@/app/torneos/nuevo/wizard-state'
 import { defaultConfig, disciplineSlugs } from '@/core'
 import { seasonHeader } from './read'
 import { createSeason } from './season'
@@ -198,5 +199,66 @@ describe('createSeason con múltiples disciplinas (REQ-D1-1, contrato S13)', () 
       .eq('season_id', seasonId)
       .single()
     expect(data?.position).toBe(0)
+  })
+})
+
+/**
+ * C29 (verify-report-pr21, #4004): el radio "Individual" del wizard NO podía
+ * crear un torneo — `createSeason` lo rechazaba SIEMPRE. `newTournamentPayload`
+ * mandaba el MISMO objeto `config` como `seasons.config` (legado, validado con
+ * `sideSize` FIJO en 2, `db/season.ts:273`) y como `disciplines[0].config`
+ * (validado con `pairSize=1`). Con 8 lados de a uno esa config trae 8 valores
+ * de puntos: pasa la validación de la disciplina y rompe la del legado, que
+ * exige 4. No hay config que pase las dos — por eso el test entra por el
+ * camino REAL: `newTournamentPayload` + `createSeason` como `authenticated`,
+ * no un insert armado a mano como el resto de este archivo.
+ */
+describe('createSeason vía el wizard real, disciplina de a uno (C29)', () => {
+  it('el wizard con "Individual" crea el torneo: FIFA pair_size=1 con la curva de #3963', async () => {
+    const admin = await createTestUser()
+    const config = defaultConfig(8, 1)
+    const squad: Squad = { names: squadNames(8), mySeat: null }
+
+    const payload = newTournamentPayload('Liga FIFA', squad, config, ['FIFA'], 1)
+    const { seasonId } = await createSeason(admin.client, payload)
+
+    const db = adminClient()
+    const { data } = await db
+      .from('disciplines')
+      .select('kind, pair_size, config')
+      .eq('season_id', seasonId)
+      .single()
+    expect(data?.pair_size).toBe(1)
+    expect((data?.config as { points: number[] } | null)?.points).toEqual([10, 7, 5, 3, 2, 1, 0, 0])
+  })
+
+  /**
+   * W69 (mismo hallazgo, mismo payload): "Lados" es UN solo control para
+   * todo el paso 4 — sólo es inequívoco con una disciplina marcada. Con
+   * Pádel + FIFA juntos, aplicar `pairSize=1` a las dos sería herencia
+   * cruzada (REQ-D2-1: "sin herencia cruzada") — el pádel nacería 1v1 sin
+   * que nadie lo haya pedido para pádel. Con dos o más disciplinas
+   * marcadas, "Individual" se ignora y las dos nacen en 2 (Parejas): elegir
+   * pairSize distinto por disciplina en la misma alta es el wizard
+   * multi-disciplina (PR11a), todavía sin construir.
+   */
+  it('con Pádel + FIFA marcados, "Individual" no cruza a Pádel (W69, REQ-D2-1)', async () => {
+    const admin = await createTestUser()
+    const config = defaultConfig(8, 1)
+    const squad: Squad = { names: squadNames(8), mySeat: null }
+
+    const payload = newTournamentPayload('Mixto', squad, config, ['PADEL', 'FIFA'], 1)
+    const { seasonId } = await createSeason(admin.client, payload)
+
+    const db = adminClient()
+    const { data } = await db
+      .from('disciplines')
+      .select('kind, pair_size')
+      .eq('season_id', seasonId)
+      .order('position', { ascending: true })
+    expect(data).toEqual([
+      { kind: 'PADEL', pair_size: 2 },
+      { kind: 'FIFA', pair_size: 2 },
+    ])
   })
 })

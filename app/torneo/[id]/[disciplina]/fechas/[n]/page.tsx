@@ -392,6 +392,34 @@ export default async function FechaDetailPage({ params }: PageProps) {
       : detail.matches
     const standings = computeStandings(detail.sides, standingsMatches, config, snapshot, matchday.allowsDraw)
 
+    // S82 (verify-report-pr21 #4004): la tabla del día de una fecha
+    // `GROUPS_KNOCKOUT` OPEN mostraba UNA sola tabla con las filas de los dos
+    // grupos mezcladas. Con grupos, la pregunta del admin es "¿quién
+    // clasifica de MI grupo?" y una tabla combinada no la contesta: dos
+    // lados con el mismo puntaje pueden estar en grupos distintos y no
+    // competir entre sí por nada. Sólo OPEN: la fecha CERRADA cruza los
+    // grupos A PROPÓSITO (decisión #3962) — el campeón sale de la FINAL, no
+    // de su grupo, y partir esa tabla rompería el orden mixto que ya costó
+    // dos rondas fijar (W55/W56/W57).
+    //
+    // No recalcula nada: `standingsMatches` (arriba) ya viene filtrado a
+    // `fase === 'GRUPO'` cuando `isGroupsKnockout`, y cada fila de partido
+    // trae su propio `grupo` (lo escribe `groupedMatches`, `db/matchday.ts`,
+    // al generar los partidos) — la MISMA partición que `matchupsAfterGroups`
+    // arma con `groupSides` para calcular la llave. Alcanza con leerlo.
+    const groupOfSide = new Map<string, number>()
+    for (const match of standingsMatches) {
+      groupOfSide.set(sideKey(match.sideA), match.grupo)
+      groupOfSide.set(sideKey(match.sideB), match.grupo)
+    }
+    const formatoAbierto = matchday.formato
+    const groupedStandings: SideStanding[][] =
+      status === 'OPEN' && formatoAbierto.kind === 'GROUPS_KNOCKOUT'
+        ? Array.from({ length: formatoAbierto.groups }, (_, index) =>
+            standings.filter((row) => groupOfSide.get(sideKey(row.side)) === index + 1),
+          )
+        : []
+
     const phase = currentPhase(detail.matches)
     const phaseComplete = phase !== null && phaseIsComplete(detail.matches, phase)
     const canClosePhase = header.isAdmin && isGroupsKnockout && phase !== null && phase !== 'FINAL' && phaseComplete
@@ -734,38 +762,72 @@ export default async function FechaDetailPage({ params }: PageProps) {
         ) : (
         <div className="flex flex-col gap-2">
           <p className="text-[15px] font-extrabold tracking-[-.02em]">Tabla de la fecha</p>
-          <TablaDelDia
-            tituloLado={discipline.pairSize === 1 ? 'Jugador' : 'Pareja'}
-            muestraEmpates={matchday.allowsDraw}
-            filas={tableRows.map((row) => ({
-              key: sideKey(row.side),
-              nombre: sideName(row.side),
-              esInvitado: status === 'CLOSED' && hasGuest(row.side),
-              won: row.won,
-              drawn: row.drawn,
-              gamesDiff: row.gamesDiff,
-              // La columna son "los puntos que se llevó cada jugador"
-              // (`ui-screens.md` §9), y en la pareja del invitado los dos no se
-              // llevan lo mismo: el invitado 0 y su compañero lo que le tocó.
-              // El `??` resuelve eso solo, porque `computeAwards` no le escribe
-              // award al invitado. Antes esta fila mostraba `0` fijo, y con eso
-              // la pareja que ganaba la fecha 3-0 aparecía sin puntos abajo de
-              // otra con un partido ganado — contradiciendo la nota que está
-              // más abajo, "su compañero sí". Lo encontró la Task 14.
-              // El primer miembro del lado que tenga award manda: en la pareja
-              // del invitado los dos no cobran lo mismo (el invitado 0), y en un
-              // lado de uno hay un solo miembro y es el suyo. `members` recorre
-              // los que haya, así que la regla es la misma para las dos formas.
-              pts:
-                status === 'OPEN'
-                  ? '—'
-                  : String(
-                      members(row.side)
-                        .map((entryId) => pointsByEntry.get(entryId)?.points)
-                        .find((points) => points !== undefined) ?? 0,
-                    ),
-            }))}
-          />
+          {/* S82 (verify-report-pr21 #4004): sólo OPEN se parte por grupo —
+              `groupedStandings` (arriba) está VACÍO fuera de
+              `OPEN && GROUPS_KNOCKOUT`, así que ROUND_ROBIN y la fecha
+              CERRADA (decisión #3962, orden mixto que cruza los grupos a
+              propósito) siguen dibujando la MISMA tabla única de siempre, sin
+              tocar una línea de ese camino. */}
+          {groupedStandings.length > 0 ? (
+            <div className="flex flex-col gap-4">
+              {groupedStandings.map((rows, index) => (
+                <div key={`grupo-${index + 1}`} className="flex flex-col gap-1.5">
+                  <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
+                    Grupo {index + 1}
+                  </p>
+                  <TablaDelDia
+                    tituloLado={discipline.pairSize === 1 ? 'Jugador' : 'Pareja'}
+                    muestraEmpates={matchday.allowsDraw}
+                    filas={rows.map((row) => ({
+                      key: sideKey(row.side),
+                      nombre: sideName(row.side),
+                      // OPEN siempre: ni invitado congelado ni puntos
+                      // repartidos existen todavía. Mismos valores que la
+                      // rama sin partir ya usaba para OPEN, ver abajo.
+                      esInvitado: false,
+                      won: row.won,
+                      drawn: row.drawn,
+                      gamesDiff: row.gamesDiff,
+                      pts: '—',
+                    }))}
+                  />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <TablaDelDia
+              tituloLado={discipline.pairSize === 1 ? 'Jugador' : 'Pareja'}
+              muestraEmpates={matchday.allowsDraw}
+              filas={tableRows.map((row) => ({
+                key: sideKey(row.side),
+                nombre: sideName(row.side),
+                esInvitado: status === 'CLOSED' && hasGuest(row.side),
+                won: row.won,
+                drawn: row.drawn,
+                gamesDiff: row.gamesDiff,
+                // La columna son "los puntos que se llevó cada jugador"
+                // (`ui-screens.md` §9), y en la pareja del invitado los dos no se
+                // llevan lo mismo: el invitado 0 y su compañero lo que le tocó.
+                // El `??` resuelve eso solo, porque `computeAwards` no le escribe
+                // award al invitado. Antes esta fila mostraba `0` fijo, y con eso
+                // la pareja que ganaba la fecha 3-0 aparecía sin puntos abajo de
+                // otra con un partido ganado — contradiciendo la nota que está
+                // más abajo, "su compañero sí". Lo encontró la Task 14.
+                // El primer miembro del lado que tenga award manda: en la pareja
+                // del invitado los dos no cobran lo mismo (el invitado 0), y en un
+                // lado de uno hay un solo miembro y es el suyo. `members` recorre
+                // los que haya, así que la regla es la misma para las dos formas.
+                pts:
+                  status === 'OPEN'
+                    ? '—'
+                    : String(
+                        members(row.side)
+                          .map((entryId) => pointsByEntry.get(entryId)?.points)
+                          .find((points) => points !== undefined) ?? 0,
+                      ),
+              }))}
+            />
+          )}
 
           {status === 'OPEN' && (
             <p className="text-[12.5px] font-[550] text-muted">

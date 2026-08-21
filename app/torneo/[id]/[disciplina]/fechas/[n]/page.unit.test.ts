@@ -238,6 +238,95 @@ describe('la fecha GROUPS_KNOCKOUT abierta — la tabla filtra por fase (W71, de
   })
 })
 
+describe('la fecha GROUPS_KNOCKOUT abierta — la tabla del día separa por grupo (S82, verify-report-pr21 #4004)', () => {
+  /**
+   * 8 lados en 2 grupos de 4 (1-4 en el grupo 1, 5-8 en el grupo 2, dato de
+   * los propios `match.grupo` — no depende de `groupSides`, que es cosa de
+   * S83). Antes del fix, "Tabla de la fecha" era UNA tabla con las 8 filas
+   * mezcladas: la pregunta del admin ("¿quién clasifica de MI grupo?") no
+   * tenía respuesta. El test recorta desde "Tabla de la fecha" para no
+   * confundirse con los "Grupo 1"/"Grupo 2" que `Llave` ya dibuja arriba.
+   */
+  it('dibuja una tabla por grupo, y cada lado aparece SÓLO en la suya', async () => {
+    escena.status = 'OPEN'
+    escena.formato = { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 }
+    escena.sides = [1, 2, 3, 4, 5, 6, 7, 8].map(side)
+    escena.matches = [
+      playedMatch('GRUPO', 1, 1, 1, 2),
+      playedMatch('GRUPO', 1, 1, 3, 4),
+      playedMatch('GRUPO', 1, 2, 1, 3),
+      playedMatch('GRUPO', 1, 2, 2, 4),
+      playedMatch('GRUPO', 1, 3, 1, 4),
+      playedMatch('GRUPO', 1, 3, 2, 3),
+      playedMatch('GRUPO', 2, 1, 5, 6),
+      playedMatch('GRUPO', 2, 1, 7, 8),
+      playedMatch('GRUPO', 2, 2, 5, 7),
+      playedMatch('GRUPO', 2, 2, 6, 8),
+      playedMatch('GRUPO', 2, 3, 5, 8),
+      playedMatch('GRUPO', 2, 3, 6, 7),
+    ]
+
+    const html = await render()
+
+    const inicio = html.indexOf('Tabla de la fecha')
+    expect(inicio).toBeGreaterThan(-1)
+    const tabla = html.slice(inicio)
+    const g1 = tabla.indexOf('Grupo 1')
+    const g2 = tabla.indexOf('Grupo 2')
+    expect(g1).toBeGreaterThan(-1)
+    expect(g2).toBeGreaterThan(g1)
+
+    const tablaGrupo1 = tabla.slice(g1, g2)
+    const tablaGrupo2 = tabla.slice(g2)
+    expect(tablaGrupo1).toContain('Jugador 1')
+    expect(tablaGrupo1).toContain('Jugador 4')
+    expect(tablaGrupo1).not.toContain('Jugador 5')
+    expect(tablaGrupo1).not.toContain('Jugador 8')
+    expect(tablaGrupo2).toContain('Jugador 5')
+    expect(tablaGrupo2).toContain('Jugador 8')
+    expect(tablaGrupo2).not.toContain('Jugador 1')
+    expect(tablaGrupo2).not.toContain('Jugador 4')
+  })
+})
+
+describe('la fecha GROUPS_KNOCKOUT cerrada — sigue con UNA sola tabla (decisión #3962, no se toca)', () => {
+  it('no separa por grupo: el orden cruza los grupos a propósito', async () => {
+    escena.status = 'CLOSED'
+    escena.formato = { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 }
+    escena.sides = [1, 2, 3, 4, 5, 6, 7, 8].map(side)
+    escena.matches = [
+      playedMatch('GRUPO', 1, 1, 1, 2),
+      playedMatch('GRUPO', 1, 1, 3, 4),
+      playedMatch('GRUPO', 1, 2, 1, 3),
+      playedMatch('GRUPO', 1, 2, 2, 4),
+      playedMatch('GRUPO', 1, 3, 1, 4),
+      playedMatch('GRUPO', 1, 3, 2, 3),
+      playedMatch('GRUPO', 2, 1, 5, 6),
+      playedMatch('GRUPO', 2, 1, 7, 8),
+      playedMatch('GRUPO', 2, 2, 5, 7),
+      playedMatch('GRUPO', 2, 2, 6, 8),
+      playedMatch('GRUPO', 2, 3, 5, 8),
+      playedMatch('GRUPO', 2, 3, 6, 7),
+      playedMatch('SEMI', 1, 1, 1, 6),
+      playedMatch('SEMI', 1, 1, 5, 4),
+      playedMatch('FINAL', 1, 1, 1, 5),
+      unplayedMatch('TERCER_PUESTO', 1, 1, 6, 4),
+    ]
+
+    const html = await render()
+
+    const inicio = html.indexOf('Tabla de la fecha')
+    expect(inicio).toBeGreaterThan(-1)
+    const tabla = html.slice(inicio)
+    // Ni una sección "Grupo N" en la tabla del día CERRADA: el título de arriba
+    // ("Tabla de la fecha") no se parte, aunque `Llave` (más arriba en la
+    // página, fuera del recorte) siga mostrando "Grupo 1"/"Grupo 2" en su
+    // propia sección de partidos.
+    expect(tabla).not.toContain('Grupo 1')
+    expect(tabla).not.toContain('Grupo 2')
+  })
+})
+
 describe('la fecha GROUPS_KNOCKOUT cerrada — la línea de relato (decisión #3990)', () => {
   it('cuenta que el tercer puesto se definió por la tabla cuando no se jugó', async () => {
     escena.status = 'CLOSED'

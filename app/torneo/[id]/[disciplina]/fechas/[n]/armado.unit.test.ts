@@ -21,9 +21,9 @@ import { SelectorDeFormato } from './armado'
  * correcto queda sin cubrir por esa misma razón (ver el reporte de esta
  * rebanada).
  */
-function html(formato: MatchdayFormat, sides: number): string {
+function html(formato: MatchdayFormat, sides: number, suggested: MatchdayFormat = formato): string {
   return renderToStaticMarkup(
-    createElement(SelectorDeFormato, { formato, sides, pending: false, onChange: () => {} }),
+    createElement(SelectorDeFormato, { formato, sides, suggested, pending: false, onChange: () => {} }),
   )
 }
 
@@ -115,5 +115,54 @@ describe('SelectorDeFormato', () => {
     expect(btnGrupos4).toContain('aria-checked="true"')
     expect(btnGrupos2).toContain('aria-checked="false"')
     expect(btnTodos).toContain('aria-checked="false"')
+  })
+
+  /**
+   * W77 (verify-report-pr21-cierre, #4016) / decisión #4022: el selector
+   * marca cuál formato SUGIERE la app — `suggestFormat` (`core/knockout.ts`)
+   * se había quedado sin ningún consumidor de producción, y con eso
+   * desaparecía de la pantalla toda noción de "sugerido" (REQ-D8-1, primer
+   * GIVEN). Acá se pincha el TEXTO de la marca, no sólo que `suggested`
+   * exista como prop (#3957).
+   */
+  describe('la marca de "sugerido" (W77, decisión #4022)', () => {
+    it('nombra el formato sugerido en una leyenda propia, separada de los botones', () => {
+      const markup = html(ROUND_ROBIN, 12, GROUPS_2)
+      expect(markup).toContain('Sugerido: 2 grupos + llave')
+    })
+
+    it('también marca "todos contra todos" cuando es lo sugerido', () => {
+      const markup = html(GROUPS_2, 4, ROUND_ROBIN)
+      expect(markup).toContain('Sugerido: Todos contra todos')
+    })
+
+    /**
+     * S81 (verify-report-pr21 #4004) no puede volver por la puerta de atrás:
+     * la marca de "sugerido" es una leyenda de texto, nunca una clase ni un
+     * `aria-checked` sobre el botón — así que un botón puede estar
+     * SUGERIDO sin estar SELECCIONADO (y viceversa) sin que las dos señales
+     * se confundan. Acá `formato` (seleccionado) es "todos contra todos" y
+     * `suggested` es "2 grupos": el botón de 2 grupos queda con
+     * `aria-checked="false"` igual, y la leyenda nombra la sugerencia aparte.
+     */
+    it('sugerido y seleccionado son señales independientes: uno no pisa al otro', () => {
+      const markup = html(ROUND_ROBIN, 12, GROUPS_2)
+      const btnGrupos2 = /<button[^>]*>2 grupos \+ llave<\/button>/.exec(markup)?.[0] ?? ''
+      expect(btnGrupos2).toContain('aria-checked="false"') // sugerido, no elegido
+      expect(markup).toContain('Sugerido: 2 grupos + llave')
+    })
+
+    /**
+     * El caso que expuso la contradicción original (W77): antes del fix,
+     * `matchdayShape.suggestedFormat` podía calcular una sugerencia que
+     * `offerableFormats` YA NO cruzaba (`eventualSize` cuenta al invitado
+     * suelto que todavía no está sentado; `sides` acá no). En vez de
+     * mentir mostrando un botón que no está, sin marca ninguna es mejor que
+     * una marca falsa.
+     */
+    it('si lo sugerido no está entre lo ofrecido ni es el guardado, no dibuja ninguna leyenda', () => {
+      const markup = html(ROUND_ROBIN, 4, GROUPS_4)
+      expect(markup).not.toContain('Sugerido:')
+    })
   })
 })

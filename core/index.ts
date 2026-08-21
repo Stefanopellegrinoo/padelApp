@@ -115,6 +115,10 @@ export { computeAwards } from './awards'
 // `drawIsLegal` sale ahora (C30, verify-report-pr21 #4004 / decisión #4005):
 // `db/validate.ts` (setError/matchError, vía `db/matchday.ts`) es su primer
 // consumidor de producción real, fuera de core/.
+// `matchCountForFormat` sale ahora (W72, verify-report-pr21 #4004): el
+// armado (`armado-state.ts`, `matchdayShape`) es su primer consumidor real,
+// fuera de core/ — antes prometía el número del round robin incluso con
+// grupos ya elegidos.
 export {
   suggestFormat,
   groupSides,
@@ -127,6 +131,7 @@ export {
   knockoutPositions,
   isUnplayedThirdPlace,
   drawIsLegal,
+  matchCountForFormat,
 } from './knockout'
 
 // ── The season ───────────────────────────────────────────────────────────────

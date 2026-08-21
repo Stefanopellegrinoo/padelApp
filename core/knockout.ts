@@ -386,3 +386,48 @@ export function suggestFormat(headcount: number, sideSize: SideSize): MatchdayFo
   if (sides <= 8) return { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 }
   return { kind: 'GROUPS_KNOCKOUT', groups: 4, qualifiersPerGroup: 2 }
 }
+
+function combinations(n: number): number {
+  return (n * (n - 1)) / 2
+}
+
+/**
+ * Cuántos partidos tiene la fase de grupos para `sides` lados repartidos en
+ * `groups` grupos. `groupSides` (arriba) los reparte en ZIGZAG, no en partes
+ * exactamente iguales: con `sides % groups !== 0`, `sides % groups` grupos
+ * quedan con un lado de más. Sumar `C(sides/groups, 2) * groups` a secas
+ * ignora ese resto — acá se suma el round robin de CADA tamaño real.
+ */
+function groupStageMatchCount(sides: number, groups: number): number {
+  const base = Math.floor(sides / groups)
+  const withExtra = sides % groups
+  const withoutExtra = groups - withExtra
+  return withExtra * combinations(base + 1) + withoutExtra * combinations(base)
+}
+
+/**
+ * Cuántos partidos tiene la llave para un cuadro de `groups * qualifiersPerGroup`
+ * lados. Un cuadro de N lados juega N-1 partidos para tener un único campeón
+ * (la cuenta de siempre de una eliminación directa) — más el tercer puesto,
+ * que `matchupsAfterKnockout` (db/matchday.ts) genera SIEMPRE al cerrar la
+ * semifinal (decisión #3979), exista o no una fase SEMI: sin semifinal
+ * (cuadro de 2, un solo cruce que YA es la final) no hay perdedores de semi
+ * que enfrentar, así que no hay tercer puesto.
+ */
+function knockoutMatchCount(groups: number, qualifiersPerGroup: number): number {
+  const bracketSize = groups * qualifiersPerGroup
+  const hasThirdPlace = bracketSize >= 4 ? 1 : 0
+  return bracketSize - 1 + hasThirdPlace
+}
+
+/**
+ * El número REAL de partidos que promete un `MatchdayFormat` para `sides`
+ * lados (W72, verify-report-pr21 #4004): el armado seguía usando
+ * `(sides*(sides-1))/2` —la fórmula del round robin— incluso DESPUÉS de que
+ * el admin ya hubiera elegido grupos, y con `GROUPS_KNOCKOUT` ese número no
+ * describe nada real: promete 28 partidos donde de verdad se juegan 16.
+ */
+export function matchCountForFormat(format: MatchdayFormat, sides: number): number {
+  if (format.kind === 'ROUND_ROBIN') return combinations(sides)
+  return groupStageMatchCount(sides, format.groups) + knockoutMatchCount(format.groups, format.qualifiersPerGroup)
+}

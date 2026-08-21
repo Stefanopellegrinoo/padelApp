@@ -471,9 +471,16 @@ const FORMATO_LIBRE = 'border-line'
  * action, así que la suite no arrastra `next/headers` al renderizarlo.
  *
  * Sólo dos botones, nunca tres: "Todos contra todos" siempre, y el de grupos
- * únicamente cuando `suggested` es `GROUPS_KNOCKOUT` — con un plantel chico
- * (`suggestFormat` da `ROUND_ROBIN`) no hay un `groups` sensato que ofrecer,
- * y `knockoutMatchups` sólo sabe armar G∈{1,2,4} de todas formas.
+ * cuando HAY un `GROUPS_KNOCKOUT` que ofrecer — `suggested` primero, y si no,
+ * el `formato` ya GUARDADO (W73, verify-report-pr21 #4004): con un plantel
+ * chico (`suggestFormat` da `ROUND_ROBIN`) no hay un `groups` NUEVO sensato
+ * que sugerir, pero eso no borra un formato de grupos que el admin YA eligió
+ * y sigue guardado en la base — bajar dos jugadores después de elegirlo no
+ * puede volverlo invisible ni dejar los dos botones sin marcar. El botón
+ * dibuja SIEMPRE el formato realmente guardado, esté sugerido o no; lo que
+ * NO hace es ofrecer un `groups` nuevo que nadie sugirió: sin `suggested`
+ * en grupos, tocar el botón vuelve a guardar el mismo `formato` huérfano, no
+ * uno inventado. `knockoutMatchups` sólo sabe armar G∈{1,2,4} de todas formas.
  */
 export function SelectorDeFormato({
   formato,
@@ -486,6 +493,7 @@ export function SelectorDeFormato({
   pending: boolean
   onChange: (formato: MatchdayFormat) => void
 }) {
+  const grupos = suggested.kind === 'GROUPS_KNOCKOUT' ? suggested : formato.kind === 'GROUPS_KNOCKOUT' ? formato : null
   return (
     <section className="flex flex-col gap-2">
       <h2 className={`${STEP_TITLE} border-b border-line pb-2`}>Formato de la fecha</h2>
@@ -498,14 +506,14 @@ export function SelectorDeFormato({
         >
           Todos contra todos
         </button>
-        {suggested.kind === 'GROUPS_KNOCKOUT' && (
+        {grupos !== null && (
           <button
             type="button"
             disabled={pending}
-            onClick={() => onChange(suggested)}
+            onClick={() => onChange(grupos)}
             className={`${FORMATO_BOTON} ${formato.kind === 'GROUPS_KNOCKOUT' ? FORMATO_ELEGIDO : FORMATO_LIBRE}`}
           >
-            {suggested.groups} grupos + llave
+            {grupos.groups} grupos + llave
           </button>
         )}
       </div>

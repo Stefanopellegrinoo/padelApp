@@ -432,6 +432,11 @@ describe('closeMatchday', () => {
     // entraba, la fecha cerraba, y este test se ponía rojo avisando que su
     // propia palanca ya no rompía nada. El negativo sigue sin significar nada y
     // sigue prohibido.
+    //
+    // `lines` con la MISMA suma negativa (#3989, guards en serie): desde
+    // 0047_award_lines.sql hay un guard de desglose ANTES del insert de
+    // awards -- sin este `lines` acá, ese guard nuevo dispara primero y este
+    // test deja de probar el `check` de la tabla que dice probar.
     const { admin, seasonId, squad } = await buildSeasonWithSquad(defaultConfig(8), 8)
     const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
     await markAllPlaying(admin, matchdayId, squad)
@@ -443,7 +448,7 @@ describe('closeMatchday', () => {
 
     const { error } = await admin.client.rpc('close_matchday', {
       p_matchday: matchdayId,
-      p_awards: [{ entryId, position: 1, points: -1 }],
+      p_awards: [{ entryId, position: 1, points: -1, lines: [{ reason: 'ajuste de test', points: -1 }] }],
     })
 
     expect(error).not.toBeNull()
@@ -585,11 +590,13 @@ describe('closeMatchday', () => {
     await openMatchday(admin.client, matchdayId)
     await playAllMatches(admin, matchdayId, (pairA) => pairA)
 
-    const awards = entryIds.map((entryId, index) => ({
-      entryId,
-      position: index + 1,
-      points: config.points[index] ?? 0,
-    }))
+    // `lines` con la MISMA suma que `points` (#3989, guards en serie): sin
+    // esto, el guard de desglose de 0047_award_lines.sql rechaza este cierre
+    // legítimo -- `closeError` dejaría de ser `null`.
+    const awards = entryIds.map((entryId, index) => {
+      const points = config.points[index] ?? 0
+      return { entryId, position: index + 1, points, lines: [{ reason: `posición ${index + 1}`, points }] }
+    })
     const { error: closeError } = await admin.client.rpc('close_matchday', {
       p_matchday: matchdayId,
       p_awards: awards,

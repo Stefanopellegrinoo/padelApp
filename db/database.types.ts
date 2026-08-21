@@ -100,6 +100,41 @@ export type Database = {
           },
         ]
       }
+      award_lines: {
+        Row: {
+          entry_id: string
+          id: string
+          matchday_id: string
+          ordinal: number
+          points: number
+          reason: string
+        }
+        Insert: {
+          entry_id: string
+          id?: string
+          matchday_id: string
+          ordinal: number
+          points: number
+          reason: string
+        }
+        Update: {
+          entry_id?: string
+          id?: string
+          matchday_id?: string
+          ordinal?: number
+          points?: number
+          reason?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "award_lines_matchday_id_entry_id_fkey"
+            columns: ["matchday_id", "entry_id"]
+            isOneToOne: false
+            referencedRelation: "awards"
+            referencedColumns: ["matchday_id", "entry_id"]
+          },
+        ]
+      }
       awards: {
         Row: {
           entry_id: string

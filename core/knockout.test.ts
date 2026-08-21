@@ -11,6 +11,7 @@ import {
   suggestFormat,
   isUnplayedThirdPlace,
   thirdPlaceByGroupTable,
+  drawIsLegal,
 } from './knockout'
 import { pair, single } from './side'
 import type { MatchResult, Phase, Side, SideStanding } from './types'
@@ -305,6 +306,34 @@ describe('isUnplayedThirdPlace', () => {
   it('false para cualquier otra fase sin jugar — la excepción es sólo del tercer puesto', () => {
     const match: MatchResult = { round: 1, fase: 'SEMI', grupo: 1, sideA: A1, sideB: A2, sets: [] }
     expect(isUnplayedThirdPlace(match)).toBe(false)
+  })
+})
+
+/**
+ * C30 (verify-report-pr21, #4004) / decisión #4005 expresada en código: el
+ * empate es legal SÓLO en GRUPO, sin importar `allowsDraw`. Tabla de verdad
+ * completa — las cuatro celdas — porque esta línea es la única función pura
+ * de `core/` que contesta la pregunta, y hasta ahora ningún test la nombraba
+ * (cobertura sólo indirecta vía `saveResult`/`closeMatchday` en `*.db.test.ts`).
+ * La celda que importa es `('SEMI', true)`: si alguien la cambia a un `||` o
+ * le agrega `TERCER_PUESTO` "porque casi es un partido de grupo", ésta es la
+ * que tiene que caer.
+ */
+describe('drawIsLegal', () => {
+  it('GRUPO + allowsDraw=true → legal', () => {
+    expect(drawIsLegal('GRUPO', true)).toBe(true)
+  })
+
+  it('GRUPO + allowsDraw=false → ilegal (la disciplina no admite empates)', () => {
+    expect(drawIsLegal('GRUPO', false)).toBe(false)
+  })
+
+  it('SEMI + allowsDraw=true → ilegal (la celda de la decisión #4005: la fase manda, no la disciplina)', () => {
+    expect(drawIsLegal('SEMI', true)).toBe(false)
+  })
+
+  it('SEMI + allowsDraw=false → ilegal', () => {
+    expect(drawIsLegal('SEMI', false)).toBe(false)
   })
 })
 

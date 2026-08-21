@@ -439,9 +439,72 @@ describe('closeMatchday con llave (GROUPS_KNOCKOUT, Rebanada D1)', () => {
     await setMatchdayFormat(admin.client, matchdayId, { kind: 'ROUND_ROBIN' }) // legal en DRAFT
     await openMatchday(admin.client, matchdayId) // DRAFT -> OPEN, sin re-sortear
 
-    // Con el formato ya en ROUND_ROBIN, el TERCER_PUESTO sin jugar tiene
-    // que volver a trabar el cierre -- la excepción es de GROUPS_KNOCKOUT,
-    // no de la fase sola.
-    await expect(closeMatchday(admin.client, matchdayId)).rejects.toThrow(/resultado/)
+    // Con el formato ya en ROUND_ROBIN, el TERCER_PUESTO sin jugar tiene que
+    // volver a trabar el cierre -- la excepción es de GROUPS_KNOCKOUT, no de
+    // la fase sola. Hasta acá el rechazo salía de la rendija de
+    // `close_matchday` (0044, "Faltan resultados por cargar"): la RPC es la
+    // única que mira el TERCER_PUESTO sin jugar, porque `isUnplayedThirdPlace`
+    // (TS) lo saltea sin mirar el formato.
+    //
+    // W79 (verify-report-pr21-cierre, #4016) agregó un guard ANTES, en TS: si
+    // el formato es ROUND_ROBIN pero los partidos tienen forma de llave
+    // (fase != GRUPO o grupo != 1 en alguna fila), rechaza sin llegar a
+    // calcular la tabla -- así que ACÁ ese guard es el que corta primero,
+    // antes de que la RPC llegue a mirar el TERCER_PUESTO. La garantía de
+    // C31/#3988 (una llave reformateada no cierra) sigue en pie; el punto
+    // donde se corta es más temprano y más fuerte.
+    await expect(closeMatchday(admin.client, matchdayId)).rejects.toThrow(/volver a sortear/)
+  })
+
+  /**
+   * W79 (verify-report-pr21-cierre, #4016): la mitad de C31 que 0044 no
+   * cerró. A diferencia del test de arriba, ACÁ el TERCER_PUESTO SÍ se
+   * juega -- la rendija de `close_matchday` (0044, "sólo con
+   * GROUPS_KNOCKOUT") ni siquiera entra en juego, porque no falta ningún
+   * resultado. Con la fecha redrafteada a `ROUND_ROBIN` sobre una llave
+   * completa, `closeMatchday` (db/matchday.ts) tomaba la rama
+   * `computeStandings(sides, matches, ...)` -- la de "siempre, sin tocar una
+   * línea" -- y tabulaba GRUPO + SEMI + FINAL + TERCER_PUESTO como si fuera
+   * un round robin. Medido: cerraba igual, con 8 awards mezclados.
+   *
+   * El fix agrega un guard ANTES de esa rama: si el formato vigente es
+   * ROUND_ROBIN pero los partidos tienen forma de llave (alguna fase que no
+   * es GRUPO, o un `grupo` que no es 1), rechaza -- mismo idioma que el
+   * guard de C32 en `advancePhase`.
+   */
+  it('W79: llave completa con tercer puesto JUGADO no cierra ROUND_ROBIN con awards mezclados', async () => {
+    const { admin, matchdayId, matches } = await openGroupsKnockout(8, {
+      kind: 'GROUPS_KNOCKOUT',
+      groups: 2,
+      qualifiersPerGroup: 2,
+    })
+    for (const match of matches) {
+      await saveResult(admin.client, match.id, [{ gamesA: 3, gamesB: 0 }])
+    }
+    await advancePhase(admin.client, matchdayId) // GRUPO -> SEMI
+    const semis = (await matchesOf(matchdayId)).filter((match) => match.fase === 'SEMI')
+    for (const semi of semis) {
+      await saveResult(admin.client, semi.id, [{ gamesA: 3, gamesB: 0 }])
+    }
+    await advancePhase(admin.client, matchdayId) // SEMI -> FINAL + TERCER_PUESTO
+    const afterSemis = await matchesOf(matchdayId)
+    const final = afterSemis.find((match) => match.fase === 'FINAL')
+    const thirdPlace = afterSemis.find((match) => match.fase === 'TERCER_PUESTO')
+    if (final === undefined || thirdPlace === undefined) throw new Error('Faltan la final o el tercer puesto.')
+    await saveResult(admin.client, final.id, [{ gamesA: 3, gamesB: 0 }])
+    // A diferencia de C31: el tercer puesto SE JUEGA.
+    await saveResult(admin.client, thirdPlace.id, [{ gamesA: 3, gamesB: 0 }])
+
+    await redraftMatchday(admin.client, matchdayId) // OPEN -> DRAFT, no borra matches
+    await setMatchdayFormat(admin.client, matchdayId, { kind: 'ROUND_ROBIN' }) // legal en DRAFT
+    await openMatchday(admin.client, matchdayId) // DRAFT -> OPEN, sin re-sortear
+
+    await expect(closeMatchday(admin.client, matchdayId)).rejects.toThrow(/volver a sortear/)
+
+    const db = adminClient()
+    const { data } = await db.from('matchdays').select('status').eq('id', matchdayId).single()
+    expect(data?.status).toBe('OPEN') // no cerró con una tabla mezclada
+    const { data: awards } = await db.from('awards').select('id').eq('matchday_id', matchdayId)
+    expect(awards).toHaveLength(0)
   })
 })

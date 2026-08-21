@@ -363,4 +363,36 @@ describe('advancePhase', () => {
       expect(involvesA.pair_a).toBe(A)
     },
   )
+
+  /**
+   * C32 (verify-report-pr21-cierre, #4016): `changeMatchdayFormat` sólo
+   * llamaba `setMatchdayFormat` -- sin volver a sortear, `matches` sigue con
+   * la forma del formato VIEJO. Acá: sortea con `ROUND_ROBIN` (28 partidos,
+   * todos `grupo=1`), después cambia a `GROUPS_KNOCKOUT` de 2 grupos SIN
+   * regenerar -- el grupo 2 queda sin un solo partido. `openMatchday` no lo
+   * ve (compara sólo quién vino, no la forma del fixture) y la fecha llega a
+   * OPEN divergida. Medido en el navegador: "Cerrar fase" tira HTTP 500
+   * (`qualifierAt`, `Error` pelado) y la fecha queda imposible de cerrar.
+   *
+   * El fix convierte ese `Error` pelado en un `EdgeError` ANTES de llegar a
+   * `matchupsAfterGroups`: mismo criterio que cualquier otro guard de este
+   * archivo, catcheable por `onMatchday` (actions.ts) en vez de tirar un 500.
+   */
+  it('C32: cambiar el formato DESPUÉS de sortear ya no revienta advancePhase con un Error pelado', async () => {
+    const { admin, seasonId, entryIds } = await buildFifaScene(8)
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
+    await markAllPlaying(admin, matchdayId, entryIds)
+    await generatePairs(admin.client, matchdayId) // formato por default: ROUND_ROBIN, 28 partidos, grupo 1
+    // Cambia DESPUÉS de sortear, sin volver a generar -- la divergencia real.
+    await setFormato(matchdayId, { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 })
+    await openMatchday(admin.client, matchdayId) // sameSet sigue dando igual: nadie tocó quién viene
+
+    const matches = await matchesOf(matchdayId)
+    expect(matches).toHaveLength(28) // el fixture viejo, intacto
+    for (const match of matches) {
+      await saveResult(admin.client, match.id, [{ gamesA: 2, gamesB: 0 }])
+    }
+
+    await expect(advancePhase(admin.client, matchdayId)).rejects.toThrow(/volver a sortear/)
+  })
 })

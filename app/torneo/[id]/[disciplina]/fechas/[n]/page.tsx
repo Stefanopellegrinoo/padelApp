@@ -617,18 +617,25 @@ export default async function FechaDetailPage({ params }: PageProps) {
           })}
         </div>
 
-        {/* GROUPS_KNOCKOUT en juego: `Llave` reemplaza a `Rondas` — agrupa por
-            fase/grupo, no por `round` (que vuelve a 1 en cada grupo y en cada
-            fase de la llave). Una fecha CERRADA sigue mostrando `Rondas`: la
-            agrupación queda rara para una llave ya jugada, pero es cosmético
-            —los datos son correctos— y arreglarlo es una rebanada aparte, no
-            D2. */}
-        {isGroupsKnockout && status === 'OPEN' ? (
+        {/* GROUPS_KNOCKOUT — `Llave` reemplaza a `Rondas` siempre, OPEN o
+            CLOSED: agrupa por fase/grupo, no por `round` (que vuelve a 1 en
+            cada grupo y en cada fase de la llave). Hasta acá (W70,
+            verify-report-pr21 #4004) una fecha CERRADA seguía mostrando
+            `Rondas`, que agrupa TODO por `round` — 4 partidos de grupo, las
+            semis, la final y el tercer puesto vacío bajo el mismo título
+            "Ronda 1", sin que la palabra "Semifinal" o "Final" aparezca una
+            sola vez, y con un contador "7/8 cargados" mintiendo sobre una
+            fecha que cerró bien (decisión #3979). No era cosmético: era el
+            registro histórico de la llave desapareciendo justo cuando la
+            fecha pasa a ser historia. `phase` sólo se le pasa mientras está
+            OPEN — una fecha CERRADA no tiene una "fase actual", ya jugó
+            todas. */}
+        {isGroupsKnockout ? (
           <Llave
             seasonId={seasonId}
             matchdayId={matchday.id}
             matchdayNumber={matchday.number}
-            phase={phase}
+            phase={status === 'OPEN' ? phase : null}
             matches={llaveMatches}
             canClosePhase={canClosePhase}
             carga={cargaContext}

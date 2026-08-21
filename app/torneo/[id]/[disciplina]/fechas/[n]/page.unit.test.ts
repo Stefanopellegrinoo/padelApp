@@ -245,6 +245,41 @@ describe('la fecha GROUPS_KNOCKOUT cerrada — la línea de relato (decisión #3
   })
 })
 
+describe('la fecha GROUPS_KNOCKOUT cerrada — la llave no se pierde al cerrar (W70, verify-report-pr21 #4004)', () => {
+  /**
+   * Mismo dataset en los tres tests de esta tanda: 2 grupos de 4, semis
+   * cruzadas, side1 campeón (gana grupo, semi y final), side5 finalista,
+   * tercer puesto SIN jugar (decisión #3979) entre los dos perdedores de
+   * semi (6 y 2).
+   */
+  function bracketMatches(): MatchWithId[] {
+    return [
+      playedMatch('GRUPO', 1, 1, 1, 2),
+      playedMatch('GRUPO', 1, 2, 3, 4),
+      playedMatch('GRUPO', 2, 1, 5, 6),
+      playedMatch('GRUPO', 2, 2, 7, 8),
+      playedMatch('SEMI', 1, 1, 1, 6),
+      playedMatch('SEMI', 1, 1, 5, 2),
+      playedMatch('FINAL', 1, 1, 1, 5),
+      unplayedMatch('TERCER_PUESTO', 1, 1, 6, 2),
+    ]
+  }
+
+  it('dibuja la llave por fases (Semifinal, Final), no el acordeón de Rondas mezclando todo bajo "Ronda 1"', async () => {
+    escena.status = 'CLOSED'
+    escena.isAdmin = true
+    escena.formato = { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 }
+    escena.sides = ALL_SIDES
+    escena.matches = bracketMatches()
+
+    const html = await render()
+
+    expect(html).toContain('Semifinal')
+    expect(html).toContain('Final')
+    expect(html).not.toMatch(/Ronda \d+ de/)
+  })
+})
+
 describe('no-regresión — una fecha ROUND_ROBIN sigue viendo exactamente lo de siempre (REQ-D7-1)', () => {
   it('sin "Fase actual", con el acordeón de Rondas de siempre', async () => {
     escena.status = 'OPEN'

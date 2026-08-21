@@ -1,5 +1,6 @@
+import { execFileSync } from 'node:child_process'
 import { describe, expect, it } from 'vitest'
-import { defaultConfig, type MatchdayFormat } from '@/core'
+import { defaultConfig, knockoutMatchups, single, type MatchdayFormat, type SideStanding } from '@/core'
 import {
   closeMatchday,
   createMatchday,
@@ -12,6 +13,23 @@ import {
 import { adminClient } from './test/admin'
 import { createSeason } from './test/factories'
 import { createTestUser, type TestUser } from './test/users'
+
+/**
+ * Mismo `localSql` que `db/match-phase.db.test.ts` — sesión `postgres` dentro
+ * del contenedor, para leer el catálogo real (`pg_get_constraintdef`) en vez
+ * de copiar el check a mano.
+ */
+function localSql(sql: string): string {
+  return execFileSync(
+    'docker',
+    [
+      'exec', '-i', 'supabase_db_padelApp',
+      'psql', '-U', 'postgres', '-d', 'postgres',
+      '-X', '-q', '-A', '-t', '-v', 'ON_ERROR_STOP=1', '-f', '-',
+    ],
+    { input: sql, encoding: 'utf8' },
+  )
+}
 
 // ── scaffolding local: los mismos armadores de `db/generate.db.test.ts`,
 // mínimos para llegar a OPEN y probar el guard "editable antes de armar".
@@ -361,5 +379,79 @@ describe('trigger de base: formato inmutable fuera de DRAFT (W68)', () => {
       .eq('id', matchdayId)
 
     expect(error).toBeNull()
+  })
+})
+
+// ── W74 (verify-report-pr21 #4004) ──────────────────────────────────────────
+
+function standingAt(position: number): SideStanding {
+  return { side: single(`w74-${position}`), played: 0, won: 0, drawn: 0, dayPoints: 0, setsDiff: 0, gamesDiff: 0, position }
+}
+
+/** `groupCount` grupos con 2 clasificados cada uno — lo mínimo que `knockoutMatchups` necesita para no tirar por falta de clasificados. */
+function fakeGroups(groupCount: number): SideStanding[][] {
+  return Array.from({ length: groupCount }, (_unused, index) => [standingAt(index * 2 + 1), standingAt(index * 2 + 2)])
+}
+
+/**
+ * `groups ∈ {1,2,4}` y `qualifiersPerGroup = 2` están escritos DOS veces: el
+ * check `matchdays_formato_kind` (0040, SQL) y `knockoutMatchups`
+ * (`core/knockout.ts`, TS) — hasta acá sólo un COMENTARIO las ataba ("las dos
+ * listas están acopladas A PROPÓSITO... si mañana knockoutMatchups aprende a
+ * armar 8 grupos, este check es el segundo lugar que hay que tocar").
+ *
+ * Mismo molde que `db/match-phase.db.test.ts` (`PHASE_ORDER` contra
+ * `pg_get_constraintdef`/`pg_get_functiondef`): lee el catálogo real, no una
+ * copia a mano del check. El lado de TypeScript se deriva EJECUTANDO
+ * `knockoutMatchups` con fixtures reales (1..8 grupos, 1..4 clasificados) y
+ * quedándose con lo que NO tira — no una lista repetida en el test.
+ */
+describe('groups ∈ {1,2,4} + qualifiersPerGroup=2 no driftea entre matchdays_formato_kind y knockoutMatchups (W74)', () => {
+  it('el ARRAY de groups del check SQL es EXACTAMENTE el que knockoutMatchups sabe armar', () => {
+    const checkDef = localSql(`
+      select pg_get_constraintdef(oid) from pg_constraint
+       where conrelid = 'public.matchdays'::regclass and conname = 'matchdays_formato_kind';
+    `)
+    const arrayLiteral = checkDef.match(/'groups'[^)]*\)\)::integer = ANY \(ARRAY\[([^\]]+)\]\)/)
+    if (arrayLiteral?.[1] === undefined) {
+      throw new Error('matchdays_formato_kind ya no valida groups con "= ANY (ARRAY[...])" — revisar este test.')
+    }
+    const sqlGroups = new Set(arrayLiteral[1].split(',').map((value) => Number(value.trim())))
+
+    const actualGroups = new Set<number>()
+    for (let groupCount = 1; groupCount <= 8; groupCount++) {
+      try {
+        knockoutMatchups(fakeGroups(groupCount), 2)
+        actualGroups.add(groupCount)
+      } catch {
+        // knockoutMatchups no sabe armar cruces para esta cantidad de grupos
+      }
+    }
+
+    expect(actualGroups).toEqual(sqlGroups)
+  })
+
+  it('el qualifiersPerGroup del check SQL es EXACTAMENTE el que knockoutMatchups sabe armar', () => {
+    const checkDef = localSql(`
+      select pg_get_constraintdef(oid) from pg_constraint
+       where conrelid = 'public.matchdays'::regclass and conname = 'matchdays_formato_kind';
+    `)
+    const equality = checkDef.match(/'qualifiersPerGroup'[^)]*\)\)::integer = (\d+)/)
+    if (equality?.[1] === undefined) {
+      throw new Error('matchdays_formato_kind ya no valida qualifiersPerGroup con una igualdad — revisar este test.')
+    }
+    const sqlQualifiers = Number(equality[1])
+
+    const actualQualifiers = new Set<number>()
+    for (let qualifiers = 1; qualifiers <= 4; qualifiers++) {
+      try {
+        knockoutMatchups(fakeGroups(2), qualifiers)
+        actualQualifiers.add(qualifiers)
+      } catch {
+        // knockoutMatchups sólo arma cruces con 2 clasificados por grupo
+      }
+    }
+
+    expect(actualQualifiers).toEqual(new Set([sqlQualifiers]))
   })
 })

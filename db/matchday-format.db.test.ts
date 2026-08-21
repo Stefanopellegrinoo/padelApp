@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { defaultConfig, type MatchdayFormat } from '@/core'
-import { createMatchday, generatePairs, openMatchday, setAttendance, setMatchdayFormat } from './matchday'
+import {
+  closeMatchday,
+  createMatchday,
+  generatePairs,
+  openMatchday,
+  saveResult,
+  setAttendance,
+  setMatchdayFormat,
+} from './matchday'
 import { adminClient } from './test/admin'
 import { createSeason } from './test/factories'
 import { createTestUser, type TestUser } from './test/users'
@@ -280,6 +288,77 @@ describe('matchdays_formato_kind — GROUPS_KNOCKOUT exige su forma completa (RE
       allows_draw: false,
       formato: { kind: 'ROUND_ROBIN' },
     })
+
+    expect(error).toBeNull()
+  })
+})
+
+/**
+ * W68 (verify-report-pr21, #4004): `grant update (formato)` (0040) deja
+ * PATCHear `formato` en CUALQUIER estado, salteando `setMatchdayFormat` —
+ * cuyo guard ("editable antes de armar") es SÓLO de TypeScript. Mismo
+ * patrón que #3989 (guards en serie): un test que entra por
+ * `setMatchdayFormat` no prueba nada de esto, porque el wrapper ya rechaza
+ * antes de llegar al UPDATE real. Acá se hace el `.update()` DIRECTO, con
+ * `admin.client` (`authenticated`, el mismo rol que ejecuta en producción,
+ * nunca `service_role`).
+ *
+ * El guard tiene que vivir en la BASE (trigger), porque nada en TypeScript
+ * puede interceptar un PATCH que llega directo a PostgREST.
+ */
+describe('trigger de base: formato inmutable fuera de DRAFT (W68)', () => {
+  it('un PATCH directo a formato rechaza con la fecha OPEN', async () => {
+    const admin = await createTestUser()
+    const players = await fillerPlayers(8)
+    const { seasonId, entryIds } = await createSeason({ admin, config: defaultConfig(8), squad: players })
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-03-05')
+    await markAllPlaying(admin, matchdayId, entryIds)
+    await generatePairs(admin.client, matchdayId)
+    await openMatchday(admin.client, matchdayId)
+
+    const { error } = await admin.client
+      .from('matchdays')
+      .update({ formato: groupsFormat })
+      .eq('id', matchdayId)
+
+    expect(error).not.toBeNull()
+
+    const db = adminClient()
+    const { data } = await db.from('matchdays').select('formato').eq('id', matchdayId).single()
+    expect(data?.formato).toEqual({ kind: 'ROUND_ROBIN' }) // no cambió
+  })
+
+  it('un PATCH directo a formato rechaza con la fecha CLOSED (la más peligrosa: desbloquea el cierre)', async () => {
+    const admin = await createTestUser()
+    const players = await fillerPlayers(8)
+    const { seasonId, entryIds } = await createSeason({ admin, config: defaultConfig(8), squad: players })
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-03-05')
+    await markAllPlaying(admin, matchdayId, entryIds)
+    await generatePairs(admin.client, matchdayId)
+    await openMatchday(admin.client, matchdayId)
+    const db = adminClient()
+    const { data: matches } = await db.from('matches').select('id').eq('matchday_id', matchdayId)
+    for (const match of matches ?? []) {
+      await saveResult(admin.client, match.id, [{ gamesA: 4, gamesB: 0 }])
+    }
+    await closeMatchday(admin.client, matchdayId)
+
+    const { error } = await admin.client
+      .from('matchdays')
+      .update({ formato: groupsFormat })
+      .eq('id', matchdayId)
+
+    expect(error).not.toBeNull()
+  })
+
+  it('no-regresión: un PATCH directo SIGUE andando con la fecha en DRAFT', async () => {
+    const { admin, seasonId, disciplineId } = await scene()
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-03-05', disciplineId)
+
+    const { error } = await admin.client
+      .from('matchdays')
+      .update({ formato: groupsFormat })
+      .eq('id', matchdayId)
 
     expect(error).toBeNull()
   })

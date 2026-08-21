@@ -303,6 +303,29 @@ export function submitSeats({ names, mySeat }: Squad): {
  * parámetro obligatorio, olvidarlo es un error de `tsc`, no un test que haya
  * que escribir y mantener — más fuerte que cualquier test (verificado con
  * mutación: sacar el argumento en `wizard.tsx` rompe `npm run typecheck`).
+ *
+ * C29 (verify-report-pr21, #4004): acá adentro `config` viaja hacia DOS
+ * lugares con reglas DISTINTAS, y antes de este fix era el MISMO objeto para
+ * los dos. `seasons.config` es el legado (`db/season.ts: createSeason`,
+ * comentario "siempre pádel, sideSize=2 fijo, nunca disciplina-specific") y
+ * `createSeason` lo valida con `sideSize` HARDCODEADO en 2. Con
+ * `pairSize=1`, `builtConfig.points` trae la curva de la decisión #3963 (8-12
+ * lados) — pasa la validación de la disciplina y rompe la del legado, que
+ * exige la MITAD de esos valores. No existe un `config` que pase las dos: el
+ * legado necesita su PROPIA curva, siempre de a dos, sin importar qué eligió
+ * "Lados". El plantel llega siempre par acá (`squadWarning`, paso 2), así que
+ * esa curva de a dos siempre existe.
+ *
+ * W69 (mismo payload, mismo fix): "Lados" es UN solo control para las
+ * disciplinas marcadas del paso 4 — sólo es inequívoco con UNA marcada. Con
+ * dos o más, aplicar el `pairSize` elegido a TODAS sería herencia cruzada
+ * (REQ-D2-1, "sin herencia cruzada"): el pádel nacería 1v1 porque FIFA lo
+ * pidió, sin que nadie lo haya elegido para pádel. Con dos o más marcadas se
+ * ignora y todas nacen en 2 (Parejas), el default de siempre — elegir un
+ * `pairSize` DISTINTO por disciplina en la misma alta es el wizard
+ * multi-disciplina (PR11a), todavía sin construir; hasta que exista, la
+ * salida segura es no aplicar un dato ambiguo, no adivinar a cuál de las
+ * marcadas lo quiso el usuario.
  */
 export function newTournamentPayload(
   name: string,
@@ -318,12 +341,22 @@ export function newTournamentPayload(
   disciplines: ReturnType<typeof buildDisciplines>
 } {
   const seats = submitSeats(squad)
-  const builtConfig = { ...config, squadSize: seats.squadNames.length }
+  const squadSize = seats.squadNames.length
+  const builtConfig = { ...config, squadSize }
+
+  const effectivePairSize: SideSize = picked.length === 1 ? pairSize : 2
+  const disciplineConfig: SeasonConfig =
+    effectivePairSize === pairSize
+      ? builtConfig
+      : { ...builtConfig, points: configFor(squadSize, effectivePairSize).points }
+  const legacyConfig: SeasonConfig =
+    pairSize === 2 ? builtConfig : { ...builtConfig, points: configFor(squadSize, 2).points }
+
   return {
     name,
     ...seats,
-    config: builtConfig,
-    disciplines: buildDisciplines(picked, builtConfig, pairSize),
+    config: legacyConfig,
+    disciplines: buildDisciplines(picked, disciplineConfig, effectivePairSize),
   }
 }
 

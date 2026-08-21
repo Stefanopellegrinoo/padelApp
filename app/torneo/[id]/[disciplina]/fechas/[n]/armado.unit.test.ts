@@ -71,4 +71,23 @@ describe('SelectorDeFormato', () => {
     expect(btnTodos).toContain('bg-accent')
     expect(btnGrupos).not.toContain('bg-accent')
   })
+
+  /**
+   * W73 (verify-report-pr21 #4004): un `formato` GUARDADO en grupos puede
+   * quedar huérfano si baja la asistencia — 12 presentes eligen "2 grupos +
+   * llave", se bajan dos, y con 10 presentes `suggestFormat` ya no sugiere
+   * grupos (`suggested.kind === 'ROUND_ROBIN'`). El botón de grupos
+   * desaparecía enteramente (la condición sólo miraba `suggested`) y ningún
+   * botón quedaba marcado, aunque la base siguiera armando con ese formato.
+   * Caso `(G2, RR)`: el ÚNICO de la matriz de S31/W73 que `armado.unit.test.ts`
+   * no cubría todavía.
+   */
+  it('con un `formato` de grupos GUARDADO pero ya no sugerido, el botón de grupos sigue ahí y marcado', () => {
+    const huerfano = html(GROUPS_2, ROUND_ROBIN)
+    expect(huerfano).toContain('2 grupos + llave')
+    const btnGrupos = /<button[^>]*>2 grupos \+ llave<\/button>/.exec(huerfano)?.[0] ?? ''
+    const btnTodos = /<button[^>]*>Todos contra todos<\/button>/.exec(huerfano)?.[0] ?? ''
+    expect(btnGrupos).toContain('bg-accent')
+    expect(btnTodos).not.toContain('bg-accent')
+  })
 })

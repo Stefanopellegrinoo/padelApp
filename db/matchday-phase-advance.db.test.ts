@@ -395,4 +395,43 @@ describe('advancePhase', () => {
 
     await expect(advancePhase(admin.client, matchdayId)).rejects.toThrow(/volver a sortear/)
   })
+
+  /**
+   * C33 (verify-report-pr21-cierre, #4016): dos `advancePhase` concurrentes
+   * leen la MISMA fase GRUPO completa, deciden LOS DOS que hay que avanzar, e
+   * insertan CADA UNO su propia llave -- la protección de hoy
+   * (`currentPhase` + `phaseIsComplete`) es lógica y en TypeScript, sin
+   * ningún lock. Medido: `fulfilled | fulfilled`, 4 semis en vez de 2, y
+   * "Cerrar fase" revienta después con "El tercer puesto necesita
+   * exactamente 2 semifinales, hay 4." -- sin FINAL, fecha muerta.
+   *
+   * `Promise.allSettled` con las DOS llamadas EN VUELO A LA VEZ -- no
+   * secuenciales (el test de arriba, "no duplica la llave si se llama dos
+   * veces SEGUIDAS", ya cubre eso y no dice nada de la carrera real: la
+   * segunda llamada secuencial ve la fase nueva sin jugar y rechaza sola,
+   * sin competir con nadie).
+   */
+  it('C33: dos advancePhase concurrentes no duplican la llave -- exactamente uno gana', async () => {
+    const { admin, matchdayId, matches } = await openGroupsKnockout(8, {
+      kind: 'GROUPS_KNOCKOUT',
+      groups: 2,
+      qualifiersPerGroup: 2,
+    })
+    for (const match of matches) {
+      await saveResult(admin.client, match.id, [{ gamesA: 2, gamesB: 0 }])
+    }
+
+    const results = await Promise.allSettled([
+      advancePhase(admin.client, matchdayId),
+      advancePhase(admin.client, matchdayId),
+    ])
+
+    const fulfilled = results.filter((result) => result.status === 'fulfilled')
+    const rejected = results.filter((result) => result.status === 'rejected')
+    expect(fulfilled).toHaveLength(1)
+    expect(rejected).toHaveLength(1)
+
+    const semis = (await matchesOf(matchdayId)).filter((match) => match.fase === 'SEMI')
+    expect(semis).toHaveLength(2)
+  })
 })

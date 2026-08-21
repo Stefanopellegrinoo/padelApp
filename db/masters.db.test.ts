@@ -15,6 +15,7 @@ import {
   type Side,
 } from '@/core'
 import type { Json } from './database.types'
+import { updateDisciplineConfig } from './discipline'
 import {
   addGuest,
   clearPairs,
@@ -333,6 +334,48 @@ describe('generateMastersPairs pair_size guard', () => {
     await expect(generateMastersPairs(admin.client, matchday.id)).rejects.toThrow(
       'El Masters se juega de a parejas: una disciplina de a uno no lo arma.',
     )
+  })
+})
+
+// ── W87 (verify-report-pre-contract #4026) ──────────────────────────────────
+// `create_masters` leía `seasons.config.regularMatchdays`, y `seasons.config`
+// no tiene escritor de producción desde PR6: `updateDisciplineConfig`
+// (db/discipline.ts), el único camino real de "Fechas" en Ajustes, sólo toca
+// `disciplines.config`. El portón del Masters y la pantalla (que SÍ lee
+// `discipline.config.regularMatchdays`, `fechas/page.tsx:114`) podían quedar
+// diciendo dos cosas distintas.
+function tenMatchdaySeason(): SeasonConfig {
+  return { ...defaultConfig(8), regularMatchdays: 10, countBestOf: 10 }
+}
+
+describe('create_masters reads disciplines.config, not seasons.config', () => {
+  it('lets the Masters be armed after the FECHAS the admin edited in Ajustes, not the stale value nobody writes back to seasons.config', async () => {
+    const { admin, seasonId, disciplineId, squad } = await buildScene(tenMatchdaySeason())
+
+    // "Fechas" en Ajustes: el único escritor real de producción, y sólo toca
+    // disciplines.config (docblock de updateDisciplineConfig). seasons.config
+    // se queda en regularMatchdays=10 para siempre.
+    await updateDisciplineConfig(admin.client, disciplineId, {
+      ...tenMatchdaySeason(),
+      regularMatchdays: 1,
+      countBestOf: 1,
+    })
+
+    // Juega y cierra sólo 1 fecha: playRegularSeason lee la config vigente de
+    // la DISCIPLINA (primaryDiscipline(header).config), que ahora dice 1.
+    await playRegularSeason(admin, seasonId, squad)
+
+    const mastersId = await createMasters(admin.client, seasonId, '2026-12-20')
+
+    const db = adminClient()
+    const { data: matchday, error } = await db
+      .from('matchdays')
+      .select('kind, discipline_id')
+      .eq('id', mastersId)
+      .single()
+    if (error || matchday === null) throw new Error(error?.message)
+    expect(matchday.kind).toBe('MASTERS')
+    expect(matchday.discipline_id).toBe(disciplineId)
   })
 })
 

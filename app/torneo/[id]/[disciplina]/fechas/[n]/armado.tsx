@@ -451,7 +451,11 @@ export function Armado({
                 pair.defending ? 'border-up' : 'border-line'
               }`}
             >
-              <span className="w-4 shrink-0 text-[14px] font-extrabold text-muted">{index + 1}</span>
+              {/* S85 (verify-report-pr21-cierre #4016): `w-4` (16px) recorta "10"/"11"/"12"
+                  (18px medidos con Chromium real, Archivo 800) — sólo muerde con 10+
+                  lados, la capacidad que abrió esta cadena. `w-5` (20px) los contiene
+                  sin overflow, medido a 360 px y 390 px. */}
+              <span className="w-5 shrink-0 text-[14px] font-extrabold text-muted">{index + 1}</span>
               <span className="flex-1 text-[14.5px] font-[750]">{pair.names}</span>
               {pair.defending && (
                 <span className="shrink-0 rounded-full bg-ok-bg px-[10px] py-[6px] text-[10.5px] font-extrabold text-up">

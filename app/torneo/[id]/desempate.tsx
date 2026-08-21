@@ -106,7 +106,11 @@ export function Desempate({
                 row.position === 1 ? 'bg-chip' : ''
               }`}
             >
-              <span className="w-4 shrink-0 text-[14px] font-extrabold text-muted">{row.position}</span>
+              {/* S85 (verify-report-pr21-cierre #4016): la tabla general de la
+                  temporada llega a 10+ jugadores sin techo propio -- `w-4`
+                  (16px) recorta "10"/"11"/"12" (18px medidos con Chromium
+                  real). `w-5` (20px) los contiene sin overflow. */}
+              <span className="w-5 shrink-0 text-[14px] font-extrabold text-muted">{row.position}</span>
               <span
                 className={`flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full text-[11px] font-extrabold ${
                   row.position === 1 ? 'bg-accent text-accent-text' : 'bg-chip text-muted'

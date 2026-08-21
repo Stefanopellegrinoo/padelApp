@@ -118,7 +118,13 @@ export function MastersDraft({
             key={row.entryId}
             className={`flex items-center gap-3 p-3 ${index > 0 ? 'border-t border-line' : ''}`}
           >
-            <span className="w-4 shrink-0 text-[14px] font-extrabold text-muted">{index + 1}</span>
+            {/* S85 (verify-report-pr21-cierre #4016): mismo gemelo que
+                armado.tsx/desempate.tsx. Acá es sólo consistencia -- `index + 1`
+                nunca pasa de MASTERS_SIZE=4 (core/constants.ts), así que este
+                span jamás corta un número de dos dígitos hoy -- pero es la
+                misma forma copiada tres veces y conviene que las tres digan
+                lo mismo. */}
+            <span className="w-5 shrink-0 text-[14px] font-extrabold text-muted">{index + 1}</span>
             <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full bg-chip text-[11px] font-extrabold text-muted">
               {initials(row.name)}
             </span>

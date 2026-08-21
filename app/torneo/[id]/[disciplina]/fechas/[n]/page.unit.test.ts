@@ -651,3 +651,27 @@ describe('el armado en DRAFT — vista previa del reparto en grupos (S83, verify
     expect(html).not.toContain('Cómo quedan los grupos')
   })
 })
+
+describe('el armado en DRAFT — el número de asiento no se recorta desde el 10 (S85, verify-report-pr21-cierre #4016)', () => {
+  /**
+   * `w-4` (16px) más `text-[14px] font-extrabold` mide 18px para "10"/"11" —
+   * medido con Chromium real (Archivo 800, ver apply-progress de esta
+   * tanda): `scrollWidth 18 > clientWidth 16`. Acá no hay layout real
+   * (`renderToStaticMarkup`), así que lo que se pincha es la CLASE — `w-5`
+   * (20px) es la que la medición real confirmó sin overflow.
+   */
+  it('con 10 lados, el décimo asiento usa w-5, no w-4', async () => {
+    escena.status = 'DRAFT'
+    escena.isAdmin = true
+    escena.formato = { kind: 'ROUND_ROBIN' }
+    escena.sides = Array.from({ length: 10 }, (_, index) => side(index + 1))
+    escena.matches = []
+
+    const html = await render()
+
+    const orden = html.slice(html.indexOf('Orden de la fecha'))
+    const decimo = /<span class="[^"]*">10<\/span>/.exec(orden)?.[0] ?? ''
+    expect(decimo).toContain('w-5')
+    expect(decimo).not.toContain('w-4')
+  })
+})

@@ -1456,7 +1456,7 @@ export async function resultsOf(
 
 /**
  * El `matchFormat` de la configuración de la disciplina dueña de este partido,
- * MÁS su `allows_draw`.
+ * MÁS su `allows_draw` y su `fase`.
  *
  * `allows_draw` sale de la fila de `matches`, no de la disciplina, y es a
  * propósito: es el valor que `match_sets_match_draw` va a verificar contra
@@ -1464,6 +1464,10 @@ export async function resultsOf(
  * (`matches → matchdays → disciplines`), así que leerlo del partido no es una
  * segunda fuente de verdad — es la MISMA, un salto más cerca, y sin un select
  * extra: ya se estaba leyendo esta fila.
+ *
+ * `fase` por el mismo motivo, agregada para C30 (decisión #4005): el
+ * caller la combina con `allows_draw` vía `drawIsLegal` — el empate sólo es
+ * legal en GRUPO, sin importar lo que diga la disciplina.
  */
 async function matchFormatOf(
   supabase: Client,

@@ -12,9 +12,10 @@ import {
   isUnplayedThirdPlace,
   thirdPlaceByGroupTable,
   drawIsLegal,
+  matchCountForFormat,
 } from './knockout'
 import { pair, single } from './side'
-import type { MatchResult, Phase, Side, SideStanding } from './types'
+import type { MatchdayFormat, MatchResult, Phase, Side, SideStanding } from './types'
 
 const A = pair('a1', 'a2')
 const B = pair('b1', 'b2')
@@ -422,5 +423,41 @@ describe('suggestFormat', () => {
     // funciones REALES, lejísimos de los 66 del round robin puro que
     // motivó W32.
     expect(total).toBe(19)
+  })
+})
+
+describe('matchCountForFormat', () => {
+  /**
+   * El número real de partidos, no la fórmula de round robin hardcodeada
+   * (W72, verify-report-pr21 #4004): el armado la seguía usando incluso
+   * DESPUÉS de elegir grupos. `groups` no siempre reparte los lados en
+   * partes iguales —el reparto en zigzag de `groupSides` deja algunos grupos
+   * con uno más que otros—, así que la cuenta de grupo no es
+   * `groups * C(sides/groups, 2)` a secas: hay que sumar el round robin de
+   * CADA grupo con su tamaño real (piso/techo). Y la llave no es "hasta N":
+   * con `qualifiersPerGroup` fijo en 2, el tamaño del cuadro
+   * (`groups * qualifiersPerGroup`) determina la cuenta exacta —incluido el
+   * tercer puesto, que `matchupsAfterKnockout` (db/matchday.ts) genera
+   * SIEMPRE junto con la final en cuanto hay semifinal (decisión #3979), la
+   * juegue alguien o no.
+   */
+  it('ROUND_ROBIN: el todos contra todos de siempre, C(sides,2)', () => {
+    expect(matchCountForFormat({ kind: 'ROUND_ROBIN' }, 8)).toBe(28)
+  })
+
+  it('GROUPS_KNOCKOUT, 8 lados en 2 grupos de 4: 12 de grupo + 4 de llave (semis+final+tercero) = 16, no 28', () => {
+    const format: MatchdayFormat = { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 }
+    expect(matchCountForFormat(format, 8)).toBe(16)
+  })
+
+  it('GROUPS_KNOCKOUT, 12 lados en 4 grupos de 3: 12 de grupo + 8 de llave (cuartos+semis+final+tercero) = 20, no 66', () => {
+    const format: MatchdayFormat = { kind: 'GROUPS_KNOCKOUT', groups: 4, qualifiersPerGroup: 2 }
+    expect(matchCountForFormat(format, 12)).toBe(20)
+  })
+
+  it('GROUPS_KNOCKOUT con un reparto DESPAREJO (9 lados en 2 grupos: uno de 5 y uno de 4) suma cada grupo con su tamaño real', () => {
+    const format: MatchdayFormat = { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 }
+    // C(5,2) + C(4,2) = 10 + 6 = 16 de grupo, + 4 de llave = 20.
+    expect(matchCountForFormat(format, 9)).toBe(20)
   })
 })

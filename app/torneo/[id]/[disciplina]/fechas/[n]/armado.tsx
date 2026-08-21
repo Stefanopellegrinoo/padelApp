@@ -44,6 +44,18 @@ export interface DraftPairVM {
 }
 
 /**
+ * Un grupo de la vista previa (S83, verify-report-pr21 #4004): a quiénes
+ * dejaría `generatePairs` en este grupo si se confirmara la fecha con el
+ * orden de HOY. `null` (no `[]`) cuando no hay vista previa que mostrar —
+ * `page.tsx` no sabe repartir sin partidos generados, así que un array
+ * vacío sería un reparto inventado, no la ausencia de uno.
+ */
+export interface GroupPreviewVM {
+  number: number
+  names: string[]
+}
+
+/**
  * El vocabulario de la disciplina. Un lado de uno no es "una pareja" y su
  * fecha no tiene "parejas invitadas": son jugadores invitados que juegan
  * solos, igual que todos.
@@ -102,6 +114,13 @@ interface ArmadoProps {
   loadedResults: number
   /** El `matchdays.formato` guardado hoy (REQ-D8-1) — `ROUND_ROBIN` por default hasta que se elija otro. */
   formato: MatchdayFormat
+  /**
+   * El reparto real en grupos (S83, verify-report-pr21 #4004), calculado en
+   * `page.tsx` con las MISMAS funciones que `generatePairs` usa para armar
+   * de verdad. `null` con `ROUND_ROBIN` elegido, o mientras el armado está
+   * incompleto y `pairingContextFor` todavía no puede resolver un orden.
+   */
+  groupPreview: GroupPreviewVM[] | null
 }
 
 const STEP_TITLE = 'text-[15px] font-extrabold tracking-[-.02em]'
@@ -132,6 +151,7 @@ export function Armado({
   pairs,
   loadedResults,
   formato,
+  groupPreview,
 }: ArmadoProps) {
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -265,6 +285,31 @@ export function Armado({
         pending={pending}
         onChange={(next) => run(() => changeMatchdayFormat(seasonId, matchdayId, matchdayNumber, next))}
       />
+
+      {/* S83 (verify-report-pr21 #4004): entre elegir "2 grupos + llave" y
+          confirmar no había forma de ver quién cae en cada grupo — recién se
+          sabía con la fecha ya armada, tarde para cambiar de opinión.
+          `groupPreview` sale de `page.tsx` con las MISMAS funciones que
+          `generatePairs` corre al confirmar, así que el reparto que se ve
+          acá es el reparto real, no uno inventado. */}
+      {groupPreview !== null && (
+        <section className="flex flex-col gap-3 rounded-card border border-line bg-surface p-4">
+          <div className="flex flex-col gap-1">
+            <h2 className={STEP_TITLE}>Cómo quedan los grupos</h2>
+            <p className="text-[11.5px] font-[600] text-muted">
+              Con el orden de hoy. Si cambia quién viene, puede cambiar el reparto.
+            </p>
+          </div>
+          {groupPreview.map((group) => (
+            <div key={group.number} className="flex flex-col gap-1.5">
+              <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
+                Grupo {group.number}
+              </p>
+              <p className="text-[13.5px] font-[650]">{group.names.join(' · ')}</p>
+            </div>
+          ))}
+        </section>
+      )}
 
       <section className="flex flex-col gap-2">
         <div className="flex items-center justify-between gap-2 border-b border-line pb-2">

@@ -3,9 +3,11 @@ import { notFound } from 'next/navigation'
 import type { ReactNode } from 'react'
 import {
   bracketOrderNote,
+  buildSides,
   computeRanking,
   computeStandings,
   currentPhase,
+  groupSides,
   includes,
   isUnplayedThirdPlace,
   mastersChampion,
@@ -34,6 +36,7 @@ import {
   seasonHeader,
   seasonMatchdaysOf,
 } from '@/db/read'
+import { pairingContextFor } from '@/db/matchday'
 import { sideLabel, tiebreakNote } from './tabla-desempate'
 import { TablaDelDia } from './tabla-del-dia'
 import { awardsBefore, closedHistory, frozenPointsOf, type FrozenAward } from '@/db/season'
@@ -41,7 +44,7 @@ import { serverClient } from '@/db/server'
 import { EdgeError } from '@/db/errors'
 import { matchdayFull } from '@/app/format'
 import { Rondas, type RoundMatchVM, type RoundVM } from './rondas'
-import { Armado, type DraftPairVM, type GuestPairVM, type GuestVM, type SeatVM } from './armado'
+import { Armado, type DraftPairVM, type GroupPreviewVM, type GuestPairVM, type GuestVM, type SeatVM } from './armado'
 import { CierreFecha } from './carga'
 import { DiaDeLaFecha } from './dia'
 import { Llave, type LlaveMatchVM } from './llave'
@@ -259,6 +262,40 @@ export default async function FechaDetailPage({ params }: PageProps) {
       withGuest: members(side).some((entryId) => detail.guestIds.includes(entryId)),
     }))
 
+    // S83 (verify-report-pr21 #4004): entre elegir "2 grupos + llave" y
+    // confirmar la fecha no había ninguna vista previa del reparto. En DRAFT
+    // los partidos TODAVÍA NO EXISTEN (`generatePairs` corre recién al
+    // confirmar), así que no hay llave que dibujar — pero sí se puede
+    // mostrar el REPARTO: dado el orden real de hoy, quiénes caen en cada
+    // grupo. `pairingContextFor` + `buildSides` son la MISMA pareja de
+    // funciones que corre `generatePairs` (`db/matchday.ts`) antes de armar
+    // los partidos — acá sólo LEEN, no escriben nada — así que el orden que
+    // arma esta vista previa es el mismo que va a usar el confirmar de
+    // verdad. `groupSides` (`core/knockout.ts`) reparte en SERPENTINA, no en
+    // tajadas: si la previa inventara su propio corte secuencial, mostraría
+    // un reparto que después `generatePairs` no arma — peor que no tener
+    // previa.
+    //
+    // `pairingContextFor` puede tirar mientras el armado está incompleto
+    // (plantel impar sin invitado todavía, puntos que no alcanzan, etc.) —
+    // son los MISMOS guards que `generatePairs` aplicaría al confirmar hoy
+    // mismo. Sin nada armable todavía no hay nada que previsualizar: mejor
+    // ninguna vista previa que una pantalla rota.
+    let groupPreview: GroupPreviewVM[] | null = null
+    const formatoDraft = matchday.formato
+    if (formatoDraft.kind === 'GROUPS_KNOCKOUT') {
+      try {
+        const { input, pairSize } = await pairingContextFor(supabase, matchday.id)
+        const previewSides = buildSides({ ...input, sideSize: pairSize })
+        groupPreview = groupSides(previewSides, formatoDraft.groups).map((group, index) => ({
+          number: index + 1,
+          names: group.map((previewSide) => sideName(previewSide)),
+        }))
+      } catch {
+        groupPreview = null
+      }
+    }
+
     body = (
       <Armado
         seasonId={seasonId}
@@ -272,6 +309,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
         pairs={draftPairs}
         loadedResults={detail.matches.filter((match) => match.sets.length > 0).length}
         formato={matchday.formato}
+        groupPreview={groupPreview}
       />
     )
   }

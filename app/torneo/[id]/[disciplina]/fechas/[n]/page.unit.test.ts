@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 import { defaultConfig, type DisciplineId, type MatchdayFormat, type Side } from '@/core'
 import type { DisciplineHeader, MatchdaySummary, MatchWithId } from '@/db/read'
+import type { PairingContext } from '@/db/matchday'
 
 /**
  * `FechaDetailPage` entera, RENDERIZADA — no un componente suelto. Es el
@@ -36,7 +37,33 @@ const escena = vi.hoisted(() => ({
   // `standings` sin tocar y `orderMoved` da `false` siempre — la pie de la
   // llave (`bracketOrderNote`) nunca se podría ejercitar contra eso.
   frozenPoints: new Map<string, { position: number; points: number }>(),
+  // S83 (verify-report-pr21 #4004): lo que `pairingContextFor` (`@/db/matchday`)
+  // devolvería HOY — page.tsx lo usa para la vista previa del reparto en
+  // grupos de una fecha DRAFT. `buildSides`/`groupSides` NO se mockean: corren
+  // de verdad sobre este `input`, así que el reparto que el test ve es el
+  // mismo algoritmo que `generatePairs` usaría al confirmar.
+  pairingContext: {
+    input: {
+      present: ['e1', 'e2', 'e3', 'e4', 'e5', 'e6', 'e7', 'e8'],
+      points: new Map(),
+      snapshot: ['e1', 'e2', 'e3', 'e4', 'e5', 'e6', 'e7', 'e8'],
+      defenders: null,
+      defendersAlreadyRepeated: false,
+      previousPairs: [],
+      guestIds: [],
+      fixedPairs: [],
+    },
+    pairSize: 1,
+  } as unknown as PairingContext,
 }))
+
+vi.mock('@/db/matchday', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/db/matchday')>()
+  return {
+    ...real,
+    pairingContextFor: async () => escena.pairingContext,
+  }
+})
 
 vi.mock('@/db/server', () => ({
   serverClient: async () => ({}),
@@ -379,5 +406,55 @@ describe('el armado — el selector de formato pasa el `formato` guardado, no un
     const btnTodos = /<button[^>]*>Todos contra todos<\/button>/.exec(html)?.[0] ?? ''
     expect(btnGrupos).toContain('bg-accent')
     expect(btnTodos).not.toContain('bg-accent')
+  })
+})
+
+describe('el armado en DRAFT — vista previa del reparto en grupos (S83, verify-report-pr21 #4004)', () => {
+  /**
+   * `pairingContextFor` está mockeado (arriba, `escena.pairingContext`) pero
+   * `buildSides`/`groupSides` NO — corren de verdad. Con `points` vacío y
+   * `snapshot` en el mismo orden que `present` (e1..e8), `orderPool` no
+   * reordena nada, así que el reparto de `groupSides` sobre e1..e8 en 2
+   * grupos es el de LA SERPENTINA: grupo 1 = e1,e4,e5,e8 · grupo 2 =
+   * e2,e3,e6,e7 (calculado a mano trazando `groupSides`, `core/knockout.ts`).
+   * Un reparto en TAJADAS (1-4 / 5-8) pondría a e2 y e3 en el grupo 1 — el
+   * `not.toContain` de abajo lo distingue.
+   */
+  it('con "2 grupos + llave" elegido, muestra el reparto en SERPENTINA — no en tajadas', async () => {
+    escena.status = 'DRAFT'
+    escena.isAdmin = true
+    escena.formato = { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 }
+    escena.sides = []
+    escena.matches = []
+
+    const html = await render()
+
+    const inicio = html.indexOf('Cómo quedan los grupos')
+    expect(inicio).toBeGreaterThan(-1)
+    const preview = html.slice(inicio)
+    const g1 = preview.indexOf('Grupo 1')
+    const g2 = preview.indexOf('Grupo 2')
+    expect(g1).toBeGreaterThan(-1)
+    expect(g2).toBeGreaterThan(g1)
+
+    const seccionGrupo1 = preview.slice(g1, g2)
+    expect(seccionGrupo1).toContain('Jugador 1')
+    expect(seccionGrupo1).toContain('Jugador 4')
+    expect(seccionGrupo1).toContain('Jugador 5')
+    expect(seccionGrupo1).toContain('Jugador 8')
+    expect(seccionGrupo1).not.toContain('Jugador 2')
+    expect(seccionGrupo1).not.toContain('Jugador 3')
+  })
+
+  it('con "todos contra todos" elegido, no muestra ninguna vista previa de grupos', async () => {
+    escena.status = 'DRAFT'
+    escena.isAdmin = true
+    escena.formato = { kind: 'ROUND_ROBIN' }
+    escena.sides = []
+    escena.matches = []
+
+    const html = await render()
+
+    expect(html).not.toContain('Cómo quedan los grupos')
   })
 })

@@ -834,10 +834,11 @@ export async function advancePhase(supabase: Client, matchdayId: string): Promis
     }
   }
 
-  const nextMatchups =
+  const nextMatchups = knockoutBoundary(() =>
     phase === 'GRUPO'
       ? matchupsAfterGroups(inPhase, formato, config, snapshot, matchday.allows_draw)
-      : matchupsAfterKnockout(phase, inPhase)
+      : matchupsAfterKnockout(phase, inPhase),
+  )
 
   const pairs = await pairsBySide(supabase, matchdayId)
   const rows: MatchRow[] = nextMatchups.map(({ fase, sideA, sideB }) => ({
@@ -894,6 +895,28 @@ function matchupsAfterKnockout(
     next.push({ fase: 'TERCER_PUESTO', sideA: thirdSideA, sideB: thirdSideB })
   }
   return next
+}
+
+/**
+ * W78, "aparte" (verify-report-pr21-cierre, #4016): `qualifierAt`/`winnerOf`/
+ * `loserOf` (privadas de `core/knockout.ts`, llamadas por `knockoutMatchups`/
+ * `nextRoundMatchups`/`losingMatchup`/`knockoutPositions`) tiran `Error`
+ * PELADOS cuando la llave llega en una forma que no esperan — es la familia
+ * que ya causó C30, C32 y C33: cada vez que se coló hasta el error boundary
+ * de Next.js, salió "Algo se rompió" (HTTP 500) en vez de un rechazo
+ * prolijo. `core/` no puede importar `EdgeError` (vive acá, una capa
+ * arriba) así que la conversión pasa en el BORDE, en los dos puntos donde
+ * `db/matchday.ts` llama a esas funciones (`advancePhase` y
+ * `standingsFromBracket`) — no una por una dentro de `core/knockout.ts`.
+ */
+function knockoutBoundary<T>(work: () => T): T {
+  try {
+    return work()
+  } catch (error) {
+    if (error instanceof EdgeError) throw error
+    if (error instanceof Error) throw new EdgeError(error.message)
+    throw error
+  }
 }
 
 /** Los lados distintos que aparecen en `matches`, en orden de primera aparición. */
@@ -1187,7 +1210,7 @@ function standingsFromBracket(
   const groupMatches = matches.filter((match) => match.fase === 'GRUPO')
   const bracket = matches.filter((match) => match.fase !== 'GRUPO')
   const groupTable = computeStandings(uniqueSides(groupMatches), [...groupMatches], config, snapshot, allowsDraw)
-  return knockoutPositions(bracket, groupTable)
+  return knockoutBoundary(() => knockoutPositions(bracket, groupTable))
 }
 
 /**

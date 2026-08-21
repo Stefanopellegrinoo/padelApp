@@ -304,9 +304,6 @@ export default async function FechaDetailPage({ params }: PageProps) {
         : Promise.resolve(new Map<string, FrozenAward>()),
     ])
 
-    const snapshot = snapshotForMatchday(matchdayNumber, seedOrder, awardsByMatchday, config)
-    const standings = computeStandings(detail.sides, detail.matches, config, snapshot, matchday.allowsDraw)
-
     // La fase y la llave (REQ-D8-1, decisión #3979): `matchday.formato` es lo
     // que decide si esta fecha tiene fases que dibujar. `phase`/`phaseComplete`
     // se calculan siempre —son baratos y puros— pero sólo se USAN mientras la
@@ -314,6 +311,29 @@ export default async function FechaDetailPage({ params }: PageProps) {
     // manda `fase` distinta de `GRUPO` (REQ-D7-1, no-regresión), así que acá
     // adentro `phase` siempre da `'GRUPO'` y `canClosePhase` siempre da falso.
     const isGroupsKnockout = matchday.formato.kind === 'GROUPS_KNOCKOUT'
+
+    const snapshot = snapshotForMatchday(matchdayNumber, seedOrder, awardsByMatchday, config)
+    // Restricción de pureza del design (#3801, PUNTO 6): "computeStandings
+    // recibe SÓLO los partidos de la fase que tabula. Filtra el caller." Sin
+    // esto, el mano a mano de dos lados del MISMO grupo puede quedar decidido
+    // por un partido de la LLAVE entre ellos —`headToHead` (core/standings.ts)
+    // devuelve el PRIMER partido que los conecta en el array, así que el orden
+    // de llegada, no el resultado de grupo, terminaba mandando (W71,
+    // verify-report-pr21 #4004). La tabla de la fecha en GROUPS_KNOCKOUT es
+    // SIEMPRE la de GRUPO mientras la fecha está OPEN —no la fase actual—:
+    // filtrar por la fase actual dejaría la tabla con 2 o 4 filas apenas
+    // arranca la llave, y el resto de los lados desaparecería de una tabla
+    // que hoy los muestra a todos (S82, otra tanda, sigue sin separar por
+    // grupo pero sigue mostrando a todos). CLOSED no se toca: usa
+    // `frozenTableRows` sobre estos mismos `standings` más abajo, y ese
+    // comportamiento (la tabla mezclando fases en una fecha cerrada) es W70,
+    // de otra tanda.
+    const standingsMatches =
+      status === 'OPEN' && isGroupsKnockout
+        ? detail.matches.filter((match) => match.fase === 'GRUPO')
+        : detail.matches
+    const standings = computeStandings(detail.sides, standingsMatches, config, snapshot, matchday.allowsDraw)
+
     const phase = currentPhase(detail.matches)
     const phaseComplete = phase !== null && phaseIsComplete(detail.matches, phase)
     const canClosePhase = header.isAdmin && isGroupsKnockout && phase !== null && phase !== 'FINAL' && phaseComplete

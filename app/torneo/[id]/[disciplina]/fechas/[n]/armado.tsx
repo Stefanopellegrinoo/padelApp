@@ -229,7 +229,7 @@ export function Armado({
     // partidos del formato que ya está en la base, no asumir round robin.
     formato,
   })
-  const { size, sides, matches, complete, needsLooseGuest, eventualSize, tooFew, tooMany } = shape
+  const { size, sides, matches, complete, needsLooseGuest, eventualSize, tooFew, tooMany, suggestedFormat } = shape
   const label = words(sideSize)
   const guestUnnamed = [
     ...looseGuests.map((guest) => guest.name),
@@ -282,6 +282,7 @@ export function Armado({
         // `SelectorDeFormato` con el `formato` guardado (W73) deja ver
         // exactamente lo mismo que antes de settear.
         sides={sizeSettled ? shape.sides : 0}
+        suggested={suggestedFormat}
         pending={pending}
         onChange={(next) => run(() => changeMatchdayFormat(seasonId, matchdayId, matchdayNumber, next))}
       />
@@ -508,6 +509,11 @@ const FORMATO_BOTON = 'flex-1 rounded-field border-[1.5px] p-3 text-[13.5px] fon
 const FORMATO_ELEGIDO = 'border-accent bg-accent text-accent-text'
 const FORMATO_LIBRE = 'border-line'
 
+/** "Todos contra todos" o "N grupos + llave" — el mismo texto para el botón y para la leyenda de "Sugerido". */
+function formatoLabel(formato: MatchdayFormat): string {
+  return formato.kind === 'ROUND_ROBIN' ? 'Todos contra todos' : `${formato.groups} grupos + llave`
+}
+
 /**
  * El selector de formato de la fecha (REQ-D8-1): "todos contra todos"
  * siempre, más un botón por CADA tamaño de grupo OFRECIBLE para `sides`
@@ -540,16 +546,35 @@ const FORMATO_LIBRE = 'border-line'
  * ARIA Authoring Practices para un conjunto de opciones mutuamente
  * excluyentes, sobre `<button>` en vez de `<input type="radio">` porque acá
  * no hay un `<form>` que serialice el valor — el estado lo maneja `onChange`.
+ *
+ * `suggested` (W77, verify-report-pr21-cierre #4016 / decisión #4022):
+ * `suggestFormat` (`core/knockout.ts`) se había quedado sin consumidor de
+ * producción, y con eso desaparecía de la pantalla el primer GIVEN de
+ * REQ-D8-1 ("propone 2 grupos de 4"). La marca es una LEYENDA de texto
+ * aparte (`Sugerido: …`), nunca una clase ni un `aria-checked` sobre el
+ * botón — a propósito, para que no repita el error de S81: "sugerido" y
+ * "elegido" son preguntas distintas y un lector de pantalla (o un test) no
+ * tiene por qué confundirlas.
+ *
+ * La leyenda sólo se dibuja si `suggested` es de verdad una de las opciones
+ * que este selector está mostrando (ofrecida hoy, o el `formato` guardado
+ * como huérfano de W73) — nunca nombra un botón que no existe. `suggested`
+ * llega con `eventualSize` (cuenta al invitado suelto que todavía no está
+ * sentado, `armado-state.ts`) mientras que `sides` acá es el tamaño de HOY;
+ * en el hueco donde los dos difieren, la leyenda calla en vez de mentir.
  */
 export function SelectorDeFormato({
   formato,
   sides,
+  suggested,
   pending,
   onChange,
 }: {
   formato: MatchdayFormat
   /** Lados de HOY: de acá sale qué botones de grupos se ofrecen (`offerableFormats`), no de una sugerencia. */
   sides: number
+  /** El formato que `suggestFormat` propone (REQ-D8-1) — se marca con una leyenda, no reemplaza los botones de #4014. */
+  suggested: MatchdayFormat
   pending: boolean
   onChange: (formato: MatchdayFormat) => void
 }) {
@@ -560,9 +585,14 @@ export function SelectorDeFormato({
     formato.kind === 'GROUPS_KNOCKOUT' && !ofertados.some((candidato) => candidato.groups === formato.groups)
       ? [...ofertados, formato]
       : ofertados
+  const suggestedIsShown =
+    suggested.kind === 'ROUND_ROBIN' || grupos.some((candidato) => candidato.groups === suggested.groups)
   return (
     <section className="flex flex-col gap-2">
       <h2 className={`${STEP_TITLE} border-b border-line pb-2`}>Formato de la fecha</h2>
+      {suggestedIsShown && (
+        <p className="text-[11.5px] font-[600] text-muted">Sugerido: {formatoLabel(suggested)}</p>
+      )}
       <div className="flex gap-2" role="radiogroup" aria-label="Formato de la fecha">
         <button
           type="button"

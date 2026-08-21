@@ -773,6 +773,30 @@ export async function advancePhase(supabase: Client, matchdayId: string): Promis
   // riesgo de arriba. `matchupsAfterGroups`/`matchupsAfterKnockout` reciben
   // YA garantizado que todo acá adentro es `fase === phase`.
   const inPhase = matches.filter((match) => match.fase === phase)
+
+  // C32 (verify-report-pr21-cierre, #4016): `changeMatchdayFormat` puede
+  // guardar un `formato` nuevo DESPUÉS de que `generatePairs` ya armó el
+  // fixture con el viejo — `openMatchday` no lo nota (compara sólo quién
+  // vino, nunca la forma del fixture contra `formato`). Con `groups=2` y un
+  // fixture que sigue siendo el `ROUND_ROBIN` de antes, TODOS los partidos
+  // caen en `grupo=1` (default de columna, 0039) y el grupo 2 llega acá sin
+  // un solo lado — `qualifierAt` (core/knockout.ts) tira un `Error` PELADO
+  // que `onMatchday` (actions.ts) no sabe convertir en un rechazo prolijo:
+  // HTTP 500 y la fecha queda sin poder cerrarse nunca. Se chequea ACÁ,
+  // antes de `matchupsAfterGroups`, con la misma forma que exige
+  // `knockoutMatchups`: cada grupo declarado necesita al menos
+  // `qualifiersPerGroup` lados jugados — no "al menos un partido", porque un
+  // partido plantado en un grupo ajeno (ver el test de fase+grupo, arriba)
+  // no cuenta como que ESE grupo esté armado.
+  if (phase === 'GRUPO') {
+    for (let groupNumber = 1; groupNumber <= formato.groups; groupNumber++) {
+      const ofGroup = inPhase.filter((match) => match.grupo === groupNumber)
+      if (uniqueSides(ofGroup).length < formato.qualifiersPerGroup) {
+        throw new EdgeError('El formato cambió después de armar la fecha: hay que volver a sortearla.')
+      }
+    }
+  }
+
   const nextMatchups =
     phase === 'GRUPO'
       ? matchupsAfterGroups(inPhase, formato, config, snapshot, matchday.allows_draw)
@@ -1044,6 +1068,20 @@ export async function closeMatchday(supabase: Client, matchdayId: string): Promi
   // (segundo GIVEN de REQ-D7-4, no-regresión) — `computeAwards`, dos líneas
   // más abajo, no cambia de firma en ninguno de los dos casos.
   const formato = matchday.formato as unknown as MatchdayFormat
+
+  // W79 (verify-report-pr21-cierre, #4016): la mitad de C31 que 0044 no
+  // cerró. `redraft_matchday` no borra `matches` (0011) y `setMatchdayFormat`
+  // deja volver a `ROUND_ROBIN` en DRAFT con una llave completa todavía
+  // puesta — sin este guard, la rama de abajo tabula GRUPO + SEMI + FINAL +
+  // TERCER_PUESTO con `computeStandings` como si fuera un round robin, y
+  // cierra con awards mezclados (medido: 8 awards, `CLOSED`). Se corta ACÁ,
+  // antes de tabular nada: `ROUND_ROBIN` sólo puede tener partidos de
+  // `fase='GRUPO'`/`grupo=1` (REQ-D7-1) — cualquier otra fila es la marca de
+  // una llave anterior que sobrevivió al redraft.
+  if (formato.kind === 'ROUND_ROBIN' && matches.some((match) => match.fase !== 'GRUPO' || match.grupo !== 1)) {
+    throw new EdgeError('El formato cambió después de armar la fecha: hay que volver a sortearla.')
+  }
+
   const standings =
     formato.kind === 'GROUPS_KNOCKOUT'
       ? standingsFromBracket(matches, config, snapshot, matchday.allows_draw)

@@ -2,7 +2,7 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import type { SideSize } from '@/core'
-import { PasoFormato, SelectorDeLados } from './wizard'
+import { PasoDisciplinas, PasoFormato, SelectorDeLados } from './wizard'
 import { configFor, type DisciplineKind } from './wizard-state'
 
 /**
@@ -18,15 +18,13 @@ import { configFor, type DisciplineKind } from './wizard-state'
  * HTML. Es el mismo motor que corre en el servidor de Next; lo que no cubre es
  * la interacción (no hay clicks acá).
  */
-function html(picked: DisciplineKind[], pairSize: SideSize = 2): string {
+function html(picked: DisciplineKind[]): string {
   return renderToStaticMarkup(
     createElement(PasoFormato, {
       config: configFor(8),
       picked,
       errors: [],
-      pairSize,
       onChange: () => {},
-      onChangePairSize: () => {},
     }),
   )
 }
@@ -73,19 +71,30 @@ describe('paso 4 del wizard — los steppers que se dibujan', () => {
     expect(paso).toContain('Sets por partido')
     expect(paso).toContain('Games por set')
   })
+
+  /**
+   * W76/decisión #4017: el radio "Lados" bajó al paso 1 — el paso 4 ya no
+   * lo dibuja para nada, marcado o no. Si esto volviera a aparecer acá,
+   * volvería la ambigüedad que W76 midió (dos disciplinas, un solo radio).
+   */
+  it('ya no dibuja el radio "Lados": bajó al paso 1, uno por disciplina', () => {
+    const paso = html(['PADEL', 'FIFA'])
+    expect(paso).not.toContain('Lados')
+  })
 })
 
 /**
- * El radio "Lados" (Rebanada F, decisión `decisions/alcance-desbloqueo-1v1-pr21`).
+ * El radio "Lados" (Rebanada F, decisión `decisions/alcance-desbloqueo-1v1-pr21`,
+ * y W76/decisión #4017 que lo movió al paso 1, uno por disciplina).
  *
  * Sin clicks —este repo no tiene runner E2E ni React Testing Library, mismo
  * límite documentado en `armado.unit.test.ts` para `SelectorDeFormato`—: se
  * mira qué radio sale marcado para un `pairSize` dado. Que tocar el radio
- * dispare `buildDisciplines(picked, config, pairSize)` con el argumento
- * correcto en el submit real queda sin cubrir por esa misma razón (ver el
- * reporte de esta rebanada). Lo que SÍ está cubierto de punta a punta es que
- * `buildDisciplines`, recibiendo `pairSize=1`, arma la fila con la curva de
- * la decisión #3963 (`wizard-state.unit.test.ts`).
+ * dispare `changePairSize(kind, next)` con el argumento correcto en el
+ * submit real queda sin cubrir por esa misma razón (ver el reporte de esta
+ * rebanada). Lo que SÍ está cubierto de punta a punta es que
+ * `newTournamentPayload`, recibiendo `pairSizes`, arma cada fila con la
+ * curva de la decisión #3963 (`wizard-state.unit.test.ts`).
  */
 describe('SelectorDeLados', () => {
   it('nace marcado en "Parejas" — no-regresión: ningún pádel existente cambia', () => {
@@ -108,20 +117,93 @@ describe('SelectorDeLados', () => {
     expect(inputs[0]).not.toContain('checked')
     expect(inputs[1]).toContain('checked')
   })
+
+  it('con un `name` propio, los `<input>` llevan ESE name -- no siempre "pairSize"', () => {
+    const markup = renderToStaticMarkup(
+      createElement(SelectorDeLados, { pairSize: 2, onChange: () => {}, name: 'pairSize-FIFA' }),
+    )
+    expect(markup).not.toContain('name="pairSize"')
+    const inputs = markup.match(/<input[^>]*name="pairSize-FIFA"[^>]*\/>/g) ?? []
+    expect(inputs).toHaveLength(2)
+  })
 })
 
-describe('paso 4 del wizard — el fieldset "Lados"', () => {
-  it('el paso de formato incluye el selector de Lados, en Parejas por default', () => {
-    const paso = html(['PADEL'])
-    expect(paso).toContain('Lados')
-    expect(paso).toContain('Parejas')
-    expect(paso).toContain('Individual')
+const PICK_NONE: DisciplineKind[] = []
+
+function pasoDisciplinasHtml(
+  picked: DisciplineKind[],
+  pairSizes: Record<DisciplineKind, SideSize> = { PADEL: 2, FIFA: 2 },
+): string {
+  return renderToStaticMarkup(
+    createElement(PasoDisciplinas, {
+      picked,
+      pairSizes,
+      warning: null,
+      onToggle: () => {},
+      onChangePairSize: () => {},
+    }),
+  )
+}
+
+/**
+ * W76 (verify-report-pr21-cierre, #4016) + decisión #4017: el paso 1 lleva
+ * un selector "Parejas / Individual" POR disciplina marcada, al lado de su
+ * checkbox — no uno solo para todas.
+ *
+ * Antes (medido en la auditoría): con Pádel + FIFA marcados, tocar
+ * "Individual" pintaba la curva de 8 puntos en el paso 4 y el torneo se
+ * creaba con las DOS en `pair_size=2` — la pantalla prometía algo que el
+ * dato no iba a tener. El test de abajo tiene que DISTINGUIR las dos filas
+ * a la vez: uno que sólo mirara una no probaría la ausencia de herencia
+ * cruzada en ningún sentido.
+ */
+describe('PasoDisciplinas', () => {
+  it('sin marcar ninguna, no dibuja ningún selector de Lados', () => {
+    const paso = pasoDisciplinasHtml(PICK_NONE)
+    expect(paso).not.toContain('Lados')
   })
 
-  it('con pairSize=1 marca "Individual" también dentro del paso de formato', () => {
-    const paso = html(['FIFA'], 1)
-    const inputs = paso.match(/<input[^>]*name="pairSize"[^>]*\/>/g) ?? []
-    expect(inputs).toHaveLength(2)
-    expect(inputs[1]).toContain('checked')
+  it('marcar una disciplina hace aparecer SU selector de Lados', () => {
+    const paso = pasoDisciplinasHtml(['PADEL'])
+    expect(paso).toContain('Lados')
+    expect(paso).toContain('name="pairSize-PADEL"')
+    expect(paso).not.toContain('name="pairSize-FIFA"')
+  })
+
+  /**
+   * La prueba central de #4017: Pádel y FIFA marcados, cada uno con SU
+   * `pairSize` -- Pádel en Parejas, FIFA en Individual. Los DOS radios
+   * tienen que salir marcados con su valor propio, cada uno en SU grupo
+   * (`name` distinto), sin que ninguno le pise el estado al otro.
+   */
+  it('con Pádel Y FIFA marcados y sólo FIFA en Individual, cada radio queda marcado por su cuenta', () => {
+    const paso = pasoDisciplinasHtml(['PADEL', 'FIFA'], { PADEL: 2, FIFA: 1 })
+
+    const padelInputs = paso.match(/<input[^>]*name="pairSize-PADEL"[^>]*\/>/g) ?? []
+    const fifaInputs = paso.match(/<input[^>]*name="pairSize-FIFA"[^>]*\/>/g) ?? []
+    expect(padelInputs).toHaveLength(2)
+    expect(fifaInputs).toHaveLength(2)
+
+    // Pádel: "Parejas" (primero) marcado, "Individual" (segundo) no.
+    expect(padelInputs[0]).toContain('checked')
+    expect(padelInputs[1]).not.toContain('checked')
+    // FIFA: al revés -- "Individual" marcado, "Parejas" no. Si los dos
+    // grupos compartieran `name`, el navegador forzaría UN solo marcado
+    // entre los cuatro radios -- acá tienen que convivir los dos.
+    expect(fifaInputs[0]).not.toContain('checked')
+    expect(fifaInputs[1]).toContain('checked')
+  })
+
+  it('el aviso de "elegí al menos una disciplina" se dibuja cuando llega no-null', () => {
+    const paso = renderToStaticMarkup(
+      createElement(PasoDisciplinas, {
+        picked: PICK_NONE,
+        pairSizes: { PADEL: 2, FIFA: 2 },
+        warning: 'Elegí al menos una disciplina para el torneo.',
+        onToggle: () => {},
+        onChangePairSize: () => {},
+      }),
+    )
+    expect(paso).toContain('Elegí al menos una disciplina para el torneo.')
   })
 })

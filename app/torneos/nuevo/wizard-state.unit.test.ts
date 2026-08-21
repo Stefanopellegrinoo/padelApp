@@ -368,15 +368,16 @@ describe('newTournamentPayload', () => {
   // `armado-state.ts`, `carga-state.ts`, `sumar-state.ts`: sacar la lógica
   // del `.tsx` para poder testearla sin DOM y sin base).
   //
-  // `pairSize` es OBLIGATORIO acá (a diferencia de `buildDisciplines`): el
-  // único caller (`Wizard`) siempre tiene uno, `useState` nace en 2. Por eso
-  // el pádel de este test también lo pasa explícito — la fila que sale
-  // ahora lleva `pairSize: 2` en vez de omitir la clave, y es exactamente lo
-  // mismo que escribe la base (`addDiscipline`: `spec.pairSize ?? 2`).
+  // `pairSizes` es OBLIGATORIO acá (a diferencia de `buildDisciplines`): el
+  // único caller (`Wizard`) siempre tiene uno por disciplina, `useState`
+  // nace en `{ PADEL: 2, FIFA: 2 }`. Por eso el pádel de este test también lo
+  // pasa explícito — la fila que sale lleva `pairSize: 2` en vez de omitir
+  // la clave, y es exactamente lo mismo que escribe la base
+  // (`addDiscipline`: `spec.pairSize ?? 2`).
   it('arma exactamente el payload que createTournament espera, para pádel', () => {
     const squad: Squad = { names: Array(8).fill('Jugador'), mySeat: 0 }
     const config = configFor(8)
-    expect(newTournamentPayload('Los Jueves', squad, config, ['PADEL'], 2)).toEqual({
+    expect(newTournamentPayload('Los Jueves', squad, config, ['PADEL'], { PADEL: 2, FIFA: 2 })).toEqual({
       name: 'Los Jueves',
       squadNames: squad.names,
       mySeatIndex: 0,
@@ -391,7 +392,7 @@ describe('newTournamentPayload', () => {
   it('el squadSize del payload sale del plantel cargado, no el que traía la config', () => {
     const squad: Squad = { names: [...Array(8).fill('Jugador'), '', ''], mySeat: null }
     const staleConfig = configFor(12)
-    const payload = newTournamentPayload('X', squad, staleConfig, ['PADEL'], 2)
+    const payload = newTournamentPayload('X', squad, staleConfig, ['PADEL'], { PADEL: 2, FIFA: 2 })
     expect(payload.squadNames).toHaveLength(8)
     expect(payload.config.squadSize).toBe(8)
   })
@@ -402,7 +403,7 @@ describe('newTournamentPayload', () => {
   it('con pairSize=1, las disciplines del payload salen con la curva de la decisión #3963', () => {
     const squad: Squad = { names: Array(8).fill('Jugador'), mySeat: null }
     const config = configFor(8, 1)
-    const payload = newTournamentPayload('Liga FIFA', squad, config, ['FIFA'], 1)
+    const payload = newTournamentPayload('Liga FIFA', squad, config, ['FIFA'], { PADEL: 2, FIFA: 1 })
     expect(payload.disciplines).toEqual([
       {
         kind: 'FIFA',
@@ -411,6 +412,34 @@ describe('newTournamentPayload', () => {
         pairSize: 1,
       },
     ])
+  })
+
+  /**
+   * W76 (verify-report-pr21-cierre, #4016) + decisión #4017: "Lados" ya NO
+   * es un solo control para todas las disciplinas marcadas — cada una trae
+   * el suyo. Con Pádel Y FIFA marcados y SÓLO FIFA en "Individual", el
+   * payload tiene que traer las DOS filas con su `pairSize` PROPIO — ni
+   * las dos en 2 (el bug de W69/W76: "Individual" se ignoraba en silencio)
+   * ni las dos en 1 (herencia cruzada, exactamente lo que W69 cerró y que
+   * REQ-D2-1 prohíbe).
+   *
+   * Un test que sólo mirara UNA fila no probaría la ausencia de herencia
+   * cruzada en ningún sentido — hace falta ver las DOS a la vez.
+   */
+  it('con Pádel Y FIFA marcados, cada uno trae SU pairSize -- sin herencia cruzada en ningún sentido (W76, #4017)', () => {
+    const squad: Squad = { names: Array(8).fill('Jugador'), mySeat: null }
+    const config = configFor(8)
+    const payload = newTournamentPayload('Mixto', squad, config, ['PADEL', 'FIFA'], { PADEL: 2, FIFA: 1 })
+
+    expect(payload.disciplines).toHaveLength(2)
+    const padel = payload.disciplines.find((row) => row.kind === 'PADEL')
+    const fifa = payload.disciplines.find((row) => row.kind === 'FIFA')
+    expect(padel?.pairSize).toBe(2)
+    expect(fifa?.pairSize).toBe(1)
+    // Cada uno con SU curva (#3963: 8 lados de a uno puntúan los primeros
+    // seis; 8 jugadores en parejas son 4 lados, la curva de 4).
+    expect(padel?.config.points).toEqual([10, 6, 3, 1])
+    expect(fifa?.config.points).toEqual([10, 7, 5, 3, 2, 1, 0, 0])
   })
 })
 

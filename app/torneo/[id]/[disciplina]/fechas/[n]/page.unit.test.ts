@@ -539,6 +539,16 @@ describe('no-regresión — una fecha ROUND_ROBIN sigue viendo exactamente lo de
 })
 
 describe('el armado — el selector de formato pasa el `formato` guardado, no un valor fijo', () => {
+  /**
+   * S84 (verify-report-pr21-cierre #4016): este test seguía decidiendo "cuál
+   * botón está marcado" con `bg-accent`, la clase de Tailwind — sin ninguna
+   * señal semántica, así que un cambio de estilo (o un lector de pantalla)
+   * no tenía forma de confiar en esto. `armado.unit.test.ts` ya había
+   * migrado a `aria-checked` (S81) el mismo día que este archivo, gemelo,
+   * recibió +305 líneas y se pasó por al lado. `SelectorDeFormato`
+   * (`armado.tsx`) ya dibuja `role="radio"` + `aria-checked` por botón desde
+   * S81 — acá no cambia una línea de producción, sólo lo que el test mira.
+   */
   it('con GROUPS_KNOCKOUT ya elegido, el botón marcado es el de grupos', async () => {
     escena.status = 'DRAFT'
     escena.isAdmin = true
@@ -550,8 +560,8 @@ describe('el armado — el selector de formato pasa el `formato` guardado, no un
 
     const btnGrupos = /<button[^>]*>2 grupos \+ llave<\/button>/.exec(html)?.[0] ?? ''
     const btnTodos = /<button[^>]*>Todos contra todos<\/button>/.exec(html)?.[0] ?? ''
-    expect(btnGrupos).toContain('bg-accent')
-    expect(btnTodos).not.toContain('bg-accent')
+    expect(btnGrupos).toContain('aria-checked="true"')
+    expect(btnTodos).toContain('aria-checked="false"')
   })
 })
 

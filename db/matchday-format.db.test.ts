@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import { describe, expect, it } from 'vitest'
-import { defaultConfig, knockoutMatchups, single, type MatchdayFormat, type SideStanding } from '@/core'
+import { defaultConfig, KNOCKOUT_GROUP_COUNTS, knockoutMatchups, single, type MatchdayFormat, type SideStanding } from '@/core'
 import {
   closeMatchday,
   createMatchday,
@@ -477,6 +477,20 @@ function fakeGroups(groupCount: number): SideStanding[][] {
   return Array.from({ length: groupCount }, (_unused, index) => [standingAt(index * 2 + 1), standingAt(index * 2 + 2)])
 }
 
+/** Qué `groups` sabe armar `knockoutMatchups` HOY, probado con fixtures reales — no una lista repetida a mano. */
+function probeSupportedGroupCounts(): Set<number> {
+  const actualGroups = new Set<number>()
+  for (let groupCount = 1; groupCount <= 8; groupCount++) {
+    try {
+      knockoutMatchups(fakeGroups(groupCount), 2)
+      actualGroups.add(groupCount)
+    } catch {
+      // knockoutMatchups no sabe armar cruces para esta cantidad de grupos
+    }
+  }
+  return actualGroups
+}
+
 /**
  * `groups ∈ {1,2,4}` y `qualifiersPerGroup = 2` están escritos DOS veces: el
  * check `matchdays_formato_kind` (0040, SQL) y `knockoutMatchups`
@@ -502,17 +516,7 @@ describe('groups ∈ {1,2,4} + qualifiersPerGroup=2 no driftea entre matchdays_f
     }
     const sqlGroups = new Set(arrayLiteral[1].split(',').map((value) => Number(value.trim())))
 
-    const actualGroups = new Set<number>()
-    for (let groupCount = 1; groupCount <= 8; groupCount++) {
-      try {
-        knockoutMatchups(fakeGroups(groupCount), 2)
-        actualGroups.add(groupCount)
-      } catch {
-        // knockoutMatchups no sabe armar cruces para esta cantidad de grupos
-      }
-    }
-
-    expect(actualGroups).toEqual(sqlGroups)
+    expect(probeSupportedGroupCounts()).toEqual(sqlGroups)
   })
 
   it('el qualifiersPerGroup del check SQL es EXACTAMENTE el que knockoutMatchups sabe armar', () => {
@@ -537,5 +541,25 @@ describe('groups ∈ {1,2,4} + qualifiersPerGroup=2 no driftea entre matchdays_f
     }
 
     expect(actualQualifiers).toEqual(new Set([sqlQualifiers]))
+  })
+
+  /**
+   * W81 (verify-report-pr21-cierre, #4016): `offerableFormats`
+   * (`core/knockout.ts`) tenía su PROPIA lista hardcodeada (`[2, 4]`) — una
+   * TERCERA copia de "qué `groups` sabe armar `knockoutMatchups`" que este
+   * tripwire (arriba) sólo ataba de a DOS: si mañana `knockoutMatchups`
+   * aprendiera a armar 8 grupos y el check SQL se actualizara junto con él,
+   * los dos tests de arriba seguían verdes y `offerableFormats` seguía
+   * ofreciendo sólo 2 y 4 en silencio.
+   *
+   * `KNOCKOUT_GROUP_COUNTS` es ahora la fuente ÚNICA: `offerableFormats` LEE
+   * de ahí (filtrando el `1`, que la decisión #4014 excluye siempre por
+   * motivo de negocio, no de forma) en vez de repetir la lista. Este test
+   * ata esa fuente al mismo catálogo real que ya prueban los dos de arriba
+   * — la tercera copia deja de poder existir porque no hay una tercera
+   * lista, hay una sola constante que los tres lugares comparten.
+   */
+  it('KNOCKOUT_GROUP_COUNTS (la fuente de offerableFormats) es EXACTAMENTE lo que knockoutMatchups sabe armar', () => {
+    expect(new Set(KNOCKOUT_GROUP_COUNTS)).toEqual(probeSupportedGroupCounts())
   })
 })

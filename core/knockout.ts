@@ -191,6 +191,8 @@ function qualifierAt(group: readonly SideStanding[] | undefined, index: number):
  * del design, "knockoutMatchups sólo soporta G∈{1,2,4} y P=2"): cualquier
  * otra combinación tira, no se tolera en silencio.
  */
+export const KNOCKOUT_GROUP_COUNTS = [1, 2, 4] as const
+
 export function knockoutMatchups(
   groups: readonly (readonly SideStanding[])[],
   qualifiersPerGroup: number,
@@ -453,22 +455,34 @@ function smallestGroupSize(sides: number, groups: number): number {
  * Los formatos que el selector puede OFRECER para `sides` lados (W75,
  * verify-report-pr21 #4004 / decisión de Stefano en
  * `decisions/formatos-ofrecidos-en-el-armado`): `ROUND_ROBIN` siempre, más
- * cada `GROUPS_KNOCKOUT` de `groups ∈ {2, 4}` (`knockoutMatchups` sabe armar
- * también 1, ver abajo por qué queda afuera) donde CADA grupo tenga 3 lados o
- * más (`smallestGroupSize(sides, groups) >= 3`).
+ * cada `GROUPS_KNOCKOUT` de `KNOCKOUT_GROUP_COUNTS` (arriba) donde CADA
+ * grupo tenga 3 lados o más (`smallestGroupSize(sides, groups) >= 3`).
  *
- * Dos razones, no una:
- * 1. `groups = 1` queda afuera SIEMPRE, sin excepción: un grupo + llave es
- *    el mismo round robin de siempre más un partido extra
- *    (`matchCountForFormat` de 1 grupo = `combinations(sides) + 1`) — nunca
- *    ahorra nada, y `suggestFormat` tampoco lo propone jamás.
+ * Dos razones, no una, para lo que queda afuera:
+ * 1. `groups = 1` queda afuera SIEMPRE, sin excepción — filtrado acá, no en
+ *    `KNOCKOUT_GROUP_COUNTS`: es una regla de NEGOCIO (decisión #4014), no
+ *    de forma. Un grupo + llave es el mismo round robin de siempre más un
+ *    partido extra (`matchCountForFormat` de 1 grupo =
+ *    `combinations(sides) + 1`) — nunca ahorra nada, y `suggestFormat`
+ *    (deriva de ESTA función) tampoco lo propone jamás.
  * 2. Un grupo de 2 lados con `qualifiersPerGroup = 2` tiene tasa de
  *    eliminación CERO: pasan los dos, el grupo no decide nada. No es una
  *    regla estética, es aritmética.
+ *
+ * W81 (verify-report-pr21-cierre, #4016): ANTES iteraba `[2, 4] as const`,
+ * una copia a mano — una TERCERA, junto con el check SQL (`matchdays_formato_kind`,
+ * 0040) y `knockoutMatchups` (arriba) — que el tripwire de W74
+ * (`db/matchday-format.db.test.ts`) no ataba: si `knockoutMatchups`
+ * aprendiera a armar 8 grupos, esta lista podía seguir ofreciendo sólo 2 y 4
+ * en silencio. Ahora DERIVA de `KNOCKOUT_GROUP_COUNTS`, la misma constante
+ * que documenta lo que `knockoutMatchups` sabe armar — no puede haber una
+ * tercera copia si no hay una segunda lista, sólo un filtro de negocio sobre
+ * la única fuente.
  */
 export function offerableFormats(sides: number): MatchdayFormat[] {
   const formats: MatchdayFormat[] = [{ kind: 'ROUND_ROBIN' }]
-  for (const groups of [2, 4] as const) {
+  for (const groups of KNOCKOUT_GROUP_COUNTS) {
+    if (groups === 1) continue // decisión #4014: "1 grupo + llave" nunca ahorra nada
     if (smallestGroupSize(sides, groups) >= 3) {
       formats.push({ kind: 'GROUPS_KNOCKOUT', groups, qualifiersPerGroup: 2 })
     }

@@ -213,9 +213,15 @@ describe('la pantalla de una fecha no recalcula sus puntos', () => {
   // estados de fecha: montarlo pediría mockear ocho lectores para pinchar un
   // argumento. El techo, declarado: falso POSITIVO si alguien renombra
   // `detail`, `config` o `snapshot` — el lado correcto del que equivocarse.
+  //
+  // W71 (verify-report-pr21 #4004): el segundo argumento dejó de ser
+  // `detail.matches` a secas — la restricción de pureza del design (#3801,
+  // PUNTO 6) obliga a filtrar por fase antes de tabular, y ese filtro vive en
+  // `standingsMatches`. Pinchar el nombre nuevo, no `detail.matches`, es lo
+  // que hace que este test note si alguien vuelve a pasar el array crudo.
   it('le pasa a la tabla el allows_draw CONGELADO de la fecha, no un booleano fijo', () => {
     expect(sinComentarios(source)).toMatch(
-      /computeStandings\s*\(\s*detail\.sides\s*,\s*detail\.matches\s*,\s*config\s*,\s*snapshot\s*,\s*matchday\.allowsDraw\s*,?\s*\)/,
+      /computeStandings\s*\(\s*detail\.sides\s*,\s*standingsMatches\s*,\s*config\s*,\s*snapshot\s*,\s*matchday\.allowsDraw\s*,?\s*\)/,
     )
   })
 

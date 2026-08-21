@@ -55,21 +55,32 @@ describe('SelectorDeFormato', () => {
    * `formato` en GROUPS_KNOCKOUT y `suggested` en ROUND_ROBIN (el admin ya se
    * apartó de la sugerencia), el botón marcado tiene que ser el de grupos.
    * Se pincha el ARGUMENTO `formato`, no sólo que el botón exista (#3957).
+   *
+   * S81 (verify-report-pr21 #4004): esto se decidía con `toContain('bg-accent')`
+   * — acoplaba el test a una clase de Tailwind, no al comportamiento. Un
+   * rediseño que cambiara el color rompía un test que no habla de color, sin
+   * decir nada de si el control seguía marcado de verdad. `SelectorDeFormato`
+   * tampoco tenía NINGUNA señal de accesibilidad —sin `aria-checked` ni
+   * `role`, un lector de pantalla no podía saber cuál botón está elegido—:
+   * el hallazgo real era que el control no era accesible, no que el test
+   * fuera brittle. El fix es del componente (`role="radio"`/`aria-checked`,
+   * patrón "radio group" de la ARIA APG para opciones mutuamente
+   * excluyentes); el test ahora lee esa señal.
    */
   it('marca como elegido el `formato` que llega, no el sugerido', () => {
     const eligioGrupos = html(GROUPS_2, GROUPS_2)
     const btnGrupos = /<button[^>]*>2 grupos \+ llave<\/button>/.exec(eligioGrupos)?.[0] ?? ''
     const btnTodos = /<button[^>]*>Todos contra todos<\/button>/.exec(eligioGrupos)?.[0] ?? ''
-    expect(btnGrupos).toContain('bg-accent')
-    expect(btnTodos).not.toContain('bg-accent')
+    expect(btnGrupos).toContain('aria-checked="true"')
+    expect(btnTodos).toContain('aria-checked="false"')
   })
 
   it('y al revés: con formato ROUND_ROBIN elegido, el marcado es "Todos contra todos"', () => {
     const eligioTodos = html(ROUND_ROBIN, GROUPS_2)
     const btnGrupos = /<button[^>]*>2 grupos \+ llave<\/button>/.exec(eligioTodos)?.[0] ?? ''
     const btnTodos = /<button[^>]*>Todos contra todos<\/button>/.exec(eligioTodos)?.[0] ?? ''
-    expect(btnTodos).toContain('bg-accent')
-    expect(btnGrupos).not.toContain('bg-accent')
+    expect(btnTodos).toContain('aria-checked="true"')
+    expect(btnGrupos).toContain('aria-checked="false"')
   })
 
   /**
@@ -87,7 +98,7 @@ describe('SelectorDeFormato', () => {
     expect(huerfano).toContain('2 grupos + llave')
     const btnGrupos = /<button[^>]*>2 grupos \+ llave<\/button>/.exec(huerfano)?.[0] ?? ''
     const btnTodos = /<button[^>]*>Todos contra todos<\/button>/.exec(huerfano)?.[0] ?? ''
-    expect(btnGrupos).toContain('bg-accent')
-    expect(btnTodos).not.toContain('bg-accent')
+    expect(btnGrupos).toContain('aria-checked="true"')
+    expect(btnTodos).toContain('aria-checked="false"')
   })
 })

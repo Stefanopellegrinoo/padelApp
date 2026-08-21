@@ -481,6 +481,15 @@ const FORMATO_LIBRE = 'border-line'
  * NO hace es ofrecer un `groups` nuevo que nadie sugirió: sin `suggested`
  * en grupos, tocar el botón vuelve a guardar el mismo `formato` huérfano, no
  * uno inventado. `knockoutMatchups` sólo sabe armar G∈{1,2,4} de todas formas.
+ *
+ * `role="radiogroup"` + `role="radio"`/`aria-checked` por botón (S81,
+ * verify-report-pr21 #4004): antes, "cuál está elegido" sólo se distinguía
+ * por la clase de Tailwind (`FORMATO_ELEGIDO` vs `FORMATO_LIBRE`) — sin
+ * ninguna señal semántica, un lector de pantalla no tenía forma de saber cuál
+ * de los dos formatos está marcado. Es exactamente el patrón "radio group"
+ * de la ARIA Authoring Practices para un conjunto de opciones mutuamente
+ * excluyentes, sobre `<button>` en vez de `<input type="radio">` porque acá
+ * no hay un `<form>` que serialice el valor — el estado lo maneja `onChange`.
  */
 export function SelectorDeFormato({
   formato,
@@ -497,9 +506,11 @@ export function SelectorDeFormato({
   return (
     <section className="flex flex-col gap-2">
       <h2 className={`${STEP_TITLE} border-b border-line pb-2`}>Formato de la fecha</h2>
-      <div className="flex gap-2">
+      <div className="flex gap-2" role="radiogroup" aria-label="Formato de la fecha">
         <button
           type="button"
+          role="radio"
+          aria-checked={formato.kind === 'ROUND_ROBIN'}
           disabled={pending}
           onClick={() => onChange({ kind: 'ROUND_ROBIN' })}
           className={`${FORMATO_BOTON} ${formato.kind === 'ROUND_ROBIN' ? FORMATO_ELEGIDO : FORMATO_LIBRE}`}
@@ -509,6 +520,8 @@ export function SelectorDeFormato({
         {grupos !== null && (
           <button
             type="button"
+            role="radio"
+            aria-checked={formato.kind === 'GROUPS_KNOCKOUT'}
             disabled={pending}
             onClick={() => onChange(grupos)}
             className={`${FORMATO_BOTON} ${formato.kind === 'GROUPS_KNOCKOUT' ? FORMATO_ELEGIDO : FORMATO_LIBRE}`}

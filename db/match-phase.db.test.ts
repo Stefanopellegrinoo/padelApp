@@ -118,6 +118,23 @@ describe('matches.fase / matches.grupo (REQ-D7-1)', () => {
   })
 })
 
+/**
+ * S79 (verify-report-pr21 #4004): `matchday_phase` no tiene NINGÚN consumidor
+ * de PRODUCCIÓN — `currentPhase` (`core/knockout.ts`) hace la misma deducción
+ * en TypeScript y es lo que usa `advancePhase`. La auditoría preguntó si
+ * correspondía borrarla o traerle un consumidor real.
+ *
+ * Decisión: SE QUEDA, sin migración. SÍ tiene un consumidor — este archivo:
+ * el `describe('PHASE_ORDER no driftea...')` de más abajo lee su
+ * `pg_get_functiondef` como tripwire estructural contra `PHASE_ORDER`. Es un
+ * consumidor de TEST, no de producción — pero es real: si `matchday_phase` se
+ * borra, ese tripwire se va con ella, y el acople entre las tres copias de
+ * las fases (`PHASE_ORDER` en TS, el `check` de `matches.fase`, el
+ * `array[...]` de esta función) vuelve a depender sólo de un comentario.
+ * Sigue revocada de los tres roles (W5, `0020_disciplines_grants.sql`) — ese
+ * guard no cambia. Quien la encuentre con "0 consumidores" en un grep de
+ * producción: no es código muerto, es un tripwire vivo.
+ */
 describe('matchday_phase (REQ-D7-3)', () => {
   it('un matchday recién armado devuelve GRUPO', async () => {
     const { matchdayId } = await armedMatchday()

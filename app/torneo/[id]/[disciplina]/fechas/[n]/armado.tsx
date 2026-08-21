@@ -205,6 +205,9 @@ export function Armado({
     looseGuests: looseGuests.length,
     guestPairs: guestPairs.length,
     sideSize,
+    // El GUARDADO, no la sugerencia (W72): `matches` tiene que contar los
+    // partidos del formato que ya está en la base, no asumir round robin.
+    formato,
   })
   const { size, sides, matches, complete, needsLooseGuest, eventualSize, tooFew, tooMany } = shape
   const label = words(sideSize)

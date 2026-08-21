@@ -4,7 +4,7 @@
  * server'`, así que la suite pura no lo puede importar.
  */
 
-import { MAX_PLAYERS, MIN_PLAYERS, suggestFormat, type MatchdayFormat, type SideSize } from '@/core'
+import { MAX_PLAYERS, matchCountForFormat, MIN_PLAYERS, suggestFormat, type MatchdayFormat, type SideSize } from '@/core'
 
 /** Un asiento del plantel, como lo dibuja el armado. */
 export interface SeatVM {
@@ -47,7 +47,13 @@ export interface MatchdayShape {
   size: number
   /** Lados que salen de esas personas. De a uno, uno por cabeza. */
   sides: number
-  /** Partidos del round robin completo: C(sides, 2). */
+  /**
+   * Los partidos reales de la fecha, según el `formato` GUARDADO — round
+   * robin completo (`C(sides, 2)`) si es `ROUND_ROBIN`, grupos + llave si es
+   * `GROUPS_KNOCKOUT` (W72, verify-report-pr21 #4004). Antes de esta cuenta
+   * era SIEMPRE la fórmula del round robin, incluso con grupos ya elegidos
+   * y guardados en la base.
+   */
   matches: number
   /** Todos entran en lados completos. De a uno es siempre cierto. */
   complete: boolean
@@ -89,12 +95,20 @@ export interface MatchdayShape {
  * decisión de producto es que se cierra con el formato de grupos (REQ-D8-1,
  * PR21), no con una constante nueva — por eso `matches` existe: de a uno, 12
  * jugadores son 66 partidos, y ése es el número que hace pedir ese formato.
+ *
+ * `formato` es OBLIGATORIO y sin default, mismo criterio que `allowsDraw` en
+ * `computeStandings` (design #3801): sin él, `matches` seguía prometiendo el
+ * round robin incluso DESPUÉS de que el admin ya hubiera elegido y guardado
+ * grupos (W72, verify-report-pr21 #4004) — un default a `ROUND_ROBIN` acá
+ * habría escondido ese mismo bug otra vez, en vez de obligar a cada llamador
+ * a decir de qué formato está hablando.
  */
 export function matchdayShape({
   confirmed,
   looseGuests,
   guestPairs,
   sideSize,
+  formato,
 }: {
   confirmed: number
   /** Invitados sueltos ya sentados: juegan con alguien del torneo. */
@@ -102,6 +116,8 @@ export function matchdayShape({
   /** Parejas invitadas: suman DOS personas cada una. */
   guestPairs: number
   sideSize: SideSize
+  /** El `matchdays.formato` GUARDADO hoy — no la sugerencia. */
+  formato: MatchdayFormat
 }): MatchdayShape {
   const size = confirmed + looseGuests + guestPairs * 2
   // La línea de "son impares" describe al suelto que `syncGuestSeat` agrega, y
@@ -113,7 +129,7 @@ export function matchdayShape({
   return {
     size,
     sides,
-    matches: (sides * (sides - 1)) / 2,
+    matches: matchCountForFormat(formato, sides),
     complete: size % sideSize === 0,
     needsLooseGuest,
     eventualSize,

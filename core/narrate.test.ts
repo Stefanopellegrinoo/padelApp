@@ -255,9 +255,18 @@ describe('thirdPlaceNote', () => {
 // que esas columnas no explican, porque el orden real lo arma la llave
 // (`knockoutPositions`), no la fase de grupos sola.
 describe('bracketOrderNote', () => {
-  it('cuenta que el orden sale de la llave, no de PG ni de la diferencia de games', () => {
-    expect(bracketOrderNote()).toBe(
+  const PADEL = CONFIG.matchFormat
+  const FIFA = { ...CONFIG.matchFormat, openScore: true }
+
+  it('pádel: cuenta la diferencia de games', () => {
+    expect(bracketOrderNote(PADEL)).toBe(
       'El orden sale del resultado de la llave, no sólo de la fase de grupos: por eso puede haber lados con el mismo PG y la misma diferencia de games en un orden distinto.',
+    )
+  })
+
+  it('FIFA (marcador abierto): cuenta la diferencia de GOL, no de games', () => {
+    expect(bracketOrderNote(FIFA)).toBe(
+      'El orden sale del resultado de la llave, no sólo de la fase de grupos: por eso puede haber lados con el mismo PG y la misma diferencia de gol en un orden distinto.',
     )
   })
 })

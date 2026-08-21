@@ -564,12 +564,14 @@ export default async function FechaDetailPage({ params }: PageProps) {
     // apaga a `tiebreakNote` en el caso NORMAL de una fecha con llave —no en
     // el borde raro que `tiebreakNote` ya cubre— y el pie se queda mudo justo
     // donde más hace falta: medido, dos lados con el mismo `PG` y la misma
-    // diferencia de games en un orden que ninguna columna explica. Mutuamente
+    // diferencia en un orden que ninguna columna explica. Mutuamente
     // excluyente con `note`: cuando el orden no se movió, `tiebreakNote` ya lo
-    // explica y esto no hace falta.
+    // explica y esto no hace falta. `config.matchFormat`, no un "games" fijo:
+    // la llave existe sobre todo en FIFA, donde eso es gol, no games —mismo
+    // argumento de `tiebreakNote` dos líneas arriba.
     const bracketNote =
       status === 'CLOSED' && isGroupsKnockout && orderMoved(standings, tableRows)
-        ? bracketOrderNote()
+        ? bracketOrderNote(config.matchFormat)
         : null
 
     // Decisión #3990: el costo que quedó vivo de #3979 ("se puede cerrar sin

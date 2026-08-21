@@ -335,7 +335,13 @@ describe('la fecha GROUPS_KNOCKOUT cerrada — la llave no se pierde al cerrar (
 
     const html = await render()
 
-    expect(html).toContain('El orden sale del resultado de la llave')
+    // La disciplina de este archivo es FIFA (`openScore: true`, línea 51): el
+    // pie tiene que decir "diferencia de GOL", no "de games" — un `toContain`
+    // que sólo mirara el prefijo pasaría igual con "games" hardcodeado.
+    expect(html).toContain(
+      'El orden sale del resultado de la llave, no sólo de la fase de grupos: por eso puede haber lados con el mismo PG y la misma diferencia de gol en un orden distinto.',
+    )
+    expect(html).not.toContain('diferencia de games en un orden distinto')
   })
 })
 

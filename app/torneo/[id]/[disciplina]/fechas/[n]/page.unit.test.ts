@@ -30,6 +30,12 @@ const escena = vi.hoisted(() => ({
   matches: [] as MatchWithId[],
   sides: [] as Side[],
   isAdmin: true,
+  // Vacío salvo en los tests que necesitan `frozenTableRows` reordenando de
+  // verdad (W70, verify-report-pr21 #4004): con el Map vacío de siempre
+  // ninguna fila tiene puesto congelado, así que `tableRows` es LITERALMENTE
+  // `standings` sin tocar y `orderMoved` da `false` siempre — la pie de la
+  // llave (`bracketOrderNote`) nunca se podría ejercitar contra eso.
+  frozenPoints: new Map<string, { position: number; points: number }>(),
 }))
 
 vi.mock('@/db/server', () => ({
@@ -42,7 +48,7 @@ vi.mock('@/db/season', async (importOriginal) => {
     ...real,
     awardsBefore: async () => new Map(),
     closedHistory: async () => null,
-    frozenPointsOf: async () => new Map(),
+    frozenPointsOf: async () => escena.frozenPoints,
   }
 })
 
@@ -265,12 +271,34 @@ describe('la fecha GROUPS_KNOCKOUT cerrada — la llave no se pierde al cerrar (
     ]
   }
 
+  /**
+   * Los puestos que `knockoutPositions` (core/knockout.ts) arma de verdad para
+   * `bracketMatches()`: 1º y 2º de la final (1, 5), 3º/4º de la tabla de
+   * grupos porque el tercer puesto no se jugó (6, 2 — perdedores de semi
+   * ordenados por su puesto de grupo), y de ahí para abajo la tabla de grupos
+   * combinada de los dos grupos (3, 7, 4, 8). Calculado a mano y verificado
+   * contra `core/knockout.test.ts`, no inventado para que el test cierre.
+   */
+  function bracketFrozenPoints(): Map<string, { position: number; points: number }> {
+    return new Map([
+      ['e1', { position: 1, points: 10 }],
+      ['e5', { position: 2, points: 7 }],
+      ['e2', { position: 3, points: 5 }],
+      ['e6', { position: 4, points: 3 }],
+      ['e3', { position: 5, points: 2 }],
+      ['e7', { position: 6, points: 1 }],
+      ['e4', { position: 7, points: 0 }],
+      ['e8', { position: 8, points: 0 }],
+    ])
+  }
+
   it('dibuja la llave por fases (Semifinal, Final), no el acordeón de Rondas mezclando todo bajo "Ronda 1"', async () => {
     escena.status = 'CLOSED'
     escena.isAdmin = true
     escena.formato = { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 }
     escena.sides = ALL_SIDES
     escena.matches = bracketMatches()
+    escena.frozenPoints = bracketFrozenPoints()
 
     const html = await render()
 
@@ -285,6 +313,7 @@ describe('la fecha GROUPS_KNOCKOUT cerrada — la llave no se pierde al cerrar (
     escena.formato = { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 }
     escena.sides = ALL_SIDES
     escena.matches = bracketMatches()
+    escena.frozenPoints = bracketFrozenPoints()
 
     const html = await render()
 
@@ -294,6 +323,19 @@ describe('la fecha GROUPS_KNOCKOUT cerrada — la llave no se pierde al cerrar (
     // `standingsFromBracket` calculó su award con SÓLO el partido de grupo: el
     // PG que se dibuja tiene que decir lo mismo que la tabla que pagó.
     expect(fila?.[1]).toBe('1')
+  })
+
+  it('explica el orden cuando el resultado de la llave lo mueve y tiebreakNote se apaga por orderMoved', async () => {
+    escena.status = 'CLOSED'
+    escena.isAdmin = true
+    escena.formato = { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 }
+    escena.sides = ALL_SIDES
+    escena.matches = bracketMatches()
+    escena.frozenPoints = bracketFrozenPoints()
+
+    const html = await render()
+
+    expect(html).toContain('El orden sale del resultado de la llave')
   })
 })
 

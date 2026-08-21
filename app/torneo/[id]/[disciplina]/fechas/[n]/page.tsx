@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import type { ReactNode } from 'react'
 import {
+  bracketOrderNote,
   computeRanking,
   computeStandings,
   currentPhase,
@@ -556,6 +557,21 @@ export default async function FechaDetailPage({ params }: PageProps) {
         ? tiebreakNote(standings, config, nameOf, discipline.pairSize)
         : null
 
+    // W70 (verify-report-pr21 #4004), decisión #3962 respetada: el orden NO
+    // cambia, esto sólo lo explica. En GROUPS_KNOCKOUT el orden congelado casi
+    // siempre mueve el podio (`knockoutPositions` lo arma con el resultado de
+    // la LLAVE, no con la tabla de grupos), así que `orderMoved` de arriba
+    // apaga a `tiebreakNote` en el caso NORMAL de una fecha con llave —no en
+    // el borde raro que `tiebreakNote` ya cubre— y el pie se queda mudo justo
+    // donde más hace falta: medido, dos lados con el mismo `PG` y la misma
+    // diferencia de games en un orden que ninguna columna explica. Mutuamente
+    // excluyente con `note`: cuando el orden no se movió, `tiebreakNote` ya lo
+    // explica y esto no hace falta.
+    const bracketNote =
+      status === 'CLOSED' && isGroupsKnockout && orderMoved(standings, tableRows)
+        ? bracketOrderNote()
+        : null
+
     // Decisión #3990: el costo que quedó vivo de #3979 ("se puede cerrar sin
     // jugar el tercer puesto") era que nadie se enteraba de que el 3º/4º salió
     // de la tabla de grupos y no de la cancha. Sólo en la fecha CERRADA — es
@@ -718,6 +734,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
           )}
 
           {note !== null && <p className="text-[12.5px] font-[550] text-muted">{note}</p>}
+          {bracketNote !== null && <p className="text-[12.5px] font-[550] text-muted">{bracketNote}</p>}
           {thirdNote !== null && <p className="text-[12.5px] font-[550] text-muted">{thirdNote}</p>}
         </div>
         )}

@@ -202,6 +202,27 @@ export function thirdPlaceNote(matches: readonly MatchResult[]): string | null {
   return 'El tercer puesto se definió por la tabla de grupos: no se jugó el partido.'
 }
 
+/**
+ * La línea de relato para cuando el ORDEN de una fecha `GROUPS_KNOCKOUT`
+ * cerrada no lo explican ni el `PG` ni la diferencia de games (W70,
+ * verify-report-pr21 #4004, decisión #3962 respetada: el orden NO cambia,
+ * esto sólo lo cuenta). `knockoutPositions` (core/knockout.ts) arma ese orden
+ * a partir del resultado de LA LLAVE —quién ganó la final, quién quedó
+ * afuera en cada instancia—, no de la fase de grupos sola: dos lados
+ * empatados en `PG` y en diferencia de games pueden terminar en un orden que
+ * esas dos columnas no explican.
+ *
+ * `tiebreakNote` (tabla-desempate.ts) no puede narrar ese caso: esa frase
+ * explica el desempate que hizo `computeStandings` sobre el orden EN VIVO, y
+ * acá el orden que se dibuja es el de la llave, no el de `computeStandings`
+ * — `page.tsx` sólo la muestra cuando `orderMoved` ya apagó a `tiebreakNote`,
+ * así que las dos frases son mutuamente excluyentes y ninguna reemplaza a la
+ * otra: completa el pie donde el otro se calla.
+ */
+export function bracketOrderNote(): string {
+  return 'El orden sale del resultado de la llave, no sólo de la fase de grupos: por eso puede haber lados con el mismo PG y la misma diferencia de games en un orden distinto.'
+}
+
 function ordinal(position: number): string {
   const words: Record<number, string> = {
     1: 'el 1º',

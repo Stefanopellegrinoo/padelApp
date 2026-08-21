@@ -165,6 +165,11 @@ export { formatsLabel, narrateRules, scoreDiffLabel, scoreUnit } from './narrate
 // `thirdPlaceNote` (decisión #3990, PR21 D2): la fecha de la [id]/[disciplina]/
 // fechas/[n]/page.tsx CERRADA es su primer consumidor real.
 export { thirdPlaceNote } from './narrate'
+// `bracketOrderNote` (W70, verify-report-pr21 #4004): mismo primer
+// consumidor que `thirdPlaceNote`, la fecha CERRADA de la llave — cuenta por
+// qué el orden no lo explican `PG` ni la diferencia de games cuando el pie de
+// siempre (`tiebreakNote`) se apaga por `orderMoved`.
+export { bracketOrderNote } from './narrate'
 
 // ── Reading the season back ──────────────────────────────────────────────────
 // What the read-only screens need on top of the ranking. All derived, nothing

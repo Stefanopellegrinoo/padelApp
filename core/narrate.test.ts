@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatLabel, formatsLabel, narrateRules, thirdPlaceNote } from './narrate'
+import { bracketOrderNote, formatLabel, formatsLabel, narrateRules, thirdPlaceNote } from './narrate'
 import { MASTERS_MATCHES, MASTERS_SIZE } from './constants'
 import { pair } from './side'
 import type { MatchResult, Phase, Side, SeasonConfig } from './types'
@@ -247,5 +247,17 @@ describe('thirdPlaceNote', () => {
 
   it('no dice nada sin semifinales: no hay 3º/4º que la llave tenga que explicar', () => {
     expect(thirdPlaceNote([playedMatch('FINAL', A, B)])).toBeNull()
+  })
+})
+
+// W70 (verify-report-pr21 #4004): la tabla de una fecha cerrada con llave
+// puede mostrar el mismo PG y la misma diferencia en dos filas en un orden
+// que esas columnas no explican, porque el orden real lo arma la llave
+// (`knockoutPositions`), no la fase de grupos sola.
+describe('bracketOrderNote', () => {
+  it('cuenta que el orden sale de la llave, no de PG ni de la diferencia de games', () => {
+    expect(bracketOrderNote()).toBe(
+      'El orden sale del resultado de la llave, no sólo de la fase de grupos: por eso puede haber lados con el mismo PG y la misma diferencia de games en un orden distinto.',
+    )
   })
 })

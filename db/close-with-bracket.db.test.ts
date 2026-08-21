@@ -6,8 +6,10 @@ import {
   createMatchday,
   generatePairs,
   openMatchday,
+  redraftMatchday,
   saveResult,
   setAttendance,
+  setMatchdayFormat,
 } from './matchday'
 import { adminClient } from './test/admin'
 import type { Json } from './database.types'
@@ -396,6 +398,50 @@ describe('closeMatchday con llave (GROUPS_KNOCKOUT, Rebanada D1)', () => {
       await saveResult(admin.client, match.id, [{ gamesA: 4, gamesB: 0 }])
     }
 
+    await expect(closeMatchday(admin.client, matchdayId)).rejects.toThrow(/resultado/)
+  })
+
+  /**
+   * C31 (verify-report-pr21, #4004): la rendija de 0041 mira SÓLO `m.fase`,
+   * nunca `matchdays.formato` -- así que alcanza a una fecha que LLEGÓ a
+   * `ROUND_ROBIN` con una fila de TERCER_PUESTO que una llave anterior dejó.
+   * `redraft_matchday` no borra `matches` (0011:7-9) y `setMatchdayFormat`
+   * permite cambiar el formato en DRAFT (REQ-D8-1) -- las dos cosas juntas
+   * dejan una fecha `ROUND_ROBIN` con un partido de llave sin resultado que
+   * hoy cierra igual, contra lo que #3988 fija por escrito ("la excepción
+   * es una rendija de una sola fase, no un permiso general").
+   *
+   * Camino de punta a punta con funciones de producción, rol `authenticated`
+   * -- el mismo que midió la auditoría.
+   */
+  it('C31: redraftear a ROUND_ROBIN con la llave adentro no destraba el cierre', async () => {
+    const { admin, matchdayId, matches } = await openGroupsKnockout(8, {
+      kind: 'GROUPS_KNOCKOUT',
+      groups: 2,
+      qualifiersPerGroup: 2,
+    })
+    for (const match of matches) {
+      await saveResult(admin.client, match.id, [{ gamesA: 3, gamesB: 0 }])
+    }
+    await advancePhase(admin.client, matchdayId) // GRUPO -> SEMI
+    const semis = (await matchesOf(matchdayId)).filter((match) => match.fase === 'SEMI')
+    for (const semi of semis) {
+      await saveResult(admin.client, semi.id, [{ gamesA: 3, gamesB: 0 }])
+    }
+    await advancePhase(admin.client, matchdayId) // SEMI -> FINAL + TERCER_PUESTO
+    const final = (await matchesOf(matchdayId)).find((match) => match.fase === 'FINAL')
+    if (final === undefined) throw new Error('Falta la final.')
+    await saveResult(admin.client, final.id, [{ gamesA: 3, gamesB: 0 }])
+    // TERCER_PUESTO queda SIN JUGAR -- la rendija de #3979/#3988 que 0041
+    // habilita a propósito, mientras la fecha SIGUE siendo GROUPS_KNOCKOUT.
+
+    await redraftMatchday(admin.client, matchdayId) // OPEN -> DRAFT, no borra matches
+    await setMatchdayFormat(admin.client, matchdayId, { kind: 'ROUND_ROBIN' }) // legal en DRAFT
+    await openMatchday(admin.client, matchdayId) // DRAFT -> OPEN, sin re-sortear
+
+    // Con el formato ya en ROUND_ROBIN, el TERCER_PUESTO sin jugar tiene
+    // que volver a trabar el cierre -- la excepción es de GROUPS_KNOCKOUT,
+    // no de la fase sola.
     await expect(closeMatchday(admin.client, matchdayId)).rejects.toThrow(/resultado/)
   })
 })

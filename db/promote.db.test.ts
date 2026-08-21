@@ -122,6 +122,21 @@ async function awardsOf(matchdayId: string): Promise<AwardRow[]> {
   return data ?? []
 }
 
+// `admin.client` (authenticated), no `adminClient()`: mismo criterio que
+// `award-lines.db.test.ts` — el punto es probar que el grant + la RLS de
+// `award_lines_read` alcanzan de verdad (#3957), no que el dato esté ahí.
+async function awardLinesOf(
+  admin: TestUser,
+  matchdayId: string,
+): Promise<Array<{ entry_id: string; ordinal: number; reason: string; points: number }>> {
+  const { data, error } = await admin.client
+    .from('award_lines')
+    .select('entry_id, ordinal, reason, points')
+    .eq('matchday_id', matchdayId)
+  if (error) throw new Error(error.message)
+  return data ?? []
+}
+
 async function squadSeedPositions(seasonId: string): Promise<Array<{ id: string; seed_position: number }>> {
   const db = adminClient()
   const { data, error } = await db
@@ -922,6 +937,61 @@ describe('promoteGuest — disciplina de a uno: se promueve, sin copiar nada', (
       /jugó en una pareja que no cobró puntos/,
     )
     expect((await entryRow(guestA)).kind).toBe('GUEST')
+  })
+})
+
+// ── REQ-D10-3 (spec #3800, design #3801 PUNTO 8 "promote_guest (PR 24)") ────
+//
+// `promote_guest` ya copiaba el TOTAL congelado del compañero (`awards`,
+// spec 3.1, arriba). Desde que `close_matchday` desglosa ese total en
+// `award_lines` (D10 rebanada A), la copia queda a medias: el invitado
+// promovido se lleva el número pero no el POR QUÉ. Este bloque prueba las
+// DOS puntas contra el RPC DIRECTO (`admin.client.rpc('promote_guest', ...)`,
+// no el wrapper `promoteGuest`) — mismo criterio que
+// `award-lines.db.test.ts` y #3989: un guard o una copia sólo probada por el
+// wrapper no cubre nada que el wrapper no ejercite, y acá el wrapper es un
+// passthrough así que en principio alcanzaría, pero el punto de unión real
+// es el RPC — se prueba ahí para no depender de que el wrapper se mantenga
+// como passthrough.
+describe('promoteGuest — REQ-D10-3: copia también el desglose (award_lines)', () => {
+  it('de a DOS: el invitado se lleva las MISMAS líneas que su compañero — razón y puntos, no una línea vacía o inventada', async () => {
+    const { admin, matchdayId, guestId, partnerId } = await closedMatchdayWithLooseGuest('2026-08-10')
+
+    const partnerLinesBefore = (await awardLinesOf(admin, matchdayId))
+      .filter((line) => line.entry_id === partnerId)
+      .sort((left, right) => left.ordinal - right.ordinal)
+    expect(partnerLinesBefore.length).toBeGreaterThan(0)
+
+    const { error } = await admin.client.rpc('promote_guest', { p_entry: guestId })
+    expect(error).toBeNull()
+
+    const after = await awardLinesOf(admin, matchdayId)
+    const guestLines = after
+      .filter((line) => line.entry_id === guestId)
+      .sort((left, right) => left.ordinal - right.ordinal)
+
+    // No una copia vacía ni inventada: mismo ordinal, misma razón, mismos
+    // puntos que el compañero — sólo cambia a quién pertenece la fila.
+    expect(guestLines).toEqual(
+      partnerLinesBefore.map((line) => ({ ...line, entry_id: guestId })),
+    )
+
+    // El compañero no se reescribe.
+    const partnerLinesAfter = after
+      .filter((line) => line.entry_id === partnerId)
+      .sort((left, right) => left.ordinal - right.ordinal)
+    expect(partnerLinesAfter).toEqual(partnerLinesBefore)
+  })
+
+  it('de a UNO: la promoción PROCEDE por el RPC directo (W35) y no copia ninguna línea — no hay compañero de quien copiar', async () => {
+    const { admin, matchdayId, guestId } = await closedSoloMatchdayWithGuest()
+
+    const { error } = await admin.client.rpc('promote_guest', { p_entry: guestId })
+
+    expect(error).toBeNull()
+    expect((await entryRow(guestId)).kind).toBe('SQUAD')
+    const guestLines = (await awardLinesOf(admin, matchdayId)).filter((line) => line.entry_id === guestId)
+    expect(guestLines).toEqual([])
   })
 })
 

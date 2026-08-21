@@ -168,6 +168,43 @@ describe('la fecha GROUPS_KNOCKOUT en juego — fase y llave (REQ-D8-1, decisió
   })
 })
 
+describe('la fecha GROUPS_KNOCKOUT abierta — la tabla filtra por fase (W71, design #3801 "Restricción de pureza")', () => {
+  /**
+   * Dos lados del MISMO grupo (1 y 2), empatados en puntos y diferencia de
+   * juegos SOLO si se cuenta la llave — el mano a mano de GRUPO dice 1, el
+   * de la FINAL dice 2 (lo contrario). `headToHead` (core/standings.ts)
+   * devuelve el PRIMER partido que encuentra que los conecta, así que el
+   * partido de la FINAL va PRIMERO en el array a propósito: sin filtrar por
+   * fase, `computeStandings` lo encuentra antes que el de grupo y el 2
+   * termina arriba del 1 — exactamente el riesgo que el design (#3801,
+   * PUNTO 6) advierte: "el headToHead de dos lados del mismo grupo puede
+   * quedar decidido por una semifinal [o cualquier partido de la llave]".
+   */
+  it('el mano a mano del grupo decide, no un partido de la llave entre los mismos dos lados', async () => {
+    escena.status = 'OPEN'
+    escena.formato = { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 }
+    escena.sides = [1, 2, 3, 4].map(side)
+    escena.matches = [
+      playedMatch('FINAL', 1, 1, 2, 1), // side2 le gana a side1 — CONTRADICE el de grupo
+      playedMatch('GRUPO', 1, 1, 1, 2), // side1 le gana a side2 — el resultado real del grupo
+      playedMatch('GRUPO', 1, 1, 1, 3),
+      playedMatch('GRUPO', 1, 1, 1, 4),
+      playedMatch('GRUPO', 1, 1, 2, 3),
+      playedMatch('GRUPO', 1, 1, 2, 4),
+      playedMatch('GRUPO', 1, 1, 3, 4),
+    ]
+
+    const html = await render()
+
+    // `Llave` (arriba) también nombra a los dos lados en la fila del partido
+    // de GRUPO, así que buscar en la página entera encontraría "Jugador 1"
+    // antes de tiempo sin decir nada del ORDEN de la tabla. Recortar desde
+    // el título de la tabla aísla la sección que sí importa acá.
+    const tabla = html.slice(html.indexOf('Tabla de la fecha'))
+    expect(tabla.indexOf('Jugador 1')).toBeLessThan(tabla.indexOf('Jugador 2'))
+  })
+})
+
 describe('la fecha GROUPS_KNOCKOUT cerrada — la línea de relato (decisión #3990)', () => {
   it('cuenta que el tercer puesto se definió por la tabla cuando no se jugó', async () => {
     escena.status = 'CLOSED'

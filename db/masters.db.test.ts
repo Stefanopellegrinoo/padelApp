@@ -379,6 +379,83 @@ describe('create_masters reads disciplines.config, not seasons.config', () => {
   })
 })
 
+// ── C34 (verify-report-pre-contract #4026) + decisión #4027 ────────────────
+// `disciplines.has_masters` existe desde 0015 y ningún lector de producción
+// la consumía: una disciplina de a uno quedaba sin forma de terminar la
+// temporada, porque `close_matchday` sólo pone `disciplines.status =
+// 'FINISHED'` cuando cierra el Masters, y el Masters rechaza para siempre a
+// una disciplina pair_size=1 (`generateMastersPairs`, arriba). Stefano
+// decidió: una disciplina puede declarar que no juega Masters, y en ese caso
+// termina con su última fecha REGULAR.
+async function setHasMasters(disciplineId: DisciplineId, value: boolean): Promise<void> {
+  const db = adminClient()
+  const { error } = await db.from('disciplines').update({ has_masters: value }).eq('id', disciplineId)
+  if (error) throw new Error(error.message)
+}
+
+async function disciplineStatusOf(disciplineId: DisciplineId): Promise<string> {
+  const db = adminClient()
+  const { data, error } = await db.from('disciplines').select('status').eq('id', disciplineId).single()
+  if (error || data === null) throw new Error(error?.message)
+  return data.status
+}
+
+async function buildSoloScene(): Promise<Scene> {
+  const config = defaultConfig(8, 1)
+  const admin = await createTestUser()
+  const player = await createTestUser()
+  const filler = await fillerPlayers(config.squadSize - 1)
+  const { seasonId, disciplineId, entryIds } = await createSeason({
+    admin,
+    config: { ...config, regularMatchdays: 1, countBestOf: 1 },
+    squad: [player.playerId, ...filler],
+    disciplines: [{ kind: 'FIFA', pairSize: 1 }],
+  })
+  return { admin, player, seasonId, disciplineId, squad: entryIds }
+}
+
+describe('a discipline without a masters (has_masters=false)', () => {
+  it('finishes when its last regular matchday closes, with no Masters ever needed', async () => {
+    const { admin, seasonId, disciplineId, squad } = await buildSoloScene()
+    await setHasMasters(disciplineId, false)
+
+    await playRegularSeason(admin, seasonId, squad)
+
+    expect(await disciplineStatusOf(disciplineId)).toBe('FINISHED')
+  })
+
+  it('create_masters refuses to build one for it, even once its last fecha regular is closed', async () => {
+    const { admin, seasonId, disciplineId, squad } = await buildSoloScene()
+    await setHasMasters(disciplineId, false)
+    await playRegularSeason(admin, seasonId, squad)
+
+    await expect(createMasters(admin.client, seasonId, '2026-12-20')).rejects.toThrow(
+      'Esta disciplina no juega Masters',
+    )
+  })
+
+  it('reopening that last regular matchday returns disciplines.status to ACTIVE', async () => {
+    const { admin, seasonId, disciplineId, squad } = await buildSoloScene()
+    await setHasMasters(disciplineId, false)
+    await playRegularSeason(admin, seasonId, squad)
+    expect(await disciplineStatusOf(disciplineId)).toBe('FINISHED')
+
+    const db = adminClient()
+    const { data: matchday, error } = await db
+      .from('matchdays')
+      .select('id')
+      .eq('discipline_id', disciplineId)
+      .eq('kind', 'REGULAR')
+      .order('number', { ascending: false })
+      .limit(1)
+      .single()
+    if (error || matchday === null) throw new Error(error?.message)
+
+    await reopenMatchday(admin.client, matchday.id)
+
+    expect(await disciplineStatusOf(disciplineId)).toBe('ACTIVE')
+  })
+})
 
 describe('create_masters discipline resolution', () => {
   // 0016_matchday_scope.sql:85 resolvía `v_discipline` con un

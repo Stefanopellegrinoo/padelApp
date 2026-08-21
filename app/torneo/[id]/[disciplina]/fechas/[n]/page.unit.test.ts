@@ -289,6 +289,63 @@ describe('la fecha GROUPS_KNOCKOUT abierta — la tabla del día separa por grup
   })
 })
 
+describe('la fecha GROUPS_KNOCKOUT abierta — un lado sin partidos de grupo NO desaparece (W82, verify-report-pr21-cierre #4016)', () => {
+  /**
+   * `formatoAbierto.groups` (2) promete dos grupos, pero `standingsMatches`
+   * sólo tiene partidos del grupo 1 — el fixture real de C32 (cambiar el
+   * formato después de sortear sin volver a sortear) deja exactamente esta
+   * forma: `matchday.formato` dice una cosa, `matches.grupo` dice otra. Antes
+   * del fix, `groupedStandings` armaba igual los 2 bloques que `formatoAbierto`
+   * pedía, y el lado 5-8 —sin ninguna fila en `groupOfSide`— no entraba en
+   * NINGÚN filtro: "GRUPO 2" salía con el título y cero filas, y esos cuatro
+   * lados no aparecían en ningún otro lugar de la pantalla.
+   *
+   * Decisión (W82): en vez de partir con bloques huérfanos, la pantalla NO
+   * separa por grupo cuando hay un lado sin partido de grupo — cae a la
+   * MISMA tabla única que ya usa CLOSED/ROUND_ROBIN (así nadie desaparece,
+   * los ocho lados que sí tienen resultado se ven ahí) — y agrega una nota
+   * explícita diciendo por qué esta fecha no se puede partir todavía. Elegida
+   * sobre inventar un grupo "sin asignar": la pantalla no puede saber en qué
+   * grupo cae el lado que falta (esa es la pregunta que el propio C32 deja
+   * sin responder), así que separarlo iría a adivinar.
+   */
+  it('con un lado sin partidos de grupo, la tabla NO parte en bloques huérfanos: los ocho siguen visibles y hay una nota', async () => {
+    escena.status = 'OPEN'
+    escena.formato = { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 }
+    escena.sides = [1, 2, 3, 4, 5, 6, 7, 8].map(side)
+    // Sólo el grupo 1 tiene partidos -- 5, 6, 7, 8 no aparecen en ningún
+    // `match.grupo`, exactamente el fixture roto de C32.
+    escena.matches = [
+      playedMatch('GRUPO', 1, 1, 1, 2),
+      playedMatch('GRUPO', 1, 1, 3, 4),
+      playedMatch('GRUPO', 1, 2, 1, 3),
+      playedMatch('GRUPO', 1, 2, 2, 4),
+      playedMatch('GRUPO', 1, 3, 1, 4),
+      playedMatch('GRUPO', 1, 3, 2, 3),
+    ]
+
+    const html = await render()
+
+    const inicio = html.indexOf('Tabla de la fecha')
+    expect(inicio).toBeGreaterThan(-1)
+    const tabla = html.slice(inicio)
+
+    // Nadie desaparece: los ocho lados siguen en la tabla, no sólo los cuatro
+    // del grupo 1 con partidos.
+    for (const n of [1, 2, 3, 4, 5, 6, 7, 8]) {
+      expect(tabla).toContain(`Jugador ${n}`)
+    }
+    // No se dibuja un bloque "Grupo 2" vacío -- ni ningún bloque partido: cae
+    // a la tabla única.
+    expect(tabla).not.toContain('Grupo 1')
+    expect(tabla).not.toContain('Grupo 2')
+    // Y dice por qué.
+    expect(tabla).toContain(
+      'El formato cambió después de sortear: esta tabla no se puede partir por grupo todavía. Volvé al armado y sorteá de nuevo.',
+    )
+  })
+})
+
 describe('la fecha GROUPS_KNOCKOUT cerrada — sigue con UNA sola tabla (decisión #3962, no se toca)', () => {
   it('no separa por grupo: el orden cruza los grupos a propósito', async () => {
     escena.status = 'CLOSED'

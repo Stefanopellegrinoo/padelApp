@@ -230,7 +230,13 @@ export function bracketOrderNote(format: MatchFormat): string {
   return `El orden sale del resultado de la llave, no sólo de la fase de grupos: por eso puede haber lados con el mismo PG y la misma ${scoreDiffLabel(format)} en un orden distinto.`
 }
 
-function ordinal(position: number): string {
+/**
+ * "el 1º", "el 2º"... La única fuente de este nombre: `computeAwards`
+ * (core/awards.ts) la reusa para el `reason` de `AwardLine` en vez de
+ * reimplementar la misma tabla — sería la tercera copia, el mismo patrón que
+ * ya se cerró para `scoreDiffLabel`/`scoreUnit` (HIGIENE, championRecord).
+ */
+export function ordinal(position: number): string {
   const words: Record<number, string> = {
     1: 'el 1º',
     2: 'el 2º',

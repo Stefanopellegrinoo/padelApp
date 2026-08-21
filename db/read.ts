@@ -718,7 +718,10 @@ export async function seasonAwardsOf(
   for (const row of data ?? []) {
     const meta = metaByMatchdayId.get(row.matchday_id)
     if (meta === undefined) continue
-    const award: Award = { entryId: row.entry_id, position: row.position, points: row.points }
+    // `lines: []` — mismo motivo que `db/season.ts: awardsBefore` (REQ-D10-2):
+    // esta lectura no trae `award_lines`, y sus consumidores (ranking,
+    // stats, historial) sólo usan `points`/`position`.
+    const award: Award = { entryId: row.entry_id, position: row.position, points: row.points, lines: [] }
     let byNumber = result.get(meta.disciplineId)
     if (byNumber === undefined) {
       byNumber = new Map()
@@ -794,7 +797,10 @@ export async function awardsOf(supabase: Client, seasonId: string): Promise<Map<
   for (const row of awards ?? []) {
     const matchdayNumber = numberOf.get(row.matchday_id)
     if (matchdayNumber === undefined) continue
-    const award: Award = { entryId: row.entry_id, position: row.position, points: row.points }
+    // `lines: []` — mismo motivo que `db/season.ts: awardsBefore` (REQ-D10-2):
+    // esta lectura no trae `award_lines`, y sus consumidores (ranking,
+    // stats, historial) sólo usan `points`/`position`.
+    const award: Award = { entryId: row.entry_id, position: row.position, points: row.points, lines: [] }
     const bucket = result.get(matchdayNumber)
     if (bucket === undefined) result.set(matchdayNumber, [award])
     else bucket.push(award)

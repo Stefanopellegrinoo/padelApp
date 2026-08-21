@@ -113,7 +113,10 @@ export async function awardsBefore(
   for (const row of awards ?? []) {
     const matchdayNumber = numberOf.get(row.matchday_id)
     if (matchdayNumber === undefined) continue
-    const award: Award = { entryId: row.entry_id, position: row.position, points: row.points }
+    // `lines: []` — esta lectura no trae `award_lines` (REQ-D10-2: una fecha
+    // cerrada antes del cambio no tiene desglose, y a esta pantalla no le
+    // hace falta: sólo usa `points`/`position` para el ranking).
+    const award: Award = { entryId: row.entry_id, position: row.position, points: row.points, lines: [] }
     const bucket = result.get(matchdayNumber)
     if (bucket === undefined) result.set(matchdayNumber, [award])
     else bucket.push(award)
@@ -156,10 +159,12 @@ export async function closedHistory(
     sides: (pairs ?? []).map((row) =>
       sideOfRow(row.pair_size as SideSize, row.entry_a, row.entry_b),
     ),
+    // `lines: []` — mismo motivo que `awardsBefore` más arriba: REQ-D10-2.
     awards: (awards ?? []).map((row) => ({
       entryId: row.entry_id,
       position: row.position,
       points: row.points,
+      lines: [],
     })),
   }
 }

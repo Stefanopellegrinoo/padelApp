@@ -9,7 +9,7 @@ function history(sides: Side[], champion: Side | null): MatchdayHistory {
     const position = champion !== null && side === champion ? 1 : index + 2
     for (const entryId of members(side)) {
       if (entryId.startsWith('g')) continue // guests don't collect points
-      awards.push({ entryId, position, points: 10 - position })
+      awards.push({ entryId, position, points: 10 - position, lines: [] })
     }
   })
   return { sides, awards }
@@ -76,8 +76,8 @@ describe('previousContext', () => {
     const broken: MatchdayHistory = {
       sides: [A, B],
       awards: [
-        { entryId: 'p1', position: 1, points: 10 },
-        { entryId: 'p3', position: 1, points: 10 },
+        { entryId: 'p1', position: 1, points: 10, lines: [] },
+        { entryId: 'p3', position: 1, points: 10, lines: [] },
       ],
     }
     expect(() => previousContext(broken, null)).toThrow(/2 parejas en la posición 1/)
@@ -86,7 +86,7 @@ describe('previousContext', () => {
   it('fails if the winner is not in any pair', () => {
     const broken: MatchdayHistory = {
       sides: [A],
-      awards: [{ entryId: 'p9', position: 1, points: 10 }],
+      awards: [{ entryId: 'p9', position: 1, points: 10, lines: [] }],
     }
     expect(() => previousContext(broken, null)).toThrow(/0 parejas en la posición 1/)
   })
@@ -121,7 +121,7 @@ describe('previousContext', () => {
   it('fails when the awards exist but none is in position 1', () => {
     const broken: MatchdayHistory = {
       sides: [A, B],
-      awards: [{ entryId: 'p1', position: 2, points: 8 }],
+      awards: [{ entryId: 'p1', position: 2, points: 8, lines: [] }],
     }
     expect(() => previousContext(broken, null)).toThrow(/awards pero ninguno en la posición 1/)
   })

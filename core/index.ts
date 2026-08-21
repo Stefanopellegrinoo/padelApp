@@ -39,6 +39,7 @@ export type {
   MatchResult,
   SideStanding,
   Award,
+  AwardLine,
   RankingRow,
 } from './types'
 // `PHASE_ORDER` sale del barrel para su test estructural

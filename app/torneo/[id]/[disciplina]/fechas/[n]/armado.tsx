@@ -527,6 +527,32 @@ export function Armado({
   )
 }
 
+/**
+ * S86 (verify-report-pr21-cierre #4016, decisión #4014 sobre el techo de
+ * tres botones): con 12 lados a 360px, "Todos contra todos" envuelve en tres
+ * renglones ("Todos" / "contra" / "todos") y fija la altura de toda la fila
+ * de botones — sin overflow horizontal, y legible (medido con Chromium real,
+ * fuente Archivo 800: `scrollWidth === innerWidth` en las dos anchuras).
+ *
+ * QUEDA ASÍ, decisión escrita: las dos alternativas baratas que se probaron
+ * (medido con Chromium, el mismo layout — `flex gap-2` de tres `flex-1`
+ * dentro de 320px útiles a 360px) cuestan más de lo que arreglan.
+ * - **Achicar sólo la tipografía de este botón**: rompe la equivalencia
+ *   visual de un `role="radiogroup"` — tres opciones mutuamente excluyentes
+ *   con tamaños de letra distintos leen como si una pesara menos que las
+ *   otras, justo lo que S81/W77 ya cuidaron con `aria-checked` en vez de
+ *   apoyarse sólo en la clase.
+ * - **Acortar el texto** ("Todos vs. todos"): sí baja la fila a dos líneas
+ *   (medido: 71px → 56px), pero `formatoLabel` es el MISMO texto para el
+ *   botón y para la leyenda "Sugerido:" (línea de abajo), así que cambiarlo
+ *   tocaría 7+ asserts en dos archivos de test y la copia que el resto del
+ *   código escribe siempre entera ("todos contra todos", en comentarios y en
+ *   `core/knockout.ts`) — por 15px de fila, a cambio de una abreviatura que
+ *   no está en ningún otro lado de la app.
+ *
+ * El techo de tres botones ya lo aceptó #4014; esto es sólo la primera vez
+ * que se vio el wrinkle y se lo mide en vez de forzar un arreglo.
+ */
 const FORMATO_BOTON = 'flex-1 rounded-field border-[1.5px] p-3 text-[13.5px] font-extrabold'
 const FORMATO_ELEGIDO = 'border-accent bg-accent text-accent-text'
 const FORMATO_LIBRE = 'border-line'

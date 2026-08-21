@@ -308,9 +308,19 @@ export default async function FechaDetailPage({ params }: PageProps) {
     // La fase y la llave (REQ-D8-1, decisión #3979): `matchday.formato` es lo
     // que decide si esta fecha tiene fases que dibujar. `phase`/`phaseComplete`
     // se calculan siempre —son baratos y puros— pero sólo se USAN mientras la
-    // fecha está `OPEN` y `GROUPS_KNOCKOUT`: una fecha `ROUND_ROBIN` nunca
-    // manda `fase` distinta de `GRUPO` (REQ-D7-1, no-regresión), así que acá
-    // adentro `phase` siempre da `'GRUPO'` y `canClosePhase` siempre da falso.
+    // fecha está `OPEN` y `GROUPS_KNOCKOUT` (`isGroupsKnockout`, gatea
+    // `canClosePhase` directamente, sin pasar por `phase`).
+    //
+    // (S80, verify-report-pr21 #4004): este bloque decía *"una fecha
+    // `ROUND_ROBIN` nunca manda `fase` distinta de `GRUPO` ... así que acá
+    // adentro `phase` siempre da `'GRUPO'`"*. Falso en el camino de C31:
+    // `redraft_matchday` no borra `matches` (0011), así que una fecha que
+    // TUVO una llave y volvió a `ROUND_ROBIN` puede seguir con filas de
+    // `SEMI`/`FINAL`/etc. en la base, y `currentPhase` (más abajo) las lee
+    // tal cual —devuelve la fase más avanzada que encuentre, sin mirar
+    // `matchday.formato`. Lo que SÍ sigue siendo cierto con o sin ese camino:
+    // `canClosePhase` está gateado por `isGroupsKnockout`, no por `phase` —
+    // con `ROUND_ROBIN` da siempre falso, sea cual sea la fase deducida.
     const isGroupsKnockout = matchday.formato.kind === 'GROUPS_KNOCKOUT'
 
     const snapshot = snapshotForMatchday(matchdayNumber, seedOrder, awardsByMatchday, config)

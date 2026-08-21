@@ -1,0 +1,52 @@
+-- C33 (verify-report-pr21-cierre, #4016): dos `advancePhase` concurrentes leen
+-- la MISMA fase completa, deciden LOS DOS que hay que avanzar, e insertan CADA
+-- UNO su propia llave -- la protección de hoy (`currentPhase` +
+-- `phaseIsComplete`, `db/matchday.ts`) es lógica y en TypeScript: las dos
+-- llamadas leen, las dos ven la fase completa, las dos insertan. Ningún lock.
+--
+-- Medido con funciones de producción, rol `authenticated`:
+--   await Promise.allSettled([advancePhase(md), advancePhase(md)])
+--   -> fulfilled | fulfilled, 4 semis (esperaba 2), 16 partidos (esperaba 14)
+-- Jugadas las 4 semis, "Cerrar fase" revienta con `Error` PELADO
+-- ("El tercer puesto necesita exactamente 2 semifinales, hay 4.") -> HTTP
+-- 500, nunca se genera la FINAL, la fecha queda muerta. Recuperarla es
+-- borrar todos los resultados.
+--
+-- `knockoutMatchups`/`nextRoundMatchups` (core/knockout.ts) son deterministas
+-- sobre la MISMA fase completa: dos llamadas que ven idénticos partidos
+-- arman EXACTAMENTE los mismos cruces (mismo `pair_a`, mismo `pair_b`, misma
+-- `fase`). `insertMatches` (`db/matchday.ts`) manda un solo INSERT con todas
+-- las filas de la fase nueva -- una sola sentencia, atómica en Postgres: si
+-- CUALQUIER fila choca contra el unique de abajo, el INSERT entero falla,
+-- sin fila a medias. La segunda llamada pierde con un error controlado
+-- (`insertMatches` ya lo envuelve en `EdgeError`), no con un 500.
+--
+-- Alcance del unique, verificado contra los partidos legítimos que ya
+-- existen: `buildFixture` (round robin, `fase='GRUPO'`) nunca repite un
+-- cruce dentro del mismo grupo -- cada pareja de lados juega una sola vez.
+-- Entre grupos distintos los `pair_id` nunca se repiten (cada lado tiene su
+-- propia fila en `pairs`), así que dos grupos no pueden chocar entre sí SIN
+-- necesitar `grupo` en la clave -- pero `grupo` SÍ tiene que estar: un test
+-- existente (`db/matchday-phase-advance.db.test.ts`, "filtra por FASE Y
+-- GRUPO") plantea A PROPÓSITO un partido `fase='GRUPO'` extra entre las
+-- MISMAS dos parejas del grupo 1, en un `grupo` distinto (99) -- es el
+-- fixture que prueba que `advancePhase` filtra por los DOS ejes, no sólo por
+-- `fase`. Sin `grupo` en el unique, esa fila legítima (de test, no de
+-- producción: nada más escribe `matches` salvo `generatePairs`/
+-- `advancePhase`) chocaba contra el partido real. Con `grupo` adentro, el
+-- unique sigue atrapando la carrera de C33 igual de fuerte: las dos filas
+-- que compiten por una fase de LLAVE (`SEMI`/`FINAL`/`TERCER_PUESTO`)
+-- siempre nacen con `grupo=1` (`advancePhase`, `db/matchday.ts` — "sólo
+-- GRUPO puede tener grupo > 1"), así que agregar la columna no le abre
+-- ninguna rendija a la carrera real.
+--
+-- Entre fases (GRUPO vs SEMI vs FINAL vs TERCER_PUESTO) el unique va
+-- scopeado por `fase`, así que una revancha entre las mismas dos parejas en
+-- una fase distinta -- que no pasa hoy, pero no es lo que este unique
+-- prohíbe -- no rechazaría nada.
+--
+-- Aditiva y plana (mismo criterio que 0039/0040): `matches` está lejísimos
+-- del umbral de ~100k filas donde el patrón expand/contract (not valid +
+-- validate en archivos separados) paga algo.
+alter table public.matches
+  add constraint matches_no_duplicate_matchup unique (matchday_id, fase, grupo, pair_a, pair_b);

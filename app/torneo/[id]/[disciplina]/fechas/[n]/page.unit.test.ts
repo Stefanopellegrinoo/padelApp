@@ -278,6 +278,23 @@ describe('la fecha GROUPS_KNOCKOUT cerrada — la llave no se pierde al cerrar (
     expect(html).toContain('Final')
     expect(html).not.toMatch(/Ronda \d+ de/)
   })
+
+  it('el PG de la tabla cuenta sólo los partidos de grupo — la misma tabla que decidió los puntos (standingsFromBracket, D1)', async () => {
+    escena.status = 'CLOSED'
+    escena.isAdmin = true
+    escena.formato = { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 }
+    escena.sides = ALL_SIDES
+    escena.matches = bracketMatches()
+
+    const html = await render()
+
+    const tabla = html.slice(html.indexOf('Tabla de la fecha'))
+    const fila = /Jugador 1<\/span><span[^>]*>(\d+)<\/span>/.exec(tabla)
+    // side1 ganó 1 partido de GRUPO, 1 de SEMI y la FINAL — 3 en total —, pero
+    // `standingsFromBracket` calculó su award con SÓLO el partido de grupo: el
+    // PG que se dibuja tiene que decir lo mismo que la tabla que pagó.
+    expect(fila?.[1]).toBe('1')
+  })
 })
 
 describe('no-regresión — una fecha ROUND_ROBIN sigue viendo exactamente lo de siempre (REQ-D7-1)', () => {

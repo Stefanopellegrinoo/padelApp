@@ -320,18 +320,27 @@ export default async function FechaDetailPage({ params }: PageProps) {
     // devuelve el PRIMER partido que los conecta en el array, así que el orden
     // de llegada, no el resultado de grupo, terminaba mandando (W71,
     // verify-report-pr21 #4004). La tabla de la fecha en GROUPS_KNOCKOUT es
-    // SIEMPRE la de GRUPO mientras la fecha está OPEN —no la fase actual—:
+    // SIEMPRE la de GRUPO —mientras está OPEN, la fase actual, no ninguna
+    // otra; una vez CLOSED, TODA la fase de grupos— nunca la fecha entera:
     // filtrar por la fase actual dejaría la tabla con 2 o 4 filas apenas
     // arranca la llave, y el resto de los lados desaparecería de una tabla
     // que hoy los muestra a todos (S82, otra tanda, sigue sin separar por
-    // grupo pero sigue mostrando a todos). CLOSED no se toca: usa
-    // `frozenTableRows` sobre estos mismos `standings` más abajo, y ese
-    // comportamiento (la tabla mezclando fases en una fecha cerrada) es W70,
-    // de otra tanda.
-    const standingsMatches =
-      status === 'OPEN' && isGroupsKnockout
-        ? detail.matches.filter((match) => match.fase === 'GRUPO')
-        : detail.matches
+    // grupo pero sigue mostrando a todos).
+    //
+    // CLOSED entra al mismo filtro por lo mismo que ya vale para OPEN: el
+    // punto de la fecha (W70, verify-report-pr21 #4004) es que
+    // `standingsFromBracket` (`db/matchday.ts`) — quien de verdad calculó los
+    // awards al cerrar — arma su `groupTable` con `computeStandings` sobre
+    // SÓLO los partidos de GRUPO, y `knockoutPositions` (core/knockout.ts)
+    // copia esas mismas filas (`statsOf`) para el podio. Antes de este fix
+    // `standingsMatches` era `detail.matches` sin filtrar para CLOSED, así
+    // que el `PG`/`Dif` de esta pantalla sumaban semis y final —medido: un
+    // campeón con 3 partidos de grupo mostraba PG 5— mientras los puntos que
+    // cobró salieron de sumar sólo 3. Las dos tablas tienen que ser la MISMA
+    // tabla.
+    const standingsMatches = isGroupsKnockout
+      ? detail.matches.filter((match) => match.fase === 'GRUPO')
+      : detail.matches
     const standings = computeStandings(detail.sides, standingsMatches, config, snapshot, matchday.allowsDraw)
 
     const phase = currentPhase(detail.matches)

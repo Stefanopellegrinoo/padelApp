@@ -16,6 +16,7 @@ import {
   mastersQualifiers,
   members,
   nextRoundMatchups,
+  offerableFormats,
   phaseIsComplete,
   previousContext,
   pair,
@@ -251,6 +252,42 @@ export async function setMatchdayFormat(
   const matchday = await requireMatchday(supabase, matchdayId)
   if (matchday.status !== 'DRAFT') {
     throw new EdgeError('El formato sólo se cambia con la fecha en armado.')
+  }
+
+  // W78 (verify-report-pr21-cierre, #4016): `matchdays_formato_kind` (0040)
+  // sólo valida la FORMA (`groups ∈ {1,2,4}`), nunca si esos grupos tienen
+  // sentido para cuántos lados hay HOY — así que una fecha FIFA de 8 lados
+  // aceptaba `groups: 4` (grupos de 2, eliminación cero) y `groups: 1`
+  // (siempre round robin + 1 partido), los dos descartados por la decisión
+  // #4014. `offerableFormats` (`core/knockout.ts`) YA es la fuente única de
+  // qué `groups` tienen sentido para `sides` lados — se reusa acá, no se
+  // repite la regla (evita ser la cuarta copia que W81, el mismo informe,
+  // señala como el problema).
+  //
+  // Guard en TypeScript, no en un trigger de SQL: reproducir "cuántos lados
+  // hay hoy" en PL/pgSQL exigiría repetir en SQL la cuenta de `attendances`
+  // + invitados que YA vive acá (`playingEntryIds`/`guestsOf`, las mismas
+  // que arma `pairingContextFor`) — una copia más de esa cuenta en un
+  // lenguaje distinto, con su propio riesgo de driftear. La reachability de
+  // un PATCH directo que salte este guard queda acotada por lo mismo que ya
+  // protege al resto de `formato`: sólo el organizador (`grant update` +
+  // RLS) y sólo con la fecha en DRAFT (trigger `matchdays_formato_immutable_after_draft`,
+  // 0045) — y si igual pasara, el guard de `advancePhase` (C32, más abajo)
+  // convierte cualquier desalineación entre `formato` y el fixture ya
+  // armado en un `EdgeError` prolijo, nunca en un 500.
+  if (formato.kind === 'GROUPS_KNOCKOUT') {
+    const { pairSize } = await disciplineConfig(supabase, matchday.discipline_id)
+    const present = [
+      ...(await playingEntryIds(supabase, matchdayId)),
+      ...(await guestsOf(supabase, matchdayId)).map((guest) => guest.entryId),
+    ]
+    const sides = Math.floor(present.length / pairSize)
+    const esOfrecible = offerableFormats(sides).some(
+      (candidato) => candidato.kind === 'GROUPS_KNOCKOUT' && candidato.groups === formato.groups,
+    )
+    if (!esOfrecible) {
+      throw new EdgeError(`Con ${sides} lados, ${formato.groups} grupos no es un formato ofrecible.`)
+    }
   }
 
   const { error, count } = await supabase

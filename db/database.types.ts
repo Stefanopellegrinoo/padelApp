@@ -299,6 +299,7 @@ export type Database = {
       match_sets: {
         Row: {
           allows_draw: boolean
+          fase: string
           games_a: number
           games_b: number
           id: string
@@ -307,6 +308,7 @@ export type Database = {
         }
         Insert: {
           allows_draw?: boolean
+          fase?: string
           games_a: number
           games_b: number
           id?: string
@@ -315,6 +317,7 @@ export type Database = {
         }
         Update: {
           allows_draw?: boolean
+          fase?: string
           games_a?: number
           games_b?: number
           id?: string
@@ -328,6 +331,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "matches"
             referencedColumns: ["id", "allows_draw"]
+          },
+          {
+            foreignKeyName: "match_sets_match_fase"
+            columns: ["match_id", "fase"]
+            isOneToOne: false
+            referencedRelation: "matches"
+            referencedColumns: ["id", "fase"]
           },
           {
             foreignKeyName: "match_sets_match_id_fkey"

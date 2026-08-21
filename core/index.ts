@@ -112,6 +112,9 @@ export { computeAwards } from './awards'
 // `usesSetsDiff`/`scoreDiffLabel` (design #3801, decisión #12): al aparecer
 // la tercera copia de una regla, se extrae. Los dos call sites viven fuera de
 // core/, así que hace falta el barrel — no es reflejo.
+// `drawIsLegal` sale ahora (C30, verify-report-pr21 #4004 / decisión #4005):
+// `db/validate.ts` (setError/matchError, vía `db/matchday.ts`) es su primer
+// consumidor de producción real, fuera de core/.
 export {
   suggestFormat,
   groupSides,
@@ -123,6 +126,7 @@ export {
   losingMatchup,
   knockoutPositions,
   isUnplayedThirdPlace,
+  drawIsLegal,
 } from './knockout'
 
 // ── The season ───────────────────────────────────────────────────────────────

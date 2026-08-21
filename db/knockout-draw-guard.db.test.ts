@@ -141,7 +141,7 @@ describe('el empate sólo es legal en GRUPO (C30, decisión #4005)', () => {
 
     const { error } = await admin.client
       .from('match_sets')
-      .insert({ match_id: semi.id, set_number: 1, games_a: 2, games_b: 2, allows_draw: true })
+      .insert({ match_id: semi.id, set_number: 1, games_a: 2, games_b: 2, allows_draw: true, fase: 'SEMI' })
 
     expect(error).not.toBeNull()
     expect(error?.message).toMatch(/match_sets_no_draw/)

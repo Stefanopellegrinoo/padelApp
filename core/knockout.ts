@@ -126,6 +126,27 @@ function setsTally(match: MatchResult): { setsA: number; setsB: number } {
   return { setsA, setsB }
 }
 
+/**
+ * Si un empate es un resultado LEGAL para un partido de esta fase (C30,
+ * verify-report-pr21 #4004 / decisión #4005): sólo en GRUPO, sin importar si
+ * la disciplina admite empates. Fuera de GRUPO —OCTAVOS, CUARTOS, SEMI,
+ * TERCER_PUESTO, FINAL— una llave necesita un ganador para avanzar o para
+ * cerrar; un empate ahí deja de significar algo y es exactamente lo que
+ * `winnerOf`/`loserOf` (abajo) no saben resolver.
+ *
+ * Con `fase='GRUPO'` es LITERALMENTE `allowsDraw`, la regla de siempre
+ * (`match_sets_no_draw` con `allows_draw=false` antes de esta decisión) —
+ * mismo criterio que la migración `0043` (SQL) sigue del lado de la base.
+ * Causa raíz que este guard cierra: `phaseIsComplete` ("tiene sets
+ * cargados") y `winnerOf` ("tiene un ganador") no acordaban qué es un
+ * partido resuelto; con el empate prohibido fuera de GRUPO, un partido con
+ * sets SIEMPRE tiene ganador ahí, y las dos definiciones vuelven a
+ * coincidir.
+ */
+export function drawIsLegal(fase: Phase, allowsDraw: boolean): boolean {
+  return allowsDraw && fase === 'GRUPO'
+}
+
 function winnerOf(match: MatchResult): Side {
   const { setsA, setsB } = setsTally(match)
   if (setsA === setsB) throw new Error('Un partido de llave sin definir no tiene ganador.')

@@ -5,6 +5,7 @@ import {
   computeRanking,
   computeStandings,
   currentPhase,
+  drawIsLegal,
   faseForCount,
   groupSides,
   isUnplayedThirdPlace,
@@ -1023,7 +1024,13 @@ export async function closeMatchday(supabase: Client, matchdayId: string): Promi
     // una vez creada la fecha la disciplina ya no puede cambiarlo). Cerrar
     // tiene que juzgar los resultados con la misma regla con la que se
     // guardaron, no con la de hoy.
-    const problem = matchError(match.sets, config.matchFormat, matchday.allows_draw)
+    //
+    // `drawIsLegal` (C30, decisión #4005): el empate sólo es legal en GRUPO,
+    // sin importar `allows_draw` — fuera de GRUPO una llave necesita un
+    // ganador. Sin este filtro, un empate colado en una fase de llave
+    // pasaba este loop y reventaba después, en `winnerOf`
+    // (`nextRoundMatchups`/`losingMatchup`, más abajo).
+    const problem = matchError(match.sets, config.matchFormat, drawIsLegal(match.fase, matchday.allows_draw))
     if (problem !== null) throw new EdgeError(problem)
   }
 
@@ -1144,8 +1151,13 @@ export async function saveResult(
   matchId: string,
   sets: SetScore[],
 ): Promise<void> {
-  const { format, allowsDraw } = await matchFormatOf(supabase, matchId)
-  const problem = matchError(sets, format, allowsDraw)
+  const { format, allowsDraw, fase } = await matchFormatOf(supabase, matchId)
+  // `drawIsLegal` (C30, decisión #4005): el empate sólo es legal en GRUPO —
+  // sin este filtro, la pantalla dejaba guardar un 2-2 en cualquier fase de
+  // la llave y el 500 salía recién al avanzar de fase o cerrar la fecha
+  // (`winnerOf`, core/knockout.ts). Acá, con el mensaje claro que `setError`
+  // ya sabe dar para un empate no permitido.
+  const problem = matchError(sets, format, drawIsLegal(fase, allowsDraw))
   if (problem !== null) throw new EdgeError(problem)
 
   // La política match_sets_write ya exige que la fecha esté OPEN: acá alcanza
@@ -1160,12 +1172,19 @@ export async function saveResult(
   // columna (`false`) rebotaba cada resultado de una disciplina con empates
   // —medido incluso con un 4-2, que no es empate ninguno—, o sea el guard no
   // protegía nada y mataba todo.
+  //
+  // `fase` por el MISMO motivo, ahora con `match_sets_match_fase` (0042,
+  // C30): el default de columna (`'GRUPO'`) no coincide con la `fase` real
+  // de un partido de llave, y la FK compuesta rebota CUALQUIER resultado de
+  // una fase distinta de GRUPO — medido: hasta un 3-0 en una SEMI, que no es
+  // empate ninguno, quedaba bloqueado sin este campo.
   const rows = sets.map((set, index) => ({
     match_id: matchId,
     set_number: index + 1,
     games_a: set.gamesA,
     games_b: set.gamesB,
     allows_draw: allowsDraw,
+    fase,
   }))
   const { error: insertError } = await supabase.from('match_sets').insert(rows)
   if (insertError !== null) {
@@ -1449,10 +1468,10 @@ export async function resultsOf(
 async function matchFormatOf(
   supabase: Client,
   matchId: string,
-): Promise<{ format: MatchFormat; allowsDraw: boolean }> {
+): Promise<{ format: MatchFormat; allowsDraw: boolean; fase: Phase }> {
   const { data: match, error: fetchError } = await supabase
     .from('matches')
-    .select('matchday_id, allows_draw')
+    .select('matchday_id, allows_draw, fase')
     .eq('id', matchId)
     .maybeSingle()
   if (fetchError) throw new EdgeError(`No se pudo leer el partido: ${fetchError.message}`)
@@ -1460,5 +1479,5 @@ async function matchFormatOf(
 
   const matchday = await requireMatchday(supabase, match.matchday_id)
   const { config } = await disciplineConfig(supabase, matchday.discipline_id)
-  return { format: config.matchFormat, allowsDraw: match.allows_draw }
+  return { format: config.matchFormat, allowsDraw: match.allows_draw, fase: match.fase as Phase }
 }

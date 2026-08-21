@@ -59,32 +59,50 @@ export interface GroupPreviewVM {
  * El vocabulario de la disciplina. Un lado de uno no es "una pareja" y su
  * fecha no tiene "parejas invitadas": son jugadores invitados que juegan
  * solos, igual que todos.
+ *
+ * `drawNote` (W80, verify-report-pr21-cierre #4016): antes dependía SÓLO de
+ * `sideSize`, nunca del `formato` elegido — con "N grupos + llave" elegido,
+ * la vista previa de S83 ("Cómo quedan los grupos") dibujaba arriba un
+ * reparto en grupos y esta nota, dos pantallazos más abajo, seguía
+ * prometiendo "todos contra todos, en el orden de la tabla" (o el cruce de
+ * defensores del pádel): la misma clase de contradicción que W55-W57.
+ * `formato.qualifiersPerGroup` es literal en el texto — no un "2" fijo — para
+ * que la nota se rompa sola si algún día deja de ser siempre 2 (`core/knockout.ts`,
+ * `knockoutMatchups` hoy sólo arma cruces con 2 clasificados por grupo).
  */
-function words(sideSize: SideSize) {
-  return sideSize === 1
-    ? {
-        sides: 'jugadores',
-        guestSection: 'Jugadores invitados',
-        guestNote:
-          'Juegan solos, como todos, y no suman puntos para el campeonato. Entran de a dos.',
-        addGuest: '+ Agregar 2 invitados',
-        removeGuest: 'Sacar los dos invitados',
-        draw: 'Ordenar jugadores',
-        drawn: 'Orden de la fecha',
-        drawNote: 'Juegan todos contra todos, en el orden de la tabla.',
-      }
-    : {
-        sides: 'parejas',
-        guestSection: 'Parejas invitadas',
-        guestNote:
-          'Juegan juntos y no suman puntos para el campeonato: es un amistoso adentro de la fecha.',
-        addGuest: '+ Agregar pareja invitada',
-        removeGuest: 'Sacar la pareja invitada',
-        draw: 'Generar parejas',
-        drawn: 'Parejas',
-        drawNote:
-          'Los defensores quedan fijos. El resto se arma cruzando la tabla: 1° con último, 2° con anteúltimo, y así.',
-      }
+function words(sideSize: SideSize, formato: MatchdayFormat) {
+  const base =
+    sideSize === 1
+      ? {
+          sides: 'jugadores',
+          guestSection: 'Jugadores invitados',
+          guestNote:
+            'Juegan solos, como todos, y no suman puntos para el campeonato. Entran de a dos.',
+          addGuest: '+ Agregar 2 invitados',
+          removeGuest: 'Sacar los dos invitados',
+          draw: 'Ordenar jugadores',
+          drawn: 'Orden de la fecha',
+          drawNote: 'Juegan todos contra todos, en el orden de la tabla.',
+        }
+      : {
+          sides: 'parejas',
+          guestSection: 'Parejas invitadas',
+          guestNote:
+            'Juegan juntos y no suman puntos para el campeonato: es un amistoso adentro de la fecha.',
+          addGuest: '+ Agregar pareja invitada',
+          removeGuest: 'Sacar la pareja invitada',
+          draw: 'Generar parejas',
+          drawn: 'Parejas',
+          drawNote:
+            'Los defensores quedan fijos. El resto se arma cruzando la tabla: 1° con último, 2° con anteúltimo, y así.',
+        }
+  return {
+    ...base,
+    drawNote:
+      formato.kind === 'GROUPS_KNOCKOUT'
+        ? `Juegan por grupos: todos contra todos adentro de cada grupo, y los ${formato.qualifiersPerGroup} primeros de cada uno pasan a la llave.`
+        : base.drawNote,
+  }
 }
 
 interface ArmadoProps {
@@ -230,7 +248,7 @@ export function Armado({
     formato,
   })
   const { size, sides, matches, complete, needsLooseGuest, eventualSize, tooFew, tooMany, suggestedFormat } = shape
-  const label = words(sideSize)
+  const label = words(sideSize, formato)
   const guestUnnamed = [
     ...looseGuests.map((guest) => guest.name),
     ...guestPairs.flatMap((pair) => [pair.a.name, pair.b.name]),

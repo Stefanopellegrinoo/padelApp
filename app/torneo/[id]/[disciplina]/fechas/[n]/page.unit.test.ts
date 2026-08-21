@@ -555,6 +555,43 @@ describe('el armado — el selector de formato pasa el `formato` guardado, no un
   })
 })
 
+describe('el armado en DRAFT — la nota del reparto coincide con el formato elegido (W80, verify-report-pr21-cierre #4016)', () => {
+  /**
+   * `drawNote` (`armado.tsx`, dentro de `words(sideSize)`) dependía SÓLO del
+   * tamaño del lado y nunca del `formato` — con "4 grupos + llave" elegido,
+   * "Cómo quedan los grupos" (S83) dibujaba arriba un reparto en grupos y,
+   * dos pantallazos más abajo, la nota seguía prometiendo "todos contra
+   * todos": la misma contradicción que W55-W57 (comportamiento y relato
+   * dichos por dos caminos que dejaron de estar de acuerdo).
+   */
+  it('con grupos elegidos, la nota describe grupos + llave, no "todos contra todos"', async () => {
+    escena.status = 'DRAFT'
+    escena.isAdmin = true
+    escena.formato = { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 }
+    escena.sides = ALL_SIDES
+    escena.matches = []
+
+    const html = await render()
+
+    expect(html).not.toContain('Juegan todos contra todos, en el orden de la tabla.')
+    expect(html).toContain(
+      'Juegan por grupos: todos contra todos adentro de cada grupo, y los 2 primeros de cada uno pasan a la llave.',
+    )
+  })
+
+  it('no-regresión: con "todos contra todos" elegido, la nota sigue siendo la de siempre', async () => {
+    escena.status = 'DRAFT'
+    escena.isAdmin = true
+    escena.formato = { kind: 'ROUND_ROBIN' }
+    escena.sides = [1, 2, 3, 4].map(side)
+    escena.matches = []
+
+    const html = await render()
+
+    expect(html).toContain('Juegan todos contra todos, en el orden de la tabla.')
+  })
+})
+
 describe('el armado en DRAFT — vista previa del reparto en grupos (S83, verify-report-pr21 #4004)', () => {
   /**
    * `pairingContextFor` está mockeado (arriba, `escena.pairingContext`) pero

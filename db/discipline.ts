@@ -198,6 +198,12 @@ export async function addDiscipline(
       position: (maxRow?.position ?? -1) + 1,
       pair_size: spec.pairSize ?? 2,
       allows_draw: spec.allowsDraw ?? false,
+      // Decisión #4029, parte 1: de a uno nace SIN Masters -- `openMatchday`
+      // (`db/matchday.ts:985`) rechaza siempre una fecha MASTERS con
+      // `pair_size=1`, así que ofrecer el check encendido ahí sería ofrecer
+      // algo que la app ya rechaza. De a dos sigue naciendo en `true`, el
+      // default de siempre (`0015_disciplines.sql:21`).
+      has_masters: (spec.pairSize ?? 2) !== 1,
     })
     .select('id')
     .single()

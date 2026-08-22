@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { defaultConfig, type SeasonConfig } from '@/core'
 import {
+  cancelMatchday,
   closeMatchday,
   createMasters,
   createMatchday,
@@ -153,5 +154,39 @@ describe('seasons.status ya no tiene escritor de producción (REQ-D3-3)', () => 
 
     expect(await disciplineStatus(disciplineId)).toBe('ACTIVE')
     expect(await seasonStatus(seasonId)).toBe('SETUP')
+  })
+
+  // `cancel_matchday` escribía `seasons.status` con guard (`where status =
+  // 'ACTIVE'`), no incondicional. Con los otros tres escritores ya cerrados,
+  // ninguna fila de test llega naturalmente a `seasons.status = 'ACTIVE'` —
+  // así que este test la planta a mano (`adminClient`, sólo para armar
+  // escena, nunca para lo que el test viene a probar) para ejercer el guard
+  // de verdad y no pasar por vacuidad.
+  it('cancel_matchday no toca seasons.status ni siquiera cuando el guard viejo hubiera matcheado', async () => {
+    const admin = await createTestUser()
+    const players = await fillerPlayers(8)
+    const { seasonId, disciplineId, entryIds } = await createSeason({
+      admin,
+      config: defaultConfig(8),
+      squad: players,
+    })
+
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-03-05')
+    for (const entryId of entryIds) {
+      await setAttendance(admin.client, matchdayId, entryId, 'PLAYING')
+    }
+    await generatePairs(admin.client, matchdayId)
+    await openMatchday(admin.client, matchdayId)
+    expect(await disciplineStatus(disciplineId)).toBe('ACTIVE')
+
+    const db = adminClient()
+    const { error: plantError } = await db.from('seasons').update({ status: 'ACTIVE' }).eq('id', seasonId)
+    if (plantError) throw new Error(plantError.message)
+    expect(await seasonStatus(seasonId)).toBe('ACTIVE')
+
+    await cancelMatchday(admin.client, matchdayId)
+
+    expect(await disciplineStatus(disciplineId)).toBe('SETUP')
+    expect(await seasonStatus(seasonId)).toBe('ACTIVE')
   })
 })

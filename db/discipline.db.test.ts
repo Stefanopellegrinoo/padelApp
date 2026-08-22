@@ -641,4 +641,41 @@ describe('addDiscipline (PR 13, REQ-D1-2)', () => {
       addDiscipline(admin.client, seasonId, { kind: 'PADEL', config: defaultConfig(10) }, entryIds.slice(0, 9)),
     ).rejects.toThrow()
   })
+
+  /**
+   * Decisión #4029, parte 1: `has_masters` nace por `pair_size`, automático,
+   * sin que nadie lo pase. Antes de esta tanda la columna nacía en `true`
+   * por default (0015) y nada la escribía — el camino que C34 destrabó
+   * (`create_masters`/`close_matchday`/`reopen_matchday` YA la leen, tanda
+   * anterior) seguía sin un solo productor que la pusiera en `false`.
+   */
+  it('con pairSize=1, la disciplina nace con has_masters=false (decisión #4029)', async () => {
+    const admin = await createTestUser()
+    const { seasonId } = await createSeason({
+      admin,
+      squad: [admin.playerId, ...(await fillerPlayers(7))],
+    })
+
+    const fifaId = await addDiscipline(admin.client, seasonId, {
+      kind: 'FIFA',
+      config: { ...defaultConfig(8), points: [8, 7, 6, 5, 4, 3, 2, 1] },
+      pairSize: 1,
+    })
+
+    const { data } = await adminClient().from('disciplines').select('has_masters').eq('id', fifaId).single()
+    expect(data?.has_masters).toBe(false)
+  })
+
+  it('con pairSize=2 (o sin pasarlo), la disciplina nace con has_masters=true -- no-regresión', async () => {
+    const admin = await createTestUser()
+    const { seasonId } = await createSeason({
+      admin,
+      squad: [admin.playerId, ...(await fillerPlayers(7))],
+    })
+
+    const padelId = await addDiscipline(admin.client, seasonId, { kind: 'PADEL', config: defaultConfig(8) })
+
+    const { data } = await adminClient().from('disciplines').select('has_masters').eq('id', padelId).single()
+    expect(data?.has_masters).toBe(true)
+  })
 })

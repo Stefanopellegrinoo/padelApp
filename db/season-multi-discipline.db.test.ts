@@ -176,6 +176,36 @@ describe('createSeason con múltiples disciplinas (REQ-D1-1, contrato S13)', () 
     ])
   })
 
+  // Decisión #4029, parte 1: mismo automático que `addDiscipline`, ahora
+  // desde el wizard -- `has_masters` nace de `pair_size`, sin que nadie lo
+  // pase explícito.
+  it('has_masters nace de pair_size -- false de a uno, true de a dos (decisión #4029)', async () => {
+    const admin = await createTestUser()
+    const config = defaultConfig(8)
+    const fifaConfig = { ...config, points: [8, 7, 6, 5, 4, 3, 2, 1] }
+    const { seasonId } = await createSeason(admin.client, {
+      name: 'Formas mixtas Masters',
+      squadNames: squadNames(8),
+      config,
+      disciplines: [
+        { kind: 'PADEL', config },
+        { kind: 'FIFA', config: fifaConfig, pairSize: 1 },
+      ],
+    })
+
+    const db = adminClient()
+    const { data } = await db
+      .from('disciplines')
+      .select('kind, has_masters')
+      .eq('season_id', seasonId)
+      .order('position', { ascending: true })
+
+    expect(data).toEqual([
+      { kind: 'PADEL', has_masters: true },
+      { kind: 'FIFA', has_masters: false },
+    ])
+  })
+
   // Compat: el único caller de producción (`app/torneos/nuevo/actions.ts`)
   // todavía no pasa `disciplines` — el wizard multi-disciplina es PR11a,
   // fuera de este slice. Tiene que seguir viendo exactamente el mismo
@@ -276,5 +306,31 @@ describe('createSeason vía el wizard real, disciplina de a uno (C29)', () => {
     const fifa = data?.find((row) => row.kind === 'FIFA')
     expect((padel?.config as { points: number[] } | null)?.points).toEqual([10, 6, 3, 1])
     expect((fifa?.config as { points: number[] } | null)?.points).toEqual([10, 7, 5, 3, 2, 1, 0, 0])
+  })
+
+  // Decisión #4029, parte 1, por el camino REAL del wizard: crear un torneo
+  // con "Individual" elegido para FIFA tiene que dejarla sin Masters desde
+  // el arranque, sin que el admin tenga que pisar Ajustes después.
+  it('el wizard con "Individual" crea la disciplina sin Masters (decisión #4029)', async () => {
+    const admin = await createTestUser()
+    const config = defaultConfig(8)
+    const squad: Squad = { names: squadNames(8), mySeat: null }
+
+    const payload = newTournamentPayload('Mixto Masters', squad, config, ['PADEL', 'FIFA'], {
+      PADEL: 2,
+      FIFA: 1,
+    })
+    const { seasonId } = await createSeason(admin.client, payload)
+
+    const db = adminClient()
+    const { data } = await db
+      .from('disciplines')
+      .select('kind, has_masters')
+      .eq('season_id', seasonId)
+      .order('position', { ascending: true })
+    expect(data).toEqual([
+      { kind: 'PADEL', has_masters: true },
+      { kind: 'FIFA', has_masters: false },
+    ])
   })
 })

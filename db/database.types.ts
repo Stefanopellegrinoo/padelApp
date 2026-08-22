@@ -641,7 +641,7 @@ export type Database = {
       }
       seasons: {
         Row: {
-          config: Json
+          config: Json | null
           created_at: string
           created_by: string
           id: string
@@ -652,7 +652,7 @@ export type Database = {
           status: string
         }
         Insert: {
-          config: Json
+          config?: Json | null
           created_at?: string
           created_by: string
           id?: string
@@ -663,7 +663,7 @@ export type Database = {
           status?: string
         }
         Update: {
-          config?: Json
+          config?: Json | null
           created_at?: string
           created_by?: string
           id?: string

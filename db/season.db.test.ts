@@ -22,7 +22,7 @@ import {
   saveResult,
   setAttendance,
 } from './matchday'
-import { awardsBefore, squadSeedOrder, updateSeasonConfig } from './season'
+import { awardsBefore, squadSeedOrder } from './season'
 import { adminClient } from './test/admin'
 import { createSeason } from './test/factories'
 import { createTestUser, type TestUser } from './test/users'
@@ -360,9 +360,12 @@ async function buildWalkthroughSeason(): Promise<WalkthroughSeason> {
     await recordClose(matchdayId, number)
   }
 
-  // Fecha 5: cambia la escala de puntos antes de sortearla. Lo cerrado antes no se tiene que mover (test 5).
+  // Fecha 5: cambia la escala de puntos antes de sortearla. Lo cerrado antes
+  // no se tiene que mover (test 5). `config` es una variable LOCAL de este
+  // harness: `playMatchday` la usa directo, nunca releída de `seasons.config`
+  // (C35, #4034 — esa columna no tiene lectores de producción desde PR 5, y
+  // `updateSeasonConfig` era su único escritor de test, sin efecto real acá).
   config = { ...config, points: [12, 7, 4, 1] }
-  await updateSeasonConfig(admin.client, seasonId, config)
   const md5 = await createMatchday(admin.client, seasonId, playedOn(5))
   await playMatchday(admin, seasonId, disciplineId, md5, 5, config, { playing: squad })
   await recordClose(md5, 5)

@@ -66,10 +66,18 @@ export interface SeasonHeader {
    * que `seasons_read`, así que quien ve este header ve su disciplina.
    *
    * `SeasonHeader` ya NO trae `config`: hasta PR 5 este header devolvía
-   * `seasons.config` (`updateSeasonConfig` era su único escritor), que podía
-   * divergir de la disciplina sin que nada lo notara. `disciplines.config` es
-   * la fuente real desde PR 5; `primaryDiscipline` es el acceso de acá hasta
-   * que exista el wizard multi-disciplina (PR 11).
+   * `seasons.config`, que podía divergir de la disciplina sin que nada lo
+   * notara. `disciplines.config` es la fuente real desde PR 5;
+   * `primaryDiscipline` es el acceso de acá hasta que exista el wizard
+   * multi-disciplina (PR 11).
+   *
+   * CORRECCIÓN (C35, verify-report-go-no-go #4034): esta nota decía
+   * "(`updateSeasonConfig` era su único escritor)" — falso, y es justo lo que
+   * hizo errar a dos tandas (#4028, #4032): las dos buscaron esa función
+   * exportada y ninguna miró el `.insert()` inline de `createSeason`, que
+   * SÍ escribía `seasons.config` hasta que esta misma tanda lo cerró. La
+   * columna sigue existiendo (nullable desde `0059`) sin un solo lector ni
+   * escritor de producción; el `drop column` es del CONTRACT.
    */
   disciplines: DisciplineHeader[]
   /** The share link's token. Every participant can already read this column; the wizard and the settings screen show it. */

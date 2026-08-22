@@ -1,0 +1,15 @@
+-- Prepara `seasons.config` para el CONTRACT (verify-report-go-no-go #4034,
+-- C35) ────────────────────────────────────────────────────────────────────
+--
+-- `seasons.config` es `jsonb not null` sin default (0001_schema.sql:16). El
+-- CONTRACT (design #3801, secuencia_expand_contract paso 11) la va a
+-- dropear: ya no tiene lectores de producción desde `0049`
+-- (create_masters pasó a leer disciplines.config), pero SÍ tenía un
+-- escritor vivo — `createSeason` (db/season.ts) la insertaba en cada
+-- torneo nuevo, el camino más caliente del producto.
+--
+-- Regla de orden del design ("aditivo -> schema ANTES que código"): esta
+-- migración SOLO relaja el `not null`, nada más — sin eso el insert de
+-- `createSeason` fallaría en cuanto el código dejara de mandar la columna.
+-- El `drop column` real, irreversible, queda para el CONTRACT.
+alter table public.seasons alter column config drop not null;

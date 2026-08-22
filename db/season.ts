@@ -9,20 +9,6 @@ import { assertValidConfig } from './validate'
 import type { Client } from './client'
 export type { Client }
 
-/** `SeasonConfig` from the `jsonb` column. The cast is a bet `assertValidConfig` backs up. */
-export async function seasonConfig(supabase: Client, seasonId: string): Promise<SeasonConfig> {
-  const { data, error } = await supabase
-    .from('seasons')
-    .select('config')
-    .eq('id', seasonId)
-    .maybeSingle()
-  if (error) {
-    throw new EdgeError(`No se pudo leer la configuración de la temporada: ${error.message}`)
-  }
-  if (data === null) throw new EdgeError('La temporada no existe.')
-  return data.config as unknown as SeasonConfig
-}
-
 /**
  * The squad's seed order FOR ONE DISCIPLINE. Explicit `order by`: nothing else
  * keeps it stable.
@@ -273,8 +259,10 @@ export async function createSeason(
   { name, squadNames, config, mySeatIndex = null, disciplines }: NewSeason,
 ): Promise<{ seasonId: string; inviteToken: string }> {
   const disciplineSpecs = disciplines ?? [{ kind: 'PADEL' as const, config }]
-  // `config` es el legacy `seasons.config` (drop en el PR de contract):
-  // siempre pádel, sideSize=2 fijo, nunca disciplina-specific.
+  // `config` YA NO se escribe en `seasons.config` (C35, verify-report-go-no-go
+  // #4034): esa columna no tiene lectores desde PR 5 y el `drop column` es del
+  // CONTRACT. Acá sólo sobrevive como default de la disciplina implícita
+  // cuando el caller no manda `disciplines` — siempre pádel, sideSize=2 fijo.
   assertValidConfig(config, 2)
   for (const spec of disciplineSpecs) {
     assertValidConfig(spec.config, spec.pairSize ?? 2)
@@ -310,7 +298,7 @@ export async function createSeason(
 
   const { data: season, error: seasonError } = await supabase
     .from('seasons')
-    .insert({ name: trimmed, config: config as unknown as Json, created_by: userId })
+    .insert({ name: trimmed, created_by: userId })
     .select('id, invite_token')
     .single()
   if (seasonError !== null || season === null) {
@@ -478,23 +466,4 @@ export async function updateSeasonRules(
   if (count === 0) {
     throw new EdgeError('No se pudieron guardar las reglas: sólo puede hacerlo quien organiza.')
   }
-}
-
-/**
- * The only writer in this plan: `assertValidConfig` runs before the update lands.
- *
- * `sideSize` hardcoded at 2: `seasons.config` is the legacy, pre-disciplines
- * field (dropped at the contract PR) and is always padel-shaped.
- */
-export async function updateSeasonConfig(
-  supabase: Client,
-  seasonId: string,
-  config: SeasonConfig,
-): Promise<void> {
-  assertValidConfig(config, 2)
-  const { error } = await supabase
-    .from('seasons')
-    .update({ config: config as unknown as Json })
-    .eq('id', seasonId)
-  if (error) throw new EdgeError(`No se pudo actualizar la configuración: ${error.message}`)
 }

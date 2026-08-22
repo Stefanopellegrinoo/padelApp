@@ -663,17 +663,6 @@ export async function generatePairs(supabase: Client, matchdayId: string): Promi
   const { input, pairSize } = await pairingContextFor(supabase, matchdayId)
   const sides = buildSides({ ...input, sideSize: pairSize })
 
-  // Deleting the pairs cascades to matches and match_sets. A DRAFT matchday
-  // usually has no results to lose, but `redraft_matchday` can land one here
-  // WITH results already loaded — it goes back from OPEN without deleting
-  // anything, on purpose (spec: the transition itself deletes nothing).
-  // Regenerating from that state deliberately discards them; the confirm
-  // panel in the UI warns before this runs. The status guard above only
-  // blocks OPEN/CLOSED, it does not promise DRAFT is always a clean slate.
-  await deletePairs(supabase, matchdayId)
-
-  const stored = await insertPairs(supabase, matchdayId, sides)
-
   //`matchday.formato` generaliza el armado (REQ-D8-1, Rebanada C1): con
   // `ROUND_ROBIN` es EXACTAMENTE el camino de siempre, sin tocar una línea —
   // `roundRobinMatches` no manda `fase`/`grupo` y la fila cae en el default
@@ -691,6 +680,40 @@ export async function generatePairs(supabase: Client, matchdayId: string): Promi
   // acá no puede tener la forma incompleta que reventaba `groupSides` con
   // `groups=undefined` DESPUÉS de haber borrado y reinsertado las parejas.
   const formato = matchday.formato as unknown as MatchdayFormat
+
+  // W84 (verify-report-pre-contract #4026): el guard de `setMatchdayFormat`
+  // (más arriba en este archivo) es de MOMENTO DE ESCRITURA — valida contra
+  // los presentes de CUANDO SE ELIGE el formato, y nadie revalida si la
+  // asistencia cambia DESPUÉS. Medido: FIFA de 12 acepta "4 grupos", bajan 4
+  // ausentes (8 presentes), y sin este guard `generatePairs` armaba igual 4
+  // grupos de 2 — tasa de eliminación CERO, lo que la decisión #4014
+  // excluye "SIEMPRE, sin excepción". Acá es el lugar correcto para
+  // revalidar: `sides` recién se calculó con la asistencia de HOY (misma
+  // cuenta que ya usa `setMatchdayFormat`), y todavía no se tocó ninguna
+  // fila — un rechazo acá no deja la fecha a medio armar (S69,
+  // `generatePairs` no corre en una transacción).
+  if (
+    formato.kind === 'GROUPS_KNOCKOUT' &&
+    !offerableFormats(sides.length).some(
+      (candidato) => candidato.kind === 'GROUPS_KNOCKOUT' && candidato.groups === formato.groups,
+    )
+  ) {
+    throw new EdgeError(
+      `Con ${sides.length} lados, ${formato.groups} grupos no es un formato ofrecible. Volvé al armado y elegí otro formato.`,
+    )
+  }
+
+  // Deleting the pairs cascades to matches and match_sets. A DRAFT matchday
+  // usually has no results to lose, but `redraft_matchday` can land one here
+  // WITH results already loaded — it goes back from OPEN without deleting
+  // anything, on purpose (spec: the transition itself deletes nothing).
+  // Regenerating from that state deliberately discards them; the confirm
+  // panel in the UI warns before this runs. The status guard above only
+  // blocks OPEN/CLOSED, it does not promise DRAFT is always a clean slate.
+  await deletePairs(supabase, matchdayId)
+
+  const stored = await insertPairs(supabase, matchdayId, sides)
+
   const matches: MatchRow[] =
     formato.kind === 'GROUPS_KNOCKOUT'
       ? groupedMatches(matchdayId, matchday.allows_draw, sides, stored, formato.groups)

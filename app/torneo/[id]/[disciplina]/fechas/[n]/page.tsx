@@ -284,6 +284,34 @@ export default async function FechaDetailPage({ params }: PageProps) {
     // ninguna vista previa que una pantalla rota.
     let groupPreview: GroupPreviewVM[] | null = null
     const formatoDraft = matchday.formato
+
+    // S94 (verify-report-pre-contract #4026): mismo estado divergido que
+    // C32/W86 — `changeMatchdayFormat` puede tocar `formato` DESPUÉS de que
+    // `generatePairs` ya armó el fixture (`pairs` + `matches`) con el viejo,
+    // sin volver a sortear (`pairsAndMatchesOf`, `db/read.ts`, no filtra por
+    // status: una vez dibujado, `detail.matches` es el fixture REAL,
+    // aunque `matchday.formato` haya cambiado después). `drawNote`
+    // (armado.tsx) no puede confiar ciegamente en `formato`: tiene que
+    // preguntar si el fixture YA SORTEADO sigue cubriendo los grupos que
+    // `formato` declara hoy — misma pregunta que W86 resuelve para la tabla
+    // del día, sobre `detail.sides` en vez de `standings` porque acá
+    // todavía no hay resultados que tabular.
+    const groupOfDrawnSide = new Map<string, number>()
+    for (const match of groupPhaseMatches(detail.matches)) {
+      groupOfDrawnSide.set(sideKey(match.sideA), match.grupo)
+      groupOfDrawnSide.set(sideKey(match.sideB), match.grupo)
+    }
+    const candidateGroupsDraft: Side[][] =
+      formatoDraft.kind === 'GROUPS_KNOCKOUT'
+        ? Array.from({ length: formatoDraft.groups }, (_, index) =>
+            detail.sides.filter((side) => groupOfDrawnSide.get(sideKey(side)) === index + 1),
+          )
+        : []
+    const drawnCoversFormatoGroups =
+      candidateGroupsDraft.every((group) => group.length > 0) &&
+      candidateGroupsDraft.reduce((sum, group) => sum + group.length, 0) === detail.sides.length
+    const formatDrifted = formatoDraft.kind === 'GROUPS_KNOCKOUT' && !drawnCoversFormatoGroups
+
     if (formatoDraft.kind === 'GROUPS_KNOCKOUT') {
       try {
         const { input, pairSize } = await pairingContextFor(supabase, matchday.id)
@@ -310,6 +338,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
         pairs={draftPairs}
         loadedResults={detail.matches.filter((match) => match.sets.length > 0).length}
         formato={matchday.formato}
+        formatDrifted={formatDrifted}
         groupPreview={groupPreview}
       />
     )

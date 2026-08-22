@@ -7,6 +7,7 @@ import {
   currentPhase,
   drawIsLegal,
   faseForCount,
+  groupPhaseMatches,
   groupSides,
   isUnplayedThirdPlace,
   knockoutMatchups,
@@ -1207,7 +1208,7 @@ function standingsFromBracket(
   if (phase !== 'FINAL' || !phaseIsComplete(matches, 'FINAL')) {
     throw new EdgeError('La llave todavía no llegó a la final: no se puede cerrar la fecha.')
   }
-  const groupMatches = matches.filter((match) => match.fase === 'GRUPO')
+  const groupMatches = groupPhaseMatches(matches)
   const bracket = matches.filter((match) => match.fase !== 'GRUPO')
   const groupTable = computeStandings(uniqueSides(groupMatches), [...groupMatches], config, snapshot, allowsDraw)
   return knockoutBoundary(() => knockoutPositions(bracket, groupTable))

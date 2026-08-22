@@ -7,6 +7,7 @@ import {
   computeRanking,
   computeStandings,
   currentPhase,
+  groupPhaseMatches,
   groupSides,
   includes,
   isUnplayedThirdPlace,
@@ -387,9 +388,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
     // campeón con 3 partidos de grupo mostraba PG 5— mientras los puntos que
     // cobró salieron de sumar sólo 3. Las dos tablas tienen que ser la MISMA
     // tabla.
-    const standingsMatches = isGroupsKnockout
-      ? detail.matches.filter((match) => match.fase === 'GRUPO')
-      : detail.matches
+    const standingsMatches = isGroupsKnockout ? groupPhaseMatches(detail.matches) : detail.matches
     const standings = computeStandings(detail.sides, standingsMatches, config, snapshot, matchday.allowsDraw)
 
     // S82 (verify-report-pr21 #4004): la tabla del día de una fecha

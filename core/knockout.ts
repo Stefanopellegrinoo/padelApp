@@ -342,6 +342,22 @@ export function isUnplayedThirdPlace(match: MatchResult): boolean {
 }
 
 /**
+ * Sólo los partidos de la fase de GRUPO: el criterio que decide qué cuenta
+ * para la tabla del día y para el récord del campeón (W85,
+ * verify-report-pre-contract #4026). `standingsFromBracket` (db/matchday.ts)
+ * y `fechas/[n]/page.tsx` ya lo aplicaban, cada uno con su propio
+ * `.filter(m => m.fase === 'GRUPO')` — `fechas/page.tsx` (la lista) no,
+ * así que el récord del campeón salía distinto en las dos pantallas para la
+ * misma fecha cerrada con llave. Para ROUND_ROBIN es un no-op: todos los
+ * partidos nacen `fase='GRUPO'` (default de columna, `0039`), así que las
+ * tres llamadas quedan atadas a la MISMA función sin que ninguna necesite
+ * saber si la fecha tiene llave o no.
+ */
+export function groupPhaseMatches<T extends MatchResult>(matches: readonly T[]): T[] {
+  return matches.filter((match) => match.fase === 'GRUPO')
+}
+
+/**
  * Posición final de la fecha cuando hay llave (REQ-D7-4): 1º el ganador de
  * la final, 2º quien la pierde, 3º/4º según `thirdAndFourth` (agujero (b)
  * de arriba), y 5º en adelante en el orden que ya trae `groupTable` —

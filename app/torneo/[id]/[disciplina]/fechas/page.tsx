@@ -1,6 +1,15 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { MASTERS_SIZE, members, resolveDisciplineBySlug, sameSide, type Award, type MatchResult, type Side } from '@/core'
+import {
+  MASTERS_SIZE,
+  groupPhaseMatches,
+  members,
+  resolveDisciplineBySlug,
+  sameSide,
+  type Award,
+  type MatchResult,
+  type Side,
+} from '@/core'
 import {
   entriesOf,
   matchdayDetail,
@@ -100,7 +109,13 @@ export default async function FechasPage({ params }: PageProps) {
     return {
       names,
       record: championRecord(
-        detail.matches,
+        // W85 (verify-report-pre-contract #4026): `detail.matches` sin
+        // filtrar sumaba la llave al récord ("5–0 · +15 goles" acá contra
+        // "PG 3 DIF +9" en `/fechas/[n]`, para el MISMO campeón de la MISMA
+        // fecha). `groupPhaseMatches` es el mismo criterio que ya usa
+        // `standingsFromBracket` (db/matchday.ts) — quien de verdad reparte
+        // los puntos — y que `/fechas/[n]` ya aplicaba.
+        groupPhaseMatches(detail.matches),
         championSide,
         matchFormat,
         // El `allows_draw` CONGELADO en la fecha, no el de la disciplina de

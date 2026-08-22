@@ -82,7 +82,7 @@ vi.mock('@/db/season', async (importOriginal) => {
 vi.mock('@/db/read', async (importOriginal) => {
   const real = await importOriginal<typeof import('@/db/read')>()
   const config = { ...defaultConfig(8, 1), matchFormat: { ...defaultConfig(8, 1).matchFormat, openScore: true } }
-  const discipline: DisciplineHeader = { id: D1, kind: 'FIFA', config, weight: 1, pairSize: 1 }
+  const discipline: DisciplineHeader = { id: D1, kind: 'FIFA', config, weight: 1, pairSize: 1, hasMasters: false }
   const entries = Array.from({ length: 8 }, (_, index) => ({
     id: `e${index + 1}`,
     displayName: `Jugador ${index + 1}`,

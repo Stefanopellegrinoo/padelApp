@@ -19,6 +19,7 @@ describe('toDisciplineHeader', () => {
       config: {},
       weight: 1,
       pair_size: 2,
+      has_masters: true,
     })
     expect(header.weight).toBe(1)
   })

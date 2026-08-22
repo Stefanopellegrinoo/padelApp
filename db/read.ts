@@ -43,6 +43,14 @@ export interface DisciplineHeader {
   weight: number
   /** `disciplines.pair_size` real — mismo select, una columna más. */
   pairSize: SideSize
+  /**
+   * `disciplines.has_masters` real (decisión #4029) — mismo select, una
+   * columna más. Nace de `pairSize` al crear (parte 1) y es lo único que
+   * Ajustes necesita para dibujar el control (parte 2) y para saber si tiene
+   * que salir deshabilitado (parte 3: no se puede encender en una disciplina
+   * de a uno).
+   */
+  hasMasters: boolean
 }
 
 export interface SeasonHeader {
@@ -203,6 +211,7 @@ interface DisciplineHeaderRow {
    */
   weight: number
   pair_size: number
+  has_masters: boolean
 }
 
 interface MatchdayRow {
@@ -235,6 +244,7 @@ export function toDisciplineHeader(row: DisciplineHeaderRow): DisciplineHeader {
     // cero riesgo.
     weight: Number(row.weight),
     pairSize: row.pair_size as SideSize,
+    hasMasters: row.has_masters,
   }
 }
 
@@ -274,7 +284,7 @@ function toMatchdaySummary(row: MatchdayRow): MatchdaySummary {
 }
 
 const SEASON_HEADER_COLUMNS = 'id, name, status, created_by, invite_token'
-const DISCIPLINE_HEADER_COLUMNS = 'id, season_id, kind, config, weight, pair_size'
+const DISCIPLINE_HEADER_COLUMNS = 'id, season_id, kind, config, weight, pair_size, has_masters'
 
 /** Every season where the caller has a seat — admin or squad. RLS does the filtering; this only shapes the rows. */
 export async function mySeasons(supabase: Client): Promise<SeasonHeader[]> {

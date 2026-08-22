@@ -15,6 +15,7 @@ import {
   matchCountForFormat,
   offerableFormats,
   groupPhaseMatches,
+  KNOCKOUT_GROUP_COUNTS,
 } from './knockout'
 import { pair, single } from './side'
 import type { MatchdayFormat, MatchResult, Phase, Side, SideStanding } from './types'
@@ -415,6 +416,28 @@ describe('suggestFormat', () => {
     expect(format).toEqual({ kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 })
     if (format.kind !== 'GROUPS_KNOCKOUT') throw new Error('unreachable')
     expect(8 / format.groups).toBe(4) // "2 grupos DE 4"
+  })
+
+  /*
+   * S91 (verify-report-pre-contract #4026): `suggestFormat` tomaba
+   * `groupFormats.at(-1)` para quedarse con "el de más grupos", confiando en
+   * que `offerableFormats` itera `KNOCKOUT_GROUP_COUNTS` de menos a más --
+   * cierto sólo porque la constante ESTÁ escrita `[1, 2, 4]`, nada la ata a
+   * seguir así. Mutarla acá adentro, correr `suggestFormat` con la
+   * constante desordenada, y restaurarla en el `finally` -- mismo patrón de
+   * "mutar y revertir" que el resto de esta ronda usa contra SQL.
+   */
+  it('no depende del ORDEN de KNOCKOUT_GROUP_COUNTS: desordenada a [1,4,2], sigue sugiriendo el máximo de grupos', () => {
+    const mutable = KNOCKOUT_GROUP_COUNTS as unknown as number[]
+    const original = [...mutable]
+    mutable.length = 0
+    mutable.push(1, 4, 2)
+    try {
+      expect(suggestFormat(12, 1)).toEqual({ kind: 'GROUPS_KNOCKOUT', groups: 4, qualifiersPerGroup: 2 })
+    } finally {
+      mutable.length = 0
+      mutable.push(...original)
+    }
   })
 
   it('12 lados de a uno: grupos + llave completa dan 19 partidos, no 66 (razón de W32, decisión #3863)', () => {

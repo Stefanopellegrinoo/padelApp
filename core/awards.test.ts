@@ -32,6 +32,20 @@ describe('computeAwards', () => {
     expect(awards[1]?.points).toBe(10)
   })
 
+  /*
+   * S89 (verify-report-pre-contract #4026): `lines` se armaba UNA sola vez,
+   * fuera del loop que reparte los dos `Award` de una pareja -- los dos
+   * apuntaban al MISMO array. Un `.toEqual` que sólo compara CONTENIDO pasa
+   * igual con el bug (los dos arrays arrancan iguales); hace falta mutar el
+   * de uno y mirar que el del otro no se mueva.
+   */
+  it('no comparte la misma instancia de `lines` entre los dos miembros de una pareja', () => {
+    const awards = computeAwards([standing('a1', 'a2', 1)], CONFIG, [])
+    const [first, second] = awards
+    first?.lines.push({ reason: 'bonus de prueba', points: 99 })
+    expect(second?.lines).toEqual([{ reason: `${ordinal(1)} de la fecha`, points: 10 }])
+  })
+
   it('uses the leading values of the list for a four pair matchday', () => {
     const standings = [
       standing('a1', 'a2', 1),

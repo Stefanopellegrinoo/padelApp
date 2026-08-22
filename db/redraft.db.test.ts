@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { defaultConfig, members, type SeasonConfig, type Side } from '@/core'
+import { defaultConfig, members, type DisciplineId, type SeasonConfig, type Side } from '@/core'
 import {
   closeMatchday,
   createMasters,
@@ -40,11 +40,11 @@ async function fillerPlayers(count: number): Promise<string[]> {
 async function buildSeasonWithSquad(
   config: SeasonConfig,
   squadSize: number,
-): Promise<{ admin: TestUser; seasonId: string; squad: string[] }> {
+): Promise<{ admin: TestUser; seasonId: string; disciplineId: DisciplineId; squad: string[] }> {
   const admin = await createTestUser()
   const players = await fillerPlayers(squadSize)
-  const { seasonId, entryIds } = await createSeason({ admin, config, squad: players })
-  return { admin, seasonId, squad: entryIds }
+  const { seasonId, disciplineId, entryIds } = await createSeason({ admin, config, squad: players })
+  return { admin, seasonId, disciplineId, squad: entryIds }
 }
 
 async function markAllPlaying(admin: TestUser, matchdayId: string, entryIds: string[]): Promise<void> {
@@ -94,9 +94,16 @@ async function matchdayStatus(matchdayId: string): Promise<string> {
   return data.status
 }
 
-async function seasonStatus(seasonId: string): Promise<string> {
+// `seasons.status` ya no tiene escritor de producción (bloqueante #2 del
+// contract, db/season-status-writers.db.test.ts): el trinquete real vive en
+// `disciplines.status`.
+async function disciplineStatus(disciplineId: DisciplineId): Promise<string> {
   const db = adminClient()
-  const { data, error } = await db.from('seasons').select('status').eq('id', seasonId).single()
+  const { data, error } = await db
+    .from('disciplines')
+    .select('status')
+    .eq('id', disciplineId)
+    .single()
   if (error || data === null) throw new Error(error?.message)
   return data.status
 }
@@ -128,13 +135,19 @@ async function awardsOf(
 async function buildOpenMatchday(
   config: SeasonConfig,
   squadSize: number,
-): Promise<{ admin: TestUser; seasonId: string; squad: string[]; matchdayId: string }> {
-  const { admin, seasonId, squad } = await buildSeasonWithSquad(config, squadSize)
+): Promise<{
+  admin: TestUser
+  seasonId: string
+  disciplineId: DisciplineId
+  squad: string[]
+  matchdayId: string
+}> {
+  const { admin, seasonId, disciplineId, squad } = await buildSeasonWithSquad(config, squadSize)
   const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
   await markAllPlaying(admin, matchdayId, squad)
   await generatePairs(admin.client, matchdayId)
   await openMatchday(admin.client, matchdayId)
-  return { admin, seasonId, squad, matchdayId }
+  return { admin, seasonId, disciplineId, squad, matchdayId }
 }
 
 const sortSides = (sides: Side[]): Side[] => [...sides].sort((left, right) => left.a.localeCompare(right.a))
@@ -239,12 +252,12 @@ describe('redraftMatchday', () => {
     expect(await matchdayStatus(matchdayId)).toBe('OPEN')
   })
 
-  it('no toca el estado de la temporada ni el invariante de una sola fecha sin cerrar', async () => {
-    const { admin, seasonId, matchdayId } = await buildOpenMatchday(defaultConfig(8), 8)
+  it('no toca el estado de la disciplina ni el invariante de una sola fecha sin cerrar', async () => {
+    const { admin, seasonId, disciplineId, matchdayId } = await buildOpenMatchday(defaultConfig(8), 8)
 
     await redraftMatchday(admin.client, matchdayId)
 
-    expect(await seasonStatus(seasonId)).toBe('ACTIVE')
+    expect(await disciplineStatus(disciplineId)).toBe('ACTIVE')
     expect(await nonClosedMatchdaysOf(seasonId)).toBe(1)
   })
 

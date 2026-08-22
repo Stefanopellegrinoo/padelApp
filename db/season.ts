@@ -334,6 +334,10 @@ export async function createSeason(
     disciplineRows.push(discipline)
   }
 
+  // Sin `seed_position` (C37): esa columna se relaja para el SQUAD en el
+  // contract y el CHECK `entries_seed_shape` la va a prohibir. El orden del
+  // plantel se escribe abajo, en `discipline_entries`, que es donde vive
+  // desde PR 7.
   const { data: entryRows, error: entriesError } = await supabase
     .from('entries')
     .insert(
@@ -341,11 +345,10 @@ export async function createSeason(
         season_id: season.id,
         display_name: seat.trim(),
         kind: 'SQUAD' as const,
-        seed_position: index,
         player_id: index === mySeatIndex ? myPlayerId : null,
       })),
     )
-    .select('id, seed_position')
+    .select('id')
   if (entriesError !== null || entryRows === null) {
     await supabase.from('seasons').delete().eq('id', season.id)
     throw new EdgeError(
@@ -355,8 +358,8 @@ export async function createSeason(
     )
   }
 
-  // Cada asiento entra a TODAS las disciplinas recién creadas, con el mismo
-  //Seed_position que en `entries`. Decisión de este slice (REQ-D1-3/D1-4):
+  // Cada asiento entra a TODAS las disciplinas recién creadas, en el orden en
+  // que el wizard los nombró. Decisión de este slice (REQ-D1-3/D1-4):
   // el plantel es compartido a nivel torneo y por default juega todo — no
   // hay pantalla de "quién juega qué" en este wizard todavía (PR13 la agrega
   // para sumar una disciplina en curso). `discipline_entries` (PR 7) es la
@@ -364,12 +367,18 @@ export async function createSeason(
   // disciplinas vacías aunque `entries` tenga todo el plantel.
   if (entryRows.length > 0) {
     const { error: seatsError } = await supabase.from('discipline_entries').insert(
+      // El índice del array, no una columna de vuelta (C37): `insert ...
+      // returning` devuelve las filas en el orden del `values`, así que
+      // `entryRows[i]` es `squadNames[i]`. Lo fija el test de
+      // `db/entries.db.test.ts` que compara nombre por nombre contra
+      // `seedPosition` 0..7 — si PostgREST dejara de conservar ese orden, cae
+      // ahí y no en una tabla desordenada en producción.
       disciplineRows.flatMap((discipline) =>
-        entryRows.map((row) => ({
+        entryRows.map((row, index) => ({
           discipline_id: discipline.id,
           entry_id: row.id,
           season_id: season.id,
-          seed_position: row.seed_position,
+          seed_position: index,
         })),
       ),
     )

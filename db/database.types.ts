@@ -285,7 +285,7 @@ export type Database = {
           matchday_id: string | null
           player_id: string | null
           season_id: string
-          seed_position: number
+          seed_position: number | null
         }
         Insert: {
           created_at?: string
@@ -295,7 +295,7 @@ export type Database = {
           matchday_id?: string | null
           player_id?: string | null
           season_id: string
-          seed_position: number
+          seed_position?: number | null
         }
         Update: {
           created_at?: string
@@ -305,7 +305,7 @@ export type Database = {
           matchday_id?: string | null
           player_id?: string | null
           season_id?: string
-          seed_position?: number
+          seed_position?: number | null
         }
         Relationships: [
           {

@@ -511,6 +511,16 @@ export async function entriesOf(
   let fallbackSeed = 0
   for (const row of rows) {
     if (row.kind !== 'SQUAD') {
+      // Un GUEST SIEMPRE tiene `seed_position`: es su orden real dentro de la
+      // fecha (`entries_guest_order`), lo escribe `addGuestSeat`
+      // (`db/matchday.ts`) y el CHECK `entries_seed_shape` del contract se lo
+      // va a exigir `not null`. El tipo dejó de garantizarlo cuando la
+      // columna se relajó para el SQUAD (C37, `0060`), así que el invariante
+      // se chequea acá en vez de taparse con un `?? 0` que ordenaría mal sin
+      // decir nada.
+      if (row.seed_position === null) {
+        throw new EdgeError('Un invitado quedó sin posición en su fecha. Esto es un bug.')
+      }
       entries.push({
         id: row.id,
         displayName: row.display_name,

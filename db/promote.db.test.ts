@@ -89,7 +89,7 @@ interface EntryRow {
   id: string
   kind: 'SQUAD' | 'GUEST'
   matchday_id: string | null
-  seed_position: number
+  seed_position: number | null
   display_name: string
   season_id: string
 }
@@ -137,7 +137,9 @@ async function awardLinesOf(
   return data ?? []
 }
 
-async function squadSeedPositions(seasonId: string): Promise<Array<{ id: string; seed_position: number }>> {
+// `seed_position` es `number | null` desde C37 (`0060`): para el SQUAD nadie
+// la escribe más, y el contract la va a poner en null y prohibir lo contrario.
+async function squadSeedPositions(seasonId: string): Promise<Array<{ id: string; seed_position: number | null }>> {
   const db = adminClient()
   const { data, error } = await db
     .from('entries')
@@ -210,11 +212,14 @@ describe('promoteGuest — spec 3.1: se copia el award congelado del compañero'
       expect(after).toContainEqual(row)
     }
 
-    // El asiento pasó a SQUAD, salió de la fecha (matchday_id null), y cayó al final del plantel.
+    // El asiento pasó a SQUAD, salió de la fecha (matchday_id null) y perdió
+    // la posición de invitado (C37): en `entries` el SQUAD ya no tiene
+    // ninguna. La que cuenta —al final del plantel de esta disciplina— es la
+    // de `discipline_entries`, y la mide el test de la spec 3.6.
     const promoted = await entryRow(guestId)
     expect(promoted.kind).toBe('SQUAD')
     expect(promoted.matchday_id).toBeNull()
-    expect(promoted.seed_position).toBe(8) // los 8 asientos originales van 0..7
+    expect(promoted.seed_position).toBeNull()
   })
 
   it('no toca los awards de NINGUNA otra fecha de la temporada', async () => {

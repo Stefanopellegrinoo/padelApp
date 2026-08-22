@@ -489,3 +489,45 @@ describe('deleteSeason', () => {
     expect(await seasonExists(seasonId)).toBe(true)
   })
 })
+
+// ── C37: entriesOf sin disciplina resoluble ─────────────────────────────────
+// La rama `effectiveDisciplineId === null` de `entriesOf` usaba
+// `entries.seed_position` para TODO el plantel — la última lectura de esa
+// columna para el SQUAD, que el contract relaja a `null`. Devolvía `null` en
+// un campo tipado `number`.
+//
+// La rama NO tenía un solo testigo: medido borrándola entera, la suite
+// quedaba en 425/425. Éste es el que le faltaba, y el que fija que el fallback
+// no puede perder a nadie — es lo único que separa "no hay orden que dar" de
+// "el plantel desapareció de la pantalla".
+describe('entriesOf sin disciplina resoluble (C37)', () => {
+  it('devuelve el plantel entero con un orden propio, sin leer entries.seed_position', async () => {
+    const admin = await createTestUser()
+    const { seasonId, entryIds, disciplineIds } = await buildSeasonScene({
+      admin,
+      squad: await fillerPlayers(4),
+    })
+    const [disciplineId] = disciplineIds
+    if (disciplineId === undefined || entryIds.length !== 4) throw new Error('La escena no se armó.')
+
+    // `entries.seed_position` miente a propósito: si la rama la sigue
+    // leyendo, los `seedPosition` salen 10,20,30,40 en vez de 0,1,2,3.
+    const db = adminClient()
+    for (const [index, entryId] of entryIds.entries()) {
+      const { error } = await db
+        .from('entries')
+        .update({ seed_position: (index + 1) * 10 })
+        .eq('id', entryId)
+      if (error) throw new Error(error.message)
+    }
+
+    // Sin disciplina, `defaultDisciplineId` da `null` — el caso que la rama
+    // dice cubrir. `discipline_entries` cascadea con ella.
+    const { error: deleteError } = await db.from('disciplines').delete().eq('id', disciplineId)
+    if (deleteError) throw new Error(deleteError.message)
+
+    const seats = await entriesOf(admin.client, seasonId)
+    expect(seats).toHaveLength(4)
+    expect(seats.map((seat) => seat.seedPosition)).toEqual([0, 1, 2, 3])
+  })
+})

@@ -6,6 +6,7 @@ import {
   addMySeat,
   buildDisciplines,
   configFor,
+  configForPairSizeChange,
   disciplinesWarning,
   filledCount,
   formatErrors,
@@ -95,6 +96,28 @@ describe('the config the wizard builds', () => {
       expect(validateConfig(configFor(size), 2)).toEqual([])
       expect(formatErrors(configFor(size))).toEqual([])
     }
+  })
+})
+
+/**
+ * W83 (verify-report-pre-contract, #4026), tercera vez de la familia
+ * W69 → W76 → W83: con UNA sola disciplina marcada, tocar "Lados" tiene que
+ * rehacer `config` a la curva de la disciplina que queda — exactamente lo
+ * que `wizard.tsx` hacía antes de `fe44255` y dejó de hacer al cerrar W76.
+ * Con dos o más marcadas, `config` se queda con la curva legado de a dos
+ * (C29) sin que "Lados" la mueva, que es lo que #4017 arregló.
+ */
+describe('configForPairSizeChange (W83, #4026)', () => {
+  it('con una sola disciplina, rehace la curva a la del sideSize elegido', () => {
+    const config = configFor(8) // curva de a dos, 4 valores
+    const next = configForPairSizeChange(config, 8, ['FIFA'], 1)
+    expect(next.points).toEqual([10, 7, 5, 3, 2, 1, 0, 0])
+  })
+
+  it('con dos o más disciplinas marcadas, deja `config` sin tocar -- #4017 sigue dueño de esa curva', () => {
+    const config = configFor(8)
+    const next = configForPairSizeChange(config, 8, ['PADEL', 'FIFA'], 1)
+    expect(next).toBe(config)
   })
 })
 
@@ -440,6 +463,54 @@ describe('newTournamentPayload', () => {
     // seis; 8 jugadores en parejas son 4 lados, la curva de 4).
     expect(padel?.config.points).toEqual([10, 6, 3, 1])
     expect(fifa?.config.points).toEqual([10, 7, 5, 3, 2, 1, 0, 0])
+  })
+
+  /**
+   * W83 (verify-report-pre-contract, #4026): el test de arriba ("con
+   * pairSize=1, las disciplines... salen con la curva de #3963") entra con
+   * `config = configFor(8, 1)` -- la curva de a uno YA armada -- así que no
+   * puede distinguir "respetó lo que le pasaron" de "lo tiró y usó el
+   * default": las dos dan el mismo resultado. Éste SÍ distingue: la curva
+   * que llega acá está EDITADA a mano (valores que #3963 nunca produce), y
+   * tiene que ser la que se guarda -- no el default.
+   */
+  it('con una sola disciplina, la curva EDITADA a mano es la que se guarda -- no el default de #3963 (W83)', () => {
+    const squad: Squad = { names: Array(8).fill('Jugador'), mySeat: null }
+    const edited = { ...configFor(8, 1), points: [20, 12, 6, 2, 0, 0, 0, 0] }
+    const payload = newTournamentPayload('Liga FIFA', squad, edited, ['FIFA'], { PADEL: 2, FIFA: 1 })
+    expect(payload.disciplines[0]?.config.points).toEqual([20, 12, 6, 2, 0, 0, 0, 0])
+  })
+
+  /**
+   * El mismo distingo, con DOS disciplinas: la curva editada en pantalla es
+   * SIEMPRE la legado de a dos (C29, W76/#4017) -- acá tiene que quedar en
+   * PADEL (pairSize=2), tal cual se editó, y FIFA (pairSize=1) se queda con
+   * el default de #3963, sin heredar la edición de PADEL ni perder la suya.
+   */
+  it('con dos disciplinas, la curva editada es SOLO para la de a dos -- FIFA de a uno sigue con el default de #3963', () => {
+    const squad: Squad = { names: Array(8).fill('Jugador'), mySeat: null }
+    const edited = { ...configFor(8), points: [20, 12, 6, 2] }
+    const payload = newTournamentPayload('Mixto', squad, edited, ['PADEL', 'FIFA'], { PADEL: 2, FIFA: 1 })
+    const padel = payload.disciplines.find((row) => row.kind === 'PADEL')
+    const fifa = payload.disciplines.find((row) => row.kind === 'FIFA')
+    expect(padel?.config.points).toEqual([20, 12, 6, 2])
+    expect(fifa?.config.points).toEqual([10, 7, 5, 3, 2, 1, 0, 0])
+  })
+
+  /**
+   * El guard de forma (`soleCurveMatches`): si `config` quedó con la curva
+   * legado de a dos (4 valores, por ejemplo porque el admin destildó una
+   * segunda disciplina sin volver a tocar "Lados") y la única disciplina que
+   * sobrevive es de a uno, el LARGO no coincide con lo que esa disciplina
+   * necesita (8) -- confiar en `builtConfig` ahí guardaría un `points`
+   * inválido. Tiene que caer al default seguro, igual que si nunca se
+   * hubiera editado nada.
+   */
+  it('con una sola disciplina pero una curva de forma vieja (largo de a dos), usa el default -- no arriesga un largo inválido', () => {
+    const squad: Squad = { names: Array(8).fill('Jugador'), mySeat: null }
+    const stale = configFor(8) // 4 valores, la forma de a dos
+    const payload = newTournamentPayload('Liga FIFA', squad, stale, ['FIFA'], { PADEL: 2, FIFA: 1 })
+    expect(payload.disciplines[0]?.config.points).toEqual([10, 7, 5, 3, 2, 1, 0, 0])
   })
 })
 

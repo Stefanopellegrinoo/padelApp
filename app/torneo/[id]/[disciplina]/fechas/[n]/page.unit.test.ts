@@ -31,6 +31,10 @@ const escena = vi.hoisted(() => ({
   matches: [] as MatchWithId[],
   sides: [] as Side[],
   isAdmin: true,
+  // S93/S94 (verify-report-pre-contract #4026): `discipline.pairSize` nacía
+  // hardcodeado en `1` acá abajo -- para el armado de PÁDEL (sideSize=2)
+  // hace falta poder tocarlo por test, mismo patrón que `status`/`formato`.
+  pairSize: 1 as 1 | 2,
   // Vacío salvo en los tests que necesitan `frozenTableRows` reordenando de
   // verdad (W70, verify-report-pr21 #4004): con el Map vacío de siempre
   // ninguna fila tiene puesto congelado, así que `tableRows` es LITERALMENTE
@@ -82,7 +86,12 @@ vi.mock('@/db/season', async (importOriginal) => {
 vi.mock('@/db/read', async (importOriginal) => {
   const real = await importOriginal<typeof import('@/db/read')>()
   const config = { ...defaultConfig(8, 1), matchFormat: { ...defaultConfig(8, 1).matchFormat, openScore: true } }
-  const discipline: DisciplineHeader = { id: D1, kind: 'FIFA', config, weight: 1, pairSize: 1, hasMasters: false }
+  // Función, no un literal fijado al importar el mock: `escena.pairSize` se
+  // toca por test (S93/S94, verify-report-pre-contract #4026), así que
+  // `sideSize` tiene que leerse en el momento en que `seasonHeader` corre.
+  function discipline(): DisciplineHeader {
+    return { id: D1, kind: 'FIFA', config, weight: 1, pairSize: escena.pairSize, hasMasters: false }
+  }
   const entries = Array.from({ length: 8 }, (_, index) => ({
     id: `e${index + 1}`,
     displayName: `Jugador ${index + 1}`,
@@ -114,7 +123,7 @@ vi.mock('@/db/read', async (importOriginal) => {
       regularMatchdays: 10,
       isAdmin: escena.isAdmin,
       inviteToken: 'token',
-      disciplines: [discipline],
+      disciplines: [discipline()],
     }),
     seasonMatchdaysOf: async () => [matchdaySummary()],
     entriesOf: async () => entries,
@@ -626,9 +635,21 @@ describe('el armado en DRAFT — la nota del reparto coincide con el formato ele
   it('con grupos elegidos, la nota describe grupos + llave, no "todos contra todos"', async () => {
     escena.status = 'DRAFT'
     escena.isAdmin = true
+    escena.pairSize = 1
     escena.formato = { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 }
     escena.sides = ALL_SIDES
-    escena.matches = []
+    // S94 (verify-report-pre-contract #4026): el fixture tiene que CUBRIR de
+    // verdad los 2 grupos que `formato` declara -- `matches = []` (como
+    // decía este test antes de S94) ahora es exactamente el estado
+    // DIVERGIDO que ese hallazgo agarra, y produciría la nota de drift, no
+    // ésta. Grupo 1 = lados 1-4, grupo 2 = lados 5-8: alcanza con cubrir,
+    // la partición concreta no importa para esta pregunta.
+    escena.matches = [
+      playedMatch('GRUPO', 1, 1, 1, 2),
+      playedMatch('GRUPO', 1, 1, 3, 4),
+      playedMatch('GRUPO', 2, 1, 5, 6),
+      playedMatch('GRUPO', 2, 1, 7, 8),
+    ]
 
     const html = await render()
 
@@ -641,6 +662,7 @@ describe('el armado en DRAFT — la nota del reparto coincide con el formato ele
   it('no-regresión: con "todos contra todos" elegido, la nota sigue siendo la de siempre', async () => {
     escena.status = 'DRAFT'
     escena.isAdmin = true
+    escena.pairSize = 1
     escena.formato = { kind: 'ROUND_ROBIN' }
     escena.sides = [1, 2, 3, 4].map(side)
     escena.matches = []
@@ -648,6 +670,103 @@ describe('el armado en DRAFT — la nota del reparto coincide con el formato ele
     const html = await render()
 
     expect(html).toContain('Juegan todos contra todos, en el orden de la tabla.')
+  })
+})
+
+describe('el armado en DRAFT — la nota no promete grupos sobre un fixture que no se volvió a sortear (S94, verify-report-pre-contract #4026)', () => {
+  /**
+   * Mismo estado divergido que C32/W86: `changeMatchdayFormat` puede tocar
+   * `formato` DESPUÉS de que `generatePairs` ya armó el fixture con el
+   * viejo, sin volver a sortear. El fixture REAL (no uno sintético, lección
+   * #4025/W86) es sortear ROUND_ROBIN (`buildFixture`, la MISMA función que
+   * corre `db/matchday.ts`) y DESPUÉS cambiar el formato a grupos: los 28
+   * partidos quedan con `fase='GRUPO', grupo=1` (default de columna, 0039).
+   */
+  it('con el fixture real de C32 (round robin completo, todo grupo=1), la nota NO promete grupos', async () => {
+    escena.status = 'DRAFT'
+    escena.isAdmin = true
+    escena.pairSize = 1
+    escena.formato = { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 }
+    escena.sides = ALL_SIDES
+    escena.matches = buildFixture(8).flatMap((round, roundIndex) =>
+      round.map(([a, b]) => playedMatch('GRUPO', 1, roundIndex + 1, a + 1, b + 1)),
+    )
+    expect(escena.matches).toHaveLength(28)
+
+    const html = await render()
+
+    expect(html).not.toContain('Juegan por grupos: todos contra todos adentro de cada grupo')
+    expect(html).toContain('El formato cambió después de sortear')
+  })
+
+  it('no-regresión: con grupos elegidos y el fixture que sí los cubre, sigue prometiendo grupos', async () => {
+    escena.status = 'DRAFT'
+    escena.isAdmin = true
+    escena.pairSize = 1
+    escena.formato = { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 }
+    escena.sides = ALL_SIDES
+    escena.matches = [
+      playedMatch('GRUPO', 1, 1, 1, 2),
+      playedMatch('GRUPO', 1, 1, 3, 4),
+      playedMatch('GRUPO', 2, 1, 5, 6),
+      playedMatch('GRUPO', 2, 1, 7, 8),
+    ]
+
+    const html = await render()
+
+    expect(html).toContain('Juegan por grupos: todos contra todos adentro de cada grupo')
+    expect(html).not.toContain('El formato cambió después de sortear')
+  })
+})
+
+describe('el armado en DRAFT — la nota de pádel no pierde cómo se armaron las parejas al elegir grupos (S93, verify-report-pre-contract #4026)', () => {
+  /**
+   * W80 REEMPLAZABA `drawNote` entero al elegir grupos: para PÁDEL
+   * (sideSize=2) eso se llevaba puesta la única explicación de CÓMO se
+   * armaron las parejas de la lista de arriba ("Los defensores quedan
+   * fijos..."), que es una pregunta distinta de CÓMO se van a jugar. Las
+   * dos tienen que convivir.
+   */
+  it('con pádel, grupos elegidos y un fixture que los cubre, la nota dice cómo se armaron las parejas Y cómo se juega', async () => {
+    escena.status = 'DRAFT'
+    escena.isAdmin = true
+    escena.pairSize = 2
+    escena.formato = { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 }
+    escena.sides = ALL_SIDES
+    escena.matches = [
+      playedMatch('GRUPO', 1, 1, 1, 2),
+      playedMatch('GRUPO', 1, 1, 3, 4),
+      playedMatch('GRUPO', 2, 1, 5, 6),
+      playedMatch('GRUPO', 2, 1, 7, 8),
+    ]
+
+    const html = await render()
+
+    expect(html).toContain(
+      'Los defensores quedan fijos. El resto se arma cruzando la tabla: 1° con último, 2° con anteúltimo, y así.',
+    )
+    expect(html).toContain(
+      'Juegan por grupos: todos contra todos adentro de cada grupo, y los 2 primeros de cada uno pasan a la llave.',
+    )
+  })
+
+  it('con pádel y el fixture real de C32 sin re-sortear, sigue diciendo cómo se armaron las parejas pero no promete grupos', async () => {
+    escena.status = 'DRAFT'
+    escena.isAdmin = true
+    escena.pairSize = 2
+    escena.formato = { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 }
+    escena.sides = ALL_SIDES
+    escena.matches = buildFixture(8).flatMap((round, roundIndex) =>
+      round.map(([a, b]) => playedMatch('GRUPO', 1, roundIndex + 1, a + 1, b + 1)),
+    )
+
+    const html = await render()
+
+    expect(html).toContain(
+      'Los defensores quedan fijos. El resto se arma cruzando la tabla: 1° con último, 2° con anteúltimo, y así.',
+    )
+    expect(html).not.toContain('Juegan por grupos: todos contra todos adentro de cada grupo')
+    expect(html).toContain('El formato cambió después de sortear')
   })
 })
 
@@ -665,6 +784,7 @@ describe('el armado en DRAFT — vista previa del reparto en grupos (S83, verify
   it('con "2 grupos + llave" elegido, muestra el reparto en SERPENTINA — no en tajadas', async () => {
     escena.status = 'DRAFT'
     escena.isAdmin = true
+    escena.pairSize = 1
     escena.formato = { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 }
     escena.sides = []
     escena.matches = []
@@ -691,6 +811,7 @@ describe('el armado en DRAFT — vista previa del reparto en grupos (S83, verify
   it('con "todos contra todos" elegido, no muestra ninguna vista previa de grupos', async () => {
     escena.status = 'DRAFT'
     escena.isAdmin = true
+    escena.pairSize = 1
     escena.formato = { kind: 'ROUND_ROBIN' }
     escena.sides = []
     escena.matches = []
@@ -712,6 +833,7 @@ describe('el armado en DRAFT — el número de asiento no se recorta desde el 10
   it('con 10 lados, el décimo asiento usa w-5, no w-4', async () => {
     escena.status = 'DRAFT'
     escena.isAdmin = true
+    escena.pairSize = 1
     escena.formato = { kind: 'ROUND_ROBIN' }
     escena.sides = Array.from({ length: 10 }, (_, index) => side(index + 1))
     escena.matches = []

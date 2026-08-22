@@ -451,10 +451,16 @@ export async function seasonRules(
  * (de LA TEMPORADA, dual-write tail-only desde PR 7) y mezclarla con
  * `discipline_entries.seed_position` (de LA DISCIPLINA) producía posiciones
  * colisionadas. Única excepción: si la disciplina no se pudo resolver
- * (`defaultDisciplineId` da `null` — típicamente un extraño sin RLS para
- * verla) se usa `entries.seed_position` para TODO el plantel por igual, sin
- * `discipline_entries` de por medio, porque ahí no hay dos espacios que
- * mezclar, sólo uno.
+ * (`defaultDisciplineId` da `null`) el SQUAD se numera 0,1,2… en el orden de
+ * entrada, sin `discipline_entries` de por medio, porque ahí no hay dos
+ * espacios que mezclar — no hay ninguno.
+ *
+ * Esa excepción numeraba con `entries.seed_position` hasta C37, y el contract
+ * deja esa columna en `null` para el SQUAD. El caso es raro (las tres tablas
+ * comparten el gate `is_participant`, así que quien no ve `disciplines`
+ * tampoco ve `entries`: hace falta una temporada sin ninguna disciplina) y
+ * NO tenía un solo test — medido borrando la rama entera, la suite quedaba
+ * verde. Ahora sí lo tiene: `db/entries.db.test.ts`.
  */
 export async function entriesOf(
   supabase: Client,
@@ -469,7 +475,14 @@ export async function entriesOf(
       .from('entries')
       .select('id, display_name, kind, seed_position, player_id, matchday_id')
       .eq('season_id', seasonId)
-      .order('seed_position', { ascending: true }),
+      // Orden de ENTRADA, no el de salida: cada `seedPosition` se resuelve
+      // más abajo y las pantallas re-ordenan por ese campo. Dejó de ser
+      // `seed_position` (C37) porque esa columna se va a `null` para el
+      // SQUAD con el contract, y ordenar por una columna nula es no ordenar.
+      // `created_at` solo no alcanza: `createSeason` inserta todo el plantel
+      // en UNA sentencia y comparten el `now()`.
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true }),
     effectiveDisciplineIdPromise,
   ])
   if (error) throw new EdgeError(`No se pudo leer el plantel: ${error.message}`)
@@ -488,6 +501,14 @@ export async function entriesOf(
   }
 
   const entries: EntryRow[] = []
+  //Sólo para la rama sin disciplina resoluble: numera el SQUAD 0,1,2… en el
+  // orden de entrada. Antes ese número salía de `entries.seed_position`
+  // (C37), que el contract deja en `null` para el SQUAD — habría devuelto
+  // `null` en un campo tipado `number`. Acá no hay orden real que dar (no hay
+  // disciplina de la cual leerlo), y lo que importa es no perder a nadie:
+  // devolver el plantel con un orden propio es peor que el orden real y
+  // MUCHO mejor que una pantalla vacía.
+  let fallbackSeed = 0
   for (const row of rows) {
     if (row.kind !== 'SQUAD') {
       entries.push({
@@ -500,7 +521,7 @@ export async function entriesOf(
       })
       continue
     }
-    const seedPosition = effectiveDisciplineId === null ? row.seed_position : disciplineSeed.get(row.id)
+    const seedPosition = effectiveDisciplineId === null ? fallbackSeed++ : disciplineSeed.get(row.id)
     if (seedPosition === undefined) continue // no juega esta disciplina
     entries.push({
       id: row.id,

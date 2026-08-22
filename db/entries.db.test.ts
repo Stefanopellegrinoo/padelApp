@@ -526,8 +526,16 @@ describe('entriesOf sin disciplina resoluble (C37)', () => {
     const { error: deleteError } = await db.from('disciplines').delete().eq('id', disciplineId)
     if (deleteError) throw new Error(deleteError.message)
 
-    const seats = await entriesOf(admin.client, seasonId)
-    expect(seats).toHaveLength(4)
-    expect(seats.map((seat) => seat.seedPosition)).toEqual([0, 1, 2, 3])
+    // La temporada queda en un estado que REQ-NR-4 prohíbe, y los dos
+    // tripwires globales de `db/discipline.db.test.ts` lo cazan al final de
+    // la corrida — así que esta escena se limpia sola, pase o falle. El
+    // `finally` no es ceremonia: sin él, este test rompe otros dos.
+    try {
+      const seats = await entriesOf(admin.client, seasonId)
+      expect(seats).toHaveLength(4)
+      expect(seats.map((seat) => seat.seedPosition)).toEqual([0, 1, 2, 3])
+    } finally {
+      await db.from('seasons').delete().eq('id', seasonId)
+    }
   })
 })

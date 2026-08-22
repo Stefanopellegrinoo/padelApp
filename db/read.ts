@@ -691,16 +691,41 @@ export async function seasonMatchdaysOf(supabase: Client, seasonId: string): Pro
  * queda afuera porque no se pasa por esa tabla. Sumar puntos ponderados
  * (`computeRanking` por disciplina + `computeGlobalRanking`) ya deja en 0 a
  * quien no jugó una de ellas — no hace falta excluirlo acá.
+ *
+ * Delega en `seasonSquadMembersOf` y tira los campos de más (C37): las dos
+ * traían la misma fila con el mismo orden, y ese orden dejó de ser un
+ * `.order()` de una columna para pasar a resolverse contra la disciplina
+ * primaria. Duplicarlo era duplicar la parte que se puede desincronizar.
  */
 export async function seasonSquadOf(supabase: Client, seasonId: string): Promise<EntryId[]> {
+  return (await seasonSquadMembersOf(supabase, seasonId)).map((member) => member.id)
+}
+
+/**
+ * El orden del plantel A NIVEL TORNEO: `entry_id -> seed_position` de la
+ * disciplina PRIMARIA. Quien no juega la primaria no está en el mapa.
+ *
+ * Decisión #4044 (C37): `entries.seed_position` deja de tener valor para el
+ * SQUAD con el contract —se relaja y se ata a `kind = 'GUEST'`—, y el orden
+ * pasa a vivir sólo en `discipline_entries`, que es POR DISCIPLINA. La
+ * pregunta que quedaba abierta desde PR 7 es cuál de ellas ordena el TORNEO,
+ * y la respuesta es la primaria: es la que se sembró desde
+ * `entries.seed_position` en el backfill de 0023, así que elegirla es cero
+ * cambio visible para las temporadas que ya existen.
+ *
+ * `defaultDisciplineId` es el mismo criterio que usan `create_masters`
+ * (0050) y `season_invite` (0026) —`order by position, created_at limit 1`—
+ * y se reusa a propósito en vez de escribir uno nuevo.
+ */
+async function seasonSeedOrder(supabase: Client, seasonId: string): Promise<Map<string, number>> {
+  const disciplineId = await defaultDisciplineId(supabase, seasonId)
+  if (disciplineId === null) return new Map()
   const { data, error } = await supabase
-    .from('entries')
-    .select('id')
-    .eq('season_id', seasonId)
-    .eq('kind', 'SQUAD')
-    .order('seed_position', { ascending: true })
-  if (error) throw new EdgeError(`No se pudo leer el plantel: ${error.message}`)
-  return (data ?? []).map((row) => row.id)
+    .from('discipline_entries')
+    .select('entry_id, seed_position')
+    .eq('discipline_id', disciplineId)
+  if (error) throw new EdgeError(`No se pudo leer el orden del plantel: ${error.message}`)
+  return new Map((data ?? []).map((seat) => [seat.entry_id, seat.seed_position]))
 }
 
 /** Una fila de `seasonSquadMembersOf`: el id que necesita `computeRanking`, el nombre que la pantalla dibuja, y el dueño del asiento (o `null` si nadie lo reclamó). */
@@ -711,27 +736,48 @@ export interface SquadMember {
 }
 
 /**
- * Igual que `seasonSquadOf` pero con `display_name` (PR12b slice 2, tabla
- * global): la raíz de la temporada necesita el NOMBRE de cada fila, no sólo
- * el id — algo que `entriesOf` sí trae pero filtrado a UNA disciplina
- * (exactamente lo que esta pantalla no puede hacer). `seasonSquadOf` se deja
- * intacto: `torneos/page.tsx` sólo necesita los ids.
+ * El plantel de la temporada CON el nombre (PR12b slice 2, tabla global): la
+ * raíz de la temporada necesita el NOMBRE de cada fila, no sólo el id — algo
+ * que `entriesOf` sí trae pero filtrado a UNA disciplina (exactamente lo que
+ * esta pantalla no puede hacer). Es la implementación de las dos:
+ * `seasonSquadOf` delega acá y se queda con los ids.
  *
  * `playerId` (C14) se sumó para que "Plantel" en
  * Ajustes pueda usar esta función en vez de `entriesOf(seasonId)` sin
  * disciplina — esa llamada caía en la disciplina por defecto y perdía a
- * cualquier SQUAD promovido desde otra (`db/read.ts:419`). Acá no hay ese
- * problema: no se pasa por `discipline_entries`.
+ * cualquier SQUAD promovido desde otra (`db/read.ts:419`).
+ *
+ * CUIDADO al tocar esto (C37): desde que el orden es el de la primaria, acá
+ * SÍ se lee `discipline_entries` — pero sólo para ORDENAR, nunca para
+ * filtrar. Quien no juega la primaria va al final (`seasonSeedOrder`), no
+ * afuera. Convertir ese `?? MAX_SAFE_INTEGER` en un `.filter()` reabre
+ * exactamente el agujero que esta función existe para tapar.
  */
 export async function seasonSquadMembersOf(supabase: Client, seasonId: string): Promise<SquadMember[]> {
-  const { data, error } = await supabase
-    .from('entries')
-    .select('id, display_name, player_id')
-    .eq('season_id', seasonId)
-    .eq('kind', 'SQUAD')
-    .order('seed_position', { ascending: true })
+  const [{ data, error }, order] = await Promise.all([
+    supabase
+      .from('entries')
+      .select('id, display_name, player_id')
+      .eq('season_id', seasonId)
+      .eq('kind', 'SQUAD')
+      // El orden REAL lo pone `seasonSeedOrder` acá abajo; éste es sólo el de
+      // entrada, y tiene que ser determinístico igual porque es el desempate
+      // de quien no juega la primaria. `created_at` solo no alcanza:
+      // `createSeason` inserta todo el plantel en UNA sentencia, así que
+      // comparten el `now()` al milisegundo — de ahí el `id` detrás.
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true }),
+    seasonSeedOrder(supabase, seasonId),
+  ])
   if (error) throw new EdgeError(`No se pudo leer el plantel: ${error.message}`)
-  return (data ?? []).map((row) => ({ id: row.id, displayName: row.display_name, playerId: row.player_id }))
+  //`?? MAX_SAFE_INTEGER`: quien no juega la primaria va al FINAL, no se
+  // pierde (REQ-D9 — esta función existe justamente para no perder a nadie) y
+  // no se cuela en el medio. Mismo criterio que `season_invite` (0026) desde
+  // PR 9: `order by (de.seed_position is null), de.seed_position`.
+  return (data ?? [])
+    .map((row) => ({ row, seed: order.get(row.id) ?? Number.MAX_SAFE_INTEGER }))
+    .sort((left, right) => left.seed - right.seed)
+    .map(({ row }) => ({ id: row.id, displayName: row.display_name, playerId: row.player_id }))
 }
 
 /**

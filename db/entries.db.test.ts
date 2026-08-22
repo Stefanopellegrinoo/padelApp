@@ -134,6 +134,26 @@ describe('createSeason', () => {
     expect(data?.[0]?.config).toEqual(config)
   })
 
+  // C35 (verify-report-go-no-go #4034): `seasons.config` es la columna que el
+  // CONTRACT va a dropear, y `createSeason` era su único escritor de
+  // producción — `disciplines.config` (arriba) es la fuente real desde PR 5.
+  // `not null` sin default: sin la migración que la relaja, este insert ni
+  // arrancaría sin la columna.
+  it('no escribe seasons.config — es la columna que el CONTRACT va a dropear (C35, #4034)', async () => {
+    const admin = await createTestUser()
+
+    const { seasonId } = await createSeason(admin.client, {
+      name: 'Sin escritor de seasons.config',
+      squadNames: squadNames(8),
+      config: defaultConfig(8),
+    })
+
+    const db = adminClient()
+    const { data, error } = await db.from('seasons').select('config').eq('id', seasonId).single()
+    if (error || data === null) throw new Error(error?.message)
+    expect(data.config).toBeNull()
+  })
+
   // El que arma el torneo casi siempre lo juega. El asiento propio se reclama
   // en el mismo insert del plantel, así que lo que hay que probar es que cae en
   // el asiento QUE ELIGIÓ y en ninguno más — errarle por uno lo ata al lugar de

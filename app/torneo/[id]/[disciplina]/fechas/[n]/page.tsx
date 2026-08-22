@@ -413,27 +413,40 @@ export default async function FechaDetailPage({ params }: PageProps) {
       groupOfSide.set(sideKey(match.sideB), match.grupo)
     }
     const formatoAbierto = matchday.formato
-    // W82 (verify-report-pr21-cierre #4016): `formatoAbierto.groups` fija
-    // CUÁNTOS bloques dibujar sin mirar si `groupOfSide` de verdad cubre a
-    // todos los lados. Si `matchday.formato` y `matches.grupo` divergen (el
-    // fixture roto de C32: formato cambiado después de sortear, sin volver a
-    // sortear), un lado sin ningún partido de GRUPO no cae en NINGÚN
-    // `index + 1` — no sale en su bloque ni en ningún otro: desaparece de la
-    // pantalla sin que nada lo diga. `allSidesGrouped` es el guard: sólo se
-    // parte si el reparto es completo. Con un hueco, la pantalla NO adivina
-    // en qué grupo cae el lado que falta —esa es justo la pregunta que C32
-    // deja sin responder—: cae a la tabla ÚNICA (misma que ROUND_ROBIN/CLOSED
-    // ya usan) para que los ocho sigan visibles, y `groupMismatchNote` (más
-    // abajo) explica por qué no se pudo partir.
-    const allSidesGrouped = standings.every((row) => groupOfSide.has(sideKey(row.side)))
-    const groupedStandings: SideStanding[][] =
-      status === 'OPEN' && formatoAbierto.kind === 'GROUPS_KNOCKOUT' && allSidesGrouped
+    // W82 (verify-report-pr21-cierre #4016) + W86 (verify-report-pre-contract
+    // #4026): `formatoAbierto.groups` fija CUÁNTOS bloques dibujar sin mirar
+    // si `groupOfSide` de verdad cubre CADA UNO de esos bloques. Si
+    // `matchday.formato` y `matches.grupo` divergen (el fixture roto de C32:
+    // formato cambiado después de sortear, sin volver a sortear), la pregunta
+    // "¿todo lado está en ALGÚN grupo?" (el guard viejo, `allSidesGrouped`) NO
+    // es la misma que "¿algún grupo DECLARADO quedó vacío?" — con un round
+    // robin completo sin re-sortear, los 28 partidos nacen `grupo=1` (default
+    // de columna, `0039`), así que TODOS los lados están en groupOfSide y el
+    // guard viejo daba `true`: partía en 2 bloques y "Grupo 2" salía con
+    // encabezado y cero filas. El guard correcto arma la partición candidata
+    // y exige que NINGÚN grupo quede vacío Y que la suma cubra a todos los
+    // lados (la segunda condición sigue cazando el hueco original de W82: un
+    // lado sin ningún partido de grupo tampoco cae en ningún índice). Con
+    // cualquiera de los dos huecos, la pantalla NO adivina en qué grupo cae
+    // lo que falta —esa es justo la pregunta que C32 deja sin responder—: cae
+    // a la tabla ÚNICA (misma que ROUND_ROBIN/CLOSED ya usan) para que todos
+    // sigan visibles, y `groupMismatchNote` (más abajo) explica por qué no se
+    // pudo partir.
+    const candidateGroups: SideStanding[][] =
+      formatoAbierto.kind === 'GROUPS_KNOCKOUT'
         ? Array.from({ length: formatoAbierto.groups }, (_, index) =>
             standings.filter((row) => groupOfSide.get(sideKey(row.side)) === index + 1),
           )
         : []
+    const groupsCoverEveryone =
+      candidateGroups.every((rows) => rows.length > 0) &&
+      candidateGroups.reduce((sum, rows) => sum + rows.length, 0) === standings.length
+    const groupedStandings: SideStanding[][] =
+      status === 'OPEN' && formatoAbierto.kind === 'GROUPS_KNOCKOUT' && groupsCoverEveryone
+        ? candidateGroups
+        : []
     const groupMismatchNote =
-      status === 'OPEN' && formatoAbierto.kind === 'GROUPS_KNOCKOUT' && !allSidesGrouped
+      status === 'OPEN' && formatoAbierto.kind === 'GROUPS_KNOCKOUT' && !groupsCoverEveryone
         ? 'El formato cambió después de sortear: esta tabla no se puede partir por grupo todavía. Volvé al armado y sorteá de nuevo.'
         : null
 

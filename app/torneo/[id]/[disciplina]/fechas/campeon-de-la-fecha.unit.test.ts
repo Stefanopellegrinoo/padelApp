@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { defaultConfig, pair, type MatchFormat, type MatchResult, type Side } from '@/core'
+import { defaultConfig, groupPhaseMatches, pair, type MatchFormat, type MatchResult, type Side } from '@/core'
 import { championRecord } from './campeon-de-la-fecha'
 
 /**
@@ -62,6 +62,30 @@ describe('championRecord donde el empate es legal', () => {
   })
 })
 
+// W85 (verify-report-pre-contract #4026): con una fecha GROUPS_KNOCKOUT
+// cerrada, `/fechas` (esta pantalla) le pasaba `detail.matches` ENTERO a
+// `championRecord` —grupo + llave— mientras `/fechas/[n]` ya filtraba a
+// `fase === 'GRUPO'` (lo mismo que `standingsFromBracket`, quien de verdad
+// reparte los puntos). Medido en Chromium: "5–0 · +15 goles" en la lista
+// contra "PG 3 DIF +9" en el detalle, para el mismo campeón de la misma
+// fecha. `groupPhaseMatches` es el criterio único; este test prueba que
+// aplicarlo cambia el resultado sobre un fixture con llave real.
+describe('championRecord sobre una fecha con llave — sólo cuenta lo que se juega en GRUPO (W85, verify-report-pre-contract #4026)', () => {
+  it('la fecha entera y el filtro de grupo dan récords DISTINTOS para el mismo campeón', () => {
+    const bracketMatches: MatchResult[] = [
+      { round: 1, fase: 'GRUPO', grupo: 1, sideA: A, sideB: B, sets: [{ gamesA: 4, gamesB: 1 }] },
+      { round: 1, fase: 'GRUPO', grupo: 1, sideA: A, sideB: C, sets: [{ gamesA: 3, gamesB: 2 }] },
+      { round: 1, fase: 'SEMI', grupo: 1, sideA: A, sideB: B, sets: [{ gamesA: 4, gamesB: 0 }] },
+      { round: 1, fase: 'FINAL', grupo: 1, sideA: A, sideB: C, sets: [{ gamesA: 4, gamesB: 0 }] },
+    ]
+
+    // El bug de W85: contar la fecha entera suma la llave.
+    expect(championRecord(bracketMatches, A, FIFA, false)).toBe('4–0 · +12 goles')
+    // Lo que de verdad decidió los puntos (standingsFromBracket): sólo grupo.
+    expect(championRecord(groupPhaseMatches(bracketMatches), A, FIFA, false)).toBe('2–0 · +4 goles')
+  })
+})
+
 // ── El punto de unión ────────────────────────────────────────────────────────
 //
 // Extraer mueve el riesgo acá: el módulo queda con seis tests y el cableado con
@@ -88,15 +112,19 @@ describe('el cableado de la marca del campeón', () => {
   /** El fuente sin comentarios: lo que de verdad se ejecuta. */
   const ejecutable = source.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ')
 
-  it('le pasa el formato de la disciplina y el allows_draw CONGELADO de la fecha', () => {
+  // W85 (verify-report-pre-contract #4026): `detail.matches` sin filtrar
+  // sumaba la llave al récord del campeón. El primer argumento tiene que ser
+  // `groupPhaseMatches(detail.matches)` — el mismo criterio que ya usa
+  // `standingsFromBracket` (db/matchday.ts) y `fechas/[n]/page.tsx`.
+  it('le pasa SÓLO los partidos de grupo, el formato de la disciplina y el allows_draw CONGELADO de la fecha', () => {
     expect(ejecutable).toMatch(
-      /championRecord\(\s*detail\.matches\s*,\s*championSide\s*,\s*matchFormat\s*,\s*matchday\.allowsDraw\s*,?\s*\)/,
+      /championRecord\(\s*groupPhaseMatches\(detail\.matches\)\s*,\s*championSide\s*,\s*matchFormat\s*,\s*matchday\.allowsDraw\s*,?\s*\)/,
     )
   })
 
   it('y pinchar sólo el nombre no serviría: el mis-wire lo conserva', () => {
-    const misWire = 'championRecord(detail.matches, championSide, matchFormat, false)'
+    const misWire = 'championRecord(detail.matches, championSide, matchFormat, matchday.allowsDraw)'
     expect(misWire).toMatch(/championRecord\(/)
-    expect(misWire).not.toMatch(/,\s*matchday\.allowsDraw\s*,?\s*\)/)
+    expect(misWire).not.toMatch(/championRecord\(\s*groupPhaseMatches\(detail\.matches\)/)
   })
 })

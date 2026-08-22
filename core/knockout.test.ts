@@ -14,6 +14,7 @@ import {
   drawIsLegal,
   matchCountForFormat,
   offerableFormats,
+  groupPhaseMatches,
 } from './knockout'
 import { pair, single } from './side'
 import type { MatchdayFormat, MatchResult, Phase, Side, SideStanding } from './types'
@@ -308,6 +309,37 @@ describe('isUnplayedThirdPlace', () => {
   it('false para cualquier otra fase sin jugar — la excepción es sólo del tercer puesto', () => {
     const match: MatchResult = { round: 1, fase: 'SEMI', grupo: 1, sideA: A1, sideB: A2, sets: [] }
     expect(isUnplayedThirdPlace(match)).toBe(false)
+  })
+})
+
+/**
+ * W85 (verify-report-pre-contract #4026): el criterio "sólo cuentan los
+ * partidos de GRUPO" vivía escrito dos veces —`standingsFromBracket`
+ * (db/matchday.ts) y `fechas/[n]/page.tsx`— y NO en `fechas/page.tsx` (la
+ * lista), que le pasaba la fecha ENTERA a `championRecord`: el récord del
+ * campeón salía distinto en las dos pantallas para la misma fecha. Extraído
+ * para que las tres queden atadas a la MISMA función — mismo remedio que
+ * `usesSetsDiff`/`isUnplayedThirdPlace`.
+ */
+describe('groupPhaseMatches', () => {
+  const A1 = pair('a1', 'a2')
+  const A2 = pair('a3', 'a4')
+
+  it('se queda con los partidos de GRUPO y descarta los de la llave', () => {
+    const grupo = match('GRUPO', true)
+    const semi = playedMatch('SEMI', 1, A1, A2, 'A')
+    const final = playedMatch('FINAL', 1, A1, A2, 'A')
+    expect(groupPhaseMatches([grupo, semi, final])).toEqual([grupo])
+  })
+
+  it('un round robin, todo GRUPO, pasa entero — no es un no-op accidental', () => {
+    const matches = [match('GRUPO', true), match('GRUPO', false, 2)]
+    expect(groupPhaseMatches(matches)).toEqual(matches)
+  })
+
+  it('sin ningún partido de grupo, devuelve vacío', () => {
+    const semi = playedMatch('SEMI', 1, A1, A2, 'A')
+    expect(groupPhaseMatches([semi])).toEqual([])
   })
 })
 

@@ -146,6 +146,40 @@ describe('db/read', () => {
       expect(ids).toContain(seasonId)
       expect(ids).not.toContain(otherSeasonId)
     })
+
+    // Bloqueante #2 del contract (verify-report-pre-contract #4026, REQ-D3-3):
+    // `SeasonHeader.status` tiene que DERIVAR de `disciplines.status`, no leer
+    // `seasons.status` — que ya no tiene escritor de producción (`0055`-`0058`).
+    // Se planta una mentira en `seasons.status` (adminClient, sólo para armar
+    // escena) distinta de lo que la disciplina dice: si `mySeasons` la
+    // repitiera, esta rama del test la vería.
+    it('derives .status from disciplines.status, not seasons.status (REQ-D3-3)', async () => {
+      const db = adminClient()
+      const { data: disciplineRow, error: disciplineError } = await db
+        .from('disciplines')
+        .select('status')
+        .eq('season_id', seasonId)
+        .single()
+      if (disciplineError || disciplineRow === null) throw new Error(disciplineError?.message)
+
+      const lie = disciplineRow.status === 'FINISHED' ? 'SETUP' : 'FINISHED'
+      const { error: plantError } = await db.from('seasons').update({ status: lie }).eq('id', seasonId)
+      if (plantError) throw new Error(plantError.message)
+
+      try {
+        const seasons = await mySeasons(admin.client)
+        const header = seasons.find((season) => season.id === seasonId)
+        if (header === undefined) throw new Error('mySeasons no devolvió la temporada de test.')
+        expect(header.status).toBe(disciplineRow.status)
+        expect(header.status).not.toBe(lie)
+      } finally {
+        const { error: revertError } = await db
+          .from('seasons')
+          .update({ status: disciplineRow.status })
+          .eq('id', seasonId)
+        if (revertError) throw new Error(revertError.message)
+      }
+    })
   })
 
   describe('seasonHeader', () => {
@@ -172,6 +206,37 @@ describe('db/read', () => {
       const weight = header.disciplines[0]?.weight
       expect(typeof weight).toBe('number')
       expect(weight).toBe(1)
+    })
+
+    // Mismo criterio que el test gemelo de `mySeasons` de arriba, pero contra
+    // el otro call site: `seasonHeader` arma `SeasonHeader` con su PROPIA
+    // consulta y su propio `Promise.all`, así que no alcanza con probar uno
+    // de los dos (lección #3957 — el consumidor con un solo test es el que
+    // nadie mira).
+    it('derives .status from disciplines.status, not seasons.status (REQ-D3-3)', async () => {
+      const db = adminClient()
+      const { data: disciplineRow, error: disciplineError } = await db
+        .from('disciplines')
+        .select('status')
+        .eq('season_id', seasonId)
+        .single()
+      if (disciplineError || disciplineRow === null) throw new Error(disciplineError?.message)
+
+      const lie = disciplineRow.status === 'FINISHED' ? 'SETUP' : 'FINISHED'
+      const { error: plantError } = await db.from('seasons').update({ status: lie }).eq('id', seasonId)
+      if (plantError) throw new Error(plantError.message)
+
+      try {
+        const header = await seasonHeader(admin.client, seasonId)
+        expect(header.status).toBe(disciplineRow.status)
+        expect(header.status).not.toBe(lie)
+      } finally {
+        const { error: revertError } = await db
+          .from('seasons')
+          .update({ status: disciplineRow.status })
+          .eq('id', seasonId)
+        if (revertError) throw new Error(revertError.message)
+      }
     })
   })
 

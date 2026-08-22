@@ -13,6 +13,7 @@ import {
   addMySeat,
   buildDisciplines,
   configFor,
+  configForPairSizeChange,
   disciplinesWarning,
   filledCount,
   formatErrors,
@@ -410,12 +411,16 @@ export function Wizard({ myName }: { myName: string }) {
     setConfig((current) => resizeConfig(current, filledCount(next.names)))
   }
 
-  // Cada radio "Lados" manda sólo sobre SU disciplina — a diferencia de la
-  // versión anterior (un solo control), tocar acá ya no rehace `config`: el
-  // paso 4 sigue siendo la curva de a dos siempre (C29), y la disciplina que
-  // elija "Individual" arma la suya aparte en `newTournamentPayload`.
+  // Cada radio "Lados" manda sólo sobre SU disciplina. Con 2+ marcadas, tocar
+  // acá no rehace `config`: el paso 4 sigue siendo la curva de a dos siempre
+  // (C29), y la disciplina que elija "Individual" arma la suya aparte en
+  // `newTournamentPayload`. Pero con UNA sola marcada no hay ambigüedad que
+  // cuidar (`configForPairSizeChange`, `wizard-state.ts`) — ahí SÍ rehace
+  // `config` para que el paso 4 muestre y deje editar la curva de ESA
+  // disciplina, exactamente como antes de `fe44255` (W83, #4026).
   const changePairSize = (kind: DisciplineKind, next: SideSize) => {
     setPairSizes((current) => ({ ...current, [kind]: next }))
+    setConfig((current) => configForPairSizeChange(current, filled, disciplines, next))
   }
 
   const blocked =

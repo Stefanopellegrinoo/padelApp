@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
-import { defaultConfig, type DisciplineId, type MatchdayFormat, type Side } from '@/core'
+import { buildFixture, defaultConfig, type DisciplineId, type MatchdayFormat, type Side } from '@/core'
 import type { DisciplineHeader, MatchdaySummary, MatchWithId } from '@/db/read'
 import type { PairingContext } from '@/db/matchday'
 
@@ -337,6 +337,55 @@ describe('la fecha GROUPS_KNOCKOUT abierta — un lado sin partidos de grupo NO 
     }
     // No se dibuja un bloque "Grupo 2" vacío -- ni ningún bloque partido: cae
     // a la tabla única.
+    expect(tabla).not.toContain('Grupo 1')
+    expect(tabla).not.toContain('Grupo 2')
+    // Y dice por qué.
+    expect(tabla).toContain(
+      'El formato cambió después de sortear: esta tabla no se puede partir por grupo todavía. Volvé al armado y sorteá de nuevo.',
+    )
+  })
+})
+
+describe('la fecha GROUPS_KNOCKOUT abierta — el fixture REAL de C32 tampoco desaparece a nadie (W86, verify-report-pre-contract #4026)', () => {
+  /**
+   * W82 se declaró cerrado con un fixture SINTÉTICO: cuatro lados sin NINGÚN
+   * partido de grupo, un estado que C32 nunca produce (mutar el guard viejo
+   * hacía caer ese test, pero el bug seguía vivo en pantalla — lección
+   * #4025, "mutar prueba que el test fija el código, NO que el código cubra
+   * el escenario real"). El fixture REAL de C32 es sortear ROUND_ROBIN
+   * (`buildFixture`, la MISMA función que `db/matchday.ts` corre en
+   * `roundRobinMatches`) y DESPUÉS cambiar el formato a grupos sin volver a
+   * sortear: los 28 partidos quedan con `fase='GRUPO', grupo=1` (el default
+   * de columna que `roundRobinMatches` deja sin tocar, `0039`), así que
+   * TODOS los lados SÍ están en `groupOfSide` — el guard viejo
+   * (`allSidesGrouped`) daba `true` y partía igual, dibujando "Grupo 2" con
+   * encabezado y cero filas (medido en Chromium, verify-report #4026).
+   */
+  it('con el fixture real de C32 (round robin completo, todo grupo=1), no dibuja un "Grupo 2" vacío', async () => {
+    escena.status = 'OPEN'
+    escena.formato = { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 }
+    escena.sides = ALL_SIDES
+    // El sorteo REAL: `buildFixture(8)` es exactamente lo que
+    // `roundRobinMatches` corre, y cada partido nace fase='GRUPO'/grupo=1
+    // (default de columna) porque nadie los re-sorteó tras cambiar el
+    // formato — no un fixture inventado a mano.
+    escena.matches = buildFixture(8).flatMap((round, roundIndex) =>
+      round.map(([a, b]) => playedMatch('GRUPO', 1, roundIndex + 1, a + 1, b + 1)),
+    )
+    expect(escena.matches).toHaveLength(28)
+
+    const html = await render()
+
+    const inicio = html.indexOf('Tabla de la fecha')
+    expect(inicio).toBeGreaterThan(-1)
+    const tabla = html.slice(inicio)
+
+    // Nadie desaparece: los ocho lados siguen en la tabla.
+    for (const n of [1, 2, 3, 4, 5, 6, 7, 8]) {
+      expect(tabla).toContain(`Jugador ${n}`)
+    }
+    // No se dibuja "Grupo 2" con encabezado y cero filas -- ni ningún bloque
+    // partido: cae a la tabla única.
     expect(tabla).not.toContain('Grupo 1')
     expect(tabla).not.toContain('Grupo 2')
     // Y dice por qué.

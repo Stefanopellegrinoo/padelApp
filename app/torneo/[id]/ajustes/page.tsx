@@ -180,6 +180,8 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
         seasonId={seasonId}
         disciplineId={discipline.id}
         config={discipline.config}
+        pairSize={discipline.pairSize}
+        hasMasters={discipline.hasMasters}
         disciplineLabel={header.disciplines.length > 1 ? DISCIPLINE_LABELS[discipline.kind] : null}
       />
       <Disciplinas

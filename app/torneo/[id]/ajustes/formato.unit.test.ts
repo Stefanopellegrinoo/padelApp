@@ -34,14 +34,18 @@ describe('Formato — el control de Masters (decisión #4029)', () => {
     const input = /<input[^>]*type="checkbox"[^>]*\/>/.exec(markup)?.[0] ?? ''
     expect(markup).toContain('Masters')
     expect(input).toContain('checked')
-    expect(input).not.toContain('disabled')
+    // No basta con `.not.toContain('disabled')`: la clase Tailwind
+    // `disabled:opacity-40` contiene ESE substring aunque el atributo no
+    // esté -- hay que buscar el ATRIBUTO (`disabled=""`, cómo React lo
+    // serializa), no cualquier ocurrencia de la palabra.
+    expect(input).not.toContain('disabled=""')
   })
 
   it('con pairSize=2 y hasMasters=false, el check sale apagado pero SIGUE habilitado -- una liga de pádel también puede no querer Masters', () => {
     const markup = html(2, false)
     const input = /<input[^>]*type="checkbox"[^>]*\/>/.exec(markup)?.[0] ?? ''
     expect(input).not.toContain('checked')
-    expect(input).not.toContain('disabled')
+    expect(input).not.toContain('disabled=""')
   })
 
   /**
@@ -54,7 +58,7 @@ describe('Formato — el control de Masters (decisión #4029)', () => {
     const markup = html(1, false)
     const input = /<input[^>]*type="checkbox"[^>]*\/>/.exec(markup)?.[0] ?? ''
     expect(input).not.toContain('checked')
-    expect(input).toContain('disabled')
+    expect(input).toContain('disabled=""')
     expect(markup).toContain('Una disciplina de a uno no juega Masters')
   })
 })

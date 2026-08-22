@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { describe, it, expect } from 'vitest'
 import { defaultConfig } from '@/core'
 import { createMatchday, matchdayContextFor } from './matchday'
-import { addDiscipline, disciplineConfig, updateDisciplineConfig } from './discipline'
+import { addDiscipline, disciplineConfig, updateDisciplineConfig, updateDisciplineHasMasters } from './discipline'
 import { awardsOf, derivedSeasonStatus } from './read'
 import { squadSeedOrder } from './season'
 import { adminClient } from './test/admin'
@@ -677,5 +677,120 @@ describe('addDiscipline (PR 13, REQ-D1-2)', () => {
 
     const { data } = await adminClient().from('disciplines').select('has_masters').eq('id', padelId).single()
     expect(data?.has_masters).toBe(true)
+  })
+})
+
+//── Decisión #4029, partes 2 y 3 — editable en Ajustes, con guard ──────────
+describe('updateDisciplineHasMasters (decisión #4029, parte 2)', () => {
+  it('un admin puede apagar y volver a prender el Masters de una disciplina de a dos', async () => {
+    const admin = await createTestUser()
+    const { seasonId, disciplineId } = await createSeason({ admin })
+
+    await updateDisciplineHasMasters(admin.client, disciplineId, false)
+    expect((await adminClient().from('disciplines').select('has_masters').eq('id', disciplineId).single()).data)
+      .toEqual({ has_masters: false })
+
+    await updateDisciplineHasMasters(admin.client, disciplineId, true)
+    expect((await adminClient().from('disciplines').select('has_masters').eq('id', disciplineId).single()).data)
+      .toEqual({ has_masters: true })
+  })
+
+  /**
+   * Parte 3 de la decisión: NO se puede encender el Masters en una
+   * disciplina de a uno -- ahí sigue roto (`generateMastersPairs`,
+   * `db/matchday.ts:985`, rechaza siempre `pair_size=1`). Ofrecerlo sería
+   * ofrecer algo que la app rechaza después.
+   */
+  it('rechaza encender el Masters en una disciplina de a uno, y no escribe nada', async () => {
+    const admin = await createTestUser()
+    const { seasonId } = await createSeason({
+      admin,
+      squad: [admin.playerId, ...(await fillerPlayers(7))],
+    })
+    const soloId = await addDiscipline(admin.client, seasonId, {
+      kind: 'FIFA',
+      config: { ...defaultConfig(8), points: [8, 7, 6, 5, 4, 3, 2, 1] },
+      pairSize: 1,
+    })
+
+    await expect(updateDisciplineHasMasters(admin.client, soloId, true)).rejects.toThrow(
+      /una disciplina de a uno/,
+    )
+    const { data } = await adminClient().from('disciplines').select('has_masters').eq('id', soloId).single()
+    expect(data?.has_masters).toBe(false)
+  })
+
+  it('apagar el Masters de una disciplina de a uno (ya apagado) no rebota -- idempotente', async () => {
+    const admin = await createTestUser()
+    const { seasonId } = await createSeason({
+      admin,
+      squad: [admin.playerId, ...(await fillerPlayers(7))],
+    })
+    const soloId = await addDiscipline(admin.client, seasonId, {
+      kind: 'FIFA',
+      config: { ...defaultConfig(8), points: [8, 7, 6, 5, 4, 3, 2, 1] },
+      pairSize: 1,
+    })
+
+    await expect(updateDisciplineHasMasters(admin.client, soloId, false)).resolves.toBeUndefined()
+  })
+})
+
+/**
+ * El guard de aplicación no alcanza solo (#3989): `grant update (...,
+ * has_masters, ...) to authenticated` (0015:70) es de COLUMNA, no de
+ * función -- un `PATCH` directo a `disciplines` salta `updateDisciplineHasMasters`
+ * entero. El CHECK de la migración 0053 es lo que de verdad no se puede
+ * esquivar, y por eso este describe entra por la tabla directo, con
+ * `admin.client` (`authenticated`) y NUNCA `service_role` (regla del repo:
+ * nunca `service_role` para probar lo que ejecuta `authenticated`).
+ */
+describe('disciplines_has_masters_needs_pair (decisión #4029, parte 3, guard de base)', () => {
+  it('un UPDATE directo que prende has_masters en pair_size=1 lo rechaza la base, no TypeScript', async () => {
+    const admin = await createTestUser()
+    const { seasonId } = await createSeason({
+      admin,
+      squad: [admin.playerId, ...(await fillerPlayers(7))],
+    })
+    const soloId = await addDiscipline(admin.client, seasonId, {
+      kind: 'FIFA',
+      config: { ...defaultConfig(8), points: [8, 7, 6, 5, 4, 3, 2, 1] },
+      pairSize: 1,
+    })
+
+    const { error } = await admin.client.from('disciplines').update({ has_masters: true }).eq('id', soloId)
+    expect(error?.code).toBe('23514') // check_violation, no un rechazo de aplicación
+  })
+
+  it('un INSERT directo con pair_size=1 y has_masters=true también lo rechaza la base', async () => {
+    const admin = await createTestUser()
+    const { seasonId } = await createSeason({ admin })
+
+    const { error } = await admin.client
+      .from('disciplines')
+      .insert({ season_id: seasonId, kind: 'FIFA', config: {}, position: 1, pair_size: 1, has_masters: true } as never)
+    expect(error?.code).toBe('23514')
+  })
+
+  it('las tres combinaciones legales (2/true, 2/false, 1/false) siguen pasando -- no-regresión', async () => {
+    const admin = await createTestUser()
+    const { seasonId } = await createSeason({
+      admin,
+      squad: [admin.playerId, ...(await fillerPlayers(7))],
+    })
+
+    const pairsOn = await admin.client
+      .from('disciplines')
+      .insert({ season_id: seasonId, kind: 'PADEL', config: {}, position: 1, pair_size: 2, has_masters: true } as never)
+    const pairsOff = await admin.client
+      .from('disciplines')
+      .insert({ season_id: seasonId, kind: 'PADEL', config: {}, position: 2, pair_size: 2, has_masters: false } as never)
+    const soloOff = await admin.client
+      .from('disciplines')
+      .insert({ season_id: seasonId, kind: 'FIFA', config: {}, position: 3, pair_size: 1, has_masters: false } as never)
+
+    expect(pairsOn.error).toBeNull()
+    expect(pairsOff.error).toBeNull()
+    expect(soloOff.error).toBeNull()
   })
 })

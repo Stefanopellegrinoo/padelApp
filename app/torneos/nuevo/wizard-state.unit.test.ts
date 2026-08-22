@@ -7,6 +7,7 @@ import {
   buildDisciplines,
   configFor,
   configForPairSizeChange,
+  configSideSize,
   disciplinesWarning,
   filledCount,
   formatErrors,
@@ -118,6 +119,67 @@ describe('configForPairSizeChange (W83, #4026)', () => {
     const config = configFor(8)
     const next = configForPairSizeChange(config, 8, ['PADEL', 'FIFA'], 1)
     expect(next).toBe(config)
+  })
+})
+
+/**
+ * Corrección #4030 sobre W83: `sideSize` era OPCIONAL en `configFor` y
+ * `resizeConfig` (lección #3994 -- un parámetro opcional es invisible para
+ * el compilador Y para los tests, porque el default suele coincidir con el
+ * caso feliz). `wizard.tsx` tenía TRES call sites que lo olvidaban -- el
+ * estado inicial de `config`, `setSquad` (agrandar/achicar el plantel) y
+ * "Usar los defaults" -- y sólo UNO de los tres (`changePairSize`, W83) se
+ * había medido. `configSideSize` es la respuesta única a la pregunta que
+ * los tres necesitan.
+ */
+describe('configSideSize (corrección #4030, lección #3994)', () => {
+  it('con una sola disciplina, es SU pairSize', () => {
+    expect(configSideSize(['FIFA'], { PADEL: 2, FIFA: 1 })).toBe(1)
+  })
+
+  it('con dos o más disciplinas, es la curva legado de a dos (C29)', () => {
+    expect(configSideSize(['PADEL', 'FIFA'], { PADEL: 2, FIFA: 1 })).toBe(2)
+  })
+
+  it('sin ninguna marcada (arranque del wizard), es 2 -- el default de siempre', () => {
+    expect(configSideSize([], { PADEL: 2, FIFA: 2 })).toBe(2)
+  })
+})
+
+/**
+ * Los call sites de `wizard.tsx:411` (`setSquad`) y `:681` ("Usar los
+ * defaults") armados acá tal cual los arma la pantalla, con
+ * `configSideSize` de por medio. El test tiene que DISTINGUIR: con la única
+ * disciplina en "Individual", disparar ese camino tiene que dar la curva de
+ * la decisión #3963 -- NO la de parejas, que es lo que daban antes de esta
+ * corrección (`resizeConfig`/`configFor` sin tercer argumento caían en
+ * `sideSize=2` en silencio).
+ */
+describe('los call sites de wizard.tsx que #4030 corrigió', () => {
+  it('agrandar el plantel con la única disciplina en Individual sigue en la curva de #3963, no la de parejas (:411)', () => {
+    // Estado de pantalla: FIFA marcado solo, "Individual" elegido -- config
+    // ya en la forma de #3963 para 8 (lo que dejó `changePairSize`, W83).
+    const config = configFor(8, 1)
+    const picked = ['FIFA'] as const
+    const pairSizes = { PADEL: 2, FIFA: 1 } as const
+
+    // El admin agrega jugadores: el plantel pasa a 10. Exactamente lo que
+    // `setSquad` hace en `wizard.tsx:411`.
+    const next = resizeConfig(config, 10, configSideSize(picked, pairSizes))
+
+    expect(next.points).toEqual(defaultConfig(10, 1).points)
+    expect(next.points).not.toEqual(defaultConfig(10, 2).points)
+  })
+
+  it('"Usar los defaults" con la única disciplina en Individual da la curva de #3963, no la de parejas (:681)', () => {
+    const picked = ['FIFA'] as const
+    const pairSizes = { PADEL: 2, FIFA: 1 } as const
+
+    // Exactamente lo que el botón hace en `wizard.tsx:681`.
+    const next = configFor(8, configSideSize(picked, pairSizes))
+
+    expect(next.points).toEqual(defaultConfig(8, 1).points)
+    expect(next.points).not.toEqual(defaultConfig(8, 2).points)
   })
 })
 

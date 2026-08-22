@@ -55,22 +55,22 @@ describe('the config the wizard builds', () => {
   // Con 12 hacen falta 6 valores de puntos: si al cambiar el plantel la lista
   // no se rehace, la temporada nace inválida y createSeason la rebota.
   it('rebuilds the points list when the squad changes size', () => {
-    const eight = configFor(8)
+    const eight = configFor(8, 2)
     expect(eight.points).toHaveLength(4)
 
-    const twelve = resizeConfig(eight, 12)
+    const twelve = resizeConfig(eight, 12, 2)
     expect(twelve.points).toHaveLength(6)
     expect(twelve.squadSize).toBe(12)
   })
 
   it('leaves the config alone when the size did not change', () => {
-    const config = { ...configFor(8), points: [20, 10, 5, 1] }
-    expect(resizeConfig(config, 8)).toBe(config)
+    const config = { ...configFor(8, 2), points: [20, 10, 5, 1] }
+    expect(resizeConfig(config, 8, 2)).toBe(config)
   })
 
   it('gives back exactly defaultConfig for every squad size', () => {
     for (const size of [8, 10, 12]) {
-      expect(configFor(size)).toEqual(defaultConfig(size))
+      expect(configFor(size, 2)).toEqual(defaultConfig(size))
     }
   })
 
@@ -94,8 +94,8 @@ describe('the config the wizard builds', () => {
   // `createSeason` lo rebota en el submit y el usuario se entera al final.
   it('produces a config core accepts, for every squad size', () => {
     for (const size of [8, 10, 12]) {
-      expect(validateConfig(configFor(size), 2)).toEqual([])
-      expect(formatErrors(configFor(size))).toEqual([])
+      expect(validateConfig(configFor(size, 2), 2)).toEqual([])
+      expect(formatErrors(configFor(size, 2))).toEqual([])
     }
   })
 })
@@ -110,13 +110,13 @@ describe('the config the wizard builds', () => {
  */
 describe('configForPairSizeChange (W83, #4026)', () => {
   it('con una sola disciplina, rehace la curva a la del sideSize elegido', () => {
-    const config = configFor(8) // curva de a dos, 4 valores
+    const config = configFor(8, 2) // curva de a dos, 4 valores
     const next = configForPairSizeChange(config, 8, ['FIFA'], 1)
     expect(next.points).toEqual([10, 7, 5, 3, 2, 1, 0, 0])
   })
 
   it('con dos o más disciplinas marcadas, deja `config` sin tocar -- #4017 sigue dueño de esa curva', () => {
-    const config = configFor(8)
+    const config = configFor(8, 2)
     const next = configForPairSizeChange(config, 8, ['PADEL', 'FIFA'], 1)
     expect(next).toBe(config)
   })
@@ -185,7 +185,7 @@ describe('los call sites de wizard.tsx que #4030 corrigió', () => {
 
 describe('formatErrors', () => {
   it('catches points that do not go down', () => {
-    const config = { ...configFor(8), points: [10, 10, 5, 3] }
+    const config = { ...configFor(8, 2), points: [10, 10, 5, 3] }
     expect(formatErrors(config)).toEqual([
       'Los puntos tienen que ir de mayor a menor. El único que se puede repetir es el 0.',
     ])
@@ -193,7 +193,7 @@ describe('formatErrors', () => {
 
   // Lo que el usuario quiere poder escribir: que sólo puntúen los primeros.
   it('accepts a tail of zeros, so only the first places score', () => {
-    expect(formatErrors({ ...configFor(12), points: [10, 6, 3, 1, 0, 0] })).toEqual([])
+    expect(formatErrors({ ...configFor(12, 2), points: [10, 6, 3, 1, 0, 0] })).toEqual([])
   })
 
   // Este test decía lo contrario y era el que quedaba de la regla vieja. El 0
@@ -201,7 +201,7 @@ describe('formatErrors', () => {
   // sume— y el stepper baja hasta 0 desde entonces, pero ESTA pantalla siguió
   // trabando el "Continuar". Se podía elegir un 0 y no se podía avanzar.
   it('accepts a zero as the last value, which the stepper can reach', () => {
-    const config = { ...configFor(8), points: [10, 6, 3, 0] }
+    const config = { ...configFor(8, 2), points: [10, 6, 3, 0] }
     expect(formatErrors(config)).toEqual([])
   })
 
@@ -221,7 +221,7 @@ describe('formatErrors', () => {
       [4, 3, 2, 2],
     ]
     for (const points of lists) {
-      const config = { ...configFor(8), points }
+      const config = { ...configFor(8, 2), points }
       const coreRejects = validateConfig(config, 2).length > 0
       const wizardRejects = formatErrors(config).length > 0
       expect(wizardRejects, `puntos ${points.join('·')}`).toBe(coreRejects)
@@ -229,19 +229,19 @@ describe('formatErrors', () => {
   })
 
   it('catches counting more matchdays than the season has', () => {
-    const config = { ...configFor(8), regularMatchdays: 10, countBestOf: 12 }
+    const config = { ...configFor(8, 2), regularMatchdays: 10, countBestOf: 12 }
     expect(formatErrors(config)).toEqual(['No pueden contar más fechas de las que se juegan.'])
   })
 
   it('reports both problems at once', () => {
-    const config = { ...configFor(8), points: [1, 2, 3, 4], regularMatchdays: 4, countBestOf: 9 }
+    const config = { ...configFor(8, 2), points: [1, 2, 3, 4], regularMatchdays: 4, countBestOf: 9 }
     expect(formatErrors(config)).toHaveLength(2)
   })
 })
 
 describe('summaryOf', () => {
   it('lists the six rows of the handoff, in order', () => {
-    const rows = summaryOf('Los Jueves 2026', Array(8).fill('Jugador'), configFor(8), ['PADEL'])
+    const rows = summaryOf('Los Jueves 2026', Array(8).fill('Jugador'), configFor(8, 2), ['PADEL'])
     expect(rows.map((row) => row.key)).toEqual([
       'Nombre',
       'Jugadores',
@@ -259,7 +259,7 @@ describe('summaryOf', () => {
   // pádel del torneo y MIENTE sobre la otra mitad. Es la misma clase de copy
   //Que ya costó W47, W51 y W56.
   it('nombra el formato de cada disciplina cuando hay más de una', () => {
-    const rows = summaryOf('Los Jueves 2026', Array(8).fill('Jugador'), configFor(8), [
+    const rows = summaryOf('Los Jueves 2026', Array(8).fill('Jugador'), configFor(8, 2), [
       'PADEL',
       'FIFA',
     ])
@@ -267,7 +267,7 @@ describe('summaryOf', () => {
   })
 
   it('y una liga de sólo FIFA no promete ningún set', () => {
-    const rows = summaryOf('Liga FIFA', Array(8).fill('Jugador'), configFor(8), ['FIFA'])
+    const rows = summaryOf('Liga FIFA', Array(8).fill('Jugador'), configFor(8, 2), ['FIFA'])
     expect(rows[2]?.value).toBe('Marcador de goles')
   })
 })
@@ -373,7 +373,7 @@ describe('buildDisciplines', () => {
   // `0-0`. Y `allows_draw` no se puede corregir después —`0015_disciplines.sql`
   // no lo pone en el grant de UPDATE—, así que nacer mal era para siempre.
   it('da una fila por kind marcado, con los puntos y las fechas del paso 4', () => {
-    const config = configFor(8)
+    const config = configFor(8, 2)
     expect(buildDisciplines(['PADEL', 'FIFA'], config)).toEqual([
       { kind: 'PADEL', config, allowsDraw: false },
       {
@@ -385,7 +385,7 @@ describe('buildDisciplines', () => {
   })
 
   it('el pádel nace exactamente igual que hoy: sets, sin empates', () => {
-    const config = configFor(8)
+    const config = configFor(8, 2)
     expect(buildDisciplines(['PADEL'], config)).toEqual([
       { kind: 'PADEL', config, allowsDraw: false },
     ])
@@ -396,7 +396,7 @@ describe('buildDisciplines', () => {
   // ordinal del slug (padel/padel-2). Tocar FIFA antes que Pádel tiene que dar
   // FIFA primero, no importa el orden en que aparecen los checkboxes en pantalla.
   it('keeps the order the user picked, not DISCIPLINE_KINDS order', () => {
-    const config = configFor(8)
+    const config = configFor(8, 2)
     expect(buildDisciplines(['FIFA', 'PADEL'], config).map((row) => row.kind)).toEqual([
       'FIFA',
       'PADEL',
@@ -404,7 +404,7 @@ describe('buildDisciplines', () => {
   })
 
   it('gives back nothing for an empty pick', () => {
-    expect(buildDisciplines([], configFor(8))).toEqual([])
+    expect(buildDisciplines([], configFor(8, 2))).toEqual([])
   })
 
   // Rebanada F: el radio "Individual" tiene que llegar hasta acá como
@@ -461,7 +461,7 @@ describe('newTournamentPayload', () => {
   // (`addDiscipline`: `spec.pairSize ?? 2`).
   it('arma exactamente el payload que createTournament espera, para pádel', () => {
     const squad: Squad = { names: Array(8).fill('Jugador'), mySeat: 0 }
-    const config = configFor(8)
+    const config = configFor(8, 2)
     expect(newTournamentPayload('Los Jueves', squad, config, ['PADEL'], { PADEL: 2, FIFA: 2 })).toEqual({
       name: 'Los Jueves',
       squadNames: squad.names,
@@ -476,7 +476,7 @@ describe('newTournamentPayload', () => {
   // el admin agregó/sacó nombres después de tocar el paso 4).
   it('el squadSize del payload sale del plantel cargado, no el que traía la config', () => {
     const squad: Squad = { names: [...Array(8).fill('Jugador'), '', ''], mySeat: null }
-    const staleConfig = configFor(12)
+    const staleConfig = configFor(12, 2)
     const payload = newTournamentPayload('X', squad, staleConfig, ['PADEL'], { PADEL: 2, FIFA: 2 })
     expect(payload.squadNames).toHaveLength(8)
     expect(payload.config.squadSize).toBe(8)
@@ -513,7 +513,7 @@ describe('newTournamentPayload', () => {
    */
   it('con Pádel Y FIFA marcados, cada uno trae SU pairSize -- sin herencia cruzada en ningún sentido (W76, #4017)', () => {
     const squad: Squad = { names: Array(8).fill('Jugador'), mySeat: null }
-    const config = configFor(8)
+    const config = configFor(8, 2)
     const payload = newTournamentPayload('Mixto', squad, config, ['PADEL', 'FIFA'], { PADEL: 2, FIFA: 1 })
 
     expect(payload.disciplines).toHaveLength(2)
@@ -551,7 +551,7 @@ describe('newTournamentPayload', () => {
    */
   it('con dos disciplinas, la curva editada es SOLO para la de a dos -- FIFA de a uno sigue con el default de #3963', () => {
     const squad: Squad = { names: Array(8).fill('Jugador'), mySeat: null }
-    const edited = { ...configFor(8), points: [20, 12, 6, 2] }
+    const edited = { ...configFor(8, 2), points: [20, 12, 6, 2] }
     const payload = newTournamentPayload('Mixto', squad, edited, ['PADEL', 'FIFA'], { PADEL: 2, FIFA: 1 })
     const padel = payload.disciplines.find((row) => row.kind === 'PADEL')
     const fifa = payload.disciplines.find((row) => row.kind === 'FIFA')
@@ -570,7 +570,7 @@ describe('newTournamentPayload', () => {
    */
   it('con una sola disciplina pero una curva de forma vieja (largo de a dos), usa el default -- no arriesga un largo inválido', () => {
     const squad: Squad = { names: Array(8).fill('Jugador'), mySeat: null }
-    const stale = configFor(8) // 4 valores, la forma de a dos
+    const stale = configFor(8, 2) // 4 valores, la forma de a dos
     const payload = newTournamentPayload('Liga FIFA', squad, stale, ['FIFA'], { PADEL: 2, FIFA: 1 })
     expect(payload.disciplines[0]?.config.points).toEqual([10, 7, 5, 3, 2, 1, 0, 0])
   })
@@ -611,7 +611,7 @@ describe('submitSeats', () => {
  * marcadas, así que los steppers se van sólo cuando NINGUNA usa sets.
  */
 describe('steppersFor', () => {
-  const PADEL = configFor(8).matchFormat
+  const PADEL = configFor(8, 2).matchFormat
   const FIFA = { ...PADEL, openScore: true }
 
   it('con sets dibuja los cinco', () => {

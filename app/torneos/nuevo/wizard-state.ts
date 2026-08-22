@@ -390,11 +390,16 @@ export function newTournamentPayload(
  * seed y por todos los tests contra la base. Un wizard que produjera otros
  * defaults haría que ninguna captura de pantalla coincida con ningún fixture.
  *
- * `sideSize` es opcional y se lo pasa tal cual a `defaultConfig` —antes se
- * dejaba caer acá, y con `sideSize=1` la curva de puntos salía la de parejas
- * en vez de la de la decisión #3963 (S75, cerrado en Rebanada E).
+ * `sideSize` es OBLIGATORIO (lección #3994, cerrada acá tras W69 → W76 →
+ * W83): era opcional y caía en silencio a la curva de parejas — el mismo
+ * default que "el caso feliz" (pádel) necesita, así que ningún call site
+ * que se olvidara de pasarlo se veía roto en ese caso, y sólo se notaba con
+ * una disciplina de a uno (S75, y de nuevo en `wizard.tsx` tres veces:
+ * `configSideSize`, acá abajo). Con el parámetro obligatorio, olvidarlo es
+ * un error de `tsc` en cada call site — el compilador los señala a todos,
+ * no sólo al que un verify-report mida esta vez.
  */
-export function configFor(squadSize: number, sideSize?: SideSize): SeasonConfig {
+export function configFor(squadSize: number, sideSize: SideSize): SeasonConfig {
   return defaultConfig(squadSize, sideSize)
 }
 
@@ -403,12 +408,37 @@ export function configFor(squadSize: number, sideSize?: SideSize): SeasonConfig 
  * admin hubiera tocado. No es una pérdida: con otro plantel hace falta otra
  * cantidad de valores, y una lista de 4 en un plantel de 12 es inválida.
  *
- * `sideSize` viaja igual que en `configFor` (mismo cierre de S75): sin
- * pasarlo, la curva que sale es la de parejas.
+ * `sideSize` viaja igual que en `configFor`, y por la misma razón: OBLIGATORIO
+ * (#3994) desde que dejar de pasarlo daba la curva de parejas en silencio.
  */
-export function resizeConfig(config: SeasonConfig, squadSize: number, sideSize?: SideSize): SeasonConfig {
+export function resizeConfig(config: SeasonConfig, squadSize: number, sideSize: SideSize): SeasonConfig {
   if (config.squadSize === squadSize) return config
   return { ...config, squadSize, points: configFor(squadSize, sideSize).points }
+}
+
+/**
+ * El `sideSize` que le corresponde a `config` — la curva compartida del
+ * paso 4, C29 — en el estado ACTUAL del wizard (disciplinas marcadas +
+ * lados elegidos), sin que haya cambiado nada todavía.
+ *
+ * Nace de la corrección #4030 sobre W83: al volver `sideSize` obligatorio en
+ * `configFor`/`resizeConfig` (#3994), el compilador marcó TRES call sites en
+ * `wizard.tsx` que hasta entonces dejaban que `sideSize` cayera a `undefined`
+ * (parejas) en silencio — el estado inicial de `config`, `setSquad`
+ * (agrandar/achicar el plantel) y "Usar los defaults". Los tres necesitan
+ * la MISMA pregunta ("¿qué representa `config` ahora mismo?"), así que viven
+ * de esta única función y no de tres respuestas escritas a mano.
+ *
+ * Misma regla que `configForPairSizeChange`, que resuelve la pregunta
+ * hermana ("¿qué pasa a representar `config` cuando ESO cambia"): sin
+ * ambigüedad (UNA sola disciplina marcada) es SU `pairSize`; con 2+ sigue
+ * siendo la curva legado de a dos (C29) — nadie más la mueve.
+ */
+export function configSideSize(
+  picked: readonly DisciplineKind[],
+  pairSizes: Record<DisciplineKind, SideSize>,
+): SideSize {
+  return picked.length === 1 ? pairSizes[picked[0]!] : 2
 }
 
 /**

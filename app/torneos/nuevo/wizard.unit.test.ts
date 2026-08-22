@@ -21,7 +21,7 @@ import { configFor, type DisciplineKind } from './wizard-state'
 function html(picked: DisciplineKind[]): string {
   return renderToStaticMarkup(
     createElement(PasoFormato, {
-      config: configFor(8),
+      config: configFor(8, 2),
       picked,
       errors: [],
       onChange: () => {},

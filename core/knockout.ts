@@ -398,9 +398,18 @@ export function knockoutPositions(
  * DERIVA de `offerableFormats` (abajo): propone el `GROUPS_KNOCKOUT` con más
  * grupos que esté ofrecible para `sides`, o `ROUND_ROBIN` si ninguno lo está
  * — la contradicción deja de poder existir porque no hay dos umbrales que
- * puedan desalinearse, hay una sola fuente. `offerableFormats` ya ordena sus
- * candidatos de menos a más grupos (`[2, 4]`), así que el último elemento es
- * siempre el de más grupos.
+ * puedan desalinearse, hay una sola fuente.
+ *
+ * S91 (verify-report-pre-contract #4026, corrección sobre lo de arriba):
+ * esto tomaba `groupFormats.at(-1)` confiando en que `offerableFormats` itera
+ * `KNOCKOUT_GROUP_COUNTS` de menos a más grupos — cierto sólo porque la
+ * constante ESTÁ escrita `[1, 2, 4]`, nada la ata a seguir ordenada así.
+ * `KNOCKOUT_GROUP_COUNTS` es la fuente única de QUÉ grupos existen (W81),
+ * pero nadie era la fuente de en qué ORDEN — escribirla `[1, 4, 2]` dejaba
+ * el tripwire de W74/W81 en verde y esto sugiriendo 2 grupos donde había 4
+ * (verificado por mutación, `core/knockout.test.ts`). Ahora elige el máximo
+ * de `groups` EXPLÍCITO, así que ningún orden de la constante puede
+ * romperlo.
  *
  * Es la salida real de W32 (decisión #3863): sin grupos, una fecha de 12
  * jugadores de a uno son C(12,2)=66 partidos de round robin puro. Con
@@ -414,7 +423,11 @@ export function suggestFormat(headcount: number, sideSize: SideSize): MatchdayFo
   const groupFormats = offerableFormats(sides).filter(
     (format): format is Extract<MatchdayFormat, { kind: 'GROUPS_KNOCKOUT' }> => format.kind === 'GROUPS_KNOCKOUT',
   )
-  return groupFormats.at(-1) ?? { kind: 'ROUND_ROBIN' }
+  const mostGroups = groupFormats.reduce<Extract<MatchdayFormat, { kind: 'GROUPS_KNOCKOUT' }> | null>(
+    (best, candidate) => (best === null || candidate.groups > best.groups ? candidate : best),
+    null,
+  )
+  return mostGroups ?? { kind: 'ROUND_ROBIN' }
 }
 
 function combinations(n: number): number {

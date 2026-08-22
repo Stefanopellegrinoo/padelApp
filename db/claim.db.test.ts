@@ -46,10 +46,12 @@ async function createOpenSeason(
   if (disciplineError || discipline === null) throw new Error(disciplineError?.message)
 
   const entryIds: string[] = []
-  for (const [index, name] of seatNames.entries()) {
+  for (const name of seatNames) {
     const { data: entry, error: entryError } = await db
       .from('entries')
-      .insert({ season_id: season.id, display_name: name, kind: 'SQUAD', seed_position: index })
+      // Sin `seed_position` (C37): el CHECK `entries_seed_shape` del contract
+      // lo prohíbe para el SQUAD. El orden lo pone `discipline_entries`, abajo.
+      .insert({ season_id: season.id, display_name: name, kind: 'SQUAD' })
       .select('id')
       .single()
     if (entryError || entry === null) throw new Error(entryError?.message)

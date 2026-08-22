@@ -99,7 +99,8 @@ async function createWalkthroughSeason(
         player_id: playerId ?? null,
         display_name: playerId === undefined ? 'Asiento libre de test' : `Jugador de test ${index + 1}`,
         kind: 'SQUAD',
-        seed_position: index,
+        // Sin `seed_position` (C37): el orden se siembra en
+        // `discipline_entries`, unas líneas más abajo.
       })
       .select('id')
       .single()

@@ -289,7 +289,6 @@ describe('RLS — escritura', () => {
         season_id: seasonId,
         display_name: 'Jugador nuevo',
         kind: 'SQUAD',
-        seed_position: 0,
       })
       .select()
     expect(newEntry.error).toBeNull()
@@ -324,7 +323,7 @@ describe('RLS — escritura', () => {
 
     const { data, error } = await adminA.client
       .from('entries')
-      .insert({ season_id: seasonBId, display_name: 'Intruso', kind: 'SQUAD', seed_position: 99 })
+      .insert({ season_id: seasonBId, display_name: 'Intruso', kind: 'SQUAD' })
       .select()
 
     expect(data).toBeNull()
@@ -422,7 +421,7 @@ describe('RLS — escritura', () => {
 
     const entries = await member.client
       .from('entries')
-      .insert({ season_id: seasonId, display_name: 'Intruso', kind: 'SQUAD', seed_position: 77 })
+      .insert({ season_id: seasonId, display_name: 'Intruso', kind: 'SQUAD' })
       .select()
     expect(entries.data, 'tabla entries').toBeNull()
     expect(entries.error?.code, 'tabla entries').toBe('42501')

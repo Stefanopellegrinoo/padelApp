@@ -512,6 +512,14 @@ describe('entriesOf sin disciplina resoluble (C37)', () => {
 
     // `entries.seed_position` miente a propósito: si la rama la sigue
     // leyendo, los `seedPosition` salen 10,20,30,40 en vez de 0,1,2,3.
+    //
+    // EL CONTRACT SE LLEVA ESTE TEST. Es el único que queda escribiendo la
+    // columna para un SQUAD, y lo hace justamente para probar que nadie la
+    // lee: con el CHECK `entries_seed_shape` puesto, este `update` no puede
+    // existir. Verificado aplicando la DDL destructiva completa a la base
+    // local — es el ÚNICO rojo que queda de los 311 que midió #4034, y no es
+    // un camino de producción. Borrarlo junto con la columna, igual que los 6
+    // tests-guardia de `seasons.status` (N75).
     const db = adminClient()
     for (const [index, entryId] of entryIds.entries()) {
       const { error } = await db

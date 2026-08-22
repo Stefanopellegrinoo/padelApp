@@ -7,6 +7,7 @@ import {
   generateMastersPairs,
   generatePairs,
   openMatchday,
+  reopenMatchday,
   saveResult,
   setAttendance,
 } from './matchday'
@@ -122,6 +123,35 @@ describe('seasons.status ya no tiene escritor de producción (REQ-D3-3)', () => 
     await closeMatchday(admin.client, mastersId)
 
     expect(await disciplineStatus(disciplineId)).toBe('FINISHED')
+    expect(await seasonStatus(seasonId)).toBe('SETUP')
+  })
+
+  it('reopen_matchday revierte disciplines.status al reabrir el Masters y deja seasons.status intacto', async () => {
+    const admin = await createTestUser()
+    const players = await fillerPlayers(8)
+    const config = shortSeason()
+    const { seasonId, disciplineId, entryIds } = await createSeason({ admin, config, squad: players })
+
+    const regularId = await createMatchday(admin.client, seasonId, '2026-03-05')
+    for (const entryId of entryIds) {
+      await setAttendance(admin.client, regularId, entryId, 'PLAYING')
+    }
+    await generatePairs(admin.client, regularId)
+    await openMatchday(admin.client, regularId)
+    await playAllMatches(admin, regularId)
+    await closeMatchday(admin.client, regularId)
+
+    const mastersId = await createMasters(admin.client, seasonId, '2026-12-20')
+    await generateMastersPairs(admin.client, mastersId)
+    await openMatchday(admin.client, mastersId)
+    await playAllMatches(admin, mastersId)
+    await closeMatchday(admin.client, mastersId)
+    expect(await disciplineStatus(disciplineId)).toBe('FINISHED')
+    expect(await seasonStatus(seasonId)).toBe('SETUP')
+
+    await reopenMatchday(admin.client, mastersId)
+
+    expect(await disciplineStatus(disciplineId)).toBe('ACTIVE')
     expect(await seasonStatus(seasonId)).toBe('SETUP')
   })
 })

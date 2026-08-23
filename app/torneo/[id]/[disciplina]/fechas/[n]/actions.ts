@@ -2,11 +2,12 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import type { SetScore } from '@/core'
+import type { MatchdayFormat, SetScore } from '@/core'
 import { EdgeError } from '@/db/errors'
 import { promoteGuest } from '@/db/entries'
 import {
   addGuest,
+  advancePhase,
   cancelMatchday,
   clearPairs,
   closeMatchday,
@@ -23,6 +24,7 @@ import {
   seedAttendances,
   setAttendance,
   setMatchdayDate,
+  setMatchdayFormat,
   syncGuestSeat,
   unlockPair,
 } from '@/db/matchday'
@@ -173,6 +175,24 @@ export async function closeTheMatchday(
 ): Promise<WriteResult> {
   return onMatchday(seasonId, matchdayNumber, async (supabase) => {
     await closeMatchday(supabase, matchdayId)
+  })
+}
+
+/**
+ * Cierra la fase actual y arma la siguiente (REQ-D7-2). Sólo tiene sentido con
+ * `formato.kind === 'GROUPS_KNOCKOUT'`: `advancePhase` tira si la fecha es
+ * `ROUND_ROBIN` o si la fase actual todavía tiene partidos sin jugar — el
+ * botón de la pantalla ya se apaga en ese caso (`phaseIsComplete`), así que
+ * llegar acá rebotando sería un bug de la pantalla, no algo que este wrapper
+ * tenga que prevenir de nuevo.
+ */
+export async function closePhase(
+  seasonId: string,
+  matchdayId: string,
+  matchdayNumber: number,
+): Promise<WriteResult> {
+  return onMatchday(seasonId, matchdayNumber, async (supabase) => {
+    await advancePhase(supabase, matchdayId)
   })
 }
 
@@ -330,6 +350,22 @@ export async function confirmMatchday(
 ): Promise<WriteResult> {
   return inDraft(seasonId, matchdayId, matchdayNumber, async (supabase) => {
     await openMatchday(supabase, matchdayId)
+  })
+}
+
+/**
+ * El formato elegido en el armado (REQ-D8-1): `matchdayShape` sugiere uno con
+ * `suggestFormat`, y esto guarda el que el admin haya tocado — el sugerido u
+ * otro. `setMatchdayFormat` (db/matchday.ts) rechaza tocarlo fuera de DRAFT.
+ */
+export async function changeMatchdayFormat(
+  seasonId: string,
+  matchdayId: string,
+  matchdayNumber: number,
+  formato: MatchdayFormat,
+): Promise<WriteResult> {
+  return inDraft(seasonId, matchdayId, matchdayNumber, async (supabase) => {
+    await setMatchdayFormat(supabase, matchdayId, formato)
   })
 }
 

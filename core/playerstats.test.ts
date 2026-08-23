@@ -5,7 +5,7 @@ import { pair, single } from './side'
 import type { MatchResult, Side } from './types'
 
 function match(sideA: Side, sideB: Side, gamesA: number, gamesB: number, round = 1): MatchResult {
-  return { round, sideA, sideB, sets: [{ gamesA, gamesB }] }
+  return { round, fase: 'GRUPO', grupo: 1, sideA, sideB, sets: [{ gamesA, gamesB }] }
 }
 
 describe('tallyPlayers', () => {

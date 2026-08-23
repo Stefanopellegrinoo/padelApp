@@ -34,11 +34,20 @@ export type {
   SideSize,
   Side,
   SetScore,
+  Phase,
+  MatchdayFormat,
   MatchResult,
   SideStanding,
   Award,
+  AwardLine,
   RankingRow,
 } from './types'
+// `PHASE_ORDER` sale del barrel para su test estructural
+// (`db/match-phase.db.test.ts`): las seis fases están escritas también en el
+// `check` de `matches.fase` y en el `array_position` de `matchday_phase`
+// (0039_match_phase.sql) — sin un test que las ate, las tres pueden driftear
+// en silencio.
+export { PHASE_ORDER } from './types'
 
 //── Un lado de 1 o 2 (decisión de producto #5, REQ-D5-1/2) ──────────────────
 // `Side` es una unión discriminada: leer `.b` sin angostar `size` a `2` es
@@ -82,6 +91,55 @@ export { previousContext } from './history'
 export { computeStandings, usesSetsDiff } from './standings'
 export { computeAwards } from './awards'
 
+//── Formato sugerido y grupos de una fecha (REQ-D8-1, PR21) ─────────────────
+// `suggestFormat` es la salida real de W32 (decisión #3863): grupos + llave
+// en vez de un techo de jugadores nuevo. `MatchdayFormat` (su tipo de
+// retorno, exportado arriba desde `./types`) SALE del barrel recién en esta
+// rebanada (C1): `generatePairs` (`db/matchday.ts`) ya lo lee de
+// `matchday.formato` para decidir cómo armar — es su primer consumidor real,
+// publicarlo deja de ser reflejo. `groupSides` sale con él por el mismo
+// motivo: es el helper que `generatePairs` usa para repartir los lados antes
+// de llamar `buildFixture` una vez por grupo (hallazgo de diseño de esta
+// rebanada, el design PUNTO 7 no lo nombraba). Rebanada C2: `currentPhase`/
+// `phaseIsComplete`/`faseForCount`/`knockoutMatchups`/`nextRoundMatchups`/
+// `losingMatchup` salen ahora — `advancePhase` (`db/matchday.ts`) es su
+// primer consumidor real. Rebanada D1: `knockoutPositions` sale ahora —
+// `closeMatchday` (`db/matchday.ts`, `standingsFromBracket`) es su primer
+// consumidor de producción real.
+// `isUnplayedThirdPlace` sale ahora (refactor sobre PR21 D2, sin cambiar
+// comportamiento): la regla vivía repetida en dos call sites de TypeScript
+// (`closeMatchday` en db/matchday.ts y `remainingMatches` en
+// app/torneo/[id]/[disciplina]/fechas/[n]/page.tsx) — mismo remedio que
+// `usesSetsDiff`/`scoreDiffLabel` (design #3801, decisión #12): al aparecer
+// la tercera copia de una regla, se extrae. Los dos call sites viven fuera de
+// core/, así que hace falta el barrel — no es reflejo.
+// `drawIsLegal` sale ahora (C30, verify-report-pr21 #4004 / decisión #4005):
+// `db/validate.ts` (setError/matchError, vía `db/matchday.ts`) es su primer
+// consumidor de producción real, fuera de core/.
+// `matchCountForFormat` sale ahora (W72, verify-report-pr21 #4004): el
+// armado (`armado-state.ts`, `matchdayShape`) es su primer consumidor real,
+// fuera de core/ — antes prometía el número del round robin incluso con
+// grupos ya elegidos.
+// `offerableFormats` sale ahora (W75, verify-report-pr21 #4004):
+// `SelectorDeFormato` (`armado.tsx`) es su primer consumidor real — antes el
+// selector sólo dejaba aceptar o rechazar el único formato sugerido, nunca
+// elegir "otro" de verdad (REQ-D8-1).
+export {
+  suggestFormat,
+  groupSides,
+  currentPhase,
+  phaseIsComplete,
+  faseForCount,
+  knockoutMatchups,
+  nextRoundMatchups,
+  losingMatchup,
+  knockoutPositions,
+  isUnplayedThirdPlace,
+  drawIsLegal,
+  matchCountForFormat,
+  offerableFormats,
+} from './knockout'
+
 // ── The season ───────────────────────────────────────────────────────────────
 export { computeRanking } from './ranking'
 export { snapshotForMatchday } from './snapshots'
@@ -110,6 +168,14 @@ export type { RulesSection } from './narrate'
 // fue W64. Sigue exportada de `./narrate`, para su test y para `formatsLabel`,
 // que es su único llamador.
 export { formatsLabel, narrateRules, scoreDiffLabel, scoreUnit } from './narrate'
+// `thirdPlaceNote` (decisión #3990, PR21 D2): la fecha de la [id]/[disciplina]/
+// fechas/[n]/page.tsx CERRADA es su primer consumidor real.
+export { thirdPlaceNote } from './narrate'
+// `bracketOrderNote` (W70, verify-report-pr21 #4004): mismo primer
+// consumidor que `thirdPlaceNote`, la fecha CERRADA de la llave — cuenta por
+// qué el orden no lo explican `PG` ni la diferencia de games cuando el pie de
+// siempre (`tiebreakNote`) se apaga por `orderMoved`.
+export { bracketOrderNote } from './narrate'
 
 // ── Reading the season back ──────────────────────────────────────────────────
 // What the read-only screens need on top of the ranking. All derived, nothing

@@ -4,23 +4,37 @@ import {
   computeAwards,
   computeRanking,
   computeStandings,
+  currentPhase,
+  drawIsLegal,
+  faseForCount,
+  groupSides,
+  isUnplayedThirdPlace,
+  knockoutMatchups,
+  knockoutPositions,
+  losingMatchup,
   mastersFixture,
   mastersQualifiers,
   members,
+  nextRoundMatchups,
+  phaseIsComplete,
   previousContext,
   pair,
+  sameSide,
   sideOfRow,
   snapshotForMatchday,
   type Award,
   type DisciplineId,
   type EntryId,
+  type MatchdayFormat,
   type MatchFormat,
   type MatchResult,
   type PairingInput,
+  type Phase,
   type SeasonConfig,
   type SetScore,
   type Side,
   type SideSize,
+  type SideStanding,
 } from '@/core'
 import type { Database, Json } from './database.types'
 import { disciplineConfig } from './discipline'
@@ -216,6 +230,36 @@ export async function setMatchdayDate(
   if (error !== null) throw new EdgeError(`No se pudo cambiar el día: ${error.message}`)
   if (count === 0) {
     throw new EdgeError('No se pudo cambiar el día: sólo puede hacerlo quien organiza.')
+  }
+}
+
+/**
+ * Cambia el formato sugerido de una fecha (REQ-D8-1) — el primer escritor de
+ * producción del `grant update (formato)` que trajo la Rebanada C1 (0040).
+ *
+ * A diferencia de `setMatchdayDate`, el formato SÓLO se puede tocar con la
+ * fecha en `DRAFT`: "editable antes de armar" es el requisito, y `formato`
+ * deja de importar en cuanto `generatePairs` ya lo leyó para armar los
+ * partidos — cambiarlo después no reordena nada, sólo confunde con qué se
+ * arma la fecha si se vuelve a sortear.
+ */
+export async function setMatchdayFormat(
+  supabase: Client,
+  matchdayId: string,
+  formato: MatchdayFormat,
+): Promise<void> {
+  const matchday = await requireMatchday(supabase, matchdayId)
+  if (matchday.status !== 'DRAFT') {
+    throw new EdgeError('El formato sólo se cambia con la fecha en armado.')
+  }
+
+  const { error, count } = await supabase
+    .from('matchdays')
+    .update({ formato: formato as unknown as Json }, { count: 'exact' })
+    .eq('id', matchdayId)
+  if (error !== null) throw new EdgeError(`No se pudo cambiar el formato: ${error.message}`)
+  if (count === 0) {
+    throw new EdgeError('No se pudo cambiar el formato: sólo puede hacerlo quien organiza.')
   }
 }
 
@@ -580,7 +624,6 @@ export async function generatePairs(supabase: Client, matchdayId: string): Promi
   // que ya trae `input` — ningún select nuevo.
   const { input, pairSize } = await pairingContextFor(supabase, matchdayId)
   const sides = buildSides({ ...input, sideSize: pairSize })
-  const fixture = buildFixture(sides.length)
 
   // Deleting the pairs cascades to matches and match_sets. A DRAFT matchday
   // usually has no results to lose, but `redraft_matchday` can land one here
@@ -592,7 +635,41 @@ export async function generatePairs(supabase: Client, matchdayId: string): Promi
   await deletePairs(supabase, matchdayId)
 
   const stored = await insertPairs(supabase, matchdayId, sides)
-  const matches = fixture.flatMap((round, index) =>
+
+  //`matchday.formato` generaliza el armado (REQ-D8-1, Rebanada C1): con
+  // `ROUND_ROBIN` es EXACTAMENTE el camino de siempre, sin tocar una línea —
+  // `roundRobinMatches` no manda `fase`/`grupo` y la fila cae en el default
+  // de columna ('GRUPO'/1, 0039), igual que antes de esta rebanada
+  // (REQ-D7-1, no-regresión). Con `GROUPS_KNOCKOUT`, `groupedMatches` reparte
+  // los lados con `groupSides` (hallazgo de diseño de esta rebanada, el
+  // design PUNTO 7 no lo nombraba) y corre `buildFixture` UNA VEZ POR GRUPO —
+  // `buildFixture` (core/fixture.ts) no se toca, sigue operando sobre
+  // índices numéricos, ahora dentro de cada grupo.
+  //
+  // Lo que hace HONESTO este doble cast es el check `matchdays_formato_kind`
+  // (0040), no la confianza: con `GROUPS_KNOCKOUT` la base ya exige
+  // `groups`/`qualifiersPerGroup` numéricos y dentro de lo que
+  // `knockoutMatchups` sabe armar (G∈{1,2,4}, P=2) — una fila que llega hasta
+  // acá no puede tener la forma incompleta que reventaba `groupSides` con
+  // `groups=undefined` DESPUÉS de haber borrado y reinsertado las parejas.
+  const formato = matchday.formato as unknown as MatchdayFormat
+  const matches: MatchRow[] =
+    formato.kind === 'GROUPS_KNOCKOUT'
+      ? groupedMatches(matchdayId, matchday.allows_draw, sides, stored, formato.groups)
+      : roundRobinMatches(matchdayId, matchday.allows_draw, sides, stored)
+
+  await insertMatches(supabase, matches)
+}
+
+/** El camino de siempre: un round robin sobre TODOS los lados de la fecha. */
+function roundRobinMatches(
+  matchdayId: string,
+  allowsDraw: boolean,
+  sides: Side[],
+  stored: string[],
+): MatchRow[] {
+  const fixture = buildFixture(sides.length)
+  return fixture.flatMap((round, index) =>
     round.map(([left, right]) => {
       const pairA = stored[left]
       const pairB = stored[right]
@@ -606,11 +683,220 @@ export async function generatePairs(supabase: Client, matchdayId: string): Promi
         round: index + 1,
         pair_a: pairA,
         pair_b: pairB,
-        allows_draw: matchday.allows_draw,
+        allows_draw: allowsDraw,
       }
     }),
   )
-  await insertMatches(supabase, matches)
+}
+
+/**
+ * Reparte `sides` en `groups` grupos con `groupSides` y corre `buildFixture`
+ * una vez por grupo, con `fase='GRUPO'` y `grupo=groupIndex+1` explícitos en
+ * cada fila: es el argumento que tiene que llegar hasta la fila real de
+ * `matches`, no sólo el nombre del helper (#3957, la regla de las seis veces).
+ */
+function groupedMatches(
+  matchdayId: string,
+  allowsDraw: boolean,
+  sides: Side[],
+  stored: string[],
+  groups: number,
+): MatchRow[] {
+  const storedSides = sides.map((side, index) => {
+    const pairId = stored[index]
+    if (pairId === undefined) {
+      throw new Error(
+        `El armado por grupos nombró el lado ${index} y sólo hay ${stored.length}. Esto es un bug.`,
+      )
+    }
+    return { side, pairId }
+  })
+
+  return groupSides(storedSides, groups).flatMap((group, groupIndex) => {
+    const fixture = buildFixture(group.length)
+    return fixture.flatMap((round, index) =>
+      round.map(([left, right]) => {
+        const pairA = group[left]
+        const pairB = group[right]
+        if (pairA === undefined || pairB === undefined) {
+          throw new Error(
+            `El fixture del grupo ${groupIndex + 1} nombró la pareja ${left} o ${right} y sólo hay ${group.length}. Esto es un bug.`,
+          )
+        }
+        return {
+          matchday_id: matchdayId,
+          round: index + 1,
+          pair_a: pairA.pairId,
+          pair_b: pairB.pairId,
+          allows_draw: allowsDraw,
+          fase: 'GRUPO',
+          grupo: groupIndex + 1,
+        }
+      }),
+    )
+  })
+}
+
+/**
+ * Cierra la fase actual y arma la siguiente (REQ-D7-2): la llave se genera al
+ * cerrar la fase anterior, nunca queda un partido "a definir". Sólo aplica a
+ * `formato.kind === 'GROUPS_KNOCKOUT'` — una fecha `ROUND_ROBIN` es una sola
+ * fase GRUPO de punta a punta, sin nada que avanzar.
+ *
+ * El riesgo que el design (#3801, PUNTO 7 y `riesgos`) anota desde el día
+ * uno se vuelve código acá: `computeStandings` es PURA y tabula lo que se le
+ * pase. `matchupsAfterGroups` (abajo) filtra por `fase==='GRUPO'` (ya
+ * garantizado por `inPhase`, ver más abajo) Y por `grupo===groupNumber` — sin
+ * el segundo filtro, un partido de otra fase entre los mismos dos lados
+ * (`grupo` cae siempre en 1 ahí, `matches_group_only_in_groups`, 0039) puede
+ * colarse en la tabla del grupo 1 y decidir su mano a mano.
+ */
+export async function advancePhase(supabase: Client, matchdayId: string): Promise<void> {
+  const { matchday, config, snapshot } = await matchdayContextFor(supabase, matchdayId)
+  if (matchday.status !== 'OPEN') {
+    throw new EdgeError('Sólo se puede avanzar de fase con la fecha abierta.')
+  }
+  const formato = matchday.formato as unknown as MatchdayFormat
+  if (formato.kind !== 'GROUPS_KNOCKOUT') {
+    throw new EdgeError('Esta fecha no tiene fases: se juega entera en una ronda.')
+  }
+
+  const { matches } = await resultsOf(supabase, matchdayId)
+  const phase = currentPhase(matches)
+  if (phase === null) throw new EdgeError('La fecha todavía no tiene partidos generados.')
+  if (phase === 'FINAL') throw new EdgeError('La llave ya llegó a la final: no hay fase siguiente.')
+  if (!phaseIsComplete(matches, phase)) {
+    throw new EdgeError('Todavía hay partidos sin jugar en la fase actual.')
+  }
+
+  // Sólo los partidos de la fase que se está cerrando — el primer filtro del
+  // riesgo de arriba. `matchupsAfterGroups`/`matchupsAfterKnockout` reciben
+  // YA garantizado que todo acá adentro es `fase === phase`.
+  const inPhase = matches.filter((match) => match.fase === phase)
+
+  // C32 (verify-report-pr21-cierre, #4016): `changeMatchdayFormat` puede
+  // guardar un `formato` nuevo DESPUÉS de que `generatePairs` ya armó el
+  // fixture con el viejo — `openMatchday` no lo nota (compara sólo quién
+  // vino, nunca la forma del fixture contra `formato`). Con `groups=2` y un
+  // fixture que sigue siendo el `ROUND_ROBIN` de antes, TODOS los partidos
+  // caen en `grupo=1` (default de columna, 0039) y el grupo 2 llega acá sin
+  // un solo lado — `qualifierAt` (core/knockout.ts) tira un `Error` PELADO
+  // que `onMatchday` (actions.ts) no sabe convertir en un rechazo prolijo:
+  // HTTP 500 y la fecha queda sin poder cerrarse nunca. Se chequea ACÁ,
+  // antes de `matchupsAfterGroups`, con la misma forma que exige
+  // `knockoutMatchups`: cada grupo declarado necesita al menos
+  // `qualifiersPerGroup` lados jugados — no "al menos un partido", porque un
+  // partido plantado en un grupo ajeno (ver el test de fase+grupo, arriba)
+  // no cuenta como que ESE grupo esté armado.
+  if (phase === 'GRUPO') {
+    for (let groupNumber = 1; groupNumber <= formato.groups; groupNumber++) {
+      const ofGroup = inPhase.filter((match) => match.grupo === groupNumber)
+      if (uniqueSides(ofGroup).length < formato.qualifiersPerGroup) {
+        throw new EdgeError('El formato cambió después de armar la fecha: hay que volver a sortearla.')
+      }
+    }
+  }
+
+  const nextMatchups =
+    phase === 'GRUPO'
+      ? matchupsAfterGroups(inPhase, formato, config, snapshot, matchday.allows_draw)
+      : matchupsAfterKnockout(phase, inPhase)
+
+  const pairs = await pairsBySide(supabase, matchdayId)
+  const rows: MatchRow[] = nextMatchups.map(({ fase, sideA, sideB }) => ({
+    matchday_id: matchdayId,
+    round: 1,
+    pair_a: pairIdOf(pairs, sideA),
+    pair_b: pairIdOf(pairs, sideB),
+    allows_draw: matchday.allows_draw,
+    fase,
+    grupo: 1, // matches_group_only_in_groups (0039): sólo GRUPO puede tener grupo > 1
+  }))
+  await insertMatches(supabase, rows)
+}
+
+/**
+ * De GRUPO a la primera ronda de la llave: una tabla POR GRUPO (el filtro que
+ * hace real el riesgo del design), y `knockoutMatchups` arma los cruces.
+ */
+function matchupsAfterGroups(
+  groupMatches: readonly MatchResult[],
+  formato: Extract<MatchdayFormat, { kind: 'GROUPS_KNOCKOUT' }>,
+  config: SeasonConfig,
+  snapshot: EntryId[],
+  allowsDraw: boolean,
+): Array<{ fase: Phase; sideA: Side; sideB: Side }> {
+  const groupTables: SideStanding[][] = []
+  for (let groupNumber = 1; groupNumber <= formato.groups; groupNumber++) {
+    // El filtro que hace real el riesgo: SOLO los partidos de ESTE grupo,
+    // nunca la fase entera. `groupMatches` ya viene filtrado a `fase==='GRUPO'`
+    // por `advancePhase` — acá falta el segundo eje, `grupo`.
+    const ofGroup = groupMatches.filter((match) => match.grupo === groupNumber)
+    groupTables.push(computeStandings(uniqueSides(ofGroup), [...ofGroup], config, snapshot, allowsDraw))
+  }
+  const matchups = knockoutMatchups(groupTables, formato.qualifiersPerGroup)
+  const fase = faseForCount(matchups.length)
+  return matchups.map(([sideA, sideB]) => ({ fase, sideA, sideB }))
+}
+
+/**
+ * De una ronda de llave YA JUGADA a la siguiente: `nextRoundMatchups` empareja
+ * ganadores. Si la fase que se cierra es SEMI, la FINAL no es la única fase
+ * nueva — TERCER_PUESTO se genera en el mismo momento, con los perdedores
+ * (decisión #3979: existe aunque después nadie la juegue).
+ */
+function matchupsAfterKnockout(
+  phase: Phase,
+  played: readonly MatchResult[],
+): Array<{ fase: Phase; sideA: Side; sideB: Side }> {
+  const matchups = nextRoundMatchups(played)
+  const fase = faseForCount(matchups.length)
+  const next = matchups.map(([sideA, sideB]) => ({ fase, sideA, sideB }))
+  if (phase === 'SEMI') {
+    const [thirdSideA, thirdSideB] = losingMatchup(played)
+    next.push({ fase: 'TERCER_PUESTO', sideA: thirdSideA, sideB: thirdSideB })
+  }
+  return next
+}
+
+/** Los lados distintos que aparecen en `matches`, en orden de primera aparición. */
+function uniqueSides(matches: readonly MatchResult[]): Side[] {
+  const sides: Side[] = []
+  for (const match of matches) {
+    if (!sides.some((side) => sameSide(side, match.sideA))) sides.push(match.sideA)
+    if (!sides.some((side) => sameSide(side, match.sideB))) sides.push(match.sideB)
+  }
+  return sides
+}
+
+/**
+ * Las parejas de la fecha con su lado, para traducir el `Side` que devuelven
+ * `knockoutMatchups`/`nextRoundMatchups`/`losingMatchup` al `pair_id` que
+ * `matches.pair_a`/`pair_b` necesitan. Los lados no cambian entre fases —
+ * la llave reutiliza las MISMAS parejas de la fase de grupos, no arma unas
+ * nuevas.
+ */
+async function pairsBySide(
+  supabase: Client,
+  matchdayId: string,
+): Promise<Array<{ id: string; side: Side }>> {
+  const { data, error } = await supabase
+    .from('pairs')
+    .select('id, entry_a, entry_b, pair_size')
+    .eq('matchday_id', matchdayId)
+  if (error) throw new EdgeError(`No se pudieron leer las parejas: ${error.message}`)
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    side: sideOfRow(row.pair_size as SideSize, row.entry_a, row.entry_b),
+  }))
+}
+
+function pairIdOf(pairs: readonly { id: string; side: Side }[], side: Side): string {
+  const found = pairs.find((row) => sameSide(row.side, side))
+  if (found === undefined) {
+    throw new Error('Un lado de la llave no tiene pareja guardada en esta fecha. Esto es un bug.')
+  }
+  return found.id
 }
 
 /**
@@ -747,19 +1033,59 @@ export async function closeMatchday(supabase: Client, matchdayId: string): Promi
   const { sides, matches } = await resultsOf(supabase, matchdayId)
 
   for (const match of matches) {
+    // El partido de TERCER_PUESTO puede quedar SIN JUGAR a propósito
+    // (decisión #3979): el guard de `standingsFromBracket`, más abajo, sólo
+    // exige que la FINAL esté completa. Sin esta excepción el loop de abajo
+    // rechazaría CUALQUIER llave que se saltee ese partido con "Falta cargar
+    // el resultado", antes incluso de llegar al guard que a propósito lo
+    // permite. No-op para ROUND_ROBIN: esa fecha nunca tiene un match en fase
+    // TERCER_PUESTO (siempre 'GRUPO', REQ-D7-1). `isUnplayedThirdPlace`
+    // (core/knockout.ts) — la misma regla vive también en page.tsx
+    // (remainingMatches) y en 0041 (SQL); refactor sobre PR21 D2.
+    if (isUnplayedThirdPlace(match)) continue
     // `matchday.allows_draw`, no la disciplina: es el valor CONGELADO en la
     // fecha (`matchdays_discipline_draw` es `on update no action`, así que
     // una vez creada la fecha la disciplina ya no puede cambiarlo). Cerrar
     // tiene que juzgar los resultados con la misma regla con la que se
     // guardaron, no con la de hoy.
-    const problem = matchError(match.sets, config.matchFormat, matchday.allows_draw)
+    //
+    // `drawIsLegal` (C30, decisión #4005): el empate sólo es legal en GRUPO,
+    // sin importar `allows_draw` — fuera de GRUPO una llave necesita un
+    // ganador. Sin este filtro, un empate colado en una fase de llave
+    // pasaba este loop y reventaba después, en `winnerOf`
+    // (`nextRoundMatchups`/`losingMatchup`, más abajo).
+    const problem = matchError(match.sets, config.matchFormat, drawIsLegal(match.fase, matchday.allows_draw))
     if (problem !== null) throw new EdgeError(problem)
   }
 
   // `matchday.allows_draw` por lo MISMO que el `matchError` de arriba: es el
   // valor congelado en la fecha. Cerrar una fecha vieja tiene que tabularla
   // con la regla con la que se jugó, no con la que la disciplina tenga hoy.
-  const standings = computeStandings(sides, matches, config, snapshot, matchday.allows_draw)
+  //
+  // `formato.kind` bifurca la posición del día (REQ-D7-4): con
+  // `GROUPS_KNOCKOUT` la arma la llave (`standingsFromBracket`); con
+  // `ROUND_ROBIN` es EXACTAMENTE el camino de siempre, sin tocar una línea
+  // (segundo GIVEN de REQ-D7-4, no-regresión) — `computeAwards`, dos líneas
+  // más abajo, no cambia de firma en ninguno de los dos casos.
+  const formato = matchday.formato as unknown as MatchdayFormat
+
+  // W79 (verify-report-pr21-cierre, #4016): la mitad de C31 que 0044 no
+  // cerró. `redraft_matchday` no borra `matches` (0011) y `setMatchdayFormat`
+  // deja volver a `ROUND_ROBIN` en DRAFT con una llave completa todavía
+  // puesta — sin este guard, la rama de abajo tabula GRUPO + SEMI + FINAL +
+  // TERCER_PUESTO con `computeStandings` como si fuera un round robin, y
+  // cierra con awards mezclados (medido: 8 awards, `CLOSED`). Se corta ACÁ,
+  // antes de tabular nada: `ROUND_ROBIN` sólo puede tener partidos de
+  // `fase='GRUPO'`/`grupo=1` (REQ-D7-1) — cualquier otra fila es la marca de
+  // una llave anterior que sobrevivió al redraft.
+  if (formato.kind === 'ROUND_ROBIN' && matches.some((match) => match.fase !== 'GRUPO' || match.grupo !== 1)) {
+    throw new EdgeError('El formato cambió después de armar la fecha: hay que volver a sortearla.')
+  }
+
+  const standings =
+    formato.kind === 'GROUPS_KNOCKOUT'
+      ? standingsFromBracket(matches, config, snapshot, matchday.allows_draw)
+      : computeStandings(sides, matches, config, snapshot, matchday.allows_draw)
   // El Masters define al campeón del año, no reparte puntos (spec 2.7), y
   // `close_matchday` rechaza un `p_awards` no vacío cuando kind = 'MASTERS'.
   // Sin esta rama el Masters no se puede cerrar: `computeAwards` devolvería seis
@@ -774,6 +1100,57 @@ export async function closeMatchday(supabase: Client, matchdayId: string): Promi
     p_awards: awards as unknown as Json,
   })
   if (error !== null) throw new EdgeError(error.message)
+}
+
+/**
+ * Posición del día para una fecha `GROUPS_KNOCKOUT` (REQ-D7-4, primer
+ * GIVEN): la arma `knockoutPositions` a partir de la LLAVE, no de la tabla
+ * de grupos plana. `computeAwards` sigue recibiendo `SideStanding[]` sin
+ * cambiar de firma.
+ *
+ * Guard (decisión #3979, cerrada con el número a la vista: la curva de
+ * pádel paga 5 al 3º y 3 al 4º, dos puntos de campeonato reales): sólo
+ * exige que `FINAL` esté completa. NO exige `TERCER_PUESTO` jugado — a
+ * propósito, no un descuido. Si ese partido no se jugó, `knockoutPositions`
+ * (Rebanada B2, `core/knockout.ts`) ya hace fallback a la tabla de grupos
+ * para decidir 3º/4º.
+ *
+ * AGUJERO DE DISEÑO cerrado acá, surfaceado en el reporte de esta rebanada
+ * (`apply-progress-pr21d1`), no inventado en silencio: `knockoutPositions`
+ * pide UNA `groupTable`, pero `GROUPS_KNOCKOUT` arma G tablas, una por grupo
+ * (ver `matchupsAfterGroups`) — ninguna decide sola quién es 5º entre el 3º
+ * del grupo A y el 3º del grupo B, y el spec (REQ-D7-4) tampoco lo dice.
+ *
+ * Decisión tomada acá: se REUTILIZA `computeStandings` —la MISMA función
+ * que arma la tabla de una fecha `ROUND_ROBIN` entera— sobre TODOS los
+ * lados y TODOS los partidos de la fase `GRUPO` juntos, no separados por
+ * grupo. No es una regla nueva: es el mismo criterio de siempre (puntos del
+ * día → diferencia → mano a mano → snapshot) aplicado al universo completo
+ * de la fase de grupos, el mismo orden que hubiera salido si todos hubieran
+ * jugado entre sí. `headToHead` ya devuelve `NOT_PLAYED` para dos lados de
+ * grupos distintos que nunca se cruzaron (no inventa un resultado), así que
+ * cae al snapshot como cualquier otro empate sin cruce — el mismo mecanismo
+ * que ya resuelve empates DENTRO de un grupo. Es la misma convención que
+ * usan los torneos reales para ordenar a quien no clasificó (p.ej. "mejores
+ * terceros"): por los números de la fase de grupos, no por el número de
+ * grupo. Distinto de `matchupsAfterGroups` (Rebanada C2), que SÍ separa por
+ * grupo — ahí el objetivo es decidir quién clasifica DENTRO de su propio
+ * grupo, acá el objetivo es ordenar a TODOS entre sí.
+ */
+function standingsFromBracket(
+  matches: readonly MatchResult[],
+  config: SeasonConfig,
+  snapshot: EntryId[],
+  allowsDraw: boolean,
+): SideStanding[] {
+  const phase = currentPhase(matches)
+  if (phase !== 'FINAL' || !phaseIsComplete(matches, 'FINAL')) {
+    throw new EdgeError('La llave todavía no llegó a la final: no se puede cerrar la fecha.')
+  }
+  const groupMatches = matches.filter((match) => match.fase === 'GRUPO')
+  const bracket = matches.filter((match) => match.fase !== 'GRUPO')
+  const groupTable = computeStandings(uniqueSides(groupMatches), [...groupMatches], config, snapshot, allowsDraw)
+  return knockoutPositions(bracket, groupTable)
 }
 
 /**
@@ -812,8 +1189,13 @@ export async function saveResult(
   matchId: string,
   sets: SetScore[],
 ): Promise<void> {
-  const { format, allowsDraw } = await matchFormatOf(supabase, matchId)
-  const problem = matchError(sets, format, allowsDraw)
+  const { format, allowsDraw, fase } = await matchFormatOf(supabase, matchId)
+  // `drawIsLegal` (C30, decisión #4005): el empate sólo es legal en GRUPO —
+  // sin este filtro, la pantalla dejaba guardar un 2-2 en cualquier fase de
+  // la llave y el 500 salía recién al avanzar de fase o cerrar la fecha
+  // (`winnerOf`, core/knockout.ts). Acá, con el mensaje claro que `setError`
+  // ya sabe dar para un empate no permitido.
+  const problem = matchError(sets, format, drawIsLegal(fase, allowsDraw))
   if (problem !== null) throw new EdgeError(problem)
 
   // La política match_sets_write ya exige que la fecha esté OPEN: acá alcanza
@@ -828,12 +1210,19 @@ export async function saveResult(
   // columna (`false`) rebotaba cada resultado de una disciplina con empates
   // —medido incluso con un 4-2, que no es empate ninguno—, o sea el guard no
   // protegía nada y mataba todo.
+  //
+  // `fase` por el MISMO motivo, ahora con `match_sets_match_fase` (0042,
+  // C30): el default de columna (`'GRUPO'`) no coincide con la `fase` real
+  // de un partido de llave, y la FK compuesta rebota CUALQUIER resultado de
+  // una fase distinta de GRUPO — medido: hasta un 3-0 en una SEMI, que no es
+  // empate ninguno, quedaba bloqueado sin este campo.
   const rows = sets.map((set, index) => ({
     match_id: matchId,
     set_number: index + 1,
     games_a: set.gamesA,
     games_b: set.gamesB,
     allows_draw: allowsDraw,
+    fase,
   }))
   const { error: insertError } = await supabase.from('match_sets').insert(rows)
   if (insertError !== null) {
@@ -985,6 +1374,17 @@ interface MatchRow {
    * que faltaba las dos veces que este bug apareció.
    */
   allows_draw: boolean
+  /**
+   * Opcionales a propósito (Rebanada C1, REQ-D7-1): `roundRobinMatches` no
+   * los manda nunca, así que esa fila cae en el default de columna
+   * ('GRUPO'/1, 0039) — el mismo comportamiento que tenía este insert antes
+   * de esta rebanada. `groupedMatches` los manda siempre explícitos: `grupo`
+   * es lo que separa una fase de grupos real de "todos contra todos con otro
+   * nombre" (matches_group_only_in_groups, 0039, ya lo exige del lado de la
+   * base).
+   */
+  fase?: Phase
+  grupo?: number
 }
 
 /** Inserta el fixture. */
@@ -1021,8 +1421,14 @@ async function pairEntryIds(supabase: Client, matchdayId: string): Promise<strin
  * tiraba con una fila `pair_size=1`, así que `closeMatchday()` —el wrapper TS,
  * no el RPC— no podía cerrar una fecha de a uno. `sideOfRow` devuelve el lado
  * con su forma y `computeStandings` ya lo tabula (S39).
+ *
+ * Exportada (#3957, PR21 B1): `fase`/`grupo` de cada `MatchResult` tienen hoy
+ * un solo consumidor de producción — este `select` — y `closeMatchday` no los
+ * usa todavía (llega con D1), así que ningún test que pase por el wrapper
+ * público puede notar si alguien los hardcodea a `'GRUPO'`/`1`. El test de
+ * `db/match-phase.db.test.ts` llama esta función directo.
  */
-async function resultsOf(
+export async function resultsOf(
   supabase: Client,
   matchdayId: string,
 ): Promise<{ sides: Side[]; matches: MatchResult[] }> {
@@ -1041,7 +1447,7 @@ async function resultsOf(
 
   const { data: matchRows, error: matchesError } = await supabase
     .from('matches')
-    .select('id, round, pair_a, pair_b')
+    .select('id, round, pair_a, pair_b, fase, grupo')
     .eq('matchday_id', matchdayId)
     .order('round', { ascending: true })
   if (matchesError) throw new EdgeError(`No se pudieron leer los partidos: ${matchesError.message}`)
@@ -1073,7 +1479,14 @@ async function resultsOf(
         `El partido ${row.id} referencia una pareja que no está en la fecha. Esto es un bug.`,
       )
     }
-    return { round: row.round, sideA, sideB, sets: setsByMatch.get(row.id) ?? [] }
+    return {
+      round: row.round,
+      fase: row.fase as Phase,
+      grupo: row.grupo,
+      sideA,
+      sideB,
+      sets: setsByMatch.get(row.id) ?? [],
+    }
   })
 
   return { sides: [...sideById.values()], matches }
@@ -1081,7 +1494,7 @@ async function resultsOf(
 
 /**
  * El `matchFormat` de la configuración de la disciplina dueña de este partido,
- * MÁS su `allows_draw`.
+ * MÁS su `allows_draw` y su `fase`.
  *
  * `allows_draw` sale de la fila de `matches`, no de la disciplina, y es a
  * propósito: es el valor que `match_sets_match_draw` va a verificar contra
@@ -1089,14 +1502,18 @@ async function resultsOf(
  * (`matches → matchdays → disciplines`), así que leerlo del partido no es una
  * segunda fuente de verdad — es la MISMA, un salto más cerca, y sin un select
  * extra: ya se estaba leyendo esta fila.
+ *
+ * `fase` por el mismo motivo, agregada para C30 (decisión #4005): el
+ * caller la combina con `allows_draw` vía `drawIsLegal` — el empate sólo es
+ * legal en GRUPO, sin importar lo que diga la disciplina.
  */
 async function matchFormatOf(
   supabase: Client,
   matchId: string,
-): Promise<{ format: MatchFormat; allowsDraw: boolean }> {
+): Promise<{ format: MatchFormat; allowsDraw: boolean; fase: Phase }> {
   const { data: match, error: fetchError } = await supabase
     .from('matches')
-    .select('matchday_id, allows_draw')
+    .select('matchday_id, allows_draw, fase')
     .eq('id', matchId)
     .maybeSingle()
   if (fetchError) throw new EdgeError(`No se pudo leer el partido: ${fetchError.message}`)
@@ -1104,5 +1521,5 @@ async function matchFormatOf(
 
   const matchday = await requireMatchday(supabase, match.matchday_id)
   const { config } = await disciplineConfig(supabase, matchday.discipline_id)
-  return { format: config.matchFormat, allowsDraw: match.allows_draw }
+  return { format: config.matchFormat, allowsDraw: match.allows_draw, fase: match.fase as Phase }
 }

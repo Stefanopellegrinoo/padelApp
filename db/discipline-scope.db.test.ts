@@ -423,7 +423,7 @@ describe('lecturas de producción scopeadas por disciplina, no por temporada', (
     await insertAward(fifaClosed, seasonId, c, 1, 99)
 
     const before = await awardsBefore(admin.client, padelId, 2)
-    expect(before.get(1)).toEqual([{ entryId: a, position: 1, points: 10 }])
+    expect(before.get(1)).toEqual([{ entryId: a, position: 1, points: 10, lines: [] }])
   })
 
   it('closedHistoryAll trae sólo las fechas cerradas de la disciplina por defecto', async () => {
@@ -448,7 +448,7 @@ describe('lecturas de producción scopeadas por disciplina, no por temporada', (
     await insertAward(fifaClosed, seasonId, c, 1, 99)
 
     const map = await awardsOf(admin.client, seasonId)
-    expect(map.get(1)).toEqual([{ entryId: a, position: 1, points: 10 }])
+    expect(map.get(1)).toEqual([{ entryId: a, position: 1, points: 10, lines: [] }])
   })
 })
 

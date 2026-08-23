@@ -1,3 +1,4 @@
+import { ordinal } from './narrate'
 import { members } from './side'
 import type { Award, EntryId, SeasonConfig, SideStanding } from './types'
 
@@ -54,8 +55,12 @@ export function computeAwards(
     if (points === undefined) {
       throw new Error(`No hay puntos definidos para la posición ${index + 1}.`)
     }
+    // REQ-D10-1: hoy hay UNA sola fuente de puntos —la posición del día—, así
+    // que el desglose es siempre una línea cuya suma es el total. El día que
+    // haya una segunda fuente, esto ya tiene la forma que hace falta.
+    const lines = [{ reason: `${ordinal(index + 1)} de la fecha`, points }]
     for (const entryId of championshipMembers(row)) {
-      awards.push({ entryId, position: index + 1, points })
+      awards.push({ entryId, position: index + 1, points, lines })
     }
   }
   return awards

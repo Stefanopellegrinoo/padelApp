@@ -100,6 +100,41 @@ export type Database = {
           },
         ]
       }
+      award_lines: {
+        Row: {
+          entry_id: string
+          id: string
+          matchday_id: string
+          ordinal: number
+          points: number
+          reason: string
+        }
+        Insert: {
+          entry_id: string
+          id?: string
+          matchday_id: string
+          ordinal: number
+          points: number
+          reason: string
+        }
+        Update: {
+          entry_id?: string
+          id?: string
+          matchday_id?: string
+          ordinal?: number
+          points?: number
+          reason?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "award_lines_matchday_id_entry_id_fkey"
+            columns: ["matchday_id", "entry_id"]
+            isOneToOne: false
+            referencedRelation: "awards"
+            referencedColumns: ["matchday_id", "entry_id"]
+          },
+        ]
+      }
       awards: {
         Row: {
           entry_id: string
@@ -299,6 +334,7 @@ export type Database = {
       match_sets: {
         Row: {
           allows_draw: boolean
+          fase: string
           games_a: number
           games_b: number
           id: string
@@ -307,6 +343,7 @@ export type Database = {
         }
         Insert: {
           allows_draw?: boolean
+          fase?: string
           games_a: number
           games_b: number
           id?: string
@@ -315,6 +352,7 @@ export type Database = {
         }
         Update: {
           allows_draw?: boolean
+          fase?: string
           games_a?: number
           games_b?: number
           id?: string
@@ -330,6 +368,13 @@ export type Database = {
             referencedColumns: ["id", "allows_draw"]
           },
           {
+            foreignKeyName: "match_sets_match_fase"
+            columns: ["match_id", "fase"]
+            isOneToOne: false
+            referencedRelation: "matches"
+            referencedColumns: ["id", "fase"]
+          },
+          {
             foreignKeyName: "match_sets_match_id_fkey"
             columns: ["match_id"]
             isOneToOne: false
@@ -343,6 +388,7 @@ export type Database = {
           allows_draw: boolean
           closed_at: string | null
           discipline_id: string
+          formato: Json
           id: string
           kind: string
           number: number
@@ -355,6 +401,7 @@ export type Database = {
           allows_draw?: boolean
           closed_at?: string | null
           discipline_id: string
+          formato?: Json
           id?: string
           kind?: string
           number: number
@@ -367,6 +414,7 @@ export type Database = {
           allows_draw?: boolean
           closed_at?: string | null
           discipline_id?: string
+          formato?: Json
           id?: string
           kind?: string
           number?: number
@@ -409,6 +457,8 @@ export type Database = {
       matches: {
         Row: {
           allows_draw: boolean
+          fase: string
+          grupo: number
           id: string
           matchday_id: string
           pair_a: string
@@ -417,6 +467,8 @@ export type Database = {
         }
         Insert: {
           allows_draw?: boolean
+          fase?: string
+          grupo?: number
           id?: string
           matchday_id: string
           pair_a: string
@@ -425,6 +477,8 @@ export type Database = {
         }
         Update: {
           allows_draw?: boolean
+          fase?: string
+          grupo?: number
           id?: string
           matchday_id?: string
           pair_a?: string
@@ -653,6 +707,7 @@ export type Database = {
       match_is_open: { Args: { p_match: string }; Returns: boolean }
       match_season: { Args: { p_match: string }; Returns: string }
       matchday_discipline: { Args: { p_matchday: string }; Returns: string }
+      matchday_phase: { Args: { p_matchday: string }; Returns: string }
       matchday_season: { Args: { p_matchday: string }; Returns: string }
       my_player_id: { Args: never; Returns: string }
       open_matchday: { Args: { p_matchday: string }; Returns: undefined }

@@ -10,6 +10,8 @@ import {
   filledCount,
   formatErrors,
   moveSeat,
+  newDisciplineSpec,
+  newTournamentPayload,
   removeSeatAt,
   resizeConfig,
   squadWarning,
@@ -68,6 +70,22 @@ describe('the config the wizard builds', () => {
     for (const size of [8, 10, 12]) {
       expect(configFor(size)).toEqual(defaultConfig(size))
     }
+  })
+
+  // S75: `configFor`/`resizeConfig` llamaban `defaultConfig(squadSize)` y
+  // dejaban caer `sideSize` a su default 2 — con "Individual" elegido, la
+  // curva que salía era la de parejas, no la de la decisión #3963 (#3957: se
+  // pincha el ARGUMENTO, no que la función acepte el parámetro).
+  it('threads sideSize into defaultConfig instead of dropping to the pairs default (S75)', () => {
+    expect(configFor(8, 1)).toEqual(defaultConfig(8, 1))
+    expect(configFor(8, 1).points).toEqual([10, 7, 5, 3, 2, 1, 0, 0])
+  })
+
+  it('resizeConfig keeps the sideSize curve when the squad changes size', () => {
+    const eightSolo = configFor(8, 1)
+    const twelveSolo = resizeConfig(eightSolo, 12, 1)
+    expect(twelveSolo.points).toEqual(defaultConfig(12, 1).points)
+    expect(twelveSolo.points).toEqual([10, 7, 5, 3, 2, 1, 0, 0, 0, 0, 0, 0])
   })
 
   // Lo que arma el wizard tiene que pasar la validación de core/, o
@@ -302,6 +320,126 @@ describe('buildDisciplines', () => {
 
   it('gives back nothing for an empty pick', () => {
     expect(buildDisciplines([], configFor(8))).toEqual([])
+  })
+
+  // Rebanada F: el radio "Individual" tiene que llegar hasta acá como
+  // pairSize=1, y arrastrar consigo la config con la curva de la decisión
+  // #3963 (no sólo la clave "pairSize" — #3957, se pinchan los argumentos).
+  it('incluye pairSize en el retorno cuando se pasa 1, con la curva de #3963', () => {
+    const config = configFor(8, 1)
+    expect(buildDisciplines(['FIFA'], config, 1)).toEqual([
+      {
+        kind: 'FIFA',
+        config: { ...config, matchFormat: { ...config.matchFormat, openScore: true } },
+        allowsDraw: true,
+        pairSize: 1,
+      },
+    ])
+  })
+})
+
+describe('newDisciplineSpec', () => {
+  // El "+ Agregar disciplina" de Ajustes arma esto con el tamaño de SU
+  // plantel elegido (REQ-D1-4), no el de toda la temporada.
+  it('arma la config del tamaño de plantel que se le pasa', () => {
+    expect(newDisciplineSpec('PADEL', 8)).toEqual({
+      kind: 'PADEL',
+      config: defaultConfig(8),
+      allowsDraw: false,
+    })
+  })
+
+  // El punto de unión del lado de Ajustes (Rebanada F): pairSize tiene que
+  // llegar hasta acá Y la config.points tiene que ser la curva de la
+  // decisión #3963 — no sólo que la clave `pairSize` exista (#3957).
+  it('con pairSize=1 arma la curva de la decisión #3963, no la de parejas', () => {
+    const spec = newDisciplineSpec('FIFA', 8, 1)
+    expect(spec.pairSize).toBe(1)
+    expect(spec.config.points).toEqual([10, 7, 5, 3, 2, 1, 0, 0])
+    expect(spec.allowsDraw).toBe(true)
+  })
+})
+
+describe('newTournamentPayload', () => {
+  // Lo que arma el submit del wizard: name + submitSeats(squad) + config con
+  // el squadSize REAL + buildDisciplines. Antes vivía inline adentro del
+  // `startTransition` de `Wizard` — puro salvo el `await createTournament`, y
+  // sin embargo intestable ahí (repite el patrón de `wizard-state.ts`,
+  // `armado-state.ts`, `carga-state.ts`, `sumar-state.ts`: sacar la lógica
+  // del `.tsx` para poder testearla sin DOM y sin base).
+  //
+  // `pairSizes` es OBLIGATORIO acá (a diferencia de `buildDisciplines`): el
+  // único caller (`Wizard`) siempre tiene uno por disciplina, `useState`
+  // nace en `{ PADEL: 2, FIFA: 2 }`. Por eso el pádel de este test también lo
+  // pasa explícito — la fila que sale lleva `pairSize: 2` en vez de omitir
+  // la clave, y es exactamente lo mismo que escribe la base
+  // (`addDiscipline`: `spec.pairSize ?? 2`).
+  it('arma exactamente el payload que createTournament espera, para pádel', () => {
+    const squad: Squad = { names: Array(8).fill('Jugador'), mySeat: 0 }
+    const config = configFor(8)
+    expect(newTournamentPayload('Los Jueves', squad, config, ['PADEL'], { PADEL: 2, FIFA: 2 })).toEqual({
+      name: 'Los Jueves',
+      squadNames: squad.names,
+      mySeatIndex: 0,
+      config,
+      disciplines: buildDisciplines(['PADEL'], config, 2),
+    })
+  })
+
+  // El squadSize del payload sale del plantel REALMENTE cargado al momento
+  // de mandar, no del que traía la config (que puede estar desactualizada si
+  // el admin agregó/sacó nombres después de tocar el paso 4).
+  it('el squadSize del payload sale del plantel cargado, no el que traía la config', () => {
+    const squad: Squad = { names: [...Array(8).fill('Jugador'), '', ''], mySeat: null }
+    const staleConfig = configFor(12)
+    const payload = newTournamentPayload('X', squad, staleConfig, ['PADEL'], { PADEL: 2, FIFA: 2 })
+    expect(payload.squadNames).toHaveLength(8)
+    expect(payload.config.squadSize).toBe(8)
+  })
+
+  // El punto de unión de la Rebanada F, en el payload REAL que cruza al
+  // server action — no sólo hasta `buildDisciplines` suelto (#3957, se
+  // pinchan los argumentos, no que la función interna acepte el parámetro).
+  it('con pairSize=1, las disciplines del payload salen con la curva de la decisión #3963', () => {
+    const squad: Squad = { names: Array(8).fill('Jugador'), mySeat: null }
+    const config = configFor(8, 1)
+    const payload = newTournamentPayload('Liga FIFA', squad, config, ['FIFA'], { PADEL: 2, FIFA: 1 })
+    expect(payload.disciplines).toEqual([
+      {
+        kind: 'FIFA',
+        config: { ...config, matchFormat: { ...config.matchFormat, openScore: true } },
+        allowsDraw: true,
+        pairSize: 1,
+      },
+    ])
+  })
+
+  /**
+   * W76 (verify-report-pr21-cierre, #4016) + decisión #4017: "Lados" ya NO
+   * es un solo control para todas las disciplinas marcadas — cada una trae
+   * el suyo. Con Pádel Y FIFA marcados y SÓLO FIFA en "Individual", el
+   * payload tiene que traer las DOS filas con su `pairSize` PROPIO — ni
+   * las dos en 2 (el bug de W69/W76: "Individual" se ignoraba en silencio)
+   * ni las dos en 1 (herencia cruzada, exactamente lo que W69 cerró y que
+   * REQ-D2-1 prohíbe).
+   *
+   * Un test que sólo mirara UNA fila no probaría la ausencia de herencia
+   * cruzada en ningún sentido — hace falta ver las DOS a la vez.
+   */
+  it('con Pádel Y FIFA marcados, cada uno trae SU pairSize -- sin herencia cruzada en ningún sentido (W76, #4017)', () => {
+    const squad: Squad = { names: Array(8).fill('Jugador'), mySeat: null }
+    const config = configFor(8)
+    const payload = newTournamentPayload('Mixto', squad, config, ['PADEL', 'FIFA'], { PADEL: 2, FIFA: 1 })
+
+    expect(payload.disciplines).toHaveLength(2)
+    const padel = payload.disciplines.find((row) => row.kind === 'PADEL')
+    const fifa = payload.disciplines.find((row) => row.kind === 'FIFA')
+    expect(padel?.pairSize).toBe(2)
+    expect(fifa?.pairSize).toBe(1)
+    // Cada uno con SU curva (#3963: 8 lados de a uno puntúan los primeros
+    // seis; 8 jugadores en parejas son 4 lados, la curva de 4).
+    expect(padel?.config.points).toEqual([10, 6, 3, 1])
+    expect(fifa?.config.points).toEqual([10, 7, 5, 3, 2, 1, 0, 0])
   })
 })
 

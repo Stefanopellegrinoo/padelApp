@@ -2,16 +2,24 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import type { ReactNode } from 'react'
 import {
+  bracketOrderNote,
+  buildSides,
   computeRanking,
   computeStandings,
+  currentPhase,
+  groupSides,
   includes,
+  isUnplayedThirdPlace,
   mastersChampion,
   mastersQualifiers,
   members,
+  phaseIsComplete,
+  PHASE_ORDER,
   previousContext,
   resolveDisciplineBySlug,
   sameSide,
   snapshotForMatchday,
+  thirdPlaceNote,
   usesSetsDiff,
   type MatchResult,
   type SeasonConfig,
@@ -28,6 +36,7 @@ import {
   seasonHeader,
   seasonMatchdaysOf,
 } from '@/db/read'
+import { pairingContextFor } from '@/db/matchday'
 import { sideLabel, tiebreakNote } from './tabla-desempate'
 import { TablaDelDia } from './tabla-del-dia'
 import { awardsBefore, closedHistory, frozenPointsOf, type FrozenAward } from '@/db/season'
@@ -35,9 +44,10 @@ import { serverClient } from '@/db/server'
 import { EdgeError } from '@/db/errors'
 import { matchdayFull } from '@/app/format'
 import { Rondas, type RoundMatchVM, type RoundVM } from './rondas'
-import { Armado, type DraftPairVM, type GuestPairVM, type GuestVM, type SeatVM } from './armado'
+import { Armado, type DraftPairVM, type GroupPreviewVM, type GuestPairVM, type GuestVM, type SeatVM } from './armado'
 import { CierreFecha } from './carga'
 import { DiaDeLaFecha } from './dia'
+import { Llave, type LlaveMatchVM } from './llave'
 import { MastersDraft, type QualifierVM } from './masters'
 import { SumarInvitado, type GuestPromoteVM, type SumarSeatVM } from './sumar'
 import { guestsToPromote } from './sumar-state'
@@ -252,6 +262,40 @@ export default async function FechaDetailPage({ params }: PageProps) {
       withGuest: members(side).some((entryId) => detail.guestIds.includes(entryId)),
     }))
 
+    // S83 (verify-report-pr21 #4004): entre elegir "2 grupos + llave" y
+    // confirmar la fecha no había ninguna vista previa del reparto. En DRAFT
+    // los partidos TODAVÍA NO EXISTEN (`generatePairs` corre recién al
+    // confirmar), así que no hay llave que dibujar — pero sí se puede
+    // mostrar el REPARTO: dado el orden real de hoy, quiénes caen en cada
+    // grupo. `pairingContextFor` + `buildSides` son la MISMA pareja de
+    // funciones que corre `generatePairs` (`db/matchday.ts`) antes de armar
+    // los partidos — acá sólo LEEN, no escriben nada — así que el orden que
+    // arma esta vista previa es el mismo que va a usar el confirmar de
+    // verdad. `groupSides` (`core/knockout.ts`) reparte en SERPENTINA, no en
+    // tajadas: si la previa inventara su propio corte secuencial, mostraría
+    // un reparto que después `generatePairs` no arma — peor que no tener
+    // previa.
+    //
+    // `pairingContextFor` puede tirar mientras el armado está incompleto
+    // (plantel impar sin invitado todavía, puntos que no alcanzan, etc.) —
+    // son los MISMOS guards que `generatePairs` aplicaría al confirmar hoy
+    // mismo. Sin nada armable todavía no hay nada que previsualizar: mejor
+    // ninguna vista previa que una pantalla rota.
+    let groupPreview: GroupPreviewVM[] | null = null
+    const formatoDraft = matchday.formato
+    if (formatoDraft.kind === 'GROUPS_KNOCKOUT') {
+      try {
+        const { input, pairSize } = await pairingContextFor(supabase, matchday.id)
+        const previewSides = buildSides({ ...input, sideSize: pairSize })
+        groupPreview = groupSides(previewSides, formatoDraft.groups).map((group, index) => ({
+          number: index + 1,
+          names: group.map((previewSide) => sideName(previewSide)),
+        }))
+      } catch {
+        groupPreview = null
+      }
+    }
+
     body = (
       <Armado
         seasonId={seasonId}
@@ -264,6 +308,8 @@ export default async function FechaDetailPage({ params }: PageProps) {
         guestPairs={guestPairs}
         pairs={draftPairs}
         loadedResults={detail.matches.filter((match) => match.sets.length > 0).length}
+        formato={matchday.formato}
+        groupPreview={groupPreview}
       />
     )
   }
@@ -297,8 +343,111 @@ export default async function FechaDetailPage({ params }: PageProps) {
         : Promise.resolve(new Map<string, FrozenAward>()),
     ])
 
+    // La fase y la llave (REQ-D8-1, decisión #3979): `matchday.formato` es lo
+    // que decide si esta fecha tiene fases que dibujar. `phase`/`phaseComplete`
+    // se calculan siempre —son baratos y puros— pero sólo se USAN mientras la
+    // fecha está `OPEN` y `GROUPS_KNOCKOUT` (`isGroupsKnockout`, gatea
+    // `canClosePhase` directamente, sin pasar por `phase`).
+    //
+    // (S80, verify-report-pr21 #4004): este bloque decía *"una fecha
+    // `ROUND_ROBIN` nunca manda `fase` distinta de `GRUPO` ... así que acá
+    // adentro `phase` siempre da `'GRUPO'`"*. Falso en el camino de C31:
+    // `redraft_matchday` no borra `matches` (0011), así que una fecha que
+    // TUVO una llave y volvió a `ROUND_ROBIN` puede seguir con filas de
+    // `SEMI`/`FINAL`/etc. en la base, y `currentPhase` (más abajo) las lee
+    // tal cual —devuelve la fase más avanzada que encuentre, sin mirar
+    // `matchday.formato`. Lo que SÍ sigue siendo cierto con o sin ese camino:
+    // `canClosePhase` está gateado por `isGroupsKnockout`, no por `phase` —
+    // con `ROUND_ROBIN` da siempre falso, sea cual sea la fase deducida.
+    const isGroupsKnockout = matchday.formato.kind === 'GROUPS_KNOCKOUT'
+
     const snapshot = snapshotForMatchday(matchdayNumber, seedOrder, awardsByMatchday, config)
-    const standings = computeStandings(detail.sides, detail.matches, config, snapshot, matchday.allowsDraw)
+    // Restricción de pureza del design (#3801, PUNTO 6): "computeStandings
+    // recibe SÓLO los partidos de la fase que tabula. Filtra el caller." Sin
+    // esto, el mano a mano de dos lados del MISMO grupo puede quedar decidido
+    // por un partido de la LLAVE entre ellos —`headToHead` (core/standings.ts)
+    // devuelve el PRIMER partido que los conecta en el array, así que el orden
+    // de llegada, no el resultado de grupo, terminaba mandando (W71,
+    // verify-report-pr21 #4004). La tabla de la fecha en GROUPS_KNOCKOUT es
+    // SIEMPRE la de GRUPO —mientras está OPEN, la fase actual, no ninguna
+    // otra; una vez CLOSED, TODA la fase de grupos— nunca la fecha entera:
+    // filtrar por la fase actual dejaría la tabla con 2 o 4 filas apenas
+    // arranca la llave, y el resto de los lados desaparecería de una tabla
+    // que hoy los muestra a todos (S82, otra tanda, sigue sin separar por
+    // grupo pero sigue mostrando a todos).
+    //
+    // CLOSED entra al mismo filtro por lo mismo que ya vale para OPEN: el
+    // punto de la fecha (W70, verify-report-pr21 #4004) es que
+    // `standingsFromBracket` (`db/matchday.ts`) — quien de verdad calculó los
+    // awards al cerrar — arma su `groupTable` con `computeStandings` sobre
+    // SÓLO los partidos de GRUPO, y `knockoutPositions` (core/knockout.ts)
+    // copia esas mismas filas (`statsOf`) para el podio. Antes de este fix
+    // `standingsMatches` era `detail.matches` sin filtrar para CLOSED, así
+    // que el `PG`/`Dif` de esta pantalla sumaban semis y final —medido: un
+    // campeón con 3 partidos de grupo mostraba PG 5— mientras los puntos que
+    // cobró salieron de sumar sólo 3. Las dos tablas tienen que ser la MISMA
+    // tabla.
+    const standingsMatches = isGroupsKnockout
+      ? detail.matches.filter((match) => match.fase === 'GRUPO')
+      : detail.matches
+    const standings = computeStandings(detail.sides, standingsMatches, config, snapshot, matchday.allowsDraw)
+
+    // S82 (verify-report-pr21 #4004): la tabla del día de una fecha
+    // `GROUPS_KNOCKOUT` OPEN mostraba UNA sola tabla con las filas de los dos
+    // grupos mezcladas. Con grupos, la pregunta del admin es "¿quién
+    // clasifica de MI grupo?" y una tabla combinada no la contesta: dos
+    // lados con el mismo puntaje pueden estar en grupos distintos y no
+    // competir entre sí por nada. Sólo OPEN: la fecha CERRADA cruza los
+    // grupos A PROPÓSITO (decisión #3962) — el campeón sale de la FINAL, no
+    // de su grupo, y partir esa tabla rompería el orden mixto que ya costó
+    // dos rondas fijar (W55/W56/W57).
+    //
+    // No recalcula nada: `standingsMatches` (arriba) ya viene filtrado a
+    // `fase === 'GRUPO'` cuando `isGroupsKnockout`, y cada fila de partido
+    // trae su propio `grupo` (lo escribe `groupedMatches`, `db/matchday.ts`,
+    // al generar los partidos) — la MISMA partición que `matchupsAfterGroups`
+    // arma con `groupSides` para calcular la llave. Alcanza con leerlo.
+    const groupOfSide = new Map<string, number>()
+    for (const match of standingsMatches) {
+      groupOfSide.set(sideKey(match.sideA), match.grupo)
+      groupOfSide.set(sideKey(match.sideB), match.grupo)
+    }
+    const formatoAbierto = matchday.formato
+    const groupedStandings: SideStanding[][] =
+      status === 'OPEN' && formatoAbierto.kind === 'GROUPS_KNOCKOUT'
+        ? Array.from({ length: formatoAbierto.groups }, (_, index) =>
+            standings.filter((row) => groupOfSide.get(sideKey(row.side)) === index + 1),
+          )
+        : []
+
+    const phase = currentPhase(detail.matches)
+    const phaseComplete = phase !== null && phaseIsComplete(detail.matches, phase)
+    const canClosePhase = header.isAdmin && isGroupsKnockout && phase !== null && phase !== 'FINAL' && phaseComplete
+    // Orden (fase, grupo, round): `matchdayDetail` sólo ordena por `round`, que
+    // vuelve a 1 en cada grupo Y en cada fase de la llave — sin este orden acá,
+    // `Llave` agruparía bien por sección pero las SECCIONES saldrían mezcladas
+    // (una semifinal antes que un grupo, por ejemplo).
+    const llaveMatches: LlaveMatchVM[] = [...detail.matches]
+      .sort((a, b) => {
+        const phaseDiff = PHASE_ORDER.indexOf(a.fase) - PHASE_ORDER.indexOf(b.fase)
+        if (phaseDiff !== 0) return phaseDiff
+        if (a.grupo !== b.grupo) return a.grupo - b.grupo
+        return a.round - b.round
+      })
+      .map((match) => {
+        const [gamesA, gamesB] = totalGames(match)
+        return {
+          key: match.id,
+          matchId: match.id,
+          fase: match.fase,
+          grupo: match.grupo,
+          sideAName: sideName(match.sideA),
+          sideBName: sideName(match.sideB),
+          scoreA: match.sets.length === 0 ? '–' : String(gamesA),
+          scoreB: match.sets.length === 0 ? '–' : String(gamesB),
+          winner: matchWinner(match),
+        }
+      })
 
     const { defenders, defendersAlreadyRepeated } = previousContext(lastHistory, beforeLastHistory)
     const effectiveDefenders = defenders !== null && !defendersAlreadyRepeated ? defenders : null
@@ -427,7 +576,17 @@ export default async function FechaDetailPage({ params }: PageProps) {
       header.isAdmin && status === 'OPEN'
         ? { seasonId, matchdayId: matchday.id, disciplina, matchdayNumber: matchday.number, format: config.matchFormat }
         : null
-    const remainingMatches = detail.matches.filter((match) => match.sets.length === 0).length
+    // Excluye un `TERCER_PUESTO` sin jugar (decisiones #3979/#3988): la RPC
+    // `close_matchday` (0041) ya tolera cerrar con ese único partido vacío, y
+    // el botón "Cerrar fecha" de más abajo tiene que estar de acuerdo — si
+    // no, queda deshabilitado para siempre con "faltan 1 partidos" aunque el
+    // servidor acepte cerrar. `isUnplayedThirdPlace` (core/knockout.ts): la
+    // misma regla vive también en `closeMatchday` (db/matchday.ts) y en 0041
+    // (SQL) — refactor sobre PR21 D2, sin esto la regla quedaba escrita tres
+    // veces.
+    const remainingMatches = detail.matches.filter(
+      (match) => match.sets.length === 0 && !isUnplayedThirdPlace(match),
+    ).length
     // Para los dos avisos destructivos del pie: "Volver al armado" (spec: no
     // prometer que se conservan las parejas si ya hay algo cargado) y "Borrar
     // fecha", que nombra cuántos resultados se pierde. No sale de
@@ -473,6 +632,29 @@ export default async function FechaDetailPage({ params }: PageProps) {
       status === 'CLOSED' && !orderMoved(standings, tableRows)
         ? tiebreakNote(standings, config, nameOf, discipline.pairSize)
         : null
+
+    // W70 (verify-report-pr21 #4004), decisión #3962 respetada: el orden NO
+    // cambia, esto sólo lo explica. En GROUPS_KNOCKOUT el orden congelado casi
+    // siempre mueve el podio (`knockoutPositions` lo arma con el resultado de
+    // la LLAVE, no con la tabla de grupos), así que `orderMoved` de arriba
+    // apaga a `tiebreakNote` en el caso NORMAL de una fecha con llave —no en
+    // el borde raro que `tiebreakNote` ya cubre— y el pie se queda mudo justo
+    // donde más hace falta: medido, dos lados con el mismo `PG` y la misma
+    // diferencia en un orden que ninguna columna explica. Mutuamente
+    // excluyente con `note`: cuando el orden no se movió, `tiebreakNote` ya lo
+    // explica y esto no hace falta. `config.matchFormat`, no un "games" fijo:
+    // la llave existe sobre todo en FIFA, donde eso es gol, no games —mismo
+    // argumento de `tiebreakNote` dos líneas arriba.
+    const bracketNote =
+      status === 'CLOSED' && isGroupsKnockout && orderMoved(standings, tableRows)
+        ? bracketOrderNote(config.matchFormat)
+        : null
+
+    // Decisión #3990: el costo que quedó vivo de #3979 ("se puede cerrar sin
+    // jugar el tercer puesto") era que nadie se enteraba de que el 3º/4º salió
+    // de la tabla de grupos y no de la cancha. Sólo en la fecha CERRADA — es
+    // ahí donde se congeló ese resultado.
+    const thirdNote = status === 'CLOSED' && isGroupsKnockout ? thirdPlaceNote(detail.matches) : null
 
     // Sumar invitado (spec Capability 3) sólo existe con la fecha CLOSED:
     // `promote_guest` rechaza cualquier otro estado del lado de la base, y
@@ -538,7 +720,32 @@ export default async function FechaDetailPage({ params }: PageProps) {
           })}
         </div>
 
-        {totalRounds > 0 && <Rondas rounds={rounds} totalRounds={totalRounds} carga={cargaContext} />}
+        {/* GROUPS_KNOCKOUT — `Llave` reemplaza a `Rondas` siempre, OPEN o
+            CLOSED: agrupa por fase/grupo, no por `round` (que vuelve a 1 en
+            cada grupo y en cada fase de la llave). Hasta acá (W70,
+            verify-report-pr21 #4004) una fecha CERRADA seguía mostrando
+            `Rondas`, que agrupa TODO por `round` — 4 partidos de grupo, las
+            semis, la final y el tercer puesto vacío bajo el mismo título
+            "Ronda 1", sin que la palabra "Semifinal" o "Final" aparezca una
+            sola vez, y con un contador "7/8 cargados" mintiendo sobre una
+            fecha que cerró bien (decisión #3979). No era cosmético: era el
+            registro histórico de la llave desapareciendo justo cuando la
+            fecha pasa a ser historia. `phase` sólo se le pasa mientras está
+            OPEN — una fecha CERRADA no tiene una "fase actual", ya jugó
+            todas. */}
+        {isGroupsKnockout ? (
+          <Llave
+            seasonId={seasonId}
+            matchdayId={matchday.id}
+            matchdayNumber={matchday.number}
+            phase={status === 'OPEN' ? phase : null}
+            matches={llaveMatches}
+            canClosePhase={canClosePhase}
+            carga={cargaContext}
+          />
+        ) : (
+          totalRounds > 0 && <Rondas rounds={rounds} totalRounds={totalRounds} carga={cargaContext} />
+        )}
 
         {champion !== null ? (
           <div className="flex flex-col gap-2">
@@ -555,38 +762,72 @@ export default async function FechaDetailPage({ params }: PageProps) {
         ) : (
         <div className="flex flex-col gap-2">
           <p className="text-[15px] font-extrabold tracking-[-.02em]">Tabla de la fecha</p>
-          <TablaDelDia
-            tituloLado={discipline.pairSize === 1 ? 'Jugador' : 'Pareja'}
-            muestraEmpates={matchday.allowsDraw}
-            filas={tableRows.map((row) => ({
-              key: sideKey(row.side),
-              nombre: sideName(row.side),
-              esInvitado: status === 'CLOSED' && hasGuest(row.side),
-              won: row.won,
-              drawn: row.drawn,
-              gamesDiff: row.gamesDiff,
-              // La columna son "los puntos que se llevó cada jugador"
-              // (`ui-screens.md` §9), y en la pareja del invitado los dos no se
-              // llevan lo mismo: el invitado 0 y su compañero lo que le tocó.
-              // El `??` resuelve eso solo, porque `computeAwards` no le escribe
-              // award al invitado. Antes esta fila mostraba `0` fijo, y con eso
-              // la pareja que ganaba la fecha 3-0 aparecía sin puntos abajo de
-              // otra con un partido ganado — contradiciendo la nota que está
-              // más abajo, "su compañero sí". Lo encontró la Task 14.
-              // El primer miembro del lado que tenga award manda: en la pareja
-              // del invitado los dos no cobran lo mismo (el invitado 0), y en un
-              // lado de uno hay un solo miembro y es el suyo. `members` recorre
-              // los que haya, así que la regla es la misma para las dos formas.
-              pts:
-                status === 'OPEN'
-                  ? '—'
-                  : String(
-                      members(row.side)
-                        .map((entryId) => pointsByEntry.get(entryId)?.points)
-                        .find((points) => points !== undefined) ?? 0,
-                    ),
-            }))}
-          />
+          {/* S82 (verify-report-pr21 #4004): sólo OPEN se parte por grupo —
+              `groupedStandings` (arriba) está VACÍO fuera de
+              `OPEN && GROUPS_KNOCKOUT`, así que ROUND_ROBIN y la fecha
+              CERRADA (decisión #3962, orden mixto que cruza los grupos a
+              propósito) siguen dibujando la MISMA tabla única de siempre, sin
+              tocar una línea de ese camino. */}
+          {groupedStandings.length > 0 ? (
+            <div className="flex flex-col gap-4">
+              {groupedStandings.map((rows, index) => (
+                <div key={`grupo-${index + 1}`} className="flex flex-col gap-1.5">
+                  <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
+                    Grupo {index + 1}
+                  </p>
+                  <TablaDelDia
+                    tituloLado={discipline.pairSize === 1 ? 'Jugador' : 'Pareja'}
+                    muestraEmpates={matchday.allowsDraw}
+                    filas={rows.map((row) => ({
+                      key: sideKey(row.side),
+                      nombre: sideName(row.side),
+                      // OPEN siempre: ni invitado congelado ni puntos
+                      // repartidos existen todavía. Mismos valores que la
+                      // rama sin partir ya usaba para OPEN, ver abajo.
+                      esInvitado: false,
+                      won: row.won,
+                      drawn: row.drawn,
+                      gamesDiff: row.gamesDiff,
+                      pts: '—',
+                    }))}
+                  />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <TablaDelDia
+              tituloLado={discipline.pairSize === 1 ? 'Jugador' : 'Pareja'}
+              muestraEmpates={matchday.allowsDraw}
+              filas={tableRows.map((row) => ({
+                key: sideKey(row.side),
+                nombre: sideName(row.side),
+                esInvitado: status === 'CLOSED' && hasGuest(row.side),
+                won: row.won,
+                drawn: row.drawn,
+                gamesDiff: row.gamesDiff,
+                // La columna son "los puntos que se llevó cada jugador"
+                // (`ui-screens.md` §9), y en la pareja del invitado los dos no se
+                // llevan lo mismo: el invitado 0 y su compañero lo que le tocó.
+                // El `??` resuelve eso solo, porque `computeAwards` no le escribe
+                // award al invitado. Antes esta fila mostraba `0` fijo, y con eso
+                // la pareja que ganaba la fecha 3-0 aparecía sin puntos abajo de
+                // otra con un partido ganado — contradiciendo la nota que está
+                // más abajo, "su compañero sí". Lo encontró la Task 14.
+                // El primer miembro del lado que tenga award manda: en la pareja
+                // del invitado los dos no cobran lo mismo (el invitado 0), y en un
+                // lado de uno hay un solo miembro y es el suyo. `members` recorre
+                // los que haya, así que la regla es la misma para las dos formas.
+                pts:
+                  status === 'OPEN'
+                    ? '—'
+                    : String(
+                        members(row.side)
+                          .map((entryId) => pointsByEntry.get(entryId)?.points)
+                          .find((points) => points !== undefined) ?? 0,
+                      ),
+              }))}
+            />
+          )}
 
           {status === 'OPEN' && (
             <p className="text-[12.5px] font-[550] text-muted">
@@ -605,6 +846,8 @@ export default async function FechaDetailPage({ params }: PageProps) {
           )}
 
           {note !== null && <p className="text-[12.5px] font-[550] text-muted">{note}</p>}
+          {bracketNote !== null && <p className="text-[12.5px] font-[550] text-muted">{bracketNote}</p>}
+          {thirdNote !== null && <p className="text-[12.5px] font-[550] text-muted">{thirdNote}</p>}
         </div>
         )}
 

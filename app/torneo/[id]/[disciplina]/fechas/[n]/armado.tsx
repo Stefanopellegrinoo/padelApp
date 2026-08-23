@@ -1,10 +1,11 @@
 'use client'
 
 import { useOptimistic, useState, useTransition } from 'react'
-import { MAX_PLAYERS, MIN_PLAYERS, type SideSize } from '@/core'
+import { MAX_PLAYERS, MIN_PLAYERS, offerableFormats, type MatchdayFormat, type SideSize } from '@/core'
 import { initials } from '@/app/format'
 import {
   addGuestPair,
+  changeMatchdayFormat,
   confirmMatchday,
   drawPairs,
   removeGuestPair,
@@ -40,6 +41,18 @@ export interface DraftPairVM {
   names: string
   defending: boolean
   withGuest: boolean
+}
+
+/**
+ * Un grupo de la vista previa (S83, verify-report-pr21 #4004): a quiénes
+ * dejaría `generatePairs` en este grupo si se confirmara la fecha con el
+ * orden de HOY. `null` (no `[]`) cuando no hay vista previa que mostrar —
+ * `page.tsx` no sabe repartir sin partidos generados, así que un array
+ * vacío sería un reparto inventado, no la ausencia de uno.
+ */
+export interface GroupPreviewVM {
+  number: number
+  names: string[]
 }
 
 /**
@@ -99,6 +112,15 @@ interface ArmadoProps {
    * realmente se pierde.
    */
   loadedResults: number
+  /** El `matchdays.formato` guardado hoy (REQ-D8-1) — `ROUND_ROBIN` por default hasta que se elija otro. */
+  formato: MatchdayFormat
+  /**
+   * El reparto real en grupos (S83, verify-report-pr21 #4004), calculado en
+   * `page.tsx` con las MISMAS funciones que `generatePairs` usa para armar
+   * de verdad. `null` con `ROUND_ROBIN` elegido, o mientras el armado está
+   * incompleto y `pairingContextFor` todavía no puede resolver un orden.
+   */
+  groupPreview: GroupPreviewVM[] | null
 }
 
 const STEP_TITLE = 'text-[15px] font-extrabold tracking-[-.02em]'
@@ -128,6 +150,8 @@ export function Armado({
   guestPairs,
   pairs,
   loadedResults,
+  formato,
+  groupPreview,
 }: ArmadoProps) {
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -201,6 +225,9 @@ export function Armado({
     looseGuests: looseGuests.length,
     guestPairs: guestPairs.length,
     sideSize,
+    // El GUARDADO, no la sugerencia (W72): `matches` tiene que contar los
+    // partidos del formato que ya está en la base, no asumir round robin.
+    formato,
   })
   const { size, sides, matches, complete, needsLooseGuest, eventualSize, tooFew, tooMany } = shape
   const label = words(sideSize)
@@ -243,6 +270,46 @@ export function Armado({
           )}
         </div>
       </section>
+
+      <SelectorDeFormato
+        formato={formato}
+        // Gateado por `sizeSettled` por el mismo motivo que la banda de
+        // arriba: mientras el tilde vuela, `eventualSize`/`sides` puede leer
+        // un número que no existe en ningún momento, y con él la lista de
+        // ofrecidos podría prender y apagar botones sin que nada haya
+        // cambiado de verdad todavía. `0` lados no ofrece ningún grupo
+        // (`offerableFormats(0)` es sólo `ROUND_ROBIN`), así que el merge de
+        // `SelectorDeFormato` con el `formato` guardado (W73) deja ver
+        // exactamente lo mismo que antes de settear.
+        sides={sizeSettled ? shape.sides : 0}
+        pending={pending}
+        onChange={(next) => run(() => changeMatchdayFormat(seasonId, matchdayId, matchdayNumber, next))}
+      />
+
+      {/* S83 (verify-report-pr21 #4004): entre elegir "2 grupos + llave" y
+          confirmar no había forma de ver quién cae en cada grupo — recién se
+          sabía con la fecha ya armada, tarde para cambiar de opinión.
+          `groupPreview` sale de `page.tsx` con las MISMAS funciones que
+          `generatePairs` corre al confirmar, así que el reparto que se ve
+          acá es el reparto real, no uno inventado. */}
+      {groupPreview !== null && (
+        <section className="flex flex-col gap-3 rounded-card border border-line bg-surface p-4">
+          <div className="flex flex-col gap-1">
+            <h2 className={STEP_TITLE}>Cómo quedan los grupos</h2>
+            <p className="text-[11.5px] font-[600] text-muted">
+              Con el orden de hoy. Si cambia quién viene, puede cambiar el reparto.
+            </p>
+          </div>
+          {groupPreview.map((group) => (
+            <div key={group.number} className="flex flex-col gap-1.5">
+              <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
+                Grupo {group.number}
+              </p>
+              <p className="text-[13.5px] font-[650]">{group.names.join(' · ')}</p>
+            </div>
+          ))}
+        </section>
+      )}
 
       <section className="flex flex-col gap-2">
         <div className="flex items-center justify-between gap-2 border-b border-line pb-2">
@@ -434,6 +501,96 @@ export function Armado({
 
       <BorrarFecha seasonId={seasonId} matchdayId={matchdayId} disciplina={disciplina} loadedResults={loadedResults} />
     </div>
+  )
+}
+
+const FORMATO_BOTON = 'flex-1 rounded-field border-[1.5px] p-3 text-[13.5px] font-extrabold'
+const FORMATO_ELEGIDO = 'border-accent bg-accent text-accent-text'
+const FORMATO_LIBRE = 'border-line'
+
+/**
+ * El selector de formato de la fecha (REQ-D8-1): "todos contra todos"
+ * siempre, más un botón por CADA tamaño de grupo OFRECIBLE para `sides`
+ * lados hoy (W75, verify-report-pr21 #4004 / decisión de Stefano en
+ * `decisions/formatos-ofrecidos-en-el-armado`) — no un único botón que sólo
+ * deja aceptar o rechazar la sugerencia. `offerableFormats` (`core/knockout.ts`)
+ * es la fuente de qué grupos son ofrecibles: `ROUND_ROBIN` siempre, más cada
+ * `groups ∈ {2, 4}` donde CADA grupo tenga 3 lados o más — `groups = 1` no
+ * se ofrece NUNCA (es el mismo round robin más un partido, no ahorra nada) y
+ * un grupo de 2 tiene tasa de eliminación cero (pasan los dos).
+ *
+ * Exportado y afuera de `Armado` para poder RENDERIZARLO en la suite, mismo
+ * precedente que `PanelGoles` (`./carga.tsx`) y `PasoFormato`
+ * (`app/torneos/nuevo/wizard.tsx`): recibe `onChange` en vez de importar la
+ * action, así que la suite no arrastra `next/headers` al renderizarlo.
+ *
+ * El `formato` YA GUARDADO se dibuja SIEMPRE, esté ofrecible hoy o no (W73,
+ * verify-report-pr21 #4004): con 12 presentes el admin elige "4 grupos +
+ * llave", bajan dos y `offerableFormats(10)` ya no lo incluye — eso no borra
+ * el botón ni lo deja sin marcar, porque la base sigue armando con ese
+ * formato hasta que alguien elija otro. Lo que NO hace es ofrecer un
+ * `groups` nuevo que nadie propuso: un `formato` huérfano se agrega a la
+ * lista ofrecida, no la reemplaza.
+ *
+ * `role="radiogroup"` + `role="radio"`/`aria-checked` por botón (S81,
+ * verify-report-pr21 #4004): antes, "cuál está elegido" sólo se distinguía
+ * por la clase de Tailwind (`FORMATO_ELEGIDO` vs `FORMATO_LIBRE`) — sin
+ * ninguna señal semántica, un lector de pantalla no tenía forma de saber cuál
+ * de los formatos está marcado. Es exactamente el patrón "radio group" de la
+ * ARIA Authoring Practices para un conjunto de opciones mutuamente
+ * excluyentes, sobre `<button>` en vez de `<input type="radio">` porque acá
+ * no hay un `<form>` que serialice el valor — el estado lo maneja `onChange`.
+ */
+export function SelectorDeFormato({
+  formato,
+  sides,
+  pending,
+  onChange,
+}: {
+  formato: MatchdayFormat
+  /** Lados de HOY: de acá sale qué botones de grupos se ofrecen (`offerableFormats`), no de una sugerencia. */
+  sides: number
+  pending: boolean
+  onChange: (formato: MatchdayFormat) => void
+}) {
+  const ofertados = offerableFormats(sides).filter(
+    (candidato): candidato is Extract<MatchdayFormat, { kind: 'GROUPS_KNOCKOUT' }> => candidato.kind === 'GROUPS_KNOCKOUT',
+  )
+  const grupos =
+    formato.kind === 'GROUPS_KNOCKOUT' && !ofertados.some((candidato) => candidato.groups === formato.groups)
+      ? [...ofertados, formato]
+      : ofertados
+  return (
+    <section className="flex flex-col gap-2">
+      <h2 className={`${STEP_TITLE} border-b border-line pb-2`}>Formato de la fecha</h2>
+      <div className="flex gap-2" role="radiogroup" aria-label="Formato de la fecha">
+        <button
+          type="button"
+          role="radio"
+          aria-checked={formato.kind === 'ROUND_ROBIN'}
+          disabled={pending}
+          onClick={() => onChange({ kind: 'ROUND_ROBIN' })}
+          className={`${FORMATO_BOTON} ${formato.kind === 'ROUND_ROBIN' ? FORMATO_ELEGIDO : FORMATO_LIBRE}`}
+        >
+          Todos contra todos
+        </button>
+        {grupos.map((candidato) => (
+          <button
+            key={candidato.groups}
+            type="button"
+            role="radio"
+            aria-checked={formato.kind === 'GROUPS_KNOCKOUT' && formato.groups === candidato.groups}
+            disabled={pending}
+            onClick={() => onChange(candidato)}
+            className={`${FORMATO_BOTON} ${
+              formato.kind === 'GROUPS_KNOCKOUT' && formato.groups === candidato.groups ? FORMATO_ELEGIDO : FORMATO_LIBRE
+            }`}
+          >
+            {candidato.groups} grupos + llave
+          </button>
+        ))}
+      </div>
+    </section>
   )
 }
 

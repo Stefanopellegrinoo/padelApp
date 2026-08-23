@@ -13,6 +13,8 @@ const FOUR: MastersFour = ['p1', 'p2', 'p3', 'p4']
 function played(sideA: Side, sideB: Side, aWins: boolean): MatchResult {
   return {
     round: 1,
+    fase: 'GRUPO',
+    grupo: 1,
     sideA,
     sideB,
     sets: [aWins ? { gamesA: 4, gamesB: 1 } : { gamesA: 1, gamesB: 4 }],
@@ -119,7 +121,9 @@ describe('mastersChampion', () => {
     const fixture = mastersFixture(FOUR)
     const first = fixture[0]
     if (first === undefined) throw new Error('bad test fixture')
-    const matches: MatchResult[] = [{ round: 1, sideA: first.sideA, sideB: first.sideB, sets: [] }]
+    const matches: MatchResult[] = [
+      { round: 1, fase: 'GRUPO', grupo: 1, sideA: first.sideA, sideB: first.sideB, sets: [] },
+    ]
     expect(mastersChampion(FOUR, matches)).toBe('p1')
   })
 

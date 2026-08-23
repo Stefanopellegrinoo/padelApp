@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { newTournamentPayload, type Squad } from '@/app/torneos/nuevo/wizard-state'
 import { defaultConfig, disciplineSlugs } from '@/core'
 import { seasonHeader } from './read'
 import { createSeason } from './season'
@@ -198,5 +199,82 @@ describe('createSeason con múltiples disciplinas (REQ-D1-1, contrato S13)', () 
       .eq('season_id', seasonId)
       .single()
     expect(data?.position).toBe(0)
+  })
+})
+
+/**
+ * C29 (verify-report-pr21, #4004): el radio "Individual" del wizard NO podía
+ * crear un torneo — `createSeason` lo rechazaba SIEMPRE. `newTournamentPayload`
+ * mandaba el MISMO objeto `config` como `seasons.config` (legado, validado con
+ * `sideSize` FIJO en 2, `db/season.ts:273`) y como `disciplines[0].config`
+ * (validado con `pairSize=1`). Con 8 lados de a uno esa config trae 8 valores
+ * de puntos: pasa la validación de la disciplina y rompe la del legado, que
+ * exige 4. No hay config que pase las dos — por eso el test entra por el
+ * camino REAL: `newTournamentPayload` + `createSeason` como `authenticated`,
+ * no un insert armado a mano como el resto de este archivo.
+ */
+describe('createSeason vía el wizard real, disciplina de a uno (C29)', () => {
+  it('el wizard con "Individual" crea el torneo: FIFA pair_size=1 con la curva de #3963', async () => {
+    const admin = await createTestUser()
+    // El `config` de entrada es siempre la curva de a dos (C29, W76/#4017):
+    // la curva de a uno la arma `newTournamentPayload` sola, a partir de
+    // `pairSizes.FIFA`, no de lo que traiga este argumento.
+    const config = defaultConfig(8)
+    const squad: Squad = { names: squadNames(8), mySeat: null }
+
+    const payload = newTournamentPayload('Liga FIFA', squad, config, ['FIFA'], { PADEL: 2, FIFA: 1 })
+    const { seasonId } = await createSeason(admin.client, payload)
+
+    const db = adminClient()
+    const { data } = await db
+      .from('disciplines')
+      .select('kind, pair_size, config')
+      .eq('season_id', seasonId)
+      .single()
+    expect(data?.pair_size).toBe(1)
+    expect((data?.config as { points: number[] } | null)?.points).toEqual([10, 7, 5, 3, 2, 1, 0, 0])
+  })
+
+  /**
+   * W69 (tanda de cierre, #4006): "Lados" era UN solo control para todo el
+   * paso 4 — con Pádel + FIFA juntos, aplicar `pairSize=1` a las DOS sería
+   * herencia cruzada (REQ-D2-1: "sin herencia cruzada") — el pádel nacería
+   * 1v1 sin que nadie lo haya pedido para pádel. El arreglo de entonces
+   * evitaba la herencia IGNORANDO "Individual" con dos o más marcadas —
+   * las dos nacían en 2, sin excepción.
+   *
+   * W76 (verify-report-pr21-cierre, #4016) + decisión #4017: ESE arreglo
+   * cambió un bug por otro de la misma familia — la pantalla mostraba la
+   * curva de a uno para FIFA y el torneo se creaba igual, con las dos en 2,
+   * sin decir una palabra. El wizard ahora lleva un selector "Parejas /
+   * Individual" POR disciplina, así que "no cruza a Pádel" ya no significa
+   * "Individual se ignora": significa que CADA disciplina nace con SU
+   * `pairSize`, elegido en SU propio radio — pádel en 2, FIFA en 1, las dos
+   * a la vez, sin que ninguna le pise el dato a la otra.
+   */
+  it('con Pádel + FIFA marcados, cada uno nace con SU pairSize -- sin herencia cruzada en ningún sentido (W69/W76, REQ-D2-1)', async () => {
+    const admin = await createTestUser()
+    const config = defaultConfig(8)
+    const squad: Squad = { names: squadNames(8), mySeat: null }
+
+    const payload = newTournamentPayload('Mixto', squad, config, ['PADEL', 'FIFA'], { PADEL: 2, FIFA: 1 })
+    const { seasonId } = await createSeason(admin.client, payload)
+
+    const db = adminClient()
+    const { data } = await db
+      .from('disciplines')
+      .select('kind, pair_size, config')
+      .eq('season_id', seasonId)
+      .order('position', { ascending: true })
+    expect(data?.map((row) => ({ kind: row.kind, pair_size: row.pair_size }))).toEqual([
+      { kind: 'PADEL', pair_size: 2 },
+      { kind: 'FIFA', pair_size: 1 },
+    ])
+    // Cada fila con SU curva (#3963: 8 jugadores en parejas son 4 lados,
+    // la curva de 4; 8 lados de a uno puntúan los primeros seis).
+    const padel = data?.find((row) => row.kind === 'PADEL')
+    const fifa = data?.find((row) => row.kind === 'FIFA')
+    expect((padel?.config as { points: number[] } | null)?.points).toEqual([10, 6, 3, 1])
+    expect((fifa?.config as { points: number[] } | null)?.points).toEqual([10, 7, 5, 3, 2, 1, 0, 0])
   })
 })

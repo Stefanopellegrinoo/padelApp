@@ -14,7 +14,7 @@ const CONFIG: SeasonConfig = {
 }
 
 function award(entryId: string, points: number): Award {
-  return { entryId, position: 1, points }
+  return { entryId, position: 1, points, lines: [] }
 }
 
 describe('snapshotForMatchday', () => {

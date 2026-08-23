@@ -58,11 +58,14 @@ const DEFAULT_POINTS: Record<number, number[]> = {
  * puestos con ceros abajo. Corregido acá, mismo criterio que N48 — la frase
  * falsa vive en el código y ahí se arregla.)
  *
- * Lo que SIGUE sin existir es el camino de PANTALLA: ningún caller de hoy pasa
- * `sideSize = 1`. Son los otros dos bloqueos del 1v1, y van con PR21 a
- * propósito — abrir el camino antes de que existan los grupos dejaría crear
- * una fecha de 12 de a uno, que son 66 partidos contra 15 en parejas (W32,
- * decisión #3863).
+ * (S80, verify-report-pr21 #4004): este bloque decía *"Lo que SIGUE sin
+ * existir es el camino de PANTALLA: ningún caller de hoy pasa `sideSize =
+ * 1`"*. Falso desde las Rebanadas E/F: `configFor` (`app/torneos/nuevo/
+ * wizard-state.ts`, caller de `wizard.tsx`) y `newDisciplineSpec` (misma
+ * `wizard-state.ts`, caller de `app/torneo/[id]/ajustes/actions.ts`) le pasan
+ * `sideSize = 1` a esta función cuando el admin elige "Individual" — los dos
+ * caminos de creación de disciplina. Corregido acá, mismo criterio que N48 y
+ * la corrección de arriba: la frase falsa vive en el código y ahí se arregla.
  */
 export function defaultConfig(squadSize: number, sideSize: SideSize = 2): SeasonConfig {
   const sideCount = squadSize / sideSize

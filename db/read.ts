@@ -15,7 +15,9 @@ import type {
   Award,
   DisciplineId,
   EntryId,
+  MatchdayFormat,
   MatchResult,
+  Phase,
   PlayedMatchday,
   SeasonConfig,
   SeasonStatus,
@@ -163,6 +165,12 @@ export interface MatchdaySummary {
    * `closeMatchday`, que ya juzgaba los resultados con `matchday.allows_draw`.
    */
   allowsDraw: boolean
+  /**
+   * `matchdays.formato` (REQ-D8-1, Rebanada C1): cómo se arma esta fecha en
+   * particular. `ROUND_ROBIN` por default (0040) — una fecha de pádel de
+   * siempre nunca lo cambia y sigue viendo exactamente eso.
+   */
+  formato: MatchdayFormat
 }
 
 export interface MatchdayDetail {
@@ -205,6 +213,7 @@ interface MatchdayRow {
   played_on: string | null
   discipline_id: string
   allows_draw: boolean
+  formato: unknown
 }
 
 /** `null` for an anonymous or logged-out caller — never throws, so a stranger's read still resolves to "nothing theirs" instead of blowing up. */
@@ -258,6 +267,9 @@ function toMatchdaySummary(row: MatchdayRow): MatchdaySummary {
     // `DisciplineId`, no `string` a secas.
     disciplineId: row.discipline_id as DisciplineId,
     allowsDraw: row.allows_draw,
+    // Mismo doble cast que `db/matchday.ts` ya usa para esta misma columna: lo
+    // honesto es `matchdays_formato_kind` (0040), no la confianza.
+    formato: row.formato as unknown as MatchdayFormat,
   }
 }
 
@@ -593,7 +605,7 @@ export async function matchdaysOf(supabase: Client, seasonId: string): Promise<M
   if (disciplineId === null) return []
   const { data, error } = await supabase
     .from('matchdays')
-    .select('id, number, kind, status, played_on, discipline_id, allows_draw')
+    .select('id, number, kind, status, played_on, discipline_id, allows_draw, formato')
     .eq('discipline_id', disciplineId)
     .order('number', { ascending: true })
   if (error) throw new EdgeError(`No se pudieron leer las fechas: ${error.message}`)
@@ -621,7 +633,7 @@ export async function matchdaysOf(supabase: Client, seasonId: string): Promise<M
 export async function seasonMatchdaysOf(supabase: Client, seasonId: string): Promise<MatchdaySummary[]> {
   const { data, error } = await supabase
     .from('matchdays')
-    .select('id, number, kind, status, played_on, discipline_id, allows_draw')
+    .select('id, number, kind, status, played_on, discipline_id, allows_draw, formato')
     .eq('season_id', seasonId)
     .order('number', { ascending: true })
   if (error) throw new EdgeError(`No se pudieron leer las fechas: ${error.message}`)
@@ -706,7 +718,10 @@ export async function seasonAwardsOf(
   for (const row of data ?? []) {
     const meta = metaByMatchdayId.get(row.matchday_id)
     if (meta === undefined) continue
-    const award: Award = { entryId: row.entry_id, position: row.position, points: row.points }
+    // `lines: []` — mismo motivo que `db/season.ts: awardsBefore` (REQ-D10-2):
+    // esta lectura no trae `award_lines`, y sus consumidores (ranking,
+    // stats, historial) sólo usan `points`/`position`.
+    const award: Award = { entryId: row.entry_id, position: row.position, points: row.points, lines: [] }
     let byNumber = result.get(meta.disciplineId)
     if (byNumber === undefined) {
       byNumber = new Map()
@@ -723,7 +738,7 @@ export async function seasonAwardsOf(
 export async function matchdayDetail(supabase: Client, matchdayId: string): Promise<MatchdayDetail> {
   const { data: matchdayRow, error: matchdayError } = await supabase
     .from('matchdays')
-    .select('id, number, kind, status, played_on, discipline_id, allows_draw')
+    .select('id, number, kind, status, played_on, discipline_id, allows_draw, formato')
     .eq('id', matchdayId)
     .maybeSingle()
   if (matchdayError) throw new EdgeError(`No se pudo leer la fecha: ${matchdayError.message}`)
@@ -782,7 +797,10 @@ export async function awardsOf(supabase: Client, seasonId: string): Promise<Map<
   for (const row of awards ?? []) {
     const matchdayNumber = numberOf.get(row.matchday_id)
     if (matchdayNumber === undefined) continue
-    const award: Award = { entryId: row.entry_id, position: row.position, points: row.points }
+    // `lines: []` — mismo motivo que `db/season.ts: awardsBefore` (REQ-D10-2):
+    // esta lectura no trae `award_lines`, y sus consumidores (ranking,
+    // stats, historial) sólo usan `points`/`position`.
+    const award: Award = { entryId: row.entry_id, position: row.position, points: row.points, lines: [] }
     const bucket = result.get(matchdayNumber)
     if (bucket === undefined) result.set(matchdayNumber, [award])
     else bucket.push(award)
@@ -818,7 +836,7 @@ async function pairsAndMatchesOf(
 
   const { data: matchRows, error: matchesError } = await supabase
     .from('matches')
-    .select('id, round, pair_a, pair_b')
+    .select('id, round, pair_a, pair_b, fase, grupo')
     .eq('matchday_id', matchdayId)
     .order('round', { ascending: true })
   if (matchesError) throw new EdgeError(`No se pudieron leer los partidos: ${matchesError.message}`)
@@ -850,7 +868,15 @@ async function pairsAndMatchesOf(
         `El partido ${row.id} referencia una pareja que no está en la fecha. Esto es un bug.`,
       )
     }
-    return { id: row.id, round: row.round, sideA, sideB, sets: setsByMatch.get(row.id) ?? [] }
+    return {
+      id: row.id,
+      round: row.round,
+      fase: row.fase as Phase,
+      grupo: row.grupo,
+      sideA,
+      sideB,
+      sets: setsByMatch.get(row.id) ?? [],
+    }
   })
 
   return { sides: [...sideById.values()], matches }

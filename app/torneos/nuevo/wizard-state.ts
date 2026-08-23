@@ -14,6 +14,7 @@ import {
   pointsErrors,
   type MatchFormat,
   type SeasonConfig,
+  type SideSize,
 } from '@/core'
 
 /** Los rangos son medidas del handoff (§6 paso 4), no decisiones de este código. */
@@ -131,16 +132,48 @@ export function disciplinesWarning(picked: readonly DisciplineKind[]): string | 
  * está en el grant de UPDATE de `disciplines` (`0015_disciplines.sql:70`), así
  * que la disciplina que nace sin empates no los tiene nunca más.
  *
- * Lo que sigue sin preguntar es `pair_size` —FIFA es 1v1 Y 2v2, decisión de
- * producto #5— y por eso todo lo que sale de acá se juega de a dos, como hoy.
+ * `pairSize` —FIFA es 1v1 Y 2v2, decisión de producto #5— es OPCIONAL y sin
+ * default acá a propósito: quien no lo pasa arma parejas, como siempre
+ * (`addDiscipline`/`NewSeasonDiscipline` caen a 2 si no llega). Sólo se agrega
+ * al resultado cuando se pasa —el pádel de hoy no gana una clave `pairSize`
+ * que antes no tenía, que rompería el `toEqual` de sus propios tests.
+ * Rebanada F (decisión `decisions/alcance-desbloqueo-1v1-pr21`) es quien por
+ * fin lo pasa, desde el radio "Lados".
+ *
  * Quien quiera cambiar los puntos o las fechas de una disciplina lo hace
  * después en Ajustes → Formato (`updateDisciplineConfig`, PR6).
  */
 export function buildDisciplines(
   picked: readonly DisciplineKind[],
   config: SeasonConfig,
-): { kind: DisciplineKind; config: SeasonConfig; allowsDraw: boolean }[] {
-  return picked.map((kind) => ({ kind, ...disciplineProfile(kind, config) }))
+  pairSize?: SideSize,
+): { kind: DisciplineKind; config: SeasonConfig; allowsDraw: boolean; pairSize?: SideSize }[] {
+  return picked.map((kind) => ({
+    kind,
+    ...disciplineProfile(kind, config),
+    ...(pairSize === undefined ? {} : { pairSize }),
+  }))
+}
+
+/**
+ * La fila que arma "+ Agregar disciplina" (Ajustes, REQ-D1-2): la misma forma
+ * que una fila de `buildDisciplines`, para UNA sola disciplina y con la
+ * config del tamaño de SU plantel elegido (`headcount`, no el de toda la
+ * temporada — REQ-D1-4, solape parcial).
+ *
+ * Vive acá y no en `ajustes/actions.ts` por lo mismo que el resto de este
+ * archivo: `actions.ts` es `'use server'` y no se puede importar en la suite
+ * unitaria sin arrastrar `next/headers` (mismo precedente que
+ * `SelectorDeFormato`, PR21 D2 — un pedazo se saca a un archivo sin ese
+ * import para poder testearlo). El único tramo que queda sin test es la línea
+ * de una sola llamada que le reenvía este resultado a `addDiscipline`.
+ */
+export function newDisciplineSpec(
+  kind: DisciplineKind,
+  headcount: number,
+  pairSize?: SideSize,
+): { kind: DisciplineKind; config: SeasonConfig; allowsDraw: boolean; pairSize?: SideSize } {
+  return buildDisciplines([kind], defaultConfig(headcount, pairSize), pairSize)[0]!
 }
 
 /** Cuántos nombres del plantel están cargados de verdad. */
@@ -245,6 +278,89 @@ export function submitSeats({ names, mySeat }: Squad): {
 }
 
 /**
+ * El payload exacto que espera `createTournament` (`./actions`), armado a
+ * partir de lo que el wizard fue juntando en sus cinco pasos.
+ *
+ * Vivía inline adentro del `startTransition` del submit de `Wizard` —puro
+ * salvo el `await` final— e intestable ahí por eso: mismo motivo por el que
+ * `wizard-state.ts`/`armado-state.ts`/`carga-state.ts`/`sumar-state.ts`
+ * existen, sacar la lógica del `.tsx` para poder probarla sin DOM y sin base.
+ *
+ * `squadSize` sale del plantel REALMENTE cargado (`submitSeats(squad)`), no
+ * del que traía `config`: la config del paso 4 puede quedar desactualizada
+ * si el admin agrega o saca nombres después de tocarla, y `buildDisciplines`
+ * tiene que ver el tamaño real para que la curva de puntos sea la correcta.
+ *
+ * `pairSize` es el punto de unión de la Rebanada F: viaja tal cual hasta
+ * `buildDisciplines`, así que elegir "Individual" llega hasta ACÁ, en el
+ * payload real que cruza al server action (#3957 — se pinchan los
+ * argumentos, no que la función interna acepte el parámetro).
+ *
+ * OBLIGATORIO acá y no opcional como en `buildDisciplines`/`newDisciplineSpec`:
+ * este único caller (`Wizard`) SIEMPRE tiene un `pairSize` (nace en 2, el
+ * `useState` no es `undefined` nunca), así que dejarlo opcional sólo abriría
+ * la puerta a olvidarlo en el sitio del submit sin que nada lo marque. Con el
+ * parámetro obligatorio, olvidarlo es un error de `tsc`, no un test que haya
+ * que escribir y mantener — más fuerte que cualquier test (verificado con
+ * mutación: sacar el argumento en `wizard.tsx` rompe `npm run typecheck`).
+ *
+ * C29 (verify-report-pr21, #4004): acá adentro `config` viaja hacia DOS
+ * lugares con reglas DISTINTAS, y antes de este fix era el MISMO objeto para
+ * los dos. `seasons.config` es el legado (`db/season.ts: createSeason`,
+ * comentario "siempre pádel, sideSize=2 fijo, nunca disciplina-specific") y
+ * `createSeason` lo valida con `sideSize` HARDCODEADO en 2. Con
+ * `pairSize=1`, `builtConfig.points` trae la curva de la decisión #3963 (8-12
+ * lados) — pasa la validación de la disciplina y rompe la del legado, que
+ * exige la MITAD de esos valores. No existe un `config` que pase las dos: el
+ * legado necesita su PROPIA curva, siempre de a dos, sin importar qué eligió
+ * "Lados". El plantel llega siempre par acá (`squadWarning`, paso 2), así que
+ * esa curva de a dos siempre existe.
+ *
+ * W69 (tanda de cierre, #4006) + W76/decisión #4017 (verify-report-pr21-cierre,
+ * #4016): "Lados" ERA un solo control para las disciplinas marcadas del paso
+ * 4 — sólo era inequívoco con UNA marcada, así que con dos o más se ignoraba
+ * y todas nacían en 2. Eso evitaba la herencia cruzada (REQ-D2-1) pero abría
+ * otra: la pantalla podía mostrar "Individual" tildado sin que el dato lo
+ * reflejara. El wizard ahora trae un selector POR disciplina (`pairSizes`,
+ * uno por cada `DisciplineKind`), así que acá cada disciplina arma SU PROPIA
+ * config con SU PROPIA curva — `picked.length` ya no importa: dos
+ * disciplinas nunca comparten `pairSize` a menos que el admin haya elegido
+ * lo mismo para las dos a propósito. `config` (el que entra y el que se
+ * devuelve como legado) sigue siendo SIEMPRE la curva de a dos (C29): el
+ * paso 4 ya no tiene un control que la cambie, ahora que "Lados" bajó al
+ * paso 1.
+ */
+export function newTournamentPayload(
+  name: string,
+  squad: Squad,
+  config: SeasonConfig,
+  picked: readonly DisciplineKind[],
+  pairSizes: Record<DisciplineKind, SideSize>,
+): {
+  name: string
+  squadNames: string[]
+  mySeatIndex: number | null
+  config: SeasonConfig
+  disciplines: ReturnType<typeof buildDisciplines>
+} {
+  const seats = submitSeats(squad)
+  const squadSize = seats.squadNames.length
+  const builtConfig = { ...config, squadSize }
+
+  return {
+    name,
+    ...seats,
+    config: builtConfig,
+    disciplines: picked.flatMap((kind) => {
+      const pairSize = pairSizes[kind]
+      const disciplineConfig: SeasonConfig =
+        pairSize === 2 ? builtConfig : { ...builtConfig, points: configFor(squadSize, pairSize).points }
+      return buildDisciplines([kind], disciplineConfig, pairSize)
+    }),
+  }
+}
+
+/**
  * La config por defecto para un plantel de este tamaño.
  *
  * Sale de `defaultConfig` y no de la lista del handoff (§6 paso 4, "Defaults
@@ -253,19 +369,26 @@ export function submitSeats({ names, mySeat }: Squad): {
  * está implementado, testeado, validado por `validateConfig` y usado por el
  * seed y por todos los tests contra la base. Un wizard que produjera otros
  * defaults haría que ninguna captura de pantalla coincida con ningún fixture.
+ *
+ * `sideSize` es opcional y se lo pasa tal cual a `defaultConfig` —antes se
+ * dejaba caer acá, y con `sideSize=1` la curva de puntos salía la de parejas
+ * en vez de la de la decisión #3963 (S75, cerrado en Rebanada E).
  */
-export function configFor(squadSize: number): SeasonConfig {
-  return defaultConfig(squadSize)
+export function configFor(squadSize: number, sideSize?: SideSize): SeasonConfig {
+  return defaultConfig(squadSize, sideSize)
 }
 
 /**
  * Rehace `points` cuando cambia el tamaño del plantel, **pisando** lo que el
  * admin hubiera tocado. No es una pérdida: con otro plantel hace falta otra
  * cantidad de valores, y una lista de 4 en un plantel de 12 es inválida.
+ *
+ * `sideSize` viaja igual que en `configFor` (mismo cierre de S75): sin
+ * pasarlo, la curva que sale es la de parejas.
  */
-export function resizeConfig(config: SeasonConfig, squadSize: number): SeasonConfig {
+export function resizeConfig(config: SeasonConfig, squadSize: number, sideSize?: SideSize): SeasonConfig {
   if (config.squadSize === squadSize) return config
-  return { ...config, squadSize, points: configFor(squadSize).points }
+  return { ...config, squadSize, points: configFor(squadSize, sideSize).points }
 }
 
 /**

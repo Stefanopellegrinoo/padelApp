@@ -22,7 +22,7 @@ const B = pair('b1', 'b2')
 const C = pair('c1', 'c2')
 
 function partido(izq: Side, der: Side, golesA: number, golesB: number): MatchResult {
-  return { round: 1, sideA: izq, sideB: der, sets: [{ gamesA: golesA, gamesB: golesB }] }
+  return { round: 1, fase: 'GRUPO', grupo: 1, sideA: izq, sideB: der, sets: [{ gamesA: golesA, gamesB: golesB }] }
 }
 
 describe('championRecord en pádel — no se mueve', () => {

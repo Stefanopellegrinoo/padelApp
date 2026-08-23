@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import type { MatchdayFormat } from '@/core'
 import { applySeatTick, matchdayShape, type SeatVM } from './armado-state'
+
+const ROUND_ROBIN: MatchdayFormat = { kind: 'ROUND_ROBIN' }
 
 const squad: SeatVM[] = [
   { entryId: 'a', name: 'Ana', playing: true },
@@ -79,7 +82,7 @@ describe('applySeatTick', () => {
 describe('matchdayShape', () => {
   describe('de a dos (pair_size=2)', () => {
     it('parte el plantel en parejas y cuenta el round robin', () => {
-      const shape = matchdayShape({ confirmed: 12, looseGuests: 0, guestPairs: 0, sideSize: 2 })
+      const shape = matchdayShape({ confirmed: 12, looseGuests: 0, guestPairs: 0, sideSize: 2, formato: ROUND_ROBIN })
       expect(shape.size).toBe(12)
       expect(shape.sides).toBe(6)
       expect(shape.matches).toBe(15)
@@ -88,7 +91,7 @@ describe('matchdayShape', () => {
     })
 
     it('con plantel impar pide el invitado suelto que empareja', () => {
-      const shape = matchdayShape({ confirmed: 7, looseGuests: 0, guestPairs: 0, sideSize: 2 })
+      const shape = matchdayShape({ confirmed: 7, looseGuests: 0, guestPairs: 0, sideSize: 2, formato: ROUND_ROBIN })
       expect(shape.needsLooseGuest).toBe(true)
       expect(shape.eventualSize).toBe(8)
       // 7 solos no bloquea por piso: van a ser 8.
@@ -96,14 +99,14 @@ describe('matchdayShape', () => {
     })
 
     it('no vuelve a pedir un suelto cuando ya hay uno', () => {
-      const shape = matchdayShape({ confirmed: 7, looseGuests: 1, guestPairs: 0, sideSize: 2 })
+      const shape = matchdayShape({ confirmed: 7, looseGuests: 1, guestPairs: 0, sideSize: 2, formato: ROUND_ROBIN })
       expect(shape.needsLooseGuest).toBe(false)
       expect(shape.size).toBe(8)
       expect(shape.complete).toBe(true)
     })
 
     it('una pareja invitada suma dos y no cambia la paridad', () => {
-      const shape = matchdayShape({ confirmed: 8, looseGuests: 0, guestPairs: 1, sideSize: 2 })
+      const shape = matchdayShape({ confirmed: 8, looseGuests: 0, guestPairs: 1, sideSize: 2, formato: ROUND_ROBIN })
       expect(shape.size).toBe(10)
       expect(shape.sides).toBe(5)
       expect(shape.needsLooseGuest).toBe(false)
@@ -113,7 +116,7 @@ describe('matchdayShape', () => {
       // Plantel par con un suelto YA nombrado: `syncGuestSeat` lo conserva a
       // propósito y la fecha queda impar. Es el caso que el comentario de
       // `armado.tsx` nombraba como no dibujado.
-      const shape = matchdayShape({ confirmed: 8, looseGuests: 1, guestPairs: 0, sideSize: 2 })
+      const shape = matchdayShape({ confirmed: 8, looseGuests: 1, guestPairs: 0, sideSize: 2, formato: ROUND_ROBIN })
       expect(shape.size).toBe(9)
       expect(shape.complete).toBe(false)
     })
@@ -121,7 +124,7 @@ describe('matchdayShape', () => {
 
   describe('de a uno (pair_size=1)', () => {
     it('cada jugador es su propio lado: la paridad no existe', () => {
-      const shape = matchdayShape({ confirmed: 9, looseGuests: 0, guestPairs: 0, sideSize: 1 })
+      const shape = matchdayShape({ confirmed: 9, looseGuests: 0, guestPairs: 0, sideSize: 1, formato: ROUND_ROBIN })
       expect(shape.sides).toBe(9)
       expect(shape.needsLooseGuest).toBe(false)
       expect(shape.complete).toBe(true)
@@ -130,7 +133,7 @@ describe('matchdayShape', () => {
 
     it('nunca pide un invitado para emparejar, ni con plantel impar', () => {
       for (const confirmed of [7, 8, 9, 10, 11]) {
-        const shape = matchdayShape({ confirmed, looseGuests: 0, guestPairs: 0, sideSize: 1 })
+        const shape = matchdayShape({ confirmed, looseGuests: 0, guestPairs: 0, sideSize: 1, formato: ROUND_ROBIN })
         expect(shape.needsLooseGuest).toBe(false)
         expect(shape.complete).toBe(true)
       }
@@ -139,16 +142,29 @@ describe('matchdayShape', () => {
     it('cuenta los partidos que la fecha va a tener de verdad', () => {
       //El número que W32 nombra y la pantalla nunca mostró: 12 de a uno son
       // 66 partidos donde 12 de a dos son 15.
-      expect(matchdayShape({ confirmed: 8, looseGuests: 0, guestPairs: 0, sideSize: 1 }).matches).toBe(28)
-      expect(matchdayShape({ confirmed: 12, looseGuests: 0, guestPairs: 0, sideSize: 1 }).matches).toBe(66)
-      expect(matchdayShape({ confirmed: 12, looseGuests: 0, guestPairs: 0, sideSize: 2 }).matches).toBe(15)
+      expect(matchdayShape({ confirmed: 8, looseGuests: 0, guestPairs: 0, sideSize: 1, formato: ROUND_ROBIN }).matches).toBe(28)
+      expect(matchdayShape({ confirmed: 12, looseGuests: 0, guestPairs: 0, sideSize: 1, formato: ROUND_ROBIN }).matches).toBe(66)
+      expect(matchdayShape({ confirmed: 12, looseGuests: 0, guestPairs: 0, sideSize: 2, formato: ROUND_ROBIN }).matches).toBe(15)
+    })
+
+    /**
+     * W72 (verify-report-pr21 #4004): con "2 grupos + llave" ya elegido y
+     * GUARDADO en la base, la banda seguía prometiendo el round robin —28,
+     * la fórmula vieja hardcodeada— cuando los partidos reales son 12 de
+     * grupo + 4 de llave (semis, final y tercer puesto) = 16. `matches`
+     * tiene que mirar el `formato` que llega, no asumir siempre round robin.
+     */
+    it('con "2 grupos + llave" ya elegido, cuenta los partidos reales — no el round robin', () => {
+      const grupos2: MatchdayFormat = { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 }
+      const shape = matchdayShape({ confirmed: 8, looseGuests: 0, guestPairs: 0, sideSize: 1, formato: grupos2 })
+      expect(shape.matches).toBe(16)
     })
 
     it('una pareja invitada suma dos jugadores que juegan solos', () => {
       //La matriz tenía `guestPairs` sólo con
       //`sideSize: 2`. Este es el caso que produjo W41 — el servidor rechazaba
       // esta misma fecha mientras la pantalla la mostraba armable.
-      const shape = matchdayShape({ confirmed: 8, looseGuests: 0, guestPairs: 1, sideSize: 1 })
+      const shape = matchdayShape({ confirmed: 8, looseGuests: 0, guestPairs: 1, sideSize: 1, formato: ROUND_ROBIN })
       expect(shape.size).toBe(10)
       expect(shape.sides).toBe(10)
       expect(shape.matches).toBe(45)
@@ -166,9 +182,46 @@ describe('matchdayShape', () => {
       //`assertMatchdaySize` no condiciona MIN/MAX por `sideSize` (W32 sigue
       // abierto, reasignado a PR21/grupos): la pantalla no puede prometer un
       // límite distinto del que el servidor va a aplicar.
-      expect(matchdayShape({ confirmed: 7, looseGuests: 0, guestPairs: 0, sideSize: 1 }).tooFew).toBe(true)
-      expect(matchdayShape({ confirmed: 13, looseGuests: 0, guestPairs: 0, sideSize: 1 }).tooMany).toBe(true)
-      expect(matchdayShape({ confirmed: 12, looseGuests: 0, guestPairs: 0, sideSize: 1 }).tooMany).toBe(false)
+      expect(matchdayShape({ confirmed: 7, looseGuests: 0, guestPairs: 0, sideSize: 1, formato: ROUND_ROBIN }).tooFew).toBe(true)
+      expect(matchdayShape({ confirmed: 13, looseGuests: 0, guestPairs: 0, sideSize: 1, formato: ROUND_ROBIN }).tooMany).toBe(true)
+      expect(matchdayShape({ confirmed: 12, looseGuests: 0, guestPairs: 0, sideSize: 1, formato: ROUND_ROBIN }).tooMany).toBe(false)
+    })
+  })
+
+  /**
+   * REQ-D8-1: `matchdayShape` expone el `suggestedFormat` de `suggestFormat`,
+   * editable antes de armar (el selector de `armado.tsx` es lo que lo hace
+   * editable — acá sólo se fija que la SUGERENCIA que ve la pantalla es la
+   * real y no una copia). Usa `eventualSize`, no `confirmed`: el suelto que
+   * `syncGuestSeat` va a sumar para emparejar cuenta para la sugerencia igual
+   * que cuenta para `matches`.
+   */
+  describe('suggestedFormat (REQ-D8-1)', () => {
+    it('8 presentes de a uno sugieren 2 grupos + llave, el ejemplo del requisito', () => {
+      const shape = matchdayShape({ confirmed: 8, looseGuests: 0, guestPairs: 0, sideSize: 1, formato: ROUND_ROBIN })
+      expect(shape.suggestedFormat).toEqual({ kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 })
+    })
+
+    it('12 de a uno sugieren 4 grupos: la salida real de W32, no 66 partidos de round robin', () => {
+      const shape = matchdayShape({ confirmed: 12, looseGuests: 0, guestPairs: 0, sideSize: 1, formato: ROUND_ROBIN })
+      expect(shape.suggestedFormat).toEqual({ kind: 'GROUPS_KNOCKOUT', groups: 4, qualifiersPerGroup: 2 })
+    })
+
+    it('un plantel chico sugiere todos contra todos, de a uno o de a dos', () => {
+      expect(matchdayShape({ confirmed: 5, looseGuests: 0, guestPairs: 0, sideSize: 1, formato: ROUND_ROBIN }).suggestedFormat).toEqual({
+        kind: 'ROUND_ROBIN',
+      })
+      expect(matchdayShape({ confirmed: 8, looseGuests: 0, guestPairs: 0, sideSize: 2, formato: ROUND_ROBIN }).suggestedFormat).toEqual({
+        kind: 'ROUND_ROBIN',
+      })
+    })
+
+    it('cuenta el suelto que todavía no está: la sugerencia usa eventualSize, no confirmed', () => {
+      // 7 confirmados de a dos piden un suelto (eventualSize 8, 4 lados) — la
+      // sugerencia tiene que mirar esos 4 lados, no los 3 lados y pico de 7.
+      const shape = matchdayShape({ confirmed: 7, looseGuests: 0, guestPairs: 0, sideSize: 2, formato: ROUND_ROBIN })
+      expect(shape.eventualSize).toBe(8)
+      expect(shape.suggestedFormat).toEqual({ kind: 'ROUND_ROBIN' })
     })
   })
 })

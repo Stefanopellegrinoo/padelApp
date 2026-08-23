@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { formatLabel, formatsLabel, narrateRules } from './narrate'
+import { bracketOrderNote, formatLabel, formatsLabel, narrateRules, thirdPlaceNote } from './narrate'
 import { MASTERS_MATCHES, MASTERS_SIZE } from './constants'
-import type { SeasonConfig } from './types'
+import { pair } from './side'
+import type { MatchResult, Phase, Side, SeasonConfig } from './types'
 
 const CONFIG: SeasonConfig = {
   squadSize: 12,
@@ -215,5 +216,57 @@ describe('formatsLabel', () => {
 
   it('sin disciplinas no inventa una frase', () => {
     expect(formatsLabel([])).toBe('')
+  })
+})
+
+// Decisión #3990: el único costo vivo que quedaba de #3979 ("se puede cerrar
+// la fecha sin jugar el tercer puesto") era que nadie se enteraba de que el
+// 3º/4º salió de la tabla de grupos y no de la cancha. Esta línea lo cuenta.
+describe('thirdPlaceNote', () => {
+  const A = pair('a1', 'a2')
+  const B = pair('b1', 'b2')
+
+  function playedMatch(fase: Phase, sideA: Side, sideB: Side): MatchResult {
+    return { round: 1, fase, grupo: 1, sideA, sideB, sets: [{ gamesA: 4, gamesB: 1 }] }
+  }
+
+  it('cuenta que el tercer puesto se definió por la tabla cuando ese partido no se jugó', () => {
+    const semis = [playedMatch('SEMI', A, B), playedMatch('SEMI', A, B)]
+    const final = playedMatch('FINAL', A, B)
+    expect(thirdPlaceNote([...semis, final])).toBe(
+      'El tercer puesto se definió por la tabla de grupos: no se jugó el partido.',
+    )
+  })
+
+  it('no dice nada cuando el tercer puesto se jugó de verdad', () => {
+    const semis = [playedMatch('SEMI', A, B), playedMatch('SEMI', A, B)]
+    const playoff = playedMatch('TERCER_PUESTO', A, B)
+    const final = playedMatch('FINAL', A, B)
+    expect(thirdPlaceNote([...semis, playoff, final])).toBeNull()
+  })
+
+  it('no dice nada sin semifinales: no hay 3º/4º que la llave tenga que explicar', () => {
+    expect(thirdPlaceNote([playedMatch('FINAL', A, B)])).toBeNull()
+  })
+})
+
+// W70 (verify-report-pr21 #4004): la tabla de una fecha cerrada con llave
+// puede mostrar el mismo PG y la misma diferencia en dos filas en un orden
+// que esas columnas no explican, porque el orden real lo arma la llave
+// (`knockoutPositions`), no la fase de grupos sola.
+describe('bracketOrderNote', () => {
+  const PADEL = CONFIG.matchFormat
+  const FIFA = { ...CONFIG.matchFormat, openScore: true }
+
+  it('pádel: cuenta la diferencia de games', () => {
+    expect(bracketOrderNote(PADEL)).toBe(
+      'El orden sale del resultado de la llave, no sólo de la fase de grupos: por eso puede haber lados con el mismo PG y la misma diferencia de games en un orden distinto.',
+    )
+  })
+
+  it('FIFA (marcador abierto): cuenta la diferencia de GOL, no de games', () => {
+    expect(bracketOrderNote(FIFA)).toBe(
+      'El orden sale del resultado de la llave, no sólo de la fase de grupos: por eso puede haber lados con el mismo PG y la misma diferencia de gol en un orden distinto.',
+    )
   })
 })

@@ -50,6 +50,8 @@ function playMatchday(
       // lopsided — fine for what these tests check, not a realistic season.
       matches.push({
         round,
+        fase: 'GRUPO',
+        grupo: 1,
         sideA: pairA,
         sideB: pairB,
         sets: [{ gamesA: 4, gamesB: left < right ? 1 : 2 }],

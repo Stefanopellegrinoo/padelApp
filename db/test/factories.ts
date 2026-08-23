@@ -57,7 +57,9 @@ export async function createSeason({
     .from('seasons')
     .insert({
       name: `Temporada de test ${Date.now()}`,
-      config: config as unknown as Json,
+      // Sin `config` (C35): `createSeason` de producción dejó de escribirla y
+      // el CONTRACT la dropea. Es nullable desde `0059`. La config REAL vive
+      // en `disciplines.config`, que se inserta más abajo.
       created_by: admin.userId,
     })
     .select('id')

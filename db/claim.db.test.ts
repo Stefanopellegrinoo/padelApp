@@ -31,7 +31,6 @@ async function createOpenSeason(
     .from('seasons')
     .insert({
       name: `Temporada de test ${Date.now()}`,
-      config: defaultConfig(seatNames.length) as unknown as Json,
       created_by: admin.userId,
     })
     .select('id, invite_token')

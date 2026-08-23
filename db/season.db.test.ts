@@ -72,7 +72,6 @@ async function createWalkthroughSeason(
     .from('seasons')
     .insert({
       name: `Temporada de test ${Date.now()}`,
-      config: config as unknown as Json,
       created_by: admin.userId,
     })
     .select('id, invite_token')

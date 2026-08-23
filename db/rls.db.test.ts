@@ -398,7 +398,6 @@ describe('RLS — escritura', () => {
       .from('seasons')
       .insert({
         name: 'Temporada forjada',
-        config: defaultConfig(8) as unknown as Json,
         created_by: admin.userId,
       })
       .select()

@@ -836,3 +836,46 @@ describe('C36 — cada disciplina juega su propio Masters', () => {
     )
   })
 })
+
+// ── S97: los dos `if` que dependen de una premisa que sólo sostiene TS ──────
+// `0049` sacó el `if v_regular is null then raise` que `0021` tenía, al mudar
+// la lectura de `seasons` a `disciplines`. Sin él, un `disciplines.config` sin
+// `regularMatchdays` deja `v_regular` en NULL, y en SQL una comparación con
+// NULL no es falsa: es NULL, que el `if` trata como falso.
+//
+// Efecto medido acá abajo: la disciplina NO TERMINA NUNCA, sin un solo error.
+// Es el mismo síntoma que C36, por otra causa y sin nada que lo diga.
+//
+// Inalcanzable por la app (`SeasonConfig` declara `regularMatchdays` y
+// `assertValidConfig` valida `>= 1`), pero `close_matchday` es `security
+// definer` y se llega por RPC directo — la premisa la sostiene TypeScript, que
+// no corre del lado de la base.
+describe('S97 — close_matchday con un config sin regularMatchdays', () => {
+  it('no deja la disciplina sin terminar en silencio', async () => {
+    const { admin, seasonId, disciplineId, squad } = await buildSoloScene()
+    await setHasMasters(disciplineId, false)
+
+    // El config pierde `regularMatchdays`, sin pasar por ninguna función de
+    // escritura de la app — que es exactamente cómo llegaría en producción:
+    // por un PATCH directo o una fila vieja anterior al campo.
+    const db = adminClient()
+    const { data: row, error: readError } = await db
+      .from('disciplines')
+      .select('config')
+      .eq('id', disciplineId)
+      .single()
+    if (readError || row === null) throw new Error(readError?.message)
+    const { regularMatchdays: _drop, ...sinFechas } = row.config as Record<string, unknown>
+    const { error: writeError } = await db
+      .from('disciplines')
+      .update({ config: sinFechas as never })
+      .eq('id', disciplineId)
+    if (writeError) throw new Error(writeError.message)
+
+    // Cerrar su única fecha regular: con `has_masters = false` esto tendría
+    // que terminarla (C34), y con `v_regular` NULL no termina nada.
+    await expect(playRegularSeason(admin, seasonId, squad, disciplineId)).rejects.toThrow(
+      /no tiene definida la cantidad de fechas/,
+    )
+  })
+})

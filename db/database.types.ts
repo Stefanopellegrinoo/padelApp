@@ -641,7 +641,6 @@ export type Database = {
       }
       seasons: {
         Row: {
-          config: Json | null
           created_at: string
           created_by: string
           id: string
@@ -649,10 +648,8 @@ export type Database = {
           name: string
           rules_text: string
           rules_updated_at: string | null
-          status: string
         }
         Insert: {
-          config?: Json | null
           created_at?: string
           created_by: string
           id?: string
@@ -660,10 +657,8 @@ export type Database = {
           name: string
           rules_text?: string
           rules_updated_at?: string | null
-          status?: string
         }
         Update: {
-          config?: Json | null
           created_at?: string
           created_by?: string
           id?: string
@@ -671,7 +666,6 @@ export type Database = {
           name?: string
           rules_text?: string
           rules_updated_at?: string | null
-          status?: string
         }
         Relationships: []
       }

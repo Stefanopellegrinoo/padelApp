@@ -320,24 +320,23 @@ describe('season_public_rules', () => {
     expect(data).toEqual([])
   })
 
-  //PR 5 (0022, REQ-D2-1): la config real vive en `disciplines.config`, no en
-  // `seasons.config`. Esa columna sigue existiendo (nullable desde `0059`)
-  // hasta el CONTRACT, pero desde PR 6 no tiene un solo caller de
-  // producción — ni de escritura (`updateSeasonConfig` se borró en C35,
-  // `#4034`) ni de lectura: `saveConfig` (Ajustes) llama
-  // `updateDisciplineConfig`, y esta RPC ya no lee `seasons.config`. Se
-  // diverge a mano, sin pasar por ninguna función de escritura, para probar
-  // que lo que vuelve es la disciplina, no la temporada desincronizada.
-  it('lee la config de la disciplina, no la de la temporada (PR 5)', async () => {
+  // PR 5 (0022, REQ-D2-1): la config real vive en `disciplines.config`.
+  //
+  // Este test PLANTABA una config divergente en `seasons.config` para probar
+  // que lo que volvía era la disciplina y no la temporada desincronizada. El
+  // CONTRACT (`0066`) dropeó esa columna, así que ya no hay de qué divergir:
+  // la afirmación pasó de "elige bien entre dos fuentes" a "devuelve la única
+  // que hay", y perdió su poder discriminante.
+  //
+  // Se conserva igual porque lo que sigue midiendo es real —que
+  // `season_public_rules`, la ÚNICA superficie pública de la app, devuelve la
+  // config correcta— pero conviene saber qué dejó de cubrir. Fue el único de
+  // los NUEVE guardias del contract que `test:db` no vio caer: pasaba en
+  // verde con la columna ya dropeada, y lo cazó el typecheck.
+  it('lee la config de la disciplina (PR 5)', async () => {
     const admin = await createTestUser()
     const padelConfig = defaultConfig(8)
     const { seasonId } = await createSeason({ admin, config: padelConfig })
-    const db = adminClient()
-    const divergedSeasonConfig = { ...padelConfig, regularMatchdays: 99 }
-    await db
-      .from('seasons')
-      .update({ config: divergedSeasonConfig as unknown as never })
-      .eq('id', seasonId)
 
     const { data, error } = await anonClient().rpc('season_public_rules', { p_season: seasonId })
 

@@ -146,40 +146,6 @@ describe('db/read', () => {
       expect(ids).toContain(seasonId)
       expect(ids).not.toContain(otherSeasonId)
     })
-
-    // Bloqueante #2 del contract (verify-report-pre-contract #4026, REQ-D3-3):
-    // `SeasonHeader.status` tiene que DERIVAR de `disciplines.status`, no leer
-    // `seasons.status` — que ya no tiene escritor de producción (`0055`-`0058`).
-    // Se planta una mentira en `seasons.status` (adminClient, sólo para armar
-    // escena) distinta de lo que la disciplina dice: si `mySeasons` la
-    // repitiera, esta rama del test la vería.
-    it('derives .status from disciplines.status, not seasons.status (REQ-D3-3)', async () => {
-      const db = adminClient()
-      const { data: disciplineRow, error: disciplineError } = await db
-        .from('disciplines')
-        .select('status')
-        .eq('season_id', seasonId)
-        .single()
-      if (disciplineError || disciplineRow === null) throw new Error(disciplineError?.message)
-
-      const lie = disciplineRow.status === 'FINISHED' ? 'SETUP' : 'FINISHED'
-      const { error: plantError } = await db.from('seasons').update({ status: lie }).eq('id', seasonId)
-      if (plantError) throw new Error(plantError.message)
-
-      try {
-        const seasons = await mySeasons(admin.client)
-        const header = seasons.find((season) => season.id === seasonId)
-        if (header === undefined) throw new Error('mySeasons no devolvió la temporada de test.')
-        expect(header.status).toBe(disciplineRow.status)
-        expect(header.status).not.toBe(lie)
-      } finally {
-        const { error: revertError } = await db
-          .from('seasons')
-          .update({ status: disciplineRow.status })
-          .eq('id', seasonId)
-        if (revertError) throw new Error(revertError.message)
-      }
-    })
   })
 
   describe('seasonHeader', () => {
@@ -213,31 +179,6 @@ describe('db/read', () => {
     // consulta y su propio `Promise.all`, así que no alcanza con probar uno
     // de los dos (lección #3957 — el consumidor con un solo test es el que
     // nadie mira).
-    it('derives .status from disciplines.status, not seasons.status (REQ-D3-3)', async () => {
-      const db = adminClient()
-      const { data: disciplineRow, error: disciplineError } = await db
-        .from('disciplines')
-        .select('status')
-        .eq('season_id', seasonId)
-        .single()
-      if (disciplineError || disciplineRow === null) throw new Error(disciplineError?.message)
-
-      const lie = disciplineRow.status === 'FINISHED' ? 'SETUP' : 'FINISHED'
-      const { error: plantError } = await db.from('seasons').update({ status: lie }).eq('id', seasonId)
-      if (plantError) throw new Error(plantError.message)
-
-      try {
-        const header = await seasonHeader(admin.client, seasonId)
-        expect(header.status).toBe(disciplineRow.status)
-        expect(header.status).not.toBe(lie)
-      } finally {
-        const { error: revertError } = await db
-          .from('seasons')
-          .update({ status: disciplineRow.status })
-          .eq('id', seasonId)
-        if (revertError) throw new Error(revertError.message)
-      }
-    })
   })
 
   describe('seasonRules', () => {
@@ -390,15 +331,14 @@ describe('db/read', () => {
     })
 
     // C37 / decisión #4044: el orden del plantel A NIVEL TORNEO es el de la
-    // disciplina PRIMARIA (`discipline_entries` de la que resuelve
-    // `defaultDisciplineId`), NO `entries.seed_position` — esa columna se
-    // relaja para el SQUAD en el contract y deja de tener valor.
+    // disciplina PRIMARIA — `discipline_entries` de la que resuelve
+    // `defaultDisciplineId`.
     //
-    // La mentira es a propósito, mismo método que los dos tests de
-    // `seasons.status` de más abajo: se planta una divergencia entre las dos
-    // fuentes para que el test no pueda pasar por casualidad. Mientras el
-    // dual-write siga vivo los dos órdenes coinciden, y un test que no
-    // divergiera pasaría leyendo cualquiera de las dos.
+    // La divergencia es a propósito: se invierte el orden de la primaria para
+    // que el test no pueda pasar por casualidad. Sigue siendo la prueba
+    // correcta después del CONTRACT: lo que se compara son DOS órdenes de
+    // `discipline_entries` (el de la primaria contra el de la otra), no el
+    // viejo `entries.seed_position`, que ya no existe para el SQUAD.
     it('ordena por la disciplina primaria, no por entries.seed_position (C37)', async () => {
       const owner = await createTestUser()
       const { seasonId, entryIds, disciplineIds } = await createSeason({

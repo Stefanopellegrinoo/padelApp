@@ -13,7 +13,6 @@ import {
 import {
   entriesOf,
   matchdayDetail,
-  primaryDiscipline,
   seasonAwardsOf,
   seasonHeader,
   seasonMatchdaysOf,

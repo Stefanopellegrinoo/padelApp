@@ -56,7 +56,7 @@ interface SeasonCard {
  * nadie necesite ver POR QUÉ empatan dos personas en la global.
  *
  * Consultas por temporada, REMEDIDAS con `pg_stat_statements` (misma técnica
- * que S10, verify-report ronda 4) contra un escenario con una fecha cerrada
+ * que S10) contra un escenario con una fecha cerrada
  * real: **10 antes** (S10 midió 9 sin ninguna CLOSED — `awardsOf` corta antes
  * de su 3ª consulta cuando no hay ninguna) → **5 después**. Sin fan-out por
  * disciplina: las dos lecturas de temporada entera traen TODAS en una sola
@@ -86,7 +86,7 @@ async function cardFor(supabase: Client, header: SeasonHeader): Promise<SeasonCa
 
   // "Próxima fecha" queda igual que antes (de la disciplina primaria): con
   // más de una disciplina puede haber más de una fecha viva a la vez
-  // (REQ-D3-1) y elegir CUÁL mostrar acá es una decisión de UI que REQ-D9 no
+  //(REQ-D3-1) y elegir CUÁL mostrar acá es una decisión de UI que REQ-D9 no
   // pide — fuera del corte de esta PR.
   const primaryDisciplineId = header.disciplines[0]?.id
   const live =

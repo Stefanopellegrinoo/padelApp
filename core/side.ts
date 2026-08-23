@@ -1,12 +1,17 @@
 import type { EntryId, Side, SideSize } from './types'
 
 /** Un lado de a uno — FIFA 1v1, o cualquier disciplina con `pairSize: 1`. */
-export function single(a: EntryId): Side {
+/** Un lado de UNO, angostado: el tipo lo distingue de un lado de dos. */
+export type Solo = Extract<Side, { size: 1 }>
+/** Un lado de DOS, angostado. Lo que el sorteo de parejas sabe manejar. */
+export type Duo = Extract<Side, { size: 2 }>
+
+export function single(a: EntryId): Solo {
   return { size: 1, a }
 }
 
 /** Un lado de a dos — todos los lados de hoy, hasta que exista una disciplina con `pairSize: 1`. */
-export function pair(a: EntryId, b: EntryId): Side {
+export function pair(a: EntryId, b: EntryId): Duo {
   return { size: 2, a, b }
 }
 
@@ -35,16 +40,16 @@ export function partnerOf(side: Side, entryId: EntryId): EntryId | null {
 /**
  * El único constructor de borde: donde un `Side` nace de una fila cruda (una
  * fila de `pairs`, por ejemplo). Con un discriminante VARIABLE (`row.pair_size`,
- * no un literal) el excess-property check de TS no dispara (S28, verify-report
+ * no un literal) el excess-property check de TS no dispara (S28,
  * ronda 9): `{ size: row.pair_size as SideSize, a, b }` compila limpio y, si
  * `pair_size` es 1, el `b` de la fila queda adentro del objeto sin que nadie
  * pueda leerlo — se pierde en silencio. `sideOfRow` cierra ese agujero: tira
- * si la forma no cierra, igual que `pairOf` (pair-compat.ts) con un lado de
- * uno.
+ * si la forma no cierra. (Hasta PR19 lo mismo hacía `pairOf`, que murió con
+ * `Pair` y `core/pair-compat.ts`.)
  */
 export function sideOfRow(size: SideSize, a: EntryId, b: EntryId | null): Side {
   if (size === 1) {
-    // S37 (verify-report ronda 12): simétrico con la rama de abajo — antes
+    //Simétrico con la rama de abajo — antes
     // descartaba un `b` que sobraba EN SILENCIO, exactamente el modo de falla
     // que este constructor existe para cerrar (comentario de arriba).
     if (b !== null) throw new Error('Un lado de a uno con segundo miembro. La fila está rota.')

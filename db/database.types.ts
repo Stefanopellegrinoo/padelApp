@@ -298,6 +298,7 @@ export type Database = {
       }
       match_sets: {
         Row: {
+          allows_draw: boolean
           games_a: number
           games_b: number
           id: string
@@ -305,6 +306,7 @@ export type Database = {
           set_number: number
         }
         Insert: {
+          allows_draw?: boolean
           games_a: number
           games_b: number
           id?: string
@@ -312,6 +314,7 @@ export type Database = {
           set_number: number
         }
         Update: {
+          allows_draw?: boolean
           games_a?: number
           games_b?: number
           id?: string
@@ -319,6 +322,13 @@ export type Database = {
           set_number?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "match_sets_match_draw"
+            columns: ["match_id", "allows_draw"]
+            isOneToOne: false
+            referencedRelation: "matches"
+            referencedColumns: ["id", "allows_draw"]
+          },
           {
             foreignKeyName: "match_sets_match_id_fkey"
             columns: ["match_id"]
@@ -330,6 +340,7 @@ export type Database = {
       }
       matchdays: {
         Row: {
+          allows_draw: boolean
           closed_at: string | null
           discipline_id: string
           id: string
@@ -341,6 +352,7 @@ export type Database = {
           status: string
         }
         Insert: {
+          allows_draw?: boolean
           closed_at?: string | null
           discipline_id: string
           id?: string
@@ -352,6 +364,7 @@ export type Database = {
           status?: string
         }
         Update: {
+          allows_draw?: boolean
           closed_at?: string | null
           discipline_id?: string
           id?: string
@@ -363,6 +376,13 @@ export type Database = {
           status?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "matchdays_discipline_draw"
+            columns: ["discipline_id", "allows_draw"]
+            isOneToOne: false
+            referencedRelation: "disciplines"
+            referencedColumns: ["id", "allows_draw"]
+          },
           {
             foreignKeyName: "matchdays_discipline_season"
             columns: ["discipline_id", "season_id"]
@@ -388,6 +408,7 @@ export type Database = {
       }
       matches: {
         Row: {
+          allows_draw: boolean
           id: string
           matchday_id: string
           pair_a: string
@@ -395,6 +416,7 @@ export type Database = {
           round: number
         }
         Insert: {
+          allows_draw?: boolean
           id?: string
           matchday_id: string
           pair_a: string
@@ -402,6 +424,7 @@ export type Database = {
           round: number
         }
         Update: {
+          allows_draw?: boolean
           id?: string
           matchday_id?: string
           pair_a?: string
@@ -409,6 +432,13 @@ export type Database = {
           round?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "matches_matchday_draw"
+            columns: ["matchday_id", "allows_draw"]
+            isOneToOne: false
+            referencedRelation: "matchdays"
+            referencedColumns: ["id", "allows_draw"]
+          },
           {
             foreignKeyName: "matches_matchday_id_fkey"
             columns: ["matchday_id"]
@@ -644,6 +674,13 @@ export type Database = {
           season_name: string
           seed_position: number
           squad_size: number
+        }[]
+      }
+      season_public_formats: {
+        Args: { p_season: string }
+        Returns: {
+          config: Json
+          kind: string
         }[]
       }
       season_public_rules: {

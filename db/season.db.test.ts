@@ -2,11 +2,13 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import {
   computeRanking,
   defaultConfig,
-  samePair,
+  members,
+  pair,
+  sameSide,
   sideOfRow,
   snapshotForMatchday,
   type DisciplineId,
-  type Pair,
+  type Side,
   type SeasonConfig,
 } from '@/core'
 import {
@@ -123,7 +125,7 @@ async function createWalkthroughSeason(
   if (openSeatEntryId === undefined) throw new Error('Falta el asiento libre de test.')
   return {
     seasonId: season.id,
-    // Único cast de esta función (N2): esta temporada no pasa por
+    //Único cast de esta función: esta temporada no pasa por
     // db/test/factories.ts, así que nace su propio DisciplineId acá.
     disciplineId: discipline.id as DisciplineId,
     entryIds,
@@ -138,7 +140,7 @@ async function markPlaying(admin: TestUser, matchdayId: string, entryIds: string
   }
 }
 
-// `entry_b: string | null` desde 0028 (REQ-D5-1): la fila real ya lo permite,
+//`entry_b: string | null` desde 0028 (REQ-D5-1): la fila real ya lo permite,
 // aunque esta suite sólo ejercita pádel (pair_size=2, siempre no-nulo).
 async function pairsOf(
   matchdayId: string,
@@ -203,12 +205,12 @@ async function rankingBefore(
 }
 
 /** La pareja que se quedó con la posición 1 de premios, o null si la fecha no pagó a nadie. */
-function championPairOf(awards: AwardRow[], pairs: Pair[]): Pair | null {
+function championPairOf(awards: AwardRow[], pairs: Side[]): Side | null {
   const winners = new Set(
     awards.filter((award) => award.position === 1).map((award) => award.entry_id),
   )
   if (winners.size === 0) return null
-  return pairs.find((pair) => winners.has(pair.a) || winners.has(pair.b)) ?? null
+  return pairs.find((side) => members(side).some((entryId) => winners.has(entryId))) ?? null
 }
 
 /**
@@ -229,7 +231,7 @@ async function playByRankRule(
   const rankIndex = new Map(ranking.map((row, index) => [row.entryId, index]))
   const worst = ranking.length // los invitados quedan afuera del ranking del plantel: valen como el peor posible
 
-  // W38 (verify-report ronda 12): `requirePartner` retirado — `sideOfRow`
+  //`requirePartner` retirado — `sideOfRow`
   // (core/side.ts) es el hogar único. `2` es literal, no leído de la fila:
   // esta suite sólo ejercita pádel (pair_size=2, siempre con `entry_b`).
   const pairs = await pairsOf(matchdayId)
@@ -303,7 +305,7 @@ interface WalkthroughSeason {
   openSeatEntryId: string
   inviteToken: string
   matchdayIds: string[] // índice 0 → fecha 1, ..., índice 9 → fecha 10
-  pairsByMatchday: Map<number, Pair[]>
+  pairsByMatchday: Map<number, Side[]>
   awardsRightAfterClose: Map<number, AwardRow[]>
   /** El del plantel que falta en la fecha 6 — nunca uno de los defensores que entran a esa fecha. */
   absentee: string
@@ -336,18 +338,17 @@ async function buildWalkthroughSeason(): Promise<WalkthroughSeason> {
   } = await createWalkthroughSeason(admin, config, 8)
 
   const matchdayIds: string[] = []
-  const pairsByMatchday = new Map<number, Pair[]>()
+  const pairsByMatchday = new Map<number, Side[]>()
   const awardsRightAfterClose = new Map<number, AwardRow[]>()
   const playedOn = (day: number) => `2026-01-${String(day).padStart(2, '0')}`
 
   const recordClose = async (matchdayId: string, number: number): Promise<void> => {
     matchdayIds[number - 1] = matchdayId
-    // W38 (verify-report ronda 12): idem arriba — sideOfRow(2, ...) inline.
+    //Idem arriba — sideOfRow(2,...) inline.
     pairsByMatchday.set(
       number,
       (await pairsOf(matchdayId)).map((row) => {
-        const side = sideOfRow(2, row.entry_a, row.entry_b)
-        return { a: row.entry_a, b: side.size === 2 ? side.b : row.entry_a }
+        return sideOfRow(2, row.entry_a, row.entry_b)
       }),
     )
     awardsRightAfterClose.set(number, sortByEntry(await awardsOf(matchdayId)))
@@ -368,7 +369,7 @@ async function buildWalkthroughSeason(): Promise<WalkthroughSeason> {
 
   // Fecha 6: invitado suelto por el ausente — nunca uno de los defensores que entran a esta fecha.
   const md5Champion = championPairOf(awardsRightAfterClose.get(5) ?? [], pairsByMatchday.get(5) ?? [])
-  const defending = new Set(md5Champion === null ? [] : [md5Champion.a, md5Champion.b])
+  const defending = new Set(md5Champion === null ? [] : members(md5Champion))
   const absentee = squad.find((entryId) => !defending.has(entryId))
   if (absentee === undefined) throw new Error('No hay a quién ausentar sin tocar a los defensores.')
   const md6 = await createMatchday(admin.client, seasonId, playedOn(6))
@@ -481,7 +482,7 @@ describe('a whole season played end to end', () => {
     for (let number = 2; number <= 10; number++) {
       const previous = season.pairsByMatchday.get(number - 1) ?? []
       const current = season.pairsByMatchday.get(number) ?? []
-      const repeated = current.filter((pair) => previous.some((old) => samePair(old, pair)))
+      const repeated = current.filter((pair) => previous.some((old) => sameSide(old, pair)))
 
       expect(repeated.length).toBeLessThanOrEqual(1)
       if (repeated.length === 1) {
@@ -490,7 +491,7 @@ describe('a whole season played end to end', () => {
         if (onlyRepeat === undefined || champion === null) {
           throw new Error('Bug de test: se esperaba una pareja repetida con campeón.')
         }
-        expect(samePair(onlyRepeat, champion)).toBe(true)
+        expect(sameSide(onlyRepeat, champion)).toBe(true)
       }
     }
   })
@@ -504,8 +505,8 @@ describe('a whole season played end to end', () => {
 
     const pairsMd2 = season.pairsByMatchday.get(2) ?? []
     const pairsMd3 = season.pairsByMatchday.get(3) ?? []
-    expect(pairsMd2.some((pair) => samePair(pair, champion1))).toBe(true)
-    expect(pairsMd3.some((pair) => samePair(pair, champion1))).toBe(false)
+    expect(pairsMd2.some((pair) => sameSide(pair, champion1))).toBe(true)
+    expect(pairsMd3.some((pair) => sameSide(pair, champion1))).toBe(false)
   })
 
   it("the table discards its worst results as of matchday 9's close", async () => {
@@ -564,9 +565,9 @@ describe('a whole season played end to end', () => {
     const md6Pairs = season.pairsByMatchday.get(6) ?? []
     const md6Awards = season.awardsRightAfterClose.get(6) ?? []
     expect(md6Pairs).toHaveLength(4)
-    expect(md6Pairs.some((pair) => pair.a === season.loneGuestEntryId || pair.b === season.loneGuestEntryId)).toBe(
-      true,
-    )
+    expect(
+      md6Pairs.some((side) => members(side).includes(season.loneGuestEntryId)),
+    ).toBe(true)
     expect(md6Awards.some((award) => award.entry_id === season.loneGuestEntryId)).toBe(false)
     expect(md6Awards.some((award) => award.entry_id === season.absentee)).toBe(false)
     expect(md6Awards).toHaveLength(7) // el plantel presente, sin el invitado
@@ -575,7 +576,7 @@ describe('a whole season played end to end', () => {
     const md8Awards = season.awardsRightAfterClose.get(8) ?? []
     const [guestA, guestB] = season.guestPairEntryIds
     expect(md8Pairs).toHaveLength(5)
-    expect(md8Pairs.some((pair) => samePair(pair, { a: guestA, b: guestB }))).toBe(true)
+    expect(md8Pairs.some((side) => sameSide(side, pair(guestA!, guestB!)))).toBe(true)
     expect(md8Awards.some((award) => award.entry_id === guestA || award.entry_id === guestB)).toBe(false)
     expect(md8Awards).toHaveLength(8) // el plantel completo, ninguno de los dos invitados
   })

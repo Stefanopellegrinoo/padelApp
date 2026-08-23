@@ -10,7 +10,7 @@ que decidir antes de seguir. Los detalles viven en los documentos que se enlazan
 ## Producción
 
 La base de producción existe y está lista: proyecto **`padelApp`** en Supabase
-Cloud (`yttmhxcdnjknobiccvsp`, São Paulo), con las **10 migraciones aplicadas** y
+Cloud (`<tu-proyecto-ref>`, São Paulo), con las **10 migraciones aplicadas** y
 verificada con SQL, no asumida: 10 tablas, **las 10 con RLS**, 21 políticas, 15
 funciones `security definer`, **0 usuarios y 0 temporadas**, y sin rastro del
 usuario del seed.
@@ -43,10 +43,10 @@ sólo se resume.
 
 | Plan | Qué produce | Estado |
 |---|---|---|
-| **1. `core/`** | Toda la lógica del campeonato, funciones puras | ✅ **Terminado y en `main`** |
-| **2. Datos y auth** | Schema Supabase, migraciones, RLS, login + Google | ✅ **Terminado**, rama `plan-2-data-and-auth` |
-| **3. Pantallas de lectura** | Tabla, Fechas, Estadísticas, Reglas, Perfil | ✅ **Terminado**, rama `plan-3-read-screens` |
-| **4. Pantallas de escritura** | Crear torneo, abrir fecha, cargar resultados, Ajustes, Masters | ✅ **Terminado** (13 de 14 tareas; la 7 se descartó), rama `plan-4-write-screens` |
+| **1. `core/`** | Toda la lógica del campeonato, funciones puras | [Completado] **Terminado y en `main`** |
+| **2. Datos y auth** | Schema Supabase, migraciones, RLS, login + Google | [Completado] **Terminado**, rama `plan-2-data-and-auth` |
+| **3. Pantallas de lectura** | Tabla, Fechas, Estadísticas, Reglas, Perfil | [Completado] **Terminado**, rama `plan-3-read-screens` |
+| **4. Pantallas de escritura** | Crear torneo, abrir fecha, cargar resultados, Ajustes, Masters | [Completado] **Terminado** (13 de 14 tareas; la 7 se descartó), rama `plan-4-write-screens` |
 
 > **Si estás retomando, el producto está terminado y en `main`.** No queda una
 > sola pantalla por construir: se juega una temporada entera, de crear el torneo
@@ -141,7 +141,7 @@ del plan 2.
 
 ## Lo que falta implementar, por plan
 
-### Plan 2 — datos y auth ✅
+### Plan 2 — datos y auth [Completado]
 
 Las 14 tareas están hechas. Lo que quedó construido: schema y migraciones, RLS
 sobre las diez tablas, auth con mail y contraseña más Google, reclamo de asiento
@@ -192,7 +192,7 @@ cerraron antes de arrancar:
 - **Reabrir borra la fecha siguiente si está vacía.** Si ya tiene asistencias,
   invitados o parejas, no la toca y hay que borrarla a mano.
 
-### Plan 3 — pantallas de lectura ✅
+### Plan 3 — pantallas de lectura [Completado]
 
 Las 11 tareas están hechas. Quedaron construidas las seis pantallas (Tabla con su
 sheet de desempate, Fechas, Fecha `[n]` con el acordeón de rondas, Estadísticas,
@@ -249,7 +249,7 @@ preguntas sobre quien mira: "¿estoy anotado?" y "¿cuál asiento soy yo?". Ante
 escribir el Plan 4, **trazar qué dato necesita cada pantalla y recién ahí definir
 las funciones de datos.**
 
-### Plan 4 — pantallas de escritura 🚧
+### Plan 4 — pantallas de escritura [En progreso]
 
 **Hecho: 13 de las 14 tareas** (la 7 se descartó), rama `plan-4-write-screens`.
 Toda la capa de datos, "Mis torneos", el wizard de crear torneo, **el flujo
@@ -387,10 +387,10 @@ falla que este documento ya tenía anotado del Plan 2.
 
 **Lo que el Plan 3 le dejó, con lo que ya se resolvió:**
 
-- ✅ **"Mis torneos".** Construida (`/torneos`). Después de entrar van todos ahí:
+- [Completado] **"Mis torneos".** Construida (`/torneos`). Después de entrar van todos ahí:
   el caso especial de "una sola temporada, directo a su tabla" se borró, porque
   un camino distinto para el mismo destino es una rama más que puede quedar mal.
-- ✅ **La lectura de asistencias** (`attendancesOf`), y el permiso para que un
+- [Completado] **La lectura de asistencias** (`attendancesOf`), y el permiso para que un
   jugador escriba la suya (`set_my_attendance`). **Falta el toggle en la Tabla**,
   que es la Task 7 y está en la tanda B.
 - ⬜ **El flujo `DRAFT`** y **la carga de resultados**: son las Tasks 9 y 10, lo
@@ -418,12 +418,12 @@ falla que este documento ya tenía anotado del Plan 2.
 ### Dos pantallas que cambiaron de layout y todavía nadie miró
 
 Al adaptar el diseño de Stitch al formato de 8 a 12, dos pantallas necesitaron
-un layout nuevo, no sólo otro copy. Están marcadas con 🔁 en el handoff:
+un layout nuevo, no sólo otro copy. Están marcadas con  en el handoff:
 
-- ✅ **Wizard paso 4:** los puntos eran 4 columnas. Con 12 jugadores son 6 valores
+- [Completado] **Wizard paso 4:** los puntos eran 4 columnas. Con 12 jugadores son 6 valores
   y no entran a lo ancho de un teléfono. Pasaron a filas — construido en la Task
   6 del Plan 4, una fila por posición con `−`/`+` de 34px.
-- ✅ **Fecha en juego:** eran 3 rondas × 2 partidos fijas. Con 6 parejas son 15
+- [Completado] **Fecha en juego:** eran 3 rondas × 2 partidos fijas. Con 6 parejas son 15
   partidos, así que las rondas pasaron a acordeón, con la ronda en curso abierta
   y las completas colapsadas — construido en la Task 8 del Plan 3
   (`fechas/[n]/rondas.tsx`). **La Task 10 del Plan 4 le enchufa la carga de

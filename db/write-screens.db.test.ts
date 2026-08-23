@@ -320,7 +320,7 @@ describe('season_public_rules', () => {
     expect(data).toEqual([])
   })
 
-  // PR 5 (0022, REQ-D2-1): la config real vive en `disciplines.config`, no en
+  //PR 5 (0022, REQ-D2-1): la config real vive en `disciplines.config`, no en
   // `seasons.config`. `updateSeasonConfig` (db/season.ts) todavía ESCRIBE ahí
   // (la columna sigue existiendo hasta el contract, PR 27) pero desde PR 6
   // no tiene un solo caller de producción: `saveConfig` (Ajustes) llama

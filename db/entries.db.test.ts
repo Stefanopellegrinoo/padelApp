@@ -98,20 +98,20 @@ describe('createSeason', () => {
       .filter((entry) => entry.kind === 'SQUAD')
       .sort((left, right) => left.seedPosition - right.seedPosition)
 
-    // El orden es el contrato: de acá sale el snapshot 0, o sea las primeras
+    //El orden es el contrato: de acá sale el snapshot 0, o sea las primeras
     // parejas del año. `toContain` diría "están" y no "en qué lugar".
     expect(seats.map((seat) => seat.displayName)).toEqual(names)
     expect(seats.map((seat) => seat.seedPosition)).toEqual([0, 1, 2, 3, 4, 5, 6, 7])
     expect(seats.every((seat) => seat.playerId === null)).toBe(true)
   })
 
-  // W4 (verify-report): antes, sólo `db/squad-position.db.test.ts` ejercitaba
+  //Antes, sólo `db/squad-position.db.test.ts` ejercitaba
   // este backfill de rebote (removerlo tumbaba 1 test AJENO sobre posiciones
   // de plantel, sin afirmar nada sobre createSeason en sí). `createMatchday`
   // depende de esta disciplina para resolver `discipline_id` (0015/0016):
   // sin ella, la primera fecha de cualquier torneo nuevo rompe con "No se
   // pudo leer la disciplina de la temporada."
-  it('crea su propia disciplina PADEL con la config de la temporada (W4)', async () => {
+  it('crea su propia disciplina PADEL con la config de la temporada', async () => {
     const admin = await createTestUser()
     const config = defaultConfig(8)
 
@@ -393,10 +393,22 @@ describe('the squad seats', () => {
     const seatId = entryIds[1]!
 
     await expect(addSquadSeat(player.client, seasonId, 'Colado')).rejects.toThrow()
-    // Un update o un delete que RLS filtra no es un error: no afecta ninguna
-    // fila. Por eso se asierta sobre el estado, no sobre el throw.
-    await renameSeat(player.client, seatId, 'Robado')
-    await unlinkSeat(player.client, entryIds[0]!)
+
+    //ANTES estas dos no tiraban. Un update que
+    // RLS filtra no afecta ninguna fila y eso NO es un error en PostgREST, así
+    // que a quien no organiza se le decía que guardó y al recargar volvía el
+    // valor viejo. Con `count: 'exact'` avisan, que es lo que la pantalla
+    // necesita para no mentir.
+    await expect(renameSeat(player.client, seatId, 'Robado')).rejects.toThrow(
+      /sólo puede hacerlo quien organiza/,
+    )
+    await expect(unlinkSeat(player.client, entryIds[0]!)).rejects.toThrow(
+      /sólo puede hacerlo quien organiza/,
+    )
+    //Nota: `removeSeat` es un DELETE y sigue sin avisar — mismo defecto,
+    // no medido por la ronda 15 (que nombró cuatro updates). Se deja como
+    // estaba en vez de cambiarlo a ojo; el estado de abajo prueba que tampoco
+    // borra nada.
     await removeSeat(player.client, seatId)
 
     const seats = await entriesOf(admin.client, seasonId)

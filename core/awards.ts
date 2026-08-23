@@ -1,6 +1,5 @@
-import { sideOf } from './pair-compat'
 import { members } from './side'
-import type { Award, EntryId, PairStanding, SeasonConfig } from './types'
+import type { Award, EntryId, SeasonConfig, SideStanding } from './types'
 
 /**
  * Points for a finished matchday. Both members of a pair always take the same
@@ -15,18 +14,18 @@ import type { Award, EntryId, PairStanding, SeasonConfig } from './types'
  * can never walk off with the ten points of a championship they are not in.
  */
 export function computeAwards(
-  standings: PairStanding[],
+  standings: SideStanding[],
   config: SeasonConfig,
   guestIds: readonly EntryId[],
 ): Award[] {
   const guests = new Set(guestIds)
-  // `members(sideOf(row.pair))` instead of `[row.pair.a, row.pair.b]` (design
-  // #3801, PUNTO 4 fila 16): a one-member side pays its single member, the
-  // natural generalization of "both members of a pair get the same points" —
-  // not a new rule. `row.pair` is still Pair-shaped until PR18, so `sideOf`
-  // always yields `size: 2` here and this is byte-for-byte the old behavior.
-  const championshipMembers = (row: PairStanding): EntryId[] =>
-    members(sideOf(row.pair)).filter((entryId) => !guests.has(entryId))
+  // `members(row.side)` instead of `[row.pair.a, row.pair.b]` (design #3801,
+  // PUNTO 4 fila 16): a one-member side pays its single member, the natural
+  // generalization of "both members of a pair get the same points" — not a new
+  // rule. Desde PR18b `row.side` YA es un `Side` real, así que el lado de uno
+  // que llega acá cobra de verdad; con `size: 2` es byte a byte lo de antes.
+  const championshipMembers = (row: SideStanding): EntryId[] =>
+    members(row.side).filter((entryId) => !guests.has(entryId))
 
   // computeStandings already hands these over in order; sorting a copy by
   // position keeps the result honest for any other caller.
@@ -35,8 +34,14 @@ export function computeAwards(
     .filter((row) => championshipMembers(row).length > 0)
 
   if (paying.length > config.points.length) {
+    //Decía "parejas" siempre. En una disciplina
+    // de a uno eso manda a buscar un bug de parejas donde no las hay — y este
+    // mensaje es el único rastro que queda en un log cuando el reparto no
+    // cierra. La aridad sale de las propias filas, sin parámetro nuevo.
+    const side = paying[0]?.side ?? standings[0]?.side
+    const noun = side?.size === 1 ? 'competidores' : 'parejas'
     throw new Error(
-      `La fecha tiene ${paying.length} parejas del torneo pero la lista de puntos sólo tiene ${config.points.length} valores.`,
+      `La fecha tiene ${paying.length} ${noun} del torneo pero la lista de puntos sólo tiene ${config.points.length} valores.`,
     )
   }
 

@@ -3,6 +3,7 @@ import { MASTERS_SIZE, rankingWithMovement, snapshotForMatchday, type Award, typ
 import type { DisciplineHeader, EntryRow, MatchdaySummary, SeasonHeader } from '@/db/read'
 import { initials, matchdayDay } from '@/app/format'
 import { Desempate, type StandingsRow, type TiebreakEntry } from './desempate'
+import { defendersOf } from './tabla-state'
 import { Volver } from './volver'
 
 interface TablaViewProps {
@@ -77,35 +78,21 @@ export function TablaView({ header, discipline, entries, matchdays, awardsByMatc
 
   const liveMatchday = regularMatchdays.find((matchday) => matchday.status !== 'CLOSED') ?? null
 
-  const sortedClosed = [...closedRegular].sort((a, b) => b.number - a.number)
-  const last = sortedClosed[0]
-  const beforeLast = sortedClosed[1]
-  const lastWinnerIds =
-    last !== undefined
-      ? (awardsByMatchday.get(last.number) ?? [])
-          .filter((award) => award.position === 1)
-          .map((award) => award.entryId)
-      : []
-  const beforeLastWinnerIds = new Set(
-    beforeLast !== undefined
-      ? (awardsByMatchday.get(beforeLast.number) ?? [])
-          .filter((award) => award.position === 1)
-          .map((award) => award.entryId)
-      : [],
+  //La derivación vive en `tabla-state.ts`, con
+  // test propio, y ahora recibe `pairSize` — de a uno no hay defensores, y
+  // esta pantalla los anunciaba igual sobre un jugador solo.
+  const defenders = defendersOf(
+    closedRegular.map((matchday) => ({
+      number: matchday.number,
+      awards: awardsByMatchday.get(matchday.number) ?? [],
+    })),
+    nameOf,
+    discipline.pairSize,
   )
-  const alreadyRepeated =
-    lastWinnerIds.length > 0 &&
-    lastWinnerIds.length === beforeLastWinnerIds.size &&
-    lastWinnerIds.every((entryId) => beforeLastWinnerIds.has(entryId))
-
-  const defenders =
-    last !== undefined && lastWinnerIds.length > 0 && !alreadyRepeated
-      ? { matchdayNumber: last.number, names: lastWinnerIds.map((entryId) => nameOf.get(entryId) ?? '') }
-      : null
 
   return (
     <div className="flex flex-col gap-3 pt-4">
-      {/* W20 (verify-report ronda 6): esta Tabla es por-disciplina, no la
+      {/*Esta Tabla es por-disciplina, no la
           raíz — "volver" tiene que subir a la tabla global del torneo
           (`/torneo/{id}`), la única otra pantalla donde enciende la misma
           pestaña "Tabla" (`nav.tsx`). Antes apuntaba a "Mis torneos",

@@ -2,7 +2,7 @@
 export type EntryId = string
 
 /**
- * Distinto NOMINALMENTE de un season id (N2, verify-report ronda 2 de
+ * Distinto NOMINALMENTE de un season id (N2 de
  * torneo-multi-disciplina): son dos strings con la misma forma (uuid) pero
  * significados que no se pueden confundir sin que el compilador lo note.
  * `awardsBefore`/`closedHistory` (db/season.ts) cambiaron su 2º parámetro de
@@ -20,17 +20,34 @@ export interface MatchFormat {
   setsToWin: number
   gamesPerSet: number
   tieBreak: boolean
+  /**
+   * Sin marcador objetivo: cualquier par de enteros >= 0 es legal (goles FIFA).
+   * `3-1`, `0-0`, `2-2`. No hay tope de games ni "quién ganó", y el partido es
+   * UN resultado, no una serie de sets — `setsToWin`, `gamesPerSet` y
+   * `tieBreak` describen un set de pádel y NO se leen cuando esto es `true`.
+   *
+   * OBLIGATORIO y sin default a propósito (decisión #3933, y la lección de
+   * `pair_size` en PR18a y `allows_draw` en W61, dos veces la misma trampa): un
+   * campo nuevo con default permisivo esconde a los escritores que no lo
+   * escriben. Sin default, `tsc` marca cada literal de `MatchFormat` que falta
+   * y obliga a decidir en la línea exacta.
+   *
+   * El empate es una regla ORTOGONAL y vive aparte, en `disciplines.allows_draw`:
+   * `match_sets_no_draw` (0034) lo sigue exigiendo del lado de la base, así que
+   * un marcador abierto SIN empates rechaza un `0-0` igual.
+   */
+  openScore: boolean
 }
 
 export interface SeasonConfig {
   /**
    * Squad size, not matchday size. Between MIN_PLAYERS and MAX_PLAYERS.
-   * Even only when the discipline's side size is 2 (N21, verify-report
+   * Even only when the discipline's side size is 2 (N21,
    * ronda 9) — with sideSize=1 an odd squad is perfectly playable.
    */
   squadSize: number
   matchFormat: MatchFormat
-  /** Exactly squadSize / sideSize values, strictly descending, all above zero (N21, verify-report ronda 9). */
+  /** Exactly squadSize / sideSize values, strictly descending, all above zero. */
   points: number[]
   regularMatchdays: number
   countBestOf: number
@@ -55,29 +72,64 @@ export type Side =
   | { readonly size: 1; readonly a: EntryId }
   | { readonly size: 2; readonly a: EntryId; readonly b: EntryId }
 
-/** @deprecated Reemplazado por `Side`. Vive hasta PR19, junto con `core/pair-compat.ts`. */
-export interface Pair {
-  a: EntryId
-  b: EntryId
-}
-
 export interface SetScore {
   gamesA: number
   gamesB: number
 }
 
+/**
+ * `sideA`/`sideB` y no `pairA`/`pairB` (design #3801, "Renombrado desde
+ * pairA/pairB: fuerza al compilador por cada consumidor"): el rename no es
+ * cosmético, es lo que obliga a cada lector a declarar en su línea exacta qué
+ * hace ahí un lado de uno. Un cambio de tipo solo dejaría compilando a la
+ * mitad de los consumidores que indexan `.b` sin angostar.
+ */
 export interface MatchResult {
   round: number
-  pairA: Pair
-  pairB: Pair
+  sideA: Side
+  sideB: Side
   /** Empty while the match has not been played. */
   sets: SetScore[]
 }
 
-export interface PairStanding {
-  pair: Pair
+/**
+ * Cuánto paga cada resultado en la TABLA DEL DÍA. No confundir con los puntos
+ * del CAMPEONATO, que son `Award.points` y salen de `config.points`.
+ *
+ * Existe para que haya UNA sola estrategia de orden y no dos (design #3801,
+ * decisión #12): con `{ win: 1, draw: 0 }` los puntos del día son exactamente
+ * los partidos ganados, así que el pádel de siempre es el caso DEGENERADO del
+ * mismo comparador y no una segunda rama que haya que mantener sincronizada.
+ *
+ * SIN campo `loss`: el design lo listaba, pero ninguna regla de liga paga por
+ * perder y ningún camino lo escribiría en otra cosa que 0. Sumar un tercer
+ * término que siempre aporta cero es un valor especulativo, no una
+ * generalización. El día que haga falta una penalización, es un campo más acá
+ * y un término más en `dayPointsOf`.
+ */
+export interface DayScoring {
+  win: number
+  draw: number
+}
+
+/** Una fila de la tabla del día. Su identidad es el LADO, de uno o de dos. */
+export interface SideStanding {
+  side: Side
   played: number
   won: number
+  /**
+   * Partidos que terminaron iguales. Sólo puede pasar de 0 en una disciplina
+   * con `allows_draw`: sin ella la base rechaza el resultado
+   * (`match_sets_no_draw`, 0034).
+   */
+  drawn: number
+  /**
+   * Los puntos de la fecha: `won * scoring.win + drawn * scoring.draw`. Es el
+   * PRIMER criterio de orden de la tabla, y por eso está en la fila — quien
+   * quiera explicar por qué un lado quedó arriba de otro necesita mirar el
+   * mismo número que miró el sort, no una reconstrucción parecida.
+   */
+  dayPoints: number
   setsDiff: number
   gamesDiff: number
   /** 1-based final position within the matchday. */

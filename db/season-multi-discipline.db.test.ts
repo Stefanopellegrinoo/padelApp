@@ -37,7 +37,7 @@ describe('createSeason con múltiples disciplinas (REQ-D1-1, contrato S13)', () 
     expect(header.disciplines.map((d) => d.kind)).toEqual(['PADEL', 'FIFA'])
   })
 
-  // S13 (auditoría ronda 5, contrato obligatorio): sin `position` explícito,
+  //Sin `position` explícito,
   // N filas insertadas para la misma temporada comparten `position` (default
   // 0) Y `created_at` (misma transacción) — `disciplineSlugs` ordena
   // exactamente por esa clave. Esta prueba fallaría contra cualquier
@@ -86,11 +86,11 @@ describe('createSeason con múltiples disciplinas (REQ-D1-1, contrato S13)', () 
     expect(header.disciplines.map((d) => slugs.get(d.id))).toEqual(['padel', 'padel-2'])
   })
 
-  // REQ-D1-3/D1-4, decisión de este slice: el asiento entra a TODAS las
+  //REQ-D1-3/D1-4, decisión de este slice: el asiento entra a TODAS las
   // disciplinas creadas en el mismo submit — no hay pantalla de "quién juega
   // qué" en este wizard (PR13 la agrega para sumar una disciplina en curso).
   // Sin esto, un asiento SQUAD sin fila en discipline_entries tumba la
-  // aserción de no-regresión de `db/discipline.db.test.ts` (C7/W8).
+  //Aserción de no-regresión de `db/discipline.db.test.ts`.
   it('cada asiento SQUAD entra a discipline_entries de las N disciplinas', async () => {
     const admin = await createTestUser()
     const config = defaultConfig(8)
@@ -149,7 +149,7 @@ describe('createSeason con múltiples disciplinas (REQ-D1-1, contrato S13)', () 
   it('pair_size y allows_draw se persisten por disciplina, sin heredar de kind (REQ-D2-1)', async () => {
     const admin = await createTestUser()
     const config = defaultConfig(8)
-    // 8 valores de puntos, no los 4 de `config` (C16, verify-report ronda 9):
+    //8 valores de puntos, no los 4 de `config`:
     // con `pairSize: 1`, 8 presentes son 8 lados, no 4 parejas.
     const fifaConfig = { ...config, points: [8, 7, 6, 5, 4, 3, 2, 1] }
     const { seasonId } = await createSeason(admin.client, {

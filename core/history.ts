@@ -1,20 +1,19 @@
-import { samePair } from './pairing'
-import { sideOf } from './pair-compat'
-import { members } from './side'
-import type { Award, Pair } from './types'
+import { members, sameSide, type Duo } from './side'
+import type { Award, Side } from './types'
 
 /** One closed matchday, as it was stored. */
 export interface MatchdayHistory {
-  pairs: Pair[]
+  /** Los lados de esa fecha, de uno o de dos según la disciplina. */
+  sides: Side[]
   /** Frozen at close. Empty for a matchday that never closed. */
   awards: Award[]
 }
 
 /** What the draw of the next matchday needs to know about the ones before it. */
 export interface PreviousContext {
-  defenders: Pair | null
+  defenders: Duo | null
   defendersAlreadyRepeated: boolean
-  previousPairs: Pair[]
+  previousPairs: Duo[]
 }
 
 /**
@@ -40,10 +39,34 @@ export function previousContext(
   }
 
   const defenders = championsOf(last)
+  // Defensores, repetición y parejas previas son restricciones DEL SORTEO DE
+  // PAREJAS, y el sorteo de a uno no tiene ninguna (`buildSides` con
+  // `sideSize === 1` las ignora enteras, core/pairing.ts). Por eso los lados de
+  // uno se filtran: con una historia de a uno esto devuelve el mismo triple
+  //Neutro que `last === null`, que es lo que el guard de C19 hardcodea en
+  // `pairingContextFor` — ahora derivado en vez de repetido.
+  const previousPairs = duosOnly(last.sides)
   const alreadyRepeated =
-    defenders !== null && (beforeLast?.pairs ?? []).some((pair) => samePair(pair, defenders))
+    defenders !== null && duosOnly(beforeLast?.sides ?? []).some((side) => sameSide(side, defenders))
 
-  return { defenders, defendersAlreadyRepeated: alreadyRepeated, previousPairs: last.pairs }
+  return { defenders, defendersAlreadyRepeated: alreadyRepeated, previousPairs }
+}
+
+/**
+ * Sólo los lados de dos. Un lado de uno no es una pareja y se cae acá.
+ *
+ * S43: filtrar en silencio es lo contrario del
+ * criterio que S37 impuso en `sideOfRow` —que TIRA cuando la forma no cierra—,
+ * y la asimetría es deliberada porque acá el silencio no puede perder nada:
+ * una historia con lados MIXTOS es inalcanzable, y lo impide la BASE, no un
+ * `if`. `pairs_matchday_size` clava cada fila de `pairs` al `pair_size` de su
+ * fecha, `matchdays_discipline_size` impide que una disciplina cambie de
+ * aridad con fechas ya creadas (probado con un `update` real en la ronda 13:
+ * lo rechaza la FK), y las dos entradas de `previousContext` salen del mismo
+ * `discipline_id`. O sea: o vienen todos de uno, o todos de dos.
+ */
+function duosOnly(sides: readonly Side[]): Duo[] {
+  return sides.filter((side): side is Duo => side.size === 2)
 }
 
 /**
@@ -51,7 +74,7 @@ export function previousContext(
  * awards. A pair made only of guests collects no award, so it can never come out
  * of here — which is the rule, not an accident.
  */
-function championsOf(matchday: MatchdayHistory): Pair | null {
+function championsOf(matchday: MatchdayHistory): Duo | null {
   const winners = new Set(
     matchday.awards.filter((award) => award.position === 1).map((award) => award.entryId),
   )
@@ -62,16 +85,21 @@ function championsOf(matchday: MatchdayHistory): Pair | null {
     return null
   }
 
-  // `members(sideOf(pair))` instead of `pair.a`/`pair.b`: "does a winner sit
-  // on this side" doesn't care about arity, and `pair` stays Pair-shaped
-  // until PR18 — `sideOf` always yields `size: 2`, identical to before.
-  const champions = matchday.pairs.filter((pair) =>
-    members(sideOf(pair)).some((entryId) => winners.has(entryId)),
+  // `members(side)` y no `pair.a`/`pair.b`: "¿hay un ganador de este lado?" no
+  // depende de la aridad, así que esta línea vale igual para uno o para dos.
+  const champions = matchday.sides.filter((side) =>
+    members(side).some((entryId) => winners.has(entryId)),
   )
   if (champions.length !== 1) {
     throw new Error(
       `La fecha anterior tiene ${champions.length} parejas en la posición 1; tiene que haber exactamente una.`,
     )
   }
-  return champions[0] ?? null
+  const champion = champions[0]
+  // Un lado de uno NO es una pareja defensora: la regla del campeón que
+  // defiende es una restricción del sorteo de parejas, y en una disciplina de
+  // a uno no hay con quién repetir. Devolver `null` acá es la misma respuesta
+  // que da el caso "no hubo fecha anterior", que es la correcta.
+  if (champion === undefined || champion.size === 1) return null
+  return champion
 }

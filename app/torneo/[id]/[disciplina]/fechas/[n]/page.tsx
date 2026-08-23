@@ -2,19 +2,22 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import type { ReactNode } from 'react'
 import {
-  computeAwards,
   computeRanking,
   computeStandings,
+  includes,
   mastersChampion,
   mastersQualifiers,
+  members,
   previousContext,
   resolveDisciplineBySlug,
-  samePair,
+  sameSide,
   snapshotForMatchday,
+  usesSetsDiff,
   type MatchResult,
-  type Pair,
-  type PairStanding,
   type SeasonConfig,
+  type Side,
+  type SideSize,
+  type SideStanding,
 } from '@/core'
 import {
   attendancesOf,
@@ -25,7 +28,9 @@ import {
   seasonHeader,
   seasonMatchdaysOf,
 } from '@/db/read'
-import { awardsBefore, closedHistory, frozenPointsOf } from '@/db/season'
+import { sideLabel, tiebreakNote } from './tabla-desempate'
+import { TablaDelDia } from './tabla-del-dia'
+import { awardsBefore, closedHistory, frozenPointsOf, type FrozenAward } from '@/db/season'
 import { serverClient } from '@/db/server'
 import { EdgeError } from '@/db/errors'
 import { matchdayFull } from '@/app/format'
@@ -36,13 +41,15 @@ import { DiaDeLaFecha } from './dia'
 import { MastersDraft, type QualifierVM } from './masters'
 import { SumarInvitado, type GuestPromoteVM, type SumarSeatVM } from './sumar'
 import { guestsToPromote } from './sumar-state'
+import { frozenTableRows, orderMoved } from './tabla-congelada'
 
 interface PageProps {
   params: Promise<{ id: string; disciplina: string; n: string }>
 }
 
-function pairKey(pair: Pair): string {
-  return [pair.a, pair.b].sort().join('~')
+/** Clave estable de un lado, de uno o de dos: el orden de los miembros no importa. */
+function sideKey(side: Side): string {
+  return [...members(side)].sort().join('~')
 }
 
 function totalGames(match: MatchResult): [number, number] {
@@ -69,38 +76,6 @@ function matchWinner(match: MatchResult): 'A' | 'B' | null {
 }
 
 /**
- * Si la tabla se resolvió por desempate, arma la frase con el criterio real que
- * cortó, mirando `PairStanding` (posición, partidos ganados, diferencia de
- * games) de a pares consecutivos: el patrón del handoff describe exactamente el
- * caso de "empataron en partidos ganados, cortó la diferencia de games".
- */
-function tiebreakNote(standings: PairStanding[], config: SeasonConfig, nameOf: Map<string, string>): string | null {
-  const label = (pair: Pair) => `${nameOf.get(pair.a) ?? '?'} & ${nameOf.get(pair.b) ?? '?'}`
-  const usesSetsDiff = config.matchFormat.setsToWin > 1
-
-  for (let i = 1; i < standings.length; i++) {
-    const better = standings[i - 1]
-    const worse = standings[i]
-    if (better === undefined || worse === undefined) continue
-    if (better.won !== worse.won) continue
-    if (usesSetsDiff && better.setsDiff !== worse.setsDiff) continue
-
-    if (better.gamesDiff !== worse.gamesDiff) {
-      return `${label(worse.pair)} quedaron ${worse.position}° por diferencia de games: empataron en partidos ganados con ${label(better.pair)}.`
-    }
-
-    // ponytail: con todo empatado (partidos ganados y diferencia de games) el
-    // corte real pasa por el resultado directo o, en un triple empate, por el
-    // snapshot — ambos viven adentro de `computeStandings` y no se reexponen.
-    // No hay copy contractual para ese caso puntual y no ocurre con el formato
-    // a un set por defecto (sin empates posibles); si hiciera falta, se
-    // exporta el criterio exacto desde `core/standings.ts`.
-    return `${label(worse.pair)} quedaron ${worse.position}° por el desempate de la fecha: empataron en partidos ganados y en diferencia de games con ${label(better.pair)}.`
-  }
-  return null
-}
-
-/**
  * Fecha `[n]` — Task 8, Plan 3. Sólo lectura: dibuja lo que ya pasó (parejas,
  * fixture con los resultados que existan, tabla de la fecha). No arma el
  * wizard de DRAFT, no carga resultados, no cierra ni reabre — todo eso es
@@ -116,12 +91,12 @@ export default async function FechaDetailPage({ params }: PageProps) {
     seasonMatchdaysOf(supabase, seasonId),
   ])
 
-  // REQ-NR-5: slug desconocido, o de otra temporada — mismo `notFound()` que
+  //REQ-NR-5: slug desconocido, o de otra temporada — mismo `notFound()` que
   // `jugador/[entryId]/page.tsx` usa para un `entryId` que no resuelve.
   const discipline = resolveDisciplineBySlug(header.disciplines, disciplina)
   if (discipline === undefined) notFound()
 
-  // `number` es único por disciplina (REQ-D3-2), no por temporada: con dos
+  //`number` es único por disciplina (REQ-D3-2), no por temporada: con dos
   // disciplinas del mismo `kind` (Fase 2) puede haber una "fecha 2" de cada
   // una, y buscar sólo por número sin la disciplina de la URL sería
   // ambiguo — se quedaría con la primera que matchee, no necesariamente la
@@ -131,7 +106,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
   )
   if (matchday === undefined) throw new EdgeError('La fecha no existe.')
 
-  // C8, verify-report ronda 4: `entriesOf` sin `disciplineId` explícito
+  //,: `entriesOf` sin `disciplineId` explícito
   // resolvía la disciplina por dentro (`defaultDisciplineId`), que no tiene
   // por qué ser la de ESTA fecha — el desempate del día se armaba con el
   // plantel equivocado apenas hubiera más de una disciplina por temporada
@@ -140,7 +115,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
   const entries = await entriesOf(supabase, seasonId, matchday.disciplineId)
 
   const nameOf = new Map(entries.map((entry) => [entry.id, entry.displayName]))
-  const pairName = (pair: Pair) => `${nameOf.get(pair.a) ?? '?'} & ${nameOf.get(pair.b) ?? '?'}`
+  const sideName = (side: Side) => sideLabel(side, nameOf)
 
   const kicker =
     matchday.status === 'DRAFT'
@@ -149,9 +124,12 @@ export default async function FechaDetailPage({ params }: PageProps) {
         ? `En juego${matchday.playedOn !== null ? ` · ${matchdayFull(matchday.playedOn)}` : ''}`
         : `Cerrada${matchday.playedOn !== null ? ` · ${matchdayFull(matchday.playedOn)}` : ''}`
 
+  // El vocabulario de la disciplina: un lado de uno no es "una pareja".
+  const sideWord = discipline.pairSize === 1 ? 'jugadores' : 'parejas'
+
   let body: ReactNode = (
     <div className="rounded-card bg-chip p-4 text-center text-[13px] font-[550] text-muted">
-      Se está armando. Todavía no hay parejas ni partidos para mostrar.
+      Se está armando. Todavía no hay {sideWord} ni partidos para mostrar.
     </div>
   )
 
@@ -210,6 +188,11 @@ export default async function FechaDetailPage({ params }: PageProps) {
 
     const { defenders, defendersAlreadyRepeated } = previousContext(lastHistory, beforeLastHistory)
     const effectiveDefenders = defenders !== null && !defendersAlreadyRepeated ? defenders : null
+    // Los defensores ya llegan como `Side` (PR19): `previousContext` devuelve
+    // `null` en una disciplina de a uno —no hay con quién repetir— así que
+    // ningún lado se marca como defensor ahí. Antes esto los subía de `Pair` a
+    // `Side` con `pair()`; ese puente se fue con el tipo.
+    const defendingSide = effectiveDefenders
 
     // Sin fila de asistencia es "viene": el admin arma la fecha con todos y
     // descuenta a los que avisaron. `seedAttendances` —que corre en cada action,
@@ -262,11 +245,11 @@ export default async function FechaDetailPage({ params }: PageProps) {
         }
       })
 
-    const draftPairs: DraftPairVM[] = detail.pairs.map((pair) => ({
-      key: pairKey(pair),
-      names: pairName(pair),
-      defending: effectiveDefenders !== null && samePair(pair, effectiveDefenders),
-      withGuest: detail.guestIds.includes(pair.a) || detail.guestIds.includes(pair.b),
+    const draftPairs: DraftPairVM[] = detail.sides.map((side) => ({
+      key: sideKey(side),
+      names: sideName(side),
+      defending: defendingSide !== null && sameSide(side, defendingSide),
+      withGuest: members(side).some((entryId) => detail.guestIds.includes(entryId)),
     }))
 
     body = (
@@ -274,6 +257,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
         seasonId={seasonId}
         matchdayId={matchday.id}
         disciplina={disciplina}
+        sideSize={discipline.pairSize}
         matchdayNumber={matchday.number}
         seats={seats}
         looseGuests={looseGuests}
@@ -300,29 +284,68 @@ export default async function FechaDetailPage({ params }: PageProps) {
       awardsBefore(supabase, matchday.disciplineId, matchdayNumber),
       closedHistory(supabase, matchday.disciplineId, matchdayNumber - 1),
       closedHistory(supabase, matchday.disciplineId, matchdayNumber - 2),
-      // Los awards CONGELADOS de ESTA fecha, para la tarjeta de "Sumar
-      // invitado" de más abajo. `canPromote` NO sabe si hay invitados —eso lo
-      // contesta `detail`, que resuelve en este mismo `Promise.all`—, así que
-      // esto sale en TODA fecha cerrada que abra quien organiza, tenga o no
-      // invitados. Es un viaje de ida y vuelta, no tres: por eso no es
-      // `closedHistory`, cuyas otras dos consultas acá son plata tirada (el
-      // estado ya está probado por `canPromote`, y las parejas se descartan).
-      canPromote ? frozenPointsOf(supabase, matchday.id) : Promise.resolve(new Map<string, number>()),
+      // Los awards CONGELADOS de ESTA fecha. Alimentan DOS cosas: la tarjeta
+      //De "Sumar invitado" y —desde C21, — la columna
+      // de puntos de la tabla del día. Por eso la condición ya no es
+      // `canPromote` (admin) sino la fecha cerrada: cualquiera que mire una
+      // fecha cerrada necesita estos puntos, no sólo quien organiza.
+      // Es un viaje de ida y vuelta, no tres: por eso no es `closedHistory`,
+      // cuyas otras dos consultas acá son plata tirada (las parejas se
+      // descartan y el estado ya lo sabemos).
+      status === 'CLOSED' && !isMasters
+        ? frozenPointsOf(supabase, matchday.id)
+        : Promise.resolve(new Map<string, FrozenAward>()),
     ])
 
     const snapshot = snapshotForMatchday(matchdayNumber, seedOrder, awardsByMatchday, config)
-    const standings = computeStandings(detail.pairs, detail.matches, config, snapshot)
+    const standings = computeStandings(detail.sides, detail.matches, config, snapshot, matchday.allowsDraw)
 
     const { defenders, defendersAlreadyRepeated } = previousContext(lastHistory, beforeLastHistory)
     const effectiveDefenders = defenders !== null && !defendersAlreadyRepeated ? defenders : null
-    const isDefendingPair = (pair: Pair) => effectiveDefenders !== null && samePair(pair, effectiveDefenders)
+    const defendingSide = effectiveDefenders
+    const isDefendingSide = (side: Side) => defendingSide !== null && sameSide(side, defendingSide)
 
-    // El Masters no reparte puntos, así que tampoco se calculan: `computeAwards`
-    // devolvería un reparto que no existe en `awards` y que nadie escribió.
-    const pointsByEntry =
-      status === 'CLOSED' && !isMasters
-        ? new Map(computeAwards(standings, config, detail.guestIds).map((award) => [award.entryId, award.points]))
-        : new Map<string, number>()
+    // Los puntos de la fecha cerrada son los CONGELADOS, no un recálculo.
+    //
+    //Acá se llamaba a `computeAwards` con los
+    // `guestIds` de HOY. Mientras el conjunto de lados que cobran no cambiara
+    // después del cierre las dos fuentes coincidían — y PR18c es lo primero en
+    // toda la cadena que hace que cambie. Al promover al invitado que jugó
+    // solo, sale de `guestIds`, su lado pasa a cobrar, quedan 9 lados pagos
+    // contra 8 valores de puntos y `computeAwards` tira un `Error` PELADO (no
+    // `EdgeError`) que el server action re-tira: error boundary de Next, sin
+    // mensaje, sobre la pantalla desde la que se acababa de tocar el botón.
+    // `validateConfig` exige el largo exacto de `points`, así que no hay
+    // holgura posible: pasaba siempre, no era un borde.
+    //
+    // Leer los congelados es la fuente correcta POR DEFINICIÓN, no un parche:
+    // son lo que la fecha repartió, y una fecha cerrada no vuelve a repartir.
+    // Es el mismo argumento que ya estaba escrito para la tarjeta de promoción
+    // veinte líneas más abajo —"leer `awards` hoy no cambia lo que se ve,
+    // cambia DE QUÉ DEPENDE lo que se ve"— que resultó ser cierto también acá.
+    //De paso cierra W43 y saca la posibilidad de que esta tabla contradiga a
+    // la de la temporada, que lee `awards`.
+    //
+    // El Masters queda en cero como antes: no reparte puntos (spec 2.7), así
+    // que no tiene filas en `awards` y `frozenPointsOf` ni se consulta.
+    const pointsByEntry = frozenPoints
+
+    //Las filas de una fecha CERRADA se ordenan
+    // por el puesto CONGELADO, no por el que `computeStandings` calcula hoy.
+    // El criterio vive en `tabla-congelada.ts` —módulo puro, testeable— porque
+    //Entró sin una sola aserción y de ahí salieron W56 y W57.
+    //
+    // PG y Dif se siguen tomando de `standings`: salen de los resultados, que
+    // una fecha cerrada ya no cambia.
+    //
+    //La condición es la MISMA que la de la carga de `frozenPoints` de
+    // arriba, `!isMasters` incluido. El Masters no reparte puntos (spec 2.7),
+    // así que su Map llega vacío y el orden se preservaba igual — pero por la
+    // estabilidad de `Array.prototype.sort`, una garantía que ningún test fijaba
+    // y ningún comentario mencionaba. Que las dos condiciones digan lo mismo
+    // saca la asimetría que parecía un olvido.
+    const tableRows =
+      status === 'CLOSED' && !isMasters ? frozenTableRows(standings, frozenPoints) : standings
 
     // El campeón del año. Los partidos ganados por jugador salen de `standings`
     // —cada pareja del Masters juega una vez, así que sumar las tres parejas de
@@ -334,7 +357,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
       const four = mastersQualifiers(ranking)
       const winsOf = (entryId: string) =>
         standings
-          .filter((row) => row.pair.a === entryId || row.pair.b === entryId)
+          .filter((row) => includes(row.side, entryId))
           .reduce((total, row) => total + row.won, 0)
 
       const championId = mastersChampion(four, detail.matches)
@@ -360,16 +383,16 @@ export default async function FechaDetailPage({ params }: PageProps) {
       const roundMatches = detail.matches.filter((match) => match.round === roundNumber)
       const playingKeys = new Set<string>()
       for (const match of roundMatches) {
-        playingKeys.add(pairKey(match.pairA))
-        playingKeys.add(pairKey(match.pairB))
+        playingKeys.add(sideKey(match.sideA))
+        playingKeys.add(sideKey(match.sideB))
       }
       // La pareja libre existe en una fecha de 5 parejas, donde una descansa por
       // ronda. En el Masters no descansa nadie: son 6 "parejas" que son las tres
       // combinaciones de los mismos 4 jugadores, y cada ronda juega una sola,
       // así que "la que no juega" son cuatro y nombrar una es mentir.
-      const restingPair = isMasters
+      const restingSide = isMasters
         ? undefined
-        : detail.pairs.find((pair) => !playingKeys.has(pairKey(pair)))
+        : detail.sides.find((side) => !playingKeys.has(sideKey(side)))
       const loadedCount = roundMatches.filter((match) => match.sets.length > 0).length
 
       const matches: RoundMatchVM[] = roundMatches.map((match, index) => {
@@ -378,8 +401,8 @@ export default async function FechaDetailPage({ params }: PageProps) {
         return {
           key: `${roundNumber}-${index}`,
           matchId: match.id,
-          pairAName: pairName(match.pairA),
-          pairBName: pairName(match.pairB),
+          pairAName: sideName(match.sideA),
+          pairBName: sideName(match.sideB),
           scoreA: match.sets.length === 0 ? '–' : String(gamesA),
           scoreB: match.sets.length === 0 ? '–' : String(gamesB),
           winner,
@@ -391,7 +414,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
         totalCount: roundMatches.length,
         loadedCount,
         complete: roundMatches.length > 0 && loadedCount === roundMatches.length,
-        restingPairName: restingPair !== undefined ? pairName(restingPair) : null,
+        restingPairName: restingSide !== undefined ? sideName(restingSide) : null,
         matches,
       }
     })
@@ -421,7 +444,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
     // La tercera guarda —la fecha siguiente en DRAFT— se deja pasar a propósito:
     // si está vacía, `reopen_matchday` la borra y sigue, que es exactamente el
     // caso para el que se escribió; si tiene datos, su mensaje es el correcto.
-    // W13 (verify-report ronda 5): `matchdays` es de TODA la temporada
+    //`matchdays` es de TODA la temporada
     // (`seasonMatchdaysOf`), pero `reopen_matchday` (0018) filtra sus dos
     // guardas por `discipline_id` — una fecha OPEN o CLOSED de OTRA
     // disciplina no debe apagar el botón acá.
@@ -431,9 +454,25 @@ export default async function FechaDetailPage({ params }: PageProps) {
         (candidate) => candidate.status === 'CLOSED' && candidate.number > matchday.number,
       ) && !ownMatchdays.some((candidate) => candidate.status === 'OPEN' && candidate.id !== matchday.id)
 
-    const hasGuest = (pair: Pair) => detail.guestIds.includes(pair.a) || detail.guestIds.includes(pair.b)
-    const anyGuestInTable = status === 'CLOSED' && standings.some((row) => hasGuest(row.pair))
-    const note = status === 'CLOSED' ? tiebreakNote(standings, config, nameOf) : null
+    const hasGuest = (side: Side) => members(side).some((entryId) => detail.guestIds.includes(entryId))
+    const anyGuestInTable = status === 'CLOSED' && standings.some((row) => hasGuest(row.side))
+    //El pie describe el orden que la tabla
+    // DIBUJA, o no se dibuja. `tiebreakNote` sale de `standings` e imprime
+    // `worse.position`, el puesto que `computeStandings` calcula hoy; desde que
+    // la tabla se ordena por el puesto congelado las dos fuentes se pueden
+    // contradecir, y el pie es el único ordinal que el usuario ve porque la
+    // tabla no imprime puestos. Medido: decía "quedó 2°" sobre quien la tabla
+    // dibuja primero, citando como mejor a alguien dos filas más abajo.
+    //
+    // Pasarle `tableRows` no alcanza —`worse.position` sigue siendo el vivo— y
+    // reescribir el ordinal sería peor: el desempate que el pie explica lo hizo
+    // `computeStandings` sobre el orden vivo, así que sobre el congelado estaría
+    // explicando una comparación que nunca ocurrió. Cuando el orden no se movió,
+    // que es el caso normal, el pie se ve igual que siempre.
+    const note =
+      status === 'CLOSED' && !orderMoved(standings, tableRows)
+        ? tiebreakNote(standings, config, nameOf, discipline.pairSize)
+        : null
 
     // Sumar invitado (spec Capability 3) sólo existe con la fecha CLOSED:
     // `promote_guest` rechaza cualquier otro estado del lado de la base, y
@@ -441,26 +480,33 @@ export default async function FechaDetailPage({ params }: PageProps) {
     // falla por estado.
     //
     // Los puntos de la tarjeta salen de `awards` —la tabla CONGELADA, la misma
-    // fila que `promote_guest` copia con su `join`— y NO de `pointsByEntry`,
-    // que es el recálculo en vivo de veinte líneas más arriba. Reusar
-    // `pointsByEntry` parecía lo prudente ("una sola cuenta") y era justo al
-    // revés, porque las dos no contestan la misma pregunta: `pointsByEntry`
-    // dice cuánto daría un recálculo HOY, y la tarjeta tiene que prometer
-    // cuánto va a GRABAR la escritura. Con el salteo silencioso que había
-    // antes se separaban: medido en una temporada de 12, después de promover
+    // fila que `promote_guest` copia con su `join`—, igual que la tabla del
+    //Día de arriba: desde C21 las dos leen
+    // `frozenPoints` y son LA MISMA fuente.
+    //
+    //Hasta C21 este párrafo distinguía la
+    // tarjeta de `pointsByEntry`, que era un recálculo en vivo, y la
+    // distinción era real — medido en una temporada de 12, después de promover
     // la pantalla mostraba al invitado con 5 puntos que no existían en ninguna
-    // fila de `awards` y a su compañero con 3 donde la tabla tenía 5.
-    // `promote_guest` ahora refusa ese caso, y sobre los dos escenarios que SÍ
-    // acepta —invitado suelto en una temporada de 12, e invitado suelto
-    // conviviendo con una pareja toda invitada en una de 8— las dos fuentes
-    // coinciden fila por fila. O sea: leer `awards` hoy no cambia lo que se
-    // ve, cambia DE QUÉ DEPENDE lo que se ve.
+    //Fila de `awards` y a su compañero con 3 donde la tabla tenía 5. C21
+    // borró esa diferencia haciendo que la tabla también lea los congelados,
+    // así que el párrafo pasó a distinguir `pointsByEntry` de sí mismo.
+    //
+    // Lo que sigue valiendo es el argumento, y por eso queda escrito: la
+    // tarjeta tiene que prometer lo que la escritura va a GRABAR, no lo que un
+    // recálculo daría hoy. Leer `awards` no cambia lo que se ve, cambia DE QUÉ
+    // DEPENDE lo que se ve — y resultó ser cierto también para la tabla.
     //
     // La clasificación en sí —qué estado le toca a cada invitado— vive en
     // `sumar-state.ts`, que es pura y por eso tiene tests: acá adentro no los
     // podía tener, y su predicado ya se escribió mal una vez.
     const guestsForPromotion: GuestPromoteVM[] = canPromote
-      ? guestsToPromote({ guestIds: detail.guestIds, pairs: detail.pairs, frozenPoints, nameOf })
+      ? guestsToPromote({
+          guestIds: detail.guestIds,
+          sides: detail.sides,
+          frozenPoints: new Map([...frozenPoints].map(([entryId, award]) => [entryId, award.points])),
+          nameOf,
+        })
       : []
     // La lista de asientos es sólo para el select de "antes de quién" de esa
     // tarjeta: sin invitados que sumar no hay tarjeta, y armarla es trabajo al
@@ -476,16 +522,16 @@ export default async function FechaDetailPage({ params }: PageProps) {
     body = (
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap gap-1.5">
-          {detail.pairs.map((pair) => {
-            const defending = isDefendingPair(pair)
+          {detail.sides.map((side) => {
+            const defending = isDefendingSide(side)
             return (
               <span
-                key={pairKey(pair)}
+                key={sideKey(side)}
                 className={`rounded-full px-3 py-1.5 text-[11.5px] font-[750] ${
                   defending ? 'bg-ok-bg text-up' : 'bg-chip text-muted'
                 }`}
               >
-                {pairName(pair)}
+                {sideName(side)}
                 {defending ? ' · Defensora' : ''}
               </span>
             )
@@ -509,53 +555,38 @@ export default async function FechaDetailPage({ params }: PageProps) {
         ) : (
         <div className="flex flex-col gap-2">
           <p className="text-[15px] font-extrabold tracking-[-.02em]">Tabla de la fecha</p>
-          <div className="overflow-hidden rounded-[14px] border border-line">
-            <div className="grid grid-cols-[1fr_34px_44px_44px] gap-2 bg-chip px-3 py-2 text-[9.5px] font-extrabold uppercase tracking-[.13em] text-muted">
-              <span>Pareja</span>
-              <span className="text-right">PG</span>
-              <span className="text-right">Dif</span>
-              <span className="text-right">Pts</span>
-            </div>
-            {standings.map((row, index) => {
-              const guestInRow = status === 'CLOSED' && hasGuest(row.pair)
+          <TablaDelDia
+            tituloLado={discipline.pairSize === 1 ? 'Jugador' : 'Pareja'}
+            muestraEmpates={matchday.allowsDraw}
+            filas={tableRows.map((row) => ({
+              key: sideKey(row.side),
+              nombre: sideName(row.side),
+              esInvitado: status === 'CLOSED' && hasGuest(row.side),
+              won: row.won,
+              drawn: row.drawn,
+              gamesDiff: row.gamesDiff,
               // La columna son "los puntos que se llevó cada jugador"
               // (`ui-screens.md` §9), y en la pareja del invitado los dos no se
               // llevan lo mismo: el invitado 0 y su compañero lo que le tocó.
               // El `??` resuelve eso solo, porque `computeAwards` no le escribe
               // award al invitado. Antes esta fila mostraba `0` fijo, y con eso
               // la pareja que ganaba la fecha 3-0 aparecía sin puntos abajo de
-              // otra con un partido ganado — contradiciendo la nota que está dos
-              // líneas más abajo, "su compañero sí". Lo encontró la Task 14.
-              const pts =
+              // otra con un partido ganado — contradiciendo la nota que está
+              // más abajo, "su compañero sí". Lo encontró la Task 14.
+              // El primer miembro del lado que tenga award manda: en la pareja
+              // del invitado los dos no cobran lo mismo (el invitado 0), y en un
+              // lado de uno hay un solo miembro y es el suyo. `members` recorre
+              // los que haya, así que la regla es la misma para las dos formas.
+              pts:
                 status === 'OPEN'
                   ? '—'
-                  : String(pointsByEntry.get(row.pair.a) ?? pointsByEntry.get(row.pair.b) ?? 0)
-              const diff = row.gamesDiff
-              return (
-                <div
-                  key={pairKey(row.pair)}
-                  className={`grid grid-cols-[1fr_34px_44px_44px] items-center gap-2 px-3 py-2 text-[13.5px] ${
-                    index > 0 ? 'border-t border-line' : ''
-                  }`}
-                >
-                  <span className="flex items-center gap-1.5 font-bold">
-                    {pairName(row.pair)}
-                    {guestInRow && (
-                      <span className="shrink-0 rounded-full border border-line px-1.5 py-0.5 text-[9px] font-extrabold text-muted">
-                        Invitado
-                      </span>
-                    )}
-                  </span>
-                  <span className="text-right font-bold text-muted">{row.won}</span>
-                  <span className="text-right font-bold text-muted">
-                    {diff >= 0 ? '+' : ''}
-                    {diff}
-                  </span>
-                  <span className="text-right text-[17px] font-extrabold">{pts}</span>
-                </div>
-              )
-            })}
-          </div>
+                  : String(
+                      members(row.side)
+                        .map((entryId) => pointsByEntry.get(entryId)?.points)
+                        .find((points) => points !== undefined) ?? 0,
+                    ),
+            }))}
+          />
 
           {status === 'OPEN' && (
             <p className="text-[12.5px] font-[550] text-muted">

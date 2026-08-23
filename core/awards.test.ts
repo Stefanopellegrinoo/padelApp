@@ -1,19 +1,20 @@
 import { describe, it, expect } from 'vitest'
 import { computeAwards } from './awards'
 import { defaultConfig } from './config'
-import type { Pair, PairStanding, SeasonConfig } from './types'
+import { pair, single } from './side'
+import type { Side, SideStanding, SeasonConfig } from './types'
 
 const CONFIG: SeasonConfig = {
   squadSize: 12,
-  matchFormat: { setsToWin: 1, gamesPerSet: 4, tieBreak: true },
+  matchFormat: { setsToWin: 1, gamesPerSet: 4, tieBreak: true, openScore: false },
   points: [10, 7, 5, 3, 2, 1],
   regularMatchdays: 10,
   countBestOf: 8,
   tiebreakSnapshotEvery: 3,
 }
 
-function standing(a: string, b: string, position: number): PairStanding {
-  return { pair: { a, b }, played: 3, won: 0, setsDiff: 0, gamesDiff: 0, position }
+function standing(a: string, b: string, position: number): SideStanding {
+  return { side: pair(a, b), played: 3, won: 0, drawn: 0, dayPoints: 0, setsDiff: 0, gamesDiff: 0, position }
 }
 
 describe('computeAwards', () => {
@@ -94,15 +95,47 @@ describe('computeAwards', () => {
     const tooMany = Array.from({ length: 7 }, (_, i) => standing(`p${i}a`, `p${i}b`, i + 1))
     expect(() => computeAwards(tooMany, CONFIG, [])).toThrow(/puntos/)
   })
+
+  /*
+   * S44: el mensaje decía "parejas" siempre, y en una
+   * disciplina de a uno eso manda a buscar un bug de parejas donde no las hay.
+   * Es el único rastro que queda en un log cuando el reparto no cierra — la
+   * ronda 14 lo encontró en el server.log como la firma de C21.
+   */
+  it('dice "competidores" y no "parejas" cuando el lado es de uno', () => {
+    const solos = ['s1', 's2', 's3', 's4', 's5', 's6', 's7'].map((id, index) => ({
+      side: single(id),
+      played: 0,
+      won: 0,
+      drawn: 0,
+      dayPoints: 0,
+      setsDiff: 0,
+      gamesDiff: 0,
+      position: index + 1,
+    }))
+    expect(() => computeAwards(solos, CONFIG, [])).toThrow(
+      /La fecha tiene 7 competidores del torneo pero la lista de puntos sólo tiene 6 valores\./,
+    )
+  })
+
+  it('sigue diciendo "parejas" cuando el lado es de dos (S44, no-regresión)', () => {
+    const tooMany = table([
+      pair('a1', 'a2'), pair('b1', 'b2'), pair('c1', 'c2'), pair('d1', 'd2'),
+      pair('e1', 'e2'), pair('f1', 'f2'), pair('g1', 'g2'),
+    ])
+    expect(() => computeAwards(tooMany, CONFIG, [])).toThrow(
+      /La fecha tiene 7 parejas del torneo pero la lista de puntos sólo tiene 6 valores\./,
+    )
+  })
 })
 
-const pair = (a: string, b: string): Pair => ({ a, b })
-
-const table = (pairs: Pair[]): PairStanding[] =>
-  pairs.map((p, index) => ({
-    pair: p,
+const table = (sides: Side[]): SideStanding[] =>
+  sides.map((p, index) => ({
+    side: p,
     played: 0,
     won: 0,
+    drawn: 0,
+    dayPoints: 0,
     setsDiff: 0,
     gamesDiff: 0,
     position: index + 1,
@@ -177,7 +210,7 @@ describe('computeAwards — guests', () => {
 describe('computeAwards — el teorema de la promoción (spec 3.1)', () => {
   // Pareja 1: p1 (plantel) y g1 (invitado). Pareja 2: p2 y p3, plantel las dos.
   // CONFIG.points = [10, 7, 5, 3, 2, 1] — literal del archivo, no derivado.
-  const standings: PairStanding[] = [standing('p1', 'g1', 1), standing('p2', 'p3', 2)]
+  const standings: SideStanding[] = [standing('p1', 'g1', 1), standing('p2', 'p3', 2)]
 
   it('con g1 invitado —el comportamiento real de close_matchday—, p1 se lleva 10 puntos y g1 no tiene award', () => {
     const awards = computeAwards(standings, CONFIG, ['g1'])
@@ -217,7 +250,7 @@ describe('computeAwards — el teorema de la promoción (spec 3.1)', () => {
   // que hace visible ese filtro — y de paso demuestra el contraejemplo por el
   // que `promote_guest` (0014_promote_guest.sql) REFUSA ese caso en vez de
   // saltearlo: ahí copiar el award congelado NO es lo que un recálculo daría.
-  const conParejaInvitada: PairStanding[] = [
+  const conParejaInvitada: SideStanding[] = [
     standing('p1', 'p2', 1),
     standing('g1', 'g2', 2),
     standing('p3', 'p4', 3),

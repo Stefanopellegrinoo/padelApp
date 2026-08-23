@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { pair, single } from '@/core'
 import { guestsToPromote, type GuestPromotionInput } from './sumar-state'
 
 const nombres = new Map([
@@ -12,7 +13,7 @@ const nombres = new Map([
 function fecha(partial: Partial<GuestPromotionInput> = {}): GuestPromotionInput {
   return {
     guestIds: ['invi'],
-    pairs: [],
+    sides: [],
     frozenPoints: new Map<string, number>(),
     nameOf: nombres,
     ...partial,
@@ -23,7 +24,7 @@ describe('guestsToPromote', () => {
   it('ofrece el botón con los puntos congelados de su compañero', () => {
     const [invitado] = guestsToPromote(
       fecha({
-        pairs: [{ a: 'ana', b: 'invi' }],
+        sides: [pair('ana', 'invi')],
         frozenPoints: new Map([['ana', 5]]),
       }),
     )
@@ -40,7 +41,7 @@ describe('guestsToPromote', () => {
     const [invitado] = guestsToPromote(
       fecha({
         guestIds: ['invi', 'invi2'],
-        pairs: [{ a: 'invi', b: 'invi2' }],
+        sides: [pair('invi', 'invi2')],
         frozenPoints: new Map([['ana', 5]]),
       }),
     )
@@ -51,7 +52,7 @@ describe('guestsToPromote', () => {
   it('refusa al que nunca quedó en una pareja de la fecha', () => {
     const [invitado] = guestsToPromote(
       fecha({
-        pairs: [{ a: 'ana', b: 'beto' }],
+        sides: [pair('ana', 'beto')],
         frozenPoints: new Map([['ana', 5]]),
       }),
     )
@@ -78,18 +79,18 @@ describe('guestsToPromote', () => {
 
     const [cobraPrimero] = guestsToPromote(
       fecha({
-        pairs: [
-          { a: 'ana', b: 'invi' },
-          { a: 'invi', b: 'invi2' },
+        sides: [
+          pair('ana', 'invi'),
+          pair('invi', 'invi2'),
         ],
         frozenPoints,
       }),
     )
     const [cobraSegundo] = guestsToPromote(
       fecha({
-        pairs: [
-          { a: 'invi', b: 'invi2' },
-          { a: 'ana', b: 'invi' },
+        sides: [
+          pair('invi', 'invi2'),
+          pair('ana', 'invi'),
         ],
         frozenPoints,
       }),
@@ -114,17 +115,17 @@ describe('guestsToPromote', () => {
    */
   it('con dos parejas que cobraron distinto, promete los puntos de la primera', () => {
     const pairs = [
-      { a: 'ana', b: 'invi' },
-      { a: 'invi', b: 'beto' },
+      pair('ana', 'invi'),
+      pair('invi', 'beto'),
     ]
     const frozenPoints = new Map([
       ['ana', 5],
       ['beto', 9],
     ])
 
-    const [invitado] = guestsToPromote(fecha({ pairs, frozenPoints }))
+    const [invitado] = guestsToPromote(fecha({ sides: pairs, frozenPoints }))
     // Y al revés, para que la aserción no acierte por simetría de los valores.
-    const [alReves] = guestsToPromote(fecha({ pairs: [...pairs].reverse(), frozenPoints }))
+    const [alReves] = guestsToPromote(fecha({ sides: [...pairs].reverse(), frozenPoints }))
 
     expect(invitado).toEqual({
       entryId: 'invi',
@@ -145,7 +146,7 @@ describe('guestsToPromote', () => {
   it('trata un award de 0 puntos como award, no como ausencia', () => {
     const [invitado] = guestsToPromote(
       fecha({
-        pairs: [{ a: 'ana', b: 'invi' }],
+        sides: [pair('ana', 'invi')],
         frozenPoints: new Map([['ana', 0]]),
       }),
     )
@@ -162,9 +163,9 @@ describe('guestsToPromote', () => {
     const estados = guestsToPromote(
       fecha({
         guestIds: ['invi', 'invi2'],
-        pairs: [
-          { a: 'ana', b: 'invi' },
-          { a: 'beto', b: 'cami' },
+        sides: [
+          pair('ana', 'invi'),
+          pair('beto', 'cami'),
         ],
         frozenPoints: new Map([
           ['ana', 3],
@@ -179,5 +180,54 @@ describe('guestsToPromote', () => {
 
   it('sin invitados no devuelve nada', () => {
     expect(guestsToPromote(fecha({ guestIds: [] }))).toEqual([])
+  })
+})
+
+/**
+ * En una disciplina de a uno el invitado ES su propio lado. No hay compañero
+ * de quien copiar puntos, y `computeAwards` saltea los lados hechos sólo de
+ * invitados, así que no tiene fila en `awards`.
+ *
+ * PR18b lo sacaba de la lista entera, porque `promote_guest` lo rechazaba: su
+ * guard de "¿el compañero cobró?" daba TRUE con `entry_b` nulo (W35).
+ * **PR18c cambió eso**: la base ahora saltea ese
+ * guard y la copia cuando `pair_size = 1`, y la promoción procede.
+ *
+ * Por eso el estado no es `PUEDE`: `PUEDE` promete los puntos que se le van a
+ * copiar del compañero, y acá no se copia nada. `JUGO_SOLO` es "se puede
+ * sumar, y no se lleva puntos de esta fecha" — que es distinto de no poder, y
+ * distinto de poder con puntos. Meterlo en `PUEDE` con `partnerPoints: 0`
+ * habría sido mentir con un número: 0 es un award real desde
+ * `0010_points_can_be_zero.sql`, no la ausencia de uno.
+ */
+describe('guestsToPromote con lados de uno (pair_size=1)', () => {
+  it('el que jugó solo se puede sumar, y la tarjeta dice que no trae puntos', () => {
+    const promovibles = guestsToPromote(
+      fecha({ sides: [single('invi'), single('ana')], frozenPoints: new Map([['ana', 5]]) }),
+    )
+    expect(promovibles).toEqual([{ entryId: 'invi', name: 'Invitado', estado: 'JUGO_SOLO' }])
+  })
+
+  it('no promete puntos ajenos aunque otro lado de la fecha haya cobrado', () => {
+    // `ana` cobró 5 jugando sola. El invitado no hereda eso: no fue su
+    // compañera, fue su rival.
+    const [invitado] = guestsToPromote(
+      fecha({ sides: [single('invi'), single('ana')], frozenPoints: new Map([['ana', 5]]) }),
+    )
+    expect(invitado).not.toHaveProperty('partnerPoints')
+  })
+
+  it('en un torneo mixto cada invitado recibe el estado de SU lado', () => {
+    const promovibles = guestsToPromote(
+      fecha({
+        guestIds: ['invi', 'invi2'],
+        sides: [single('invi'), pair('ana', 'invi2')],
+        frozenPoints: new Map([['ana', 7]]),
+      }),
+    )
+    expect(promovibles).toEqual([
+      { entryId: 'invi', name: 'Invitado', estado: 'JUGO_SOLO' },
+      { entryId: 'invi2', name: 'Otro invitado', estado: 'PUEDE', partnerPoints: 7 },
+    ])
   })
 })

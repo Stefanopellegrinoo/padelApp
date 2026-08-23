@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { defaultConfig, type SeasonConfig } from '@/core'
+import { defaultConfig, pair, type SeasonConfig } from '@/core'
 import {
   cancelMatchday,
   createMatchday,
@@ -36,9 +36,9 @@ async function insertMatchday(
   status: 'DRAFT' | 'OPEN' | 'CLOSED',
 ): Promise<string> {
   const db = adminClient()
-  // `matchdays_discipline_size` (0028, REQ-D5-1) exige que `pair_size` de la
+  //`matchdays_discipline_size` (0028, REQ-D5-1) exige que `pair_size` de la
   // fecha coincida con el de SU disciplina — este helper crea fechas para
-  // disciplinas pair_size=1 (W30, C15 abajo) y pair_size=2 (el resto), así
+  //Disciplinas pair_size=1 (W30, C15 abajo) y pair_size=2 (el resto), así
   // que no puede confiar en el default de columna (2).
   const { data: discipline, error: disciplineError } = await db
     .from('disciplines')
@@ -235,14 +235,14 @@ describe('dos disciplinas concurrentes (PR 4)', () => {
   })
 })
 
-// ── C1/C2 (0019_discipline_status_moves.sql) — el camino REAL, no fabricado ─
+//── C1/C2 (0019_discipline_status_moves.sql) — el camino REAL, no fabricado ─
 // Antes de 0019, disciplines.status nunca se movía: `derivedSeasonStatus`
 // hubiera dicho SETUP para un torneo con una disciplina en curso. Este test
 // llega al estado "pádel ACTIVE, FIFA SETUP" abriendo una fecha de verdad
 // (generatePairs + openMatchday), no con un update de service_role — es
-// justo el escenario que REQ-D3-3 pide y que el verify-report (C2) marcó
+//Justo el escenario que REQ-D3-3 pide y que el marcó
 // sin cobertura end-to-end.
-describe('estado derivado real: abrir una fecha por el camino real (C1, C2)', () => {
+describe('estado derivado real: abrir una fecha por el camino real', () => {
   it('abrir la primera fecha de pádel mueve su disciplina a ACTIVE sin tocar a FIFA, y derivedSeasonStatus lo refleja', async () => {
     const admin = await createTestUser()
     const filler = await fillerPlayers(8)
@@ -258,7 +258,7 @@ describe('estado derivado real: abrir una fecha por el camino real (C1, C2)', ()
     // Recién creada: las dos disciplinas en SETUP, la temporada también.
     expect(await derivedSeasonStatus(admin.client, seasonId)).toBe('SETUP')
 
-    // `disciplineId` explícito (S26, guarda de ambigüedad): la temporada
+    //`disciplineId` explícito (S26, guarda de ambigüedad): la temporada
     // tiene dos disciplinas, así que omitirlo ahora tira en vez de adivinar
     // — la fecha que este test necesita es de pádel.
     const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10', padelId)
@@ -271,19 +271,18 @@ describe('estado derivado real: abrir una fecha por el camino real (C1, C2)', ()
     expect(await disciplineStatus(padelId)).toBe('ACTIVE')
     expect(await disciplineStatus(fifaId), 'FIFA no arrancó: nadie le abrió una fecha').toBe('SETUP')
 
-    // El caso exacto de REQ-D3-3: una disciplina ACTIVE y otra SETUP -> ACTIVE.
+    //El caso exacto de REQ-D3-3: una disciplina ACTIVE y otra SETUP -> ACTIVE.
     expect(await derivedSeasonStatus(admin.client, seasonId)).toBe('ACTIVE')
   })
 })
 
-// ── N7 (verify-report ronda 2): createMatchday, cobertura dedicada ─────────
-// El test de C1/C2 de arriba YA ejercita esto de rebote (createMatchday con
+//El test de C1/C2 de arriba YA ejercita esto de rebote (createMatchday con
 // 2 disciplinas, antes rompía con PGRST116 vía `.single()` sobre season_id),
 // pero su asunto declarado es derivedSeasonStatus, no createMatchday. Este
 // test tiene una sola pregunta: ¿a qué disciplina queda scopeada la fecha
 // nueva? — y la responde leyendo `discipline_id` directo, no por rebote de
 // otro assert.
-describe('createMatchday resuelve la disciplina por defecto (N7)', () => {
+describe('createMatchday resuelve la disciplina por defecto', () => {
   it('sin disciplineId y con una sola disciplina, la fecha queda scopeada a esa disciplina', async () => {
     const admin = await createTestUser()
     const filler = await fillerPlayers(8)
@@ -301,10 +300,10 @@ describe('createMatchday resuelve la disciplina por defecto (N7)', () => {
     expect(matchday.discipline_id).toBe(disciplineId)
   })
 
-  // S26 (verify-report ronda 8): con UNA sola disciplina, "no elegir" no es
+  //Con UNA sola disciplina, "no elegir" no es
   // ambiguo — hay una sola respuesta posible (el test de arriba). Con MÁS de
   // una, adivinar en silencio es exactamente la clase de bug que ya causó
-  // C8, C9, C12 y el de `matchdaysOf` en esta cadena: este test ANTES
+  //, C9, C12 y el de `matchdaysOf` en esta cadena: este test ANTES
   // aseveraba ese default a propósito ("la fecha nueva queda scopeada a la
   // primera disciplina por position, no a la última creada") — ya no es el
   // comportamiento correcto, así que se reescribe en vez de mantenerlo: la
@@ -323,15 +322,15 @@ describe('createMatchday resuelve la disciplina por defecto (N7)', () => {
   })
 })
 
-// ── C12 (verify-report ronda 7) — createMatchday con disciplineId explícito ─
-// N7 (arriba) prueba el caso de una sola disciplina; esto prueba el lado que
+//── C12 — createMatchday con disciplineId explícito ─
+//(arriba) prueba el caso de una sola disciplina; esto prueba el lado que
 // faltaba: el escritor puede apuntar CADA fecha a la disciplina que le
 // corresponde, y dos disciplinas pueden tener cada una su fecha sin cerrar A
 // LA VEZ pasando por el mismo `createMatchday` real (no fabricado) —
-// REQ-D3-1 de punta a punta, no sólo a nivel de índice. Las dos llamadas
-// pasan `disciplineId` explícito (S26, guarda de ambigüedad): con dos
+//REQ-D3-1 de punta a punta, no sólo a nivel de índice. Las dos llamadas
+//Pasan `disciplineId` explícito (S26, guarda de ambigüedad): con dos
 // disciplinas, omitirlo ya no resuelve por default, tira.
-describe('createMatchday con disciplineId explícito (C12)', () => {
+describe('createMatchday con disciplineId explícito', () => {
   it('la fecha nueva queda en la disciplina que se le pasa, y las dos coexisten sin cerrar', async () => {
     const admin = await createTestUser()
     const { seasonId, disciplineIds } = await createSeason({
@@ -356,7 +355,7 @@ describe('createMatchday con disciplineId explícito (C12)', () => {
   })
 })
 
-// ── C4 — lecturas de producción scopeadas por disciplina, no por temporada ─
+//── C4 — lecturas de producción scopeadas por disciplina, no por temporada ─
 // Antes del fix, las cinco funciones de abajo filtraban `matchdays` por
 // `season_id`: con dos disciplinas compartiendo número de fecha (posible
 // desde que 0018 sacó el tripwire), `closedHistory` rompía con PGRST116
@@ -364,7 +363,7 @@ describe('createMatchday con disciplineId explícito (C12)', () => {
 // `awardsOf` devolvían filas de las DOS disciplinas mezcladas. Acá se prueba
 // que cada una queda scopeada a UNA sola disciplina — la que corresponde —
 // aunque la otra tenga exactamente el mismo número de fecha.
-describe('lecturas de producción scopeadas por disciplina, no por temporada (C4)', () => {
+describe('lecturas de producción scopeadas por disciplina, no por temporada', () => {
   async function twoDisciplineSeason() {
     const admin = await createTestUser()
     const filler = await fillerPlayers(4)
@@ -397,10 +396,10 @@ describe('lecturas de producción scopeadas por disciplina, no por temporada (C4
     await insertPair(fifaMd, seasonId, c, d)
 
     const padelHistory = await closedHistory(admin.client, padelId, 1)
-    expect(padelHistory?.pairs).toEqual([{ a, b }])
+    expect(padelHistory?.sides).toEqual([pair(a, b)])
 
     const fifaHistory = await closedHistory(admin.client, fifaId, 1)
-    expect(fifaHistory?.pairs).toEqual([{ a: c, b: d }])
+    expect(fifaHistory?.sides).toEqual([pair(c, d)])
   })
 
   it('matchdaysOf no duplica la fecha 1 cuando hay dos disciplinas', async () => {
@@ -437,7 +436,7 @@ describe('lecturas de producción scopeadas por disciplina, no por temporada (C4
 
     const history = await closedHistoryAll(admin.client, seasonId)
     expect(history).toHaveLength(1)
-    expect(history[0]?.pairs).toEqual([{ a, b }])
+    expect(history[0]?.sides).toEqual([pair(a, b)])
   })
 
   it('awardsOf trae sólo los premios de la disciplina por defecto', async () => {
@@ -453,14 +452,13 @@ describe('lecturas de producción scopeadas por disciplina, no por temporada (C4
   })
 })
 
-// ── W30 (verify-report ronda 9) — pair_size real, no un hardcode ───────────
 // Antes de esta tanda, `matchdayContextFor`/`pairingContextFor` pasaban un
 // `2` literal a `assertValidConfig`/`assertMatchdaySize` aunque
 // `disciplineConfig` ya leía la fila de `disciplines` donde vive `pair_size`
 // — el valor real estaba a una columna del select que ya corría. Medido
 // antes del fix: esta misma escena tiraba "El plantel tiene que ser un
 // número par." contra una disciplina de a uno con plantel impar.
-describe('matchdayContextFor/pairingContextFor leen el pair_size real (W30)', () => {
+describe('matchdayContextFor/pairingContextFor leen el pair_size real', () => {
   it('una disciplina pair_size=1 con plantel impar no tropieza con la paridad de a dos', async () => {
     const admin = await createTestUser()
     const filler = await fillerPlayers(9)
@@ -489,13 +487,13 @@ describe('matchdayContextFor/pairingContextFor leen el pair_size real (W30)', ()
   })
 })
 
-// ── C15 (verify-report ronda 9) — syncGuestSeat no inventa invitados en 1v1 ─
+//── C15 — syncGuestSeat no inventa invitados en 1v1 ─
 // Antes de esta tanda, `syncGuestSeat` calculaba `isOdd` sobre el headcount
 // sin mirar `pair_size`: en una disciplina de a uno, un plantel impar es
 // NORMAL (cada presente es su propio lado) y no le falta nadie — pero la
 // función igual insertaba un GUEST fantasma (nombre vacío) y borraba el
 // sorteo de paso. Medido antes del fix: 0 filas GUEST antes, 1 después.
-describe('syncGuestSeat no inventa un invitado en una disciplina de a uno (C15)', () => {
+describe('syncGuestSeat no inventa un invitado en una disciplina de a uno', () => {
   it('con pair_size=1 y presentes impares, no crea GUEST ni toca las parejas', async () => {
     const admin = await createTestUser()
     const filler = await fillerPlayers(9)

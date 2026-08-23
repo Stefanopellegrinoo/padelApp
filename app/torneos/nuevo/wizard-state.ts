@@ -5,7 +5,16 @@
  * DOM y sin base. Es la única parte del paso a paso donde se puede equivocar
  * algo: el resto es dibujar.
  */
-import { MAX_PLAYERS, MIN_PLAYERS, defaultConfig, pointsErrors, type SeasonConfig } from '@/core'
+import {
+  MAX_PLAYERS,
+  MIN_PLAYERS,
+  defaultConfig,
+  disciplineProfile,
+  formatsLabel,
+  pointsErrors,
+  type MatchFormat,
+  type SeasonConfig,
+} from '@/core'
 
 /** Los rangos son medidas del handoff (§6 paso 4), no decisiones de este código. */
 export interface Stepper {
@@ -55,6 +64,33 @@ export const STEPPERS: Stepper[] = [
 ]
 
 /**
+ * Los steppers que gobiernan algo para ESTE conjunto de formatos.
+ *
+ * Con marcador abierto "Sets por partido" y "Games por set" no deciden nada
+ * —`setError` los ignora, `matchError` no los exige y `usesSetsDiff` los
+ * apaga— y encima el segundo se anuncia con "A 4 games el resultado se carga
+ * en dos toques", que es JUSTO la máquina que esa disciplina no monta. Es la
+ * misma clase de mentira que el copy que decía "1 set a 4 games" en una liga de
+ * goles (W47, W51, W56, W63).
+ *
+ * Toma una lista de formatos y no un `openScore` suelto porque las dos
+ * pantallas que dibujan estos steppers preguntan cosas distintas: Ajustes edita
+ * la config de UNA disciplina, y el paso 4 del wizard edita la de la TEMPORADA,
+ * compartida por todas las marcadas. Con Pádel y FIFA marcados esos dos
+ * steppers siguen gobernando la mitad de pádel, así que se van sólo cuando
+ * NINGUNA de las disciplinas usa sets. Una función y no dos filtros: W63 nació
+ * exactamente de que Ajustes filtrara y el wizard no.
+ *
+ * Sin disciplinas se dibujan los cinco: "nadie usa sets" no es cierto cuando no
+ * hay nadie, y el paso 1 no deja continuar sin marcar al menos una.
+ */
+export function steppersFor(formats: readonly MatchFormat[]): Stepper[] {
+  const usesSets = formats.length === 0 || formats.some((format) => !format.openScore)
+  if (usesSets) return STEPPERS
+  return STEPPERS.filter((row) => row.key !== 'setsToWin' && row.key !== 'gamesPerSet')
+}
+
+/**
  * Las disciplinas que el paso 1 puede marcar. REQ-D1-1: checkboxes por kind,
  * 1 o más — no hay "+ agregar otra disciplina" acá. Dos disciplinas del MISMO
  * kind (dos Pádel) sólo se arman después, desde Ajustes (PR13): este paso
@@ -86,17 +122,25 @@ export function disciplinesWarning(picked: readonly DisciplineKind[]): string | 
  * Una fila por disciplina marcada, en el orden en que se marcaron: el mismo
  * `disciplines: NewSeasonDiscipline[]` que espera `createSeason` (PR11b).
  *
- * Comparten la MISMA config: armar una distinta por disciplina necesitaría un
- * paso nuevo por cada kind, y hoy `pair_size`/`allows_draw` todavía no son
- * editables desde ninguna pantalla (llegan en PR14+) — no hay nada distinto
- * que pedir todavía. Quien quiera otra config por disciplina la cambia después
- * en Ajustes → Formato (`updateDisciplineConfig`, PR6), que ya existe para eso.
+ * Comparten los PUNTOS, las fechas y el plantel —que es lo que el paso 4
+ * pregunta—, y cada una nace con la forma de marcador de su disciplina
+ * (`disciplineProfile`, PR20 rebanada D2). Hasta acá compartían la config
+ * entera y una liga de FIFA nacía siendo pádel con otro nombre: sin marcador
+ * abierto y sin empates, o sea sin poder cargar ni un `3-1` ni un `0-0`. No es
+ * una preferencia que el wizard pueda preguntar más adelante: `allows_draw` no
+ * está en el grant de UPDATE de `disciplines` (`0015_disciplines.sql:70`), así
+ * que la disciplina que nace sin empates no los tiene nunca más.
+ *
+ * Lo que sigue sin preguntar es `pair_size` —FIFA es 1v1 Y 2v2, decisión de
+ * producto #5— y por eso todo lo que sale de acá se juega de a dos, como hoy.
+ * Quien quiera cambiar los puntos o las fechas de una disciplina lo hace
+ * después en Ajustes → Formato (`updateDisciplineConfig`, PR6).
  */
 export function buildDisciplines(
   picked: readonly DisciplineKind[],
   config: SeasonConfig,
-): { kind: DisciplineKind; config: SeasonConfig }[] {
-  return picked.map((kind) => ({ kind, config }))
+): { kind: DisciplineKind; config: SeasonConfig; allowsDraw: boolean }[] {
+  return picked.map((kind) => ({ kind, ...disciplineProfile(kind, config) }))
 }
 
 /** Cuántos nombres del plantel están cargados de verdad. */
@@ -245,17 +289,37 @@ export function formatErrors(config: SeasonConfig): string[] {
   return errors
 }
 
-/** El resumen del paso 5, en el orden del handoff. */
+/**
+ * El resumen del paso 5, en el orden del handoff.
+ *
+ * `picked` no es decorativo: la fila "Formato" decía "1 set a 4 games" leyendo
+ * la config compartida, y desde que una liga de FIFA nace con marcador de goles
+ * esa frase describe la mitad pádel del torneo y MIENTE sobre la otra mitad.
+ * Con una sola disciplina el resumen dice exactamente lo mismo que siempre —el
+ * prefijo aparece recién cuando hay dos cosas distintas que nombrar.
+ *
+ * Esa regla la escribe `formatsLabel` (`core/narrate.ts`) y no este archivo:
+ * Reglas y Ajustes tenían el mismo problema con los mismos datos (W64)
+ * y tres copias de la misma frase es como nació W64.
+ */
 export function summaryOf(
   name: string,
   names: readonly string[],
   config: SeasonConfig,
+  picked: readonly DisciplineKind[],
 ): Array<{ key: string; value: string }> {
-  const setWord = config.matchFormat.setsToWin === 1 ? '1 set' : `${config.matchFormat.setsToWin} sets`
   return [
     { key: 'Nombre', value: name },
     { key: 'Jugadores', value: String(filledCount(names)) },
-    { key: 'Formato', value: `${setWord} a ${config.matchFormat.gamesPerSet} games` },
+    {
+      key: 'Formato',
+      value: formatsLabel(
+        picked.map((kind) => ({
+          label: DISCIPLINE_LABELS[kind],
+          matchFormat: disciplineProfile(kind, config).config.matchFormat,
+        })),
+      ),
+    },
     { key: 'Puntos', value: config.points.join(' · ') },
     { key: 'Fechas', value: String(config.regularMatchdays) },
     { key: 'Desempate', value: `cada ${config.tiebreakSnapshotEvery} fechas` },

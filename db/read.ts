@@ -10,17 +10,17 @@
  * of its own: RLS is what keeps a stranger from reading a season that is not
  * theirs, and that only holds if the query actually runs as the caller.
  */
-import { pairFromRow, seasonStatusOf } from '@/core'
+import { seasonStatusOf, sideOfRow } from '@/core'
 import type {
   Award,
   DisciplineId,
   EntryId,
   MatchResult,
-  Pair,
   PlayedMatchday,
   SeasonConfig,
   SeasonStatus,
   SetScore,
+  Side,
   SideSize,
 } from '@/core'
 import type { Client } from './client'
@@ -34,12 +34,12 @@ export interface DisciplineHeader {
   config: SeasonConfig
   /**
    * `disciplines.weight` (REQ-D9-1/2, tabla global) — ya `number` desde que
-   * sale de PostgREST (W21, `verify-report` ronda 6, medido con el cliente
+   * sale de PostgREST (W21, `` ronda 6, medido con el cliente
    * real; el `Number(...)` de `toDisciplineHeader` es un no-op de cinturón,
    * no una conversión real).
    */
   weight: number
-  /** `disciplines.pair_size` real (W30, verify-report ronda 9) — mismo select, una columna más. */
+  /** `disciplines.pair_size` real — mismo select, una columna más. */
   pairSize: SideSize
 }
 
@@ -81,7 +81,7 @@ export function primaryDiscipline(header: SeasonHeader): DisciplineHeader {
  * La disciplina de UNA fecha puntual — no la [0] de la temporada. PR 10 pone
  * la disciplina en la URL de `fechas/[n]`, y ese mismo cambio deja a mano
  * `matchday.disciplineId` donde antes sólo estaba `primaryDiscipline(header)`
- * (verify-report ronda 4, hallazgo adyacente): con dos disciplinas del mismo
+ *: con dos disciplinas del mismo
  * `kind` en la temporada (Fase 2), la [0] ya no es necesariamente la de ESTA
  * fecha.
  *
@@ -126,6 +126,19 @@ export interface PublicRules {
   adminName: string
 }
 
+/**
+ * Una disciplina vista desde afuera: su tipo y su config, nada más.
+ *
+ * `kind` va como literal y no como el `DisciplineKind` de `wizard-state`, por
+ * lo mismo que `DisciplineHeader.kind` unas líneas más arriba: `db/` no
+ * importa de `app/`. La pantalla traduce el literal a etiqueta con
+ * `DISCIPLINE_LABELS`, que es donde ese mapa vive.
+ */
+export interface PublicFormat {
+  kind: 'PADEL' | 'FIFA'
+  config: SeasonConfig
+}
+
 /** A row of `pair_locks`: the same `{ a, b }` the draw uses, plus the id `unlockPair` deletes by. */
 export interface PairLockRow {
   id: string
@@ -141,11 +154,21 @@ export interface MatchdaySummary {
   playedOn: string | null
   /** Para que quien ya tiene esta fila no tenga que resolver la disciplina de nuevo (`awardsBefore`/`closedHistory` la piden). */
   disciplineId: DisciplineId
+  /**
+   * Si un empate es un resultado legal en ESTA fecha. Sale de `matchdays`, no
+   * de la disciplina, y a propósito: `matchdays_discipline_draw` es `on update
+   * no action`, así que una vez creada la fecha la disciplina ya no puede
+   * cambiarlo. Es el valor CONGELADO, y una fecha vieja se tiene que poder
+   * releer con la misma regla con la que se jugó. Mismo criterio que
+   * `closeMatchday`, que ya juzgaba los resultados con `matchday.allows_draw`.
+   */
+  allowsDraw: boolean
 }
 
 export interface MatchdayDetail {
   matchday: MatchdaySummary
-  pairs: Pair[]
+  /** Los lados de la fecha, de uno o de dos según la disciplina. */
+  sides: Side[]
   matches: MatchWithId[]
   guestIds: EntryId[]
 }
@@ -165,7 +188,7 @@ interface DisciplineHeaderRow {
   config: unknown
   /**
    * `database.types.ts` (generado) declara esto `number`, y el tipo NO
-   * miente (W21, `verify-report` ronda 6, medido con el cliente real):
+   * miente (W21, `` ronda 6, medido con el cliente real):
    * PostgREST emite `numeric(4,2)` sin comillas y `Response.json()` lo
    * entrega ya como `number`. `toDisciplineHeader` igual lo pasa por
    * `Number()`, ver ahí el porqué.
@@ -181,6 +204,7 @@ interface MatchdayRow {
   status: string
   played_on: string | null
   discipline_id: string
+  allows_draw: boolean
 }
 
 /** `null` for an anonymous or logged-out caller — never throws, so a stranger's read still resolves to "nothing theirs" instead of blowing up. */
@@ -198,7 +222,7 @@ export function toDisciplineHeader(row: DisciplineHeaderRow): DisciplineHeader {
     // Number(...) EN ESTE ÚNICO LUGAR: no convierte nada en la práctica —
     // `row.weight` ya llega `number` (ver DisciplineHeaderRow.weight) — pero
     // se deja como cinturón para cualquier lectura futura que no pase por
-    // `fetch`+`JSON.parse` (W21, `verify-report` ronda 6). `Number(1) === 1`,
+    //`fetch`+`JSON.parse` (W21, `` ronda 6). `Number(1) === 1`,
     // cero riesgo.
     weight: Number(row.weight),
     pairSize: row.pair_size as SideSize,
@@ -230,9 +254,10 @@ function toMatchdaySummary(row: MatchdayRow): MatchdaySummary {
     kind: row.kind as 'REGULAR' | 'MASTERS',
     status: row.status as 'DRAFT' | 'OPEN' | 'CLOSED',
     playedOn: row.played_on,
-    // Única marca de esta función (N2): de acá en más `disciplineId` es
+    //Única marca de esta función: de acá en más `disciplineId` es
     // `DisciplineId`, no `string` a secas.
     disciplineId: row.discipline_id as DisciplineId,
+    allowsDraw: row.allows_draw,
   }
 }
 
@@ -363,7 +388,7 @@ export async function seasonRules(
  * Para un SQUAD, `disciplineId` (opcional) elige de cuál: sin él cae en
  * `defaultDisciplineId`, el mismo criterio que el resto del código hasta el
  * wizard multi-disciplina (PR 11) — la pantalla de una fecha SÍ pasa la suya
- * (`matchday.disciplineId`, C8, verify-report ronda 4).
+ * (`matchday.disciplineId`, C8).
  *
  * Un SQUAD sin fila en `discipline_entries` de esa disciplina NO PERTENECE a
  * ella y queda AFUERA de lo que devuelve esta función — ya no se lo cubre con
@@ -528,6 +553,38 @@ export async function publicRules(supabase: Client, seasonId: string): Promise<P
   }
 }
 
+/**
+ * El formato de CADA disciplina del torneo, para alguien sin cuenta.
+ *
+ * La segunda —y última— lectura de este archivo que funciona sin sesión.
+ * `publicRules` de acá arriba trae los cinco campos de la pantalla pero la
+ * config de UNA sola disciplina, la de por defecto, y ni siquiera su `kind`:
+ * con eso, un torneo de pádel + FIFA le decía a un extraño "1 set a 4 games"
+ * sobre una mitad que se juega a goles (S76, la mitad anónima de W64).
+ *
+ * Va por `season_public_formats` (0038), una función NUEVA y ADITIVA:
+ * `season_public_rules` no se toca. Cambiarle el `returns table` pedía
+ * `drop function` —Postgres rechaza cambiar el tipo de retorno con `create or
+ * replace`— y el drop se lleva los grants, dejando sin superficie pública la
+ * única pantalla que se comparte por link.
+ *
+ * Devuelve `kind` y `config` y NADA más, y eso está fijado por test
+ * (`db/public-formats.db.test.ts`): un `id` de más le regalaría a `anon`
+ * claves primarias, y `anon` hoy lee **cero** tablas.
+ *
+ * Array vacío en vez de excepción para un link muerto, mismo criterio que
+ * `publicRules`.
+ */
+export async function publicFormats(supabase: Client, seasonId: string): Promise<PublicFormat[]> {
+  const { data, error } = await supabase.rpc('season_public_formats', { p_season: seasonId })
+  if (error !== null) throw new EdgeError(`No se pudieron leer los formatos: ${error.message}`)
+
+  return (data ?? []).map((row) => ({
+    kind: row.kind as 'PADEL' | 'FIFA',
+    config: row.config as unknown as SeasonConfig,
+  }))
+}
+
 export async function matchdaysOf(supabase: Client, seasonId: string): Promise<MatchdaySummary[]> {
   const disciplineId = await defaultDisciplineId(supabase, seasonId)
   // Ninguna disciplina visible: para un extraño es RLS escondiéndolas, no un
@@ -536,7 +593,7 @@ export async function matchdaysOf(supabase: Client, seasonId: string): Promise<M
   if (disciplineId === null) return []
   const { data, error } = await supabase
     .from('matchdays')
-    .select('id, number, kind, status, played_on, discipline_id')
+    .select('id, number, kind, status, played_on, discipline_id, allows_draw')
     .eq('discipline_id', disciplineId)
     .order('number', { ascending: true })
   if (error) throw new EdgeError(`No se pudieron leer las fechas: ${error.message}`)
@@ -564,7 +621,7 @@ export async function matchdaysOf(supabase: Client, seasonId: string): Promise<M
 export async function seasonMatchdaysOf(supabase: Client, seasonId: string): Promise<MatchdaySummary[]> {
   const { data, error } = await supabase
     .from('matchdays')
-    .select('id, number, kind, status, played_on, discipline_id')
+    .select('id, number, kind, status, played_on, discipline_id, allows_draw')
     .eq('season_id', seasonId)
     .order('number', { ascending: true })
   if (error) throw new EdgeError(`No se pudieron leer las fechas: ${error.message}`)
@@ -605,7 +662,7 @@ export interface SquadMember {
  * (exactamente lo que esta pantalla no puede hacer). `seasonSquadOf` se deja
  * intacto: `torneos/page.tsx` sólo necesita los ids.
  *
- * `playerId` (C14, verify-report ronda 8) se sumó para que "Plantel" en
+ * `playerId` (C14) se sumó para que "Plantel" en
  * Ajustes pueda usar esta función en vez de `entriesOf(seasonId)` sin
  * disciplina — esa llamada caía en la disciplina por defecto y perdía a
  * cualquier SQUAD promovido desde otra (`db/read.ts:419`). Acá no hay ese
@@ -666,16 +723,16 @@ export async function seasonAwardsOf(
 export async function matchdayDetail(supabase: Client, matchdayId: string): Promise<MatchdayDetail> {
   const { data: matchdayRow, error: matchdayError } = await supabase
     .from('matchdays')
-    .select('id, number, kind, status, played_on, discipline_id')
+    .select('id, number, kind, status, played_on, discipline_id, allows_draw')
     .eq('id', matchdayId)
     .maybeSingle()
   if (matchdayError) throw new EdgeError(`No se pudo leer la fecha: ${matchdayError.message}`)
   if (matchdayRow === null) throw new EdgeError('La fecha no existe.')
 
-  const { pairs, matches } = await pairsAndMatchesOf(supabase, matchdayId)
+  const { sides, matches } = await pairsAndMatchesOf(supabase, matchdayId)
   const guestIds = await guestIdsOf(supabase, matchdayId)
 
-  return { matchday: toMatchdaySummary(matchdayRow), pairs, matches, guestIds }
+  return { matchday: toMatchdaySummary(matchdayRow), sides, matches, guestIds }
 }
 
 /** Every CLOSED regular matchday of the season's own discipline, in number order. The Masters is excluded: it is not part of the championship's played history. */
@@ -693,8 +750,8 @@ export async function closedHistoryAll(supabase: Client, seasonId: string): Prom
 
   const history: PlayedMatchday[] = []
   for (const row of data ?? []) {
-    const { pairs, matches } = await pairsAndMatchesOf(supabase, row.id)
-    history.push({ number: row.number, pairs, matches })
+    const { sides, matches } = await pairsAndMatchesOf(supabase, row.id)
+    history.push({ number: row.number, sides, matches })
   }
   return history
 }
@@ -735,27 +792,27 @@ export async function awardsOf(supabase: Client, seasonId: string): Promise<Map<
 
 // ── helpers privados, compartidos por matchdayDetail y closedHistoryAll ─────
 
-// S38 (verify-report ronda 12): `pairFromRow` era una copia local a mano de
-// `pairOf ∘ sideOfRow`, byte por byte idéntica a la de `db/matchday.ts` y
-// `db/season.ts`. `core/pair-compat.ts` la exporta ahora como la ÚNICA
-// excepción del bloque "Deliberadamente NO exportado" (core/index.ts) — un
-// solo lugar, un solo mensaje, para las tres.
+//CERRADO acá: hasta PR18b este lector componía
+// `pairFromRow`, que TIRABA con una fila `pair_size=1` — o sea, una fecha de a
+// uno se podía jugar y cerrar en la base pero ninguna pantalla de su
+// disciplina la podía dibujar. `sideOfRow` devuelve el lado con su forma real,
+// así que el dato que 18a habilitó escribir ahora también se puede leer.
 
-/** Las parejas y los partidos de la fecha, con los sets de cada partido ordenados por `set_number`. */
+/** Los lados y los partidos de la fecha, con los sets de cada partido ordenados por `set_number`. */
 async function pairsAndMatchesOf(
   supabase: Client,
   matchdayId: string,
-): Promise<{ pairs: Pair[]; matches: MatchWithId[] }> {
+): Promise<{ sides: Side[]; matches: MatchWithId[] }> {
   const { data: pairRows, error: pairsError } = await supabase
     .from('pairs')
     .select('id, entry_a, entry_b, pair_size')
     .eq('matchday_id', matchdayId)
   if (pairsError) throw new EdgeError(`No se pudieron leer las parejas: ${pairsError.message}`)
 
-  const pairById = new Map(
+  const sideById = new Map(
     (pairRows ?? []).map((row) => [
       row.id,
-      pairFromRow(row.pair_size as SideSize, row.entry_a, row.entry_b),
+      sideOfRow(row.pair_size as SideSize, row.entry_a, row.entry_b),
     ]),
   )
 
@@ -786,17 +843,17 @@ async function pairsAndMatchesOf(
   }
 
   const matches: MatchWithId[] = (matchRows ?? []).map((row) => {
-    const pairA = pairById.get(row.pair_a)
-    const pairB = pairById.get(row.pair_b)
-    if (pairA === undefined || pairB === undefined) {
+    const sideA = sideById.get(row.pair_a)
+    const sideB = sideById.get(row.pair_b)
+    if (sideA === undefined || sideB === undefined) {
       throw new Error(
         `El partido ${row.id} referencia una pareja que no está en la fecha. Esto es un bug.`,
       )
     }
-    return { id: row.id, round: row.round, pairA, pairB, sets: setsByMatch.get(row.id) ?? [] }
+    return { id: row.id, round: row.round, sideA, sideB, sets: setsByMatch.get(row.id) ?? [] }
   })
 
-  return { pairs: [...pairById.values()], matches }
+  return { sides: [...sideById.values()], matches }
 }
 
 async function guestIdsOf(supabase: Client, matchdayId: string): Promise<EntryId[]> {

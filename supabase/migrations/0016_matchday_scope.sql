@@ -1,7 +1,7 @@
 -- ── matchdays.discipline_id pasa a NOT NULL y a ser el scope real ──────────
 -- Guarda de despliegue: si esto explota, el backfill de 0015 no terminó (o el
 -- código nuevo creó una fecha sin discipline_id antes de que este archivo
--- corriera). REQ-NR-3.
+--Corriera). REQ-NR-3.
 do $$
 begin
   if exists (select 1 from public.matchdays where discipline_id is null) then
@@ -13,13 +13,13 @@ alter table public.matchdays alter column discipline_id set not null;
 
 -- "Una fecha viva" y "un Masters" pasan de ser por temporada a ser por
 -- disciplina: dos disciplinas del mismo torneo van a poder tener cada una su
--- propia fecha abierta (REQ-D3-1) en cuanto el tripwire de 0015 caiga (PR 4).
+--Propia fecha abierta (REQ-D3-1) en cuanto el tripwire de 0015 caiga (PR 4).
 drop index public.matchdays_one_live;
 drop index public.matchdays_one_masters;
 create unique index matchdays_one_live    on public.matchdays (discipline_id) where status <> 'CLOSED';
 create unique index matchdays_one_masters on public.matchdays (discipline_id) where kind = 'MASTERS';
 
--- El número de fecha se numera por disciplina, no por temporada (REQ-D3-2):
+--El número de fecha se numera por disciplina, no por temporada (REQ-D3-2):
 -- la fecha 3 de pádel y la fecha 3 de FIFA del mismo torneo tienen que poder
 -- coexistir.
 alter table public.matchdays drop constraint matchdays_season_id_number_key;

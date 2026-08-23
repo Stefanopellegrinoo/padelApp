@@ -8,7 +8,6 @@ import { createTournament } from './actions'
 import {
   DISCIPLINE_KINDS,
   DISCIPLINE_LABELS,
-  STEPPERS,
   type DisciplineKind,
   type Squad,
   addMySeat,
@@ -21,6 +20,7 @@ import {
   removeSeatAt,
   resizeConfig,
   squadWarning,
+  steppersFor,
   submitSeats,
   summaryOf,
   toggleDiscipline,
@@ -125,6 +125,101 @@ function Stepper({
         +
       </button>
     </div>
+  )
+}
+
+/**
+ * El paso 4: los puntos por posición y los steppers del formato.
+ *
+ * Vive afuera de `Wizard` —y exportado— para poder RENDERIZARLO en la suite
+ * unitaria: `step` es estado interno del wizard y sin clicks no se llega hasta
+ * acá. W63 fue una mentira de este paso que ningún
+ * test podía ver, en un proyecto que ya se comió cinco problemas de pantalla.
+ *
+ * Cuáles steppers dibuja lo decide `steppersFor`, la MISMA función que usa
+ * Ajustes. Lo que cambia es qué se le pregunta: acá la config es de la
+ * TEMPORADA y la comparten todas las disciplinas marcadas, así que se le pasan
+ * los formatos de todas — con Pádel y FIFA marcados, "Sets por partido" y
+ * "Games por set" siguen gobernando la mitad de pádel y tienen que estar.
+ */
+export function PasoFormato({
+  config,
+  picked,
+  errors,
+  onChange,
+}: {
+  config: SeasonConfig
+  picked: readonly DisciplineKind[]
+  errors: string[]
+  onChange: (next: SeasonConfig) => void
+}) {
+  const steppers = steppersFor(
+    buildDisciplines(picked, config).map((row) => row.config.matchFormat),
+  )
+
+  return (
+    <>
+      <p className="text-[13.5px] font-[550] leading-[1.5] text-muted">
+        Son los puntos de cada posición de la fecha. Si una fecha la juegan menos parejas, se usan
+        los primeros de la lista — ganar siempre suma {config.points[0] ?? 0}.
+      </p>
+      {/* Filas verticales para soportar planteles grandes con múltiples valores de puntos. */}
+      <div className="overflow-hidden rounded-[14px] border border-line">
+        {config.points.map((value, index) => (
+          <div
+            key={index}
+            className={`flex h-[56px] items-center justify-between gap-2 px-3 ${index > 0 ? 'border-t border-line' : ''}`}
+          >
+            <span className="w-7 shrink-0 text-[13px] font-extrabold text-muted">{index + 1}°</span>
+            {/* Desde 0: el torneo puede decidir que el último no sume. */}
+            <Stepper
+              value={value}
+              min={0}
+              max={99}
+              onChange={(next) => {
+                const points = [...config.points]
+                points[index] = next
+                onChange({ ...config, points })
+              }}
+            />
+          </div>
+        ))}
+      </div>
+
+      <div className="overflow-hidden rounded-[14px] border border-line">
+        {steppers.map((stepper, index) => (
+          <div
+            key={stepper.key}
+            className={`flex min-h-[56px] items-center justify-between gap-2 px-3 py-2 ${index > 0 ? 'border-t border-line' : ''}`}
+          >
+            <div className="min-w-0">
+              <p className="text-[14px] font-bold">{stepper.label}</p>
+              <p className="text-pretty text-[11.5px] font-semibold text-muted">{stepper.hint}</p>
+            </div>
+            <Stepper
+              value={
+                stepper.key === 'setsToWin' || stepper.key === 'gamesPerSet'
+                  ? config.matchFormat[stepper.key]
+                  : config[stepper.key]
+              }
+              min={stepper.min}
+              max={stepper.max}
+              onChange={(next) =>
+                onChange(
+                  stepper.key === 'setsToWin' || stepper.key === 'gamesPerSet'
+                    ? { ...config, matchFormat: { ...config.matchFormat, [stepper.key]: next } }
+                    : { ...config, [stepper.key]: next },
+                )
+              }
+            />
+          </div>
+        ))}
+      </div>
+
+      {errors.map((message) => (
+        <Aviso key={message}>{message}</Aviso>
+      ))}
+    </>
   )
 }
 
@@ -378,73 +473,7 @@ export function Wizard({ myName }: { myName: string }) {
         )}
 
         {step === 3 && (
-          <>
-            <p className="text-[13.5px] font-[550] leading-[1.5] text-muted">
-              Son los puntos de cada posición de la fecha. Si una fecha la juegan menos parejas, se
-              usan los primeros de la lista — ganar siempre suma {config.points[0] ?? 0}.
-            </p>
-            {/* 🔁 El handoff dibujaba los puntos en 4 columnas y no escala: un
-                plantel de 12 necesita 6 valores y no entran a lo ancho. Filas. */}
-            <div className="overflow-hidden rounded-[14px] border border-line">
-              {config.points.map((value, index) => (
-                <div
-                  key={index}
-                  className={`flex h-[56px] items-center justify-between gap-2 px-3 ${index > 0 ? 'border-t border-line' : ''}`}
-                >
-                  <span className="w-7 shrink-0 text-[13px] font-extrabold text-muted">
-                    {index + 1}°
-                  </span>
-                  {/* Desde 0: el torneo puede decidir que el último no sume. */}
-                  <Stepper
-                    value={value}
-                    min={0}
-                    max={99}
-                    onChange={(next) => {
-                      const points = [...config.points]
-                      points[index] = next
-                      setConfig({ ...config, points })
-                    }}
-                  />
-                </div>
-              ))}
-            </div>
-
-            <div className="overflow-hidden rounded-[14px] border border-line">
-              {STEPPERS.map((stepper, index) => (
-                <div
-                  key={stepper.key}
-                  className={`flex min-h-[56px] items-center justify-between gap-2 px-3 py-2 ${index > 0 ? 'border-t border-line' : ''}`}
-                >
-                  <div className="min-w-0">
-                    <p className="text-[14px] font-bold">{stepper.label}</p>
-                    <p className="text-pretty text-[11.5px] font-semibold text-muted">
-                      {stepper.hint}
-                    </p>
-                  </div>
-                  <Stepper
-                    value={
-                      stepper.key === 'setsToWin' || stepper.key === 'gamesPerSet'
-                        ? config.matchFormat[stepper.key]
-                        : config[stepper.key]
-                    }
-                    min={stepper.min}
-                    max={stepper.max}
-                    onChange={(next) =>
-                      setConfig(
-                        stepper.key === 'setsToWin' || stepper.key === 'gamesPerSet'
-                          ? { ...config, matchFormat: { ...config.matchFormat, [stepper.key]: next } }
-                          : { ...config, [stepper.key]: next },
-                      )
-                    }
-                  />
-                </div>
-              ))}
-            </div>
-
-            {errors.map((message) => (
-              <Aviso key={message}>{message}</Aviso>
-            ))}
-          </>
+          <PasoFormato config={config} picked={disciplines} errors={errors} onChange={setConfig} />
         )}
 
         {step === 4 && created !== null && (
@@ -470,7 +499,7 @@ export function Wizard({ myName }: { myName: string }) {
             </div>
 
             <div className="overflow-hidden rounded-[14px] border border-line">
-              {summaryOf(name, names, config).map((row, index) => (
+              {summaryOf(name, names, config, disciplines).map((row, index) => (
                 <div
                   key={row.key}
                   className={`flex items-center justify-between gap-3 px-3 py-2.5 ${index > 0 ? 'border-t border-line' : ''}`}

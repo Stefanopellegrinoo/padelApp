@@ -4,6 +4,8 @@ import { addGuest, closeMatchday, createMatchday, generatePairs, openMatchday, s
 import { adminClient } from './test/admin'
 import { createSeason } from './test/factories'
 import { createTestUser, type TestUser } from './test/users'
+import { closedHistoryAll, matchdayDetail } from './read'
+import { closedHistory } from './season'
 
 // ── scaffolding local a este archivo ────────────────────────────────────────
 // No va a db/test/factories.ts: esa lista de archivos es la del plan, y estos
@@ -50,7 +52,7 @@ async function markAllPlaying(admin: TestUser, matchdayId: string, entryIds: str
   }
 }
 
-// `entry_b: string | null` desde 0028 (REQ-D5-1): la fila real ya lo permite,
+//`entry_b: string | null` desde 0028 (REQ-D5-1): la fila real ya lo permite,
 // aunque esta suite sólo ejercita pádel (pair_size=2, siempre no-nulo).
 async function pairsOf(
   matchdayId: string,
@@ -117,13 +119,12 @@ async function matchdayStatus(matchdayId: string): Promise<string> {
   return data.status
 }
 
-// ── C17 (verify-report ronda 10) ────────────────────────────────────────────
-// N26 (verify-report ronda 12): PR18a hizo que `insertPairs` SÍ escriba una
+//PR18a hizo que `insertPairs` SÍ escriba una
 // fila `pair_size=1` (`generatePairs` ya arma sola una disciplina de a uno,
 // ver `full_matchday_proof` más abajo y `db/generate.db.test.ts`) — este
 // helper con service_role sigue siendo el más corto para ESTE test puntual:
 // arma la fecha con un solo `insert` en vez de todo el pipeline real
-// (asistencia/draw/apertura) que el escenario de G6/C17 de abajo no necesita.
+//(asistencia/draw/apertura) que el escenario de G6/C17 de abajo no necesita.
 async function insertOpenSingleMatchday(seasonId: string, disciplineId: string, number: number): Promise<string> {
   const db = adminClient()
   const { data, error } = await db
@@ -301,7 +302,7 @@ describe('closeMatchday', () => {
     const awards = await awardsOf(matchdayId)
     const pointsOf = new Map(awards.map((award) => [award.entry_id, award.points]))
     for (const pair of pairs) {
-      // W38 (verify-report ronda 12): `requirePartner` retirado — `sideOfRow`
+      //`requirePartner` retirado — `sideOfRow`
       // (core/side.ts) es el hogar único. `2` es literal, no leído de la fila:
       // esta suite sólo ejercita pádel (pair_size=2, siempre con `entry_b`).
       const side = sideOfRow(2, pair.entry_a, pair.entry_b)
@@ -520,7 +521,7 @@ describe('closeMatchday', () => {
    * armar: `generatePairs` moría en la FK `pairs_matchday_size` (W34) para
    * cualquier disciplina `pair_size=1`. `closeMatchday()` (el wrapper TS) NO
    * se usa acá: sigue llamando a `computeStandings`, cuyo límite público
-   * sigue `Pair` in/out hasta que `core/types.ts`/`app/**` migren (design
+   * seguía `Pair` in/out hasta que `core/types.ts`/`app/**` migraron (design
    * #3801 PUNTO 4) — `resultsOf` (db/matchday.ts) tira con un lado de uno por
    * diseño (ver el comentario de `pairFromRow` ahí). Se llama al RPC
    * `close_matchday` directo, con un payload armado a mano, igual que el
@@ -562,13 +563,13 @@ describe('closeMatchday', () => {
    * de arriba). Esto es lo que W34 describía como "todavía no puede": hoy
    * puede, de punta a punta.
    *
-   * C19 (verify-report ronda 12): una sola fecha no alcanza para probar el
+   * C19: una sola fecha no alcanza para probar el
    * lifecycle — `closedHistory` sólo entra en juego cuando existe una fecha
    * CERRADA antes en el calendario de la disciplina, así que el bug recién
    * aparece desde la fecha 2. Este test cierra la fecha 1 y después arma y
    * abre la fecha 2, ejercitando el mismo camino que recorre cada draw real.
    */
-  it('cierra la fecha 1 de una disciplina de a uno, y arma y abre la fecha 2 sin romperse (C19)', async () => {
+  it('cierra la fecha 1 de una disciplina de a uno, y arma y abre la fecha 2 sin romperse', async () => {
     const admin = await createTestUser()
     const filler = await fillerPlayers(8)
     const config: SeasonConfig = { ...defaultConfig(8), points: [8, 7, 6, 5, 4, 3, 2, 1] }
@@ -600,7 +601,7 @@ describe('closeMatchday', () => {
     expect(stored).toHaveLength(8)
     expect(new Set(stored.map((row) => row.entry_id))).toEqual(new Set(entryIds))
 
-    // C19: con la fecha 1 CLOSED, el draw de la fecha 2 pasa por
+    //Con la fecha 1 CLOSED, el draw de la fecha 2 pasa por
     // `pairingContextFor` → `closedHistory(discipline, 1)` — exactamente el
     // camino que moría antes de este fix.
     const matchday2Id = await createMatchday(admin.client, seasonId, '2026-08-17')
@@ -613,6 +614,67 @@ describe('closeMatchday', () => {
     expect(pairs2).toHaveLength(8)
     expect(pairs2.every((pair) => pair.entry_b === null)).toBe(true)
     expect(await matchdayStatus(matchday2Id)).toBe('OPEN')
+  })
+
+  /**
+   * W40 — el otro lado de C19, y el que quedó SIN
+   * PROBAR hasta acá: 18a habilitó ESCRIBIR una fecha de a uno que ninguna
+   * lectura podía devolver. `pairsAndMatchesOf` (db/read.ts), `resultsOf`
+   * (db/matchday.ts) y `closedHistory` (db/season.ts) componían `pairFromRow`,
+   * que tiraba con `pair_size=1`.
+   *
+   * Este test recorre las TRES lecturas sobre una fecha de a uno cerrada, y la
+   * cierra con el wrapper TS `closeMatchday()` —no con el RPC directo, que es
+   * lo que hace `full_matchday_proof`— porque ese wrapper es el que pasa por
+   * `resultsOf` + `computeStandings` + `computeAwards`. O sea: prueba de punta
+   * a punta que la tabla del día de una disciplina de a uno se calcula, se
+   * graba y se lee.
+   */
+  it('cierra una fecha de a uno con el wrapper TS y las tres lecturas la devuelven', async () => {
+    const admin = await createTestUser()
+    const filler = await fillerPlayers(8)
+    const config: SeasonConfig = { ...defaultConfig(8), points: [8, 7, 6, 5, 4, 3, 2, 1] }
+    const { seasonId, entryIds, disciplineId } = await createSeason({
+      admin,
+      squad: filler,
+      disciplines: [{ kind: 'FIFA', pairSize: 1, config }],
+    })
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
+    await markAllPlaying(admin, matchdayId, entryIds)
+    await generatePairs(admin.client, matchdayId)
+    await openMatchday(admin.client, matchdayId)
+    // El de `pair_a` gana siempre: con el round robin completo eso deja un
+    // orden total y estricto, así que la tabla del día no se resuelve por
+    // desempate y el primero es el que ganó de verdad — que es justo lo que
+    //Decía que ningún test comprobaba.
+    await playAllMatches(admin, matchdayId, (pairA) => pairA)
+
+    // 1) `resultsOf` + `computeStandings` + `computeAwards`, por el wrapper.
+    await closeMatchday(admin.client, matchdayId)
+    expect(await matchdayStatus(matchdayId)).toBe('CLOSED')
+    const stored = await awardsOf(matchdayId)
+    expect(stored).toHaveLength(8)
+    expect(new Set(stored.map((row) => row.entry_id))).toEqual(new Set(entryIds))
+    // Los 8 puntos de la config se repartieron enteros y sin repetir: cada
+    // jugador es su propio lado, así que hay 8 posiciones pagas y no 4.
+    expect([...stored.map((row) => row.points)].sort((a, b) => b - a)).toEqual(config.points)
+
+    // 2) `matchdayDetail` (db/read.ts) — el que alimenta la pantalla de fecha.
+    const detail = await matchdayDetail(admin.client, matchdayId)
+    expect(detail.sides).toHaveLength(8)
+    expect(detail.sides.every((side) => side.size === 1)).toBe(true)
+    expect(new Set(detail.sides.map((side) => side.a))).toEqual(new Set(entryIds))
+    expect(detail.matches).toHaveLength(28)
+    expect(detail.matches.every((match) => match.sideA.size === 1 && match.sideB.size === 1)).toBe(true)
+
+    // 3) `closedHistory` (db/season.ts) — el que alimenta el draw siguiente,
+    // y `closedHistoryAll` (db/read.ts) — el que alimenta /stats y /jugador.
+    const history = await closedHistory(admin.client, disciplineId, 1)
+    expect(history?.sides).toHaveLength(8)
+    expect(history?.sides.every((side) => side.size === 1)).toBe(true)
+    const all = await closedHistoryAll(admin.client, seasonId)
+    expect(all).toHaveLength(1)
+    expect(all[0]?.sides.every((side) => side.size === 1)).toBe(true)
   })
 
   it('rejects a direct RPC call when a match still has no result loaded', async () => {
@@ -645,7 +707,7 @@ describe('closeMatchday', () => {
     expect(error?.message).toBe('La lista de puntos llegó mal formada.')
   })
 
-  // S36 (verify-report ronda 11): G1 no tenía ni un test — cancel.db.test.ts:528
+  //G1 no tenía ni un test — cancel.db.test.ts:528
   // cubre la misma frase para `cancel_matchday`, una función distinta.
   it('rejects a direct RPC call for a matchday that does not exist', async () => {
     const { admin } = await buildSeasonWithSquad(defaultConfig(8), 8)
@@ -658,7 +720,7 @@ describe('closeMatchday', () => {
     expect(error?.message).toBe('La fecha no existe.')
   })
 
-  // S36: la mitad de G4 (`p_awards` no nulo pero tampoco array) no tenía test —
+  //La mitad de G4 (`p_awards` no nulo pero tampoco array) no tenía test —
   // sólo el caso `null`, arriba, cubría la otra mitad del `or`.
   it('rejects a direct RPC call with a malformed (non-array) awards payload', async () => {
     const { admin, seasonId, squad } = await buildSeasonWithSquad(defaultConfig(8), 8)
@@ -675,7 +737,7 @@ describe('closeMatchday', () => {
     expect(error?.message).toBe('La lista de puntos llegó mal formada.')
   })
 
-  // S36: G6 tampoco tenía test de su `raise` — masters.db.test.ts:225 sólo
+  //G6 tampoco tenía test de su `raise` — masters.db.test.ts:225 sólo
   // prueba el paso a través con lista vacía. El premio tiene que ser para
   // alguien que SÍ jugó: el guard de premios (G5) corre antes y taparía a G6.
   it('rejects a direct RPC call awarding points on the Masters', async () => {

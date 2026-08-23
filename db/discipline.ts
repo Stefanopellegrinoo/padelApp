@@ -4,15 +4,21 @@ import type { Json } from './database.types'
 import { EdgeError } from './errors'
 import { assertValidConfig } from './validate'
 
-/** `disciplineConfig`'s return: la config Y el `pair_size` real, del mismo select. */
+/** `disciplineConfig`'s return: la config Y el `pair_size`/`allows_draw` reales, del mismo select. */
 export interface DisciplineConfigRow {
   config: SeasonConfig
   pairSize: SideSize
+  /**
+   * El `allows_draw` real de la disciplina (W61),
+   * leído del mismo select que ya trae `config` y `pair_size` — ningún select
+   * nuevo, misma razón por la que `pairSize` vive acá desde W30.
+   */
+  allowsDraw: boolean
 }
 
 /**
  * La config de UNA disciplina — `disciplines.config`, no `seasons.config` —
- * MÁS `pair_size`, de la misma fila y el mismo select (W30, verify-report
+ * MÁS `pair_size`, de la misma fila y el mismo select (W30,
  * ronda 9): antes esta función sólo traía `config` y tres call sites
  * (`matchdayContextFor`, `pairingContextFor`, `DISCIPLINE_HEADER_COLUMNS` en
  * db/read.ts) pasaban un `2` literal a `assertValidConfig`/`assertMatchdaySize`
@@ -31,39 +37,102 @@ export async function disciplineConfig(
 ): Promise<DisciplineConfigRow> {
   const { data, error } = await supabase
     .from('disciplines')
-    .select('config, pair_size')
+    .select('config, pair_size, allows_draw')
     .eq('id', disciplineId)
     .maybeSingle()
   if (error) {
     throw new EdgeError(`No se pudo leer la configuración de la disciplina: ${error.message}`)
   }
   if (data === null) throw new EdgeError('La disciplina no existe.')
-  return { config: data.config as unknown as SeasonConfig, pairSize: data.pair_size as SideSize }
+  return {
+    config: data.config as unknown as SeasonConfig,
+    pairSize: data.pair_size as SideSize,
+    allowsDraw: data.allows_draw,
+  }
 }
 
 /**
  * El único escritor de `disciplines.config`: `assertValidConfig` corre antes que el update, igual que `updateSeasonConfig`.
  *
- * `sideSize` hardcodeado en 2: `pair_size` es identidad fijada al crear la
- * disciplina (PR14 slice A) y esta función no lee la fila antes de escribir
- * — agregar esa lectura sólo para validar sería ensanchar esta PR con una
- * query nueva. Correcto hoy porque toda disciplina real es `pair_size=2`;
- * el día que exista una de `pair_size=1` editable, este hardcode es el
- * primer lugar a tocar (candidato: pasar `sideSize` como parámetro, como ya
- * hace `addDiscipline` con `spec.pairSize`).
+ * C20: el `sideSize` estaba HARDCODEADO en 2, y sobre
+ * una disciplina de a uno eso dejaba la validación invertida — rechazaba la
+ * única config válida (8 valores de puntos para 8 asientos) y aceptaba la de
+ * parejas (4), que después `matchdayContextFor` rechaza al armar y al cerrar.
+ * Una fecha OPEN con resultados quedaba sin poder cerrarse Y sin poder volver
+ * atrás desde Ajustes, porque el rollback chocaba contra este mismo `2`.
+ *
+ * El `pair_size` se LEE acá adentro en vez de recibirse por parámetro, a
+ * propósito: es identidad de la disciplina, no una opción de quien llama. Con
+ * un parámetro, cada call site presente y futuro puede pasar el equivocado y
+ * el compilador no lo nota —`SideSize` es `1 | 2` en los dos casos—, que es
+ * exactamente la clase de bug por la que `DisciplineId` está branded (N2,
+ * ronda 2). Leerlo cuesta un SELECT por guardado en una pantalla de admin;
+ * `disciplineConfig`, justo arriba, ya trae la fila que hace falta.
+ *
+ * S46: `count: 'exact'` por el mismo motivo que
+ * `setMatchdayDate` (`db/matchday.ts:198-200`) — un update que no toca ninguna
+ * fila NO es un error en PostgREST. `saveDisciplineConfig` no tiene chequeo de
+ * admin propio, se apoya en RLS, y un participante que NO organiza pasa el
+ * `select` de `disciplineConfig` (`disciplines_read` usa `is_participant`) y
+ * después su update matchea 0 filas contra `disciplines_write` (que usa
+ * `is_season_admin`). Sin esto la pantalla le decía que guardó y al recargar
+ * volvía la config vieja.
+ *
+ * C23: desde `0032_promote_guest_points_slot.sql` la
+ * BASE también escribe `disciplines.config` —al promover un invitado de a uno
+ * agrega un casillero de puntos y sube `squadSize`—, y esta función era un
+ * overwrite CIEGO del blob entero. Con Formato abierto en una pestaña y una
+ * promoción en otra, el primer toque del admin pisaba el casillero recién
+ * agregado sin un solo error en pantalla, y la fecha volvía a quedar sin poder
+ * cerrarse (C22).
+ *
+ * El guard compara el LARGO de `points` y `squadSize`, que son exactamente los
+ * dos campos que la app se escribe a sí misma. Formato edita VALORES —no tiene
+ * control para agregar o sacar un puesto, ni para mover el plantel—, así que
+ * una diferencia ahí no puede venir del formulario: sólo de que la fila cambió
+ * abajo mientras estaba abierto.
+ *
+ * ponytail: es un lock optimista pobre, sobre dos campos elegidos a mano y no
+ * sobre la fila entera. Alcanza porque hoy hay UN solo escritor automático y
+ * toca esos dos campos. El día que aparezca otro que toque cualquier otra
+ * cosa, esto no lo ve — ahí corresponde una columna de versión y comparar la
+ * fila, no dos campos.
  */
 export async function updateDisciplineConfig(
   supabase: Client,
   disciplineId: DisciplineId,
   config: SeasonConfig,
 ): Promise<void> {
-  assertValidConfig(config, 2)
-  const { error } = await supabase
+  const { config: vigente, pairSize } = await disciplineConfig(supabase, disciplineId)
+  // La validez del payload se chequea PRIMERO, y el orden importa: una config
+  // con la cantidad equivocada de puntos y una armada sobre una fila vieja se
+  // ven iguales desde acá (las dos tienen otro largo), pero la primera es un
+  // error de contenido y merece el mensaje de `validateConfig`, que dice
+  // cuántos valores hacen falta. Con el orden al revés, ese mensaje quedaba
+  // tapado por el de concurrencia.
+  assertValidConfig(config, pairSize)
+  if (
+    config.points.length !== vigente.points.length ||
+    config.squadSize !== vigente.squadSize
+  ) {
+    //El mensaje decía "—alguien sumó un jugador
+    // al plantel—". El guard dispara ante CUALQUIER diferencia de largo o de
+    // `squadSize`, en cualquier dirección; hoy la causa es cierta sólo porque
+    //El único escritor automático suma, y el `Nota: ` de arriba dice que va
+    // a haber más. Sin la causa dice lo mismo y no envejece.
+    throw new EdgeError(
+      'La configuración cambió mientras editabas. Recargá la pantalla y volvé a aplicar el cambio.',
+    )
+  }
+  const { error, count } = await supabase
     .from('disciplines')
-    .update({ config: config as unknown as Json })
+    .update({ config: config as unknown as Json }, { count: 'exact' })
     .eq('id', disciplineId)
   if (error) {
     throw new EdgeError(`No se pudo actualizar la configuración de la disciplina: ${error.message}`)
+  }
+  if (count === 0) {
+    throw new EdgeError('No se pudo guardar el formato: sólo puede hacerlo quien organiza.')
   }
 }
 
@@ -133,7 +202,7 @@ export async function addDiscipline(
     .select('id')
     .single()
   if (disciplineError !== null) {
-    // W22 (verify-report ronda 7): mismo patrón que createMatchday (matchday.ts:237) —
+    //Mismo patrón que createMatchday (matchday.ts:237) —
     // traducir los códigos conocidos en vez de dejar pasar el mensaje crudo de Postgres.
     if (disciplineError.code === '23505') {
       throw new EdgeError('Alguien acaba de agregar otra disciplina. Probá de nuevo.')
@@ -151,7 +220,7 @@ export async function addDiscipline(
   const { data: seats, error: seatsReadError } = await seatQuery
   if (seatsReadError) throw new EdgeError(`No se pudo leer el plantel: ${seatsReadError.message}`)
 
-  // C13 (verify-report ronda 7): misma guarda que createSeason (season.ts:240)
+  //Misma guarda que createSeason (season.ts:240)
   // — sin esto, la config podía describir un plantel que no era el sembrado.
   const seatCount = seats?.length ?? 0
   if (seatCount !== spec.config.squadSize) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { defaultConfig } from '@/core'
+import { defaultConfig, partnerOf } from '@/core'
 import {
   addGuest,
   closeMatchday,
@@ -15,8 +15,9 @@ import {
   syncGuestSeat,
 } from './matchday'
 import { promoteGuest } from './entries'
+import { disciplineConfig } from './discipline'
 import { entriesOf, matchdayDetail, pairLocksOf, seasonSquadMembersOf } from './read'
-import { defaultDisciplineId } from './season'
+import { defaultDisciplineId, frozenPointsOf } from './season'
 import { adminClient } from './test/admin'
 import { createSeason } from './test/factories'
 import { createTestUser, type TestUser } from './test/users'
@@ -155,11 +156,14 @@ async function closedMatchdayWithLooseGuest(
   await nameGuest(admin.client, guestId, 'Invitado suelto de test')
 
   await generatePairs(admin.client, matchdayId)
-  const pair = (await matchdayDetail(admin.client, matchdayId)).pairs.find(
-    (p) => p.a === guestId || p.b === guestId,
+  const side = (await matchdayDetail(admin.client, matchdayId)).sides.find(
+    (candidate) => candidate.a === guestId || (candidate.size === 2 && candidate.b === guestId),
   )
-  if (pair === undefined) throw new Error('El invitado no quedó en ninguna pareja.')
-  const partnerId = pair.a === guestId ? pair.b : pair.a
+  if (side === undefined) throw new Error('El invitado no quedó en ninguna pareja.')
+  // Esta factory arma una temporada de PÁDEL, así que el compañero existe;
+  // `partnerOf` devolvería `null` en una de a uno y ahí este helper no aplica.
+  const partnerId = partnerOf(side, guestId)
+  if (partnerId === null) throw new Error('El invitado jugó solo: esta factory arma pádel.')
 
   await openMatchday(admin.client, matchdayId)
   await playAllMatches(admin, matchdayId)
@@ -430,7 +434,7 @@ describe('promoteGuest — la traba de armado no puede sobrevivir a la promoció
     await setAttendance(admin.client, matchdayId, entryIds[0]!, 'PLAYING')
     await generatePairs(admin.client, matchdayId)
 
-    expect((await matchdayDetail(admin.client, matchdayId)).pairs).toHaveLength(4)
+    expect((await matchdayDetail(admin.client, matchdayId)).sides).toHaveLength(4)
   })
 })
 
@@ -651,15 +655,15 @@ describe('promoteGuest — el unique de awards protege contra una pareja duplica
   })
 })
 
-// ── S23 (verify-report ronda 7) — discipline_entries de LA FECHA, no la default
+//── S23 — discipline_entries de LA FECHA, no la default
 // `promote_guest` (0025_promote_guest_discipline_entries.sql) ya siembra la
 // disciplina de la fecha en la que jugó el invitado, no la default — la
-// siembra estaba bien desde el restatement de esa migración, pero C12
+//Siembra estaba bien desde el restatement de esa migración, pero C12
 // bloqueaba llegar a este escenario (no se podía abrir una fecha fuera de la
-// default). Con C12 cerrado, esto ya es alcanzable: se prueba de punta a
+//Default). Con C12 cerrado, esto ya es alcanzable: se prueba de punta a
 // punta, con `entriesOf` (la misma función que lee "Plantel" en Ajustes) del
 // lado de la disciplina correcta y del lado de la default.
-describe('promoteGuest — discipline_entries de la disciplina de la fecha, no la default (S23)', () => {
+describe('promoteGuest — discipline_entries de la disciplina de la fecha, no la default', () => {
   it('un invitado promovido desde una fecha FIFA entra a discipline_entries de FIFA, no de la default PADEL', async () => {
     const squad = await fillerPlayers(8)
     const admin = await createTestUser()
@@ -708,11 +712,11 @@ describe('promoteGuest — discipline_entries de la disciplina de la fecha, no l
     expect(padelSeat).toBeNull()
 
     // Misma función que arma "Plantel" en Ajustes: aparece del lado de FIFA,
-    // no del lado de la default (padel) — ahí es donde S23 mordía.
+    //No del lado de la default (padel) — ahí es donde S23 mordía.
     expect((await entriesOf(admin.client, seasonId, fifaId)).some((entry) => entry.id === guestId)).toBe(true)
     expect((await entriesOf(admin.client, seasonId, padelId)).some((entry) => entry.id === guestId)).toBe(false)
 
-    // C14 (verify-report ronda 8): lo de arriba es exactamente lo que hace que
+    //Lo de arriba es exactamente lo que hace que
     // Ajustes → Plantel pierda a esta persona — `ajustes/page.tsx:50` llama
     // `entriesOf(seasonId)` SIN disciplineId, que cae en la disciplina por
     // defecto (padel acá), igual que la aserción de arriba. Lo que Plantel
@@ -723,5 +727,261 @@ describe('promoteGuest — discipline_entries de la disciplina de la fecha, no l
     const promoted = roster.find((member) => member.id === guestId)
     expect(promoted).toBeDefined()
     expect(promoted?.playerId).toBeNull()
+  })
+})
+
+//── PR18c — slice D re-especificada ────────────
+//
+// El design (#3801) traía un "HALLAZGO NUEVO" que decía que `promote_guest`
+// con `pair_size=1` sobre una fecha CERRADA copiaba 0 puntos EN SILENCIO, y
+//Proponía agregar un `raise` para que fallara ruidoso. W35 midió eso contra
+// la función real y encontró que la premisa era FALSA en las dos puntas: ya
+// falla ruidoso, y falla por el guard EQUIVOCADO.
+//
+// La causa no es la copia final (que es inalcanzable): 60 líneas antes, el
+// guard de "¿el compañero cobró?" arma `case when pr.entry_a = p_entry then
+// pr.entry_b else pr.entry_a end`, y con un lado de uno eso da NULL, así que
+// `a.entry_id = NULL` no matchea nunca y "el compañero no cobró" sale TRUE.
+//Misma lógica de tres valores que C17, en la dirección conservadora.
+//
+// Por eso la re-especificación NO es agregar un raise: es SALTEAR el guard del
+// compañero y la copia cuando `pair_size = 1`, y dejar que la promoción
+// proceda. En una disciplina de a uno el invitado ES su propio lado y no cobró
+// nada al cerrar — no hay puntos que conservar ni que copiar, y sumarlo al
+// plantel no le mueve la posición a nadie.
+
+async function closedSoloMatchdayWithGuest(): Promise<{
+  admin: TestUser
+  seasonId: string
+  matchdayId: string
+  guestId: string
+  squadEntryIds: string[]
+}> {
+  const admin = await createTestUser()
+  const squad = await fillerPlayers(8)
+  // 8 asientos de a uno son 8 lados del torneo, así que la lista de puntos
+  // tiene 8 valores y no 4 — `validateConfig` lo exige por `sideSize`.
+  const config = { ...defaultConfig(8), points: [8, 7, 6, 5, 4, 3, 2, 1] }
+  const { seasonId, entryIds } = await createSeason({
+    admin,
+    squad,
+    disciplines: [{ kind: 'FIFA', pairSize: 1, config }],
+  })
+  const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
+  await markAllPlaying(admin, matchdayId, entryIds)
+
+  // UN invitado, sin lock: de a uno no hay a quién trabarlo. Son 9 lados, 8
+  // del torneo (el invitado no cobra) y 36 partidos.
+  const guestId = await addGuest(admin.client, matchdayId, { displayName: 'Invitado solo' })
+
+  await generatePairs(admin.client, matchdayId)
+  await openMatchday(admin.client, matchdayId)
+  await playAllMatches(admin, matchdayId)
+  await closeMatchday(admin.client, matchdayId)
+
+  return { admin, seasonId, matchdayId, guestId, squadEntryIds: entryIds }
+}
+
+describe('promoteGuest — disciplina de a uno: se promueve, sin copiar nada', () => {
+  it('el invitado que jugó solo entra al plantel en vez de rebotar contra el guard del compañero', async () => {
+    const { admin, seasonId, matchdayId, guestId, squadEntryIds } =
+      await closedSoloMatchdayWithGuest()
+
+    // Punto de partida: los 8 del plantel cobraron, el invitado no. Eso es
+    // `computeAwards`, que saltea los lados hechos sólo de invitados.
+    const before = await awardsOf(matchdayId)
+    expect(before).toHaveLength(8)
+    expect(before.some((row) => row.entry_id === guestId)).toBe(false)
+
+    await promoteGuest(admin.client, guestId)
+
+    // El asiento pasó a ser del plantel y dejó de pertenecer a esa fecha.
+    const promoted = await entryRow(guestId)
+    expect(promoted.kind).toBe('SQUAD')
+    expect(promoted.matchday_id).toBeNull()
+
+    // Y entró a la disciplina de ESTA fecha, al final del orden.
+    const seeds = await disciplineSeedPositions(seasonId)
+    expect(seeds.map((row) => row.id)).toContain(guestId)
+    expect(seeds[seeds.length - 1]?.id).toBe(guestId)
+  })
+
+  it('no se lleva puntos de esa fecha, y no le mueve la posición a nadie', async () => {
+    const { admin, matchdayId, guestId } = await closedSoloMatchdayWithGuest()
+    const before = await awardsOf(matchdayId)
+
+    await promoteGuest(admin.client, guestId)
+
+    // Jugó solo: no hubo compañero que cobrara, así que no hay nada que
+    // copiar. Y las 8 filas de los demás quedan EXACTAMENTE como estaban —
+    // que es la razón por la que la promoción se permite: no reescribe la
+    // tabla de una fecha ya cerrada.
+    const after = await awardsOf(matchdayId)
+    expect(after.some((row) => row.entry_id === guestId)).toBe(false)
+    expect(after).toEqual(before)
+  })
+
+  /*
+   * C21. Promover funcionaba y la PANTALLA de esa
+   * fecha moría en el render siguiente: `page.tsx` recalculaba los puntos del
+   * día con `computeAwards` sobre los `guestIds` de HOY, y al salir el
+   * promovido de esa lista quedaban 9 lados pagos contra 8 valores de puntos.
+   *
+   * Este test recorre la secuencia y afirma sobre la fuente que la pantalla
+   * lee AHORA: los `awards` congelados. Si alguien vuelve a recalcular, los
+   * números de acá siguen bien pero la pantalla se cae — por eso el test
+   * afirma además que el conjunto de asientos que cobran NO cambió con la
+   * promoción, que es exactamente la premisa que el recálculo rompía.
+   */
+  it('después de promover, los puntos congelados de la fecha no se mueven', async () => {
+    const { admin, matchdayId, guestId, squadEntryIds } = await closedSoloMatchdayWithGuest()
+    const antes = await frozenPointsOf(admin.client, matchdayId)
+    expect([...antes.keys()].sort()).toEqual([...squadEntryIds].sort())
+
+    await promoteGuest(admin.client, guestId)
+
+    const despues = await frozenPointsOf(admin.client, matchdayId)
+    // Mismos asientos y mismos puntos: el promovido no aparece y a los 8 que
+    // cobraron no se les movió un punto. Un recálculo con los `guestIds` de
+    // hoy daría 9 lados pagos y no podría siquiera producirse.
+    expect([...despues.keys()].sort()).toEqual([...antes.keys()].sort())
+    for (const [entryId, award] of antes) {
+      //`toStrictEqual` y no `toBe`: desde W55 el
+      // premio congelado es `{ position, points }` y no un número — el puesto
+      // viaja con los puntos justamente para que el orden de la tabla no
+      // pueda contradecirlos.
+      expect(despues.get(entryId)).toStrictEqual(award)
+    }
+
+    // Y la fecha se sigue pudiendo LEER entera, que es lo que la pantalla hace
+    // antes de dibujar: con 9 lados y 8 valores de puntos, cualquier camino
+    // que recalcule el reparto acá revienta.
+    const detail = await matchdayDetail(admin.client, matchdayId)
+    expect(detail.sides).toHaveLength(9)
+    expect(detail.guestIds).toEqual([])
+  })
+
+  /*
+   * Decisión de producto de Stefano (esta sesión). La lista de puntos tiene
+   * que tener un casillero por lado, aunque valga 0 — el 0 ya significa "de
+   * acá para abajo no se suma" (`core/config.ts: pointsErrors`). Lo que trababa
+   * la temporada no era una regla de reparto: era el LARGO de la lista.
+   *
+   * Al promover un invitado de a uno el plantel pasa de 8 a 9 y la lista se
+   * queda corta, así que la fecha siguiente no se puede sortear y —peor— si se
+   * REABRE ésta, los premios se borran y no se puede volver a cerrar (C22).
+   *
+   * La decisión: que la app agregue el casillero SOLA, con 0. El admin después
+   * lo deja en 0 o le pone valor. Cambia a propósito la convención de que
+   * "agregar un asiento no toca squadSize ni points" — acá la app no está
+   * eligiendo un reparto, está manteniendo el invariante de largo que ella
+   * misma exige.
+   */
+  it('promover de a uno agrega el casillero de puntos y sube el plantel', async () => {
+    const { admin, seasonId, guestId } = await closedSoloMatchdayWithGuest()
+    const disciplineId = await defaultDisciplineId(adminClient(), seasonId)
+    if (disciplineId === null) throw new Error('La temporada no tiene disciplina.')
+
+    const antes = await disciplineConfig(admin.client, disciplineId)
+    expect(antes.config.squadSize).toBe(8)
+    expect(antes.config.points).toEqual([8, 7, 6, 5, 4, 3, 2, 1])
+
+    await promoteGuest(admin.client, guestId)
+
+    const despues = await disciplineConfig(admin.client, disciplineId)
+    expect(despues.config.squadSize).toBe(9)
+    // El casillero nuevo va al final y en 0: el promovido no cobra por haberse
+    // sumado, y el orden de la lista sigue siendo de mayor a menor.
+    expect(despues.config.points).toEqual([8, 7, 6, 5, 4, 3, 2, 1, 0])
+    // Y el resto de la config no se toca.
+    expect({ ...despues.config, squadSize: 8, points: antes.config.points }).toEqual(antes.config)
+  })
+
+  it('la fecha se puede reabrir y volver a cerrar después de promover', async () => {
+    //Esto borraba los 8 premios y después no
+    // dejaba cerrar — la fecha quedaba OPEN con cero puntos repartidos y sin
+    // salida por ninguna pantalla. Con el casillero agregado, el re-cierre
+    // reparte 9 premios y el noveno es 0.
+    const { admin, matchdayId, guestId } = await closedSoloMatchdayWithGuest()
+    await promoteGuest(admin.client, guestId)
+
+    await reopenMatchday(admin.client, matchdayId)
+    await closeMatchday(admin.client, matchdayId)
+
+    const awards = await awardsOf(matchdayId)
+    expect(awards).toHaveLength(9)
+    expect([...awards.map((row) => row.points)].sort((a, b) => b - a)).toEqual([8, 7, 6, 5, 4, 3, 2, 1, 0])
+    expect(awards.some((row) => row.entry_id === guestId)).toBe(true)
+  })
+
+  it('de a DOS sigue refusando la pareja toda invitada (no-regresión de spec 3.2)', async () => {
+    // El mismo guard que se saltea de a uno tiene que seguir disparando donde
+    // el lado es de dos: ahí sumarlo SÍ le cambiaría los puntos a los demás.
+    const { admin, guestA } = await closedMatchdayWithGuestPair()
+    await expect(promoteGuest(admin.client, guestA)).rejects.toThrow(
+      /jugó en una pareja que no cobró puntos/,
+    )
+    expect((await entryRow(guestA)).kind).toBe('GUEST')
+  })
+})
+
+/*
+ * S57. `0033` agregó dos guards que devuelven una
+ * frase en castellano cuando `disciplines.config` está corrupta, y la auditoría
+ * midió la matriz de siete casos: seis pasaron a mensaje legible y UNO seguía
+ * dando el error crudo de Postgres —`invalid input syntax for type integer:
+ * "ocho"`— porque el cast `(config ->> 'squadSize')::int` del `select … into`
+ * revienta ANTES de que el guard pueda mirar nada. Al admin le llegaba como
+ * "Referencia: NNNN".
+ *
+ * Falla segura en las dos versiones (la config queda intacta), así que es
+ * cosmético — pero es la última fila de la matriz sin mensaje, y la matriz
+ * entera no está en ningún test. Ésta sí.
+ */
+describe('promoteGuest — una config corrupta se explica en castellano', () => {
+  async function corromper(seasonId: string, patch: Record<string, unknown>): Promise<void> {
+    const service = adminClient()
+    const { data } = await service
+      .from('disciplines')
+      .select('id, config')
+      .eq('season_id', seasonId)
+      .single()
+    const config = { ...(data?.config as Record<string, unknown>), ...patch }
+    await service
+      .from('disciplines')
+      .update({ config: config as never })
+      .eq('id', data?.id ?? '')
+  }
+
+  async function configOf(seasonId: string): Promise<unknown> {
+    const service = adminClient()
+    const { data } = await service.from('disciplines').select('config').eq('season_id', seasonId).single()
+    return data?.config
+  }
+
+  it('squadSize que no es un número se explica, en vez de filtrar el error de Postgres', async () => {
+    const { admin, seasonId, guestId } = await closedSoloMatchdayWithGuest()
+    await corromper(seasonId, { squadSize: 'ocho' })
+    const rota = await configOf(seasonId)
+
+    await expect(promoteGuest(admin.client, guestId)).rejects.toThrow(
+      /no dice de cuántos es el plantel/,
+    )
+
+    // Falla segura: la config queda como estaba, rota pero sin empeorar.
+    expect(await configOf(seasonId)).toEqual(rota)
+    expect((await entryRow(guestId)).kind).toBe('GUEST')
+  })
+
+  it('points que no es una lista se explica igual (no-regresión de W54)', async () => {
+    const { admin, seasonId, guestId } = await closedSoloMatchdayWithGuest()
+    await corromper(seasonId, { points: 5 })
+    const rota = await configOf(seasonId)
+
+    await expect(promoteGuest(admin.client, guestId)).rejects.toThrow(
+      /la lista de puntos no es una lista/,
+    )
+
+    expect(await configOf(seasonId)).toEqual(rota)
   })
 })

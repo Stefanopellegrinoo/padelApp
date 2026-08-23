@@ -260,7 +260,7 @@ export async function cancelTheMatchday(seasonId: string, matchdayId: string, di
   // llamado — mismo criterio que `inDraft`/`onMatchday` más arriba.
   revalidatePath(`/torneo/${seasonId}`, 'layout')
   revalidatePath('/torneos')
-  // W28 (verify-report ronda 8): antes redirigía al stub sin disciplina, que
+  //Antes redirigía al stub sin disciplina, que
   // reenvía a la disciplina [0] de la temporada — no necesariamente la de la
   // fecha borrada. `disciplina` ahora viaja desde `[n]/page.tsx` (ya la tiene
   // en `params`) hasta acá, así que la lista de destino es SIEMPRE la suya.

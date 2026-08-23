@@ -1,5 +1,13 @@
 import Link from 'next/link'
-import { primaryDiscipline, publicRules, seasonAdminName, seasonHeader, seasonRules } from '@/db/read'
+import { DISCIPLINE_LABELS } from '@/app/torneos/nuevo/wizard-state'
+import {
+  primaryDiscipline,
+  publicFormats,
+  publicRules,
+  seasonAdminName,
+  seasonHeader,
+  seasonRules,
+} from '@/db/read'
 import { serverClient } from '@/db/server'
 import { RulesBody } from './rules-body'
 
@@ -28,7 +36,16 @@ export default async function ReglasPage({ params }: ReglasPageProps) {
   } = await supabase.auth.getUser()
 
   if (user === null) {
-    const rules = await publicRules(supabase, id)
+    // Dos RPC y no uno, y es la forma BARATA (S76): `season_public_rules`
+    // (0022) trae los cinco campos de la pantalla pero de UNA sola disciplina,
+    // y cambiarle la firma para que traiga todas pedía `drop function` —que se
+    // lleva los grants de la única superficie pública del sistema—. Así que
+    // `season_public_formats` (0038) va al lado, aditiva. En paralelo: son dos
+    // viajes independientes.
+    const [rules, formats] = await Promise.all([
+      publicRules(supabase, id),
+      publicFormats(supabase, id),
+    ])
     if (rules === null) {
       // Ya no es "no hay sesión" —eso ahora se muestra—: es link roto o
       // temporada borrada, que es exactamente lo que dice la frase.
@@ -50,6 +67,24 @@ export default async function ReglasPage({ params }: ReglasPageProps) {
         <RulesBody
           seasonId={id}
           config={rules.config}
+          // TODAS las disciplinas, igual que la rama con sesión. Con una sola
+          // `formatsLabel` no usa la etiqueta —agrupa por FORMATO, no por
+          // disciplina— así que esa pantalla sale byte a byte como salía; con
+          // dos, cada formato queda nombrado.
+          //
+          // El `??` no es defensa de cinturón: si `season_public_formats`
+          // devolviera vacío para una temporada que `season_public_rules` SÍ
+          // encontró, narrar el formato de la config que ya tenemos es mejor
+          // que narrar nada. No debería pasar —las dos leen `disciplines`—
+          // pero son dos viajes distintos.
+          formats={
+            formats.length > 0
+              ? formats.map((format) => ({
+                  label: DISCIPLINE_LABELS[format.kind],
+                  matchFormat: format.config.matchFormat,
+                }))
+              : [{ label: '', matchFormat: rules.config.matchFormat }]
+          }
           adminName={rules.adminName}
           rulesText={rules.text}
           isAdmin={false}
@@ -72,6 +107,14 @@ export default async function ReglasPage({ params }: ReglasPageProps) {
     <RulesBody
       seasonId={id}
       config={primaryDiscipline(header).config}
+      // La fila de formato mira TODAS las disciplinas, no la [0]: desde PR20
+      // rebanada D2 cada una nace con la forma de marcador de su kind, y un
+      // torneo de pádel + FIFA le decía al grupo "1 set a 4 games" sobre una
+      //Mitad que se juega a goles.
+      formats={header.disciplines.map((discipline) => ({
+        label: DISCIPLINE_LABELS[discipline.kind],
+        matchFormat: discipline.config.matchFormat,
+      }))}
       adminName={adminName}
       rulesText={rules.text}
       isAdmin={header.isAdmin}

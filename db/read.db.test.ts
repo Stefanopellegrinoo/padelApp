@@ -161,7 +161,7 @@ describe('db/read', () => {
       expect(header.isAdmin).toBe(false)
     })
 
-    // W21 (verify-report ronda 6): reemplaza `db/read.unit.test.ts`, que
+    //Reemplaza `db/read.unit.test.ts`, que
     // fabricaba su propio input (`'0.50' as unknown as number`) y sólo
     // probaba que `Number()` funciona. Esto lee `weight` de una fila REAL
     // vía PostgREST — el dato real es `number` (JSON sin comillas), no
@@ -228,7 +228,7 @@ describe('db/read', () => {
     it('a closed matchday brings pairs, matches and full sets', async () => {
       const detail = await matchdayDetail(member.client, matchday1Id)
       expect(detail.matchday.status).toBe('CLOSED')
-      expect(detail.pairs).toHaveLength(4)
+      expect(detail.sides).toHaveLength(4)
       expect(detail.matches.length).toBeGreaterThan(0)
       expect(detail.matches.every((match) => match.sets.length > 0)).toBe(true)
       expect(detail.guestIds).toEqual([])
@@ -237,7 +237,7 @@ describe('db/read', () => {
     it('a draft matchday brings empty pairs without blowing up', async () => {
       const detail = await matchdayDetail(member.client, matchday2Id)
       expect(detail.matchday.status).toBe('DRAFT')
-      expect(detail.pairs).toEqual([])
+      expect(detail.sides).toEqual([])
       expect(detail.matches).toEqual([])
       expect(detail.guestIds).toEqual([guestEntryId])
     })
@@ -260,7 +260,7 @@ describe('db/read', () => {
     })
   })
 
-  // REQ-D9: la tabla global necesita el plantel y los premios de TODAS las
+  //REQ-D9: la tabla global necesita el plantel y los premios de TODAS las
   // disciplinas, no de la default (`entriesOf`/`awardsOf`) — mismo criterio
   // que `seasonMatchdaysOf` (PR 10) sobre `matchdaysOf`. Los awards se
   // insertan directo (no se juega la fecha entera): lo que prueba esto es el
@@ -279,7 +279,7 @@ describe('db/read', () => {
       const firstEntryId = entryIds[0]
       if (firstEntryId === undefined) throw new Error('createSeason no armó el plantel.')
 
-      // Solape parcial (REQ-D1-4): un asiento sólo juega pádel. `seasonSquadOf`
+      //Solape parcial (REQ-D1-4): un asiento sólo juega pádel. `seasonSquadOf`
       // no lo excluye por eso — a diferencia de `entriesOf`, no pasa por
       // `discipline_entries` de UNA disciplina.
       const db = adminClient()
@@ -294,8 +294,8 @@ describe('db/read', () => {
       expect(members.map((member) => member.id)).toEqual(entryIds)
       expect(members.every((member) => member.displayName.length > 0)).toBe(true)
 
-      // Mismo número (1) en las dos: REQ-D3-2 lo permite, y es el caso que C10
-      // (verify-report ronda 5) probó que el redirect legacy desempataba mal —
+      //Mismo número (1) en las dos: REQ-D3-2 lo permite, y es el caso que C10
+      //Probó que el redirect legacy desempataba mal —
       // `seasonAwardsOf` lo desambigua por `disciplineId`, no por `number` solo.
       async function seedClosed(disciplineId: string): Promise<void> {
         const { data: matchday, error } = await db
@@ -463,7 +463,7 @@ describe('db/read', () => {
 
       expect(await entriesOf(stranger.client, seasonId)).toEqual([])
       expect(await matchdaysOf(stranger.client, seasonId)).toEqual([])
-      // W16 (verify-report ronda 5): `seasonMatchdaysOf` (PR 10) es una
+      //`seasonMatchdaysOf` (PR 10) es una
       // lectura nueva de temporada entera y no tenía test de RLS propio —
       // su gemela `matchdaysOf` sí, arriba. No pasa por `defaultDisciplineId`
       // (a diferencia de `matchdaysOf`): filtra directo por `season_id`, y
@@ -475,16 +475,16 @@ describe('db/read', () => {
       expect(await closedHistoryAll(stranger.client, seasonId)).toEqual([])
       expect(await awardsOf(stranger.client, seasonId)).toEqual(new Map())
 
-      // seasonSquadOf/seasonAwardsOf (REQ-D9): mismo criterio que
+      //SeasonSquadOf/seasonAwardsOf (REQ-D9): mismo criterio que
       // seasonMatchdaysOf arriba — filtran directo por season_id, RLS da 0
       // filas para quien no participa, sin error. Se le pasa a
       // seasonAwardsOf la lista REAL de fechas cerradas (vista por admin),
       // no una lista vacía: lo que prueba es que RLS bloquea la tabla
       // `awards` para el extraño aunque conozca los ids de matchday.
       expect(await seasonSquadOf(stranger.client, seasonId)).toEqual([])
-      // W19 (verify-report ronda 6): `seasonSquadMembersOf` (PR12b slice 2)
+      //`seasonSquadMembersOf` (PR12b slice 2)
       // es la única de las tres lectoras nuevas de temporada entera que
-      // faltaba acá — mismo criterio que sus hermanas, mismo hueco que W16.
+      //Faltaba acá — mismo criterio que sus hermanas, mismo hueco que W16.
       expect(await seasonSquadMembersOf(stranger.client, seasonId)).toEqual([])
       const realMatchdays = await seasonMatchdaysOf(admin.client, seasonId)
       expect(await seasonAwardsOf(stranger.client, realMatchdays)).toEqual(new Map())

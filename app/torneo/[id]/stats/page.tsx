@@ -216,7 +216,7 @@ export default async function StatsPage({ params, searchParams }: PageProps) {
     myEntryId(supabase, seasonId),
     defaultDisciplineId(supabase, seasonId),
   ])
-  // `disciplines.config` es la fuente real desde PR 5 (C5, verify-report
+  //`disciplines.config` es la fuente real desde PR 5 (C5, 
   // ronda 3: `seasons.config` quedó sin escritor y podía divergir en silencio).
   if (disciplineId === null) throw new EdgeError('El torneo no tiene disciplina.')
   const { config } = await disciplineConfig(supabase, disciplineId)

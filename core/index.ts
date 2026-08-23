@@ -18,7 +18,7 @@
 // matches exist because there are exactly four players.
 export { MIN_PLAYERS, MAX_PLAYERS, MASTERS_SIZE, MASTERS_MATCHES } from './constants'
 
-// ── El slug de una disciplina en la URL (PR 10, REQ-NR-5) ────────────────────
+//── El slug de una disciplina en la URL (PR 10, REQ-NR-5) ────────────────────
 // Derivado, no persistido: no hay columna `slug`.
 export type { SluggableDiscipline } from './discipline-slug'
 export { disciplineSlugs, resolveDisciplineBySlug } from './discipline-slug'
@@ -33,42 +33,40 @@ export type {
   SeasonConfig,
   SideSize,
   Side,
-  Pair,
   SetScore,
   MatchResult,
-  PairStanding,
+  SideStanding,
   Award,
   RankingRow,
 } from './types'
 
-// ── Un lado de 1 o 2 (decisión de producto #5, REQ-D5-1/2) ──────────────────
+//── Un lado de 1 o 2 (decisión de producto #5, REQ-D5-1/2) ──────────────────
 // `Side` es una unión discriminada: leer `.b` sin angostar `size` a `2` es
-// error de compilación. `core/pair-compat.ts` (sideOf/pairOf) es el
-// adaptador temporal que migra `Pair` a `Side` un archivo a la vez — no se
-// exporta acá a propósito, ver el bloque "Deliberadamente NO exportado".
+// error de compilación. **PR19 borró `Pair`, `sideOf`, `pairOf` y
+// `core/pair-compat.ts` enteros**: ya no hay adaptador ni tipo paralelo, y
+// `Side` es la única forma de nombrar un lado en todo el repo.
 export { single, pair, members, includes, partnerOf, sameSide, sideOfRow } from './side'
-// `pairFromRow` es la ÚNICA excepción de ese bloque (S38, verify-report ronda
-// 12): el hogar único de `pairOf ∘ sideOfRow` que `db/` necesita para leer
-// una fila cruda como `Pair` sin reescribir esa composición a mano tres
-// veces. Nace y muere con `pair-compat.ts` — BORRADO en PR19 junto con `Pair`.
-export { pairFromRow } from './pair-compat'
 
 // ── Season configuration ─────────────────────────────────────────────────────
 // `validateConfig` RETURNS its problems in Spanish, it never throws — so it
 // only protects callers who actually read the result. Call it at every edge.
 // Skipping it is not merely untidy: `tiebreakSnapshotEvery: 0` makes the
 // snapshot chain loop forever.
-export { validateConfig, defaultConfig, pointsErrors } from './config'
+// `disciplineProfile` es la ÚNICA fuente de "con qué marcador nace una
+// disciplina de este tipo": la usan los dos caminos que crean una (el wizard y
+// "+ Agregar disciplina" de Ajustes), que antes armaban los dos su config con
+// `defaultConfig` y hacían nacer una liga de FIFA siendo pádel con otro nombre.
+export { validateConfig, defaultConfig, disciplineProfile, pointsErrors } from './config'
 
 // ── Building a matchday ──────────────────────────────────────────────────────
 // `buildSides` (PR16, design PUNTO 5) is the Side-native entry point: with
-// `sideSize=2` it is `buildPairs` unmodified, mapped through `sideOf`.
+// `sideSize=2` it is `buildPairs`, que desde PR19 ya devuelve `Side[]` solo.
 // `buildPairs`/`PairingInput` stay exported for `core/`-internal callers and
-// tests (`buildSides` itself, `core/pairing.test.ts`) — N27 (verify-report
+//Tests (`buildSides` itself, `core/pairing.test.ts`) — N27 (
 // ronda 12): `db/matchday.ts` no llama `buildPairs` directo desde PR18a, sólo
 // `buildSides`/`type PairingInput`.
 export type { PairingInput, SideBuildInput } from './pairing'
-export { buildPairs, buildSides, samePair } from './pairing'
+export { buildPairs, buildSides } from './pairing'
 export { buildFixture } from './fixture'
 
 // ── El contexto que hereda una fecha de las anteriores ───────────────────────
@@ -78,14 +76,17 @@ export type { MatchdayHistory, PreviousContext } from './history'
 export { previousContext } from './history'
 
 // ── Scoring a matchday ───────────────────────────────────────────────────────
-export { computeStandings } from './standings'
+// `usesSetsDiff` sale a la superficie porque el criterio lo comparten tres
+// lugares —la tabla, la frase del desempate de la fecha y la página de Reglas—
+// y eran tres copias de `setsToWin > 1`. Arreglar una sola las hacía discrepar.
+export { computeStandings, usesSetsDiff } from './standings'
 export { computeAwards } from './awards'
 
 // ── The season ───────────────────────────────────────────────────────────────
 export { computeRanking } from './ranking'
 export { snapshotForMatchday } from './snapshots'
 
-// ── La tabla global (REQ-D9-1/2): suma ponderada de cada disciplina ─────────
+//── La tabla global (REQ-D9-1/2): suma ponderada de cada disciplina ─────────
 export type { DisciplineRanking, GlobalRankingRow } from './global-ranking'
 export { computeGlobalRanking } from './global-ranking'
 
@@ -102,7 +103,13 @@ export { mastersQualifiers, mastersFixture, mastersChampion } from './masters'
 // ── The rules page ───────────────────────────────────────────────────────────
 // Generated from the config, so it can never disagree with what the app does.
 export type { RulesSection } from './narrate'
-export { narrateRules } from './narrate'
+// `formatLabel` NO sale del barrel (S77): narra UNA disciplina, y quedó sin un
+// solo consumidor de `app/` cuando las tres pantallas pasaron a `formatsLabel`
+// al cerrar W64. Publicarla es dejar abierta la puerta por la que se entra a
+// narrar un torneo de dos formatos con uno solo — que es literalmente lo que
+// fue W64. Sigue exportada de `./narrate`, para su test y para `formatsLabel`,
+// que es su único llamador.
+export { formatsLabel, narrateRules, scoreDiffLabel, scoreUnit } from './narrate'
 
 // ── Reading the season back ──────────────────────────────────────────────────
 // What the read-only screens need on top of the ranking. All derived, nothing
@@ -134,16 +141,4 @@ export { tallyPlayers, partnerRecords, bestPair } from './playerstats'
  *   orderByPoints  (order.ts)       sorts by points with the snapshot as
  *                                   tiebreak. Callers want computeRanking,
  *                                   which returns rows already in order.
- *   sideOf/pairOf  (pair-compat.ts) TEMPORARY Pair<->Side adapter, born with
- *                                   `Side` (PR14) and deleted at PR19 along
- *                                   with `Pair` itself. Only files inside
- *                                   `core/` migrating one producer/consumer
- *                                   at a time should import it, and only
- *                                   from `./pair-compat` directly. The one
- *                                   exception is `pairFromRow` (S38,
- *                                   verify-report ronda 12), exported above
- *                                   — the composed `pairOf ∘ sideOfRow` that
- *                                   `db/` needs to read a raw row as `Pair`
- *                                   without hand-writing that narrowing three
- *                                   times.
  */

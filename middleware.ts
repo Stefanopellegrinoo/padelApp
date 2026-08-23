@@ -46,7 +46,7 @@ export async function middleware(request: NextRequest) {
     return redirect
   }
 
-  // REQ-NR-5: PnP-1000 tiene bookmarkeada `/torneo/{id}/fechas/{n}` (sin
+  //REQ-NR-5: PnP-1000 tiene bookmarkeada `/torneo/{id}/fechas/{n}` (sin
   // disciplina, PR 10). Se resuelve ACÁ y no en un `page.tsx` de esa ruta:
   // así el archivo viejo deja de existir del todo (en vez de reemplazarse
   // por un stub) y la mudanza de `fechas/[n]/` a `[disciplina]/fechas/[n]/`
@@ -58,7 +58,7 @@ export async function middleware(request: NextRequest) {
   // ES el status code (no un objeto `init` con otra cosa) — verificado en
   // `node_modules/next/dist/server/web/spec-extension/response.js`, cuyo
   // default sin el segundo argumento es 307, no 308.
-  // W15 (verify-report ronda 5): `legacyFechaRedirectTarget` tira `EdgeError`
+  //`legacyFechaRedirectTarget` tira `EdgeError`
   // cuando la temporada no resuelve (RLS sin fila) — antes ese throw salía
   // del middleware entero y reemplazaba `app/error.tsx` por el 500 pelado de
   // Next. El propio módulo ya trata "no hay a dónde redirigir" como `null`

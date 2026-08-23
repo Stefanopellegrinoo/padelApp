@@ -101,7 +101,7 @@ function traced(fetchFn: typeof withFreshTokenRetry, delayMs: number): typeof wi
     if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs))
     const response = await fetchFn(input, init)
     const path = typeof input === 'string' ? input : input.toString()
-    // ponytail: la cuenta asume consultas SECUENCIALES, una a la vez — si dos
+    //Nota: la cuenta asume consultas SECUENCIALES, una a la vez — si dos
     // requests corren en paralelo se entrelazan y el número de la última línea
     // deja de ser exacto. Correcto para leer el costo de UN tilde a la vez,
     // que es para lo que sirve; para tráfico concurrente hace falta un id por

@@ -49,7 +49,7 @@ export function Disciplinas({
   const [adding, setAdding] = useState(false)
   const [kind, setKind] = useState<DisciplineKind>('PADEL')
   const [selected, setSelected] = useState<Set<string>>(() => new Set(squad.map((member) => member.entryId)))
-  // C13: el Set inicial no se resincroniza si `squad` cambia bajo el
+  //El Set inicial no se resincroniza si `squad` cambia bajo el
   // formulario abierto (ej. sacar un asiento en Plantel) — derivar contra
   // `squad` en cada render evita mandar/mostrar un asiento que ya no existe.
   const validSelected = [...selected].filter((id) => squad.some((member) => member.entryId === id))

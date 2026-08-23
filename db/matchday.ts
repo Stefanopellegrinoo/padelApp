@@ -7,8 +7,8 @@ import {
   mastersFixture,
   mastersQualifiers,
   members,
-  pairFromRow,
   previousContext,
+  pair,
   sideOfRow,
   snapshotForMatchday,
   type Award,
@@ -16,7 +16,6 @@ import {
   type EntryId,
   type MatchFormat,
   type MatchResult,
-  type Pair,
   type PairingInput,
   type SeasonConfig,
   type SetScore,
@@ -46,7 +45,7 @@ import {
 
 type RawMatchdayRow = Database['public']['Tables']['matchdays']['Row']
 /**
- * `discipline_id` distinguido NOMINALMENTE de `season_id` (N2, verify-report
+ * `discipline_id` distinguido NOMINALMENTE de `season_id` (N2,
  * ronda 2 de torneo-multi-disciplina): en la fila cruda que devuelve Supabase
  * los dos son el mismo tipo (`string`/uuid), y `awardsBefore`/`closedHistory`
  * cambiaron su 2º parámetro de "season" a "discipline" sin cambiar de tipo —
@@ -72,7 +71,7 @@ export interface MatchdayContext {
   matchday: MatchdayRow
   config: SeasonConfig
   /**
-   * El `pair_size` real de la disciplina de esta fecha (W30, verify-report
+   * El `pair_size` real de la disciplina de esta fecha (W30,
    * ronda 9), leído del mismo `disciplineConfig` que ya trae `config` —
    * ningún select nuevo. `matchdays.pair_size` (design #3801 PUNTO 1) sigue
    * sin migrar: hasta que exista, ésta es la fuente, y es la real, no un
@@ -137,17 +136,17 @@ export async function pairingContextFor(
   const ranking = computeRanking(awardsByMatchday, seedOrder, config, snapshot)
   const points = new Map(ranking.map((row) => [row.entryId, row.points]))
 
-  // C19 (verify-report ronda 12): con un lado de uno, `buildSides` (design
+  //Con un lado de uno, `buildSides` (design
   // PUNTO 5) ignora `defenders`/`previousPairs`/`fixedPairs` enteros — no hay
   // compañero que defender ni pareja que repetir. Antes de este guard,
-  // `closedHistory` corría igual y calculaba ese dato descartado; su segunda
-  // consulta lee `pairs` de la fecha CERRADA anterior con `pairFromRow`, que
-  // todavía tira para `pair_size=1` (bloqueado hasta que sus consumidores
-  // Pair-only migren a Side, PR18b). El resultado era que ninguna disciplina
-  // de a uno llegaba a la fecha 2: la fecha 1 se armaba, se abría, se jugaba
-  // y se cerraba, y recién ahí el draw de la fecha 2 rompía. Estos son los
-  // mismos valores neutros que `previousContext` ya devuelve cuando no hay
-  // fecha anterior (core/history.ts) — no una invención de este guard.
+  // `closedHistory` corría igual y calculaba ese dato descartado, y encima
+  // TIRABA: leía `pairs` de la fecha CERRADA anterior con `pairFromRow`, que
+  // no sabía leer un `pair_size=1`. Ninguna disciplina de a uno llegaba a la
+  //Fecha 2. Ese throw ya no existe (W40, PR18b: `closedHistory` devuelve
+  // `Side[]`), así que este guard queda por su OTRO motivo, que sigue en pie:
+  // ahorrarse dos consultas cuyo resultado se descarta entero. Los valores
+  // neutros son los mismos que `previousContext` devuelve para una historia
+  // de lados de uno (core/history.ts) — no una invención de acá.
   const { defenders, defendersAlreadyRepeated, previousPairs } =
     pairSize === 1
       ? { defenders: null, defendersAlreadyRepeated: false, previousPairs: [] }
@@ -173,11 +172,12 @@ export async function pairingContextFor(
       defendersAlreadyRepeated,
       previousPairs,
       guestIds: guests.map((guest) => guest.entryId),
-      // Las parejas trabadas ya vienen con la forma de `Pair`: por eso
-      // `pair_locks` es una tabla de dos columnas y no un agrupador. No hay
-      // nada que convertir, y no hay una función de armado que se pueda
-      // equivocar al hacerlo.
-      fixedPairs: locks,
+      // `pair_locks` es una tabla de DOS columnas, no un agrupador: una traba
+      // es siempre de dos por construcción del schema. Desde PR19 el tipo es
+      // `Side`, así que se construye con `pair()` en vez de pasar la fila
+      // cruda — el constructor pone el discriminante y `requireDuo`
+      // (core/pairing.ts) rechazaría cualquier cosa que llegara mal formada.
+      fixedPairs: locks.map((lock) => pair(lock.a, lock.b)),
     },
   }
 }
@@ -224,7 +224,7 @@ export async function setMatchdayDate(
  * `played_on`: la columna existe y es el dato que muestran todas las
  * pantallas.
  *
- * `disciplineId` es OPCIONAL (C12, verify-report ronda 7): sin él, cae en
+ * `disciplineId` es OPCIONAL (C12): sin él, cae en
  * `defaultDisciplineId` (la primera por `position`) — el único camino que usa
  * hoy `app/torneo/[id]/actions.ts`, que todavía no deja elegir disciplina
  * (queda para el slice de UI que cierra C12 del todo). Con él explícito, la
@@ -240,10 +240,10 @@ export async function createMatchday(
   playedOn: string,
   disciplineId?: string,
 ): Promise<string> {
-  // S26 (verify-report ronda 8): omitir `disciplineId` no es ambiguo con UNA
+  //Omitir `disciplineId` no es ambiguo con UNA
   // disciplina — es la única respuesta posible, y sigue resolviendo por
   // default más abajo. Con DOS o más, adivinar en silencio es la misma
-  // clase de bug que ya causó C8, C9, C12 y el de `matchdaysOf` en esta
+  //Clase de bug que ya causó C8, C9, C12 y el de `matchdaysOf` en esta
   // cadena: mismo criterio tripwire que `0021` (create_masters, empate de
   // disciplina) y `0027` (empate de position) — el estado ambiguo se vuelve
   // ruidoso en vez de silencioso.
@@ -263,13 +263,21 @@ export async function createMatchday(
     throw new EdgeError('No se pudo leer la disciplina de la temporada.')
   }
 
-  // `matchdays_discipline_size` (0028, REQ-D5-1) exige que `pair_size` de la
+  //`matchdays_discipline_size` (0028, REQ-D5-1) exige que `pair_size` de la
   // fecha coincida con el de SU disciplina — sin esto, el default de columna
   // (2) rechazaría cada fecha nueva de una disciplina pair_size=1 con una
   // violación de FK, no con un mensaje de usuario. `disciplineId` es un
   // `string` crudo acá (parámetro público, todavía sin marcar en el origen);
   // la FK de arriba es la que de verdad lo valida contra `disciplines`.
-  const { pairSize } = await disciplineConfig(supabase, resolvedDisciplineId as DisciplineId)
+  //
+  //`matchdays_discipline_draw` (0034, REQ-D6-1)
+  // es la MISMA trampa con `allows_draw`, y `0034` la reintrodujo seis líneas
+  // más abajo, en este mismo `.insert()`, con el párrafo de arriba ya escrito.
+  // Las dos columnas salen de la misma fila y del mismo select.
+  const { pairSize, allowsDraw } = await disciplineConfig(
+    supabase,
+    resolvedDisciplineId as DisciplineId,
+  )
 
   const { data: last, error: lastError } = await supabase
     .from('matchdays')
@@ -289,6 +297,7 @@ export async function createMatchday(
       number,
       played_on: playedOn,
       pair_size: pairSize,
+      allows_draw: allowsDraw,
     })
     .select('id')
     .single()
@@ -448,7 +457,7 @@ export async function removeGuest(supabase: Client, entryId: string): Promise<vo
  * - con número par y un invitado YA NOMBRADO tampoco. Alguien lo puso a
  *   propósito; sacarlo porque cambió un tilde es perder un dato cargado
  *
- * C15 (verify-report ronda 9): la regla entera es de PAREJA, no de cantidad —
+ * C15: la regla entera es de PAREJA, no de cantidad —
  * en una disciplina `pair_size=1` cada presente YA es su propio lado, así que
  * un plantel impar no le falta nada a nadie. Antes de este guard, la función
  * escribía un GUEST fantasma (nombre vacío) y borraba el sorteo en una
@@ -566,7 +575,7 @@ export async function generatePairs(supabase: Client, matchdayId: string): Promi
   }
 
   // `buildSides` (PR16, wired here — PR18a): con `sideSize=2` es `buildPairs`
-  // sin cambios, mapeado a `Side` vía `sideOf`; con `sideSize=1` cada
+  // sin cambios (desde PR19 ya devuelve `Side[]` solo); con `sideSize=1` cada
   // presente es su propio lado. `pairSize` sale del mismo `pairingContextFor`
   // que ya trae `input` — ningún select nuevo.
   const { input, pairSize } = await pairingContextFor(supabase, matchdayId)
@@ -592,7 +601,13 @@ export async function generatePairs(supabase: Client, matchdayId: string): Promi
           `El fixture nombró la pareja ${left} o ${right} y sólo hay ${stored.length}. Esto es un bug.`,
         )
       }
-      return { matchday_id: matchdayId, round: index + 1, pair_a: pairA, pair_b: pairB }
+      return {
+        matchday_id: matchdayId,
+        round: index + 1,
+        pair_a: pairA,
+        pair_b: pairB,
+        allows_draw: matchday.allows_draw,
+      }
     }),
   )
   await insertMatches(supabase, matches)
@@ -613,10 +628,10 @@ export async function generateMastersPairs(supabase: Client, matchdayId: string)
   if (matchday.status !== 'DRAFT') {
     throw new EdgeError('El Masters ya está armado.')
   }
-  // W39 (verify-report ronda 12): sin este guard, una disciplina pair_size=1
+  //Sin este guard, una disciplina pair_size=1
   // llegaba hasta el insert y `pairs_matchday_size` (FK real, no `season_id`
   // suelta — ver el comentario de `insertPairs` más abajo) la rebotaba con el
-  // mensaje genérico de carrera de W34/S35: "El plantel o la fecha cambiaron
+  //Mensaje genérico de carrera de W34/S35: "El plantel o la fecha cambiaron
   // mientras armabas las parejas. Volvé a intentar." — falso acá, porque el
   // Masters es estructuralmente de a dos (mastersFixture/assertValidConfig
   // más abajo, siempre `size: 2`) y reintentar falla siempre igual.
@@ -640,12 +655,11 @@ export async function generateMastersPairs(supabase: Client, matchdayId: string)
 
   // Las 6 parejas van en el orden del fixture, y los partidos las nombran por
   // índice: pareja 0 contra 1 en la ronda 1, 2 contra 3 en la 2, y así.
-  // `insertPairs` ahora pide `Side[]` (PR18a): el Masters es SIEMPRE
-  // `size: 2` (`assertValidConfig(config, 2)` arriba, sin excepción), así que
-  // el literal es correcto y no una inferencia — `sideOf`/`pair-compat.ts` no
-  // se importa acá (core-internal, ver el comentario de `pairFromRow`).
-  const pairs = fixture.flatMap((match) => [match.pairA, match.pairB])
-  const sides: Side[] = pairs.map((pair) => ({ size: 2, a: pair.a, b: pair.b }))
+  // `insertPairs` pide `Side[]` (PR18a) y desde PR18b `mastersFixture` ya los
+  // devuelve como `Side` de dos: el literal `{ size: 2 }` que había acá lo
+  // construye ahora `pair()` adentro de `core/masters.ts`, donde vive la razón
+  // (el Masters SIEMPRE se juega de a parejas).
+  const sides = fixture.flatMap((match) => [match.sideA, match.sideB])
   const stored = await insertPairs(supabase, matchdayId, sides)
 
   const matches = fixture.map((_, index) => {
@@ -654,7 +668,13 @@ export async function generateMastersPairs(supabase: Client, matchdayId: string)
     if (pairA === undefined || pairB === undefined) {
       throw new Error(`Faltan parejas para el partido ${index + 1} del Masters. Esto es un bug.`)
     }
-    return { matchday_id: matchdayId, round: index + 1, pair_a: pairA, pair_b: pairB }
+    return {
+      matchday_id: matchdayId,
+      round: index + 1,
+      pair_a: pairA,
+      pair_b: pairB,
+      allows_draw: matchday.allows_draw,
+    }
   })
   await insertMatches(supabase, matches)
 }
@@ -724,14 +744,22 @@ export async function closeMatchday(supabase: Client, matchdayId: string): Promi
   // sobre quién viene HOY en vez de sobre quiénes jugaron, y previousContext
   // podría tirar por un problema de la fecha anterior mientras cerrás ésta.
   const { matchday, config, guests, snapshot } = await matchdayContextFor(supabase, matchdayId)
-  const { pairs, matches } = await resultsOf(supabase, matchdayId)
+  const { sides, matches } = await resultsOf(supabase, matchdayId)
 
   for (const match of matches) {
-    const problem = matchError(match.sets, config.matchFormat)
+    // `matchday.allows_draw`, no la disciplina: es el valor CONGELADO en la
+    // fecha (`matchdays_discipline_draw` es `on update no action`, así que
+    // una vez creada la fecha la disciplina ya no puede cambiarlo). Cerrar
+    // tiene que juzgar los resultados con la misma regla con la que se
+    // guardaron, no con la de hoy.
+    const problem = matchError(match.sets, config.matchFormat, matchday.allows_draw)
     if (problem !== null) throw new EdgeError(problem)
   }
 
-  const standings = computeStandings(pairs, matches, config, snapshot)
+  // `matchday.allows_draw` por lo MISMO que el `matchError` de arriba: es el
+  // valor congelado en la fecha. Cerrar una fecha vieja tiene que tabularla
+  // con la regla con la que se jugó, no con la que la disciplina tenga hoy.
+  const standings = computeStandings(sides, matches, config, snapshot, matchday.allows_draw)
   // El Masters define al campeón del año, no reparte puntos (spec 2.7), y
   // `close_matchday` rechaza un `p_awards` no vacío cuando kind = 'MASTERS'.
   // Sin esta rama el Masters no se puede cerrar: `computeAwards` devolvería seis
@@ -784,8 +812,8 @@ export async function saveResult(
   matchId: string,
   sets: SetScore[],
 ): Promise<void> {
-  const format = await matchFormatOf(supabase, matchId)
-  const problem = matchError(sets, format)
+  const { format, allowsDraw } = await matchFormatOf(supabase, matchId)
+  const problem = matchError(sets, format, allowsDraw)
   if (problem !== null) throw new EdgeError(problem)
 
   // La política match_sets_write ya exige que la fecha esté OPEN: acá alcanza
@@ -795,11 +823,17 @@ export async function saveResult(
     throw new EdgeError(`No se pudo guardar el resultado: ${deleteError.message}`)
   }
 
+  //`match_sets_match_draw` (0034) exige que
+  // `allows_draw` coincida con el del PARTIDO. Sin mandarlo, el default de
+  // columna (`false`) rebotaba cada resultado de una disciplina con empates
+  // —medido incluso con un 4-2, que no es empate ninguno—, o sea el guard no
+  // protegía nada y mataba todo.
   const rows = sets.map((set, index) => ({
     match_id: matchId,
     set_number: index + 1,
     games_a: set.gamesA,
     games_b: set.gamesB,
+    allows_draw: allowsDraw,
   }))
   const { error: insertError } = await supabase.from('match_sets').insert(rows)
   if (insertError !== null) {
@@ -880,7 +914,7 @@ async function deletePairs(supabase: Client, matchdayId: string): Promise<void> 
  * Insertando de a uno lo garantiza sin tener que reordenar nada después.
  *
  * Manda `pair_size: side.size` en cada fila (PR18a) — hasta acá el insert no
- * lo mandaba (W34, verify-report ronda 10) y el default de columna (2)
+ * lo mandaba (W34) y el default de columna (2)
  * chocaba con `pairs_matchday_size` en una disciplina `pair_size=1`. `side`
  * viene de `buildSides({ sideSize: pairSize, ... })`, así que `side.size`
  * coincide siempre con el `pair_size` de la fecha — no hay un tercer valor
@@ -906,21 +940,21 @@ async function insertPairs(
       .select('id')
       .single()
     if (error || data === null) {
-      // W34 (verify-report ronda 10) traducía acá un mensaje fijo de
+      //Traducía acá un mensaje fijo de
       // "disciplina de a uno todavía no puede armar parejas automáticamente"
       // para el rebote de `pairs_matchday_size` — correcto en ese momento,
       // porque este insert no mandaba `pair_size`. Ahora lo manda (arriba), y
       // el mensaje se BORRA en vez de reescribirse: una disciplina de a uno
       // SÍ arma sola desde acá, así que no queda nada honesto que decir sobre
-      // ese caso EN EL DRAW. S35 (verify-report ronda 11) sigue vigente para
+      //Ese caso EN EL DRAW. S35 sigue vigente para
       // las otras tres FK reales del mismo insert (`pairs_entry_a_season_id_fkey`,
       // `pairs_entry_b_season_id_fkey`, `pairs_matchday_id_season_id_fkey` —
-      // no hay FK de `season_id` sola sobre `pairs`, corregido W39 verify-
+      //No hay FK de `season_id` sola sobre `pairs`, corregido W39 verify-
       // report ronda 12): esas sí son una carrera real —alguien tocó el
       // plantel o la fecha mientras se armaba— y comparten este único mensaje
       // genérico. `pairs_matchday_size` SIGUE pudiendo disparar acá, pero sólo
       // por el camino de `generateMastersPairs`, que ahora corta antes con su
-      // propio guard (W39, arriba) en vez de llegar a este insert.
+      //Propio guard (W39, arriba) en vez de llegar a este insert.
       if (error?.code === '23503') {
         throw new EdgeError('El plantel o la fecha cambiaron mientras armabas las parejas. Volvé a intentar.')
       }
@@ -936,6 +970,21 @@ interface MatchRow {
   round: number
   pair_a: string
   pair_b: string
+  /**
+   * W61. `matches_matchday_draw` (0034) exige que
+   * coincida con el de SU fecha; sin mandarlo, el default de columna (`false`)
+   * rebota cada fixture de una disciplina con empates — y lo hace DESPUÉS de
+   * que `insertPairs` ya escribió los lados, dejando la fecha con parejas y
+   * sin partidos (medido: `pairs=4, matches=0`) sin transacción que lo
+   * envuelva.
+   *
+   * Va OBLIGATORIO en esta interfaz, no como opcional con default: el `Insert`
+   * generado en `db/database.types.ts` lo declara opcional porque la columna
+   * tiene default, así que el typecheck NO puede cazar a un escritor que se lo
+   * olvide (N44). Exigirlo acá es la única red de compilación posible, y es la
+   * que faltaba las dos veces que este bug apareció.
+   */
+  allows_draw: boolean
 }
 
 /** Inserta el fixture. */
@@ -943,12 +992,6 @@ async function insertMatches(supabase: Client, rows: MatchRow[]): Promise<void> 
   const { error } = await supabase.from('matches').insert(rows)
   if (error) throw new EdgeError(`No se pudo guardar el fixture: ${error.message}`)
 }
-
-// S38 (verify-report ronda 12): `pairFromRow` era una copia local a mano de
-// `pairOf ∘ sideOfRow`, byte por byte idéntica a la de `db/read.ts` y
-// `db/season.ts`. `core/pair-compat.ts` la exporta ahora como la ÚNICA
-// excepción del bloque "Deliberadamente NO exportado" (core/index.ts) — un
-// solo lugar, un solo mensaje, para las tres.
 
 /**
  * Los `entry_id` de cada pareja de la fecha, sin importar la aridad: sólo se
@@ -970,21 +1013,29 @@ async function pairEntryIds(supabase: Client, matchdayId: string): Promise<strin
   ])
 }
 
-/** Las parejas y los partidos de la fecha, con los sets de cada partido ordenados por `set_number`. */
+/**
+ * Los lados y los partidos de la fecha, con los sets de cada partido ordenados
+ * por `set_number`.
+ *
+ * W40 CERRADO acá igual que en `db/read.ts`: componía `pairFromRow`, que
+ * tiraba con una fila `pair_size=1`, así que `closeMatchday()` —el wrapper TS,
+ * no el RPC— no podía cerrar una fecha de a uno. `sideOfRow` devuelve el lado
+ * con su forma y `computeStandings` ya lo tabula (S39).
+ */
 async function resultsOf(
   supabase: Client,
   matchdayId: string,
-): Promise<{ pairs: Pair[]; matches: MatchResult[] }> {
+): Promise<{ sides: Side[]; matches: MatchResult[] }> {
   const { data: pairRows, error: pairsError } = await supabase
     .from('pairs')
     .select('id, entry_a, entry_b, pair_size')
     .eq('matchday_id', matchdayId)
   if (pairsError) throw new EdgeError(`No se pudieron leer las parejas: ${pairsError.message}`)
 
-  const pairById = new Map(
+  const sideById = new Map(
     (pairRows ?? []).map((row) => [
       row.id,
-      pairFromRow(row.pair_size as SideSize, row.entry_a, row.entry_b),
+      sideOfRow(row.pair_size as SideSize, row.entry_a, row.entry_b),
     ]),
   )
 
@@ -1015,24 +1066,37 @@ async function resultsOf(
   }
 
   const matches: MatchResult[] = (matchRows ?? []).map((row) => {
-    const pairA = pairById.get(row.pair_a)
-    const pairB = pairById.get(row.pair_b)
-    if (pairA === undefined || pairB === undefined) {
+    const sideA = sideById.get(row.pair_a)
+    const sideB = sideById.get(row.pair_b)
+    if (sideA === undefined || sideB === undefined) {
       throw new Error(
         `El partido ${row.id} referencia una pareja que no está en la fecha. Esto es un bug.`,
       )
     }
-    return { round: row.round, pairA, pairB, sets: setsByMatch.get(row.id) ?? [] }
+    return { round: row.round, sideA, sideB, sets: setsByMatch.get(row.id) ?? [] }
   })
 
-  return { pairs: [...pairById.values()], matches }
+  return { sides: [...sideById.values()], matches }
 }
 
-/** El `matchFormat` de la configuración de la temporada dueña de este partido. */
-async function matchFormatOf(supabase: Client, matchId: string): Promise<MatchFormat> {
+/**
+ * El `matchFormat` de la configuración de la disciplina dueña de este partido,
+ * MÁS su `allows_draw`.
+ *
+ * `allows_draw` sale de la fila de `matches`, no de la disciplina, y es a
+ * propósito: es el valor que `match_sets_match_draw` va a verificar contra
+ * ESTE partido. La cadena de FK compuestas garantiza que sean el mismo
+ * (`matches → matchdays → disciplines`), así que leerlo del partido no es una
+ * segunda fuente de verdad — es la MISMA, un salto más cerca, y sin un select
+ * extra: ya se estaba leyendo esta fila.
+ */
+async function matchFormatOf(
+  supabase: Client,
+  matchId: string,
+): Promise<{ format: MatchFormat; allowsDraw: boolean }> {
   const { data: match, error: fetchError } = await supabase
     .from('matches')
-    .select('matchday_id')
+    .select('matchday_id, allows_draw')
     .eq('id', matchId)
     .maybeSingle()
   if (fetchError) throw new EdgeError(`No se pudo leer el partido: ${fetchError.message}`)
@@ -1040,5 +1104,5 @@ async function matchFormatOf(supabase: Client, matchId: string): Promise<MatchFo
 
   const matchday = await requireMatchday(supabase, match.matchday_id)
   const { config } = await disciplineConfig(supabase, matchday.discipline_id)
-  return config.matchFormat
+  return { format: config.matchFormat, allowsDraw: match.allows_draw }
 }

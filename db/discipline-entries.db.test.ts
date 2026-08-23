@@ -20,8 +20,8 @@ async function fillerPlayers(count: number): Promise<string[]> {
   return ids
 }
 
-// ── PR 7 — discipline_entries (REQ-D1-3, REQ-D1-4) ──────────────────────────
-// `entries` sigue siendo el plantel del TORNEO (REQ-D1-3: una persona, un
+//── PR 7 — discipline_entries (REQ-D1-3, REQ-D1-4) ──────────────────────────
+//`entries` sigue siendo el plantel del TORNEO (REQ-D1-3: una persona, un
 // asiento, sin duplicar por disciplina). `discipline_entries` es el
 // subconjunto por disciplina, con su propio `seed_position` — este archivo
 // prueba que las dos cosas son ciertas contra la base real, no sólo que
@@ -118,7 +118,7 @@ describe('discipline_entries — solape parcial de plantel (REQ-D1-4)', () => {
     // 4 comparten las dos disciplinas, 4 juegan sólo pádel (8 en total) y 2
     // juegan sólo FIFA (6 en total: los 4 compartidos + estos 2). Secuencial
     // y no `Promise.all`: `add_squad_seat` lee `max(seed_position)` sin
-    // trabar la tabla (ponytail documentado en 0013/0023) — dos altas
+    //Trabar la tabla (ponytail documentado en 0013/0023) — dos altas
     // concurrentes del mismo plantel chocan contra `entries_seed`, que es
     // justo el ruido que este test no quiere probar.
     const both = await addSeats(admin.client, seasonId, ['Ambos 1', 'Ambos 2', 'Ambos 3', 'Ambos 4'], [

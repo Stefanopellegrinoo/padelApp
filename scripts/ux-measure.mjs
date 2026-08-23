@@ -165,7 +165,7 @@ async function measureInteraction(page, label, runFn) {
  * más fina que el escalón puede distinguir eso de una regresión, y un gate que
  * falla sobre código sin cambios enseña a ignorarlo.
  *
- * Lo que el contrato pide tampoco es "no varió": es que el toque se conteste
+ *Lo que el contrato pide tampoco es "no varió": es que el toque se conteste
  * rápido. 150ms está muy por debajo de lo que este bug producía (300-800ms de
  * pantalla muerta) y muy por encima del escalón del instrumento, así que sólo
  * se enciende cuando algo se rompió de verdad. El delta contra el baseline
@@ -407,7 +407,7 @@ async function main() {
 
   // ================= 8) Pestañas de la nav =================
   await page.goto(closeBase, { waitUntil: 'networkidle' })
-  // W27 (verify-report ronda 8): "Fechas" ya no es `${closeBase}/fechas` (el
+  //"Fechas" ya no es `${closeBase}/fechas` (el
   // stub) — el href real es discipline-scoped (`${base}/{slug}/fechas`). Se
   // lee del DOM en vez de asumir el slug: robusto sin importar cuál sea la
   // disciplina por defecto de la temporada sembrada.

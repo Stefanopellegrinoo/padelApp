@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
-import { disciplineSlugs, validateConfig } from '@/core'
+import { DISCIPLINE_LABELS } from '@/app/torneos/nuevo/wizard-state'
+import { disciplineSlugs, formatsLabel, validateConfig } from '@/core'
 import {
   matchdaysOf,
   myEntryId,
@@ -49,12 +50,12 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
     seasonRules(supabase, seasonId),
     myEntryId(supabase, seasonId),
     matchdaysOf(supabase, seasonId),
-    // Temporada ENTERA, no la disciplina por defecto (C14, verify-report
+    //Temporada ENTERA, no la disciplina por defecto (C14, 
     // ronda 8): "Plantel" administra el asiento de la TEMPORADA (renombrar,
     // reclamar, sacar), no el de una disciplina — usar `entriesOf(seasonId)`
     // sin disciplina caía en la disciplina por defecto y perdía a cualquier
     // SQUAD promovido desde otra. Mismo criterio que ya usaba
-    // "+ Agregar disciplina" (REQ-D1-3): cualquier asiento de la temporada.
+    //"+ Agregar disciplina" (REQ-D1-3): cualquier asiento de la temporada.
     seasonSquadMembersOf(supabase, seasonId),
   ])
   if (!header.isAdmin) redirect(`/torneo/${seasonId}`)
@@ -78,11 +79,22 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
   const mismatch =
     seats.length === discipline.config.squadSize
       ? []
-      : // `discipline.pairSize` real desde W30 (verify-report ronda 9):
+      : // `discipline.pairSize` real desde W30:
         // `DisciplineHeader` ya trae `pair_size` del mismo select que `config`.
         validateConfig({ ...discipline.config, squadSize: seats.length }, discipline.pairSize)
 
-  const { setsToWin, gamesPerSet } = discipline.config.matchFormat
+  // `formatsLabel` sobre TODAS las disciplinas y no `formatLabel` sobre la
+  // [0]: esta fila decía "1 set a 4 games" en un torneo que tiene una mitad
+  //Que se juega a goles. Con una sola
+  // disciplina dice exactamente lo que decía. Es la misma etiqueta que
+  // muestran Reglas y el resumen del wizard — antes eran tres copias, y ésa es
+  // la razón por la que las tres mentían igual.
+  const formatoLabel = formatsLabel(
+    header.disciplines.map((candidate) => ({
+      label: DISCIPLINE_LABELS[candidate.kind],
+      matchFormat: candidate.config.matchFormat,
+    })),
+  )
   // CLOSED y no todas: lo que el modal tiene que poner en juego es lo que ya se
   // jugó, no una fecha en DRAFT que no cuesta nada volver a abrir.
   const playedCount = matchdays.filter((matchday) => matchday.status === 'CLOSED').length
@@ -129,9 +141,7 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
 
           <a href="#formato" className={`${ROW} border-t border-line`}>
             <span className={LABEL}>Formato</span>
-            <span className={VALUE}>
-              {setsToWin} set a {gamesPerSet} ›
-            </span>
+            <span className={VALUE}>{formatoLabel} ›</span>
           </a>
 
           <a href="#disciplinas" className={`${ROW} border-t border-line`}>
@@ -163,7 +173,15 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
       ))}
 
       <Plantel seasonId={seasonId} seats={seats} canTakeSeat={myEntry === null} />
-      <Formato seasonId={seasonId} disciplineId={discipline.id} config={discipline.config} />
+      {/* El panel edita la disciplina [0] y nada más, así que dice cuál es
+          cuando hay más de una (W65). La fila de arriba sigue nombrando el
+          formato de todas: achicarla revertiría W64 en esta pantalla. */}
+      <Formato
+        seasonId={seasonId}
+        disciplineId={discipline.id}
+        config={discipline.config}
+        disciplineLabel={header.disciplines.length > 1 ? DISCIPLINE_LABELS[discipline.kind] : null}
+      />
       <Disciplinas
         seasonId={seasonId}
         disciplines={header.disciplines.map((candidate) => ({

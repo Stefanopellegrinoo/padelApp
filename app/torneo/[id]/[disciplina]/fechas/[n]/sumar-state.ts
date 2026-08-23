@@ -5,7 +5,8 @@
  * que la suite pura no puede importar ni uno ni otro.
  */
 
-import type { Pair } from '@/core'
+import { partnerOf } from '@/core'
+import type { Side } from '@/core'
 
 /**
  * Los tres estados en los que puede estar un invitado de una fecha cerrada, y
@@ -27,6 +28,16 @@ import type { Pair } from '@/core'
  *                        típico como ejemplo. Esa pareja quedó afuera del
  *                        reparto, y meterlo al plantel desde acá correría las
  *                        posiciones pagas de todos los demás.
+ *   · `JUGO_SOLO`        la disciplina es de a uno: fue su propio lado, así
+ *                        que no hubo compañero que cobrara. SE PUEDE sumar
+ *                        —`promote_guest` saltea el guard del compañero y la
+ *                        copia con `pair_size = 1` desde
+ * `0031_promote_guest_single_side.sql`, W35— pero NO
+ *                        se lleva puntos de esta fecha, y por eso no lleva
+ *                        `partnerPoints`: no hay ninguno que prometer.
+ *                        Sumarlo no le mueve la posición a nadie, que es
+ *                        justo lo que hace legítima esta promoción y no la
+ *                        de `PAREJA_INVITADA`.
  *   · `SIN_PAREJA`       nunca quedó adentro de una pareja de esta fecha. No
  *                        hay nada suyo que conservar, y la base también lo
  *                        refusa. (El spec 3.4 pedía lo contrario —convertirlo
@@ -41,6 +52,7 @@ import type { Pair } from '@/core'
  */
 export type GuestPromoteVM = { entryId: string; name: string } & (
   | { estado: 'PUEDE'; partnerPoints: number }
+  | { estado: 'JUGO_SOLO' }
   | { estado: 'PAREJA_INVITADA' }
   | { estado: 'SIN_PAREJA' }
 )
@@ -49,8 +61,8 @@ export type GuestPromoteVM = { entryId: string; name: string } & (
 export interface GuestPromotionInput {
   /** Los invitados de ESTA fecha (`matchdayDetail`). */
   guestIds: string[]
-  /** Las parejas de ESTA fecha. */
-  pairs: Pair[]
+  /** Los lados de ESTA fecha, de uno o de dos según la disciplina. */
+  sides: Side[]
   /** Los awards CONGELADOS de esta fecha, por entry. Ausente = no cobró. */
   frozenPoints: ReadonlyMap<string, number>
   nameOf: ReadonlyMap<string, string>
@@ -81,16 +93,30 @@ export interface GuestPromotionInput {
  */
 export function guestsToPromote({
   guestIds,
-  pairs,
+  sides,
   frozenPoints,
   nameOf,
 }: GuestPromotionInput): GuestPromoteVM[] {
   return guestIds.map((guestId) => {
     const name = nameOf.get(guestId) ?? '?'
-    const partnersPoints = pairs
-      .filter((candidate) => candidate.a === guestId || candidate.b === guestId)
-      .map((pair) => frozenPoints.get(pair.a === guestId ? pair.b : pair.a))
-    if (partnersPoints.length === 0) return { entryId: guestId, name, estado: 'SIN_PAREJA' }
+    // `partnerOf` en vez de `pair.a === guestId ? pair.b : pair.a` — ESTE es el
+    // sitio que el design (#3801, decisión #1) nombra como el motivo de que
+    // `Side` sea una unión discriminada: con un lado de uno, esa expresión
+    // devolvía `undefined` en silencio y `frozenPoints.get(undefined)` daba
+    // "no cobró". `partnerOf` devuelve `null` con tipo, y el compilador obliga
+    // a decidir qué hacer con él, que es lo de abajo.
+    const partners = sides
+      .filter((side) => side.a === guestId || (side.size === 2 && side.b === guestId))
+      .map((side) => partnerOf(side, guestId))
+    if (partners.length === 0) return { entryId: guestId, name, estado: 'SIN_PAREJA' }
+    // Jugó solo: `partnerOf` devolvió `null` porque el lado es de uno, no
+    // porque falte un dato. La base acepta esta promoción desde
+    //`0031_promote_guest_single_side.sql` y no copia nada — el
+    // invitado no cobró, y sumarlo no le mueve la posición a nadie.
+    if (partners.some((partnerId) => partnerId === null)) {
+      return { entryId: guestId, name, estado: 'JUGO_SOLO' }
+    }
+    const partnersPoints = partners.map((partnerId) => frozenPoints.get(partnerId ?? ''))
     if (partnersPoints.some((points) => points === undefined)) {
       return { entryId: guestId, name, estado: 'PAREJA_INVITADA' }
     }

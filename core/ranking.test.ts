@@ -7,7 +7,7 @@ const SNAPSHOT = ['p1', 'p2', 'p3', 'p4']
 
 const CONFIG: SeasonConfig = {
   squadSize: 8,
-  matchFormat: { setsToWin: 1, gamesPerSet: 4, tieBreak: true },
+  matchFormat: { setsToWin: 1, gamesPerSet: 4, tieBreak: true, openScore: false },
   points: [10, 6, 3, 1],
   regularMatchdays: 10,
   countBestOf: 3,

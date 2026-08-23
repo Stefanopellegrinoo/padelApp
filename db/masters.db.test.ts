@@ -5,12 +5,14 @@ import {
   defaultConfig,
   mastersChampion,
   mastersQualifiers,
-  samePair,
+  members,
+  pair,
+  sameSide,
   snapshotForMatchday,
   type DisciplineId,
   type MastersFour,
-  type Pair,
   type SeasonConfig,
+  type Side,
 } from '@/core'
 import type { Json } from './database.types'
 import {
@@ -151,8 +153,8 @@ async function qualifiersOf(
   return mastersQualifiers(computeRanking(awards, seedOrder, config, snapshot))
 }
 
-function pairKey(pair: Pair): string {
-  return [pair.a, pair.b].sort().join('~')
+function sideKey(side: Side): string {
+  return [...members(side)].sort().join('~')
 }
 
 // ── el Masters ──────────────────────────────────────────────────────────────
@@ -166,7 +168,7 @@ describe('the masters', () => {
     await generateMastersPairs(admin.client, mastersId)
 
     const detail = await matchdayDetail(admin.client, mastersId)
-    expect(detail.pairs).toHaveLength(6)
+    expect(detail.sides).toHaveLength(6)
     expect(detail.matches).toHaveLength(3)
 
     const four = await qualifiersOf(admin, seasonId, disciplineId, detail.matchday.number)
@@ -174,13 +176,13 @@ describe('the masters', () => {
     // Las 6 parejas son las 6 combinaciones posibles de 4 jugadores, sin repetir.
     const expected = new Set<string>()
     for (let i = 0; i < 4; i++) {
-      for (let j = i + 1; j < 4; j++) expected.add(pairKey({ a: four[i]!, b: four[j]! }))
+      for (let j = i + 1; j < 4; j++) expected.add(sideKey(pair(four[i]!, four[j]!)))
     }
-    expect(new Set(detail.pairs.map(pairKey))).toEqual(expected)
+    expect(new Set(detail.sides.map(sideKey))).toEqual(expected)
 
     // Y cada clasificado aparece en exactamente 3 de ellas.
     for (const entryId of four) {
-      const appearances = detail.pairs.filter((pair) => pair.a === entryId || pair.b === entryId)
+      const appearances = detail.sides.filter((side) => members(side).includes(entryId))
       expect(appearances).toHaveLength(3)
     }
   })
@@ -197,11 +199,11 @@ describe('the masters', () => {
     const byRound = [...detail.matches].sort((left, right) => left.round - right.round)
 
     const facing = (round: number): Set<string> =>
-      new Set([pairKey(byRound[round]!.pairA), pairKey(byRound[round]!.pairB)])
+      new Set([sideKey(byRound[round]!.sideA), sideKey(byRound[round]!.sideB)])
 
-    expect(facing(0)).toEqual(new Set([pairKey({ a: one, b: four }), pairKey({ a: two, b: three })]))
-    expect(facing(1)).toEqual(new Set([pairKey({ a: one, b: three }), pairKey({ a: two, b: four })]))
-    expect(facing(2)).toEqual(new Set([pairKey({ a: one, b: two }), pairKey({ a: three, b: four })]))
+    expect(facing(0)).toEqual(new Set([sideKey(pair(one, four)), sideKey(pair(two, three))]))
+    expect(facing(1)).toEqual(new Set([sideKey(pair(one, three)), sideKey(pair(two, four))]))
+    expect(facing(2)).toEqual(new Set([sideKey(pair(one, two)), sideKey(pair(three, four))]))
   })
 
   // Antes de este plan `openMatchday` corría assertMatchdaySize sobre un
@@ -243,7 +245,7 @@ describe('the masters', () => {
     expect(count).toBe(0)
     expect((await seasonHeader(admin.client, seasonId)).status).toBe('FINISHED')
 
-    // C1 (0019_discipline_status_moves.sql): cerrar el Masters termina TAMBIÉN
+    //(0019_discipline_status_moves.sql): cerrar el Masters termina TAMBIÉN
     // la disciplina que lo jugó, mismo trinquete que seasons.status de arriba.
     const { data: discipline, error } = await db
       .from('disciplines')
@@ -254,7 +256,7 @@ describe('the masters', () => {
     expect(discipline.status).toBe('FINISHED')
   })
 
-  // C1 (0019_discipline_status_moves.sql): reabrir el Masters revierte
+  //(0019_discipline_status_moves.sql): reabrir el Masters revierte
   // disciplines.status a ACTIVE, gemelo del trinquete ya probado en
   // db/season.db.test.ts para seasons.status.
   it('reopening the masters returns disciplines.status to ACTIVE', async () => {
@@ -297,7 +299,7 @@ describe('the masters', () => {
 
     // El 4º gana sus tres partidos, así que gana limpio y no por desempate.
     for (const match of detail.matches) {
-      const targetIsA = match.pairA.a === target || match.pairA.b === target
+      const targetIsA = members(match.sideA).includes(target)
       await saveResult(
         admin.client,
         match.id,
@@ -310,9 +312,8 @@ describe('the masters', () => {
   })
 })
 
-// ── W39 (verify-report ronda 12): el Masters es estructuralmente de a dos ──
 
-describe('generateMastersPairs pair_size guard (W39)', () => {
+describe('generateMastersPairs pair_size guard', () => {
   it('rejects a MASTERS matchday of a pair_size=1 discipline with an honest message, before touching pairs', async () => {
     const admin = await createTestUser()
     const filler = await fillerPlayers(8)
@@ -335,9 +336,8 @@ describe('generateMastersPairs pair_size guard (W39)', () => {
   })
 })
 
-// ── N1 (verify-report ronda 2): create_masters resuelve la disciplina ──────
 
-describe('create_masters discipline resolution (N1)', () => {
+describe('create_masters discipline resolution', () => {
   // 0016_matchday_scope.sql:85 resolvía `v_discipline` con un
   // `select ... into` SIN `order by` ni `limit`: con una sola disciplina por
   // temporada (el tripwire de 0015) daba siempre lo mismo por casualidad,
@@ -573,12 +573,12 @@ describe('clearPairs', () => {
     const matchdayId = await createMatchday(admin.client, seasonId, '2026-03-05')
     await seedAttendances(admin.client, matchdayId)
     await generatePairs(admin.client, matchdayId)
-    expect((await matchdayDetail(admin.client, matchdayId)).pairs).toHaveLength(4)
+    expect((await matchdayDetail(admin.client, matchdayId)).sides).toHaveLength(4)
 
     await clearPairs(admin.client, matchdayId)
 
     const detail = await matchdayDetail(admin.client, matchdayId)
-    expect(detail.pairs).toEqual([])
+    expect(detail.sides).toEqual([])
     expect(detail.matches).toEqual([])
   })
 
@@ -590,7 +590,7 @@ describe('clearPairs', () => {
     await openMatchday(admin.client, matchdayId)
 
     await expect(clearPairs(admin.client, matchdayId)).rejects.toThrow(/en armado/)
-    expect((await matchdayDetail(admin.client, matchdayId)).pairs).toHaveLength(4)
+    expect((await matchdayDetail(admin.client, matchdayId)).sides).toHaveLength(4)
   })
 })
 
@@ -615,8 +615,8 @@ describe('a matchday drawn with a guest', () => {
     await openMatchday(admin.client, matchdayId)
 
     const detail = await matchdayDetail(admin.client, matchdayId)
-    expect(detail.pairs).toHaveLength(4)
+    expect(detail.sides).toHaveLength(4)
     expect(detail.guestIds).toEqual([guestId])
-    expect(detail.pairs.some((pair) => samePair(pair, { a: guestId, b: guestId }))).toBe(false)
+    expect(detail.sides.some((side) => sameSide(side, pair(guestId, guestId)))).toBe(false)
   })
 })

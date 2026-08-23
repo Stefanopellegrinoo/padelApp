@@ -1,12 +1,16 @@
 'use client'
 
-import { useState, useTransition } from 'react'
-import type { MatchFormat } from '@/core'
+import { type Dispatch, type SetStateAction, useState, useTransition } from 'react'
+import type { MatchFormat, SetScore } from '@/core'
 import {
+  MAX_GOAL_DIGITS,
   chooseLoserGames,
   chooseWinner,
+  goalsError,
+  goalsRejected,
   isComplete,
   loserGamesOptions,
+  openScoreSet,
   startLoad,
   type LoadState,
 } from './carga-state'
@@ -23,7 +27,7 @@ import { BorrarFecha } from './borrar'
 export interface CargaContext {
   seasonId: string
   matchdayId: string
-  /** El slug de la URL desde la que se abrió esta fecha (W28) — lo necesita `BorrarFecha` para volver a la lista correcta. */
+  /** El slug de la URL desde la que se abrió esta fecha — lo necesita `BorrarFecha` para volver a la lista correcta. */
   disciplina: string
   matchdayNumber: number
   format: MatchFormat
@@ -31,17 +35,162 @@ export interface CargaContext {
 
 const TAP = 'rounded-field bg-chip px-3 py-2.5 text-[13.5px] font-extrabold'
 const ERROR_NOTE = 'rounded-field bg-live-bg px-3 py-2.5 text-[12.5px] font-bold text-live'
+const PROMPT = 'text-[11.5px] font-extrabold uppercase tracking-[.14em] text-muted'
 
 /**
- * La carga de un partido, en dos toques y sin teclado: quién ganó, y con
- * cuántos games se quedó el que perdió.
+ * Un lado del marcador abierto.
  *
- * Con `setsToWin > 1` los dos toques se repiten por set y los sets se acumulan
- * acá: `saveResult` reemplaza los sets del partido, así que guardar de a uno
- * borraría el anterior. Se guarda una sola vez, cuando el partido cierra.
+ * `type="text"` con `inputMode="numeric"`, y no `type="number"`: el numérico
+ * deja tipear `e`, `-` y `.` igual, se le puede mover el valor con la rueda del
+ * mouse sin querer, y `maxLength` no le aplica. Lo que sale de acá es un string
+ * que `openScoreSet` decide si ya es un número o todavía no — que es
+ * exactamente lo que hace falta mientras alguien está escribiendo.
+ */
+function Goles({
+  side,
+  value,
+  disabled,
+  invalid,
+  onChange,
+}: {
+  side: string
+  value: string
+  disabled: boolean
+  /** Lo escrito ya no puede ser un marcador. Lo decide `goalsRejected`. */
+  invalid: boolean
+  onChange: (next: string) => void
+}) {
+  return (
+    <label className="flex min-w-0 flex-1 flex-col gap-1.5">
+      <span className={`truncate ${PROMPT}`}>{side}</span>
+      <input
+        type="text"
+        inputMode="numeric"
+        pattern="[0-9]*"
+        maxLength={MAX_GOAL_DIGITS}
+        value={value}
+        disabled={disabled}
+        aria-label={`Goles de ${side}`}
+        aria-invalid={invalid || undefined}
+        onChange={(event) => onChange(event.target.value)}
+        //El `focus-visible:ring` es S72: el
+        // `outline-none` dejaba el panel 100% operable por teclado y sin que se
+        // viera dónde estabas (medido: `outlineStyle: none`, `boxShadow:
+        // none`). Va SÓLO acá: `outline-none` está en 19 inputs de 11 archivos
+        // y ninguno tiene reemplazo — eso es deuda de a11y previa, y arreglarla
+        // entera es otra tarea, no un renglón de ésta.
+        className={`h-[52px] w-full rounded-field bg-chip px-3 text-center text-[20px] font-extrabold outline-none transition-opacity focus-visible:ring-2 focus-visible:ring-accent-link disabled:opacity-45 ${
+          invalid ? 'ring-1 ring-live' : ''
+        }`}
+      />
+    </label>
+  )
+}
+
+/**
+ * El panel del marcador abierto: dos números y un botón de guardar.
  *
- * El botón es su propio cancelar: volver a tocarlo cierra el panel y tira el
- * set a medio armar.
+ * Exportado y afuera de `Carga` para poder RENDERIZARLO en la suite: el panel
+ * vive detrás del estado que abre "Cargar resultado", así que sin clicks no se
+ * llega. Las dos cosas que la ronda 21 encontró abriéndolo en un navegador —el
+ * botón que se apaga sin decir por qué y el foco invisible— son atributos y
+ * clases del DOM que ninguna función pura puede ver.
+ *
+ * No opina sobre si el par es LEGAL para la disciplina: un `0-0` donde no se
+ * admiten empates lo rechaza `matchError` del lado del servidor y el mensaje
+ * vuelve por el `WriteResult`. Lo que explica este panel es lo otro: lo que ni
+ * siquiera es un marcador.
+ */
+export function PanelGoles({
+  pairAName,
+  pairBName,
+  goals,
+  pending,
+  onChange,
+  onSave,
+}: {
+  pairAName: string
+  pairBName: string
+  goals: { a: string; b: string }
+  pending: boolean
+  /**
+   * El setter entero, no `(next) => void`: los dos campos se actualizan con la
+   * forma FUNCIONAL, que es la que estaba antes de que este panel saliera a
+   * componente. Con `onChange({ ...goals, a: next })` el `goals` es el de la
+   * clausura de ESTE render; hoy da igual —un campo por evento, y cada
+   * `onChange` es su propio render— pero el día que un `onPaste` toque los dos
+   * en el mismo tick, el segundo pisa al primero. El techo se cierra acá y no
+   * en un comentario que avise (N50).
+   */
+  onChange: Dispatch<SetStateAction<{ a: string; b: string }>>
+  onSave: (set: SetScore) => void
+}) {
+  const draft = openScoreSet(goals.a, goals.b)
+  const problem = goalsError(goals.a, goals.b)
+
+  return (
+    <div className="flex flex-col gap-2">
+      <p className={PROMPT}>{pending ? 'Guardando…' : 'Goles'}</p>
+      <div className="flex items-start gap-2">
+        <Goles
+          side={pairAName}
+          value={goals.a}
+          disabled={pending}
+          invalid={goalsRejected(goals.a)}
+          onChange={(next) => onChange((current) => ({ ...current, a: next }))}
+        />
+        <Goles
+          side={pairBName}
+          value={goals.b}
+          disabled={pending}
+          invalid={goalsRejected(goals.b)}
+          onChange={(next) => onChange((current) => ({ ...current, b: next }))}
+        />
+      </div>
+      {problem !== null && <p className={ERROR_NOTE}>{problem}</p>}
+      {/* Deshabilitado sólo mientras falte un número. Si el par no es legal
+          para la disciplina —un `0-0` sin empates— el botón deja guardar y el
+          mensaje lo escribe `matchError`, que es donde vive esa regla: una
+          segunda copia acá serían dos verdades para sincronizar. */}
+      <button
+        type="button"
+        disabled={pending || draft === null}
+        onClick={() => {
+          if (draft !== null) onSave(draft)
+        }}
+        className="flex min-h-[44px] w-full items-center justify-center rounded-field bg-accent px-3 text-[13.5px] font-extrabold text-accent-text transition-opacity disabled:opacity-45"
+      >
+        Guardar resultado
+      </button>
+    </div>
+  )
+}
+
+/**
+ * La carga de un partido, con una máquina por forma de marcador.
+ *
+ * **Pádel** (el default, `openScore: false`): dos toques y sin teclado — quién
+ * ganó, y con cuántos games se quedó el que perdió. Con `setsToWin > 1` los dos
+ * toques se repiten por set y los sets se acumulan acá: `saveResult` reemplaza
+ * los sets del partido, así que guardar de a uno borraría el anterior. Se
+ * guarda una sola vez, cuando el partido cierra. **Esta mitad no cambió una
+ * línea de COMPORTAMIENTO** en PR20 rebanada D2, y sus tests son el pin.
+ *
+ * La frase decía "no cambió una línea" a secas, y eso era literalmente falso
+ * (N48): los dos `<p>` de acá abajo sí se reescribieron
+ * para usar la constante `PROMPT`. La sustancia se sostiene y está medida —el
+ * HTML servido es byte a byte idéntico contra `f43d626`, porque la cadena de
+ * clases de `PROMPT` es la misma que estaba inline—, pero una frase de más es
+ * cómo se pierde la confianza en las otras.
+ *
+ * **Marcador abierto** (`openScore: true`, FIFA): dos números y un botón de
+ * guardar. La máquina de dos toques no sirve acá y no es cuestión de estirarla:
+ * por construcción le da al ganador `format.gamesPerSet` y al perdedor menos,
+ * así que no puede producir ni un `3-1` ni un `0-0`. Un marcador abierto además
+ * es UN resultado, no una serie de sets, así que no hay nada que acumular.
+ *
+ * El botón es su propio cancelar: volver a tocarlo cierra el panel y tira lo
+ * que estaba a medio cargar.
  */
 export function Carga({
   context,
@@ -55,9 +204,29 @@ export function Carga({
   pairBName: string
 }) {
   const [state, setState] = useState<LoadState | null>(null)
+  // Los dos lados del marcador abierto, como strings: mientras se tipea,
+  // "" y "1" son estados válidos del campo y ninguno de los dos es un cero.
+  const [goals, setGoals] = useState({ a: '', b: '' })
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
   const { seasonId, matchdayNumber, format } = context
+
+  const saveOpenScore = (draft: SetScore) => {
+    setError(null)
+    startTransition(async () => {
+      const result = await saveMatchResult(seasonId, matchdayNumber, matchId, [draft])
+      if (!result.ok) {
+        // A diferencia de los dos toques, acá lo tipeado NO se tira: el rebote
+        // esperable es el de una regla del marcador —"esta disciplina no admite
+        // empates"— y se arregla cambiando un dígito, no volviendo a escribir
+        // el resultado entero.
+        setError(result.error)
+        return
+      }
+      setState(null)
+      setGoals({ a: '', b: '' })
+    })
+  }
 
   const tapGames = (loserGames: number) => {
     if (state === null) return
@@ -88,6 +257,7 @@ export function Carga({
         disabled={pending}
         onClick={() => {
           setError(null)
+          setGoals({ a: '', b: '' })
           setState(state === null ? startLoad() : null)
         }}
         className="flex min-h-[44px] w-full items-center justify-center rounded-field bg-chip px-3 text-[12.5px] font-extrabold text-muted transition-opacity disabled:opacity-45"
@@ -95,13 +265,22 @@ export function Carga({
         Cargar resultado
       </button>
 
-      {state !== null && (
+      {state !== null && format.openScore && (
+        <PanelGoles
+          pairAName={pairAName}
+          pairBName={pairBName}
+          goals={goals}
+          pending={pending}
+          onChange={setGoals}
+          onSave={saveOpenScore}
+        />
+      )}
+
+      {state !== null && !format.openScore && (
         <div className="flex flex-col gap-2">
           {state.pendingWinner === null ? (
             <>
-              <p className="text-[11.5px] font-extrabold uppercase tracking-[.14em] text-muted">
-                ¿Quién ganó?
-              </p>
+              <p className={PROMPT}>¿Quién ganó?</p>
               <div className="flex flex-col gap-2">
                 <button
                   type="button"
@@ -123,9 +302,7 @@ export function Carga({
             </>
           ) : (
             <>
-              <p className="text-[11.5px] font-extrabold uppercase tracking-[.14em] text-muted">
-                {pending ? 'Guardando…' : 'Games del perdedor'}
-              </p>
+              <p className={PROMPT}>{pending ? 'Guardando…' : 'Games del perdedor'}</p>
               <div className="flex flex-wrap gap-2">
                 {loserGamesOptions(format).map((games) => (
                   <button

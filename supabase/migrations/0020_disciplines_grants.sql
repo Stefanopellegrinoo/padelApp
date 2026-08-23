@@ -1,8 +1,8 @@
 -- ── superficie de `disciplines` para `anon` y `authenticated` ───────────────
--- Tres hallazgos de la auditoría de la Fase 0 (verify-report), los tres sobre
+--Tres hallazgos de la de la Fase 0, los tres sobre
 -- privilegios de tabla/función — nada de RLS ni de lógica.
 
--- ── W1 — `disciplines` es la ÚNICA de las 11 tablas con ACL para `anon` ─────
+--── W1 — `disciplines` es la ÚNICA de las 11 tablas con ACL para `anon` ─────
 -- Medido (information_schema): `disciplines | anon | MAINTAIN, REFERENCES,
 -- TRIGGER, TRUNCATE`. Las otras diez tablas: ninguno. Esos privilegios NO
 -- salen de ningún grant explícito de este schema — Postgres se los da a
@@ -23,7 +23,7 @@
 -- asumir que alcanza con no otorgarle nada a mano.
 revoke all on public.disciplines from anon;
 
--- ── W2 — `authenticated` podía INSERTAR `disciplines.status` aunque el
+--── W2 — `authenticated` podía INSERTAR `disciplines.status` aunque el
 -- UPDATE ya esté revocado (0015:69-70) ───────────────────────────────────────
 -- Medido (information_schema.column_privileges):
 -- `disciplines | authenticated | INSERT | status` (ídem kind, pair_size,
@@ -44,7 +44,7 @@ revoke insert on public.disciplines from authenticated;
 grant  insert (season_id, kind, config, weight, pair_size, allows_draw, has_masters, position)
   on public.disciplines to authenticated;
 
--- ── W5 — `matchday_discipline()` es código muerto expuesto como RPC ─────────
+--── W5 — `matchday_discipline()` es código muerto expuesto como RPC ─────────
 -- Grep: 0 consumidores de producción, 0 policies de RLS que la usen. PR 4
 -- (0018) deliberadamente NO la llamó: `reopen_matchday`/`cancel_matchday`
 -- leen `discipline_id` del MISMO `select ... for update` que ya bloquea la

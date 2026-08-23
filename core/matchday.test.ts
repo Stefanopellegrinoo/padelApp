@@ -6,7 +6,8 @@ import { computeAwards } from './awards'
 import { computeRanking } from './ranking'
 import { snapshotForMatchday } from './snapshots'
 import { defaultConfig } from './config'
-import type { Award, MatchResult, Pair, SeasonConfig } from './types'
+import { members, sameSide, type Duo } from './side'
+import type { Award, MatchResult, SeasonConfig, Side } from './types'
 
 const SQUAD = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8']
 const CONFIG: SeasonConfig = defaultConfig(8)
@@ -16,11 +17,11 @@ function playMatchday(
   present: string[],
   points: Map<string, number>,
   snapshot: string[],
-  previousPairs: Pair[],
-  defenders: Pair | null,
+  previousPairs: Duo[],
+  defenders: Duo | null,
   defendersAlreadyRepeated: boolean,
   config: SeasonConfig,
-): { pairs: Pair[]; awards: Award[]; champion: Pair } {
+): { pairs: Duo[]; awards: Award[]; champion: Duo } {
   const pairs = buildPairs({
     present,
     points,
@@ -47,16 +48,25 @@ function playMatchday(
       // slot, and buildPairs always puts the table leader in pair 0, so pair 0 wins
       // every match of every matchday. The simulated season is deliberately
       // lopsided — fine for what these tests check, not a realistic season.
-      matches.push({ round, pairA, pairB, sets: [{ gamesA: 4, gamesB: left < right ? 1 : 2 }] })
+      matches.push({
+        round,
+        sideA: pairA,
+        sideB: pairB,
+        sets: [{ gamesA: 4, gamesB: left < right ? 1 : 2 }],
+      })
     }
     round++
   }
 
-  const standings = computeStandings(pairs, matches, config, snapshot)
+  // `buildPairs` (no `buildSides`) sigue devolviendo `Side[]`: este test
+  // simula una temporada de PÁDEL de punta a punta, y su valor es justamente
+  // que la aritmética de a dos no se movió un bit con la migración a `Side`.
+  const standings = computeStandings(pairs, matches, config, snapshot, false)
   const awards = computeAwards(standings, config, [])
   const winner = standings[0]
   if (winner === undefined) throw new Error('la fecha no produjo tabla')
-  return { pairs, awards, champion: winner.pair }
+  if (winner.side.size !== 2) throw new Error('una fecha de pádel no produce lados de uno')
+  return { pairs, awards, champion: winner.side }
 }
 
 describe('a full matchday, end to end', () => {
@@ -72,8 +82,9 @@ describe('a full matchday, end to end', () => {
   it('gives both members of every pair the same points', () => {
     const { pairs, awards } = playMatchday(SQUAD, new Map(), SQUAD, [], null, false, CONFIG)
     const byEntry = new Map(awards.map((award) => [award.entryId, award.points]))
-    for (const pair of pairs) {
-      expect(byEntry.get(pair.a)).toBe(byEntry.get(pair.b))
+    for (const side of pairs) {
+      const [first, second] = members(side)
+      expect(byEntry.get(first!)).toBe(byEntry.get(second!))
     }
   })
 
@@ -119,7 +130,7 @@ describe('a full matchday, end to end', () => {
   })
 
   it('never repeats a pair from the immediately previous matchday', () => {
-    let previousPairs: Pair[] = []
+    let previousPairs: Duo[] = []
     let points = new Map<string, number>()
     const everyAward: Award[][] = []
 
@@ -139,7 +150,7 @@ describe('a full matchday, end to end', () => {
 
   it('builds a ranking that adds up across a whole season', () => {
     const everyAward: Award[][] = []
-    let previousPairs: Pair[] = []
+    let previousPairs: Duo[] = []
     let points = new Map<string, number>()
 
     for (let matchday = 1; matchday <= 10; matchday++) {
@@ -173,7 +184,7 @@ describe('a full matchday, end to end', () => {
   it('replays a whole season identically', () => {
     const run = () => {
       const everyAward: Award[][] = []
-      let previousPairs: Pair[] = []
+      let previousPairs: Duo[] = []
       let points = new Map<string, number>()
       for (let matchday = 1; matchday <= 5; matchday++) {
         const snapshot = snapshotForMatchday(
@@ -199,6 +210,6 @@ function pointsFrom(everyAward: Award[][], config: SeasonConfig): Map<string, nu
   return new Map(ranking.map((row) => [row.entryId, row.points]))
 }
 
-function sameAs(left: Pair, right: Pair): boolean {
-  return (left.a === right.a && left.b === right.b) || (left.a === right.b && left.b === right.a)
+function sameAs(left: Side, right: Side): boolean {
+  return sameSide(left, right)
 }

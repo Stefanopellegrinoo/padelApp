@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import type { DisciplineId, SeasonConfig } from '@/core'
-import { STEPPERS } from '@/app/torneos/nuevo/wizard-state'
+import { steppersFor } from '@/app/torneos/nuevo/wizard-state'
 import { saveConfig } from './actions'
 
 /**
@@ -14,8 +14,9 @@ import { saveConfig } from './actions'
  * segundo recién existe ahora, y el disparador para extraer el componente
  * compartido es un tercero o un cambio que haya que hacer en los dos.
  *
- * `STEPPERS` sí se importa en vez de copiarse: son los labels, las ayudas y los
- * topes, y las dos pantallas TIENEN que decir lo mismo.
+ * `steppersFor` sí se importa en vez de copiarse: son los labels, las ayudas,
+ * los topes Y cuáles corresponden, y las dos pantallas TIENEN que decir lo
+ * mismo. Copiar el criterio en vez de compartirlo es lo que produjo W63.
  *
  * Guarda a cada toque. `updateDisciplineConfig` corre `assertValidConfig`
  * antes de escribir, así que un estado intermedio inválido —bajar las fechas
@@ -29,10 +30,22 @@ export function Formato({
   seasonId,
   disciplineId,
   config,
+  disciplineLabel,
 }: {
   seasonId: string
   disciplineId: DisciplineId
   config: SeasonConfig
+  /**
+   * De qué disciplina es el formato que este panel edita, o `null` cuando el
+   * torneo tiene una sola y no hay nada que desambiguar.
+   *
+   * W65: la fila de arriba nombra el formato de TODAS las disciplinas desde
+   * que se cerró W64, y este panel siempre editó la [0]. La fila decía la
+   * verdad del torneo y el control no decía cuál era su alcance, que es W64
+   * corrido una capa para abajo. No abre camino a la segunda disciplina —eso
+   * es superficie nueva, y sigue sin existir—: sólo deja de disfrazarlo.
+   */
+  disciplineLabel: string | null
 }) {
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -61,7 +74,11 @@ export function Formato({
 
   return (
     <section id="formato" className="flex flex-col gap-2 scroll-mt-4">
-      <h2 className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">Formato</h2>
+      {/* Una sola interpolación y no `Formato{sufijo}`: con una sola disciplina
+          el título tiene que salir como el mismo nodo de texto de siempre. */}
+      <h2 className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
+        {disciplineLabel === null ? 'Formato' : `Formato · ${disciplineLabel}`}
+      </h2>
 
       <div className="overflow-hidden rounded-[14px] border border-line bg-surface">
         {config.points.map((value, index) => (
@@ -81,7 +98,15 @@ export function Formato({
       </div>
 
       <div className="overflow-hidden rounded-[14px] border border-line bg-surface">
-        {STEPPERS.map((row, index) => (
+        {/* Cuáles se dibujan lo decide `steppersFor`, no un filtro escrito acá:
+            esta pantalla filtraba y el paso 4 del wizard no, y ésa es
+            exactamente la grieta por la que una liga de solo FIFA seguía
+            leyendo "A 4 games el resultado se carga en dos toques" (W63,
+            ). Acá la config es de UNA disciplina, así que
+            la lista de formatos tiene un solo elemento. Se van de la pantalla,
+            no de la config: el jsonb los sigue teniendo porque `MatchFormat`
+            los declara obligatorios. */}
+        {steppersFor([config.matchFormat]).map((row, index) => (
           <div
             key={row.key}
             className={`flex min-h-[56px] items-center justify-between gap-2 px-3 py-2 ${index > 0 ? 'border-t border-line' : ''}`}

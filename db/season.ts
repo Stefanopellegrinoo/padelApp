@@ -1,4 +1,4 @@
-import { pairFromRow } from '@/core'
+import { sideOfRow } from '@/core'
 import type { Award, DisciplineId, EntryId, MatchdayHistory, SeasonConfig, SideSize } from '@/core'
 import type { Database, Json } from './database.types'
 import { EdgeError } from './errors'
@@ -27,7 +27,7 @@ export async function seasonConfig(supabase: Client, seasonId: string): Promise<
  * The squad's seed order FOR ONE DISCIPLINE. Explicit `order by`: nothing else
  * keeps it stable.
  *
- * Lee `discipline_entries`, no `entries` (C6, verify-report ronda 3):
+ * Lee `discipline_entries`, no `entries` (C6):
  * `entries.seed_position` es dual-write tail-only desde PR 7
  * (0023_discipline_entries.sql) — `shift_seeds_up`/`add_squad_seat` ya no
  * corren el parking ahí. `discipline_entries.seed_position` es la fuente
@@ -56,7 +56,7 @@ export async function squadSeedOrder(
  * Con el tripwire `disciplines_one_per_season` caído (0018) una temporada ya
  * PUEDE tener más de una — sin esto, `createMatchday` y las lecturas
  * scopeadas por temporada rompían con PGRST116 ("multiple/0 rows") o
- * mezclaban las dos disciplinas apenas existiera una segunda (verify-report,
+ * mezclaban las dos disciplinas apenas existiera una segunda (
  * hallazgo C4). Mismo orden que `add_squad_seat` (0013/0020): `position,
  * created_at`.
  *
@@ -77,7 +77,7 @@ export async function defaultDisciplineId(supabase: Client, seasonId: string): P
     .limit(1)
     .maybeSingle()
   if (error) throw new EdgeError(`No se pudo leer la disciplina de la temporada: ${error.message}`)
-  // Única marca de esta función (N2): de acá en más el id que circula es
+  //Única marca de esta función: de acá en más el id que circula es
   // `DisciplineId`, no `string` a secas — así lo lee todo el que lo reciba.
   return (data?.id as DisciplineId | undefined) ?? null
 }
@@ -121,12 +121,6 @@ export async function awardsBefore(
   return result
 }
 
-// S38 (verify-report ronda 12): `pairFromRow` era una copia local a mano de
-// `pairOf ∘ sideOfRow`, byte por byte idéntica a la de `db/read.ts` y
-// `db/matchday.ts`. `core/pair-compat.ts` la exporta ahora como la ÚNICA
-// excepción del bloque "Deliberadamente NO exportado" (core/index.ts) — un
-// solo lugar, un solo mensaje, para las tres.
-
 /** The matchday at `number` of one discipline's own calendar, or null when it does not exist or is not CLOSED. */
 export async function closedHistory(
   supabase: Client,
@@ -155,8 +149,12 @@ export async function closedHistory(
   if (awardsError) throw new EdgeError(`No se pudieron leer los premios: ${awardsError.message}`)
 
   return {
-    pairs: (pairs ?? []).map((row) =>
-      pairFromRow(row.pair_size as SideSize, row.entry_a, row.entry_b),
+    //CERRADO (ver `db/read.ts: pairsAndMatchesOf`): antes esto componía
+    // `pairFromRow`, que TIRABA con una fila `pair_size=1`. Ese throw es el
+    //Que C19 tuvo que esquivar con un guard en `pairingContextFor`; ahora la
+    // historia de una disciplina de a uno se lee de verdad.
+    sides: (pairs ?? []).map((row) =>
+      sideOfRow(row.pair_size as SideSize, row.entry_a, row.entry_b),
     ),
     awards: (awards ?? []).map((row) => ({
       entryId: row.entry_id,
@@ -164,6 +162,21 @@ export async function closedHistory(
       points: row.points,
     })),
   }
+}
+
+/**
+ * Un premio congelado: lo que la fecha repartió, con su puesto.
+ *
+ * W55: traía sólo `points`, y con eso la pantalla
+ * mostraba los puntos congelados en filas ORDENADAS EN VIVO — el orden sale de
+ * `computeStandings`, cuyo desempate depende del snapshot, y el snapshot
+ * depende de `discipline_entries`, que PROMOVER cambia. Resultado medido: la
+ * tabla mostraba al primero con 6 puntos y al segundo con 8. El `position`
+ * congelado es lo que hace que orden y puntos no se puedan contradecir.
+ */
+export interface FrozenAward {
+  position: number
+  points: number
 }
 
 /**
@@ -179,13 +192,15 @@ export async function closedHistory(
 export async function frozenPointsOf(
   supabase: Client,
   matchdayId: string,
-): Promise<Map<EntryId, number>> {
+): Promise<Map<EntryId, FrozenAward>> {
   const { data, error } = await supabase
     .from('awards')
-    .select('entry_id, points')
+    .select('entry_id, position, points')
     .eq('matchday_id', matchdayId)
   if (error) throw new EdgeError(`No se pudieron leer los premios: ${error.message}`)
-  return new Map((data ?? []).map((row) => [row.entry_id, row.points]))
+  return new Map(
+    (data ?? []).map((row) => [row.entry_id, { position: row.position, points: row.points }]),
+  )
 }
 
 /** Una disciplina a crear junto con la temporada. `config` es obligatoria: cada disciplina puede declarar la suya, no hereda de la temporada. */
@@ -299,7 +314,7 @@ export async function createSeason(
 
   // Una fila de `disciplines` por spec, `position` = índice del array —
   // nunca el default de la columna (ver el comentario de `disciplines` en
-  // `NewSeason`, contrato S13). Sin `disciplines` explícito esto crea la
+  //`NewSeason`, contrato S13). Sin `disciplines` explícito esto crea la
   // misma PADEL única de siempre, mismo comportamiento pre-PR11.
   const disciplineRows: { id: string }[] = []
   for (const [index, spec] of disciplineSpecs.entries()) {
@@ -344,7 +359,7 @@ export async function createSeason(
   }
 
   // Cada asiento entra a TODAS las disciplinas recién creadas, con el mismo
-  // seed_position que en `entries`. Decisión de este slice (REQ-D1-3/D1-4):
+  //Seed_position que en `entries`. Decisión de este slice (REQ-D1-3/D1-4):
   // el plantel es compartido a nivel torneo y por default juega todo — no
   // hay pantalla de "quién juega qué" en este wizard todavía (PR13 la agrega
   // para sumar una disciplina en curso). `discipline_entries` (PR 7) es la
@@ -398,7 +413,17 @@ export async function deleteSeason(supabase: Client, seasonId: string): Promise<
   }
 }
 
-/** Cambia el nombre del torneo. Lo dice el paso 1 del wizard: "se puede cambiar después". */
+/**
+ * Cambia el nombre del torneo. Lo dice el paso 1 del wizard: "se puede cambiar
+ * después".
+ *
+ * `count: 'exact'` por el mismo motivo que `setMatchdayDate` (W49):
+ * un update que no toca ninguna fila NO es un error
+ * en PostgREST. Estas escrituras se apoyan en RLS y no chequean admin por su
+ * cuenta, así que a un participante que no organiza le decían que guardó y al
+ * recargar volvía el valor viejo. La ronda 15 lo midió con un participante
+ * real en las cuatro.
+ */
 export async function renameSeason(
   supabase: Client,
   seasonId: string,
@@ -407,21 +432,43 @@ export async function renameSeason(
   const trimmed = name.trim()
   if (trimmed.length === 0) throw new EdgeError('El torneo necesita un nombre.')
 
-  const { error } = await supabase.from('seasons').update({ name: trimmed }).eq('id', seasonId)
+  const { error, count } = await supabase
+    .from('seasons')
+    .update({ name: trimmed }, { count: 'exact' })
+    .eq('id', seasonId)
   if (error !== null) throw new EdgeError(`No se pudo cambiar el nombre: ${error.message}`)
+  if (count === 0) {
+    throw new EdgeError('No se pudo cambiar el nombre: sólo puede hacerlo quien organiza.')
+  }
 }
 
-/** El texto libre del admin. Mueve el sello de última actualización, que la página de reglas muestra. */
+/**
+ * El texto libre del admin. Mueve el sello de última actualización, que la
+ * página de reglas muestra.
+ *
+ * `count: 'exact'` por el mismo motivo que `setMatchdayDate` (W49):
+ * un update que no toca ninguna fila NO es un error
+ * en PostgREST. Estas escrituras se apoyan en RLS y no chequean admin por su
+ * cuenta, así que a un participante que no organiza le decían que guardó y al
+ * recargar volvía el valor viejo. La ronda 15 lo midió con un participante
+ * real en las cuatro.
+ */
 export async function updateSeasonRules(
   supabase: Client,
   seasonId: string,
   text: string,
 ): Promise<void> {
-  const { error } = await supabase
+  const { error, count } = await supabase
     .from('seasons')
-    .update({ rules_text: text, rules_updated_at: new Date().toISOString() })
+    .update(
+      { rules_text: text, rules_updated_at: new Date().toISOString() },
+      { count: 'exact' },
+    )
     .eq('id', seasonId)
   if (error !== null) throw new EdgeError(`No se pudieron guardar las reglas: ${error.message}`)
+  if (count === 0) {
+    throw new EdgeError('No se pudieron guardar las reglas: sólo puede hacerlo quien organiza.')
+  }
 }
 
 /**

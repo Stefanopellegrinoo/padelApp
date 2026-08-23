@@ -1,19 +1,20 @@
 import { describe, it, expect } from 'vitest'
-import { computeStandings } from './standings'
-import type { MatchResult, Pair, SeasonConfig } from './types'
+import { computeStandings, headToHead, usesSetsDiff } from './standings'
+import { pair, single } from './side'
+import type { MatchResult, SeasonConfig, Side } from './types'
 
 const SNAPSHOT = ['a1', 'a2', 'b1', 'b2', 'c1', 'c2', 'd1', 'd2']
 
-const PAIRS: Pair[] = [
-  { a: 'a1', b: 'a2' },
-  { a: 'b1', b: 'b2' },
-  { a: 'c1', b: 'c2' },
-  { a: 'd1', b: 'd2' },
+const PAIRS: Side[] = [
+  pair('a1', 'a2'),
+  pair('b1', 'b2'),
+  pair('c1', 'c2'),
+  pair('d1', 'd2'),
 ]
 
 const CONFIG: SeasonConfig = {
   squadSize: 8,
-  matchFormat: { setsToWin: 1, gamesPerSet: 4, tieBreak: true },
+  matchFormat: { setsToWin: 1, gamesPerSet: 4, tieBreak: true, openScore: false },
   points: [10, 6, 3, 1],
   regularMatchdays: 10,
   countBestOf: 8,
@@ -24,11 +25,11 @@ function match(left: number, right: number, gamesA: number, gamesB: number): Mat
   const pairA = PAIRS[left]
   const pairB = PAIRS[right]
   if (pairA === undefined || pairB === undefined) throw new Error('bad test fixture')
-  return { round: 1, pairA, pairB, sets: [{ gamesA, gamesB }] }
+  return { round: 1, sideA: pairA, sideB: pairB, sets: [{ gamesA, gamesB }] }
 }
 
 function order(standings: ReturnType<typeof computeStandings>): string[] {
-  return standings.map((row) => row.pair.a)
+  return standings.map((row) => row.side.a)
 }
 
 describe('computeStandings', () => {
@@ -39,7 +40,7 @@ describe('computeStandings', () => {
       match(1, 2, 4, 2), match(1, 3, 4, 1),
       match(2, 3, 4, 3),
     ]
-    const standings = computeStandings(PAIRS, matches, CONFIG, SNAPSHOT)
+    const standings = computeStandings(PAIRS, matches, CONFIG, SNAPSHOT, false)
     expect(order(standings)).toEqual(['a1', 'b1', 'c1', 'd1'])
     expect(standings.map((row) => row.position)).toEqual([1, 2, 3, 4])
   })
@@ -51,9 +52,9 @@ describe('computeStandings', () => {
       match(1, 2, 4, 3), match(1, 3, 3, 4),
       match(2, 3, 4, 2),
     ]
-    const standings = computeStandings(PAIRS, matches, CONFIG, SNAPSHOT)
-    expect(standings[0]?.pair.a).toBe('a1')
-    expect(standings[1]?.pair.a).toBe('b1')
+    const standings = computeStandings(PAIRS, matches, CONFIG, SNAPSHOT, false)
+    expect(standings[0]?.side.a).toBe('a1')
+    expect(standings[1]?.side.a).toBe('b1')
   })
 
   it('breaks a two-way tie on the head to head when games difference is equal', () => {
@@ -63,11 +64,11 @@ describe('computeStandings', () => {
       match(1, 2, 4, 1), match(1, 3, 2, 4),
       match(2, 3, 4, 2),
     ]
-    const standings = computeStandings(PAIRS, matches, CONFIG, SNAPSHOT)
+    const standings = computeStandings(PAIRS, matches, CONFIG, SNAPSHOT, false)
     expect(standings[0]?.won).toBe(standings[1]?.won)
     expect(standings[0]?.gamesDiff).toBe(standings[1]?.gamesDiff)
-    expect(standings[0]?.pair.a).toBe('b1')
-    expect(standings[1]?.pair.a).toBe('a1')
+    expect(standings[0]?.side.a).toBe('b1')
+    expect(standings[1]?.side.a).toBe('a1')
   })
 
   it('falls back to the snapshot on a three-way tie, where the head to head is circular', () => {
@@ -77,9 +78,9 @@ describe('computeStandings', () => {
       match(0, 1, 4, 3), match(1, 2, 4, 3), match(0, 2, 3, 4),
       match(0, 3, 4, 3), match(1, 3, 4, 3), match(2, 3, 4, 3),
     ]
-    const standings = computeStandings(PAIRS, matches, CONFIG, SNAPSHOT)
+    const standings = computeStandings(PAIRS, matches, CONFIG, SNAPSHOT, false)
     // Circular head to head resolves nothing, so the snapshot cuts: a1 < b1 < c1.
-    expect(standings.map((row) => row.pair.a)).toEqual(['a1', 'b1', 'c1', 'd1'])
+    expect(standings.map((row) => row.side.a)).toEqual(['a1', 'b1', 'c1', 'd1'])
   })
 
   it('gives the same order no matter how the pairs arrive', () => {
@@ -87,9 +88,9 @@ describe('computeStandings', () => {
       match(0, 1, 4, 3), match(1, 2, 4, 3), match(0, 2, 3, 4),
       match(0, 3, 4, 3), match(1, 3, 4, 3), match(2, 3, 4, 3),
     ]
-    const straight = computeStandings(PAIRS, matches, CONFIG, SNAPSHOT)
-    const reversed = computeStandings([...PAIRS].reverse(), matches, CONFIG, SNAPSHOT)
-    expect(reversed.map((row) => row.pair.a)).toEqual(straight.map((row) => row.pair.a))
+    const straight = computeStandings(PAIRS, matches, CONFIG, SNAPSHOT, false)
+    const reversed = computeStandings([...PAIRS].reverse(), matches, CONFIG, SNAPSHOT, false)
+    expect(reversed.map((row) => row.side.a)).toEqual(straight.map((row) => row.side.a))
   })
 
   it('always produces a total order: no two pairs share a position', () => {
@@ -100,15 +101,15 @@ describe('computeStandings', () => {
       match(0, 1, 4, 3), match(1, 2, 4, 3), match(0, 2, 3, 4),
       match(0, 3, 4, 3), match(1, 3, 4, 3), match(2, 3, 4, 3),
     ]
-    const standings = computeStandings(PAIRS, matches, CONFIG, SNAPSHOT)
+    const standings = computeStandings(PAIRS, matches, CONFIG, SNAPSHOT, false)
     expect(new Set(standings.map((row) => row.position)).size).toBe(PAIRS.length)
   })
 
   it('counts played, won and games difference per pair', () => {
     const matches = [match(0, 1, 4, 2)]
-    const standings = computeStandings(PAIRS, matches, CONFIG, SNAPSHOT)
-    const rowA = standings.find((row) => row.pair.a === 'a1')
-    const rowB = standings.find((row) => row.pair.a === 'b1')
+    const standings = computeStandings(PAIRS, matches, CONFIG, SNAPSHOT, false)
+    const rowA = standings.find((row) => row.side.a === 'a1')
+    const rowB = standings.find((row) => row.side.a === 'b1')
     expect(rowA?.played).toBe(1)
     expect(rowA?.won).toBe(1)
     expect(rowA?.gamesDiff).toBe(2)
@@ -120,15 +121,15 @@ describe('computeStandings', () => {
     const pairA = PAIRS[0]
     const pairB = PAIRS[1]
     if (pairA === undefined || pairB === undefined) throw new Error('bad test fixture')
-    const matches: MatchResult[] = [{ round: 1, pairA, pairB, sets: [] }]
-    const standings = computeStandings(PAIRS, matches, CONFIG, SNAPSHOT)
+    const matches: MatchResult[] = [{ round: 1, sideA: pairA, sideB: pairB, sets: [] }]
+    const standings = computeStandings(PAIRS, matches, CONFIG, SNAPSHOT, false)
     expect(standings.every((row) => row.played === 0)).toBe(true)
   })
 
   it('adds a sets difference step when a match needs more than one set', () => {
     const multiSet: SeasonConfig = {
       ...CONFIG,
-      matchFormat: { setsToWin: 2, gamesPerSet: 6, tieBreak: true },
+      matchFormat: { setsToWin: 2, gamesPerSet: 6, tieBreak: true, openScore: false },
     }
     const pairA = PAIRS[0]
     const pairB = PAIRS[1]
@@ -136,8 +137,8 @@ describe('computeStandings', () => {
     const matches: MatchResult[] = [
       {
         round: 1,
-        pairA,
-        pairB,
+        sideA: pairA,
+        sideB: pairB,
         sets: [
           { gamesA: 6, gamesB: 4 },
           { gamesA: 3, gamesB: 6 },
@@ -145,19 +146,15 @@ describe('computeStandings', () => {
         ],
       },
     ]
-    const standings = computeStandings(PAIRS, matches, multiSet, SNAPSHOT)
-    const rowA = standings.find((row) => row.pair.a === 'a1')
+    const standings = computeStandings(PAIRS, matches, multiSet, SNAPSHOT, false)
+    const rowA = standings.find((row) => row.side.a === 'a1')
     expect(rowA?.won).toBe(1)
     expect(rowA?.setsDiff).toBe(1)
   })
 
   it('ranks six pairs as happily as four', () => {
-    const sixPairs: Pair[] = [
-      ...PAIRS,
-      { a: 'e1', b: 'e2' },
-      { a: 'f1', b: 'f2' },
-    ]
-    const standings = computeStandings(sixPairs, [], CONFIG, [...SNAPSHOT, 'e1', 'e2', 'f1', 'f2'])
+    const sixPairs: Side[] = [...PAIRS, pair('e1', 'e2'), pair('f1', 'f2')]
+    const standings = computeStandings(sixPairs, [], CONFIG, [...SNAPSHOT, 'e1', 'e2', 'f1', 'f2'], false)
     expect(standings).toHaveLength(6)
     expect(standings.map((row) => row.position)).toEqual([1, 2, 3, 4, 5, 6])
   })
@@ -173,7 +170,266 @@ describe('computeStandings', () => {
       match(2, 3, 4, 3),
     ]
     const input = [...PAIRS]
-    computeStandings(input, matches, CONFIG, SNAPSHOT)
+    computeStandings(input, matches, CONFIG, SNAPSHOT, false)
     expect(input).toEqual(PAIRS)
+  })
+})
+
+/**
+ * S39: hasta acá `computeStandings` no tenía UN SOLO
+ * test con lados de uno. La tabla del día de una disciplina `pair_size=1` no la
+ * calculaba ni la verificaba nada — el `full_matchday_proof` de `db/` arma su
+ * payload de awards por posición de asiento, no derivado de resultados.
+ *
+ * Estos tests se escriben ANTES de mover el límite público de `Pair` a `Side`,
+ * a propósito: son el RED que obliga al cambio, no la ceremonia que lo sigue.
+ * La aritmética es la misma que la del bloque de arriba (partidos ganados →
+ * diferencia de games → resultado directo → snapshot); lo único que cambia es
+ * que cada lado es una persona.
+ */
+const SOLOS: Side[] = [single('p1'), single('p2'), single('p3'), single('p4')]
+const SOLO_SNAPSHOT = ['p1', 'p2', 'p3', 'p4']
+
+function soloMatch(left: number, right: number, gamesA: number, gamesB: number): MatchResult {
+  const sideA = SOLOS[left]
+  const sideB = SOLOS[right]
+  if (sideA === undefined || sideB === undefined) throw new Error('bad test fixture')
+  return { round: 1, sideA, sideB, sets: [{ gamesA, gamesB }] }
+}
+
+describe('computeStandings con lados de uno (pair_size=1)', () => {
+  it('ordena por partidos ganados, igual que de a dos', () => {
+    // p1 gana 3, p2 gana 2, p3 gana 1, p4 gana 0.
+    const matches = [
+      soloMatch(0, 1, 4, 2), soloMatch(0, 2, 4, 1), soloMatch(0, 3, 4, 0),
+      soloMatch(1, 2, 4, 2), soloMatch(1, 3, 4, 1),
+      soloMatch(2, 3, 4, 3),
+    ]
+    const standings = computeStandings(SOLOS, matches, CONFIG, SOLO_SNAPSHOT, false)
+    expect(standings.map((row) => row.side.a)).toEqual(['p1', 'p2', 'p3', 'p4'])
+    expect(standings.map((row) => row.position)).toEqual([1, 2, 3, 4])
+  })
+
+  it('cada fila sigue siendo un lado de uno, no una pareja a medio armar', () => {
+    // La garantía que `pairOf` rompía: la fila que sale tiene la MISMA forma
+    // que entró. Con el límite viejo esto devolvía `{ a, b: undefined }`.
+    const standings = computeStandings(SOLOS, [], CONFIG, SOLO_SNAPSHOT, false)
+    expect(standings).toHaveLength(4)
+    expect(standings.every((row) => row.side.size === 1)).toBe(true)
+  })
+
+  it('corta un empate de dos por el resultado directo entre los dos jugadores', () => {
+    // p1 y p2 ganan 2 y quedan los dos +4 de games. p2 le ganó a p1 4-1, así
+    // que el cruce directo —`sameSide` sobre un lado de uno— tiene que cortar.
+    const matches = [
+      soloMatch(0, 1, 1, 4), soloMatch(0, 2, 4, 0), soloMatch(0, 3, 4, 1),
+      soloMatch(1, 2, 4, 1), soloMatch(1, 3, 2, 4),
+      soloMatch(2, 3, 4, 2),
+    ]
+    const standings = computeStandings(SOLOS, matches, CONFIG, SOLO_SNAPSHOT, false)
+    expect(standings[0]?.won).toBe(standings[1]?.won)
+    expect(standings[0]?.gamesDiff).toBe(standings[1]?.gamesDiff)
+    expect(standings[0]?.side.a).toBe('p2')
+    expect(standings[1]?.side.a).toBe('p1')
+  })
+
+  it('cuenta jugados, ganados y diferencia de games por jugador', () => {
+    const standings = computeStandings(SOLOS, [soloMatch(0, 1, 4, 2)], CONFIG, SOLO_SNAPSHOT, false)
+    const rowA = standings.find((row) => row.side.a === 'p1')
+    const rowB = standings.find((row) => row.side.a === 'p2')
+    expect(rowA?.played).toBe(1)
+    expect(rowA?.won).toBe(1)
+    expect(rowA?.gamesDiff).toBe(2)
+    expect(rowB?.won).toBe(0)
+    expect(rowB?.gamesDiff).toBe(-2)
+  })
+
+  it('con 9 jugadores impares tabula los 9: la paridad es de las parejas, no de la tabla', () => {
+    //REQ-D5-2: un plantel impar es perfectamente jugable de a uno. La tabla
+    // no puede tener un agujero por eso.
+    const nine = Array.from({ length: 9 }, (_, index) => single(`s${index + 1}`))
+    const standings = computeStandings(nine, [], CONFIG, nine.map((side) => side.a), false)
+    expect(standings).toHaveLength(9)
+    expect(standings.map((row) => row.position)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9])
+    // Sin esto el test pasaba en RED: con la lista de partidos vacía, largo y
+    // posiciones salen bien aunque cada fila sea una pareja a medio armar.
+    expect(standings.map((row) => row.side.a)).toEqual(nine.map((side) => side.a))
+  })
+})
+
+// ── PR20 rebanada D2 — el marcador abierto llega a la TABLA ──────────────────
+//
+// Decisión #3933: con `openScore` un partido es UN resultado de goles, así que
+// la "diferencia de sets" deja de ser un criterio y pasa a ser ruido. El design
+// (#3801, PUNTO 6) lo dice de la otra punta: `gamesDiff` en FIFA YA ES la
+// diferencia de gol, sin renombrar nada — lo que sobra es el escalón de sets.
+//
+// Con un marcador abierto hay exactamente un "set" por partido, así que
+// `setsDiff` degenera en `ganados − perdidos`, que es una segunda opinión sobre
+// el criterio que ya corrió primero (`won`) y que además tapa la diferencia de
+// gol. Un empate suma a `played` sin sumar a ninguno de los dos, y ahí es donde
+// las dos cuentas se separan.
+describe('computeStandings con marcador abierto', () => {
+  const OPEN_TWO_SETS: SeasonConfig = {
+    ...CONFIG,
+    matchFormat: { setsToWin: 2, gamesPerSet: 4, tieBreak: true, openScore: true },
+  }
+  const CLOSED_TWO_SETS: SeasonConfig = {
+    ...CONFIG,
+    matchFormat: { setsToWin: 2, gamesPerSet: 4, tieBreak: true, openScore: false },
+  }
+
+  // A empata con B 0-0 y le gana a C 1-0   → gana 1, pierde 0 · dif. de gol +1
+  // B empata con A, le gana a C 9-0, pierde con D 0-1 → gana 1, pierde 1 · +8
+  // Los dos ganaron UNO. Por diferencia de sets A va arriba (+1 contra 0);
+  // por diferencia de GOL va B (+8 contra +1). Sólo uno de los dos órdenes
+  // puede ser el correcto para una liga de goles.
+  const MATCHES = [
+    match(0, 1, 0, 0),
+    match(0, 2, 1, 0),
+    match(1, 2, 9, 0),
+    match(3, 1, 1, 0),
+  ]
+
+  it('corta por diferencia de gol y no por diferencia de sets', () => {
+    const standings = computeStandings(PAIRS, MATCHES, OPEN_TWO_SETS, SNAPSHOT, true)
+    expect(order(standings)).toEqual(['b1', 'a1', 'd1', 'c1'])
+    expect(standings[0]?.gamesDiff).toBe(8)
+  })
+
+  it('y el pádel a dos sets sigue cortando por diferencia de sets, igual que hoy', () => {
+    const standings = computeStandings(PAIRS, MATCHES, CLOSED_TWO_SETS, SNAPSHOT, false)
+    expect(order(standings)).toEqual(['a1', 'd1', 'b1', 'c1'])
+  })
+})
+
+// El criterio EXPORTADO, porque no lo usa sólo `computeStandings`: la pantalla
+// de la fecha arma con él la frase del desempate y la página de Reglas lo
+// narra. Eran tres copias de `setsToWin > 1` en tres archivos, y arreglar una
+// sola las hacía DISCREPAR — que es peor que dejar las tres igual de viejas.
+describe('usesSetsDiff', () => {
+  it('un marcador abierto no desempata nunca por diferencia de sets', () => {
+    expect(usesSetsDiff({ setsToWin: 2, gamesPerSet: 4, tieBreak: true, openScore: true })).toBe(
+      false,
+    )
+  })
+
+  it('un partido a más de un set, sí', () => {
+    expect(usesSetsDiff({ setsToWin: 2, gamesPerSet: 4, tieBreak: true, openScore: false })).toBe(
+      true,
+    )
+  })
+
+  it('uno a un solo set, no: con un set la diferencia de sets es el mismo dato que los ganados', () => {
+    expect(usesSetsDiff({ setsToWin: 1, gamesPerSet: 4, tieBreak: true, openScore: false })).toBe(
+      false,
+    )
+  })
+})
+
+// ── PR20 rebanada B — la tabla del día cuenta los EMPATES ────────────────────
+//
+// `REQ-D6-2` y `REQ-D6-3` del spec (#3800), PUNTO 6 del design (#3801). Hasta
+// acá el primer criterio de la tabla era `won` a secas, así que un empate
+// valía EXACTAMENTE lo mismo que una derrota: se vio en pantalla en la primera
+// liga de FIFA creable, donde la pareja del `0-0` terminó sin crédito.
+//
+// El design lo resuelve con UNA estrategia generalizada y no con una segunda
+// condicionada por `allowsDraw` (decisión #12: dos comparadores serían dos
+// verdades a sincronizar). El pádel queda como su caso DEGENERADO —
+// `{ win: 1, draw: 0, loss: 0 }` ⇒ `dayPoints === won`, idéntico por álgebra —
+// y por eso hay un test que lo fija.
+describe('computeStandings con empates (allows_draw)', () => {
+  const OPEN: SeasonConfig = {
+    ...CONFIG,
+    matchFormat: { setsToWin: 1, gamesPerSet: 4, tieBreak: true, openScore: true },
+  }
+
+  // A empata con B 0-0 y pierde 0-5 con C  → 0 ganados, 1 empatado, dif. −5
+  // D pierde los dos, 0-1 y 0-1            → 0 ganados, 0 empatados, dif. −2
+  //
+  // Los dos ganaron CERO. Con el criterio viejo el desempate entre ellos lo
+  // decide la diferencia de gol y D queda ARRIBA de A: el que empató termina
+  // último, debajo del que perdió todo. Ése es el bug, tal como se vio.
+  const MATCHES = [
+    match(0, 1, 0, 0),
+    match(2, 0, 5, 0),
+    match(2, 3, 1, 0),
+    match(1, 3, 1, 0),
+  ]
+
+  it('un empate paga más que una derrota, así que el del 0-0 no termina último', () => {
+    const standings = computeStandings(PAIRS, MATCHES, OPEN, SNAPSHOT, true)
+    expect(order(standings)).toEqual(['c1', 'b1', 'a1', 'd1'])
+  })
+
+  it('expone los empatados y los puntos del día: ganar paga 3 y empatar 1', () => {
+    const standings = computeStandings(PAIRS, MATCHES, OPEN, SNAPSHOT, true)
+    const rowA = standings.find((row) => row.side.a === 'a1')
+    const rowB = standings.find((row) => row.side.a === 'b1')
+    const rowD = standings.find((row) => row.side.a === 'd1')
+
+    expect(rowA?.drawn).toBe(1)
+    expect(rowA?.dayPoints).toBe(1)
+    // B ganó uno y empató uno: 3 + 1.
+    expect(rowB?.drawn).toBe(1)
+    expect(rowB?.dayPoints).toBe(4)
+    expect(rowD?.drawn).toBe(0)
+    expect(rowD?.dayPoints).toBe(0)
+  })
+
+  it('un empate sigue valiendo MENOS que una victoria', () => {
+    const standings = computeStandings(PAIRS, MATCHES, OPEN, SNAPSHOT, true)
+    const rowB = standings.find((row) => row.side.a === 'b1')
+    const rowA = standings.find((row) => row.side.a === 'a1')
+    expect((rowB?.dayPoints ?? 0) > (rowA?.dayPoints ?? 0)).toBe(true)
+  })
+
+  // El caso degenerado del design, fijado como test y no como comentario: sin
+  // empates permitidos los puntos del día SON los partidos ganados, así que el
+  // pádel ordena exactamente igual que antes de que este criterio existiera.
+  it('sin empates permitidos, los puntos del día son los partidos ganados', () => {
+    const matches = [
+      match(0, 1, 4, 2), match(0, 2, 4, 1), match(0, 3, 4, 0),
+      match(1, 2, 4, 2), match(1, 3, 4, 1),
+      match(2, 3, 4, 3),
+    ]
+    const standings = computeStandings(PAIRS, matches, CONFIG, SNAPSHOT, false)
+    expect(order(standings)).toEqual(['a1', 'b1', 'c1', 'd1'])
+    for (const row of standings) {
+      expect(row.dayPoints).toBe(row.won)
+      expect(row.drawn).toBe(0)
+    }
+  })
+})
+
+// `REQ-D6-3`: el mismo `return 0` cubría DOS situaciones distintas —empataron,
+// y no se enfrentaron— y las dos caían al snapshot sin que nadie pudiera
+// distinguirlas. Siguen cayendo al snapshot, pero ahora eso es una DECISIÓN
+// escrita y no un efecto del tipo de retorno.
+//
+// Exportada de `./standings` pero NO del barrel de `core`, mismo criterio que
+// `formatLabel` después de S77: la usa su test y `computeStandings`, y
+// publicarla sería ofrecer un desempate no transitivo a cualquier pantalla.
+describe('headToHead', () => {
+  const A = PAIRS[0] as Side
+  const B = PAIRS[1] as Side
+  const C = PAIRS[2] as Side
+
+  it("dice 'LEFT' cuando el primero le ganó al segundo", () => {
+    expect(headToHead(A, B, [match(0, 1, 4, 2)])).toBe('LEFT')
+  })
+
+  it("dice 'RIGHT' cuando el segundo le ganó al primero", () => {
+    expect(headToHead(A, B, [match(0, 1, 2, 4)])).toBe('RIGHT')
+  })
+
+  it("dice 'DRAW' cuando jugaron y empataron", () => {
+    expect(headToHead(A, B, [match(0, 1, 2, 2)])).toBe('DRAW')
+  })
+
+  it("dice 'NOT_PLAYED' cuando no se enfrentaron, y eso NO es un empate", () => {
+    expect(headToHead(A, B, [match(0, 2, 4, 1)])).toBe('NOT_PLAYED')
+    expect(headToHead(A, C, [])).toBe('NOT_PLAYED')
   })
 })

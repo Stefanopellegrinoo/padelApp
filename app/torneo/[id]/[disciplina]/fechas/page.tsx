@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { MASTERS_SIZE, resolveDisciplineBySlug, samePair, type Award, type MatchResult, type Pair } from '@/core'
+import { MASTERS_SIZE, members, resolveDisciplineBySlug, sameSide, type Award, type MatchResult, type Side } from '@/core'
 import {
   entriesOf,
   matchdayDetail,
@@ -13,6 +13,7 @@ import {
 import { serverClient } from '@/db/server'
 import { matchdayDay } from '@/app/format'
 import { AbrirFecha } from './abrir'
+import { championRecord, sideNames } from './campeon-de-la-fecha'
 // Import absoluto, no relativo: `./[n]/masters` sería válido pero ilegible
 // cruzando un segmento dinámico (mismo criterio que ya documentaba esta
 // pantalla en PR 10, cuando vivía un nivel más arriba).
@@ -28,44 +29,14 @@ interface ChampionInfo {
 }
 
 /**
- * Partidos ganados-perdidos y diferencia de games de la pareja campeona,
- * dentro de esa fecha puntual. No pasa por `computeStandings` —pide
- * `SeasonConfig` y el snapshot de desempate, que esta pantalla de lectura no
- * trae— porque el campeón ya lo dice `seasonAwardsOf`; sólo falta sumar sus propios
- * partidos, el mismo tally que hace `computeStandings` puertas adentro pero
- * para una sola pareja.
+ * Clave estable de un lado, de uno o de dos: el orden de los miembros no
+ * importa. N30: esta pantalla usaba
+ * `members(side).join('-')` (sin ordenar, otro separador) mientras
+ * `fechas/[n]/page.tsx` usaba la versión ordenada — la misma pregunta
+ * contestada de dos formas a 200 líneas de distancia.
  */
-function championRecord(matches: MatchResult[], champion: Pair): string {
-  let won = 0
-  let lost = 0
-  let gamesFor = 0
-  let gamesAgainst = 0
-  for (const match of matches) {
-    const isA = samePair(match.pairA, champion)
-    const isB = !isA && samePair(match.pairB, champion)
-    if (!isA && !isB) continue
-
-    let setsA = 0
-    let setsB = 0
-    let gamesA = 0
-    let gamesB = 0
-    for (const set of match.sets) {
-      gamesA += set.gamesA
-      gamesB += set.gamesB
-      if (set.gamesA > set.gamesB) setsA++
-      else if (set.gamesB > set.gamesA) setsB++
-    }
-    const championWonSets = isA ? setsA > setsB : setsB > setsA
-    const championLostSets = isA ? setsB > setsA : setsA > setsB
-    if (championWonSets) won++
-    else if (championLostSets) lost++
-    gamesFor += isA ? gamesA : gamesB
-    gamesAgainst += isA ? gamesB : gamesA
-  }
-
-  const diff = gamesFor - gamesAgainst
-  const sign = diff >= 0 ? '+' : ''
-  return `${won}–${lost} · ${sign}${diff} games`
+function sideKey(side: Side): string {
+  return [...members(side)].sort().join('~')
 }
 
 export default async function FechasPage({ params }: PageProps) {
@@ -77,7 +48,7 @@ export default async function FechasPage({ params }: PageProps) {
     seasonMatchdaysOf(supabase, seasonId),
   ])
 
-  // C12 (verify-report ronda 7): esta pantalla vivía a nivel temporada y
+  //Esta pantalla vivía a nivel temporada y
   // contaba fechas de la disciplina por DEFECTO nada más — con 2+
   // disciplinas, mentía ("10 FECHAS · 1 JUGADAS" medido). Mismo patrón de
   // resolución que `fechas/[n]/page.tsx` y la Tabla (`[disciplina]/page.tsx`):
@@ -92,6 +63,9 @@ export default async function FechasPage({ params }: PageProps) {
   const awardsByNumber: Map<number, Award[]> = awardsByDiscipline.get(discipline.id) ?? new Map()
 
   const nameById = new Map(entries.map((entry) => [entry.id, entry.displayName]))
+  // Levantado afuera de `championOf`: es una función ANIDADA y el narrowing
+  // del `notFound()` de arriba no la cruza.
+  const matchFormat = discipline.config.matchFormat
   // El Masters no se dibuja como fila: esta pantalla sólo lista fechas REGULAR
   // y muestra el Masters como el bloque bloqueado del final (Task 7, Plan 3).
   const disciplineMatchdays = seasonMatchdays.filter((matchday) => matchday.disciplineId === discipline.id)
@@ -117,13 +91,24 @@ export default async function FechasPage({ params }: PageProps) {
     const championEntryIds = (awardsByNumber.get(matchday.number) ?? [])
       .filter((award) => award.position === 1)
       .map((award) => award.entryId)
-    const championPair = detail.pairs.find(
-      (pair) => championEntryIds.includes(pair.a) || championEntryIds.includes(pair.b),
+    const championSide = detail.sides.find((side) =>
+      members(side).some((entryId) => championEntryIds.includes(entryId)),
     )
-    if (championPair === undefined) return null
+    if (championSide === undefined) return null
 
-    const names = `${nameById.get(championPair.a) ?? '?'} & ${nameById.get(championPair.b) ?? '?'}`
-    return { names, record: championRecord(detail.matches, championPair) }
+    const names = sideNames(championSide, nameById)
+    return {
+      names,
+      record: championRecord(
+        detail.matches,
+        championSide,
+        matchFormat,
+        // El `allows_draw` CONGELADO en la fecha, no el de la disciplina de
+        // hoy: una fecha vieja se lee con la regla con la que se jugó. Mismo
+        // criterio que la tabla del día y que `closeMatchday`.
+        matchday.allowsDraw,
+      ),
+    }
   }
 
   const remainingForMasters = Math.max(0, discipline.config.regularMatchdays - closedMatchdays.length)
@@ -138,7 +123,7 @@ export default async function FechasPage({ params }: PageProps) {
   // tampoco distingue el Masters.
   const hasLiveMatchday = disciplineMatchdays.some((matchday) => matchday.status !== 'CLOSED')
   // El mismo `coalesce(max(number), 0) + 1` que hace `createMatchday` PARA ESTA
-  // disciplina (REQ-D3-2, `number` es único por disciplina): si el botón dice
+  //Disciplina (REQ-D3-2, `number` es único por disciplina): si el botón dice
   // "Abrir fecha 7" y la base crea la 8, la app queda mintiendo.
   const nextNumber = Math.max(0, ...disciplineMatchdays.map((matchday) => matchday.number)) + 1
 
@@ -236,9 +221,9 @@ export default async function FechasPage({ params }: PageProps) {
 
               {inProgress && openDetail !== null && (
                 <div className="mt-2 flex flex-col gap-1">
-                  {openDetail.pairs.map((pair) => (
-                    <p key={`${pair.a}-${pair.b}`} className="text-[13.5px] font-bold">
-                      {nameById.get(pair.a) ?? '?'} & {nameById.get(pair.b) ?? '?'}
+                  {openDetail.sides.map((side) => (
+                    <p key={sideKey(side)} className="text-[13.5px] font-bold">
+                      {sideNames(side, nameById)}
                     </p>
                   ))}
                 </div>

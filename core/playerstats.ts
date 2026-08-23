@@ -11,15 +11,14 @@
  * a deliberate one-function duplicate of the same rule rather than a
  * reinterpretation of it.
  */
-import { samePair } from './pairing'
-import { sideOf } from './pair-compat'
-import { members } from './side'
-import type { EntryId, MatchResult, Pair } from './types'
+import { members, sameSide } from './side'
+import type { EntryId, MatchResult, Side } from './types'
 
-/** One matchday's roster of pairs and the matches actually played within it. */
+/** One matchday's roster of sides and the matches actually played within it. */
 export interface PlayedMatchday {
   number: number
-  pairs: Pair[]
+  /** De uno o de dos, según la disciplina de esa fecha. */
+  sides: Side[]
   matches: MatchResult[]
 }
 
@@ -89,12 +88,10 @@ export function tallyPlayers(
 
   for (const matchday of history) {
     const presentToday = new Set<EntryId>()
-    // `members(sideOf(pair))` instead of `pair.a`/`pair.b`: pure enumeration,
-    // order never matters here, so this reads the same for a side of any
-    // size. `pair` stays Pair-shaped until PR18 — `sideOf` always yields
-    // `size: 2`, so the result is identical to before.
-    for (const pair of matchday.pairs) {
-      for (const entryId of members(sideOf(pair))) presentToday.add(entryId)
+    // `members(side)` and not `.a`/`.b`: pure enumeration, order never matters
+    // here, so this reads the same for a side of any size.
+    for (const side of matchday.sides) {
+      for (const entryId of members(side)) presentToday.add(entryId)
     }
     for (const entryId of presentToday) tallyOf(entryId).matchdaysPlayed++
 
@@ -102,14 +99,14 @@ export function tallyPlayers(
       if (match.sets.length === 0) continue // not played yet
       const { gamesA, gamesB, winner } = matchOutcome(match)
 
-      for (const entryId of members(sideOf(match.pairA))) {
+      for (const entryId of members(match.sideA)) {
         const tally = tallyOf(entryId)
         tally.matchesPlayed++
         tally.gamesFor += gamesA
         tally.gamesAgainst += gamesB
         if (winner === 'A') tally.matchesWon++
       }
-      for (const entryId of members(sideOf(match.pairB))) {
+      for (const entryId of members(match.sideB)) {
         const tally = tallyOf(entryId)
         tally.matchesPlayed++
         tally.gamesFor += gamesB
@@ -122,35 +119,47 @@ export function tallyPlayers(
   return [...tallies.values()]
 }
 
+/**
+ * `pair` es un lado de DOS, angostado: una sociedad necesita dos personas.
+ * Los lados de uno no entran acá y no es una omisión — en una disciplina de a
+ * uno nadie tiene compañero, así que `partnerRecords`/`bestPair` devuelven
+ * vacío y `null`, que es la respuesta correcta y no un agujero de datos.
+ */
 interface PairTally {
-  pair: Pair
+  pair: Extract<Side, { size: 2 }>
   together: number
   won: number
   lost: number
 }
 
-/** Groups matchdays and matches by unordered pair, regardless of side. */
+/** Groups matchdays and matches by unordered pair of two, regardless of side. */
 function pairTallies(history: readonly PlayedMatchday[]): PairTally[] {
   const tallies: PairTally[] = []
 
-  const tallyOf = (pair: Pair): PairTally => {
-    let tally = tallies.find((candidate) => samePair(candidate.pair, pair))
+  const tallyOf = (side: Side): PairTally | null => {
+    if (side.size === 1) return null
+    let tally = tallies.find((candidate) => sameSide(candidate.pair, side))
     if (tally === undefined) {
-      tally = { pair, together: 0, won: 0, lost: 0 }
+      tally = { pair: side, together: 0, won: 0, lost: 0 }
       tallies.push(tally)
     }
     return tally
   }
 
   for (const matchday of history) {
-    for (const pair of matchday.pairs) tallyOf(pair).together++
+    for (const side of matchday.sides) {
+      const tally = tallyOf(side)
+      if (tally !== null) tally.together++
+    }
 
     for (const match of matchday.matches) {
       if (match.sets.length === 0) continue // not played yet
       const { winner } = matchOutcome(match)
       if (winner === 'tie') continue
-      tallyOf(winner === 'A' ? match.pairA : match.pairB).won++
-      tallyOf(winner === 'A' ? match.pairB : match.pairA).lost++
+      const won = tallyOf(winner === 'A' ? match.sideA : match.sideB)
+      const lost = tallyOf(winner === 'A' ? match.sideB : match.sideA)
+      if (won !== null) won.won++
+      if (lost !== null) lost.lost++
     }
   }
 
@@ -171,7 +180,7 @@ function isBetterPartnership(candidate: PairTally, current: PairTally): boolean 
   return candidate.together > current.together
 }
 
-/** The strongest partnership in `history` by wins, or `null` when nobody has played yet. */
+/** The strongest partnership in `history` by wins, or `null` when nobody has played yet (o cuando se juega de a uno y no hay sociedades). */
 export function bestPair(history: readonly PlayedMatchday[]): PartnerRecord | null {
   const tallies = pairTallies(history)
   if (tallies.length === 0) return null

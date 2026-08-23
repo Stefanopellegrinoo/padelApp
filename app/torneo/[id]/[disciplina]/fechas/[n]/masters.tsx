@@ -82,7 +82,7 @@ export function MastersDraft({
 }: {
   seasonId: string
   matchdayId: string
-  /** El slug de la URL desde la que se abrió esta fecha (W28) — lo necesita `BorrarFecha` para volver a la lista correcta. */
+  /** El slug de la URL desde la que se abrió esta fecha — lo necesita `BorrarFecha` para volver a la lista correcta. */
   disciplina: string
   matchdayNumber: number
   qualifiers: QualifierVM[]

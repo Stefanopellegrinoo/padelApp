@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { buildPairs, buildSides, samePair, type PairingInput, type SideBuildInput } from './pairing'
-import type { Pair } from './types'
+import { buildPairs, buildSides, type PairingInput, type SideBuildInput } from './pairing'
+import { members, pair, sameSide, single, type Duo } from './side'
+import type { Side } from './types'
 
 const SNAPSHOT = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10', 'p11', 'p12']
 
@@ -18,21 +19,21 @@ function input(overrides: Partial<PairingInput> = {}): PairingInput {
   }
 }
 
-function key(pair: Pair): string {
-  return [pair.a, pair.b].sort().join('-')
+function key(side: Side): string {
+  return [...members(side)].sort().join('-')
 }
 
-function keys(pairs: Pair[]): string[] {
-  return pairs.map(key).sort()
+function keys(sides: Side[]): string[] {
+  return sides.map(key).sort()
 }
 
-describe('samePair', () => {
+describe('sameSide sobre lados de dos', () => {
   it('ignores the order of the two players', () => {
-    expect(samePair({ a: 'x', b: 'y' }, { a: 'y', b: 'x' })).toBe(true)
+    expect(sameSide(pair('x', 'y'), pair('y', 'x'))).toBe(true)
   })
 
   it('is false for different players', () => {
-    expect(samePair({ a: 'x', b: 'y' }, { a: 'x', b: 'z' })).toBe(false)
+    expect(sameSide(pair('x', 'y'), pair('x', 'z'))).toBe(false)
   })
 })
 
@@ -50,7 +51,7 @@ describe('buildPairs — the balanced default', () => {
 
   it('uses every present player exactly once', () => {
     const present = SNAPSHOT.slice(0, 12)
-    const used = buildPairs(input({ present })).flatMap((pair) => [pair.a, pair.b])
+    const used = buildPairs(input({ present })).flatMap((side) => members(side))
     expect(used.sort()).toEqual([...present].sort())
   })
 
@@ -80,7 +81,7 @@ describe('buildPairs — the balanced default', () => {
 })
 
 describe('buildPairs — the defending champions', () => {
-  const defenders: Pair = { a: 'p3', b: 'p4' }
+  const defenders: Side = pair('p3', 'p4')
 
   it('keeps the defenders together and out of the pool', () => {
     const pairs = buildPairs(input({ defenders }))
@@ -113,20 +114,20 @@ describe('buildPairs — the defending champions', () => {
 
 describe('buildPairs — no repeating last matchday', () => {
   it('never repeats a pair from the previous matchday', () => {
-    const previousPairs: Pair[] = [
-      { a: 'p1', b: 'p8' },
-      { a: 'p2', b: 'p7' },
-      { a: 'p3', b: 'p6' },
-      { a: 'p4', b: 'p5' },
+    const previousPairs: Duo[] = [
+      pair('p1', 'p8'),
+      pair('p2', 'p7'),
+      pair('p3', 'p6'),
+      pair('p4', 'p5'),
     ]
     const pairs = buildPairs(input({ previousPairs }))
     for (const built of pairs) {
-      expect(previousPairs.some((old) => samePair(old, built))).toBe(false)
+      expect(previousPairs.some((old) => sameSide(old, built))).toBe(false)
     }
   })
 
   it('falls back to the next most balanced when the ideal one repeats', () => {
-    const previousPairs: Pair[] = [{ a: 'p1', b: 'p8' }]
+    const previousPairs: Duo[] = [pair('p1', 'p8')]
     const pairs = buildPairs(input({ previousPairs }))
     expect(keys(pairs)).not.toContain('p1-p8')
     expect(pairs).toHaveLength(4)
@@ -140,18 +141,18 @@ describe('buildPairs — no repeating last matchday', () => {
   })
 
   it('still finds a legal set when the table is identical to last matchday', () => {
-    const previousPairs: Pair[] = [
-      { a: 'p1', b: 'p8' },
-      { a: 'p2', b: 'p7' },
-      { a: 'p3', b: 'p6' },
-      { a: 'p4', b: 'p5' },
+    const previousPairs: Duo[] = [
+      pair('p1', 'p8'),
+      pair('p2', 'p7'),
+      pair('p3', 'p6'),
+      pair('p4', 'p5'),
     ]
     const pairs = buildPairs(input({ previousPairs, points: new Map() }))
     expect(pairs).toHaveLength(4)
   })
 
   it('ignores a previous pair whose players are not both present', () => {
-    const previousPairs: Pair[] = [{ a: 'p1', b: 'p99' }]
+    const previousPairs: Duo[] = [pair('p1', 'p99')]
     expect(() => buildPairs(input({ previousPairs }))).not.toThrow()
   })
 
@@ -162,7 +163,7 @@ describe('buildPairs — no repeating last matchday', () => {
       const next = buildPairs(input({ present, previousPairs }))
       expect(next).toHaveLength(size / 2)
       for (const built of next) {
-        expect(previousPairs.some((old) => samePair(old, built))).toBe(false)
+        expect(previousPairs.some((old) => sameSide(old, built))).toBe(false)
       }
     }
   })
@@ -207,7 +208,7 @@ describe('buildPairs — fixed pairs', () => {
       input({
         present: ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'g1', 'g2'],
         guestIds: ['g1', 'g2'],
-        fixedPairs: [{ a: 'g1', b: 'g2' }],
+        fixedPairs: [pair('g1', 'g2')],
       }),
     )
     expect(keys(pairs)).toEqual(['g1-g2', 'p1-p6', 'p2-p5', 'p3-p4'])
@@ -217,9 +218,9 @@ describe('buildPairs — fixed pairs', () => {
     const pairs = buildPairs(
       input({
         present: ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'g1', 'g2'],
-        defenders: { a: 'p1', b: 'p2' },
+        defenders: pair('p1', 'p2'),
         guestIds: ['g1', 'g2'],
-        fixedPairs: [{ a: 'g1', b: 'g2' }],
+        fixedPairs: [pair('g1', 'g2')],
       }),
     )
     expect(keys(pairs)).toContain('p1-p2')
@@ -233,8 +234,8 @@ describe('buildPairs — fixed pairs', () => {
         present: ['g1', 'g2', 'g3', 'g4'],
         guestIds: ['g1', 'g2', 'g3', 'g4'],
         fixedPairs: [
-          { a: 'g1', b: 'g2' },
-          { a: 'g3', b: 'g4' },
+          pair('g1', 'g2'),
+          pair('g3', 'g4'),
         ],
       }),
     )
@@ -248,15 +249,15 @@ describe('buildPairs — fixed pairs', () => {
       input({
         present: ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'g1', 'g2'],
         guestIds: ['g1', 'g2'],
-        fixedPairs: [{ a: 'g1', b: 'g2' }],
-        previousPairs: [{ a: 'g1', b: 'g2' }],
+        fixedPairs: [pair('g1', 'g2')],
+        previousPairs: [pair('g1', 'g2')],
       }),
     )
     expect(keys(pairs)).toContain('g1-g2')
   })
 
   it('fails if a fixed pair includes someone who is not playing', () => {
-    expect(() => buildPairs(input({ fixedPairs: [{ a: 'p1', b: 'p99' }] }))).toThrow(
+    expect(() => buildPairs(input({ fixedPairs: [pair('p1', 'p99')] }))).toThrow(
       /p99, que no juega esta fecha/,
     )
   })
@@ -266,8 +267,8 @@ describe('buildPairs — fixed pairs', () => {
       buildPairs(
         input({
           fixedPairs: [
-            { a: 'p1', b: 'p2' },
-            { a: 'p2', b: 'p3' },
+            pair('p1', 'p2'),
+            pair('p2', 'p3'),
           ],
         }),
       ),
@@ -276,7 +277,7 @@ describe('buildPairs — fixed pairs', () => {
 
   it('fails if a fixed pair overlaps with the defenders', () => {
     expect(() =>
-      buildPairs(input({ defenders: { a: 'p1', b: 'p2' }, fixedPairs: [{ a: 'p2', b: 'p3' }] })),
+      buildPairs(input({ defenders: pair('p1', 'p2'), fixedPairs: [pair('p2', 'p3')] })),
     ).toThrow(/p2 ya está en la pareja defensora/)
   })
 })
@@ -303,9 +304,14 @@ describe('buildSides — sideSize 2 delegates to buildPairs (design PUNTO 5)', (
 
     expect(sides).toHaveLength(pairs.length)
     for (const [index, side] of sides.entries()) {
-      const pair = pairs[index]
-      if (side.size !== 2 || pair === undefined) throw new Error('expected a side of two here')
-      expect(samePair({ a: side.a, b: side.b }, pair)).toBe(true)
+      const expected = pairs[index]
+      if (expected === undefined) throw new Error('expected a side of two here')
+      expect(side.size).toBe(2)
+      // Desde PR19 `buildPairs` ya devuelve `Side[]`, así que esto compara dos
+      // lados directamente en vez de subir uno con `sideOf`. El test se queda
+      // porque lo que fija sigue valiendo: `buildSides` con `sideSize: 2` es
+      // `buildPairs` elemento a elemento, mismo orden incluido.
+      expect(sameSide(side, expected)).toBe(true)
     }
   })
 })
@@ -319,7 +325,7 @@ describe('buildSides — sideSize 1 (design PUNTO 5, decisión #5/#6)', () => {
     expect(sides.map((side) => side.a).sort()).toEqual(['p1', 'p2', 'p3'])
   })
 
-  // REQ-D5-2: headcount parity is a rule of the PAIR, not the squad. With
+  //REQ-D5-2: headcount parity is a rule of the PAIR, not the squad. With
   // sideSize=1 there is nothing to pair, so an odd count is not an error.
   it('accepts an odd headcount', () => {
     const present = ['p1', 'p2', 'p3', 'p4', 'p5']
@@ -356,10 +362,65 @@ describe('buildSides — sideSize 1 (design PUNTO 5, decisión #5/#6)', () => {
       sideInput({
         sideSize: 1,
         present: ['p1', 'p2', 'p3'],
-        defenders: { a: 'ghost1', b: 'ghost2' },
-        fixedPairs: [{ a: 'ghost3', b: 'ghost4' }],
+        defenders: pair('ghost1', 'ghost2'),
+        fixedPairs: [pair('ghost3', 'ghost4')],
       }),
     )
     expect(sides).toHaveLength(3)
+  })
+})
+
+/*
+ * PR19. Al borrar `Pair`, `fixedPairs`/`defenders`/`previousPairs` pasan a ser
+ * `Side[]`, y con eso un lado de UNO se vuelve REPRESENTABLE donde antes el
+ * tipo lo impedía. `Pair` era `{a, b}` y no había forma de escribir uno solo;
+ * `Side` es una unión y sí la hay.
+ *
+ * No es teórico: `buildSides` recibe el mismo objeto para las dos aridades
+ * (`SideBuildInput extends PairingInput`), así que una `SideBuildInput` armada
+ * para `sideSize: 1` —donde un lado de uno en `fixedPairs` es lo natural— y
+ * reusada con `sideSize: 2` cae justo acá.
+ *
+ * Antes de este guard el sorteo tiraba igual, pero con basura: `take` recorría
+ * `[pair.a, pair.b]`, el `.b` inexistente daba `undefined`, y el mensaje decía
+ * "Una pareja fija incluye a undefined, que no juega esta fecha" — que manda a
+ * buscar un asiento fantasma en vez de decir que el lado está mal formado.
+ */
+describe('buildSides — un lado de uno donde se juega de a dos (PR19)', () => {
+  /*
+   * W50: la primera versión de estos tests pasaba
+   * `single(...)` directo, y el informe de PR19 afirmaba que "el compilador no
+   * puede atrapar el caso". **Era falso** — la causa era que `pair()` devolvía
+   * `Side` a secas. Con `Duo` en los tres campos, estos mismos tests dejaron de
+   * COMPILAR, que es el resultado más fuerte: el agujero se cierra en
+   * compilación y en cada call site del repo.
+   *
+   * El cast de acá abajo es a propósito y es lo que sigue probando algo: es la
+   * forma exacta que tendría un `as` descuidado o una fila cruda que entre por
+   * fuera del tipo. El modo de falla que `requireDuo` cubre es SILENCIOSO —la
+   * pareja defensora desaparecía del sorteo sin que nadie se enterara— así que
+   * la segunda línea de defensa se queda y se prueba.
+   */
+  const comoUnCastDescuidado = (side: ReturnType<typeof single>): Duo => side as unknown as Duo
+
+  it('rechaza un lado de uno en fixedPairs con un mensaje que nombra la causa', () => {
+    expect(() =>
+      buildSides(sideInput({ sideSize: 2, fixedPairs: [comoUnCastDescuidado(single('p1'))] })),
+    ).toThrow(/Una pareja fija es de dos: llegó un lado de uno \(p1\)\./)
+  })
+
+  it('rechaza un lado de uno como pareja defensora', () => {
+    expect(() =>
+      buildSides(sideInput({ sideSize: 2, defenders: comoUnCastDescuidado(single('p1')) })),
+    ).toThrow(/La pareja defensora es de dos: llegó un lado de uno \(p1\)\./)
+  })
+
+  it('un lado de uno en previousPairs no puede hacer que el sorteo se quede sin salida', () => {
+    // `previousPairs` sólo alimenta la regla de no-repetir, que compara con
+    // `sameSide`: un lado de uno nunca va a ser igual a uno de dos, así que se
+    // ignora solo. Lo que NO puede pasar es que reviente.
+    expect(() =>
+      buildSides(sideInput({ sideSize: 2, previousPairs: [comoUnCastDescuidado(single('p1'))] })),
+    ).not.toThrow()
   })
 })

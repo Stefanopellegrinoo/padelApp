@@ -1,5 +1,50 @@
 import { MASTERS_MATCHES, MASTERS_SIZE, MAX_PLAYERS, MIN_PLAYERS } from './constants'
-import type { SeasonConfig } from './types'
+import { usesSetsDiff } from './standings'
+import type { MatchFormat, SeasonConfig } from './types'
+
+/**
+ * La etiqueta corta del formato: "1 set a 4 games", "3 sets a 4 games",
+ * "Marcador de goles".
+ *
+ * La misma frase la mostraban tres pantallas con tres copias —Reglas, Ajustes
+ * y el resumen del wizard—, y las tres decían "1 set a 4 games" sobre una
+ * disciplina que se juega a goles. La de Ajustes además escribía "set" en
+ * singular siempre, así que con `setsToWin: 3` decía "3 set a 4".
+ */
+export function formatLabel(format: MatchFormat): string {
+  if (format.openScore) return 'Marcador de goles'
+  const setWord = format.setsToWin === 1 ? '1 set' : `${format.setsToWin} sets`
+  return `${setWord} a ${format.gamesPerSet} games`
+}
+
+/**
+ * La línea de "formato de partido" de un TORNEO, que puede tener más de una
+ * disciplina y —desde PR20 rebanada D2— más de un formato.
+ *
+ * W64: hasta D2 todas las disciplinas de una
+ * temporada compartían `matchFormat`, así que una sola frase era verdad y
+ * Reglas y Ajustes narraban `primaryDiscipline(header)` sin mentir. D2 hizo que
+ * cada disciplina naciera con la forma de marcador de su `kind`, y ese mismo
+ * día un torneo de pádel + FIFA pasó a decirle al grupo "1 set a 4 games" sobre
+ * una mitad que se juega a goles.
+ *
+ * Se agrupa por FORMATO y no por disciplina: dos Pádel de la misma temporada
+ * (que la app arma desde PR13) no son dos cosas que nombrar, y con un solo
+ * formato la frase es exactamente la de siempre, sin prefijo. El prefijo
+ * aparece recién cuando hay dos cosas distintas que decir — el mismo criterio
+ * que ya usaba `summaryOf` en el paso 5 del wizard.
+ *
+ * El `label` de cada disciplina lo pone quien llama: acá adentro no vive el
+ * nombre que la UI le da a un `kind`.
+ */
+export function formatsLabel(
+  disciplines: readonly { label: string; matchFormat: MatchFormat }[],
+): string {
+  const rows = disciplines.map((row) => ({ label: row.label, format: formatLabel(row.matchFormat) }))
+  const distinct = [...new Set(rows.map((row) => row.format))]
+  if (distinct.length <= 1) return distinct[0] ?? ''
+  return rows.map((row) => `${row.label}: ${row.format}`).join(' · ')
+}
 
 export interface RulesSection {
   title: string
@@ -68,11 +113,39 @@ export function narrateRules(config: SeasonConfig): RulesSection[] {
   ]
 }
 
-function describeTiebreak(format: SeasonConfig['matchFormat'], snapshotEvery: number): string {
-  const setStep = format.setsToWin > 1 ? `corta la diferencia de sets, después ` : ''
+/**
+ * Cómo se llama lo que se cuenta adentro de un partido: **goles** con marcador
+ * abierto, **games** cuando hay sets.
+ *
+ * Exportada porque no la usa sólo esta narración: la marca del campeón en la
+ * lista de fechas (`championRecord`) cuenta la misma unidad. Eran dos copias
+ * del mismo ternario y `championRecord` iba a ser la tercera — exactamente lo
+ * que pasó con `setsToWin > 1` antes de que existiera `usesSetsDiff`.
+ */
+export function scoreUnit(format: MatchFormat): 'goles' | 'games' {
+  return format.openScore ? 'goles' : 'games'
+}
+
+/**
+ * El nombre del desempate, dicho como lo dice la cancha: *"diferencia de gol"*
+ * en fútbol, *"diferencia de games"* en pádel.
+ *
+ * NO sale de `scoreUnit`: es "diferencia de **gol**", singular, y no
+ * "diferencia de goles". Dos funciones y no una porque son dos frases
+ * distintas, no una con un sustantivo adentro.
+ */
+export function scoreDiffLabel(format: MatchFormat): string {
+  return format.openScore ? 'diferencia de gol' : 'diferencia de games'
+}
+
+function describeTiebreak(format: MatchFormat, snapshotEvery: number): string {
+  const setStep = usesSetsDiff(format) ? `corta la diferencia de sets, después ` : ''
+  // Con marcador abierto los "games" son goles y no hay escalón de sets que
+  // narrar: es el MISMO criterio que corre `computeStandings`, contado.
+  const scoreDiff = scoreDiffLabel(format)
   return (
     `En la tabla de la fecha, si dos parejas ganan la misma cantidad de partidos, ${setStep}` +
-    `corta la diferencia de games. Si empatan dos, el partido entre ellas lo decide; si empatan ` +
+    `corta la ${scoreDiff}. Si empatan dos, el partido entre ellas lo decide; si empatan ` +
     `tres o más, el partido entre ellas no alcanza porque se ganan en círculo, y corta el orden de ` +
     `desempate. En la tabla del campeonato, si dos jugadores tienen los mismos puntos corta el orden ` +
     `de desempate: una lista del mejor al peor que arranca en el orden que consensuó el ` +
@@ -80,7 +153,16 @@ function describeTiebreak(format: SeasonConfig['matchFormat'], snapshotEvery: nu
   )
 }
 
-function describeFormat(format: SeasonConfig['matchFormat']): string {
+function describeFormat(format: MatchFormat): string {
+  // Con marcador abierto no hay set, ni número al que llegar, ni tie-break:
+  // hay dos números de goles y ahí termina el partido. Narrar el set de pádel
+  // acá era describirle a los jugadores un formato que la app no juega.
+  if (format.openScore) {
+    return (
+      `Cada partido se carga con el marcador de goles: los dos números como quedaron, sin ` +
+      `un número al que haya que llegar. Puede terminar empatado.`
+    )
+  }
   const setWord = format.setsToWin === 1 ? 'un set' : `${format.setsToWin} sets ganados`
   const tie = format.tieBreak ? ' con tie-break' : ''
   return `Cada partido se define a ${setWord} de ${format.gamesPerSet} games${tie}.`

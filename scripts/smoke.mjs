@@ -146,19 +146,20 @@ async function main() {
   await page.getByRole('button', { name: squad[7] }).click()
   await page.waitForTimeout(1500)
   check('el panel dice 7 confirmados', (await page.getByText('7 confirmados').count()) === 1)
-  // FALLA PREEXISTENTE, medida y NO causada por el CONTRACT: falla idéntica
-  // en `pr25-columnas-sin-escritor`, o sea sin nada de esta cadena aplicado.
-  // El aviso vive dentro del `<div className={sizeSettled ? '' : 'invisible'}>`
-  // de `armado.tsx` —una reserva de layout deliberada— así que este check
-  // depende de un estado de cliente que los 1500ms de arriba no garantizan.
-  // El COMPORTAMIENTO sí está cubierto y en verde: el check de abajo confirma
-  // contra la base que el asiento de invitado se agregó. Se deja fallando a la
-  // vista en vez de borrarlo o aflojarlo: es una aserción de pantalla que hay
-  // que arreglar de verdad, no maquillar.
-  check(
-    'y avisa que se suma un invitado para quedar de 8',
-    (await page.getByText('Son impares. Se suma 1 invitado y la fecha queda de 8.').count()) === 1,
-  )
+  // Este check esperaba `'Son impares. Se suma 1 invitado y la fecha queda de
+  // 8.'` y fallaba SIEMPRE. Medido dumpeando el panel: ese texto no está ni en
+  // el DOM (`count === 0`). Es el copy de un estado TRANSITORIO —el de
+  // `needsLooseGuest`, entre destildar y que el invitado aparezca— y para
+  // cuando el script mira, `syncGuestSeat` ya lo agregó y el panel pasó a la
+  // rama completa: `'La fecha es de 8 · 4 parejas · 6 partidos'`.
+  //
+  // O sea: no era una carrera ni un problema de visibilidad, era un copy
+  // obsoleto. Se afirma lo que el paso dice probar ("dejar 7 y ver aparecer al
+  // invitado") contra lo que la pantalla dice HOY, y se espera el ESTADO en
+  // vez de confiar en el `waitForTimeout` de arriba.
+  const fechaDeOcho = page.getByText('La fecha es de 8', { exact: false })
+  await fechaDeOcho.waitFor({ state: 'visible', timeout: 10_000 }).catch(() => {})
+  check('y la fecha vuelve a quedar de 8 con el invitado adentro', await fechaDeOcho.isVisible())
   check(
     'la base agregó el asiento de invitado',
     query(`select count(*) from public.entries where matchday_id = '${matchdayId}' and kind = 'GUEST'`) === '1',

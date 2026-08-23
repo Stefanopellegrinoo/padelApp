@@ -966,6 +966,13 @@ async function pairsAndMatchesOf(
     .select('id, round, pair_a, pair_b, fase, grupo')
     .eq('matchday_id', matchdayId)
     .order('round', { ascending: true })
+    // Desempate por `id` (N77): `round` solo NO alcanza — una fecha de 4 lados
+    // tiene DOS partidos por ronda, y sin un segundo criterio el orden entre
+    // ellos lo decide el plan de Postgres. Es la causa del flake intermitente
+    // de `db/redraft.db.test.ts`, que comparaba el array de partidos con
+    // `toEqual` antes y después de un redraft: las escrituras movían las filas
+    // en el heap y a veces volvían al revés, sin que nada estuviera roto.
+    .order('id', { ascending: true })
   if (matchesError) throw new EdgeError(`No se pudieron leer los partidos: ${matchesError.message}`)
 
   const matchIds = (matchRows ?? []).map((row) => row.id)

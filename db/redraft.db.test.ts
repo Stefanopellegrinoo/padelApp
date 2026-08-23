@@ -395,3 +395,43 @@ describe('redraftMatchday', () => {
     expect((await matchdayDetail(admin.client, mastersId)).sides).toHaveLength(6)
   })
 })
+
+// ── El flake de N77, y su causa ─────────────────────────────────────────────
+// `no borra parejas, partidos, resultados ni presentismo` (arriba) venía
+// fallando de forma intermitente desde #3996, con `db:reset` previo: apareció
+// en 1 de ~10 corridas completas de esta sesión.
+//
+// La causa NO era el redraft. `matchdayDetail` (`db/read.ts`) ordenaba los
+// partidos SÓLO por `round`, y una fecha de 4 lados tiene DOS partidos por
+// ronda: el orden entre esos dos lo decidía el plan de Postgres. Cualquier
+// escritura que moviera las filas en el heap —y `redraftMatchday` hace
+// varias— podía devolverlos al revés, y el `expect(detailAfter.matches)
+// .toEqual(matchesBefore)` de arriba compara ARRAYS. Fallaba sin que nada
+// estuviera roto.
+//
+// LÍMITE HONESTO DE ESTE TEST: fija el CONTRATO (dentro de una ronda, por
+// `id`), no reproduce el flake. Un `update` con el mismo valor no alcanza para
+// forzar el reordenamiento —Postgres lo resuelve HOT, in-place— y no hay forma
+// de pedirle al planner el orden inverso desde PostgREST. Sin el `.order(id)`
+// del fix, este test pasa CASI siempre; con él, siempre. Su valor es dejar el
+// contrato escrito y la causa documentada, no cazar la regresión.
+describe('matchdayDetail devuelve los partidos en un orden estable', () => {
+  it('dentro de cada ronda van por id, no por lo que devuelva el plan', async () => {
+    const { admin, matchdayId } = await buildOpenMatchday(defaultConfig(8), 8)
+    const matches = (await matchdayDetail(admin.client, matchdayId)).matches
+
+    const porRonda = new Map<number, string[]>()
+    for (const match of matches) {
+      const bucket = porRonda.get(match.round)
+      if (bucket === undefined) porRonda.set(match.round, [match.id])
+      else bucket.push(match.id)
+    }
+    // El fixture tiene que tener al menos una ronda con 2+ partidos, o este
+    // test no estaría mirando nada.
+    expect([...porRonda.values()].some((ids) => ids.length > 1)).toBe(true)
+
+    for (const [round, ids] of porRonda) {
+      expect(ids, `ronda ${round}`).toEqual([...ids].sort())
+    }
+  })
+})

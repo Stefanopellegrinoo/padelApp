@@ -836,3 +836,62 @@ describe('C36 — cada disciplina juega su propio Masters', () => {
     )
   })
 })
+
+// ── S97: los dos `if` que dependen de una premisa que sólo sostiene TS ──────
+// `0049` sacó el `if v_regular is null then raise` que `0021` tenía, al mudar
+// la lectura de `seasons` a `disciplines`. Sin él, un `disciplines.config` sin
+// `regularMatchdays` deja `v_regular` en NULL, y en SQL una comparación con
+// NULL no es falsa: es NULL, que el `if` trata como falso.
+//
+// Efecto medido acá abajo: la disciplina NO TERMINA NUNCA, sin un solo error.
+// Es el mismo síntoma que C36, por otra causa y sin nada que lo diga.
+//
+// Inalcanzable por la app (`SeasonConfig` declara `regularMatchdays` y
+// `assertValidConfig` valida `>= 1`), pero `close_matchday` es `security
+// definer` y se llega por RPC directo — la premisa la sostiene TypeScript, que
+// no corre del lado de la base.
+describe('S97 — close_matchday con un config sin regularMatchdays', () => {
+  it('no deja la disciplina sin terminar en silencio', async () => {
+    const { admin, seasonId, disciplineId, squad } = await buildSoloScene()
+    await setHasMasters(disciplineId, false)
+
+    // La fecha se arma y se juega ENTERA con el config sano: `generatePairs` y
+    // `openMatchday` validan la config y rebotarían antes de llegar acá.
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-03-05', disciplineId)
+    for (const entryId of squad) await setAttendance(admin.client, matchdayId, entryId, 'PLAYING')
+    await generatePairs(admin.client, matchdayId)
+    await openMatchday(admin.client, matchdayId)
+    for (const matchId of await matchIdsOf(matchdayId)) {
+      await saveResult(admin.client, matchId, [{ gamesA: 4, gamesB: 0 }])
+    }
+
+    // Recién ACÁ el config pierde `regularMatchdays`, sin pasar por ninguna
+    // función de escritura de la app — que es como llegaría en producción: un
+    // PATCH directo, o una fila anterior al campo.
+    const db = adminClient()
+    const { data: row, error: readError } = await db
+      .from('disciplines')
+      .select('config')
+      .eq('id', disciplineId)
+      .single()
+    if (readError || row === null) throw new Error(readError?.message)
+    const { regularMatchdays: _drop, ...sinFechas } = row.config as Record<string, unknown>
+    const { error: writeError } = await db
+      .from('disciplines')
+      .update({ config: sinFechas as never })
+      .eq('id', disciplineId)
+    if (writeError) throw new Error(writeError.message)
+
+    // RPC DIRECTO y no `closeMatchday` (#3989, guards en serie): el wrapper de
+    // TS valida la config antes y rebotaría con otro mensaje, dejando el guard
+    // SQL —el único que de verdad no se puede esquivar— sin ejercitar.
+    const { error } = await admin.client.rpc('close_matchday', {
+      p_matchday: matchdayId,
+      p_awards: [],
+    })
+
+    expect(error?.message).toMatch(/no tiene definida la cantidad de fechas/)
+    //Y no terminó a medias: la fecha sigue OPEN, la disciplina sin FINISHED.
+    expect(await disciplineStatusOf(disciplineId)).not.toBe('FINISHED')
+  })
+})

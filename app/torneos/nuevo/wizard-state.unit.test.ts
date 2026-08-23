@@ -634,3 +634,78 @@ describe('steppersFor', () => {
     expect(steppersFor([])).toEqual(STEPPERS)
   })
 })
+
+// ── W88 y W90: la CUARTA y la QUINTA puerta de la familia W69 → W76 → W83 ───
+//
+// Las dos son el mismo defecto de raíz, medido por `verify-report-go-no-go`
+// (#4034): `config` es UNA curva compartida por el paso 4 (C29), y su
+// `sideSize` efectivo lo contesta `configSideSize(picked, pairSizes)` — pero
+// `formatErrors` nunca miró ese número. Validaba los VALORES de `points`
+// (`pointsErrors`) y no su CANTIDAD, que es lo único que cambia cuando el
+// admin toca las disciplinas marcadas.
+//
+// `onToggle` (`wizard.tsx:519`) no rehace `config` a propósito: con 2+
+// disciplinas no debe (C29/W76). Lo que faltaba no era rehacerla, era AVISAR
+// cuando dejó de corresponder — y "Usar los defaults" (`wizard.tsx:698`) ya
+// era la salida, sólo que nada le decía al admin que la necesitaba.
+describe('formatErrors mira el sideSize efectivo (W88, W90)', () => {
+  // W88, textual del informe: la pantalla mostraba [20,12,6,2] y la base
+  // guardaba [10,7,5,3,2,1,0,0]. Las ediciones del admin se descartaban SIN
+  // UN AVISO, que es exactamente la pregunta con la que se decidió #4017.
+  it('W88 · destildar hasta UNA sola disciplina de a uno deja de pasar en silencio', () => {
+    // Paso 1: Pádel + FIFA, FIFA en "Individual" -> config es la curva legado
+    // de a dos, 4 filas (C29: con 2+ marcadas nadie la mueve).
+    const pairSizes = { PADEL: 2 as SideSize, FIFA: 1 as SideSize }
+    const editada = { ...configFor(8, 2), points: [20, 12, 6, 2] }
+
+    // Paso 3: destilda Pádel. Queda sólo FIFA, de a uno: 8 lados, 8 valores.
+    const picked: DisciplineKind[] = ['FIFA']
+    const sideSize = configSideSize(picked, pairSizes)
+    expect(sideSize).toBe(1)
+
+    // El paso 4 tiene que decir que esa curva ya no corresponde, con el MISMO
+    // mensaje que `validateConfig` — no uno propio que pueda divergir.
+    expect(formatErrors(editada, sideSize)).toEqual(
+      validateConfig(editada, sideSize).filter((error) => error.includes('valores de puntos')),
+    )
+    expect(formatErrors(editada, sideSize)).toContain(
+      'Con un plantel de 8 hacen falta 8 valores de puntos, no 4.',
+    )
+  })
+
+  // W90, textual del informe: dejar SÓLO FIFA en "Individual" (config pasa a 8
+  // filas) y volver a tildar Pádel. `configForPairSizeChange` es no-op con 2+
+  // marcadas (C29), así que tocar "Lados" de nuevo NO lo saca — y el submit
+  // moría en el último paso con un mensaje que no nombra la disciplina.
+  it('W90 · volver a tildar la segunda disciplina se avisa en el paso 4, no en el submit', () => {
+    const pairSizes = { PADEL: 2 as SideSize, FIFA: 1 as SideSize }
+    // Sólo FIFA de a uno: `configForPairSizeChange` SÍ rehace -> 8 filas.
+    const config = configForPairSizeChange(configFor(8, 2), 8, ['FIFA'], 1)
+    expect(config.points).toHaveLength(8)
+
+    // Se vuelve a tildar Pádel: dos marcadas, la curva compartida vuelve a
+    // ser la de a dos (4 filas) y las 8 que quedaron ya no corresponden.
+    const picked: DisciplineKind[] = ['FIFA', 'PADEL']
+    expect(configForPairSizeChange(config, 8, picked, 1)).toEqual(config) // sigue siendo no-op (C29)
+    const sideSize = configSideSize(picked, pairSizes)
+    expect(sideSize).toBe(2)
+
+    expect(formatErrors(config, sideSize)).toContain(
+      'Con un plantel de 8 hacen falta 4 valores de puntos, no 8.',
+    )
+
+    // Y es el MISMO error con el que moría el submit: `createSeason` corre
+    // `assertValidConfig(config, 2)` sobre esa curva.
+    expect(validateConfig(config, 2)).toContain(
+      'Con un plantel de 8 hacen falta 4 valores de puntos, no 8.',
+    )
+  })
+
+  // PIN de no-regresión: el caso de siempre —una curva que SÍ corresponde—
+  // sigue sin errores. Es el 100% de los torneos que existen hoy.
+  it('no inventa un error cuando la curva corresponde', () => {
+    expect(formatErrors(configFor(8, 2), 2)).toEqual([])
+    expect(formatErrors(configFor(8, 1), 1)).toEqual([])
+    expect(formatErrors(configFor(12, 2), 2)).toEqual([])
+  })
+})

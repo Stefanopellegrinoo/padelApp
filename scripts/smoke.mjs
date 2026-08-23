@@ -87,6 +87,14 @@ async function main() {
   const demoName = query(`select name from public.seasons where invite_token = 'demo'`)
   const demoId = query(`select id from public.seasons where invite_token = 'demo'`)
   check('la base tiene la temporada del seed', demoName !== '', demoName)
+  // `go` y no `page.content()` a secas: el `waitForURL` del login matchea en
+  // cuanto cambia la URL, ANTES de que el Server Component de /torneos haya
+  // terminado de renderizar — así que el contenido llegaba vacío y este check
+  // fallaba SIEMPRE. Falso positivo de las dos ramas, medido: la pantalla sí
+  // lista la temporada. Un tripwire que falla por su propia carrera enseña a
+  // ignorarlo, que es el mismo argumento con el que
+  // `db/discipline.db.test.ts` defiende contar del lado de Postgres.
+  await go(page, '/torneos')
   check(
     `la pantalla nombra "${demoName}"`,
     (await page.content()).includes(demoName),
@@ -133,11 +141,20 @@ async function main() {
 
   // ── 6. Dejar 7 confirmados ────────────────────────────────────────────────
   heading('Tildar: dejar 7 y ver aparecer al invitado')
-  await go(page, `/torneo/${seasonId}/fechas/1`)
+  await go(page, `/torneo/${seasonId}/padel/fechas/1`)
   check('el panel arranca con los 8 del plantel', (await page.getByText('8 confirmados').count()) === 1)
   await page.getByRole('button', { name: squad[7] }).click()
   await page.waitForTimeout(1500)
   check('el panel dice 7 confirmados', (await page.getByText('7 confirmados').count()) === 1)
+  // FALLA PREEXISTENTE, medida y NO causada por el CONTRACT: falla idéntica
+  // en `pr25-columnas-sin-escritor`, o sea sin nada de esta cadena aplicado.
+  // El aviso vive dentro del `<div className={sizeSettled ? '' : 'invisible'}>`
+  // de `armado.tsx` —una reserva de layout deliberada— así que este check
+  // depende de un estado de cliente que los 1500ms de arriba no garantizan.
+  // El COMPORTAMIENTO sí está cubierto y en verde: el check de abajo confirma
+  // contra la base que el asiento de invitado se agregó. Se deja fallando a la
+  // vista en vez de borrarlo o aflojarlo: es una aserción de pantalla que hay
+  // que arreglar de verdad, no maquillar.
   check(
     'y avisa que se suma un invitado para quedar de 8',
     (await page.getByText('Son impares. Se suma 1 invitado y la fecha queda de 8.').count()) === 1,
@@ -182,7 +199,7 @@ async function main() {
   // ── 8. Cargar los 6 resultados y cerrar ───────────────────────────────────
   heading('Cargar los 6 resultados en dos toques y cerrar la fecha')
   for (let loaded = 0; loaded < 6; loaded++) {
-    await go(page, `/torneo/${seasonId}/fechas/1`)
+    await go(page, `/torneo/${seasonId}/padel/fechas/1`)
     // Con 4 parejas el fixture son 3 rondas de 2, y el acordeón colapsa la ronda
     // completa: al recargar, los botones que quedan a la vista son los de las
     // rondas incompletas. Por eso el índice es `loaded % 2` y no `loaded`.
@@ -200,7 +217,7 @@ async function main() {
   )
   check('los 6 partidos quedaron cargados', loadedMatches === '6', loadedMatches)
 
-  await go(page, `/torneo/${seasonId}/fechas/1`)
+  await go(page, `/torneo/${seasonId}/padel/fechas/1`)
   const closeCta = page.getByRole('button', { name: 'Cerrar fecha', exact: true })
   check('el CTA de cerrar aparece sin el "faltan N"', (await closeCta.count()) === 1)
   await closeCta.click()
@@ -240,7 +257,7 @@ async function main() {
   check(
     'y aparece el botón de reabrir, porque es la última cerrada',
     await (async () => {
-      await go(page, `/torneo/${seasonId}/fechas/1`)
+      await go(page, `/torneo/${seasonId}/padel/fechas/1`)
       return (await page.getByRole('button', { name: 'Reabrir fecha' }).count()) === 1
     })(),
   )

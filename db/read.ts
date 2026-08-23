@@ -695,7 +695,8 @@ export async function matchdaysOf(supabase: Client, seasonId: string): Promise<M
 /**
  * TODAS las fechas de la temporada, de CUALQUIER disciplina — a diferencia de
  * `matchdaysOf`, que sólo trae las de la disciplina por defecto. Bug latente
- * descubierto escribiendo el test:db de PR 10 (`legacy-fecha-redirect.db.test.ts`):
+ * descubierto escribiendo el test:db del redirect legacy de PR 10 (que el
+ * CONTRACT se llevó junto con el redirect):
  * hasta Fase 1 (una disciplina por temporada) las dos consultas daban lo
  * mismo por casualidad, y con una segunda disciplina `matchdaysOf` la deja
  * afuera en silencio — exactamente el síntoma de C8/C9 (ronda 4) en

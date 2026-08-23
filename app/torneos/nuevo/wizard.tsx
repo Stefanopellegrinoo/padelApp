@@ -412,7 +412,7 @@ export function Wizard({ myName }: { myName: string }) {
   const { names, mySeat } = squad
   const filled = filledCount(names)
   const warning = squadWarning(names)
-  const errors = formatErrors(config)
+  const errors = formatErrors(config, configSideSize(disciplines, pairSizes))
   const disciplineWarning = disciplinesWarning(disciplines)
 
   const setSquad = (next: Squad) => {

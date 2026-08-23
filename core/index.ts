@@ -65,7 +65,7 @@ export { single, pair, members, includes, partnerOf, sameSide, sideOfRow } from 
 // disciplina de este tipo": la usan los dos caminos que crean una (el wizard y
 // "+ Agregar disciplina" de Ajustes), que antes armaban los dos su config con
 // `defaultConfig` y hacían nacer una liga de FIFA siendo pádel con otro nombre.
-export { validateConfig, defaultConfig, disciplineProfile, pointsErrors } from './config'
+export { validateConfig, defaultConfig, disciplineProfile, pointsCountError, pointsErrors } from './config'
 
 // ── Building a matchday ──────────────────────────────────────────────────────
 // `buildSides` (PR16, design PUNTO 5) is the Side-native entry point: with

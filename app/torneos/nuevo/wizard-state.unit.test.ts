@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { defaultConfig, validateConfig } from '@/core'
+import { defaultConfig, validateConfig, type SideSize } from '@/core'
+import type { DisciplineKind } from './wizard-state'
 import {
   STEPPERS,
   type Squad,
@@ -95,7 +96,7 @@ describe('the config the wizard builds', () => {
   it('produces a config core accepts, for every squad size', () => {
     for (const size of [8, 10, 12]) {
       expect(validateConfig(configFor(size, 2), 2)).toEqual([])
-      expect(formatErrors(configFor(size, 2))).toEqual([])
+      expect(formatErrors(configFor(size, 2), 2)).toEqual([])
     }
   })
 })
@@ -186,14 +187,14 @@ describe('los call sites de wizard.tsx que #4030 corrigió', () => {
 describe('formatErrors', () => {
   it('catches points that do not go down', () => {
     const config = { ...configFor(8, 2), points: [10, 10, 5, 3] }
-    expect(formatErrors(config)).toEqual([
+    expect(formatErrors(config, 2)).toEqual([
       'Los puntos tienen que ir de mayor a menor. El único que se puede repetir es el 0.',
     ])
   })
 
   // Lo que el usuario quiere poder escribir: que sólo puntúen los primeros.
   it('accepts a tail of zeros, so only the first places score', () => {
-    expect(formatErrors({ ...configFor(12, 2), points: [10, 6, 3, 1, 0, 0] })).toEqual([])
+    expect(formatErrors({ ...configFor(12, 2), points: [10, 6, 3, 1, 0, 0] }, 2)).toEqual([])
   })
 
   // Este test decía lo contrario y era el que quedaba de la regla vieja. El 0
@@ -202,7 +203,7 @@ describe('formatErrors', () => {
   // trabando el "Continuar". Se podía elegir un 0 y no se podía avanzar.
   it('accepts a zero as the last value, which the stepper can reach', () => {
     const config = { ...configFor(8, 2), points: [10, 6, 3, 0] }
-    expect(formatErrors(config)).toEqual([])
+    expect(formatErrors(config, 2)).toEqual([])
   })
 
   // El paso 4 ya NO tiene su propia copia de las reglas: las dos llaman a
@@ -223,19 +224,19 @@ describe('formatErrors', () => {
     for (const points of lists) {
       const config = { ...configFor(8, 2), points }
       const coreRejects = validateConfig(config, 2).length > 0
-      const wizardRejects = formatErrors(config).length > 0
+      const wizardRejects = formatErrors(config, 2).length > 0
       expect(wizardRejects, `puntos ${points.join('·')}`).toBe(coreRejects)
     }
   })
 
   it('catches counting more matchdays than the season has', () => {
     const config = { ...configFor(8, 2), regularMatchdays: 10, countBestOf: 12 }
-    expect(formatErrors(config)).toEqual(['No pueden contar más fechas de las que se juegan.'])
+    expect(formatErrors(config, 2)).toEqual(['No pueden contar más fechas de las que se juegan.'])
   })
 
   it('reports both problems at once', () => {
     const config = { ...configFor(8, 2), points: [1, 2, 3, 4], regularMatchdays: 4, countBestOf: 9 }
-    expect(formatErrors(config)).toHaveLength(2)
+    expect(formatErrors(config, 2)).toHaveLength(2)
   })
 })
 

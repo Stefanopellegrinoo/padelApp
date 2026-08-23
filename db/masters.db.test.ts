@@ -855,9 +855,19 @@ describe('S97 — close_matchday con un config sin regularMatchdays', () => {
     const { admin, seasonId, disciplineId, squad } = await buildSoloScene()
     await setHasMasters(disciplineId, false)
 
-    // El config pierde `regularMatchdays`, sin pasar por ninguna función de
-    // escritura de la app — que es exactamente cómo llegaría en producción:
-    // por un PATCH directo o una fila vieja anterior al campo.
+    // La fecha se arma y se juega ENTERA con el config sano: `generatePairs` y
+    // `openMatchday` validan la config y rebotarían antes de llegar acá.
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-03-05', disciplineId)
+    for (const entryId of squad) await setAttendance(admin.client, matchdayId, entryId, 'PLAYING')
+    await generatePairs(admin.client, matchdayId)
+    await openMatchday(admin.client, matchdayId)
+    for (const matchId of await matchIdsOf(matchdayId)) {
+      await saveResult(admin.client, matchId, [{ gamesA: 4, gamesB: 0 }])
+    }
+
+    // Recién ACÁ el config pierde `regularMatchdays`, sin pasar por ninguna
+    // función de escritura de la app — que es como llegaría en producción: un
+    // PATCH directo, o una fila anterior al campo.
     const db = adminClient()
     const { data: row, error: readError } = await db
       .from('disciplines')
@@ -872,10 +882,16 @@ describe('S97 — close_matchday con un config sin regularMatchdays', () => {
       .eq('id', disciplineId)
     if (writeError) throw new Error(writeError.message)
 
-    // Cerrar su única fecha regular: con `has_masters = false` esto tendría
-    // que terminarla (C34), y con `v_regular` NULL no termina nada.
-    await expect(playRegularSeason(admin, seasonId, squad, disciplineId)).rejects.toThrow(
-      /no tiene definida la cantidad de fechas/,
-    )
+    // RPC DIRECTO y no `closeMatchday` (#3989, guards en serie): el wrapper de
+    // TS valida la config antes y rebotaría con otro mensaje, dejando el guard
+    // SQL —el único que de verdad no se puede esquivar— sin ejercitar.
+    const { error } = await admin.client.rpc('close_matchday', {
+      p_matchday: matchdayId,
+      p_awards: [],
+    })
+
+    expect(error?.message).toMatch(/no tiene definida la cantidad de fechas/)
+    //Y no terminó a medias: la fecha sigue OPEN, la disciplina sin FINISHED.
+    expect(await disciplineStatusOf(disciplineId)).not.toBe('FINISHED')
   })
 })

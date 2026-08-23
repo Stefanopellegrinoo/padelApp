@@ -698,6 +698,10 @@ export type Database = {
         Args: { p_awards: Json; p_matchday: string }
         Returns: undefined
       }
+      create_discipline_masters: {
+        Args: { p_discipline: string; p_played_on: string }
+        Returns: string
+      }
       create_masters: {
         Args: { p_played_on: string; p_season: string }
         Returns: string

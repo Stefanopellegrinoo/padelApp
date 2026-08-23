@@ -1049,21 +1049,33 @@ export async function generateMastersPairs(supabase: Client, matchdayId: string)
   await insertMatches(supabase, matches)
 }
 
-/** Crea la fecha del Masters. `kind` no está en el grant de columnas de `matchdays`, así que sólo la función de 0007 la puede crear. */
+/**
+ * Crea la fecha del Masters DE UNA DISCIPLINA. `kind` no está en el grant de
+ * columnas de `matchdays`, así que sólo la función de la base la puede crear.
+ *
+ * Recibe la disciplina, no la temporada (C36, decisión #4035): cada
+ * disciplina juega su propio Masters. Antes llamaba a `create_masters`, que
+ * resolvía la primaria ella misma — y con eso la SEGUNDA disciplina de un
+ * torneo no podía armar el suyo, no podía llegar a FINISHED, y la temporada
+ * no podía terminar nunca.
+ */
 export async function createMasters(
   supabase: Client,
-  seasonId: string,
+  disciplineId: DisciplineId,
   playedOn: string,
 ): Promise<string> {
-  const { data, error } = await supabase.rpc('create_masters', {
-    p_season: seasonId,
+  const { data, error } = await supabase.rpc('create_discipline_masters', {
+    p_discipline: disciplineId,
     p_played_on: playedOn,
   })
   if (error !== null) {
     // `matchdays_one_masters` y `matchdays_one_live` levantan las dos un 23505,
-    // y el mensaje crudo de Postgres nombra un índice que nadie conoce.
+    // y el mensaje crudo de Postgres nombra un índice que nadie conoce. Los
+    // dos son unique sobre `discipline_id`, así que el mensaje dice "en esta
+    // disciplina" — decía "en esta temporada", que era falso desde PR 7 y
+    // habría mandado a buscar el Masters de otra disciplina.
     if (error.code === '23505') {
-      throw new EdgeError('Ya hay un Masters, o una fecha sin cerrar en esta temporada.')
+      throw new EdgeError('Ya hay un Masters, o una fecha sin cerrar en esta disciplina.')
     }
     throw new EdgeError(error.message)
   }

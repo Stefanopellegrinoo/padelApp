@@ -165,7 +165,7 @@ describe('the masters', () => {
     const { admin, seasonId, disciplineId, squad } = await buildScene()
     await playRegularSeason(admin, seasonId, squad)
 
-    const mastersId = await createMasters(admin.client, seasonId, '2026-12-20')
+    const mastersId = await createMasters(admin.client, disciplineId, '2026-12-20')
     await generateMastersPairs(admin.client, mastersId)
 
     const detail = await matchdayDetail(admin.client, mastersId)
@@ -192,7 +192,7 @@ describe('the masters', () => {
     const { admin, seasonId, disciplineId, squad } = await buildScene()
     await playRegularSeason(admin, seasonId, squad)
 
-    const mastersId = await createMasters(admin.client, seasonId, '2026-12-20')
+    const mastersId = await createMasters(admin.client, disciplineId, '2026-12-20')
     await generateMastersPairs(admin.client, mastersId)
 
     const detail = await matchdayDetail(admin.client, mastersId)
@@ -210,10 +210,10 @@ describe('the masters', () => {
   // Antes de este plan `openMatchday` corría assertMatchdaySize sobre un
   // `present` vacío y el Masters no se podía abrir nunca.
   it('opens without a single attendance row', async () => {
-    const { admin, seasonId, squad } = await buildScene()
+    const { admin, seasonId, disciplineId, squad } = await buildScene()
     await playRegularSeason(admin, seasonId, squad)
 
-    const mastersId = await createMasters(admin.client, seasonId, '2026-12-20')
+    const mastersId = await createMasters(admin.client, disciplineId, '2026-12-20')
     await generateMastersPairs(admin.client, mastersId)
     expect(await attendancesOf(admin.client, mastersId)).toEqual(new Map())
 
@@ -229,7 +229,7 @@ describe('the masters', () => {
     const { admin, seasonId, disciplineId, squad } = await buildScene()
     await playRegularSeason(admin, seasonId, squad)
 
-    const mastersId = await createMasters(admin.client, seasonId, '2026-12-20')
+    const mastersId = await createMasters(admin.client, disciplineId, '2026-12-20')
     await generateMastersPairs(admin.client, mastersId)
     await openMatchday(admin.client, mastersId)
     for (const matchId of await matchIdsOf(mastersId)) {
@@ -264,7 +264,7 @@ describe('the masters', () => {
     const { admin, disciplineId, seasonId, squad } = await buildScene()
     await playRegularSeason(admin, seasonId, squad)
 
-    const mastersId = await createMasters(admin.client, seasonId, '2026-12-20')
+    const mastersId = await createMasters(admin.client, disciplineId, '2026-12-20')
     await generateMastersPairs(admin.client, mastersId)
     await openMatchday(admin.client, mastersId)
     for (const matchId of await matchIdsOf(mastersId)) {
@@ -290,7 +290,7 @@ describe('the masters', () => {
     const { admin, seasonId, disciplineId, squad } = await buildScene()
     await playRegularSeason(admin, seasonId, squad)
 
-    const mastersId = await createMasters(admin.client, seasonId, '2026-12-20')
+    const mastersId = await createMasters(admin.client, disciplineId, '2026-12-20')
     await generateMastersPairs(admin.client, mastersId)
     await openMatchday(admin.client, mastersId)
 
@@ -365,7 +365,7 @@ describe('create_masters reads disciplines.config, not seasons.config', () => {
     // la DISCIPLINA (primaryDiscipline(header).config), que ahora dice 1.
     await playRegularSeason(admin, seasonId, squad)
 
-    const mastersId = await createMasters(admin.client, seasonId, '2026-12-20')
+    const mastersId = await createMasters(admin.client, disciplineId, '2026-12-20')
 
     const db = adminClient()
     const { data: matchday, error } = await db
@@ -429,7 +429,7 @@ describe('a discipline without a masters (has_masters=false)', () => {
     await setHasMasters(disciplineId, false)
     await playRegularSeason(admin, seasonId, squad)
 
-    await expect(createMasters(admin.client, seasonId, '2026-12-20')).rejects.toThrow(
+    await expect(createMasters(admin.client, disciplineId, '2026-12-20')).rejects.toThrow(
       'Esta disciplina no juega Masters',
     )
   })

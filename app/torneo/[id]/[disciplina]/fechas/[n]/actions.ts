@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import type { MatchdayFormat, SetScore } from '@/core'
+import type { DisciplineId, MatchdayFormat, SetScore } from '@/core'
 import { EdgeError } from '@/db/errors'
 import { promoteGuest } from '@/db/entries'
 import {
@@ -203,10 +203,14 @@ export async function closePhase(
  * El número lo decide `create_masters` con el mismo `max(number) + 1`, así que
  * la pantalla no lo manda ni lo adivina.
  */
-export async function buildMasters(seasonId: string, playedOn: string): Promise<WriteResult> {
+export async function buildMasters(
+  seasonId: string,
+  disciplineId: DisciplineId,
+  playedOn: string,
+): Promise<WriteResult> {
   try {
     const supabase = await serverClient()
-    await createMasters(supabase, seasonId, playedOn)
+    await createMasters(supabase, disciplineId, playedOn)
     // 'layout': PR13c movió la lista a `[disciplina]/fechas`, y esta acción no
     // conoce el slug — mismo criterio que `inDraft`/`onMatchday` más abajo.
     revalidatePath(`/torneo/${seasonId}`, 'layout')

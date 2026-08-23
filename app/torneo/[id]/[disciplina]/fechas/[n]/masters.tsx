@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { MASTERS_SIZE } from '@/core'
+import { MASTERS_SIZE, type DisciplineId } from '@/core'
 import { initials } from '@/app/format'
 import { buildMasters, confirmMatchday, drawMastersPairs, type WriteResult } from './actions'
 import { BorrarFecha } from './borrar'
@@ -24,7 +24,14 @@ function today(): string {
  * Vive en este archivo, y no en `fechas/abrir.tsx`, porque es el componente del
  * Masters: lo importa `fechas/page.tsx` desde acá.
  */
-export function ArmarMasters({ seasonId }: { seasonId: string }) {
+export function ArmarMasters({
+  seasonId,
+  disciplineId,
+}: {
+  seasonId: string
+  /** C36: el Masters es de UNA disciplina, y el CTA se dibuja en cada una. */
+  disciplineId: DisciplineId
+}) {
   const [playedOn, setPlayedOn] = useState(today)
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
@@ -44,7 +51,7 @@ export function ArmarMasters({ seasonId }: { seasonId: string }) {
           onClick={() => {
             setError(null)
             startTransition(async () => {
-              const result = await buildMasters(seasonId, playedOn)
+              const result = await buildMasters(seasonId, disciplineId, playedOn)
               if (!result.ok) setError(result.error)
             })
           }}

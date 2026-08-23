@@ -15,10 +15,27 @@ import {
   syncGuestSeat,
 } from './matchday'
 import { promoteGuest } from './entries'
-import { matchdayDetail, pairLocksOf } from './read'
+import { entriesOf, matchdayDetail, pairLocksOf, seasonSquadMembersOf } from './read'
+import { defaultDisciplineId } from './season'
 import { adminClient } from './test/admin'
 import { createSeason } from './test/factories'
 import { createTestUser, type TestUser } from './test/users'
+
+/** El plantel de UNA disciplina, en orden de discipline_entries.seed_position. */
+async function disciplineSeedPositions(
+  seasonId: string,
+): Promise<Array<{ id: string; seed_position: number }>> {
+  const db = adminClient()
+  const disciplineId = await defaultDisciplineId(db, seasonId)
+  if (disciplineId === null) throw new Error('La temporada no tiene disciplina.')
+  const { data, error } = await db
+    .from('discipline_entries')
+    .select('entry_id, seed_position')
+    .eq('discipline_id', disciplineId)
+    .order('seed_position', { ascending: true })
+  if (error) throw new Error(error.message)
+  return (data ?? []).map((row) => ({ id: row.entry_id, seed_position: row.seed_position }))
+}
 
 // ── scaffolding local a este archivo ────────────────────────────────────────
 // Mismo criterio que cancel.db.test.ts: esta lista de armadores sólo le sirve
@@ -418,7 +435,16 @@ describe('promoteGuest — la traba de armado no puede sobrevivir a la promoció
 })
 
 describe('promoteGuest — spec 3.6: usa la ubicación de la Capability 2', () => {
-  it('insertar "antes de" un asiento corre la cola +1, sin tocar el orden relativo de los demás', async () => {
+  // `entries.seed_position` cambió de significado en torneo-multi-disciplina
+  // PR 7 (0023_discipline_entries.sql): `shift_seeds_up` dejó de tocar
+  // `entries` — corre `discipline_entries` — y el restatement de
+  // `promote_guest` en esa misma migración documenta la misma degradación
+  // aceptada que `add_squad_seat`: `p_before` se sigue validando (mismo
+  // mensaje si no existe), pero ya no reserva lugar en `entries`, que pasa a
+  // recibir el asiento SIEMPRE al final (dual-write, dejará de existir para
+  // SQUAD en PR 25). Su propia fila en `discipline_entries` —donde `p_before`
+  // SÍ posiciona— es el test de abajo (PR 9, "promote_guest restatement #1/3").
+  it('"antes de" sigue validando el asiento, pero entries.seed_position ya no lo posiciona (degradación aceptada)', async () => {
     const { admin, seasonId, matchdayId, guestId } = await closedMatchdayWithLooseGuest('2026-08-10')
     const before = await squadSeedPositions(seasonId)
     const target = before[2]
@@ -428,15 +454,66 @@ describe('promoteGuest — spec 3.6: usa la ubicación de la Capability 2', () =
 
     const after = await squadSeedPositions(seasonId)
     expect(after).toHaveLength(9)
-    expect(after.find((e) => e.id === guestId)?.seed_position).toBe(2)
-    expect(after.find((e) => e.id === target.id)?.seed_position).toBe(3)
-    // Nadie más se corrió salvo la cola desde la posición 2 en adelante, y
-    // ningún preexistente saltó por encima de otro.
-    expect(after.filter((e) => e.id !== guestId).map((e) => e.id)).toEqual(before.map((e) => e.id))
+    // Al final (max + 1 = 8), no en la posición 2 que pedía `p_before`.
+    expect(after.find((e) => e.id === guestId)?.seed_position).toBe(8)
+    // Nadie de los 8 preexistentes se corrió: sin `discipline_entries` propia
+    // todavía, no hay nada que parkear en `entries`.
+    expect(after.filter((e) => e.id !== guestId).map((e) => e.seed_position)).toEqual(
+      before.map((e) => e.seed_position),
+    )
     // Sin huecos ni duplicados en 0..8.
     expect(after.map((e) => e.seed_position).sort((a, b) => a - b)).toEqual(
       Array.from({ length: 9 }, (_, i) => i),
     )
+  })
+
+  // PR 9 (0025, "promote_guest restatement #1/3"): el invitado promovido SÍ
+  // entra a discipline_entries de la disciplina de ESTA fecha, y ahí `p_before`
+  // vuelve a reservar el lugar exacto — la degradación del test de arriba es
+  // sólo de `entries`, nunca de la fuente real del orden.
+  it('entra a discipline_entries de la disciplina de esta fecha, al final si p_before es null', async () => {
+    const { admin, seasonId, guestId } = await closedMatchdayWithLooseGuest('2026-08-10')
+    const before = await disciplineSeedPositions(seasonId)
+    expect(before).toHaveLength(8)
+
+    await promoteGuest(admin.client, guestId)
+
+    const after = await disciplineSeedPositions(seasonId)
+    expect(after).toHaveLength(9)
+    expect(after.find((seat) => seat.id === guestId)?.seed_position).toBe(8)
+    expect(after.filter((seat) => seat.id !== guestId)).toEqual(before)
+  })
+
+  it('con p_before puntual, corre la cola de discipline_entries igual que add_squad_seat', async () => {
+    const { admin, seasonId, guestId } = await closedMatchdayWithLooseGuest('2026-08-10')
+    const before = await disciplineSeedPositions(seasonId)
+    const target = before[2]
+    if (target === undefined) throw new Error('Falta el asiento de test.')
+
+    await promoteGuest(admin.client, guestId, target.id)
+
+    const after = await disciplineSeedPositions(seasonId)
+    expect(after).toHaveLength(9)
+    expect(after.find((seat) => seat.id === guestId)?.seed_position).toBe(2)
+    expect(after.find((seat) => seat.id === target.id)?.seed_position).toBe(3)
+    expect(after.filter((seat) => seat.id !== guestId).map((seat) => seat.id)).toEqual(
+      before.map((seat) => seat.id),
+    )
+    expect(after.map((seat) => seat.seed_position).sort((a, b) => a - b)).toEqual(
+      Array.from({ length: 9 }, (_, i) => i),
+    )
+  })
+
+  it('rechaza un p_before que no es un asiento SQUAD de esta temporada, sin promover nada', async () => {
+    const { admin, seasonId, guestId } = await closedMatchdayWithLooseGuest('2026-08-10')
+    const before = await squadSeedPositions(seasonId)
+
+    await expect(
+      promoteGuest(admin.client, guestId, '00000000-0000-0000-0000-000000000000'),
+    ).rejects.toThrow(/no está en el plantel/)
+
+    const after = await squadSeedPositions(seasonId)
+    expect(after).toEqual(before)
   })
 })
 
@@ -571,5 +648,80 @@ describe('promoteGuest — el unique de awards protege contra una pareja duplica
     // Nada quedó a mitad de camino: ni el flip a SQUAD ni ningún award nuevo.
     expect((await entryRow(guestId)).kind).toBe('GUEST')
     expect((await awardsOf(matchdayId)).filter((row) => row.entry_id === guestId)).toHaveLength(0)
+  })
+})
+
+// ── S23 (verify-report ronda 7) — discipline_entries de LA FECHA, no la default
+// `promote_guest` (0025_promote_guest_discipline_entries.sql) ya siembra la
+// disciplina de la fecha en la que jugó el invitado, no la default — la
+// siembra estaba bien desde el restatement de esa migración, pero C12
+// bloqueaba llegar a este escenario (no se podía abrir una fecha fuera de la
+// default). Con C12 cerrado, esto ya es alcanzable: se prueba de punta a
+// punta, con `entriesOf` (la misma función que lee "Plantel" en Ajustes) del
+// lado de la disciplina correcta y del lado de la default.
+describe('promoteGuest — discipline_entries de la disciplina de la fecha, no la default (S23)', () => {
+  it('un invitado promovido desde una fecha FIFA entra a discipline_entries de FIFA, no de la default PADEL', async () => {
+    const squad = await fillerPlayers(8)
+    const admin = await createTestUser()
+    const { seasonId, disciplineIds, entryIds } = await createSeason({
+      admin,
+      config: defaultConfig(8),
+      squad,
+      disciplines: [{ kind: 'PADEL' }, { kind: 'FIFA' }],
+    })
+    const [padelId, fifaId] = disciplineIds
+    if (padelId === undefined || fifaId === undefined) throw new Error('Faltan disciplinas.')
+
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10', fifaId)
+    await markAllPlaying(admin, matchdayId, entryIds)
+    await setAttendance(admin.client, matchdayId, entryIds[0]!, 'ABSENT')
+    await syncGuestSeat(admin.client, matchdayId)
+
+    const [guestId] = (await matchdayDetail(admin.client, matchdayId)).guestIds
+    if (guestId === undefined) throw new Error('syncGuestSeat no agregó invitado.')
+    await nameGuest(admin.client, guestId, 'Invitade de FIFA')
+
+    await generatePairs(admin.client, matchdayId)
+    await openMatchday(admin.client, matchdayId)
+    await playAllMatches(admin, matchdayId)
+    await closeMatchday(admin.client, matchdayId)
+
+    await promoteGuest(admin.client, guestId)
+
+    const db = adminClient()
+    const { data: fifaSeat, error: fifaSeatError } = await db
+      .from('discipline_entries')
+      .select('entry_id')
+      .eq('discipline_id', fifaId)
+      .eq('entry_id', guestId)
+      .maybeSingle()
+    if (fifaSeatError) throw new Error(fifaSeatError.message)
+    expect(fifaSeat).not.toBeNull()
+
+    const { data: padelSeat, error: padelSeatError } = await db
+      .from('discipline_entries')
+      .select('entry_id')
+      .eq('discipline_id', padelId)
+      .eq('entry_id', guestId)
+      .maybeSingle()
+    if (padelSeatError) throw new Error(padelSeatError.message)
+    expect(padelSeat).toBeNull()
+
+    // Misma función que arma "Plantel" en Ajustes: aparece del lado de FIFA,
+    // no del lado de la default (padel) — ahí es donde S23 mordía.
+    expect((await entriesOf(admin.client, seasonId, fifaId)).some((entry) => entry.id === guestId)).toBe(true)
+    expect((await entriesOf(admin.client, seasonId, padelId)).some((entry) => entry.id === guestId)).toBe(false)
+
+    // C14 (verify-report ronda 8): lo de arriba es exactamente lo que hace que
+    // Ajustes → Plantel pierda a esta persona — `ajustes/page.tsx:50` llama
+    // `entriesOf(seasonId)` SIN disciplineId, que cae en la disciplina por
+    // defecto (padel acá), igual que la aserción de arriba. Lo que Plantel
+    // necesita es `seasonSquadMembersOf` (temporada entera, sin pasar por
+    // discipline_entries), y para no perder a quién ya reclamó su asiento
+    // ("Este soy yo"/"Desvincular") esa función tiene que traer `playerId`.
+    const roster = await seasonSquadMembersOf(admin.client, seasonId)
+    const promoted = roster.find((member) => member.id === guestId)
+    expect(promoted).toBeDefined()
+    expect(promoted?.playerId).toBeNull()
   })
 })

@@ -13,8 +13,10 @@ import {
   type PartnerRecord,
   type PlayedMatchday,
 } from '@/core'
+import { disciplineConfig } from '@/db/discipline'
+import { EdgeError } from '@/db/errors'
 import { awardsOf, closedHistoryAll, entriesOf, myEntryId } from '@/db/read'
-import { seasonConfig } from '@/db/season'
+import { defaultDisciplineId } from '@/db/season'
 import { serverClient } from '@/db/server'
 
 interface PageProps {
@@ -207,13 +209,17 @@ export default async function StatsPage({ params, searchParams }: PageProps) {
 
   const supabase = await serverClient()
 
-  const [entries, history, awardsByMatchday, viewerEntryId, config] = await Promise.all([
+  const [entries, history, awardsByMatchday, viewerEntryId, disciplineId] = await Promise.all([
     entriesOf(supabase, seasonId),
     closedHistoryAll(supabase, seasonId),
     awardsOf(supabase, seasonId),
     myEntryId(supabase, seasonId),
-    seasonConfig(supabase, seasonId),
+    defaultDisciplineId(supabase, seasonId),
   ])
+  // `disciplines.config` es la fuente real desde PR 5 (C5, verify-report
+  // ronda 3: `seasons.config` quedó sin escritor y podía divergir en silencio).
+  if (disciplineId === null) throw new EdgeError('El torneo no tiene disciplina.')
+  const { config } = await disciplineConfig(supabase, disciplineId)
 
   if (history.length < MIN_CLOSED_MATCHDAYS_FOR_STATS) {
     return <InsufficientData closedCount={history.length} />

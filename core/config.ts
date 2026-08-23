@@ -1,5 +1,5 @@
 import { MAX_PLAYERS, MIN_PLAYERS } from './constants'
-import type { SeasonConfig } from './types'
+import type { SeasonConfig, SideSize } from './types'
 
 /**
  * Points for a full squad, longest first. A matchday with fewer pairs uses
@@ -11,24 +11,46 @@ const DEFAULT_POINTS: Record<number, number[]> = {
   6: [10, 7, 5, 3, 2, 1],
 }
 
-export function defaultConfig(squadSize: number): SeasonConfig {
-  const pairCount = squadSize / 2
+/**
+ * `sideSize` default 2 (el pádel de siempre — ningún caller de hoy pasa 1):
+ * la tabla de puntos por default está indexada por CANTIDAD DE LADOS, no
+ * siempre `squadSize / 2` (C16, verify-report ronda 9). `DEFAULT_POINTS` no
+ * tiene entradas para lados de a uno todavía (PUNTO 3 del design, deuda
+ * separada) — con `sideSize=1` esto devuelve `points: []` honestamente, no
+ * la tabla de parejas por casualidad.
+ */
+export function defaultConfig(squadSize: number, sideSize: SideSize = 2): SeasonConfig {
+  const sideCount = squadSize / sideSize
   return {
     squadSize,
     matchFormat: { setsToWin: 1, gamesPerSet: 4, tieBreak: true },
-    points: DEFAULT_POINTS[pairCount] ?? [],
+    points: DEFAULT_POINTS[sideCount] ?? [],
     regularMatchdays: 10,
     countBestOf: 8,
     tiebreakSnapshotEvery: 3,
   }
 }
 
-export function validateConfig(config: SeasonConfig): string[] {
+/**
+ * `sideSize` condiciona la paridad (W24, REQ-D2-2/REQ-D5-2): un plantel impar
+ * sólo es un problema cuando un lado necesita DOS. Con `sideSize=1` cada
+ * presente es su propio lado — la regla no se relaja, es INAPLICABLE.
+ *
+ * El piso/techo (`MIN_PLAYERS`/`MAX_PLAYERS`) sigue sin condicionar por
+ * `sideSize` — es cantidad, no paridad, y REQ-D2-2 no lo toca directamente.
+ * Pero el TECHO mide partidos, no jugadores (W32, verify-report ronda 9): su
+ * unidad cambia con `sideSize` (12 jugadores son 15 partidos en parejas y 66
+ * de a uno), así que dejarlo sin condicionar es DEUDA, no una corrección —
+ * PUNTO 3 del design (`DisciplineConfig.maxPlayers`) todavía no tiene
+ * decisión de producto ni migración. El PISO sí sobrevive sin ajuste: 8
+ * personas son 8 competidores válidos también en sideSize=1.
+ */
+export function validateConfig(config: SeasonConfig, sideSize: SideSize): string[] {
   const errors: string[] = []
   const { squadSize, matchFormat, points, regularMatchdays, countBestOf, tiebreakSnapshotEvery } =
     config
 
-  if (squadSize % 2 !== 0) {
+  if (sideSize === 2 && squadSize % 2 !== 0) {
     errors.push('El plantel tiene que ser un número par.')
   }
   if (squadSize < MIN_PLAYERS) {
@@ -38,7 +60,10 @@ export function validateConfig(config: SeasonConfig): string[] {
     errors.push(`El plantel no puede pasar de ${MAX_PLAYERS} jugadores.`)
   }
 
-  const expectedPoints = Math.floor(squadSize / 2)
+  // C16 (verify-report ronda 9): dividía siempre por 2, así que un 1v1
+  // pedía la MITAD de los valores de puntos que en verdad necesita — un
+  // plantel de 10 en sideSize=1 son 10 lados, no 5.
+  const expectedPoints = Math.floor(squadSize / sideSize)
   if (points.length !== expectedPoints) {
     errors.push(
       `Con un plantel de ${squadSize} hacen falta ${expectedPoints} valores de puntos, no ${points.length}.`,

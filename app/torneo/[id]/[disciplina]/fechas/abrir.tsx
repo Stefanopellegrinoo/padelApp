@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { openNextMatchday } from '../actions'
+import type { DisciplineId } from '@/core'
+import { openNextMatchday } from '../../actions'
 
 /**
  * Hoy, en el `YYYY-MM-DD` que pide `<input type="date">`, armado con los
@@ -21,11 +22,12 @@ function today(): string {
 
 interface AbrirFechaProps {
   seasonId: string
+  disciplineId: DisciplineId
   /** El número que va a tener la fecha: el mismo `max(number) + 1` que hace `createMatchday`. */
   number: number
 }
 
-export function AbrirFecha({ seasonId, number }: AbrirFechaProps) {
+export function AbrirFecha({ seasonId, disciplineId, number }: AbrirFechaProps) {
   const [playedOn, setPlayedOn] = useState(today)
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
@@ -35,7 +37,7 @@ export function AbrirFecha({ seasonId, number }: AbrirFechaProps) {
   const open = () => {
     setError(null)
     startTransition(async () => {
-      const result = await openNextMatchday(seasonId, playedOn)
+      const result = await openNextMatchday(seasonId, disciplineId, playedOn)
       if (!result.ok) setError(result.error)
     })
   }

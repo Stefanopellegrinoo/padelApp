@@ -44,13 +44,16 @@ async function addLock(seasonId: string, matchdayId: string, a: string, b: strin
   if (error) throw new Error(error.message)
 }
 
+// `entry_b: string | null` desde 0028 (REQ-D5-1). `pair_size` se agrega acá
+// (PR18a) para el test de una disciplina de a uno más abajo: el resto de esta
+// suite sigue ejercitando sólo pádel (pair_size=2, siempre no-nulo).
 async function pairsOf(
   matchdayId: string,
-): Promise<Array<{ id: string; entry_a: string; entry_b: string }>> {
+): Promise<Array<{ id: string; entry_a: string; entry_b: string | null; pair_size: number }>> {
   const db = adminClient()
   const { data, error } = await db
     .from('pairs')
-    .select('id, entry_a, entry_b')
+    .select('id, entry_a, entry_b, pair_size')
     .eq('matchday_id', matchdayId)
   if (error) throw new Error(error.message)
   return data ?? []
@@ -192,6 +195,54 @@ describe('generatePairs', () => {
         (pair.entry_a === partner && pair.entry_b === guest),
     )
     expect(mixedPair).toBe(true)
+  })
+
+  /**
+   * PR18a: reescribe el test de W34 (verify-report ronda 10), no lo borra.
+   * Aquel test probaba que `insertPairs` (que todavía no mandaba `pair_size`)
+   * traducía el rebote de `pairs_matchday_size` a un mensaje de usuario en vez
+   * de dejar pasar el string crudo de Postgres. Esta PR hace que `insertPairs`
+   * MANDE `pair_size` (vía `buildSides`) — el rebote que aquel test esperaba
+   * ya no ocurre, así que "todavía no puede armar parejas automáticamente" se
+   * volvió una mentira. Confirmado por ejecución antes de este rewrite: contra
+   * el código nuevo, la promesa vieja `rejects.toThrow(...)` fallaba con
+   * "promise resolved undefined instead of rejecting" — la prueba de que el
+   * comportamiento cambió, no sólo el texto. Esto es comportamiento NUEVO
+   * (RED real, no un refactor behaviour-preserving): antes de este slice,
+   * `generatePairs` moría acá para toda disciplina pair_size=1; ahora arma.
+   */
+  it('arma sola una disciplina de a uno: cada presente es su propio lado', async () => {
+    const admin = await createTestUser()
+    const filler = await fillerPlayers(8)
+    // squadSize/pairSize = 8 valores de puntos, no los 4 de defaultConfig(8)
+    // (pensada para pair_size=2) — si no, C16 (assertPointsCoverMatchday)
+    // corta antes de llegar al camino que este test quiere ejercitar.
+    const config: SeasonConfig = { ...defaultConfig(8), points: [8, 7, 6, 5, 4, 3, 2, 1] }
+    const { seasonId, entryIds } = await createSeason({
+      admin,
+      squad: filler,
+      disciplines: [{ kind: 'FIFA', pairSize: 1, config }],
+    })
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
+    await markAllPlaying(admin, matchdayId, entryIds)
+
+    await generatePairs(admin.client, matchdayId)
+
+    const pairs = await pairsOf(matchdayId)
+    // 8 presentes, sideSize=1: 8 lados, cada uno de un solo miembro. La FK
+    // `pairs_side_shape` (0028) ya lo exige del lado de la base; esto lo
+    // confirma en la fila real, por ejecución.
+    expect(pairs).toHaveLength(8)
+    expect(pairs.every((pair) => pair.pair_size === 1)).toBe(true)
+    expect(pairs.every((pair) => pair.entry_b === null)).toBe(true)
+    expect(new Set(pairs.map((pair) => pair.entry_a))).toEqual(new Set(entryIds))
+
+    const matches = await matchesOf(matchdayId)
+    // Round robin de 8 lados: C(8,2) = 28 partidos en 7 rondas — misma
+    // aritmética que "con 12 guarda 6 parejas y 15 partidos en 5 rondas"
+    // arriba, sólo que acá los "lados" son personas, no parejas.
+    expect(matches).toHaveLength(28)
+    expect(new Set(matches.map((match) => match.round)).size).toBe(7)
   })
 })
 

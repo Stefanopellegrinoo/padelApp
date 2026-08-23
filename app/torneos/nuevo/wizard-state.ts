@@ -54,6 +54,51 @@ export const STEPPERS: Stepper[] = [
   },
 ]
 
+/**
+ * Las disciplinas que el paso 1 puede marcar. REQ-D1-1: checkboxes por kind,
+ * 1 o más — no hay "+ agregar otra disciplina" acá. Dos disciplinas del MISMO
+ * kind (dos Pádel) sólo se arman después, desde Ajustes (PR13): este paso
+ * pregunta "qué juega el torneo", no "cuántas mesas de cada juego".
+ */
+export const DISCIPLINE_KINDS = ['PADEL', 'FIFA'] as const
+export type DisciplineKind = (typeof DISCIPLINE_KINDS)[number]
+export const DISCIPLINE_LABELS: Record<DisciplineKind, string> = { PADEL: 'Pádel', FIFA: 'FIFA' }
+
+/**
+ * Suma o saca un kind del marcado, sin ordenar: el orden en que se TOCAN los
+ * checkboxes es el que después se vuelve `position` (`createSeason`, PR11b) y
+ * de ahí el ordinal del slug (`padel`, `padel-2`, PR10). Ordenar acá por kind
+ * o alfabético cambiaría esa URL sin que nadie lo haya pedido.
+ */
+export function toggleDiscipline(
+  picked: readonly DisciplineKind[],
+  kind: DisciplineKind,
+): DisciplineKind[] {
+  return picked.includes(kind) ? picked.filter((k) => k !== kind) : [...picked, kind]
+}
+
+/** El aviso del paso 1 si no se marcó ninguna disciplina, o `null`. REQ-D1-1: 1 o más. */
+export function disciplinesWarning(picked: readonly DisciplineKind[]): string | null {
+  return picked.length === 0 ? 'Elegí al menos una disciplina para el torneo.' : null
+}
+
+/**
+ * Una fila por disciplina marcada, en el orden en que se marcaron: el mismo
+ * `disciplines: NewSeasonDiscipline[]` que espera `createSeason` (PR11b).
+ *
+ * Comparten la MISMA config: armar una distinta por disciplina necesitaría un
+ * paso nuevo por cada kind, y hoy `pair_size`/`allows_draw` todavía no son
+ * editables desde ninguna pantalla (llegan en PR14+) — no hay nada distinto
+ * que pedir todavía. Quien quiera otra config por disciplina la cambia después
+ * en Ajustes → Formato (`updateDisciplineConfig`, PR6), que ya existe para eso.
+ */
+export function buildDisciplines(
+  picked: readonly DisciplineKind[],
+  config: SeasonConfig,
+): { kind: DisciplineKind; config: SeasonConfig }[] {
+  return picked.map((kind) => ({ kind, config }))
+}
+
 /** Cuántos nombres del plantel están cargados de verdad. */
 export function filledCount(names: readonly string[]): number {
   return names.filter((name) => name.trim().length > 0).length

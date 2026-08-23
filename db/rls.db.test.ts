@@ -9,6 +9,7 @@ import { defaultConfig } from '../core/config'
 const TABLES = [
   'players',
   'seasons',
+  'disciplines',
   'matchdays',
   'entries',
   'attendances',
@@ -40,9 +41,18 @@ async function buildMatch(seasonId: string, entryIds: string[], status: 'OPEN' |
     throw new Error('Hacen falta 4 entries para armar un partido de test.')
   }
 
+  // Una sola disciplina por temporada mientras el tripwire (0015) siga
+  // puesto: no hace falta que el caller la pase, se la busca acá.
+  const { data: discipline, error: disciplineError } = await db
+    .from('disciplines')
+    .select('id')
+    .eq('season_id', seasonId)
+    .single()
+  if (disciplineError || discipline === null) throw new Error(disciplineError?.message)
+
   const { data: matchday, error: matchdayError } = await db
     .from('matchdays')
-    .insert({ season_id: seasonId, number: 1, status })
+    .insert({ season_id: seasonId, discipline_id: discipline.id, number: 1, status })
     .select('id')
     .single()
   if (matchdayError || matchday === null) throw new Error(matchdayError?.message)
@@ -71,9 +81,13 @@ async function buildMatch(seasonId: string, entryIds: string[], status: 'OPEN' |
   // Una fila en attendances, pair_locks y awards: son las tres tablas que
   // buildMatch todavía no tocaba, y los tests de cobertura por tabla las
   // necesitan pobladas.
-  const { error: attendanceError } = await db
-    .from('attendances')
-    .insert({ matchday_id: matchday.id, entry_id: a, season_id: seasonId, status: 'PLAYING' })
+  const { error: attendanceError } = await db.from('attendances').insert({
+    matchday_id: matchday.id,
+    entry_id: a,
+    season_id: seasonId,
+    discipline_id: discipline.id,
+    status: 'PLAYING',
+  })
   if (attendanceError) throw new Error(attendanceError.message)
 
   const { error: pairLockError } = await db
@@ -180,7 +194,7 @@ describe('RLS — lectura', () => {
     expect(error?.code).toBe('42501')
   })
 
-  it('anon no ve una sola fila de ninguna de las diez tablas', async () => {
+  it('anon no ve una sola fila de ninguna de las once tablas', async () => {
     const anon = anonClient()
 
     for (const table of TABLES) {
@@ -259,7 +273,7 @@ describe('RLS — escritura', () => {
 
   it('el admin escribe todo lo de su torneo', async () => {
     const admin = await createTestUser()
-    const { seasonId } = await createSeason({ admin })
+    const { seasonId, disciplineId } = await createSeason({ admin })
 
     const rename = await admin.client
       .from('seasons')
@@ -280,10 +294,22 @@ describe('RLS — escritura', () => {
       .select()
     expect(newEntry.error).toBeNull()
     expect(newEntry.data).toHaveLength(1)
+    const newEntryId = newEntry.data?.[0]?.id
+    if (newEntryId === undefined) throw new Error('Falta el id del asiento recién insertado.')
+
+    // discipline_entries_write (0023) también deja escribir al admin del
+    // torneo — sin esto, este mismo insert es el scaffold que W8
+    // (verify-report ronda 3) encontró dejando asientos huérfanos.
+    const newSeat = await admin.client
+      .from('discipline_entries')
+      .insert({ discipline_id: disciplineId, entry_id: newEntryId, season_id: seasonId, seed_position: 1 })
+      .select()
+    expect(newSeat.error).toBeNull()
+    expect(newSeat.data).toHaveLength(1)
 
     const newMatchday = await admin.client
       .from('matchdays')
-      .insert({ season_id: seasonId, number: 1 })
+      .insert({ season_id: seasonId, discipline_id: disciplineId, number: 1 })
       .select()
     expect(newMatchday.error).toBeNull()
     expect(newMatchday.data).toHaveLength(1)
@@ -307,11 +333,11 @@ describe('RLS — escritura', () => {
 
   it('nadie puede mover matchdays.status con un update directo', async () => {
     const admin = await createTestUser()
-    const { seasonId } = await createSeason({ admin })
+    const { seasonId, disciplineId } = await createSeason({ admin })
     const db = adminClient()
     const { data: matchday, error: matchdayError } = await db
       .from('matchdays')
-      .insert({ season_id: seasonId, number: 1 })
+      .insert({ season_id: seasonId, discipline_id: disciplineId, number: 1 })
       .select('id')
       .single()
     if (matchdayError || matchday === null) throw new Error(matchdayError?.message)
@@ -344,11 +370,11 @@ describe('RLS — escritura', () => {
     expect(error?.code).toBe('42501')
   })
 
-  it('a participant who is not the admin cannot insert into any of the ten tables', async () => {
+  it('a participant who is not the admin cannot insert into any of the eleven tables', async () => {
     const admin = await createTestUser()
     const member = await createTestUser()
     const filler = await fillerPlayers(3)
-    const { seasonId, entryIds } = await createSeason({
+    const { seasonId, disciplineId, entryIds } = await createSeason({
       admin,
       squad: [member.playerId, ...filler],
     })
@@ -380,9 +406,16 @@ describe('RLS — escritura', () => {
     expect(seasons.data, 'tabla seasons').toBeNull()
     expect(seasons.error?.code, 'tabla seasons').toBe('42501')
 
+    const disciplines = await member.client
+      .from('disciplines')
+      .insert({ season_id: seasonId, kind: 'FIFA', config: {} })
+      .select()
+    expect(disciplines.data, 'tabla disciplines').toBeNull()
+    expect(disciplines.error?.code, 'tabla disciplines').toBe('42501')
+
     const matchdays = await member.client
       .from('matchdays')
-      .insert({ season_id: seasonId, number: 99 })
+      .insert({ season_id: seasonId, discipline_id: disciplineId, number: 99 })
       .select()
     expect(matchdays.data, 'tabla matchdays').toBeNull()
     expect(matchdays.error?.code, 'tabla matchdays').toBe('42501')
@@ -396,7 +429,13 @@ describe('RLS — escritura', () => {
 
     const attendances = await member.client
       .from('attendances')
-      .insert({ matchday_id: matchdayId, entry_id: b, season_id: seasonId, status: 'PLAYING' })
+      .insert({
+        matchday_id: matchdayId,
+        entry_id: b,
+        season_id: seasonId,
+        discipline_id: disciplineId,
+        status: 'PLAYING',
+      })
       .select()
     expect(attendances.data, 'tabla attendances').toBeNull()
     expect(attendances.error?.code, 'tabla attendances').toBe('42501')

@@ -1,6 +1,7 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
-import { fetchWithFreshTokenRetry } from './db/client'
+import { fetchWithFreshTokenRetry, type Client } from './db/client'
+import { legacyFechaRedirectTarget, parseLegacyFechaPath } from './db/legacy-fecha-redirect'
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request })
@@ -43,6 +44,38 @@ export async function middleware(request: NextRequest) {
     const redirect = NextResponse.redirect(login)
     for (const cookie of response.cookies.getAll()) redirect.cookies.set(cookie)
     return redirect
+  }
+
+  // REQ-NR-5: PnP-1000 tiene bookmarkeada `/torneo/{id}/fechas/{n}` (sin
+  // disciplina, PR 10). Se resuelve ACÁ y no en un `page.tsx` de esa ruta:
+  // así el archivo viejo deja de existir del todo (en vez de reemplazarse
+  // por un stub) y la mudanza de `fechas/[n]/` a `[disciplina]/fechas/[n]/`
+  // es un rename de árbol limpio. Siempre después del gate de login: para
+  // este patrón `isPrivatePath` ya da `true`, así que sin sesión ya se
+  // volvió arriba.
+  //
+  // `NextResponse.redirect(url, 308)` es explícito: el segundo argumento
+  // ES el status code (no un objeto `init` con otra cosa) — verificado en
+  // `node_modules/next/dist/server/web/spec-extension/response.js`, cuyo
+  // default sin el segundo argumento es 307, no 308.
+  // W15 (verify-report ronda 5): `legacyFechaRedirectTarget` tira `EdgeError`
+  // cuando la temporada no resuelve (RLS sin fila) — antes ese throw salía
+  // del middleware entero y reemplazaba `app/error.tsx` por el 500 pelado de
+  // Next. El propio módulo ya trata "no hay a dónde redirigir" como `null`
+  // sin drama (línea de arriba); una excepción es el mismo caso — mejor
+  // esfuerzo, sin bloquear el resto del request si falla.
+  const legacy = parseLegacyFechaPath(request.nextUrl.pathname)
+  if (legacy !== null) {
+    try {
+      const target = await legacyFechaRedirectTarget(supabase as unknown as Client, legacy)
+      if (target !== null) {
+        const redirectUrl = request.nextUrl.clone()
+        redirectUrl.pathname = target
+        return NextResponse.redirect(redirectUrl, 308)
+      }
+    } catch {
+      // best-effort: cae a la resolución normal (404/error.tsx del render).
+    }
   }
 
   return response

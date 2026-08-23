@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildPairs, samePair, type PairingInput } from './pairing'
+import { buildPairs, buildSides, samePair, type PairingInput, type SideBuildInput } from './pairing'
 import type { Pair } from './types'
 
 const SNAPSHOT = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10', 'p11', 'p12']
@@ -288,5 +288,78 @@ describe('buildPairs — refusing the impossible', () => {
 
   it('throws loudly rather than returning nothing', () => {
     expect(() => buildPairs(input({ present: [] }))).toThrow()
+  })
+})
+
+function sideInput(overrides: Partial<SideBuildInput> = {}): SideBuildInput {
+  return { ...input(), sideSize: 2, ...overrides }
+}
+
+describe('buildSides — sideSize 2 delegates to buildPairs (design PUNTO 5)', () => {
+  it('returns exactly buildPairs, mapped through sideOf', () => {
+    const built = sideInput()
+    const pairs = buildPairs(built)
+    const sides = buildSides(built)
+
+    expect(sides).toHaveLength(pairs.length)
+    for (const [index, side] of sides.entries()) {
+      const pair = pairs[index]
+      if (side.size !== 2 || pair === undefined) throw new Error('expected a side of two here')
+      expect(samePair({ a: side.a, b: side.b }, pair)).toBe(true)
+    }
+  })
+})
+
+describe('buildSides — sideSize 1 (design PUNTO 5, decisión #5/#6)', () => {
+  it('gives every present player their own side', () => {
+    const sides = buildSides(sideInput({ sideSize: 1, present: ['p3', 'p1', 'p2'] }))
+
+    expect(sides).toHaveLength(3)
+    expect(sides.every((side) => side.size === 1)).toBe(true)
+    expect(sides.map((side) => side.a).sort()).toEqual(['p1', 'p2', 'p3'])
+  })
+
+  // REQ-D5-2: headcount parity is a rule of the PAIR, not the squad. With
+  // sideSize=1 there is nothing to pair, so an odd count is not an error.
+  it('accepts an odd headcount', () => {
+    const present = ['p1', 'p2', 'p3', 'p4', 'p5']
+    expect(() => buildSides(sideInput({ sideSize: 1, present }))).not.toThrow()
+    expect(buildSides(sideInput({ sideSize: 1, present }))).toHaveLength(5)
+  })
+
+  it('refuses an empty matchday, same message as the pair path', () => {
+    expect(() => buildSides(sideInput({ sideSize: 1, present: [] }))).toThrow(
+      'No se puede armar una fecha sin jugadores.',
+    )
+  })
+
+  it('orders leader first, same criterion buildPairs uses to rank the pool', () => {
+    // Default `input()` points rank p1 highest, p3 lowest — present is shuffled
+    // on purpose to prove the order comes from points, not from `present`.
+    const sides = buildSides(sideInput({ sideSize: 1, present: ['p3', 'p1', 'p2'] }))
+    expect(sides.map((side) => side.a)).toEqual(['p1', 'p2', 'p3'])
+  })
+
+  it('sends a guest to the tail, same as the pair path', () => {
+    const present = ['guest', 'p1', 'p2']
+    const sides = buildSides(sideInput({ sideSize: 1, present, guestIds: ['guest'] }))
+    expect(sides.map((side) => side.a)).toEqual(['p1', 'p2', 'guest'])
+  })
+
+  // Decisión #6 (design): un dúo fijo es una restricción de ARMADO, no un
+  // competidor. Sin armado (sideSize=1 no empareja a nadie) la restricción no
+  // significa nada — y esto lo prueba de la forma más dura posible: ni
+  // siquiera se valida contra `present`, cosa que buildPairs SÍ hace y que
+  // tiraría "no juega esta fecha" si esta rama las leyera.
+  it('ignores defenders and fixed pairs entirely — nothing to constrain without a pairing', () => {
+    const sides = buildSides(
+      sideInput({
+        sideSize: 1,
+        present: ['p1', 'p2', 'p3'],
+        defenders: { a: 'ghost1', b: 'ghost2' },
+        fixedPairs: [{ a: 'ghost3', b: 'ghost4' }],
+      }),
+    )
+    expect(sides).toHaveLength(3)
   })
 })

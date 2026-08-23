@@ -320,6 +320,33 @@ describe('season_public_rules', () => {
     expect(data).toEqual([])
   })
 
+  // PR 5 (0022, REQ-D2-1): la config real vive en `disciplines.config`, no en
+  // `seasons.config`. `updateSeasonConfig` (db/season.ts) todavía ESCRIBE ahí
+  // (la columna sigue existiendo hasta el contract, PR 27) pero desde PR 6
+  // no tiene un solo caller de producción: `saveConfig` (Ajustes) llama
+  // `updateDisciplineConfig`. Esta RPC ya no lee `seasons.config`. Se diverge
+  // a mano, sin pasar por ninguna función de escritura, para probar que lo
+  // que vuelve es la disciplina, no la temporada desincronizada.
+  it('lee la config de la disciplina, no la de la temporada (PR 5)', async () => {
+    const admin = await createTestUser()
+    const padelConfig = defaultConfig(8)
+    const { seasonId } = await createSeason({ admin, config: padelConfig })
+    const db = adminClient()
+    const divergedSeasonConfig = { ...padelConfig, regularMatchdays: 99 }
+    await db
+      .from('seasons')
+      .update({ config: divergedSeasonConfig as unknown as never })
+      .eq('id', seasonId)
+
+    const { data, error } = await anonClient().rpc('season_public_rules', { p_season: seasonId })
+
+    expect(error).toBeNull()
+    const row = data?.[0]
+    expect((row?.config as SeasonConfig | undefined)?.regularMatchdays).toBe(
+      padelConfig.regularMatchdays,
+    )
+  })
+
   // Es la ÚNICA superficie pública de la app: que abra las reglas no puede
   // abrir de paso quién juega, quién ganó ni cuánto suma cada uno.
   it('does not open anything else to an anonymous reader', async () => {

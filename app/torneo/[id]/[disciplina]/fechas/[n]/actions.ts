@@ -49,8 +49,11 @@ async function inDraft(
     const supabase = await serverClient()
     await seedAttendances(supabase, matchdayId)
     await work(supabase)
-    revalidatePath(`/torneo/${seasonId}/fechas/${matchdayNumber}`)
-    revalidatePath(`/torneo/${seasonId}/fechas`)
+    // PR 10: la fecha real vive bajo `[disciplina]/fechas/{n}`, y esta acción
+    // no conoce el slug. `'layout'` revalida esa ruta (y `/fechas`, la lista,
+    // sin moverse) de una sola vez sin necesitarlo — mismo criterio que
+    // `sumarInvitado`, más abajo, desde antes de esta PR.
+    revalidatePath(`/torneo/${seasonId}`, 'layout')
     return { ok: true }
   } catch (error) {
     if (error instanceof EdgeError) return { ok: false, error: error.message }
@@ -139,10 +142,10 @@ async function onMatchday(
   try {
     const supabase = await serverClient()
     await work(supabase)
-    revalidatePath(`/torneo/${seasonId}/fechas/${matchdayNumber}`)
-    revalidatePath(`/torneo/${seasonId}/fechas`)
-    // Cerrar y reabrir mueven la tabla y los puntos de la temporada entera.
-    revalidatePath(`/torneo/${seasonId}`)
+    // Mismo criterio que `inDraft`: cerrar y reabrir mueven la fecha (ahora
+    // bajo `[disciplina]/`), la lista y la tabla de la temporada entera — un
+    // solo `'layout'` cubre las tres sin conocer el slug.
+    revalidatePath(`/torneo/${seasonId}`, 'layout')
     return { ok: true }
   } catch (error) {
     if (error instanceof EdgeError) return { ok: false, error: error.message }
@@ -184,7 +187,9 @@ export async function buildMasters(seasonId: string, playedOn: string): Promise<
   try {
     const supabase = await serverClient()
     await createMasters(supabase, seasonId, playedOn)
-    revalidatePath(`/torneo/${seasonId}/fechas`)
+    // 'layout': PR13c movió la lista a `[disciplina]/fechas`, y esta acción no
+    // conoce el slug — mismo criterio que `inDraft`/`onMatchday` más abajo.
+    revalidatePath(`/torneo/${seasonId}`, 'layout')
     return { ok: true }
   } catch (error) {
     if (error instanceof EdgeError) return { ok: false, error: error.message }
@@ -242,7 +247,7 @@ export async function redraftTheMatchday(
  * try porque tira por dentro para cortar el render, y adentro el catch se lo
  * comería.
  */
-export async function cancelTheMatchday(seasonId: string, matchdayId: string): Promise<WriteResult> {
+export async function cancelTheMatchday(seasonId: string, matchdayId: string, disciplina: string): Promise<WriteResult> {
   try {
     const supabase = await serverClient()
     await cancelMatchday(supabase, matchdayId)
@@ -251,10 +256,15 @@ export async function cancelTheMatchday(seasonId: string, matchdayId: string): P
     throw error
   }
 
-  revalidatePath(`/torneo/${seasonId}/fechas`)
-  revalidatePath(`/torneo/${seasonId}`)
+  // 'layout' cubre la lista (bajo `[disciplina]/`) y la tabla en un solo
+  // llamado — mismo criterio que `inDraft`/`onMatchday` más arriba.
+  revalidatePath(`/torneo/${seasonId}`, 'layout')
   revalidatePath('/torneos')
-  redirect(`/torneo/${seasonId}/fechas`)
+  // W28 (verify-report ronda 8): antes redirigía al stub sin disciplina, que
+  // reenvía a la disciplina [0] de la temporada — no necesariamente la de la
+  // fecha borrada. `disciplina` ahora viaja desde `[n]/page.tsx` (ya la tiene
+  // en `params`) hasta acá, así que la lista de destino es SIEMPRE la suya.
+  redirect(`/torneo/${seasonId}/${disciplina}/fechas`)
 }
 
 /**
@@ -347,9 +357,9 @@ export async function changeMatchdayDate(
 
   // La lista de fechas y Mis torneos muestran este día ("próxima fecha"), así
   // que revalidar sólo esta pantalla dejaría el día viejo en las otras dos.
-  revalidatePath(`/torneo/${seasonId}/fechas/${matchdayNumber}`)
-  revalidatePath(`/torneo/${seasonId}/fechas`)
-  revalidatePath(`/torneo/${seasonId}`)
+  // `'layout'` cubre la fecha (bajo `[disciplina]/`), la lista y la tabla de
+  // la temporada de una vez — `/torneos` es una ruta hermana, aparte.
+  revalidatePath(`/torneo/${seasonId}`, 'layout')
   revalidatePath('/torneos')
   return { ok: true }
 }

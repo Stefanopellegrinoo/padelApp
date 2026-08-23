@@ -36,6 +36,7 @@ export type Database = {
     Tables: {
       attendances: {
         Row: {
+          discipline_id: string
           entry_id: string
           entry_kind: string
           id: string
@@ -44,6 +45,7 @@ export type Database = {
           status: string
         }
         Insert: {
+          discipline_id: string
           entry_id: string
           entry_kind?: string
           id?: string
@@ -52,6 +54,7 @@ export type Database = {
           status: string
         }
         Update: {
+          discipline_id?: string
           entry_id?: string
           entry_kind?: string
           id?: string
@@ -60,6 +63,13 @@ export type Database = {
           status?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "attendances_entry_discipline"
+            columns: ["discipline_id", "entry_id"]
+            isOneToOne: false
+            referencedRelation: "discipline_entries"
+            referencedColumns: ["discipline_id", "entry_id"]
+          },
           {
             foreignKeyName: "attendances_entry_id_entry_kind_fkey"
             columns: ["entry_id", "entry_kind"]
@@ -73,6 +83,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "entries"
             referencedColumns: ["id", "season_id"]
+          },
+          {
+            foreignKeyName: "attendances_matchday_discipline"
+            columns: ["matchday_id", "discipline_id"]
+            isOneToOne: false
+            referencedRelation: "matchdays"
+            referencedColumns: ["id", "discipline_id"]
           },
           {
             foreignKeyName: "attendances_matchday_id_season_id_fkey"
@@ -122,6 +139,105 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "matchdays"
             referencedColumns: ["id", "season_id"]
+          },
+        ]
+      }
+      discipline_entries: {
+        Row: {
+          created_at: string
+          discipline_id: string
+          entry_id: string
+          entry_kind: string
+          season_id: string
+          seed_position: number
+        }
+        Insert: {
+          created_at?: string
+          discipline_id: string
+          entry_id: string
+          entry_kind?: string
+          season_id: string
+          seed_position: number
+        }
+        Update: {
+          created_at?: string
+          discipline_id?: string
+          entry_id?: string
+          entry_kind?: string
+          season_id?: string
+          seed_position?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "discipline_entries_discipline_id_season_id_fkey"
+            columns: ["discipline_id", "season_id"]
+            isOneToOne: false
+            referencedRelation: "disciplines"
+            referencedColumns: ["id", "season_id"]
+          },
+          {
+            foreignKeyName: "discipline_entries_entry_id_entry_kind_fkey"
+            columns: ["entry_id", "entry_kind"]
+            isOneToOne: false
+            referencedRelation: "entries"
+            referencedColumns: ["id", "kind"]
+          },
+          {
+            foreignKeyName: "discipline_entries_entry_id_season_id_fkey"
+            columns: ["entry_id", "season_id"]
+            isOneToOne: false
+            referencedRelation: "entries"
+            referencedColumns: ["id", "season_id"]
+          },
+        ]
+      }
+      disciplines: {
+        Row: {
+          allows_draw: boolean
+          config: Json
+          created_at: string
+          has_masters: boolean
+          id: string
+          kind: string
+          pair_size: number
+          position: number
+          season_id: string
+          status: string
+          weight: number
+        }
+        Insert: {
+          allows_draw?: boolean
+          config: Json
+          created_at?: string
+          has_masters?: boolean
+          id?: string
+          kind: string
+          pair_size?: number
+          position?: number
+          season_id: string
+          status?: string
+          weight?: number
+        }
+        Update: {
+          allows_draw?: boolean
+          config?: Json
+          created_at?: string
+          has_masters?: boolean
+          id?: string
+          kind?: string
+          pair_size?: number
+          position?: number
+          season_id?: string
+          status?: string
+          weight?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "disciplines_season_id_fkey"
+            columns: ["season_id"]
+            isOneToOne: false
+            referencedRelation: "seasons"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -215,32 +331,52 @@ export type Database = {
       matchdays: {
         Row: {
           closed_at: string | null
+          discipline_id: string
           id: string
           kind: string
           number: number
+          pair_size: number
           played_on: string | null
           season_id: string
           status: string
         }
         Insert: {
           closed_at?: string | null
+          discipline_id: string
           id?: string
           kind?: string
           number: number
+          pair_size?: number
           played_on?: string | null
           season_id: string
           status?: string
         }
         Update: {
           closed_at?: string | null
+          discipline_id?: string
           id?: string
           kind?: string
           number?: number
+          pair_size?: number
           played_on?: string | null
           season_id?: string
           status?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "matchdays_discipline_season"
+            columns: ["discipline_id", "season_id"]
+            isOneToOne: false
+            referencedRelation: "disciplines"
+            referencedColumns: ["id", "season_id"]
+          },
+          {
+            foreignKeyName: "matchdays_discipline_size"
+            columns: ["discipline_id", "pair_size"]
+            isOneToOne: false
+            referencedRelation: "disciplines"
+            referencedColumns: ["id", "pair_size"]
+          },
           {
             foreignKeyName: "matchdays_season_id_fkey"
             columns: ["season_id"]
@@ -345,23 +481,26 @@ export type Database = {
       pairs: {
         Row: {
           entry_a: string
-          entry_b: string
+          entry_b: string | null
           id: string
           matchday_id: string
+          pair_size: number
           season_id: string
         }
         Insert: {
           entry_a: string
-          entry_b: string
+          entry_b?: string | null
           id?: string
           matchday_id: string
+          pair_size?: number
           season_id: string
         }
         Update: {
           entry_a?: string
-          entry_b?: string
+          entry_b?: string | null
           id?: string
           matchday_id?: string
+          pair_size?: number
           season_id?: string
         }
         Relationships: [
@@ -385,6 +524,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "matchdays"
             referencedColumns: ["id", "season_id"]
+          },
+          {
+            foreignKeyName: "pairs_matchday_size"
+            columns: ["matchday_id", "pair_size"]
+            isOneToOne: false
+            referencedRelation: "matchdays"
+            referencedColumns: ["id", "pair_size"]
           },
         ]
       }
@@ -451,7 +597,12 @@ export type Database = {
     }
     Functions: {
       add_squad_seat: {
-        Args: { p_before?: string; p_name: string; p_season: string }
+        Args: {
+          p_before?: string
+          p_disciplines?: string[]
+          p_name: string
+          p_season: string
+        }
         Returns: string
       }
       cancel_matchday: { Args: { p_matchday: string }; Returns: undefined }
@@ -471,6 +622,7 @@ export type Database = {
       is_season_admin: { Args: { p_season: string }; Returns: boolean }
       match_is_open: { Args: { p_match: string }; Returns: boolean }
       match_season: { Args: { p_match: string }; Returns: string }
+      matchday_discipline: { Args: { p_matchday: string }; Returns: string }
       matchday_season: { Args: { p_matchday: string }; Returns: string }
       my_player_id: { Args: never; Returns: string }
       open_matchday: { Args: { p_matchday: string }; Returns: undefined }
@@ -485,6 +637,7 @@ export type Database = {
         Returns: {
           admin_name: string
           claimed: boolean
+          disciplines: string[]
           display_name: string
           entry_id: string
           season_id: string
@@ -508,7 +661,7 @@ export type Database = {
         Returns: undefined
       }
       shift_seeds_up: {
-        Args: { p_from: number; p_season: string }
+        Args: { p_discipline: string; p_from: number }
         Returns: undefined
       }
     }

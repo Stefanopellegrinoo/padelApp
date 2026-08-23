@@ -11,7 +11,7 @@ import {
   type EntryId,
   type SeasonConfig,
 } from '@/core'
-import { awardsOf, closedHistoryAll, entriesOf, seasonHeader } from '@/db/read'
+import { awardsOf, closedHistoryAll, entriesOf, primaryDiscipline, seasonHeader, seasonSquadMembersOf } from '@/db/read'
 import { serverClient } from '@/db/server'
 import { initials } from '@/app/format'
 
@@ -183,16 +183,22 @@ export default async function JugadorPage({ params }: PageProps) {
   const { id: seasonId, entryId } = await params
   const supabase = await serverClient()
 
-  const [header, entries, history, awardsByMatchday] = await Promise.all([
+  const [header, squad, entries, history, awardsByMatchday] = await Promise.all([
     seasonHeader(supabase, seasonId),
+    seasonSquadMembersOf(supabase, seasonId),
     entriesOf(supabase, seasonId),
     closedHistoryAll(supabase, seasonId),
     awardsOf(supabase, seasonId),
   ])
 
-  const entry = entries.find((candidate) => candidate.id === entryId)
-  if (entry === undefined) notFound()
-  if (entry.kind !== 'SQUAD') notFound()
+  // La identidad se resuelve con el plantel de LA TEMPORADA (C11, verify
+  // ronda 6): `entriesOf` sin disciplina explícita filtra por la disciplina
+  // POR DEFECTO, y quien sólo juega otra disciplina (o ninguna) no aparecía
+  // ahí — pero sí es clickeable desde la tabla global, que lista al plantel
+  // entero. `entriesOf` se sigue usando abajo, sólo para las ESTADÍSTICAS de
+  // la disciplina por defecto (C9 no se toca).
+  const member = squad.find((candidate) => candidate.id === entryId)
+  if (member === undefined) notFound()
 
   const squadEntries = entries
     .filter((candidate) => candidate.kind === 'SQUAD')
@@ -200,9 +206,37 @@ export default async function JugadorPage({ params }: PageProps) {
   const seedOrder: EntryId[] = squadEntries.map((squadEntry) => squadEntry.id)
   const nameById = new Map(entries.map((candidate) => [candidate.id, candidate.displayName]))
 
+  // No participa de la disciplina por defecto (nunca 404: la identidad ya
+  // está confirmada arriba) — estado honesto, sin estadísticas fabricadas.
+  const entry = squadEntries.find((candidate) => candidate.id === entryId)
+  if (entry === undefined) {
+    return (
+      <div className="flex flex-col gap-3 pt-4">
+        <div className="flex justify-end">
+          <Link
+            href={`/torneo/${seasonId}`}
+            className="flex h-11 shrink-0 items-center rounded-full bg-chip px-[14px] text-[13px] font-bold"
+          >
+            ← Volver
+          </Link>
+        </div>
+        <div className="flex items-center gap-3 rounded-card border border-line bg-surface p-4">
+          <span className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full bg-accent text-[19px] font-extrabold text-accent-text">
+            {initials(member.displayName)}
+          </span>
+          <div>
+            <p className="text-[19px] font-extrabold">{member.displayName}</p>
+            <p className="text-[12.5px] font-semibold text-muted">Todavía no jugó esta disciplina</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   const activeMatchdayNumber = Math.min(history.length + 1, header.regularMatchdays)
-  const snapshot = snapshotForMatchday(activeMatchdayNumber, seedOrder, awardsByMatchday, header.config)
-  const ranking = rankingWithMovement(awardsByMatchday, seedOrder, header.config, snapshot)
+  const config = primaryDiscipline(header).config
+  const snapshot = snapshotForMatchday(activeMatchdayNumber, seedOrder, awardsByMatchday, config)
+  const ranking = rankingWithMovement(awardsByMatchday, seedOrder, config, snapshot)
   const row = ranking.find((candidate) => candidate.entryId === entryId)
   if (row === undefined) {
     throw new Error(`unreachable: ${entryId} está en el plantel, computeRanking siempre le arma una fila`)
@@ -240,7 +274,7 @@ export default async function JugadorPage({ params }: PageProps) {
     history.map((matchday) => matchday.number),
     awardsByMatchday,
     seedOrder,
-    header.config,
+    config,
     entryId,
   )
 

@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { notFound } from 'next/navigation'
 import type { ReactNode } from 'react'
 import {
   computeAwards,
@@ -7,6 +8,7 @@ import {
   mastersChampion,
   mastersQualifiers,
   previousContext,
+  resolveDisciplineBySlug,
   samePair,
   snapshotForMatchday,
   type MatchResult,
@@ -14,7 +16,15 @@ import {
   type PairStanding,
   type SeasonConfig,
 } from '@/core'
-import { attendancesOf, entriesOf, matchdayDetail, matchdaysOf, pairLocksOf, seasonHeader } from '@/db/read'
+import {
+  attendancesOf,
+  disciplineOf,
+  entriesOf,
+  matchdayDetail,
+  pairLocksOf,
+  seasonHeader,
+  seasonMatchdaysOf,
+} from '@/db/read'
 import { awardsBefore, closedHistory, frozenPointsOf } from '@/db/season'
 import { serverClient } from '@/db/server'
 import { EdgeError } from '@/db/errors'
@@ -28,7 +38,7 @@ import { SumarInvitado, type GuestPromoteVM, type SumarSeatVM } from './sumar'
 import { guestsToPromote } from './sumar-state'
 
 interface PageProps {
-  params: Promise<{ id: string; n: string }>
+  params: Promise<{ id: string; disciplina: string; n: string }>
 }
 
 function pairKey(pair: Pair): string {
@@ -97,18 +107,37 @@ function tiebreakNote(standings: PairStanding[], config: SeasonConfig, nameOf: M
  * Plan 4.
  */
 export default async function FechaDetailPage({ params }: PageProps) {
-  const { id: seasonId, n } = await params
+  const { id: seasonId, disciplina, n } = await params
   const matchdayNumber = Number(n)
   const supabase = await serverClient()
 
-  const [header, entries, matchdays] = await Promise.all([
+  const [header, matchdays] = await Promise.all([
     seasonHeader(supabase, seasonId),
-    entriesOf(supabase, seasonId),
-    matchdaysOf(supabase, seasonId),
+    seasonMatchdaysOf(supabase, seasonId),
   ])
 
-  const matchday = matchdays.find((candidate) => candidate.number === matchdayNumber)
+  // REQ-NR-5: slug desconocido, o de otra temporada — mismo `notFound()` que
+  // `jugador/[entryId]/page.tsx` usa para un `entryId` que no resuelve.
+  const discipline = resolveDisciplineBySlug(header.disciplines, disciplina)
+  if (discipline === undefined) notFound()
+
+  // `number` es único por disciplina (REQ-D3-2), no por temporada: con dos
+  // disciplinas del mismo `kind` (Fase 2) puede haber una "fecha 2" de cada
+  // una, y buscar sólo por número sin la disciplina de la URL sería
+  // ambiguo — se quedaría con la primera que matchee, no necesariamente la
+  // que pidió la URL.
+  const matchday = matchdays.find(
+    (candidate) => candidate.number === matchdayNumber && candidate.disciplineId === discipline.id,
+  )
   if (matchday === undefined) throw new EdgeError('La fecha no existe.')
+
+  // C8, verify-report ronda 4: `entriesOf` sin `disciplineId` explícito
+  // resolvía la disciplina por dentro (`defaultDisciplineId`), que no tiene
+  // por qué ser la de ESTA fecha — el desempate del día se armaba con el
+  // plantel equivocado apenas hubiera más de una disciplina por temporada
+  // (PR 11). Por eso `entries` se pide DESPUÉS de conocer `matchday`, con su
+  // `disciplineId`, y ya no en el `Promise.all` de arriba.
+  const entries = await entriesOf(supabase, seasonId, matchday.disciplineId)
 
   const nameOf = new Map(entries.map((entry) => [entry.id, entry.displayName]))
   const pairName = (pair: Pair) => `${nameOf.get(pair.a) ?? '?'} & ${nameOf.get(pair.b) ?? '?'}`
@@ -138,11 +167,15 @@ export default async function FechaDetailPage({ params }: PageProps) {
       .sort((a, b) => a.seedPosition - b.seedPosition)
       .map((entry) => entry.id)
     const [awardsByMatchday, detail] = await Promise.all([
-      awardsBefore(supabase, seasonId, matchdayNumber),
+      awardsBefore(supabase, matchday.disciplineId, matchdayNumber),
       matchdayDetail(supabase, matchday.id),
     ])
-    const snapshot = snapshotForMatchday(matchdayNumber, seedOrder, awardsByMatchday, header.config)
-    const ranking = computeRanking(awardsByMatchday, seedOrder, header.config, snapshot)
+    // Adyacente cerrada por PR 10: antes leía primaryDiscipline(header).config
+    // ([0] de la temporada), no necesariamente la de ESTA fecha — la URL ya
+    // trae la disciplina, así que `matchday.disciplineId` es la fuente real.
+    const mastersConfig = disciplineOf(header, matchday.disciplineId).config
+    const snapshot = snapshotForMatchday(matchdayNumber, seedOrder, awardsByMatchday, mastersConfig)
+    const ranking = computeRanking(awardsByMatchday, seedOrder, mastersConfig, snapshot)
 
     const qualifiers: QualifierVM[] = mastersQualifiers(ranking).map((entryId) => ({
       entryId,
@@ -154,6 +187,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
       <MastersDraft
         seasonId={seasonId}
         matchdayId={matchday.id}
+        disciplina={disciplina}
         matchdayNumber={matchday.number}
         qualifiers={qualifiers}
         generated={detail.matches.length > 0}
@@ -170,8 +204,8 @@ export default async function FechaDetailPage({ params }: PageProps) {
       attendancesOf(supabase, matchday.id),
       matchdayDetail(supabase, matchday.id),
       pairLocksOf(supabase, matchday.id),
-      closedHistory(supabase, seasonId, matchdayNumber - 1),
-      closedHistory(supabase, seasonId, matchdayNumber - 2),
+      closedHistory(supabase, matchday.disciplineId, matchdayNumber - 1),
+      closedHistory(supabase, matchday.disciplineId, matchdayNumber - 2),
     ])
 
     const { defenders, defendersAlreadyRepeated } = previousContext(lastHistory, beforeLastHistory)
@@ -239,6 +273,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
       <Armado
         seasonId={seasonId}
         matchdayId={matchday.id}
+        disciplina={disciplina}
         matchdayNumber={matchday.number}
         seats={seats}
         looseGuests={looseGuests}
@@ -251,7 +286,9 @@ export default async function FechaDetailPage({ params }: PageProps) {
 
   if (matchday.status !== 'DRAFT') {
     const status = matchday.status
-    const config = header.config
+    // Mismo cierre que arriba (Masters): la config es de la disciplina de
+    // ESTA fecha, no la [0] de la temporada.
+    const config = disciplineOf(header, matchday.disciplineId).config
     const seedOrder = entries
       .filter((entry) => entry.kind === 'SQUAD')
       .sort((a, b) => a.seedPosition - b.seedPosition)
@@ -260,9 +297,9 @@ export default async function FechaDetailPage({ params }: PageProps) {
     const canPromote = header.isAdmin && status === 'CLOSED' && !isMasters
     const [detail, awardsByMatchday, lastHistory, beforeLastHistory, frozenPoints] = await Promise.all([
       matchdayDetail(supabase, matchday.id),
-      awardsBefore(supabase, seasonId, matchdayNumber),
-      closedHistory(supabase, seasonId, matchdayNumber - 1),
-      closedHistory(supabase, seasonId, matchdayNumber - 2),
+      awardsBefore(supabase, matchday.disciplineId, matchdayNumber),
+      closedHistory(supabase, matchday.disciplineId, matchdayNumber - 1),
+      closedHistory(supabase, matchday.disciplineId, matchdayNumber - 2),
       // Los awards CONGELADOS de ESTA fecha, para la tarjeta de "Sumar
       // invitado" de más abajo. `canPromote` NO sabe si hay invitados —eso lo
       // contesta `detail`, que resuelve en este mismo `Promise.all`—, así que
@@ -365,7 +402,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
     // `reopen_matchday` lo vuelve a verificar y su mensaje es el que se muestra.
     const cargaContext =
       header.isAdmin && status === 'OPEN'
-        ? { seasonId, matchdayId: matchday.id, matchdayNumber: matchday.number, format: config.matchFormat }
+        ? { seasonId, matchdayId: matchday.id, disciplina, matchdayNumber: matchday.number, format: config.matchFormat }
         : null
     const remainingMatches = detail.matches.filter((match) => match.sets.length === 0).length
     // Para los dos avisos destructivos del pie: "Volver al armado" (spec: no
@@ -384,10 +421,15 @@ export default async function FechaDetailPage({ params }: PageProps) {
     // La tercera guarda —la fecha siguiente en DRAFT— se deja pasar a propósito:
     // si está vacía, `reopen_matchday` la borra y sigue, que es exactamente el
     // caso para el que se escribió; si tiene datos, su mensaje es el correcto.
+    // W13 (verify-report ronda 5): `matchdays` es de TODA la temporada
+    // (`seasonMatchdaysOf`), pero `reopen_matchday` (0018) filtra sus dos
+    // guardas por `discipline_id` — una fecha OPEN o CLOSED de OTRA
+    // disciplina no debe apagar el botón acá.
+    const ownMatchdays = matchdays.filter((candidate) => candidate.disciplineId === matchday.disciplineId)
     const isLastClosed =
-      !matchdays.some(
+      !ownMatchdays.some(
         (candidate) => candidate.status === 'CLOSED' && candidate.number > matchday.number,
-      ) && !matchdays.some((candidate) => candidate.status === 'OPEN' && candidate.id !== matchday.id)
+      ) && !ownMatchdays.some((candidate) => candidate.status === 'OPEN' && candidate.id !== matchday.id)
 
     const hasGuest = (pair: Pair) => detail.guestIds.includes(pair.a) || detail.guestIds.includes(pair.b)
     const anyGuestInTable = status === 'CLOSED' && standings.some((row) => hasGuest(row.pair))
@@ -540,6 +582,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
             context={{
               seasonId,
               matchdayId: matchday.id,
+              disciplina,
               matchdayNumber: matchday.number,
               format: config.matchFormat,
             }}
@@ -556,7 +599,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
   return (
     <div className="flex flex-col gap-4 pt-3">
       <header className="flex flex-col gap-[3px]">
-        <Link href={`/torneo/${seasonId}/fechas`} className="-mt-2 mb-1 flex min-h-[44px] w-fit items-center text-[12.5px] font-bold text-accent-link">
+        <Link href={`/torneo/${seasonId}/${disciplina}/fechas`} className="-mt-2 mb-1 flex min-h-[44px] w-fit items-center text-[12.5px] font-bold text-accent-link">
           ← Volver
         </Link>
         <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">{kicker}</p>

@@ -18,13 +18,21 @@
 // matches exist because there are exactly four players.
 export { MIN_PLAYERS, MAX_PLAYERS, MASTERS_SIZE, MASTERS_MATCHES } from './constants'
 
+// ── El slug de una disciplina en la URL (PR 10, REQ-NR-5) ────────────────────
+// Derivado, no persistido: no hay columna `slug`.
+export type { SluggableDiscipline } from './discipline-slug'
+export { disciplineSlugs, resolveDisciplineBySlug } from './discipline-slug'
+
 // ── Domain types ─────────────────────────────────────────────────────────────
 // `EntryId` is a seat in a season, never a player. Matches reference the seat,
 // so claiming a profile is one update and the tournament's history is untouched.
 export type {
   EntryId,
+  DisciplineId,
   MatchFormat,
   SeasonConfig,
+  SideSize,
+  Side,
   Pair,
   SetScore,
   MatchResult,
@@ -32,6 +40,18 @@ export type {
   Award,
   RankingRow,
 } from './types'
+
+// ── Un lado de 1 o 2 (decisión de producto #5, REQ-D5-1/2) ──────────────────
+// `Side` es una unión discriminada: leer `.b` sin angostar `size` a `2` es
+// error de compilación. `core/pair-compat.ts` (sideOf/pairOf) es el
+// adaptador temporal que migra `Pair` a `Side` un archivo a la vez — no se
+// exporta acá a propósito, ver el bloque "Deliberadamente NO exportado".
+export { single, pair, members, includes, partnerOf, sameSide, sideOfRow } from './side'
+// `pairFromRow` es la ÚNICA excepción de ese bloque (S38, verify-report ronda
+// 12): el hogar único de `pairOf ∘ sideOfRow` que `db/` necesita para leer
+// una fila cruda como `Pair` sin reescribir esa composición a mano tres
+// veces. Nace y muere con `pair-compat.ts` — BORRADO en PR19 junto con `Pair`.
+export { pairFromRow } from './pair-compat'
 
 // ── Season configuration ─────────────────────────────────────────────────────
 // `validateConfig` RETURNS its problems in Spanish, it never throws — so it
@@ -41,8 +61,14 @@ export type {
 export { validateConfig, defaultConfig, pointsErrors } from './config'
 
 // ── Building a matchday ──────────────────────────────────────────────────────
-export type { PairingInput } from './pairing'
-export { buildPairs, samePair } from './pairing'
+// `buildSides` (PR16, design PUNTO 5) is the Side-native entry point: with
+// `sideSize=2` it is `buildPairs` unmodified, mapped through `sideOf`.
+// `buildPairs`/`PairingInput` stay exported for `core/`-internal callers and
+// tests (`buildSides` itself, `core/pairing.test.ts`) — N27 (verify-report
+// ronda 12): `db/matchday.ts` no llama `buildPairs` directo desde PR18a, sólo
+// `buildSides`/`type PairingInput`.
+export type { PairingInput, SideBuildInput } from './pairing'
+export { buildPairs, buildSides, samePair } from './pairing'
 export { buildFixture } from './fixture'
 
 // ── El contexto que hereda una fecha de las anteriores ───────────────────────
@@ -58,6 +84,16 @@ export { computeAwards } from './awards'
 // ── The season ───────────────────────────────────────────────────────────────
 export { computeRanking } from './ranking'
 export { snapshotForMatchday } from './snapshots'
+
+// ── La tabla global (REQ-D9-1/2): suma ponderada de cada disciplina ─────────
+export type { DisciplineRanking, GlobalRankingRow } from './global-ranking'
+export { computeGlobalRanking } from './global-ranking'
+
+// El estado real de un torneo con más de una disciplina: DERIVADO, nunca
+// leído de una sola columna. `seasons.status` sigue en dual-write hasta el
+// contract (PR 27).
+export type { SeasonStatus } from './season'
+export { seasonStatusOf } from './season'
 
 // ── The Masters ──────────────────────────────────────────────────────────────
 export type { MastersFour } from './masters'
@@ -91,11 +127,23 @@ export { tallyPlayers, partnerRecords, bestPair } from './playerstats'
 /*
  * Deliberately NOT exported — internal to the modules above:
  *
- *   allMatchings   (matchings.ts)  enumerates every way to split a pool into
- *                                  pairs. Only buildPairs needs it, and it
- *                                  throws above MAX_PLAYERS because (n-1)!!
- *                                  reaches 654 million at twenty players.
- *   orderByPoints  (order.ts)      sorts by points with the snapshot as
- *                                  tiebreak. Callers want computeRanking,
- *                                  which returns rows already in order.
+ *   allMatchings   (matchings.ts)   enumerates every way to split a pool into
+ *                                   pairs. Only buildPairs needs it, and it
+ *                                   throws above MAX_PLAYERS because (n-1)!!
+ *                                   reaches 654 million at twenty players.
+ *   orderByPoints  (order.ts)       sorts by points with the snapshot as
+ *                                   tiebreak. Callers want computeRanking,
+ *                                   which returns rows already in order.
+ *   sideOf/pairOf  (pair-compat.ts) TEMPORARY Pair<->Side adapter, born with
+ *                                   `Side` (PR14) and deleted at PR19 along
+ *                                   with `Pair` itself. Only files inside
+ *                                   `core/` migrating one producer/consumer
+ *                                   at a time should import it, and only
+ *                                   from `./pair-compat` directly. The one
+ *                                   exception is `pairFromRow` (S38,
+ *                                   verify-report ronda 12), exported above
+ *                                   — the composed `pairOf ∘ sideOfRow` that
+ *                                   `db/` needs to read a raw row as `Pair`
+ *                                   without hand-writing that narrowing three
+ *                                   times.
  */

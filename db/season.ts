@@ -1,4 +1,5 @@
-import type { Award, EntryId, MatchdayHistory, SeasonConfig } from '@/core'
+import { pairFromRow } from '@/core'
+import type { Award, DisciplineId, EntryId, MatchdayHistory, SeasonConfig, SideSize } from '@/core'
 import type { Database, Json } from './database.types'
 import { EdgeError } from './errors'
 import { assertValidConfig } from './validate'
@@ -22,28 +23,75 @@ export async function seasonConfig(supabase: Client, seasonId: string): Promise<
   return data.config as unknown as SeasonConfig
 }
 
-/** The squad's seed order. Explicit `order by`: nothing else keeps it stable. */
-export async function squadSeedOrder(supabase: Client, seasonId: string): Promise<EntryId[]> {
+/**
+ * The squad's seed order FOR ONE DISCIPLINE. Explicit `order by`: nothing else
+ * keeps it stable.
+ *
+ * Lee `discipline_entries`, no `entries` (C6, verify-report ronda 3):
+ * `entries.seed_position` es dual-write tail-only desde PR 7
+ * (0023_discipline_entries.sql) — `shift_seeds_up`/`add_squad_seat` ya no
+ * corren el parking ahí. `discipline_entries.seed_position` es la fuente
+ * real, y ésta es la que alimenta `snapshotForMatchday` (el desempate de
+ * cada fecha y el orden de fallback del sorteo).
+ */
+export async function squadSeedOrder(
+  supabase: Client,
+  disciplineId: DisciplineId,
+): Promise<EntryId[]> {
   const { data, error } = await supabase
-    .from('entries')
-    .select('id')
-    .eq('season_id', seasonId)
-    .eq('kind', 'SQUAD')
+    .from('discipline_entries')
+    .select('entry_id')
+    .eq('discipline_id', disciplineId)
     .order('seed_position', { ascending: true })
   if (error) throw new EdgeError(`No se pudo leer el plantel: ${error.message}`)
-  return (data ?? []).map((row) => row.id)
+  return (data ?? []).map((row) => row.entry_id)
 }
 
-/** Awards of the closed matchdays before `number`, keyed by matchday number. */
+/**
+ * La disciplina de una temporada, cuando quien llama no tiene forma de
+ * elegir cuál: hoy toda temporada nace con exactamente una (`createSeason`,
+ * el seed) y no hay wizard que sume una segunda (PR 11), así que la primera
+ * por `position` es siempre LA que hay.
+ *
+ * Con el tripwire `disciplines_one_per_season` caído (0018) una temporada ya
+ * PUEDE tener más de una — sin esto, `createMatchday` y las lecturas
+ * scopeadas por temporada rompían con PGRST116 ("multiple/0 rows") o
+ * mezclaban las dos disciplinas apenas existiera una segunda (verify-report,
+ * hallazgo C4). Mismo orden que `add_squad_seat` (0013/0020): `position,
+ * created_at`.
+ *
+ * `null` en vez de tirar: cero filas visibles puede ser "esta temporada de
+ * verdad no tiene disciplina" (C3) o, igual de legítimo, "RLS le esconde la
+ * fila a quien llama" (un extraño sin asiento) — `disciplines_read` (0015)
+ * exige `is_participant`. Quien llama decide qué hacer con `null`: una
+ * lectura que hoy devuelve `[]`/`new Map()` para un extraño sigue
+ * devolviendo eso; una escritura que necesita un destino sí tira.
+ */
+export async function defaultDisciplineId(supabase: Client, seasonId: string): Promise<DisciplineId | null> {
+  const { data, error } = await supabase
+    .from('disciplines')
+    .select('id')
+    .eq('season_id', seasonId)
+    .order('position', { ascending: true })
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+  if (error) throw new EdgeError(`No se pudo leer la disciplina de la temporada: ${error.message}`)
+  // Única marca de esta función (N2): de acá en más el id que circula es
+  // `DisciplineId`, no `string` a secas — así lo lee todo el que lo reciba.
+  return (data?.id as DisciplineId | undefined) ?? null
+}
+
+/** Awards of the closed matchdays before `number` of one discipline's own calendar, keyed by matchday number. */
 export async function awardsBefore(
   supabase: Client,
-  seasonId: string,
+  disciplineId: DisciplineId,
   number: number,
 ): Promise<Map<number, Award[]>> {
   const { data: closed, error: closedError } = await supabase
     .from('matchdays')
     .select('id, number')
-    .eq('season_id', seasonId)
+    .eq('discipline_id', disciplineId)
     .eq('status', 'CLOSED')
     .lt('number', number)
   if (closedError) {
@@ -73,16 +121,22 @@ export async function awardsBefore(
   return result
 }
 
-/** The matchday at `number`, or null when it does not exist or is not CLOSED. */
+// S38 (verify-report ronda 12): `pairFromRow` era una copia local a mano de
+// `pairOf ∘ sideOfRow`, byte por byte idéntica a la de `db/read.ts` y
+// `db/matchday.ts`. `core/pair-compat.ts` la exporta ahora como la ÚNICA
+// excepción del bloque "Deliberadamente NO exportado" (core/index.ts) — un
+// solo lugar, un solo mensaje, para las tres.
+
+/** The matchday at `number` of one discipline's own calendar, or null when it does not exist or is not CLOSED. */
 export async function closedHistory(
   supabase: Client,
-  seasonId: string,
+  disciplineId: DisciplineId,
   number: number,
 ): Promise<MatchdayHistory | null> {
   const { data: matchday, error: matchdayError } = await supabase
     .from('matchdays')
     .select('id, status')
-    .eq('season_id', seasonId)
+    .eq('discipline_id', disciplineId)
     .eq('number', number)
     .maybeSingle()
   if (matchdayError) throw new EdgeError(`No se pudo leer la fecha: ${matchdayError.message}`)
@@ -90,7 +144,7 @@ export async function closedHistory(
 
   const { data: pairs, error: pairsError } = await supabase
     .from('pairs')
-    .select('entry_a, entry_b')
+    .select('entry_a, entry_b, pair_size')
     .eq('matchday_id', matchday.id)
   if (pairsError) throw new EdgeError(`No se pudieron leer las parejas: ${pairsError.message}`)
 
@@ -101,7 +155,9 @@ export async function closedHistory(
   if (awardsError) throw new EdgeError(`No se pudieron leer los premios: ${awardsError.message}`)
 
   return {
-    pairs: (pairs ?? []).map((row) => ({ a: row.entry_a, b: row.entry_b })),
+    pairs: (pairs ?? []).map((row) =>
+      pairFromRow(row.pair_size as SideSize, row.entry_a, row.entry_b),
+    ),
     awards: (awards ?? []).map((row) => ({
       entryId: row.entry_id,
       position: row.position,
@@ -132,6 +188,22 @@ export async function frozenPointsOf(
   return new Map((data ?? []).map((row) => [row.entry_id, row.points]))
 }
 
+/** Una disciplina a crear junto con la temporada. `config` es obligatoria: cada disciplina puede declarar la suya, no hereda de la temporada. */
+export interface NewSeasonDiscipline {
+  kind?: 'PADEL' | 'FIFA'
+  config: SeasonConfig
+  /**
+   * 1 (lados de a uno) o 2 (parejas), elegido al configurar la disciplina —
+   * NO derivado de `kind` (decisión de producto #5: FIFA es 1v1 Y 2v2). Sin
+   * especificar, 2: el pádel de siempre. Identidad y forma de la disciplina:
+   * `0015_disciplines.sql` revoca su UPDATE a propósito — se fija acá, al
+   * crear, y no se edita después.
+   */
+  pairSize?: SideSize
+  /** Si esta disciplina admite empates (decisión #7). Sin especificar, false: el pádel de siempre. Misma inmutabilidad que `pairSize`. */
+  allowsDraw?: boolean
+}
+
 export interface NewSeason {
   name: string
   /** Un nombre por asiento, en el orden que va a ser el orden inicial de desempate. */
@@ -142,6 +214,21 @@ export interface NewSeason {
    * organiza sin jugar. Es un índice sobre `squadNames`, no un nombre.
    */
   mySeatIndex?: number | null
+  /**
+   * Una fila de `disciplines` por elemento — `position` sale del ÍNDICE de
+   * este array, escrito EXPLÍCITO, nunca el default `0` de la columna
+   * (contrato S13, auditoría ronda 5): un insert donde dos filas comparten
+   * `position` Y `created_at` empata la clave de orden que `disciplineSlugs`
+   * (core/discipline-slug.ts) usa para no colisionar dos disciplinas del
+   * mismo `kind`. El orden de este array ES el orden del slug — el wizard
+   * multi-disciplina (PR11a, pendiente) crea las disciplinas en el orden en
+   * que las quiere ver sloggeadas.
+   *
+   * Por defecto una sola PADEL con `config`: el comportamiento de siempre,
+   * para el único caller de producción que existe hoy
+   * (`app/torneos/nuevo/actions.ts`, todavía sin wizard multi-disciplina).
+   */
+  disciplines?: NewSeasonDiscipline[]
 }
 
 /**
@@ -163,17 +250,23 @@ export interface NewSeason {
  */
 export async function createSeason(
   supabase: Client,
-  { name, squadNames, config, mySeatIndex = null }: NewSeason,
+  { name, squadNames, config, mySeatIndex = null, disciplines }: NewSeason,
 ): Promise<{ seasonId: string; inviteToken: string }> {
-  assertValidConfig(config)
+  const disciplineSpecs = disciplines ?? [{ kind: 'PADEL' as const, config }]
+  // `config` es el legacy `seasons.config` (drop en el PR de contract):
+  // siempre pádel, sideSize=2 fijo, nunca disciplina-specific.
+  assertValidConfig(config, 2)
+  for (const spec of disciplineSpecs) {
+    assertValidConfig(spec.config, spec.pairSize ?? 2)
+    if (squadNames.length !== spec.config.squadSize) {
+      throw new EdgeError(
+        `El plantel tiene ${squadNames.length} nombres y la configuración de ${spec.kind ?? 'PADEL'} dice ${spec.config.squadSize}.`,
+      )
+    }
+  }
 
   const trimmed = name.trim()
   if (trimmed.length === 0) throw new EdgeError('El torneo necesita un nombre.')
-  if (squadNames.length !== config.squadSize) {
-    throw new EdgeError(
-      `El plantel tiene ${squadNames.length} nombres y la configuración dice ${config.squadSize}.`,
-    )
-  }
   if (mySeatIndex !== null && (mySeatIndex < 0 || mySeatIndex >= squadNames.length)) {
     throw new EdgeError('El asiento que elegiste no está en el plantel.')
   }
@@ -204,22 +297,74 @@ export async function createSeason(
     throw new EdgeError(`No se pudo crear el torneo: ${seasonError?.message}`)
   }
 
-  const { error: entriesError } = await supabase.from('entries').insert(
-    squadNames.map((seat, index) => ({
-      season_id: season.id,
-      display_name: seat.trim(),
-      kind: 'SQUAD' as const,
-      seed_position: index,
-      player_id: index === mySeatIndex ? myPlayerId : null,
-    })),
-  )
-  if (entriesError !== null) {
+  // Una fila de `disciplines` por spec, `position` = índice del array —
+  // nunca el default de la columna (ver el comentario de `disciplines` en
+  // `NewSeason`, contrato S13). Sin `disciplines` explícito esto crea la
+  // misma PADEL única de siempre, mismo comportamiento pre-PR11.
+  const disciplineRows: { id: string }[] = []
+  for (const [index, spec] of disciplineSpecs.entries()) {
+    const { data: discipline, error: disciplineError } = await supabase
+      .from('disciplines')
+      .insert({
+        season_id: season.id,
+        kind: spec.kind ?? 'PADEL',
+        config: spec.config as unknown as Json,
+        position: index,
+        pair_size: spec.pairSize ?? 2,
+        allows_draw: spec.allowsDraw ?? false,
+      })
+      .select('id')
+      .single()
+    if (disciplineError !== null || discipline === null) {
+      await supabase.from('seasons').delete().eq('id', season.id)
+      throw new EdgeError(`No se pudo crear la disciplina del torneo: ${disciplineError?.message}`)
+    }
+    disciplineRows.push(discipline)
+  }
+
+  const { data: entryRows, error: entriesError } = await supabase
+    .from('entries')
+    .insert(
+      squadNames.map((seat, index) => ({
+        season_id: season.id,
+        display_name: seat.trim(),
+        kind: 'SQUAD' as const,
+        seed_position: index,
+        player_id: index === mySeatIndex ? myPlayerId : null,
+      })),
+    )
+    .select('id, seed_position')
+  if (entriesError !== null || entryRows === null) {
     await supabase.from('seasons').delete().eq('id', season.id)
     throw new EdgeError(
-      entriesError.message.includes('entries_squad_named')
+      entriesError?.message.includes('entries_squad_named') === true
         ? 'Falta un nombre del plantel.'
-        : `No se pudo cargar el plantel: ${entriesError.message}`,
+        : `No se pudo cargar el plantel: ${entriesError?.message}`,
     )
+  }
+
+  // Cada asiento entra a TODAS las disciplinas recién creadas, con el mismo
+  // seed_position que en `entries`. Decisión de este slice (REQ-D1-3/D1-4):
+  // el plantel es compartido a nivel torneo y por default juega todo — no
+  // hay pantalla de "quién juega qué" en este wizard todavía (PR13 la agrega
+  // para sumar una disciplina en curso). `discipline_entries` (PR 7) es la
+  // fuente real del orden; sin este insert, un torneo nuevo nacería con sus
+  // disciplinas vacías aunque `entries` tenga todo el plantel.
+  if (entryRows.length > 0) {
+    const { error: seatsError } = await supabase.from('discipline_entries').insert(
+      disciplineRows.flatMap((discipline) =>
+        entryRows.map((row) => ({
+          discipline_id: discipline.id,
+          entry_id: row.id,
+          season_id: season.id,
+          seed_position: row.seed_position,
+        })),
+      ),
+    )
+    if (seatsError !== null) {
+      await supabase.from('seasons').delete().eq('id', season.id)
+      throw new EdgeError(`No se pudo asignar el plantel a las disciplinas: ${seatsError.message}`)
+    }
   }
 
   return { seasonId: season.id, inviteToken: season.invite_token }
@@ -279,13 +424,18 @@ export async function updateSeasonRules(
   if (error !== null) throw new EdgeError(`No se pudieron guardar las reglas: ${error.message}`)
 }
 
-/** The only writer in this plan: `assertValidConfig` runs before the update lands. */
+/**
+ * The only writer in this plan: `assertValidConfig` runs before the update lands.
+ *
+ * `sideSize` hardcoded at 2: `seasons.config` is the legacy, pre-disciplines
+ * field (dropped at the contract PR) and is always padel-shaped.
+ */
 export async function updateSeasonConfig(
   supabase: Client,
   seasonId: string,
   config: SeasonConfig,
 ): Promise<void> {
-  assertValidConfig(config)
+  assertValidConfig(config, 2)
   const { error } = await supabase
     .from('seasons')
     .update({ config: config as unknown as Json })

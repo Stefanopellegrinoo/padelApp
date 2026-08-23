@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest'
 import { defaultConfig } from '../core/config'
 import type { Database, Json } from './database.types'
 import { adminClient } from './test/admin'
+import { createSeason } from './test/factories'
 import { createTestUser, type TestUser } from './test/users'
 
 // Cliente sin sesión: es el rol `anon` de PostgREST, no un `authenticated` de
@@ -37,6 +38,13 @@ async function createOpenSeason(
     .single()
   if (seasonError || season === null) throw new Error(seasonError?.message)
 
+  const { data: discipline, error: disciplineError } = await db
+    .from('disciplines')
+    .insert({ season_id: season.id, kind: 'PADEL', config: defaultConfig(seatNames.length) as unknown as Json })
+    .select('id')
+    .single()
+  if (disciplineError || discipline === null) throw new Error(disciplineError?.message)
+
   const entryIds: string[] = []
   for (const [index, name] of seatNames.entries()) {
     const { data: entry, error: entryError } = await db
@@ -48,14 +56,37 @@ async function createOpenSeason(
     entryIds.push(entry.id)
   }
 
+  // Cada asiento SQUAD entra también a la disciplina (W8, verify-report ronda
+  // 3): sin esto un asiento de este scaffold queda sin fila en
+  // discipline_entries y `seedAttendances` (que lee discipline_entries desde
+  // PR 8) lo trata como si no jugara nada.
+  if (entryIds.length > 0) {
+    const { error: seatsError } = await db.from('discipline_entries').insert(
+      entryIds.map((entryId, index) => ({
+        discipline_id: discipline.id,
+        entry_id: entryId,
+        season_id: season.id,
+        seed_position: index,
+      })),
+    )
+    if (seatsError) throw new Error(seatsError.message)
+  }
+
   return { seasonId: season.id, token: season.invite_token, entryIds }
 }
 
 async function addGuestEntry(seasonId: string): Promise<string> {
   const db = adminClient()
+  const { data: discipline, error: disciplineError } = await db
+    .from('disciplines')
+    .select('id')
+    .eq('season_id', seasonId)
+    .single()
+  if (disciplineError || discipline === null) throw new Error(disciplineError?.message)
+
   const { data: matchday, error: matchdayError } = await db
     .from('matchdays')
-    .insert({ season_id: seasonId, number: 1 })
+    .insert({ season_id: seasonId, discipline_id: discipline.id, number: 1 })
     .select('id')
     .single()
   if (matchdayError || matchday === null) throw new Error(matchdayError?.message)
@@ -283,5 +314,69 @@ describe('season_invite', () => {
     const { error } = await anonClient().rpc('season_invite', { p_token: 'cualquier-token' })
 
     expect(error?.code).toBe('42501')
+  })
+
+  // PR 9 (0025): `disciplines` sale de discipline_entries, no de `entries`.
+  // `createOpenSeason` (scaffolding de este archivo) no lo llena — sólo le
+  // sirve a claim_seat, que no necesita disciplinas—, así que este caso usa
+  // la factory, que sí las llena desde PR 7.
+  it('devuelve las disciplinas de cada asiento', async () => {
+    const admin = await createTestUser()
+    const { seasonId } = await createSeason({ admin, squad: [admin.playerId] })
+    const db = adminClient()
+    const { data: season, error: seasonError } = await db
+      .from('seasons')
+      .select('invite_token')
+      .eq('id', seasonId)
+      .single()
+    if (seasonError || season === null) throw new Error(seasonError?.message)
+
+    const { data, error } = await admin.client.rpc('season_invite', { p_token: season.invite_token })
+
+    expect(error).toBeNull()
+    expect(data?.[0]?.disciplines).toEqual(['PADEL'])
+  })
+
+  // W10, verify-report ronda 4: el picker seguía ordenando por
+  // `entries.seed_position` (temporada, dual-write tail-only desde PR 7), no
+  // por el orden real de `discipline_entries` (disciplina) — "antes de Juan"
+  // quedaba bien guardado en la base y mal mostrado en la pantalla de Unirse.
+  it('ordena por discipline_entries, no por entries.seed_position: "antes de Juan" aparece antes de Juan', async () => {
+    const admin = await createTestUser()
+    const { seasonId, disciplineIds } = await createSeason({ admin, disciplines: [{ kind: 'PADEL' }] })
+    const [padelId] = disciplineIds
+    if (padelId === undefined) throw new Error('Falta la disciplina.')
+
+    const seat = async (name: string, before?: string): Promise<string> => {
+      const { data, error } = await admin.client.rpc('add_squad_seat', {
+        p_season: seasonId,
+        p_name: name,
+        p_disciplines: [padelId],
+        ...(before === undefined ? {} : { p_before: before }),
+      })
+      if (error !== null || data === null) throw new Error(error?.message)
+      return data
+    }
+
+    const juan = await seat('Juan')
+    const pedro = await seat('Pedro')
+    // "antes de Juan": entries.seed_position sigue siendo tail-only (Nuevo
+    // queda última fila ahí), pero discipline_entries sí lo corre adelante.
+    const nuevo = await seat('Nuevo', juan)
+
+    const db = adminClient()
+    const { data: season, error: seasonError } = await db
+      .from('seasons')
+      .select('invite_token')
+      .eq('id', seasonId)
+      .single()
+    if (seasonError || season === null) throw new Error(seasonError?.message)
+
+    const { data: picker, error: pickerError } = await admin.client.rpc('season_invite', {
+      p_token: season.invite_token,
+    })
+    if (pickerError) throw new Error(pickerError.message)
+
+    expect((picker ?? []).map((row) => row.entry_id)).toEqual([nuevo, juan, pedro])
   })
 })

@@ -9,16 +9,59 @@ interface NavItem {
   isActive: (pathname: string) => boolean
 }
 
-export function TorneoNav({ seasonId }: { seasonId: string }) {
+/**
+ * Segmentos de primer nivel de esta sección que NO son un slug de
+ * disciplina. `kind` sólo puede ser `'padel'`/`'fifa'` (con sufijo `-N`,
+ * `core/discipline-slug.ts`), así que nunca colisiona con ninguno de estos —
+ * alcanza con excluirlos para reconocer la ruta por-disciplina de la Tabla
+ * (PR12b slice 1) sin traer la lista real de disciplinas hasta acá.
+ */
+const NON_DISCIPLINE_SEGMENTS = new Set(['fechas', 'stats', 'reglas', 'ajustes', 'jugador'])
+
+interface TorneoNavProps {
+  seasonId: string
+  /** Disciplina [0] de la temporada — a dónde va "Fechas" cuando la URL actual no trae ninguna (PR13c slice B). */
+  defaultDisciplineSlug: string
+}
+
+export function TorneoNav({ seasonId, defaultDisciplineSlug }: TorneoNavProps) {
   const pathname = usePathname()
   const base = `/torneo/${seasonId}`
 
+  // La disciplina bajo la URL actual, si la hay — mismo criterio que "Tabla"
+  // (abajo) pero sin anclar el final: cubre `${base}/{slug}` Y
+  // `${base}/{slug}/fechas/{n}`. `null` en Tabla global, Ajustes, Stats y
+  // Reglas, donde "Fechas" cae a `defaultDisciplineSlug`.
+  const pathSegment = /^\/([^/]+)/.exec(pathname.slice(base.length))?.[1]
+  const currentDisciplineSlug =
+    pathSegment !== undefined && !NON_DISCIPLINE_SEGMENTS.has(pathSegment) ? pathSegment : null
+
   const items: NavItem[] = [
-    { label: 'Tabla', href: base, isActive: (path) => path === base },
+    {
+      label: 'Tabla',
+      href: base,
+      // La ruta por-disciplina (`${base}/{slug}`) también es la Tabla — ver
+      // NON_DISCIPLINE_SEGMENTS arriba. La raíz (`base`) sigue siendo Tabla
+      // hasta slice 2.
+      isActive: (path) => {
+        if (path === base) return true
+        const match = /^\/([^/]+)$/.exec(path.slice(base.length))
+        const segment = match?.[1]
+        return segment !== undefined && !NON_DISCIPLINE_SEGMENTS.has(segment)
+      },
+    },
     {
       label: 'Fechas',
-      href: `${base}/fechas`,
-      isActive: (path) => path.startsWith(`${base}/fechas`),
+      // PR13c slice B (C12): la lista vive bajo `${base}/{disciplina}/fechas`
+      // desde ahora — a la disciplina de la pantalla actual si hay una, si no
+      // a la [0] de la temporada.
+      href: `${base}/${currentDisciplineSlug ?? defaultDisciplineSlug}/fechas`,
+      // W14 (verify-report ronda 5): la ruta de una fecha lleva la disciplina
+      // en el medio (`${base}/{disciplina}/fechas/{n}`, PR 10) — `startsWith`
+      // ya no la agarra. `includes` sobre lo que sigue de `base` la vuelve a
+      // encender sin abrir la pestaña de otra sección (ninguna `kind` se
+      // llama "fechas").
+      isActive: (path) => path.startsWith(base) && path.slice(base.length).includes('/fechas'),
     },
     { label: 'Stats', href: `${base}/stats`, isActive: (path) => path.startsWith(`${base}/stats`) },
     {

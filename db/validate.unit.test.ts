@@ -19,18 +19,18 @@ function players(count: number): string[] {
 
 describe('assertValidConfig', () => {
   it('lets the default config through', () => {
-    expect(() => assertValidConfig(defaultConfig(8))).not.toThrow()
+    expect(() => assertValidConfig(defaultConfig(8), 2)).not.toThrow()
   })
 
   it('rejects tiebreakSnapshotEvery at 0, which would hang the snapshot chain', () => {
     const config = { ...defaultConfig(8), tiebreakSnapshotEvery: 0 }
-    expect(() => assertValidConfig(config)).toThrow(EdgeError)
+    expect(() => assertValidConfig(config, 2)).toThrow(EdgeError)
   })
 
   it('joins every error into one message', () => {
     const config = { ...defaultConfig(8), tiebreakSnapshotEvery: 0, regularMatchdays: 0 }
     try {
-      assertValidConfig(config)
+      assertValidConfig(config, 2)
       throw new Error('should have thrown')
     } catch (error) {
       expect(error).toBeInstanceOf(EdgeError)
@@ -38,6 +38,27 @@ describe('assertValidConfig', () => {
       expect(message).toContain('El torneo tiene que tener al menos 1 fecha.')
       expect(message).toContain('El orden de desempate se tiene que refrescar cada 1 fecha o más.')
     }
+  })
+
+  // REQ-D2-2 (W24): un plantel impar es válido con sideSize=1 — la paridad
+  // es una regla de la pareja, no del plantel. 9, no 7 como en el GIVEN del
+  // spec: MIN_PLAYERS=8 sigue siendo un piso compartido (PUNTO 3 del
+  // design, afuera de esta tanda), y 7 tropezaría con él sin decir nada
+  // sobre la paridad.
+  //
+  // `points` tiene 9 valores, no 4 (C16, verify-report ronda 9): con
+  // sideSize=1 `expectedPoints` es `squadSize / sideSize`, no siempre
+  // `squadSize / 2` — 9 presentes de a uno son 9 lados. Sigue aislando SÓLO
+  // la paridad: el fixture de antes (4 valores) satisfacía la fórmula
+  // vieja, no la correcta, y esta prueba nunca fue sobre el conteo de
+  // puntos.
+  it('lets an odd squad through when the side is a single', () => {
+    const config = {
+      ...defaultConfig(8),
+      squadSize: 9,
+      points: [10, 9, 8, 7, 6, 5, 4, 3, 2],
+    }
+    expect(() => assertValidConfig(config, 1)).not.toThrow()
   })
 })
 
@@ -114,20 +135,31 @@ describe('matchError', () => {
 })
 
 describe('assertMatchdaySize', () => {
-  it.each([8, 10, 12])('accepts %i', (size) => {
-    expect(() => assertMatchdaySize(players(size))).not.toThrow()
+  it.each([8, 10, 12])('accepts %i on a side of two', (size) => {
+    expect(() => assertMatchdaySize(players(size), 2)).not.toThrow()
   })
 
   it('rejects 6 and says how many are missing', () => {
-    expect(() => assertMatchdaySize(players(6))).toThrow(/hacen falta 2/)
+    expect(() => assertMatchdaySize(players(6), 2)).toThrow(/hacen falta 2/)
   })
 
   it('rejects 14 and says how many are extra', () => {
-    expect(() => assertMatchdaySize(players(14))).toThrow(/sobran 2/)
+    expect(() => assertMatchdaySize(players(14), 2)).toThrow(/sobran 2/)
   })
 
-  it('rejects an odd number', () => {
-    expect(() => assertMatchdaySize(players(9))).toThrow(/de a pares/)
+  it('rejects an odd number on a side of two', () => {
+    expect(() => assertMatchdaySize(players(9), 2)).toThrow(/de a pares/)
+  })
+
+  // REQ-D5-2: FIFA (sideSize=1) con 7 presentes no tiene error de paridad —
+  // cada presente es su propio lado.
+  it('accepts an odd number on a side of one (REQ-D5-2)', () => {
+    expect(() => assertMatchdaySize(players(9), 1)).not.toThrow()
+  })
+
+  it('still enforces the floor/ceiling on a side of one', () => {
+    expect(() => assertMatchdaySize(players(6), 1)).toThrow(/hacen falta 2/)
+    expect(() => assertMatchdaySize(players(14), 1)).toThrow(/sobran 2/)
   })
 })
 
@@ -197,7 +229,7 @@ describe('assertPointsCoverMatchday', () => {
       { entryId: 'g1', displayName: 'G1' },
       { entryId: 'g2', displayName: 'G2' },
     ]
-    expect(() => assertPointsCoverMatchday(present, guests, [], config)).toThrow(EdgeError)
+    expect(() => assertPointsCoverMatchday(present, guests, [], config, 2)).toThrow(EdgeError)
   })
 
   it('does not count the guest-only pair, which is unpaid', () => {
@@ -207,7 +239,7 @@ describe('assertPointsCoverMatchday', () => {
       { entryId: 'g2', displayName: 'G2' },
     ]
     const locks: PairLock[] = [{ a: 'g1', b: 'g2' }]
-    expect(() => assertPointsCoverMatchday(present, guests, locks, config)).not.toThrow()
+    expect(() => assertPointsCoverMatchday(present, guests, locks, config, 2)).not.toThrow()
   })
 
   it('does count a guest paired with a squad player, which is paid', () => {
@@ -217,7 +249,18 @@ describe('assertPointsCoverMatchday', () => {
       { entryId: 'g2', displayName: 'G2' },
     ]
     const locks: PairLock[] = [{ a: 'g1', b: 'p0' }]
-    expect(() => assertPointsCoverMatchday(present, guests, locks, config)).toThrow(EdgeError)
+    expect(() => assertPointsCoverMatchday(present, guests, locks, config, 2)).toThrow(EdgeError)
+  })
+
+  // C16 (verify-report ronda 9): dividía siempre por 2 — con sideSize=1, 10
+  // presentes son 10 lados, no 5, y el guard que existe para avisar "faltan
+  // valores de puntos" ANTES del sorteo quedaba ciego.
+  it('divides by the real side size, not always by 2 (C16)', () => {
+    const tenPoints = { ...config, points: [10, 9, 8, 7, 6, 5, 4, 3, 2, 1] }
+    expect(() => assertPointsCoverMatchday(players(10), [], [], tenPoints, 1)).not.toThrow()
+    expect(() => assertPointsCoverMatchday(players(10), [], [], config, 1)).toThrow(
+      /10 competidores del torneo/,
+    )
   })
 })
 

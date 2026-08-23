@@ -1,0 +1,28 @@
+-- ── S19 (verify-report ronda 6) — (season_id, position) pasa a ser único ────
+-- `disciplines.position` tiene `default 0` (0015) y hasta acá NINGÚN índice
+-- lo protegía de empatar: sólo la escritura lo evitaba (`createSeason`,
+-- contrato S13 desde la auditoría ronda 5), nunca la base. Con el desempate
+-- de la tabla global cayendo en la disciplina `position=0` en caso de empate
+-- de puntos (W18, ronda 6: "puntos globales desc → puntos de la disciplina
+-- [0] desc → seed_position"), un empate de `position` deja de ser
+-- cosmético: decide el podio entero. `addDiscipline` (PR 13, db/discipline.ts)
+-- es la primera función que inserta una disciplina en un torneo YA
+-- EXISTENTE — el primer punto donde tomar el default en vez de calcular
+-- `max(position)+1` sería alcanzable desde producción, no sólo desde un test.
+--
+-- Reemplaza a `disciplines_by_season` (0015), que ya ordenaba por estas
+-- mismas dos columnas sin garantizar unicidad: mismo índice, ahora único, sin
+-- dejar uno redundante al lado. `create_masters` (0021) no depende de él para
+-- corrección — ya resuelve con `order by position, created_at limit 1`
+-- explícito — así que el drop no reabre ese bug.
+--
+-- Precheck contra los datos reales (verificado, no asumido, antes de escribir
+-- esto): CERO temporadas con dos disciplinas compartiendo `position` hoy, ni
+-- en el seed local ni en la forma que puede tener PnP-1000 en producción. Las
+-- únicas dos fuentes de filas de `disciplines` son el backfill de 0015 (una
+-- PADEL por temporada, `position=0`, no puede chocar consigo misma) y
+-- `createSeason` (db/season.ts), que desde S13 escribe `position: index`
+-- explícito y distinto por cada disciplina del array que crea. Sin fila que
+-- el `create unique index` de abajo tenga que rechazar.
+drop index public.disciplines_by_season;
+create unique index disciplines_season_position on public.disciplines (season_id, position);

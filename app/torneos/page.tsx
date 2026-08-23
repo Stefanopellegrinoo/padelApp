@@ -1,13 +1,13 @@
 import Link from 'next/link'
-import { computeRanking, snapshotForMatchday, type EntryId } from '@/core'
+import { computeGlobalRanking, computeRanking, type DisciplineRanking } from '@/core'
 import type { Client } from '@/db/client'
 import {
-  awardsOf,
-  entriesOf,
-  matchdaysOf,
   myEntryId,
   mySeasons,
   playerNames,
+  seasonAwardsOf,
+  seasonMatchdaysOf,
+  seasonSquadOf,
   type SeasonHeader,
 } from '@/db/read'
 import { serverClient } from '@/db/server'
@@ -41,46 +41,66 @@ interface SeasonCard {
 }
 
 /**
- * Se compone acá y no en `db/read.ts` a propósito.
+ * Se compone acá y no en `db/read.ts` a propósito (Plan 3: una función de
+ * datos con forma de pantalla es la que después le falta algo).
  *
- * La lección del Plan 3 fue que una función de datos con forma de pantalla es
- * la que después le falta justo lo que la siguiente pantalla necesita. Esto son
- * cuatro lecturas que ya existen, compuestas para este caso.
+ * "Mi posición" es la de la TABLA GLOBAL (REQ-D9-1/2): suma, por persona, los
+ * puntos de cada disciplina × su `weight` — con una sola disciplina y
+ * `weight=1` (el caso de hoy) da lo mismo que antes. Por eso lee
+ * `seasonSquadOf`/`seasonAwardsOf` (temporada entera) y no `entriesOf`/
+ * `awardsOf` (una disciplina puntual): la global necesita el plantel y los
+ * premios de CADA disciplina para sumarlos ponderados.
  *
- * ponytail: cuatro consultas por temporada. Con las 1 a 3 temporadas que tiene
- * cualquiera de este grupo es gratis; si alguien llegara a veinte, acá hay que
- * mirar.
+ * ponytail: sin criterio de desempate propio — `computeRanking` corre con
+ * snapshot vacío, sólo importa `.points`, nunca el orden. Alcanza mientras
+ * nadie necesite ver POR QUÉ empatan dos personas en la global.
+ *
+ * Consultas por temporada, REMEDIDAS con `pg_stat_statements` (misma técnica
+ * que S10, verify-report ronda 4) contra un escenario con una fecha cerrada
+ * real: **10 antes** (S10 midió 9 sin ninguna CLOSED — `awardsOf` corta antes
+ * de su 3ª consulta cuando no hay ninguna) → **5 después**. Sin fan-out por
+ * disciplina: las dos lecturas de temporada entera traen TODAS en una sola
+ * consulta cada una — mejora, y no crece con la cantidad de disciplinas.
  */
 async function cardFor(supabase: Client, header: SeasonHeader): Promise<SeasonCard> {
-  const [entries, matchdays, awardsByMatchday, viewerEntryId] = await Promise.all([
-    entriesOf(supabase, header.id),
-    matchdaysOf(supabase, header.id),
-    awardsOf(supabase, header.id),
+  const [squad, matchdays, viewerEntryId] = await Promise.all([
+    seasonSquadOf(supabase, header.id),
+    seasonMatchdaysOf(supabase, header.id),
     myEntryId(supabase, header.id),
   ])
+  const seasonAwards = await seasonAwardsOf(supabase, matchdays)
 
-  const seedOrder: EntryId[] = entries
-    .filter((entry) => entry.kind === 'SQUAD')
-    .sort((left, right) => left.seedPosition - right.seedPosition)
-    .map((entry) => entry.id)
+  const perDiscipline: DisciplineRanking[] = header.disciplines.map((discipline) => ({
+    weight: discipline.weight,
+    ranking: computeRanking(seasonAwards.get(discipline.id) ?? new Map(), squad, discipline.config, []),
+  }))
+  const ranking = computeGlobalRanking(perDiscipline)
 
-  const closedCount = matchdays.filter(
+  // Antes de que cierre la primera fecha de CUALQUIER disciplina, todos están
+  // en cero: mismo criterio que la Tabla de una disciplina — no mostrar un
+  // "1°" que no dice nada todavía.
+  const anyClosed = matchdays.some(
     (matchday) => matchday.kind === 'REGULAR' && matchday.status === 'CLOSED',
-  ).length
-  const activeNumber = Math.min(closedCount + 1, header.regularMatchdays)
-  const snapshot = snapshotForMatchday(activeNumber, seedOrder, awardsByMatchday, header.config)
-  const ranking = computeRanking(awardsByMatchday, seedOrder, header.config, snapshot)
-
+  )
   const index = ranking.findIndex((row) => row.entryId === viewerEntryId)
-  const live = matchdays.find((matchday) => matchday.status !== 'CLOSED') ?? null
+
+  // "Próxima fecha" queda igual que antes (de la disciplina primaria): con
+  // más de una disciplina puede haber más de una fecha viva a la vez
+  // (REQ-D3-1) y elegir CUÁL mostrar acá es una decisión de UI que REQ-D9 no
+  // pide — fuera del corte de esta PR.
+  const primaryDisciplineId = header.disciplines[0]?.id
+  const live =
+    matchdays.find(
+      (matchday) => matchday.disciplineId === primaryDisciplineId && matchday.status !== 'CLOSED',
+    ) ?? null
 
   return {
     id: header.id,
     name: header.name,
     status: header.status,
     estado: ESTADO[header.status] ?? '',
-    position: closedCount === 0 || index < 0 ? null : index + 1,
-    squadSize: seedOrder.length,
+    position: !anyClosed || index < 0 ? null : index + 1,
+    squadSize: squad.length,
     nextMatchday: live?.playedOn ?? null,
   }
 }

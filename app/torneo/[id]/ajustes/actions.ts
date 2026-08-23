@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import type { DisciplineId, SeasonConfig, SideSize } from '@/core'
 import { type DisciplineKind, newDisciplineSpec } from '@/app/torneos/nuevo/wizard-state'
-import { addDiscipline, updateDisciplineConfig } from '@/db/discipline'
+import { addDiscipline, updateDisciplineConfig, updateDisciplineHasMasters } from '@/db/discipline'
 import { addSquadSeat, claimOwnSeat, removeSeat, renameSeat, unlinkSeat } from '@/db/entries'
 import { EdgeError } from '@/db/errors'
 import { deleteSeason, renameSeason, updateSeasonRules } from '@/db/season'
@@ -135,6 +135,23 @@ export async function saveConfig(
 ): Promise<WriteResult> {
   return onSeason(seasonId, async (supabase) => {
     await updateDisciplineConfig(supabase, disciplineId, config)
+  })
+}
+
+/**
+ * Decisión #4029, parte 2: el organizador puede cambiar `has_masters` desde
+ * Ajustes. El guard de la parte 3 (no encender en una disciplina de a uno)
+ * corre adentro de `updateDisciplineHasMasters` y también en la base
+ * (`disciplines_has_masters_needs_pair`, 0053) — acá sólo se muestra el
+ * mensaje.
+ */
+export async function saveHasMasters(
+  seasonId: string,
+  disciplineId: DisciplineId,
+  hasMasters: boolean,
+): Promise<WriteResult> {
+  return onSeason(seasonId, async (supabase) => {
+    await updateDisciplineHasMasters(supabase, disciplineId, hasMasters)
   })
 }
 

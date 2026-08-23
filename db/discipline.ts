@@ -136,6 +136,50 @@ export async function updateDisciplineConfig(
   }
 }
 
+/**
+ * El único escritor de `disciplines.has_masters` DESPUÉS de creada la
+ * disciplina — decisión #4029, parte 2 ("editable en Ajustes"). La parte 1
+ * (automático al crear, por `pair_size`) vive en `addDiscipline` y
+ * `createSeason` (`db/season.ts`); ésta es la que mueve el valor cuando el
+ * organizador lo cambia después.
+ *
+ * El guard de la parte 3 (no se puede ENCENDER el Masters en una disciplina
+ * de a uno — `generateMastersPairs`, `db/matchday.ts:985`, rechaza siempre
+ * `pair_size=1`) vive ACÁ y TAMBIÉN en la base
+ * (`disciplines_has_masters_needs_pair`, 0053): `grant update (..., has_masters,
+ * ...)` (`0015_disciplines.sql:70`) es de COLUMNA, no de función, así que un
+ * `PATCH` directo a `disciplines` saltea este `if` entero (#3989 — guards en
+ * serie, el de atrás sin test propio si nadie lo mira). Este `if` sólo da un
+ * mensaje legible antes de llegar al CHECK; el CHECK es el que de verdad no
+ * se puede esquivar.
+ *
+ * Apagar el Masters de una disciplina de a uno es SIEMPRE legal (ya nace
+ * así, decisión #4029 parte 1) — el guard sólo mira `hasMasters === true`,
+ * nunca bloquea apagarlo.
+ */
+export async function updateDisciplineHasMasters(
+  supabase: Client,
+  disciplineId: DisciplineId,
+  hasMasters: boolean,
+): Promise<void> {
+  if (hasMasters) {
+    const { pairSize } = await disciplineConfig(supabase, disciplineId)
+    if (pairSize === 1) {
+      throw new EdgeError('El Masters se juega de a parejas: una disciplina de a uno no lo puede encender.')
+    }
+  }
+  const { error, count } = await supabase
+    .from('disciplines')
+    .update({ has_masters: hasMasters }, { count: 'exact' })
+    .eq('id', disciplineId)
+  if (error) {
+    throw new EdgeError(`No se pudo actualizar el Masters de la disciplina: ${error.message}`)
+  }
+  if (count === 0) {
+    throw new EdgeError('No se pudo guardar el Masters: sólo puede hacerlo quien organiza.')
+  }
+}
+
 /** Una disciplina a agregar a un torneo ya en curso — `addDiscipline`, no el wizard. */
 export interface NewDiscipline {
   kind?: 'PADEL' | 'FIFA'
@@ -198,6 +242,12 @@ export async function addDiscipline(
       position: (maxRow?.position ?? -1) + 1,
       pair_size: spec.pairSize ?? 2,
       allows_draw: spec.allowsDraw ?? false,
+      // Decisión #4029, parte 1: de a uno nace SIN Masters -- `openMatchday`
+      // (`db/matchday.ts:985`) rechaza siempre una fecha MASTERS con
+      // `pair_size=1`, así que ofrecer el check encendido ahí sería ofrecer
+      // algo que la app ya rechaza. De a dos sigue naciendo en `true`, el
+      // default de siempre (`0015_disciplines.sql:21`).
+      has_masters: (spec.pairSize ?? 2) !== 1,
     })
     .select('id')
     .single()

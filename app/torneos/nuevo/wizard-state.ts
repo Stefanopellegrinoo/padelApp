@@ -329,6 +329,22 @@ export function submitSeats({ names, mySeat }: Squad): {
  * devuelve como legado) sigue siendo SIEMPRE la curva de a dos (C29): el
  * paso 4 ya no tiene un control que la cambie, ahora que "Lados" bajó al
  * paso 1.
+ *
+ * W83 (verify-report-pre-contract, #4026): con UNA sola disciplina marcada,
+ * `pairSize !== 2` pisaba `points` SIEMPRE con el default de la decisión
+ * #3963, sin mirar si `config` ya traía la curva editada a mano —
+ * `changePairSize` (`wizard.tsx`) dejó de rehacer `config` cuando se cerró
+ * W76, así que no había ninguna forma de configurar la tabla de puntos de un
+ * 1v1 en el wizard. `soleCurveMatches` es lo que confía en la edición: sólo
+ * cuando queda UNA disciplina Y el LARGO de lo que trae `builtConfig.points`
+ * ya es el que le corresponde a esa disciplina (`configForPairSizeChange`,
+ * en `wizard.tsx`, es quien deja a `config` en esa forma apenas cambia
+ * "Lados"). El chequeo de largo, y no `picked.length === 1` a secas, es el
+ * que evita reabrir la MISMA familia por otra puerta: si el admin marcó dos
+ * disciplinas y después destildó una sin volver a tocar "Lados", `config`
+ * puede quedar con la forma legado (de a dos) mientras la única disciplina
+ * que sobrevive es de a uno — sin el chequeo de largo eso guardaría un
+ * `points` de largo inválido en vez del default seguro.
  */
 export function newTournamentPayload(
   name: string,
@@ -353,8 +369,12 @@ export function newTournamentPayload(
     config: builtConfig,
     disciplines: picked.flatMap((kind) => {
       const pairSize = pairSizes[kind]
+      const soleCurveMatches =
+        picked.length === 1 && builtConfig.points.length === configFor(squadSize, pairSize).points.length
       const disciplineConfig: SeasonConfig =
-        pairSize === 2 ? builtConfig : { ...builtConfig, points: configFor(squadSize, pairSize).points }
+        pairSize === 2 || soleCurveMatches
+          ? builtConfig
+          : { ...builtConfig, points: configFor(squadSize, pairSize).points }
       return buildDisciplines([kind], disciplineConfig, pairSize)
     }),
   }
@@ -370,11 +390,16 @@ export function newTournamentPayload(
  * seed y por todos los tests contra la base. Un wizard que produjera otros
  * defaults haría que ninguna captura de pantalla coincida con ningún fixture.
  *
- * `sideSize` es opcional y se lo pasa tal cual a `defaultConfig` —antes se
- * dejaba caer acá, y con `sideSize=1` la curva de puntos salía la de parejas
- * en vez de la de la decisión #3963 (S75, cerrado en Rebanada E).
+ * `sideSize` es OBLIGATORIO (lección #3994, cerrada acá tras W69 → W76 →
+ * W83): era opcional y caía en silencio a la curva de parejas — el mismo
+ * default que "el caso feliz" (pádel) necesita, así que ningún call site
+ * que se olvidara de pasarlo se veía roto en ese caso, y sólo se notaba con
+ * una disciplina de a uno (S75, y de nuevo en `wizard.tsx` tres veces:
+ * `configSideSize`, acá abajo). Con el parámetro obligatorio, olvidarlo es
+ * un error de `tsc` en cada call site — el compilador los señala a todos,
+ * no sólo al que un verify-report mida esta vez.
  */
-export function configFor(squadSize: number, sideSize?: SideSize): SeasonConfig {
+export function configFor(squadSize: number, sideSize: SideSize): SeasonConfig {
   return defaultConfig(squadSize, sideSize)
 }
 
@@ -383,12 +408,69 @@ export function configFor(squadSize: number, sideSize?: SideSize): SeasonConfig 
  * admin hubiera tocado. No es una pérdida: con otro plantel hace falta otra
  * cantidad de valores, y una lista de 4 en un plantel de 12 es inválida.
  *
- * `sideSize` viaja igual que en `configFor` (mismo cierre de S75): sin
- * pasarlo, la curva que sale es la de parejas.
+ * `sideSize` viaja igual que en `configFor`, y por la misma razón: OBLIGATORIO
+ * (#3994) desde que dejar de pasarlo daba la curva de parejas en silencio.
  */
-export function resizeConfig(config: SeasonConfig, squadSize: number, sideSize?: SideSize): SeasonConfig {
+export function resizeConfig(config: SeasonConfig, squadSize: number, sideSize: SideSize): SeasonConfig {
   if (config.squadSize === squadSize) return config
   return { ...config, squadSize, points: configFor(squadSize, sideSize).points }
+}
+
+/**
+ * El `sideSize` que le corresponde a `config` — la curva compartida del
+ * paso 4, C29 — en el estado ACTUAL del wizard (disciplinas marcadas +
+ * lados elegidos), sin que haya cambiado nada todavía.
+ *
+ * Nace de la corrección #4030 sobre W83: al volver `sideSize` obligatorio en
+ * `configFor`/`resizeConfig` (#3994), el compilador marcó TRES call sites en
+ * `wizard.tsx` que hasta entonces dejaban que `sideSize` cayera a `undefined`
+ * (parejas) en silencio — el estado inicial de `config`, `setSquad`
+ * (agrandar/achicar el plantel) y "Usar los defaults". Los tres necesitan
+ * la MISMA pregunta ("¿qué representa `config` ahora mismo?"), así que viven
+ * de esta única función y no de tres respuestas escritas a mano.
+ *
+ * Misma regla que `configForPairSizeChange`, que resuelve la pregunta
+ * hermana ("¿qué pasa a representar `config` cuando ESO cambia"): sin
+ * ambigüedad (UNA sola disciplina marcada) es SU `pairSize`; con 2+ sigue
+ * siendo la curva legado de a dos (C29) — nadie más la mueve.
+ */
+export function configSideSize(
+  picked: readonly DisciplineKind[],
+  pairSizes: Record<DisciplineKind, SideSize>,
+): SideSize {
+  return picked.length === 1 ? pairSizes[picked[0]!] : 2
+}
+
+/**
+ * El `config` que corresponde cuando el admin toca "Lados" para `kind`, o el
+ * mismo `config` sin tocar si tocar ese radio no cambia nada de lo que se
+ * edita en pantalla.
+ *
+ * Cierra W83 (verify-report-pre-contract, #4026), la TERCERA vez de la
+ * familia W69 → W76 → W83: las tres son la pantalla prometiendo una curva
+ * que la base no guarda, y las dos últimas las abrió el arreglo de la
+ * anterior. Antes de `fe44255` (el fix de W76/#4017), con `picked.length ===
+ * 1` cambiar "Lados" SÍ rehacía `config` (`setConfig(configFor(filled,
+ * next))` vivía en `wizard.tsx`), así que el paso 4 mostraba la curva de la
+ * ÚNICA disciplina marcada y lo que el admin editaba ahí era, literal, lo
+ * que esa disciplina iba a guardar. El fix de W76 sacó esa rehecha ENTERA
+ * —correcto para 2+ disciplinas, donde `config` tiene que quedarse siendo la
+ * curva legado de a dos (C29) sin que ningún radio la mueva— pero se llevó
+ * puesto el caso de UNA sola disciplina, que no tenía la ambigüedad que W76
+ * vino a resolver.
+ *
+ * La condición es la misma que la causa: `config` sólo puede representar SIN
+ * AMBIGÜEDAD la curva de una disciplina puntual cuando hay UNA sola marcada.
+ * Con 2+, sigue siendo la curva legado — tocar "Lados" ahí no la mueve, que
+ * es lo que #4017 arregló y no hay que volver a romper.
+ */
+export function configForPairSizeChange(
+  config: SeasonConfig,
+  squadSize: number,
+  picked: readonly DisciplineKind[],
+  next: SideSize,
+): SeasonConfig {
+  return picked.length === 1 ? configFor(squadSize, next) : config
 }
 
 /**

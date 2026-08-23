@@ -40,7 +40,16 @@ create policy award_lines_read on public.award_lines
 
 -- Nadie escribe acá directo: sólo `close_matchday` (más abajo), que corre
 -- `security definer` con el rol dueño de la función y no necesita el grant
--- de arriba para insertar. `authenticated` se queda con SELECT nada más.
+-- de arriba para insertar. CORRECCIÓN (S92, verify-report-pre-contract
+-- #4026): este comentario decía que `authenticated` se quedaba con SELECT
+-- nada más -- el catálogo real (`information_schema.role_table_grants`)
+-- dice `REFERENCES, SELECT, TRIGGER, TRUNCATE`: las default privileges de
+-- Supabase alcanzan a toda tabla nueva de `public` (mismo gotcha que arriba,
+-- N60), y este `revoke` sólo saca `insert, update, delete`. `anon` sí queda
+-- en cero (el `revoke all` de la línea 35 alcanza). Ninguno de los cuatro es
+-- alcanzable por PostgREST (que sólo habla DML) y no es accionable hoy --
+-- pero el comentario tiene que decir lo que el catálogo dice, no lo que
+-- costaría corregir.
 revoke insert, update, delete on public.award_lines from authenticated, anon;
 
 -- ── close_matchday (restatement de 0044_close_matchday_third_place_scoped_to_bracket.sql) ─

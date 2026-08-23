@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { describe, expect, it } from 'vitest'
-import { defaultConfig, members, type SeasonConfig } from '@/core'
+import { defaultConfig, members, type DisciplineId, type SeasonConfig } from '@/core'
 import {
   addGuest,
   cancelMatchday,
@@ -42,11 +42,11 @@ async function fillerPlayers(count: number): Promise<string[]> {
 async function buildSeasonWithSquad(
   config: SeasonConfig,
   squadSize: number,
-): Promise<{ admin: TestUser; seasonId: string; squad: string[] }> {
+): Promise<{ admin: TestUser; seasonId: string; disciplineId: DisciplineId; squad: string[] }> {
   const admin = await createTestUser()
   const players = await fillerPlayers(squadSize)
-  const { seasonId, entryIds } = await createSeason({ admin, config, squad: players })
-  return { admin, seasonId, squad: entryIds }
+  const { seasonId, disciplineId, entryIds } = await createSeason({ admin, config, squad: players })
+  return { admin, seasonId, disciplineId, squad: entryIds }
 }
 
 async function markAllPlaying(admin: TestUser, matchdayId: string, entryIds: string[]): Promise<void> {
@@ -125,9 +125,16 @@ async function entryExists(entryId: string): Promise<boolean> {
   return data !== null
 }
 
-async function seasonStatus(seasonId: string): Promise<string> {
+// `seasons.status` ya no tiene escritor de producción (bloqueante #2 del
+// contract, db/season-status-writers.db.test.ts): el trinquete real vive en
+// `disciplines.status`, y es lo que este archivo lee desde acá en adelante.
+async function disciplineStatus(disciplineId: DisciplineId): Promise<string> {
   const db = adminClient()
-  const { data, error } = await db.from('seasons').select('status').eq('id', seasonId).single()
+  const { data, error } = await db
+    .from('disciplines')
+    .select('status')
+    .eq('id', disciplineId)
+    .single()
   if (error || data === null) throw new Error(error?.message)
   return data.status
 }
@@ -382,19 +389,20 @@ describe('cancelMatchday', () => {
     expect(await matchesOf(matchdayId)).toHaveLength(0)
   })
 
-  // El trinquete `SETUP → ACTIVE` de `open_matchday` (0005:37) al revés. Sin
-  // esto la temporada se queda ACTIVE con cero fechas, y "En curso" en Mis
-  // torneos (`app/torneos/page.tsx:27`) para algo que no empezó.
-  it('borrar la única fecha devuelve la temporada a SETUP y el número 1 vuelve a quedar libre', async () => {
-    const { admin, seasonId, squad } = await buildSeasonWithSquad(defaultConfig(8), 8)
+  // El trinquete `SETUP → ACTIVE` de `open_matchday` (0055, live) al revés,
+  // a nivel disciplina — `seasons.status` ya no se mueve (bloqueante #2 del
+  // contract). Sin esto la disciplina se queda ACTIVE con cero fechas, y "En
+  // curso" en Mis torneos (`app/torneos/page.tsx`) para algo que no empezó.
+  it('borrar la única fecha devuelve la disciplina a SETUP y el número 1 vuelve a quedar libre', async () => {
+    const { admin, seasonId, disciplineId, squad } = await buildSeasonWithSquad(defaultConfig(8), 8)
     const matchdayId = await openMatchdayIn(admin, seasonId, squad, '2026-08-10')
     // Confirmar la primera fecha es lo que la mueve a ACTIVE. Sin esta línea el
     // test pasaría por vacuidad si algún día dejara de moverla.
-    expect(await seasonStatus(seasonId)).toBe('ACTIVE')
+    expect(await disciplineStatus(disciplineId)).toBe('ACTIVE')
 
     await cancelMatchday(admin.client, matchdayId)
 
-    expect(await seasonStatus(seasonId)).toBe('SETUP')
+    expect(await disciplineStatus(disciplineId)).toBe('SETUP')
     expect(await matchdayRowsOf(seasonId)).toHaveLength(0)
 
     // `createMatchday` numera con `max(number) + 1`, así que sin fechas vuelve a
@@ -413,7 +421,7 @@ describe('cancelMatchday', () => {
   })
 
   it('cancelar una fecha no toca ninguna otra fecha de la temporada ni el plantel', async () => {
-    const { admin, seasonId, squad } = await buildSeasonWithSquad(defaultConfig(8), 8)
+    const { admin, seasonId, disciplineId, squad } = await buildSeasonWithSquad(defaultConfig(8), 8)
     const closedId = await closedMatchdayIn(admin, seasonId, squad, '2026-08-10')
     const awardsBefore = await awardsOf(closedId)
     const squadBefore = await squadEntriesOf(seasonId)
@@ -427,10 +435,10 @@ describe('cancelMatchday', () => {
     expect(await matchdayStatus(closedId)).toBe('CLOSED')
     expect(await awardsOf(closedId)).toEqual(awardsBefore)
     expect(await squadEntriesOf(seasonId)).toEqual(squadBefore)
-    // Y la temporada NO vuelve a SETUP: la reversión del trinquete es sólo para
-    // cuando no quedó ninguna fecha. Con una jugada encima, "sin empezar" sería
-    // mentira.
-    expect(await seasonStatus(seasonId)).toBe('ACTIVE')
+    // Y la disciplina NO vuelve a SETUP: la reversión del trinquete es sólo
+    // para cuando no quedó ninguna fecha. Con una jugada encima, "sin
+    // empezar" sería mentira.
+    expect(await disciplineStatus(disciplineId)).toBe('ACTIVE')
   })
 
   it('un jugador del plantel, sin ser el admin, recibe "sólo quien organiza" y no mueve nada', async () => {
@@ -481,15 +489,15 @@ describe('cancelMatchday', () => {
   // El escenario es el que describe el comentario de la migración: la fila
   // desaparece ENTRE `matchday_season` —que ya devolvió la temporada— y el
   // `select … for update`. Con el deny-list, `null = 'CLOSED'` da null, ninguna
-  // rama dispara, el delete borra 0 filas, el `update seasons` la devuelve a
-  // SETUP y la función **contesta éxito**: la pantalla redirige a una temporada
-  // que ya no existe. Con la lista blanca, refusa y no toca nada.
+  // rama dispara, el delete borra 0 filas, el `update disciplines` la devuelve
+  // a SETUP y la función **contesta éxito**: la pantalla redirige a una
+  // temporada que ya no existe. Con la lista blanca, refusa y no toca nada.
   it('la fecha que desaparece entre la lectura y la traba se REFUSA, no devuelve éxito con cero filas borradas', async () => {
-    const { admin, seasonId, squad } = await buildSeasonWithSquad(defaultConfig(8), 8)
+    const { admin, seasonId, disciplineId, squad } = await buildSeasonWithSquad(defaultConfig(8), 8)
     const matchdayId = await openMatchdayIn(admin, seasonId, squad, '2026-08-10')
-    // Confirmar la primera fecha es lo que mueve la temporada a ACTIVE, y eso
+    // Confirmar la primera fecha es lo que mueve la disciplina a ACTIVE, y eso
     // es la mitad de la aserción de abajo.
-    expect(await seasonStatus(seasonId)).toBe('ACTIVE')
+    expect(await disciplineStatus(disciplineId)).toBe('ACTIVE')
 
     // Sesión B: traba la FILA de la fecha, espera a que la sesión A quede
     // encolada detrás de esa traba, y recién ahí la borra. Los tres statements
@@ -527,8 +535,8 @@ describe('cancelMatchday', () => {
     expect(queuedBehindTheLock).toBe(true)
     expect(error?.message).toBe('La fecha no existe.')
     // El `raise` deshace la función entera, así que el trinquete de la
-    // temporada tampoco se movió. Es la segunda mitad de la mutación: con el
-    // deny-list la temporada vuelve a SETUP sin que nadie se lo pida.
-    expect(await seasonStatus(seasonId)).toBe('ACTIVE')
+    // disciplina tampoco se movió. Es la segunda mitad de la mutación: con el
+    // deny-list la disciplina vuelve a SETUP sin que nadie se lo pida.
+    expect(await disciplineStatus(disciplineId)).toBe('ACTIVE')
   })
 })

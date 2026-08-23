@@ -58,12 +58,14 @@ async function markAllPlaying(admin: TestUser, matchdayId: string, entryIds: str
 /**
  * Una fecha en DRAFT con `count` presentes confirmados y lados de tamaño
  * `pairSize` — lo que necesita el guard de W78 (abajo) para saber "cuántos
- * lados hay hoy" sin adivinar. `sides = count / pairSize`.
+ * lados hay hoy" sin adivinar. `sides = count / pairSize`. `entryIds` sale
+ * también (W84, abajo: hace falta para bajar la asistencia DESPUÉS de
+ * elegir formato — los seis call sites viejos lo ignoran sin romperse).
  */
 async function draftMatchdayWithSides(
   count: number,
   pairSize: 1 | 2,
-): Promise<{ admin: TestUser; matchdayId: string }> {
+): Promise<{ admin: TestUser; matchdayId: string; entryIds: string[] }> {
   const admin = await createTestUser()
   const players = await fillerPlayers(count)
   const { seasonId, entryIds } = await createSeason({
@@ -74,7 +76,7 @@ async function draftMatchdayWithSides(
   })
   const matchdayId = await createMatchday(admin.client, seasonId, '2026-03-05')
   await markAllPlaying(admin, matchdayId, entryIds)
-  return { admin, matchdayId }
+  return { admin, matchdayId, entryIds }
 }
 
 /**
@@ -283,6 +285,73 @@ describe('setMatchdayFormat — el groups elegido tiene que ser OFRECIBLE para l
     const { data, error } = await db.from('matchdays').select('formato').eq('id', matchdayId).single()
     if (error || data === null) throw new Error(error?.message)
     expect(data.formato).toEqual({ kind: 'ROUND_ROBIN' })
+  })
+})
+
+/**
+ * W84 (verify-report-pre-contract #4026): el guard de W78 (arriba) es de
+ * MOMENTO DE ESCRITURA — valida `offerableFormats(sides)` contra los
+ * presentes de CUANDO SE ELIGE el formato, y nada revalida si esos
+ * presentes cambian DESPUÉS. Medido en el reporte: FIFA de 12 acepta
+ * "4 grupos" (offerableFormats(12) los ofrece), después bajan 4 ausentes
+ * (quedan 8 presentes), y `generatePairs` armaba igual 4 grupos de 2 —
+ * tasa de eliminación CERO, textual lo que la decisión #4014 excluye
+ * "SIEMPRE, sin excepción".
+ *
+ * Dónde revalidar, y por qué ACÁ: `generatePairs` ("armar"), no
+ * `openMatchday` ni `closeMatchday`. Es el momento en que la app YA sabe
+ * cuántos lados hay DE VERDAD — recién leyó `attendances` + invitados vía
+ * `pairingContextFor`, la MISMA cuenta que ya usa `setMatchdayFormat` — y es
+ * ANTES de `deletePairs`/`insertPairs`, así que un rechazo acá no deja la
+ * fecha a medio armar (`generatePairs` no corre en una transacción, S69).
+ */
+describe('generatePairs — el groups elegido tiene que seguir siendo OFRECIBLE con los presentes de HOY (W84)', () => {
+  it('rechaza armar 4 grupos si bajar la asistencia los volvió NO ofrecibles', async () => {
+    const { admin, matchdayId, entryIds } = await draftMatchdayWithSides(12, 1)
+    await setMatchdayFormat(admin.client, matchdayId, { kind: 'GROUPS_KNOCKOUT', groups: 4, qualifiersPerGroup: 2 })
+
+    // Bajan 4: quedan 8 presentes. offerableFormats(8) no ofrece 4 grupos
+    // (grupos de 2, eliminación cero — decisión #4014).
+    for (const entryId of entryIds.slice(0, 4)) {
+      await setAttendance(admin.client, matchdayId, entryId, 'ABSENT')
+    }
+
+    await expect(generatePairs(admin.client, matchdayId)).rejects.toThrow(/8 lados/)
+
+    // Y no arma nada a medias: rechazar ANTES de deletePairs/insertPairs deja
+    // la fecha sin parejas, no a medio armar.
+    const db = adminClient()
+    const { data: pairs } = await db.from('pairs').select('id').eq('matchday_id', matchdayId)
+    expect(pairs).toEqual([])
+  })
+
+  it('no-regresión: sigue armando cuando el formato SIGUE siendo ofrecible tras bajar la asistencia', async () => {
+    const { admin, matchdayId, entryIds } = await draftMatchdayWithSides(12, 1)
+    await setMatchdayFormat(admin.client, matchdayId, { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 })
+
+    // Bajan 2: quedan 10 presentes. offerableFormats(10) sigue ofreciendo 2 grupos.
+    for (const entryId of entryIds.slice(0, 2)) {
+      await setAttendance(admin.client, matchdayId, entryId, 'ABSENT')
+    }
+
+    await expect(generatePairs(admin.client, matchdayId)).resolves.toBeUndefined()
+
+    const db = adminClient()
+    const { data: pairs, error } = await db.from('pairs').select('id').eq('matchday_id', matchdayId)
+    if (error) throw new Error(error.message)
+    expect(pairs).toHaveLength(10)
+  })
+
+  it('no-regresión: ROUND_ROBIN arma igual sin importar cuánto baje la asistencia', async () => {
+    const { admin, matchdayId, entryIds } = await draftMatchdayWithSides(12, 2) // 6 lados
+
+    // Bajan 2 (MIN_PLAYERS=8 sigue satisfecho: quedan 10 presentes, 5 lados).
+    // El guard nuevo sólo mira GROUPS_KNOCKOUT — ROUND_ROBIN no lo dispara.
+    for (const entryId of entryIds.slice(0, 2)) {
+      await setAttendance(admin.client, matchdayId, entryId, 'ABSENT')
+    }
+
+    await expect(generatePairs(admin.client, matchdayId)).resolves.toBeUndefined()
   })
 })
 

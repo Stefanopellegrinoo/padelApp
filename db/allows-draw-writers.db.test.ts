@@ -226,11 +226,24 @@ describe('la cadena de allows_draw contra los escritores de producción (W61, RE
     expect(data).toEqual({ allows_draw: true, pair_size: 2, kind: 'MASTERS' })
   })
 
-  //La MISMA línea de insert
-  // de `create_masters` tampoco escribe `pair_size`, así que sobre una
-  // disciplina de a uno muere con `matchdays_discipline_size` desde `0028`.
-  // Dos cadenas rotas en el mismo insert; se cierran juntas.
-  it('create_masters escribe pair_size de su disciplina', async () => {
+  /**
+   * Este test probaba que la MISMA línea de insert de `create_masters`
+   * escribe bien `pair_size` en la fila del Masters de una disciplina de a
+   * uno (si no, moría contra `matchdays_discipline_size`, 0028).
+   *
+   * Decisión #4029, parte 3: ese escenario dejó de ser ALCANZABLE. Una
+   * disciplina de a uno NUNCA tiene `has_masters=true` -- ni por default
+   * (parte 1), ni editable a mano (el guard de `updateDisciplineHasMasters`,
+   * parte 2), ni por un `PATCH`/`INSERT` directo (el CHECK
+   * `disciplines_has_masters_needs_pair`, 0053, parte 3) -- así que
+   * `create_masters` rechaza SIEMPRE en el guard de C34 (`0050`), un paso
+   * ANTES de llegar a la línea que este test venía a ejercitar. Ese guard ya
+   * tiene su propio test directo (`db/masters.db.test.ts`, "create_masters
+   * refuses to build one for it"); lo que queda acá es la prueba de que el
+   * camino de ESTE archivo -- `createMasters` como lo usa la app -- llega al
+   * mismo rechazo, no a un error distinto ni a un 500.
+   */
+  it('create_masters rechaza ANTES de llegar a escribir pair_size de una disciplina de a uno (decisión #4029)', async () => {
     const admin = await createTestUser()
     const players = await fillerPlayers(8)
     const { seasonId, disciplineId } = await createSeason({
@@ -241,16 +254,9 @@ describe('la cadena de allows_draw contra los escritores de producción (W61, RE
     })
     await plantClosedMatchday(seasonId, disciplineId, 1, false)
 
-    const mastersId = await createMasters(admin.client, seasonId, '2026-12-20')
-
-    const db = adminClient()
-    const { data, error } = await db
-      .from('matchdays')
-      .select('allows_draw, pair_size, kind')
-      .eq('id', mastersId)
-      .single()
-    if (error || data === null) throw new Error(error?.message)
-    expect(data).toEqual({ allows_draw: false, pair_size: 1, kind: 'MASTERS' })
+    await expect(createMasters(admin.client, seasonId, '2026-12-20')).rejects.toThrow(
+      /no juega Masters/,
+    )
   })
 })
 

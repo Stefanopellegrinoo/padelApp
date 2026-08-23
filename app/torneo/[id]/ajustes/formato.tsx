@@ -1,9 +1,9 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import type { DisciplineId, SeasonConfig } from '@/core'
+import type { DisciplineId, SeasonConfig, SideSize } from '@/core'
 import { steppersFor } from '@/app/torneos/nuevo/wizard-state'
-import { saveConfig } from './actions'
+import { saveConfig, saveHasMasters } from './actions'
 
 /**
  * El formato del torneo, con el mismo layout del paso 4 del wizard: los puntos
@@ -30,11 +30,17 @@ export function Formato({
   seasonId,
   disciplineId,
   config,
+  pairSize,
+  hasMasters,
   disciplineLabel,
 }: {
   seasonId: string
   disciplineId: DisciplineId
   config: SeasonConfig
+  /** `disciplines.pair_size` real (decisión #4029, parte 3): el guard del check de Masters lo necesita. */
+  pairSize: SideSize
+  /** `disciplines.has_masters` real (decisión #4029, parte 2). */
+  hasMasters: boolean
   /**
    * De qué disciplina es el formato que este panel edita, o `null` cuando el
    * torneo tiene una sola y no hay nada que desambiguar.
@@ -54,6 +60,14 @@ export function Formato({
     setError(null)
     startTransition(async () => {
       const result = await saveConfig(seasonId, disciplineId, next)
+      if (!result.ok) setError(result.error)
+    })
+  }
+
+  const saveMasters = (next: boolean) => {
+    setError(null)
+    startTransition(async () => {
+      const result = await saveHasMasters(seasonId, disciplineId, next)
       if (!result.ok) setError(result.error)
     })
   }
@@ -130,6 +144,31 @@ export function Formato({
             )}
           </div>
         ))}
+      </div>
+
+      {/* Decisión #4029: editable acá (parte 2), pero deshabilitado -- no sólo
+          apagado -- en una disciplina de a uno (parte 3). `openMatchday`
+          (`db/matchday.ts:985`) rechaza siempre una fecha MASTERS con
+          `pair_size=1`; ofrecer el check encendido ahí sería ofrecer algo
+          que la app ya rechaza. */}
+      <div className="overflow-hidden rounded-[14px] border border-line bg-surface">
+        <div className="flex min-h-[56px] items-center justify-between gap-2 px-3 py-2">
+          <div className="min-w-0">
+            <p className="text-[14px] font-bold">Masters</p>
+            <p className="text-pretty text-[11.5px] font-semibold text-muted">
+              {pairSize === 1
+                ? 'Una disciplina de a uno no juega Masters: termina con su última fecha regular.'
+                : 'La fecha extra que corona la temporada, al final del año.'}
+            </p>
+          </div>
+          <input
+            type="checkbox"
+            checked={hasMasters}
+            disabled={pending || pairSize === 1}
+            onChange={(event) => saveMasters(event.target.checked)}
+            className="h-6 w-6 shrink-0 accent-accent disabled:opacity-40"
+          />
+        </div>
       </div>
 
       {error !== null && (

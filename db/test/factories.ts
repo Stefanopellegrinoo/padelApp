@@ -13,6 +13,15 @@ export interface DisciplineSpec {
   pairSize?: SideSize
   /** Mismo contrato. Sin especificar, default de columna (false). */
   allowsDraw?: boolean
+  /**
+   * Decisión #4029: sin especificar, sigue el mismo automático que
+   * `addDiscipline`/`createSeason` (`false` con `pairSize: 1`, `true` si
+   * no). `true` combinado con `pairSize: 1` es una combinación que la base
+   * RECHAZA (`disciplines_has_masters_needs_pair`, 0053) — no hay forma de
+   * armar ese escenario ni con esta factory, a propósito: la parte 3 de la
+   * decisión es que esa fila no puede existir, ni para un test.
+   */
+  hasMasters?: boolean
 }
 
 interface CreateSeasonOptions {
@@ -69,6 +78,11 @@ export async function createSeason({
         ...(spec.weight === undefined ? {} : { weight: spec.weight }),
         ...(spec.pairSize === undefined ? {} : { pair_size: spec.pairSize }),
         ...(spec.allowsDraw === undefined ? {} : { allows_draw: spec.allowsDraw }),
+        // Decisión #4029: mismo automático que los escritores de producción
+        // (`addDiscipline`/`createSeason`) — sin esto, cualquier spec con
+        // `pairSize: 1` viola `disciplines_has_masters_needs_pair` (0053),
+        // porque el default de columna (0015) sigue en `true`.
+        has_masters: spec.hasMasters ?? spec.pairSize !== 1,
       })
       .select('id')
       .single()

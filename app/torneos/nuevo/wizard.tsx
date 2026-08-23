@@ -13,6 +13,8 @@ import {
   addMySeat,
   buildDisciplines,
   configFor,
+  configForPairSizeChange,
+  configSideSize,
   disciplinesWarning,
   filledCount,
   formatErrors,
@@ -383,7 +385,6 @@ export function Wizard({ myName }: { myName: string }) {
     names: [myName, ...Array<string>(MIN_PLAYERS - 1).fill('')],
     mySeat: myName.trim().length === 0 ? null : 0,
   }))
-  const [config, setConfig] = useState<SeasonConfig>(() => configFor(MIN_PLAYERS))
   // Pádel marcado de entrada: sin tocar nada, el torneo nace igual que
   // siempre (una sola PADEL) — el checkbox no es una regresión, es el mismo
   // default de antes de PR11 hecho explícito.
@@ -394,6 +395,15 @@ export function Wizard({ myName }: { myName: string }) {
   // para todas — "Individual" en FIFA ya no puede pisarle el dato a Pádel
   // ni la pantalla puede mostrar un radio que el submit ignora en silencio.
   const [pairSizes, setPairSizes] = useState<Record<DisciplineKind, SideSize>>({ PADEL: 2, FIFA: 2 })
+  // Declarado DESPUÉS de `disciplines`/`pairSizes` (corrección #4030, lección
+  // #3994): `configSideSize` necesita leerlos para decidir el `sideSize`
+  // inicial -- antes este `useState` llamaba `configFor(MIN_PLAYERS)` sin
+  // tercer argumento, que caía en silencio a la curva de parejas. Con el
+  // wizard recién montado eso es lo mismo que da hoy (PADEL sola, pairSize
+  // 2), pero quedaba sin decidirlo a propósito.
+  const [config, setConfig] = useState<SeasonConfig>(() =>
+    configFor(MIN_PLAYERS, configSideSize(disciplines, pairSizes)),
+  )
   const [error, setError] = useState<string | null>(null)
   const [leaving, setLeaving] = useState(false)
   const [created, setCreated] = useState<{ seasonId: string; inviteToken: string } | null>(null)
@@ -407,15 +417,23 @@ export function Wizard({ myName }: { myName: string }) {
 
   const setSquad = (next: Squad) => {
     setSquadState(next)
-    setConfig((current) => resizeConfig(current, filledCount(next.names)))
+    // `configSideSize` y no un `sideSize` suelto (corrección #4030, lección
+    // #3994): agrandar el plantel con la única disciplina en "Individual"
+    // dejaba caer la curva de vuelta a parejas en silencio, mismo bug que
+    // W83, disparador distinto.
+    setConfig((current) => resizeConfig(current, filledCount(next.names), configSideSize(disciplines, pairSizes)))
   }
 
-  // Cada radio "Lados" manda sólo sobre SU disciplina — a diferencia de la
-  // versión anterior (un solo control), tocar acá ya no rehace `config`: el
-  // paso 4 sigue siendo la curva de a dos siempre (C29), y la disciplina que
-  // elija "Individual" arma la suya aparte en `newTournamentPayload`.
+  // Cada radio "Lados" manda sólo sobre SU disciplina. Con 2+ marcadas, tocar
+  // acá no rehace `config`: el paso 4 sigue siendo la curva de a dos siempre
+  // (C29), y la disciplina que elija "Individual" arma la suya aparte en
+  // `newTournamentPayload`. Pero con UNA sola marcada no hay ambigüedad que
+  // cuidar (`configForPairSizeChange`, `wizard-state.ts`) — ahí SÍ rehace
+  // `config` para que el paso 4 muestre y deje editar la curva de ESA
+  // disciplina, exactamente como antes de `fe44255` (W83, #4026).
   const changePairSize = (kind: DisciplineKind, next: SideSize) => {
     setPairSizes((current) => ({ ...current, [kind]: next }))
+    setConfig((current) => configForPairSizeChange(current, filled, disciplines, next))
   }
 
   const blocked =
@@ -673,7 +691,11 @@ export function Wizard({ myName }: { myName: string }) {
         {step === 3 && (
           <button
             type="button"
-            onClick={() => setConfig(configFor(filled))}
+            // `configSideSize` (corrección #4030, lección #3994): sin esto,
+            // "Usar los defaults" con la única disciplina en "Individual"
+            // volvía la curva a parejas en silencio -- mismo bug que W83,
+            // en este botón en vez de en "Lados".
+            onClick={() => setConfig(configFor(filled, configSideSize(disciplines, pairSizes)))}
             className="rounded-field border-[1.5px] border-line px-4 py-4 text-[14px] font-extrabold"
           >
             Usar los defaults

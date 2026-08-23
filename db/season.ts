@@ -332,6 +332,10 @@ export async function createSeason(
         position: index,
         pair_size: spec.pairSize ?? 2,
         allows_draw: spec.allowsDraw ?? false,
+        // Decisión #4029, parte 1 -- mismo automático que `addDiscipline`
+        // (`db/discipline.ts`): de a uno nace sin Masters, de a dos sigue en
+        // `true`.
+        has_masters: (spec.pairSize ?? 2) !== 1,
       })
       .select('id')
       .single()

@@ -43,6 +43,14 @@ export interface DisciplineHeader {
   weight: number
   /** `disciplines.pair_size` real — mismo select, una columna más. */
   pairSize: SideSize
+  /**
+   * `disciplines.has_masters` real (decisión #4029) — mismo select, una
+   * columna más. Nace de `pairSize` al crear (parte 1) y es lo único que
+   * Ajustes necesita para dibujar el control (parte 2) y para saber si tiene
+   * que salir deshabilitado (parte 3: no se puede encender en una disciplina
+   * de a uno).
+   */
+  hasMasters: boolean
 }
 
 export interface SeasonHeader {
@@ -184,7 +192,6 @@ export interface MatchdayDetail {
 interface SeasonRow {
   id: string
   name: string
-  status: string
   created_by: string
   invite_token: string
 }
@@ -203,6 +210,17 @@ interface DisciplineHeaderRow {
    */
   weight: number
   pair_size: number
+  has_masters: boolean
+  /**
+   * `disciplines.status` — NO forma parte de `DisciplineHeader` (el tipo
+   * público): ningún consumidor de pantalla lo necesita hoy, sólo
+   * `toSeasonHeader` para derivar `SeasonHeader.status` (REQ-D3-3) de la
+   * MISMA fila que ya se estaba trayendo, sin una consulta más. Exponerlo en
+   * `DisciplineHeader` obligaría a cada fixture de test que arma uno a mano
+   * (`cableado-de-formato.unit.test.ts`, `fechas/[n]/page.unit.test.ts`) a
+   * cargar un dato que no usan.
+   */
+  status: string
 }
 
 interface MatchdayRow {
@@ -235,12 +253,14 @@ export function toDisciplineHeader(row: DisciplineHeaderRow): DisciplineHeader {
     // cero riesgo.
     weight: Number(row.weight),
     pairSize: row.pair_size as SideSize,
+    hasMasters: row.has_masters,
   }
 }
 
 function toSeasonHeader(
   row: SeasonRow,
   disciplines: DisciplineHeader[],
+  status: SeasonStatus,
   userId: string | null,
 ): SeasonHeader {
   const primary = disciplines[0]
@@ -248,7 +268,7 @@ function toSeasonHeader(
   return {
     id: row.id,
     name: row.name,
-    status: row.status,
+    status,
     regularMatchdays: primary.config.regularMatchdays,
     isAdmin: row.created_by === userId,
     disciplines,
@@ -273,8 +293,12 @@ function toMatchdaySummary(row: MatchdayRow): MatchdaySummary {
   }
 }
 
-const SEASON_HEADER_COLUMNS = 'id, name, status, created_by, invite_token'
-const DISCIPLINE_HEADER_COLUMNS = 'id, season_id, kind, config, weight, pair_size'
+// `status` salió de acá (bloqueante #2 del contract, verify-report-pre-contract
+// #4026): `seasons.status` ya no tiene lector de producción. `SeasonHeader.
+// status` deriva de `disciplines.status` (REQ-D3-3, `seasonStatusOf`), con la
+// MISMA fila que `DISCIPLINE_HEADER_COLUMNS` ya trae — sin una consulta más.
+const SEASON_HEADER_COLUMNS = 'id, name, created_by, invite_token'
+const DISCIPLINE_HEADER_COLUMNS = 'id, season_id, kind, config, weight, pair_size, has_masters, status'
 
 /** Every season where the caller has a seat — admin or squad. RLS does the filtering; this only shapes the rows. */
 export async function mySeasons(supabase: Client): Promise<SeasonHeader[]> {
@@ -299,17 +323,22 @@ export async function mySeasons(supabase: Client): Promise<SeasonHeader[]> {
     throw new EdgeError(`No se pudieron leer las disciplinas: ${disciplinesError.message}`)
   }
 
-  const disciplinesBySeason = new Map<string, DisciplineHeader[]>()
+  const disciplineRowsBySeason = new Map<string, DisciplineHeaderRow[]>()
   for (const row of disciplineRows ?? []) {
-    const discipline = toDisciplineHeader(row)
-    const bucket = disciplinesBySeason.get(row.season_id)
-    if (bucket === undefined) disciplinesBySeason.set(row.season_id, [discipline])
-    else bucket.push(discipline)
+    const bucket = disciplineRowsBySeason.get(row.season_id)
+    if (bucket === undefined) disciplineRowsBySeason.set(row.season_id, [row])
+    else bucket.push(row)
   }
 
-  return seasons.map((season) =>
-    toSeasonHeader(season, disciplinesBySeason.get(season.id) ?? [], userId),
-  )
+  return seasons.map((season) => {
+    const rows = disciplineRowsBySeason.get(season.id) ?? []
+    return toSeasonHeader(
+      season,
+      rows.map(toDisciplineHeader),
+      seasonStatusOf(rows as { status: SeasonStatus }[]),
+      userId,
+    )
+  })
 }
 
 export async function seasonHeader(supabase: Client, seasonId: string): Promise<SeasonHeader> {
@@ -328,7 +357,13 @@ export async function seasonHeader(supabase: Client, seasonId: string): Promise<
   if (disciplinesError) {
     throw new EdgeError(`No se pudieron leer las disciplinas: ${disciplinesError.message}`)
   }
-  return toSeasonHeader(data, (disciplineRows ?? []).map(toDisciplineHeader), userId)
+  const rows = disciplineRows ?? []
+  return toSeasonHeader(
+    data,
+    rows.map(toDisciplineHeader),
+    seasonStatusOf(rows as { status: SeasonStatus }[]),
+    userId,
+  )
 }
 
 /**

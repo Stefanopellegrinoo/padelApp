@@ -14,6 +14,8 @@ import {
   drawIsLegal,
   matchCountForFormat,
   offerableFormats,
+  groupPhaseMatches,
+  KNOCKOUT_GROUP_COUNTS,
 } from './knockout'
 import { pair, single } from './side'
 import type { MatchdayFormat, MatchResult, Phase, Side, SideStanding } from './types'
@@ -312,6 +314,37 @@ describe('isUnplayedThirdPlace', () => {
 })
 
 /**
+ * W85 (verify-report-pre-contract #4026): el criterio "sólo cuentan los
+ * partidos de GRUPO" vivía escrito dos veces —`standingsFromBracket`
+ * (db/matchday.ts) y `fechas/[n]/page.tsx`— y NO en `fechas/page.tsx` (la
+ * lista), que le pasaba la fecha ENTERA a `championRecord`: el récord del
+ * campeón salía distinto en las dos pantallas para la misma fecha. Extraído
+ * para que las tres queden atadas a la MISMA función — mismo remedio que
+ * `usesSetsDiff`/`isUnplayedThirdPlace`.
+ */
+describe('groupPhaseMatches', () => {
+  const A1 = pair('a1', 'a2')
+  const A2 = pair('a3', 'a4')
+
+  it('se queda con los partidos de GRUPO y descarta los de la llave', () => {
+    const grupo = match('GRUPO', true)
+    const semi = playedMatch('SEMI', 1, A1, A2, 'A')
+    const final = playedMatch('FINAL', 1, A1, A2, 'A')
+    expect(groupPhaseMatches([grupo, semi, final])).toEqual([grupo])
+  })
+
+  it('un round robin, todo GRUPO, pasa entero — no es un no-op accidental', () => {
+    const matches = [match('GRUPO', true), match('GRUPO', false, 2)]
+    expect(groupPhaseMatches(matches)).toEqual(matches)
+  })
+
+  it('sin ningún partido de grupo, devuelve vacío', () => {
+    const semi = playedMatch('SEMI', 1, A1, A2, 'A')
+    expect(groupPhaseMatches([semi])).toEqual([])
+  })
+})
+
+/**
  * C30 (verify-report-pr21, #4004) / decisión #4005 expresada en código: el
  * empate es legal SÓLO en GRUPO, sin importar `allowsDraw`. Tabla de verdad
  * completa — las cuatro celdas — porque esta línea es la única función pura
@@ -383,6 +416,28 @@ describe('suggestFormat', () => {
     expect(format).toEqual({ kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 })
     if (format.kind !== 'GROUPS_KNOCKOUT') throw new Error('unreachable')
     expect(8 / format.groups).toBe(4) // "2 grupos DE 4"
+  })
+
+  /*
+   * S91 (verify-report-pre-contract #4026): `suggestFormat` tomaba
+   * `groupFormats.at(-1)` para quedarse con "el de más grupos", confiando en
+   * que `offerableFormats` itera `KNOCKOUT_GROUP_COUNTS` de menos a más --
+   * cierto sólo porque la constante ESTÁ escrita `[1, 2, 4]`, nada la ata a
+   * seguir así. Mutarla acá adentro, correr `suggestFormat` con la
+   * constante desordenada, y restaurarla en el `finally` -- mismo patrón de
+   * "mutar y revertir" que el resto de esta ronda usa contra SQL.
+   */
+  it('no depende del ORDEN de KNOCKOUT_GROUP_COUNTS: desordenada a [1,4,2], sigue sugiriendo el máximo de grupos', () => {
+    const mutable = KNOCKOUT_GROUP_COUNTS as unknown as number[]
+    const original = [...mutable]
+    mutable.length = 0
+    mutable.push(1, 4, 2)
+    try {
+      expect(suggestFormat(12, 1)).toEqual({ kind: 'GROUPS_KNOCKOUT', groups: 4, qualifiersPerGroup: 2 })
+    } finally {
+      mutable.length = 0
+      mutable.push(...original)
+    }
   })
 
   it('12 lados de a uno: grupos + llave completa dan 19 partidos, no 66 (razón de W32, decisión #3863)', () => {

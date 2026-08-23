@@ -69,8 +69,27 @@ export interface GroupPreviewVM {
  * `formato.qualifiersPerGroup` es literal en el texto — no un "2" fijo — para
  * que la nota se rompa sola si algún día deja de ser siempre 2 (`core/knockout.ts`,
  * `knockoutMatchups` hoy sólo arma cruces con 2 clasificados por grupo).
+ *
+ * S93 (verify-report-pre-contract #4026): el fix de W80 de arriba
+ * REEMPLAZABA `base.drawNote` entero al elegir grupos. Para pádel
+ * (`sideSize === 2`) esa nota base no habla de grupos: dice CÓMO SE ARMARON
+ * las parejas que la lista de arriba muestra (defensores fijos, cruce de
+ * tabla) — una pregunta distinta de CÓMO SE VAN A JUGAR, que es lo que la
+ * nota de grupos contesta. Perder la primera al elegir grupos dejaba la
+ * lista de parejas sin ninguna explicación. Para singles (`sideSize === 1`)
+ * no hay paso de "armar parejas": la nota base y la de grupos contestan la
+ * MISMA pregunta (cómo se arman los partidos), así que ahí sigue
+ * reemplazando, como antes.
+ *
+ * S94 (verify-report-pre-contract #4026): `formato` puede cambiar DESPUÉS
+ * de que el fixture YA se sorteó, sin volver a sortear (mismo estado
+ * divergido que vigila C32 y que W86 cierra en la tabla del día) —
+ * `formatDrifted` (calculado en `page.tsx` contra `detail.matches`, no
+ * contra `formato` solo) dice si eso pasó. Prometer grupos sobre un
+ * fixture que sigue siendo el de antes es la misma mentira que W86 cerró
+ * del otro lado de la pantalla.
  */
-function words(sideSize: SideSize, formato: MatchdayFormat) {
+function words(sideSize: SideSize, formato: MatchdayFormat, formatDrifted: boolean) {
   const base =
     sideSize === 1
       ? {
@@ -96,12 +115,16 @@ function words(sideSize: SideSize, formato: MatchdayFormat) {
           drawNote:
             'Los defensores quedan fijos. El resto se arma cruzando la tabla: 1° con último, 2° con anteúltimo, y así.',
         }
+
+  if (formato.kind !== 'GROUPS_KNOCKOUT') return base
+
+  const groupsNote = formatDrifted
+    ? 'El formato cambió después de sortear: para jugar por grupos hay que volver a sortear la fecha.'
+    : `Juegan por grupos: todos contra todos adentro de cada grupo, y los ${formato.qualifiersPerGroup} primeros de cada uno pasan a la llave.`
+
   return {
     ...base,
-    drawNote:
-      formato.kind === 'GROUPS_KNOCKOUT'
-        ? `Juegan por grupos: todos contra todos adentro de cada grupo, y los ${formato.qualifiersPerGroup} primeros de cada uno pasan a la llave.`
-        : base.drawNote,
+    drawNote: sideSize === 2 ? `${base.drawNote} ${groupsNote}` : groupsNote,
   }
 }
 
@@ -132,6 +155,13 @@ interface ArmadoProps {
   loadedResults: number
   /** El `matchdays.formato` guardado hoy (REQ-D8-1) — `ROUND_ROBIN` por default hasta que se elija otro. */
   formato: MatchdayFormat
+  /**
+   * `true` cuando `formato` es `GROUPS_KNOCKOUT` pero el fixture YA
+   * sorteado no lo cubre (S94, verify-report-pre-contract #4026) — mismo
+   * estado divergido que C32/W86, calculado en `page.tsx` contra
+   * `detail.matches`, no contra `formato` solo.
+   */
+  formatDrifted: boolean
   /**
    * El reparto real en grupos (S83, verify-report-pr21 #4004), calculado en
    * `page.tsx` con las MISMAS funciones que `generatePairs` usa para armar
@@ -169,6 +199,7 @@ export function Armado({
   pairs,
   loadedResults,
   formato,
+  formatDrifted,
   groupPreview,
 }: ArmadoProps) {
   const [pending, startTransition] = useTransition()
@@ -248,7 +279,7 @@ export function Armado({
     formato,
   })
   const { size, sides, matches, complete, needsLooseGuest, eventualSize, tooFew, tooMany, suggestedFormat } = shape
-  const label = words(sideSize, formato)
+  const label = words(sideSize, formato, formatDrifted)
   const guestUnnamed = [
     ...looseGuests.map((guest) => guest.name),
     ...guestPairs.flatMap((pair) => [pair.a.name, pair.b.name]),

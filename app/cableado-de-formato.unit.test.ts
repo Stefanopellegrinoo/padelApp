@@ -108,7 +108,8 @@ const PADEL = defaultConfig(8)
 const FIFA: SeasonConfig = { ...PADEL, matchFormat: { ...PADEL.matchFormat, openScore: true } }
 
 function disciplina(id: string, kind: 'PADEL' | 'FIFA', config: SeasonConfig): DisciplineHeader {
-  return { id: id as DisciplineId, kind, config, weight: 1, pairSize: kind === 'PADEL' ? 2 : 1 }
+  const pairSize = kind === 'PADEL' ? 2 : 1
+  return { id: id as DisciplineId, kind, config, weight: 1, pairSize, hasMasters: pairSize === 2 }
 }
 
 const SOLO_PADEL = [disciplina('d1', 'PADEL', PADEL)]

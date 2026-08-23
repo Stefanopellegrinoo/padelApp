@@ -129,6 +129,11 @@ export { computeAwards } from './awards'
 // `offerableFormats` deriva en vez de repetir `[2, 4]` a mano —
 // `db/matchday-format.db.test.ts` es su primer consumidor real fuera de
 // core/, el tripwire que la ata al check SQL del catálogo.
+// `groupPhaseMatches` sale ahora (W85, verify-report-pre-contract #4026): el
+// criterio "sólo GRUPO" vivía repetido en `standingsFromBracket`
+// (db/matchday.ts) y `fechas/[n]/page.tsx`, y faltaba en `fechas/page.tsx` —
+// el récord del campeón salía distinto en las dos pantallas para la misma
+// fecha con llave.
 export {
   suggestFormat,
   groupSides,
@@ -140,6 +145,7 @@ export {
   losingMatchup,
   knockoutPositions,
   isUnplayedThirdPlace,
+  groupPhaseMatches,
   drawIsLegal,
   matchCountForFormat,
   offerableFormats,

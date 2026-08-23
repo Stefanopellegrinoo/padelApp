@@ -55,11 +55,18 @@ export function computeAwards(
     if (points === undefined) {
       throw new Error(`No hay puntos definidos para la posición ${index + 1}.`)
     }
-    // REQ-D10-1: hoy hay UNA sola fuente de puntos —la posición del día—, así
-    // que el desglose es siempre una línea cuya suma es el total. El día que
-    // haya una segunda fuente, esto ya tiene la forma que hace falta.
-    const lines = [{ reason: `${ordinal(index + 1)} de la fecha`, points }]
     for (const entryId of championshipMembers(row)) {
+      // REQ-D10-1: hoy hay UNA sola fuente de puntos —la posición del día—,
+      // así que el desglose es siempre una línea cuya suma es el total. El
+      // día que haya una segunda fuente, esto ya tiene la forma que hace
+      // falta. `lines` se arma ACÁ ADENTRO, una vez por miembro (S89,
+      // verify-report-pre-contract #4026): armarlo una sola vez afuera del
+      // loop dejaba a los dos `Award` de una pareja apuntando al MISMO
+      // array — inocuo hoy porque nadie lo muta, pero `AwardLine[]` es
+      // mutable y el día que una segunda fuente haga `award.lines.push(...)`
+      // —el caso que este mismo comentario anticipa— le escribiría la línea
+      // al compañero. Contra la regla de inmutabilidad del repo.
+      const lines = [{ reason: `${ordinal(index + 1)} de la fecha`, points }]
       awards.push({ entryId, position: index + 1, points, lines })
     }
   }

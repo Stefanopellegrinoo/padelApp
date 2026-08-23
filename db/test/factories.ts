@@ -57,7 +57,9 @@ export async function createSeason({
     .from('seasons')
     .insert({
       name: `Temporada de test ${Date.now()}`,
-      config: config as unknown as Json,
+      // Sin `config` (C35): `createSeason` de producción dejó de escribirla y
+      // el CONTRACT la dropea. Es nullable desde `0059`. La config REAL vive
+      // en `disciplines.config`, que se inserta más abajo.
       created_by: admin.userId,
     })
     .select('id')
@@ -107,7 +109,12 @@ export async function createSeason({
         player_id: playerId,
         display_name: `Jugador de test ${index + 1}`,
         kind: 'SQUAD',
-        seed_position: index,
+        // Sin `seed_position` (C37), igual que `createSeason` de producción:
+        // el CHECK `entries_seed_shape` del contract lo va a prohibir para el
+        // SQUAD. El orden lo pone `discipline_entries`, abajo — que es de
+        // donde lo leen las lecturas desde esta misma tanda. Esta factory era
+        // el escritor que producía los ~318 rojos que midió el informe
+        // #4034 al aplicar la DDL destructiva.
       })
       .select('id')
       .single()
@@ -118,8 +125,8 @@ export async function createSeason({
   }
 
   // Desde PR 7 (discipline_entries): cada SQUAD entra a TODAS las disciplinas
-  // de la temporada, con el mismo `seed_position` que tiene en `entries` —
-  // mismo criterio que el backfill de 0023_discipline_entries.sql. Así los
+  // de la temporada, en el orden en que se pidió el plantel — mismo criterio
+  // que el backfill de 0023_discipline_entries.sql. Así los
   // ~215 casos que ya usan `squad` + `disciplines` de a una siguen viendo el
   //Plantel sin tocarse; el solape parcial entre disciplinas (REQ-D1-4) se
   // arma a mano, fuera de esta factory, cuando un test lo necesita.

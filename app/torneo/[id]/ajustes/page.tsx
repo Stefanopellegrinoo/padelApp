@@ -173,17 +173,31 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
       ))}
 
       <Plantel seasonId={seasonId} seats={seats} canTakeSeat={myEntry === null} />
-      {/* El panel edita la disciplina [0] y nada más, así que dice cuál es
-          cuando hay más de una (W65). La fila de arriba sigue nombrando el
-          formato de todas: achicarla revertiría W64 en esta pantalla. */}
-      <Formato
-        seasonId={seasonId}
-        disciplineId={discipline.id}
-        config={discipline.config}
-        pairSize={discipline.pairSize}
-        hasMasters={discipline.hasMasters}
-        disciplineLabel={header.disciplines.length > 1 ? DISCIPLINE_LABELS[discipline.kind] : null}
-      />
+      {/* UN panel POR DISCIPLINA (C36). Editaba sólo la [0], y con eso
+          `has_masters` de la segunda no se podía cambiar desde ninguna
+          pantalla — la decisión #4029 parte 2 dice "editable en Ajustes", y
+          sólo lo era para la primaria. Desde que cada disciplina juega su
+          propio Masters (decisión #4035), que Ajustes editara una sola
+          quedaba además inconsistente con la pantalla de Fechas.
+
+          `disciplineLabel` ya venía preparado para esto desde W65: con una
+          sola disciplina el título sale como el mismo nodo de texto de
+          siempre. El `id="formato"` va acá y no en cada `<section>`: con más
+          de una habría un `id` repetido, y el ancla de la fila de arriba
+          salta igual al primero, que es la primaria. */}
+      <div id="formato" className="flex flex-col gap-5 scroll-mt-4">
+        {header.disciplines.map((candidate) => (
+          <Formato
+            key={candidate.id}
+            seasonId={seasonId}
+            disciplineId={candidate.id}
+            config={candidate.config}
+            pairSize={candidate.pairSize}
+            hasMasters={candidate.hasMasters}
+            disciplineLabel={header.disciplines.length > 1 ? DISCIPLINE_LABELS[candidate.kind] : null}
+          />
+        ))}
+      </div>
       <Disciplinas
         seasonId={seasonId}
         disciplines={header.disciplines.map((candidate) => ({

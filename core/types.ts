@@ -194,8 +194,16 @@ export interface Award {
    * un campo opcional es invisible para el compilador y para los tests
    * (#3994) — acá el ripple de tipo es la señal que marca cada productor de
    * `Award` que todavía no decide su desglose.
+   *
+   * `readonly` (S99): S89 cerró el bug del array COMPARTIDO —`const lines`
+   * vivía afuera del loop y los dos miembros de una pareja terminaban con la
+   * MISMA instancia— moviendo la declaración adentro. Correcto, pero la
+   * garantía la sostenía la disciplina y no el compilador: el día que
+   * aparezca una segunda fuente de puntos, un `award.lines.push(...)` vuelve
+   * a mutar lo que otro esté mirando. Con `readonly` eso es un error de
+   * `tsc`, que es el mismo remedio que #3994 aplicó a `sideSize`.
    */
-  lines: AwardLine[]
+  readonly lines: readonly AwardLine[]
 }
 
 export interface RankingRow {

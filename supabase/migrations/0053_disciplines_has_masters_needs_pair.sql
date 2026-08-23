@@ -2,7 +2,7 @@
 -- desde esta tanda (parte 1, TS: `addDiscipline`/`createSeason`) y se puede
 -- editar en Ajustes (parte 2, TS: `updateDisciplineHasMasters`). La parte 3
 -- es el guard: NO se puede ENCENDER el Masters en una disciplina de a uno —
--- `generateMastersPairs` (`db/matchday.ts:985`) rechaza siempre una fecha
+-- `generateMastersPairs` (`db/matchday.ts`) rechaza siempre una fecha
 -- MASTERS con `pair_size=1`, así que ofrecer el check encendido ahí sería
 -- ofrecer algo que la app ya rechaza.
 --

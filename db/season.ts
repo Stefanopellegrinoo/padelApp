@@ -9,20 +9,6 @@ import { assertValidConfig } from './validate'
 import type { Client } from './client'
 export type { Client }
 
-/** `SeasonConfig` from the `jsonb` column. The cast is a bet `assertValidConfig` backs up. */
-export async function seasonConfig(supabase: Client, seasonId: string): Promise<SeasonConfig> {
-  const { data, error } = await supabase
-    .from('seasons')
-    .select('config')
-    .eq('id', seasonId)
-    .maybeSingle()
-  if (error) {
-    throw new EdgeError(`No se pudo leer la configuración de la temporada: ${error.message}`)
-  }
-  if (data === null) throw new EdgeError('La temporada no existe.')
-  return data.config as unknown as SeasonConfig
-}
-
 /**
  * The squad's seed order FOR ONE DISCIPLINE. Explicit `order by`: nothing else
  * keeps it stable.
@@ -273,8 +259,10 @@ export async function createSeason(
   { name, squadNames, config, mySeatIndex = null, disciplines }: NewSeason,
 ): Promise<{ seasonId: string; inviteToken: string }> {
   const disciplineSpecs = disciplines ?? [{ kind: 'PADEL' as const, config }]
-  // `config` es el legacy `seasons.config` (drop en el PR de contract):
-  // siempre pádel, sideSize=2 fijo, nunca disciplina-specific.
+  // `config` YA NO se escribe en `seasons.config` (C35, verify-report-go-no-go
+  // #4034): esa columna no tiene lectores desde PR 5 y el `drop column` es del
+  // CONTRACT. Acá sólo sobrevive como default de la disciplina implícita
+  // cuando el caller no manda `disciplines` — siempre pádel, sideSize=2 fijo.
   assertValidConfig(config, 2)
   for (const spec of disciplineSpecs) {
     assertValidConfig(spec.config, spec.pairSize ?? 2)
@@ -310,7 +298,7 @@ export async function createSeason(
 
   const { data: season, error: seasonError } = await supabase
     .from('seasons')
-    .insert({ name: trimmed, config: config as unknown as Json, created_by: userId })
+    .insert({ name: trimmed, created_by: userId })
     .select('id, invite_token')
     .single()
   if (seasonError !== null || season === null) {
@@ -346,6 +334,10 @@ export async function createSeason(
     disciplineRows.push(discipline)
   }
 
+  // Sin `seed_position` (C37): esa columna se relaja para el SQUAD en el
+  // contract y el CHECK `entries_seed_shape` la va a prohibir. El orden del
+  // plantel se escribe abajo, en `discipline_entries`, que es donde vive
+  // desde PR 7.
   const { data: entryRows, error: entriesError } = await supabase
     .from('entries')
     .insert(
@@ -353,11 +345,10 @@ export async function createSeason(
         season_id: season.id,
         display_name: seat.trim(),
         kind: 'SQUAD' as const,
-        seed_position: index,
         player_id: index === mySeatIndex ? myPlayerId : null,
       })),
     )
-    .select('id, seed_position')
+    .select('id')
   if (entriesError !== null || entryRows === null) {
     await supabase.from('seasons').delete().eq('id', season.id)
     throw new EdgeError(
@@ -367,8 +358,8 @@ export async function createSeason(
     )
   }
 
-  // Cada asiento entra a TODAS las disciplinas recién creadas, con el mismo
-  //Seed_position que en `entries`. Decisión de este slice (REQ-D1-3/D1-4):
+  // Cada asiento entra a TODAS las disciplinas recién creadas, en el orden en
+  // que el wizard los nombró. Decisión de este slice (REQ-D1-3/D1-4):
   // el plantel es compartido a nivel torneo y por default juega todo — no
   // hay pantalla de "quién juega qué" en este wizard todavía (PR13 la agrega
   // para sumar una disciplina en curso). `discipline_entries` (PR 7) es la
@@ -376,12 +367,18 @@ export async function createSeason(
   // disciplinas vacías aunque `entries` tenga todo el plantel.
   if (entryRows.length > 0) {
     const { error: seatsError } = await supabase.from('discipline_entries').insert(
+      // El índice del array, no una columna de vuelta (C37): `insert ...
+      // returning` devuelve las filas en el orden del `values`, así que
+      // `entryRows[i]` es `squadNames[i]`. Lo fija el test de
+      // `db/entries.db.test.ts` que compara nombre por nombre contra
+      // `seedPosition` 0..7 — si PostgREST dejara de conservar ese orden, cae
+      // ahí y no en una tabla desordenada en producción.
       disciplineRows.flatMap((discipline) =>
-        entryRows.map((row) => ({
+        entryRows.map((row, index) => ({
           discipline_id: discipline.id,
           entry_id: row.id,
           season_id: season.id,
-          seed_position: row.seed_position,
+          seed_position: index,
         })),
       ),
     )
@@ -478,23 +475,4 @@ export async function updateSeasonRules(
   if (count === 0) {
     throw new EdgeError('No se pudieron guardar las reglas: sólo puede hacerlo quien organiza.')
   }
-}
-
-/**
- * The only writer in this plan: `assertValidConfig` runs before the update lands.
- *
- * `sideSize` hardcoded at 2: `seasons.config` is the legacy, pre-disciplines
- * field (dropped at the contract PR) and is always padel-shaped.
- */
-export async function updateSeasonConfig(
-  supabase: Client,
-  seasonId: string,
-  config: SeasonConfig,
-): Promise<void> {
-  assertValidConfig(config, 2)
-  const { error } = await supabase
-    .from('seasons')
-    .update({ config: config as unknown as Json })
-    .eq('id', seasonId)
-  if (error) throw new EdgeError(`No se pudo actualizar la configuración: ${error.message}`)
 }

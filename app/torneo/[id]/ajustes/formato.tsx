@@ -87,7 +87,10 @@ export function Formato({
   )
 
   return (
-    <section id="formato" className="flex flex-col gap-2 scroll-mt-4">
+    // El `id="formato"` (el ancla de la fila de arriba) NO vive acá: con
+    // más de una disciplina habría un `id` repetido y HTML inválido. Lo
+    // pone el contenedor que mapea las disciplinas, en `ajustes/page.tsx`.
+    <section data-formato={disciplineId} className="flex flex-col gap-2">
       {/* Una sola interpolación y no `Formato{sufijo}`: con una sola disciplina
           el título tiene que salir como el mismo nodo de texto de siempre. */}
       <h2 className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
@@ -147,8 +150,8 @@ export function Formato({
       </div>
 
       {/* Decisión #4029: editable acá (parte 2), pero deshabilitado -- no sólo
-          apagado -- en una disciplina de a uno (parte 3). `openMatchday`
-          (`db/matchday.ts:985`) rechaza siempre una fecha MASTERS con
+          apagado -- en una disciplina de a uno (parte 3).
+          `generateMastersPairs` (`db/matchday.ts`) rechaza siempre una fecha MASTERS con
           `pair_size=1`; ofrecer el check encendido ahí sería ofrecer algo
           que la app ya rechaza. */}
       <div className="overflow-hidden rounded-[14px] border border-line bg-surface">

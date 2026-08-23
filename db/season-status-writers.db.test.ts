@@ -114,7 +114,7 @@ describe('seasons.status ya no tiene escritor de producción (REQ-D3-3)', () => 
     await playAllMatches(admin, regularId)
     await closeMatchday(admin.client, regularId)
 
-    const mastersId = await createMasters(admin.client, seasonId, '2026-12-20')
+    const mastersId = await createMasters(admin.client, disciplineId, '2026-12-20')
     await generateMastersPairs(admin.client, mastersId)
     await openMatchday(admin.client, mastersId)
     await playAllMatches(admin, mastersId)
@@ -142,7 +142,7 @@ describe('seasons.status ya no tiene escritor de producción (REQ-D3-3)', () => 
     await playAllMatches(admin, regularId)
     await closeMatchday(admin.client, regularId)
 
-    const mastersId = await createMasters(admin.client, seasonId, '2026-12-20')
+    const mastersId = await createMasters(admin.client, disciplineId, '2026-12-20')
     await generateMastersPairs(admin.client, mastersId)
     await openMatchday(admin.client, mastersId)
     await playAllMatches(admin, mastersId)

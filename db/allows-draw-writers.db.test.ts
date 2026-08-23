@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { defaultConfig, type SeasonConfig } from '@/core'
+import { defaultConfig, type DisciplineId, type SeasonConfig } from '@/core'
 import {
   closeMatchday,
   createMasters,
@@ -87,7 +87,9 @@ async function fillerPlayers(count: number): Promise<string[]> {
 interface Scene {
   admin: TestUser
   seasonId: string
-  disciplineId: string
+  //`DisciplineId` branded (C36): `createMasters` recibe la disciplina, no la
+  // temporada, y el brand es lo que impide pasarle un `seasonId` por error.
+  disciplineId: DisciplineId
   squad: string[]
 }
 
@@ -214,7 +216,7 @@ describe('la cadena de allows_draw contra los escritores de producción (W61, RE
     const { admin, seasonId, disciplineId } = await buildScene(drawConfig(), true)
     await plantClosedMatchday(seasonId, disciplineId, 2, true)
 
-    const mastersId = await createMasters(admin.client, seasonId, '2026-12-20')
+    const mastersId = await createMasters(admin.client, disciplineId, '2026-12-20')
 
     const db = adminClient()
     const { data, error } = await db
@@ -254,7 +256,7 @@ describe('la cadena de allows_draw contra los escritores de producción (W61, RE
     })
     await plantClosedMatchday(seasonId, disciplineId, 1, false)
 
-    await expect(createMasters(admin.client, seasonId, '2026-12-20')).rejects.toThrow(
+    await expect(createMasters(admin.client, disciplineId, '2026-12-20')).rejects.toThrow(
       /no juega Masters/,
     )
   })
@@ -319,7 +321,7 @@ describe('no-regresión: el pádel sigue haciendo exactamente lo mismo (REQ-NR-1
     const { admin, seasonId, disciplineId } = await buildScene(padelConfig(), false)
     await plantClosedMatchday(seasonId, disciplineId, 2, false)
 
-    const mastersId = await createMasters(admin.client, seasonId, '2026-12-20')
+    const mastersId = await createMasters(admin.client, disciplineId, '2026-12-20')
 
     const db = adminClient()
     const { data, error } = await db

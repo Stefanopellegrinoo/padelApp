@@ -50,8 +50,8 @@ describe('Formato — el control de Masters (decisión #4029)', () => {
 
   /**
    * Parte 3 de la decisión: ofrecer el check encendido en una disciplina de
-   * a uno sería ofrecer algo que la app rechaza después (`openMatchday`,
-   * `db/matchday.ts:985`). Con `pairSize=1`, `hasMasters` es SIEMPRE `false`
+   * a uno sería ofrecer algo que la app rechaza después
+   * (`generateMastersPairs`, `db/matchday.ts`). Con `pairSize=1`, `hasMasters` es SIEMPRE `false`
    * (parte 1) y el control tiene que salir DESHABILITADO -- no sólo apagado.
    */
   it('con pairSize=1, el check sale apagado y DESHABILITADO -- no se puede encender (#4029)', () => {

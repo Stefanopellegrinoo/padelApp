@@ -134,6 +134,26 @@ describe('createSeason', () => {
     expect(data?.[0]?.config).toEqual(config)
   })
 
+  // C35 (verify-report-go-no-go #4034): `seasons.config` es la columna que el
+  // CONTRACT va a dropear, y `createSeason` era su único escritor de
+  // producción — `disciplines.config` (arriba) es la fuente real desde PR 5.
+  // `not null` sin default: sin la migración que la relaja, este insert ni
+  // arrancaría sin la columna.
+  it('no escribe seasons.config — es la columna que el CONTRACT va a dropear (C35, #4034)', async () => {
+    const admin = await createTestUser()
+
+    const { seasonId } = await createSeason(admin.client, {
+      name: 'Sin escritor de seasons.config',
+      squadNames: squadNames(8),
+      config: defaultConfig(8),
+    })
+
+    const db = adminClient()
+    const { data, error } = await db.from('seasons').select('config').eq('id', seasonId).single()
+    if (error || data === null) throw new Error(error?.message)
+    expect(data.config).toBeNull()
+  })
+
   // El que arma el torneo casi siempre lo juega. El asiento propio se reclama
   // en el mismo insert del plantel, así que lo que hay que probar es que cae en
   // el asiento QUE ELIGIÓ y en ninguno más — errarle por uno lo ata al lugar de
@@ -467,5 +487,63 @@ describe('deleteSeason', () => {
     await expect(deleteSeason(stranger.client, seasonId)).rejects.toThrow(/sólo puede hacerlo quien lo creó/)
 
     expect(await seasonExists(seasonId)).toBe(true)
+  })
+})
+
+// ── C37: entriesOf sin disciplina resoluble ─────────────────────────────────
+// La rama `effectiveDisciplineId === null` de `entriesOf` usaba
+// `entries.seed_position` para TODO el plantel — la última lectura de esa
+// columna para el SQUAD, que el contract relaja a `null`. Devolvía `null` en
+// un campo tipado `number`.
+//
+// La rama NO tenía un solo testigo: medido borrándola entera, la suite
+// quedaba en 425/425. Éste es el que le faltaba, y el que fija que el fallback
+// no puede perder a nadie — es lo único que separa "no hay orden que dar" de
+// "el plantel desapareció de la pantalla".
+describe('entriesOf sin disciplina resoluble (C37)', () => {
+  it('devuelve el plantel entero con un orden propio, sin leer entries.seed_position', async () => {
+    const admin = await createTestUser()
+    const { seasonId, entryIds, disciplineIds } = await buildSeasonScene({
+      admin,
+      squad: await fillerPlayers(4),
+    })
+    const [disciplineId] = disciplineIds
+    if (disciplineId === undefined || entryIds.length !== 4) throw new Error('La escena no se armó.')
+
+    // `entries.seed_position` miente a propósito: si la rama la sigue
+    // leyendo, los `seedPosition` salen 10,20,30,40 en vez de 0,1,2,3.
+    //
+    // EL CONTRACT SE LLEVA ESTE TEST. Es el único que queda escribiendo la
+    // columna para un SQUAD, y lo hace justamente para probar que nadie la
+    // lee: con el CHECK `entries_seed_shape` puesto, este `update` no puede
+    // existir. Verificado aplicando la DDL destructiva completa a la base
+    // local — es el ÚNICO rojo que queda de los 311 que midió #4034, y no es
+    // un camino de producción. Borrarlo junto con la columna, igual que los 6
+    // tests-guardia de `seasons.status` (N75).
+    const db = adminClient()
+    for (const [index, entryId] of entryIds.entries()) {
+      const { error } = await db
+        .from('entries')
+        .update({ seed_position: (index + 1) * 10 })
+        .eq('id', entryId)
+      if (error) throw new Error(error.message)
+    }
+
+    // Sin disciplina, `defaultDisciplineId` da `null` — el caso que la rama
+    // dice cubrir. `discipline_entries` cascadea con ella.
+    const { error: deleteError } = await db.from('disciplines').delete().eq('id', disciplineId)
+    if (deleteError) throw new Error(deleteError.message)
+
+    // La temporada queda en un estado que REQ-NR-4 prohíbe, y los dos
+    // tripwires globales de `db/discipline.db.test.ts` lo cazan al final de
+    // la corrida — así que esta escena se limpia sola, pase o falle. El
+    // `finally` no es ceremonia: sin él, este test rompe otros dos.
+    try {
+      const seats = await entriesOf(admin.client, seasonId)
+      expect(seats).toHaveLength(4)
+      expect(seats.map((seat) => seat.seedPosition)).toEqual([0, 1, 2, 3])
+    } finally {
+      await db.from('seasons').delete().eq('id', seasonId)
+    }
   })
 })

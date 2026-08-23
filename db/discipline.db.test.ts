@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest'
 import { defaultConfig } from '@/core'
 import { createMatchday, matchdayContextFor } from './matchday'
 import { addDiscipline, disciplineConfig, updateDisciplineConfig, updateDisciplineHasMasters } from './discipline'
-import { awardsOf, derivedSeasonStatus } from './read'
+import { awardsOf, seasonHeader } from './read'
 import { squadSeedOrder } from './season'
 import { adminClient } from './test/admin'
 import { createSeason } from './test/factories'
@@ -152,12 +152,15 @@ describe('matchdays.discipline_id (PR 2)', () => {
 // SETUP → ACTIVE") ya tiene su prueba unitaria en core/season.test.ts, y su
 // prueba end-to-end con dos disciplinas de verdad vive en PR 4, que es donde
 // el tripwire cae y dos disciplinas concurrentes dejan de ser hipotéticas.
-describe('derivedSeasonStatus (PR 3)', () => {
+// W91: estos dos llamaban a `derivedSeasonStatus`, que tenía CERO callers de
+// producción — `seasonHeader` deriva inline con `seasonStatusOf` sobre las
+// filas que ya trae. Ahora ejercitan ese camino, que es el que corre la app.
+describe('el estado derivado de la temporada (REQ-D3-3)', () => {
   it('temporada recién creada: SETUP', async () => {
     const admin = await createTestUser()
     const { seasonId } = await createSeason({ admin })
 
-    expect(await derivedSeasonStatus(admin.client, seasonId)).toBe('SETUP')
+    expect((await seasonHeader(admin.client, seasonId)).status).toBe('SETUP')
   })
 
   it('con la disciplina en ACTIVE: ACTIVE', async () => {
@@ -167,7 +170,7 @@ describe('derivedSeasonStatus (PR 3)', () => {
     const { error } = await db.from('disciplines').update({ status: 'ACTIVE' }).eq('id', disciplineId)
     if (error) throw new Error(error.message)
 
-    expect(await derivedSeasonStatus(admin.client, seasonId)).toBe('ACTIVE')
+    expect((await seasonHeader(admin.client, seasonId)).status).toBe('ACTIVE')
   })
 })
 
@@ -600,6 +603,74 @@ describe('addDiscipline (PR 13, REQ-D1-2)', () => {
     expect(await squadSeedOrder(admin.client, partialId)).toEqual(subset)
   })
 
+  // C37 / decisión #4044: "una disciplina nueva COPIA el orden de la primaria
+  // como punto de partida". Hasta acá lo copiaba de `entries.seed_position`,
+  // que el contract relaja a `null` para el SQUAD — y `discipline_entries.
+  // seed_position` es `not null check (>= 0)`, así que el `drop not null` no
+  // degradaba esto: lo reventaba entero (REQ-D1-2 completo).
+  //
+  // La divergencia es a propósito: mientras el dual-write siga vivo los dos
+  // órdenes coinciden y copiar del lugar equivocado pasaría igual.
+  it('copia el orden de la PRIMARIA, no el de entries.seed_position (C37)', async () => {
+    const admin = await createTestUser()
+    const { seasonId, disciplineId: padelId, entryIds } = await createSeason({
+      admin,
+      squad: [admin.playerId, ...(await fillerPlayers(7))],
+    })
+    if (entryIds.length !== 8) throw new Error('Faltan asientos.')
+
+    // Pádel (la primaria) queda al revés que `entries.seed_position`, que
+    // sigue en 0..7. Parking de dos pasadas por `discipline_entries_seed`.
+    const db = adminClient()
+    const reversed = [...entryIds].reverse()
+    for (const [index, entryId] of reversed.entries()) {
+      const { error } = await db
+        .from('discipline_entries')
+        .update({ seed_position: index + 100 })
+        .eq('discipline_id', padelId)
+        .eq('entry_id', entryId)
+      if (error) throw new Error(error.message)
+    }
+    for (const [index, entryId] of reversed.entries()) {
+      const { error } = await db
+        .from('discipline_entries')
+        .update({ seed_position: index })
+        .eq('discipline_id', padelId)
+        .eq('entry_id', entryId)
+      if (error) throw new Error(error.message)
+    }
+
+    const fifaId = await addDiscipline(admin.client, seasonId, { kind: 'FIFA', config: defaultConfig(8) })
+    expect(await squadSeedOrder(admin.client, fifaId)).toEqual(reversed)
+  })
+
+  // La otra mitad de #4044 acá: quien no juega la primaria no tiene orden que
+  // copiar. Va al final — no se pierde (seguiría siendo asiento de la
+  // temporada) y no rompe el `not null` de `discipline_entries`.
+  it('manda al final a quien no juega la primaria al sembrar la nueva (C37)', async () => {
+    const admin = await createTestUser()
+    const { seasonId, disciplineId: padelId, entryIds } = await createSeason({
+      admin,
+      squad: [admin.playerId, ...(await fillerPlayers(7))],
+    })
+    const orphan = entryIds[1]
+    if (orphan === undefined || entryIds.length !== 8) throw new Error('Faltan asientos.')
+
+    const db = adminClient()
+    const { error } = await db
+      .from('discipline_entries')
+      .delete()
+      .eq('discipline_id', padelId)
+      .eq('entry_id', orphan)
+    if (error) throw new Error(error.message)
+
+    const fifaId = await addDiscipline(admin.client, seasonId, { kind: 'FIFA', config: defaultConfig(8) })
+    expect(await squadSeedOrder(admin.client, fifaId)).toEqual([
+      ...entryIds.filter((id) => id !== orphan),
+      orphan,
+    ])
+  })
+
   //PR14 slice A — mismo contrato que createSeason: addDiscipline también
   // puede declarar pair_size/allows_draw explícitos al sumar una disciplina
   //A un torneo en curso (REQ-D2-1, decisión #5).
@@ -698,7 +769,7 @@ describe('updateDisciplineHasMasters (decisión #4029, parte 2)', () => {
   /**
    * Parte 3 de la decisión: NO se puede encender el Masters en una
    * disciplina de a uno -- ahí sigue roto (`generateMastersPairs`,
-   * `db/matchday.ts:985`, rechaza siempre `pair_size=1`). Ofrecerlo sería
+   * `db/matchday.ts`, rechaza siempre `pair_size=1`). Ofrecerlo sería
    * ofrecer algo que la app rechaza después.
    */
   it('rechaza encender el Masters en una disciplina de a uno, y no escribe nada', async () => {

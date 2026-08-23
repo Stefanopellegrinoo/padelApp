@@ -375,7 +375,7 @@ describe('redraftMatchday', () => {
 
   it('el Masters también vuelve al armado, y el sorteo del Masters vuelve a estar disponible', async () => {
     const config: SeasonConfig = { ...defaultConfig(8), regularMatchdays: 1, countBestOf: 1 }
-    const { admin, seasonId, squad } = await buildSeasonWithSquad(config, 8)
+    const { admin, seasonId, disciplineId, squad } = await buildSeasonWithSquad(config, 8)
     const md1 = await createMatchday(admin.client, seasonId, '2026-03-05')
     await markAllPlaying(admin, md1, squad)
     await generatePairs(admin.client, md1)
@@ -383,7 +383,7 @@ describe('redraftMatchday', () => {
     await playAllMatches(admin, md1, (pairA) => pairA)
     await closeMatchday(admin.client, md1)
 
-    const mastersId = await createMasters(admin.client, seasonId, '2026-12-20')
+    const mastersId = await createMasters(admin.client, disciplineId, '2026-12-20')
     await generateMastersPairs(admin.client, mastersId)
     await openMatchday(admin.client, mastersId)
     expect(await matchdayStatus(mastersId)).toBe('OPEN')

@@ -66,10 +66,18 @@ export interface SeasonHeader {
    * que `seasons_read`, así que quien ve este header ve su disciplina.
    *
    * `SeasonHeader` ya NO trae `config`: hasta PR 5 este header devolvía
-   * `seasons.config` (`updateSeasonConfig` era su único escritor), que podía
-   * divergir de la disciplina sin que nada lo notara. `disciplines.config` es
-   * la fuente real desde PR 5; `primaryDiscipline` es el acceso de acá hasta
-   * que exista el wizard multi-disciplina (PR 11).
+   * `seasons.config`, que podía divergir de la disciplina sin que nada lo
+   * notara. `disciplines.config` es la fuente real desde PR 5;
+   * `primaryDiscipline` es el acceso de acá hasta que exista el wizard
+   * multi-disciplina (PR 11).
+   *
+   * CORRECCIÓN (C35, verify-report-go-no-go #4034): esta nota decía
+   * "(`updateSeasonConfig` era su único escritor)" — falso, y es justo lo que
+   * hizo errar a dos tandas (#4028, #4032): las dos buscaron esa función
+   * exportada y ninguna miró el `.insert()` inline de `createSeason`, que
+   * SÍ escribía `seasons.config` hasta que esta misma tanda lo cerró. La
+   * columna sigue existiendo (nullable desde `0059`) sin un solo lector ni
+   * escritor de producción; el `drop column` es del CONTRACT.
    */
   disciplines: DisciplineHeader[]
   /** The share link's token. Every participant can already read this column; the wizard and the settings screen show it. */
@@ -310,9 +318,21 @@ export async function mySeasons(supabase: Client): Promise<SeasonHeader[]> {
   const seasons = data ?? []
   if (seasons.length === 0) return []
 
-  const { data: disciplineRows, error: disciplinesError } = await supabase
+  // `count: 'exact'` y el guard de abajo (S98): PostgREST corta CADA select
+  // en `PGRST_DB_MAX_ROWS` (1000, `supabase/config.toml`) y NO avisa. Antes
+  // `status` era un escalar por temporada; desde REQ-D3-3 es un AGREGADO sobre
+  // estas filas (`seasonStatusOf`), y perder filas CAMBIA el resultado:
+  // `every(FINISHED)` sobre un subconjunto puede decir "Terminado" de un torneo
+  // en curso. Es la misma trampa que el tripwire de `db/discipline.db.test.ts`
+  // documenta desde que un cruce truncado le reportó 248 huérfanas que no
+  // existían.
+  const {
+    data: disciplineRows,
+    error: disciplinesError,
+    count,
+  } = await supabase
     .from('disciplines')
-    .select(DISCIPLINE_HEADER_COLUMNS)
+    .select(DISCIPLINE_HEADER_COLUMNS, { count: 'exact' })
     .in(
       'season_id',
       seasons.map((season) => season.id),
@@ -321,6 +341,16 @@ export async function mySeasons(supabase: Client): Promise<SeasonHeader[]> {
     .order('created_at', { ascending: true })
   if (disciplinesError) {
     throw new EdgeError(`No se pudieron leer las disciplinas: ${disciplinesError.message}`)
+  }
+  // Falla RUIDOSO en vez de derivar un estado sobre filas que faltan: un error
+  // en pantalla se ve y se arregla, un "Terminado" que no lo es no.
+  // ponytail: se corta en el techo de PostgREST, no pagina. Hacen falta ~1000
+  // disciplinas de UN mismo usuario para llegar; si alguna vez pasa, el
+  // upgrade es paginar con `.range()` en bucle, no subir el techo.
+  if (count !== null && (disciplineRows ?? []).length < count) {
+    throw new EdgeError(
+      `No se pudieron leer todas las disciplinas (${(disciplineRows ?? []).length} de ${count}). Recargá la pantalla.`,
+    )
   }
 
   const disciplineRowsBySeason = new Map<string, DisciplineHeaderRow[]>()
@@ -364,22 +394,6 @@ export async function seasonHeader(supabase: Client, seasonId: string): Promise<
     seasonStatusOf(rows as { status: SeasonStatus }[]),
     userId,
   )
-}
-
-/**
- * El estado REAL de un torneo con más de una disciplina (REQ-D3-3):
- * derivado de `disciplines.status`, no de `seasons.status` (que sigue
- * existiendo en dual-write hasta el contract, PR 27, pero deja de ser fuente
- * de verdad en cuanto una temporada tiene más de una disciplina).
- *
- * Ningún consumidor de `SeasonHeader.status` se cambia todavía a esto — esa
- * migración de pantallas es de una fase posterior. Esta función existe para
- * que quien la necesite ya la tenga.
- */
-export async function derivedSeasonStatus(supabase: Client, seasonId: string): Promise<SeasonStatus> {
-  const { data, error } = await supabase.from('disciplines').select('status').eq('season_id', seasonId)
-  if (error) throw new EdgeError(`No se pudo leer las disciplinas: ${error.message}`)
-  return seasonStatusOf((data ?? []) as { status: SeasonStatus }[])
 }
 
 /**
@@ -443,10 +457,16 @@ export async function seasonRules(
  * (de LA TEMPORADA, dual-write tail-only desde PR 7) y mezclarla con
  * `discipline_entries.seed_position` (de LA DISCIPLINA) producía posiciones
  * colisionadas. Única excepción: si la disciplina no se pudo resolver
- * (`defaultDisciplineId` da `null` — típicamente un extraño sin RLS para
- * verla) se usa `entries.seed_position` para TODO el plantel por igual, sin
- * `discipline_entries` de por medio, porque ahí no hay dos espacios que
- * mezclar, sólo uno.
+ * (`defaultDisciplineId` da `null`) el SQUAD se numera 0,1,2… en el orden de
+ * entrada, sin `discipline_entries` de por medio, porque ahí no hay dos
+ * espacios que mezclar — no hay ninguno.
+ *
+ * Esa excepción numeraba con `entries.seed_position` hasta C37, y el contract
+ * deja esa columna en `null` para el SQUAD. El caso es raro (las tres tablas
+ * comparten el gate `is_participant`, así que quien no ve `disciplines`
+ * tampoco ve `entries`: hace falta una temporada sin ninguna disciplina) y
+ * NO tenía un solo test — medido borrando la rama entera, la suite quedaba
+ * verde. Ahora sí lo tiene: `db/entries.db.test.ts`.
  */
 export async function entriesOf(
   supabase: Client,
@@ -461,7 +481,14 @@ export async function entriesOf(
       .from('entries')
       .select('id, display_name, kind, seed_position, player_id, matchday_id')
       .eq('season_id', seasonId)
-      .order('seed_position', { ascending: true }),
+      // Orden de ENTRADA, no el de salida: cada `seedPosition` se resuelve
+      // más abajo y las pantallas re-ordenan por ese campo. Dejó de ser
+      // `seed_position` (C37) porque esa columna se va a `null` para el
+      // SQUAD con el contract, y ordenar por una columna nula es no ordenar.
+      // `created_at` solo no alcanza: `createSeason` inserta todo el plantel
+      // en UNA sentencia y comparten el `now()`.
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true }),
     effectiveDisciplineIdPromise,
   ])
   if (error) throw new EdgeError(`No se pudo leer el plantel: ${error.message}`)
@@ -480,8 +507,26 @@ export async function entriesOf(
   }
 
   const entries: EntryRow[] = []
+  //Sólo para la rama sin disciplina resoluble: numera el SQUAD 0,1,2… en el
+  // orden de entrada. Antes ese número salía de `entries.seed_position`
+  // (C37), que el contract deja en `null` para el SQUAD — habría devuelto
+  // `null` en un campo tipado `number`. Acá no hay orden real que dar (no hay
+  // disciplina de la cual leerlo), y lo que importa es no perder a nadie:
+  // devolver el plantel con un orden propio es peor que el orden real y
+  // MUCHO mejor que una pantalla vacía.
+  let fallbackSeed = 0
   for (const row of rows) {
     if (row.kind !== 'SQUAD') {
+      // Un GUEST SIEMPRE tiene `seed_position`: es su orden real dentro de la
+      // fecha (`entries_guest_order`), lo escribe `addGuestSeat`
+      // (`db/matchday.ts`) y el CHECK `entries_seed_shape` del contract se lo
+      // va a exigir `not null`. El tipo dejó de garantizarlo cuando la
+      // columna se relajó para el SQUAD (C37, `0060`), así que el invariante
+      // se chequea acá en vez de taparse con un `?? 0` que ordenaría mal sin
+      // decir nada.
+      if (row.seed_position === null) {
+        throw new EdgeError('Un invitado quedó sin posición en su fecha. Esto es un bug.')
+      }
       entries.push({
         id: row.id,
         displayName: row.display_name,
@@ -492,7 +537,7 @@ export async function entriesOf(
       })
       continue
     }
-    const seedPosition = effectiveDisciplineId === null ? row.seed_position : disciplineSeed.get(row.id)
+    const seedPosition = effectiveDisciplineId === null ? fallbackSeed++ : disciplineSeed.get(row.id)
     if (seedPosition === undefined) continue // no juega esta disciplina
     entries.push({
       id: row.id,
@@ -683,16 +728,41 @@ export async function seasonMatchdaysOf(supabase: Client, seasonId: string): Pro
  * queda afuera porque no se pasa por esa tabla. Sumar puntos ponderados
  * (`computeRanking` por disciplina + `computeGlobalRanking`) ya deja en 0 a
  * quien no jugó una de ellas — no hace falta excluirlo acá.
+ *
+ * Delega en `seasonSquadMembersOf` y tira los campos de más (C37): las dos
+ * traían la misma fila con el mismo orden, y ese orden dejó de ser un
+ * `.order()` de una columna para pasar a resolverse contra la disciplina
+ * primaria. Duplicarlo era duplicar la parte que se puede desincronizar.
  */
 export async function seasonSquadOf(supabase: Client, seasonId: string): Promise<EntryId[]> {
+  return (await seasonSquadMembersOf(supabase, seasonId)).map((member) => member.id)
+}
+
+/**
+ * El orden del plantel A NIVEL TORNEO: `entry_id -> seed_position` de la
+ * disciplina PRIMARIA. Quien no juega la primaria no está en el mapa.
+ *
+ * Decisión #4044 (C37): `entries.seed_position` deja de tener valor para el
+ * SQUAD con el contract —se relaja y se ata a `kind = 'GUEST'`—, y el orden
+ * pasa a vivir sólo en `discipline_entries`, que es POR DISCIPLINA. La
+ * pregunta que quedaba abierta desde PR 7 es cuál de ellas ordena el TORNEO,
+ * y la respuesta es la primaria: es la que se sembró desde
+ * `entries.seed_position` en el backfill de 0023, así que elegirla es cero
+ * cambio visible para las temporadas que ya existen.
+ *
+ * `defaultDisciplineId` es el mismo criterio que usan `create_masters`
+ * (0050) y `season_invite` (0026) —`order by position, created_at limit 1`—
+ * y se reusa a propósito en vez de escribir uno nuevo.
+ */
+async function seasonSeedOrder(supabase: Client, seasonId: string): Promise<Map<string, number>> {
+  const disciplineId = await defaultDisciplineId(supabase, seasonId)
+  if (disciplineId === null) return new Map()
   const { data, error } = await supabase
-    .from('entries')
-    .select('id')
-    .eq('season_id', seasonId)
-    .eq('kind', 'SQUAD')
-    .order('seed_position', { ascending: true })
-  if (error) throw new EdgeError(`No se pudo leer el plantel: ${error.message}`)
-  return (data ?? []).map((row) => row.id)
+    .from('discipline_entries')
+    .select('entry_id, seed_position')
+    .eq('discipline_id', disciplineId)
+  if (error) throw new EdgeError(`No se pudo leer el orden del plantel: ${error.message}`)
+  return new Map((data ?? []).map((seat) => [seat.entry_id, seat.seed_position]))
 }
 
 /** Una fila de `seasonSquadMembersOf`: el id que necesita `computeRanking`, el nombre que la pantalla dibuja, y el dueño del asiento (o `null` si nadie lo reclamó). */
@@ -703,27 +773,48 @@ export interface SquadMember {
 }
 
 /**
- * Igual que `seasonSquadOf` pero con `display_name` (PR12b slice 2, tabla
- * global): la raíz de la temporada necesita el NOMBRE de cada fila, no sólo
- * el id — algo que `entriesOf` sí trae pero filtrado a UNA disciplina
- * (exactamente lo que esta pantalla no puede hacer). `seasonSquadOf` se deja
- * intacto: `torneos/page.tsx` sólo necesita los ids.
+ * El plantel de la temporada CON el nombre (PR12b slice 2, tabla global): la
+ * raíz de la temporada necesita el NOMBRE de cada fila, no sólo el id — algo
+ * que `entriesOf` sí trae pero filtrado a UNA disciplina (exactamente lo que
+ * esta pantalla no puede hacer). Es la implementación de las dos:
+ * `seasonSquadOf` delega acá y se queda con los ids.
  *
  * `playerId` (C14) se sumó para que "Plantel" en
  * Ajustes pueda usar esta función en vez de `entriesOf(seasonId)` sin
  * disciplina — esa llamada caía en la disciplina por defecto y perdía a
- * cualquier SQUAD promovido desde otra (`db/read.ts:419`). Acá no hay ese
- * problema: no se pasa por `discipline_entries`.
+ * cualquier SQUAD promovido desde otra (`db/read.ts:419`).
+ *
+ * CUIDADO al tocar esto (C37): desde que el orden es el de la primaria, acá
+ * SÍ se lee `discipline_entries` — pero sólo para ORDENAR, nunca para
+ * filtrar. Quien no juega la primaria va al final (`seasonSeedOrder`), no
+ * afuera. Convertir ese `?? MAX_SAFE_INTEGER` en un `.filter()` reabre
+ * exactamente el agujero que esta función existe para tapar.
  */
 export async function seasonSquadMembersOf(supabase: Client, seasonId: string): Promise<SquadMember[]> {
-  const { data, error } = await supabase
-    .from('entries')
-    .select('id, display_name, player_id')
-    .eq('season_id', seasonId)
-    .eq('kind', 'SQUAD')
-    .order('seed_position', { ascending: true })
+  const [{ data, error }, order] = await Promise.all([
+    supabase
+      .from('entries')
+      .select('id, display_name, player_id')
+      .eq('season_id', seasonId)
+      .eq('kind', 'SQUAD')
+      // El orden REAL lo pone `seasonSeedOrder` acá abajo; éste es sólo el de
+      // entrada, y tiene que ser determinístico igual porque es el desempate
+      // de quien no juega la primaria. `created_at` solo no alcanza:
+      // `createSeason` inserta todo el plantel en UNA sentencia, así que
+      // comparten el `now()` al milisegundo — de ahí el `id` detrás.
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true }),
+    seasonSeedOrder(supabase, seasonId),
+  ])
   if (error) throw new EdgeError(`No se pudo leer el plantel: ${error.message}`)
-  return (data ?? []).map((row) => ({ id: row.id, displayName: row.display_name, playerId: row.player_id }))
+  //`?? MAX_SAFE_INTEGER`: quien no juega la primaria va al FINAL, no se
+  // pierde (REQ-D9 — esta función existe justamente para no perder a nadie) y
+  // no se cuela en el medio. Mismo criterio que `season_invite` (0026) desde
+  // PR 9: `order by (de.seed_position is null), de.seed_position`.
+  return (data ?? [])
+    .map((row) => ({ row, seed: order.get(row.id) ?? Number.MAX_SAFE_INTEGER }))
+    .sort((left, right) => left.seed - right.seed)
+    .map(({ row }) => ({ id: row.id, displayName: row.display_name, playerId: row.player_id }))
 }
 
 /**

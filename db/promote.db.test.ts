@@ -89,7 +89,7 @@ interface EntryRow {
   id: string
   kind: 'SQUAD' | 'GUEST'
   matchday_id: string | null
-  seed_position: number
+  seed_position: number | null
   display_name: string
   season_id: string
 }
@@ -137,7 +137,9 @@ async function awardLinesOf(
   return data ?? []
 }
 
-async function squadSeedPositions(seasonId: string): Promise<Array<{ id: string; seed_position: number }>> {
+// `seed_position` es `number | null` desde C37 (`0060`): para el SQUAD nadie
+// la escribe más, y el contract la va a poner en null y prohibir lo contrario.
+async function squadSeedPositions(seasonId: string): Promise<Array<{ id: string; seed_position: number | null }>> {
   const db = adminClient()
   const { data, error } = await db
     .from('entries')
@@ -210,11 +212,14 @@ describe('promoteGuest — spec 3.1: se copia el award congelado del compañero'
       expect(after).toContainEqual(row)
     }
 
-    // El asiento pasó a SQUAD, salió de la fecha (matchday_id null), y cayó al final del plantel.
+    // El asiento pasó a SQUAD, salió de la fecha (matchday_id null) y perdió
+    // la posición de invitado (C37): en `entries` el SQUAD ya no tiene
+    // ninguna. La que cuenta —al final del plantel de esta disciplina— es la
+    // de `discipline_entries`, y la mide el test de la spec 3.6.
     const promoted = await entryRow(guestId)
     expect(promoted.kind).toBe('SQUAD')
     expect(promoted.matchday_id).toBeNull()
-    expect(promoted.seed_position).toBe(8) // los 8 asientos originales van 0..7
+    expect(promoted.seed_position).toBeNull()
   })
 
   it('no toca los awards de NINGUNA otra fecha de la temporada', async () => {
@@ -463,7 +468,15 @@ describe('promoteGuest — spec 3.6: usa la ubicación de la Capability 2', () =
   // recibir el asiento SIEMPRE al final (dual-write, dejará de existir para
   // SQUAD en PR 25). Su propia fila en `discipline_entries` —donde `p_before`
   // SÍ posiciona— es el test de abajo (PR 9, "promote_guest restatement #1/3").
-  it('"antes de" sigue validando el asiento, pero entries.seed_position ya no lo posiciona (degradación aceptada)', async () => {
+  // C37: el dual-write terminó. `promote_guest` ya no escribe
+  // `entries.seed_position` al pasar GUEST -> SQUAD — lo pone en `null`, que
+  // es lo que el CHECK `entries_seed_shape` del contract va a EXIGIR. La
+  // "degradación aceptada" que este test documentaba (el asiento iba al final
+  // de `entries` en vez de a la posición de `p_before`) deja de ser una
+  // degradación y pasa a ser el comportamiento: en `entries` ya no hay
+  // ninguna posición. La de verdad —donde `p_before` SÍ posiciona— es la de
+  // `discipline_entries`, y es el test de acá abajo.
+  it('"antes de" sigue validando el asiento, y entries.seed_position queda en null (C37)', async () => {
     const { admin, seasonId, matchdayId, guestId } = await closedMatchdayWithLooseGuest('2026-08-10')
     const before = await squadSeedPositions(seasonId)
     const target = before[2]
@@ -473,17 +486,11 @@ describe('promoteGuest — spec 3.6: usa la ubicación de la Capability 2', () =
 
     const after = await squadSeedPositions(seasonId)
     expect(after).toHaveLength(9)
-    // Al final (max + 1 = 8), no en la posición 2 que pedía `p_before`.
-    expect(after.find((e) => e.id === guestId)?.seed_position).toBe(8)
-    // Nadie de los 8 preexistentes se corrió: sin `discipline_entries` propia
-    // todavía, no hay nada que parkear en `entries`.
-    expect(after.filter((e) => e.id !== guestId).map((e) => e.seed_position)).toEqual(
-      before.map((e) => e.seed_position),
-    )
-    // Sin huecos ni duplicados en 0..8.
-    expect(after.map((e) => e.seed_position).sort((a, b) => a - b)).toEqual(
-      Array.from({ length: 9 }, (_, i) => i),
-    )
+    //El promovido entra al SQUAD sin posición en `entries`...
+    expect(after.find((e) => e.id === guestId)?.seed_position).toBeNull()
+    // ...y los 8 preexistentes tampoco tienen una: nadie escribe esa columna
+    // para el SQUAD desde C37.
+    expect(after.map((e) => e.seed_position)).toEqual(Array.from({ length: 9 }, () => null))
   })
 
   // PR 9 (0025, "promote_guest restatement #1/3"): el invitado promovido SÍ

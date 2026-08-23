@@ -162,9 +162,19 @@ describe('Ajustes — la página entera', () => {
   })
 })
 
-/** El panel que edita el formato, tal cual sale al HTML. */
+/**
+ * Los paneles que editan el formato, tal cual salen al HTML — uno POR
+ * DISCIPLINA desde C36. El `id="formato"` (el ancla de la fila de arriba) se
+ * mudó al contenedor: con más de una disciplina, dejarlo en cada `<section>`
+ * repetía el `id` y era HTML inválido.
+ */
+function panelesDeFormato(html: string): string[] {
+  return [...html.matchAll(/<section data-formato="[^"]*"[\s\S]*?<\/section>/g)].map((match) => match[0])
+}
+
+/** El primero, que es el de la disciplina primaria. */
 function panelDeFormato(html: string): string {
-  return /<section id="formato"[\s\S]*?<\/section>/.exec(html)?.[0] ?? ''
+  return panelesDeFormato(html)[0] ?? ''
 }
 
 describe('Ajustes — el panel de Formato dice de qué disciplina habla', () => {
@@ -178,8 +188,13 @@ describe('Ajustes — el panel de Formato dice de qué disciplina habla', () => 
    *
    * El arreglo es que el panel diga de cuál habla, no que la fila diga menos:
    * achicar la fila revierte W64 en Ajustes, que la ronda 22 verificó cerrado
-   * en pantalla. Y no se abre camino a la segunda disciplina: eso sería
-   * superficie nueva.
+   * en pantalla.
+   *
+   * C36: esa tanda cerró diciendo "y no se abre camino a la segunda
+   * disciplina: eso sería superficie nueva". Ahora SÍ lo hay —hay un panel
+   * por disciplina, ver el test del final del describe— y este par sigue
+   * probando lo suyo: que el nombre SIGUE a la disciplina que cada panel
+   * edita, mirando el primero.
    */
   it('con pádel primero nombra Pádel, y son sus cinco steppers los que dibuja', async () => {
     const panel = panelDeFormato(await ajustes(PADEL_Y_FIFA))
@@ -206,6 +221,23 @@ describe('Ajustes — el panel de Formato dice de qué disciplina habla', () => 
    */
   it('con una sola disciplina el panel dice exactamente lo de siempre', async () => {
     expect(panelDeFormato(await ajustes(SOLO_PADEL))).toContain('>Formato</h2>')
+  })
+
+  /**
+   * C36: hay UN panel por disciplina. Editar sólo la [0] dejaba
+   * `disciplines.has_masters` de la segunda sin ninguna pantalla que lo
+   * cambiara —la decisión #4029 parte 2 dice "editable en Ajustes"— y, desde
+   * que cada disciplina juega su propio Masters (decisión #4035), además
+   * contradecía a la pantalla de Fechas, que ya dibuja el bloque en cada una.
+   */
+  it('dibuja un panel por disciplina, cada uno con su nombre (C36)', async () => {
+    const paneles = panelesDeFormato(await ajustes(PADEL_Y_FIFA))
+    expect(paneles).toHaveLength(2)
+    expect(paneles[0]).toContain('>Formato · Pádel</h2>')
+    expect(paneles[1]).toContain('>Formato · FIFA</h2>')
+    //Y el de FIFA es el de a UNO: su check de Masters sale deshabilitado
+    // (decisión #4029 parte 3), que es justo lo que no se podía ver antes.
+    expect(paneles[1]).toContain('Una disciplina de a uno no juega Masters')
   })
 })
 

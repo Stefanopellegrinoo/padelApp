@@ -285,7 +285,7 @@ export type Database = {
           matchday_id: string | null
           player_id: string | null
           season_id: string
-          seed_position: number
+          seed_position: number | null
         }
         Insert: {
           created_at?: string
@@ -295,7 +295,7 @@ export type Database = {
           matchday_id?: string | null
           player_id?: string | null
           season_id: string
-          seed_position: number
+          seed_position?: number | null
         }
         Update: {
           created_at?: string
@@ -305,7 +305,7 @@ export type Database = {
           matchday_id?: string | null
           player_id?: string | null
           season_id?: string
-          seed_position?: number
+          seed_position?: number | null
         }
         Relationships: [
           {
@@ -641,7 +641,7 @@ export type Database = {
       }
       seasons: {
         Row: {
-          config: Json
+          config: Json | null
           created_at: string
           created_by: string
           id: string
@@ -652,7 +652,7 @@ export type Database = {
           status: string
         }
         Insert: {
-          config: Json
+          config?: Json | null
           created_at?: string
           created_by: string
           id?: string
@@ -663,7 +663,7 @@ export type Database = {
           status?: string
         }
         Update: {
-          config?: Json
+          config?: Json | null
           created_at?: string
           created_by?: string
           id?: string
@@ -697,6 +697,10 @@ export type Database = {
       close_matchday: {
         Args: { p_awards: Json; p_matchday: string }
         Returns: undefined
+      }
+      create_discipline_masters: {
+        Args: { p_discipline: string; p_played_on: string }
+        Returns: string
       }
       create_masters: {
         Args: { p_played_on: string; p_season: string }

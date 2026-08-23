@@ -243,13 +243,16 @@ describe('backfill de openScore (0037)', () => {
     const db = adminClient()
     const { data, error } = await db
       .from('seasons')
-      .select('id, config, disciplines(config)')
+      .select('id, disciplines(config)')
       .eq('invite_token', 'demo')
       .single()
     if (error || data === null) throw new Error(error?.message)
 
-    const seasonFormat = (data.config as { matchFormat?: Record<string, unknown> }).matchFormat
-    expect(seasonFormat).toHaveProperty('openScore', false)
+    // Ya no mira `seasons.config` (C35): esa columna no tiene un solo lector
+    // de producción y el CONTRACT la dropea — el seed dejó de escribirla en
+    // esta misma tanda. `disciplines.config` es la fuente real desde PR 5, y
+    // es la única mitad de este tripwire que estaba mirando lo que importa.
+    expect(data.disciplines.length).toBeGreaterThan(0)
     for (const discipline of data.disciplines) {
       const format = (discipline.config as { matchFormat?: Record<string, unknown> }).matchFormat
       expect(format).toHaveProperty('openScore', false)

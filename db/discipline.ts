@@ -2,6 +2,7 @@ import type { DisciplineId, SeasonConfig, SideSize } from '@/core'
 import type { Client } from './client'
 import type { Json } from './database.types'
 import { EdgeError } from './errors'
+import { defaultDisciplineId, squadSeedOrder } from './season'
 import { assertValidConfig } from './validate'
 
 /** `disciplineConfig`'s return: la config Y el `pair_size`/`allows_draw` reales, del mismo select. */
@@ -144,7 +145,7 @@ export async function updateDisciplineConfig(
  * organizador lo cambia después.
  *
  * El guard de la parte 3 (no se puede ENCENDER el Masters en una disciplina
- * de a uno — `generateMastersPairs`, `db/matchday.ts:985`, rechaza siempre
+ * de a uno — `generateMastersPairs`, `db/matchday.ts`, rechaza siempre
  * `pair_size=1`) vive ACÁ y TAMBIÉN en la base
  * (`disciplines_has_masters_needs_pair`, 0053): `grant update (..., has_masters,
  * ...)` (`0015_disciplines.sql:70`) es de COLUMNA, no de función, así que un
@@ -242,8 +243,8 @@ export async function addDiscipline(
       position: (maxRow?.position ?? -1) + 1,
       pair_size: spec.pairSize ?? 2,
       allows_draw: spec.allowsDraw ?? false,
-      // Decisión #4029, parte 1: de a uno nace SIN Masters -- `openMatchday`
-      // (`db/matchday.ts:985`) rechaza siempre una fecha MASTERS con
+      // Decisión #4029, parte 1: de a uno nace SIN Masters --
+      // `generateMastersPairs` (`db/matchday.ts`) rechaza siempre una fecha MASTERS con
       // `pair_size=1`, así que ofrecer el check encendido ahí sería ofrecer
       // algo que la app ya rechaza. De a dos sigue naciendo en `true`, el
       // default de siempre (`0015_disciplines.sql:21`).
@@ -265,7 +266,17 @@ export async function addDiscipline(
   if (discipline === null) throw new EdgeError('No se pudo crear la disciplina.')
   const disciplineId = discipline.id as DisciplineId
 
-  let seatQuery = supabase.from('entries').select('id, seed_position').eq('season_id', seasonId).eq('kind', 'SQUAD')
+  // `created_at, id` y no `seed_position` (C37): es sólo el orden de ENTRADA
+  // —el de salida lo pone el `rank` de la primaria, más abajo— pero tiene que
+  // ser determinístico igual, porque es el desempate de quien no juega la
+  // primaria y no tiene orden que copiar.
+  let seatQuery = supabase
+    .from('entries')
+    .select('id')
+    .eq('season_id', seasonId)
+    .eq('kind', 'SQUAD')
+    .order('created_at', { ascending: true })
+    .order('id', { ascending: true })
   if (entryIds !== undefined) seatQuery = seatQuery.in('id', entryIds)
   const { data: seats, error: seatsReadError } = await seatQuery
   if (seatsReadError) throw new EdgeError(`No se pudo leer el plantel: ${seatsReadError.message}`)
@@ -281,12 +292,31 @@ export async function addDiscipline(
   }
 
   if (seats !== null && seats.length > 0) {
+    // Decisión #4044: la disciplina NUEVA arranca con el orden de la PRIMARIA
+    // (el admin la reordena después si quiere). Salía de
+    // `entries.seed_position`, que el contract relaja a `null` para el SQUAD
+    // — y `discipline_entries.seed_position` es `not null check (>= 0)`, así
+    // que eso no degradaba REQ-D1-2: lo rompía entero.
+    //
+    // Se numera 0,1,2… en vez de copiar el número de la primaria: con un
+    // `entryIds` parcial los de la primaria vienen con huecos, y esta
+    // disciplina no tiene por qué heredarlos. Quien no juega la primaria no
+    // tiene orden que copiar y va al final, mismo criterio que
+    // `seasonSeedOrder` (`db/read.ts`) y que `season_invite` (0026).
+    const primaryId = await defaultDisciplineId(supabase, seasonId)
+    const rank = new Map(
+      (primaryId === null ? [] : await squadSeedOrder(supabase, primaryId)).map((entryId, index) => [entryId, index]),
+    )
+    const ordered = [...seats].sort(
+      (left, right) =>
+        (rank.get(left.id) ?? Number.MAX_SAFE_INTEGER) - (rank.get(right.id) ?? Number.MAX_SAFE_INTEGER),
+    )
     const { error: seatsError } = await supabase.from('discipline_entries').insert(
-      seats.map((seat) => ({
+      ordered.map((seat, index) => ({
         discipline_id: disciplineId,
         entry_id: seat.id,
         season_id: seasonId,
-        seed_position: seat.seed_position,
+        seed_position: index,
       })),
     )
     if (seatsError) {

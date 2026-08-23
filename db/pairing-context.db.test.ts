@@ -398,3 +398,49 @@ describe('pairingContextFor', () => {
     )
   })
 })
+
+// ── C37: el orden de entrada al sorteo es el de la DISCIPLINA ───────────────
+// `playingEntryIds` (`db/matchday.ts`) ordenaba `present` por
+// `entries.seed_position`, la numeración de LA TEMPORADA. Dos problemas en la
+// misma línea:
+//
+//   1. Esa columna se relaja para el SQUAD en el contract (C37) y su `?? 0`
+//      degradaba en SILENCIO — sin error, con el orden del sorteo al azar.
+//   2. Ya hoy es la numeración equivocada: el orden real del plantel de una
+//      disciplina vive en `discipline_entries` desde PR 7, y es el mismo
+//      defecto que C9 arregló en `entriesOf` sin llegar hasta acá.
+//
+// `attendances_entry_discipline` (FK a `discipline_entries`) garantiza que
+// todo presente tiene fila en la disciplina de la fecha, así que ordenar por
+// ahí no puede perder a nadie.
+describe('pairingContextFor > el orden de present (C37)', () => {
+  it('sale de discipline_entries, no de entries.seed_position', async () => {
+    const { admin, seasonId, squad } = await buildSeasonWithSquad(defaultConfig(8), 8)
+    const disciplineId = await disciplineIdOf(seasonId)
+    const matchdayId = await openMatchday(seasonId, 1, squad)
+
+    // La disciplina queda al revés que `entries.seed_position`, que sigue en
+    // 0..7. Parking de dos pasadas para no chocar `discipline_entries_seed`.
+    const db = adminClient()
+    const reversed = [...squad].reverse()
+    for (const [index, entryId] of reversed.entries()) {
+      const { error } = await db
+        .from('discipline_entries')
+        .update({ seed_position: index + 100 })
+        .eq('discipline_id', disciplineId)
+        .eq('entry_id', entryId)
+      if (error) throw new Error(error.message)
+    }
+    for (const [index, entryId] of reversed.entries()) {
+      const { error } = await db
+        .from('discipline_entries')
+        .update({ seed_position: index })
+        .eq('discipline_id', disciplineId)
+        .eq('entry_id', entryId)
+      if (error) throw new Error(error.message)
+    }
+
+    const context = await pairingContextFor(admin.client, matchdayId)
+    expect(context.input.present).toEqual(reversed)
+  })
+})

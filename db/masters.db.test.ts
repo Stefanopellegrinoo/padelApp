@@ -165,7 +165,7 @@ describe('the masters', () => {
     const { admin, seasonId, disciplineId, squad } = await buildScene()
     await playRegularSeason(admin, seasonId, squad)
 
-    const mastersId = await createMasters(admin.client, seasonId, '2026-12-20')
+    const mastersId = await createMasters(admin.client, disciplineId, '2026-12-20')
     await generateMastersPairs(admin.client, mastersId)
 
     const detail = await matchdayDetail(admin.client, mastersId)
@@ -192,7 +192,7 @@ describe('the masters', () => {
     const { admin, seasonId, disciplineId, squad } = await buildScene()
     await playRegularSeason(admin, seasonId, squad)
 
-    const mastersId = await createMasters(admin.client, seasonId, '2026-12-20')
+    const mastersId = await createMasters(admin.client, disciplineId, '2026-12-20')
     await generateMastersPairs(admin.client, mastersId)
 
     const detail = await matchdayDetail(admin.client, mastersId)
@@ -210,10 +210,10 @@ describe('the masters', () => {
   // Antes de este plan `openMatchday` corría assertMatchdaySize sobre un
   // `present` vacío y el Masters no se podía abrir nunca.
   it('opens without a single attendance row', async () => {
-    const { admin, seasonId, squad } = await buildScene()
+    const { admin, seasonId, disciplineId, squad } = await buildScene()
     await playRegularSeason(admin, seasonId, squad)
 
-    const mastersId = await createMasters(admin.client, seasonId, '2026-12-20')
+    const mastersId = await createMasters(admin.client, disciplineId, '2026-12-20')
     await generateMastersPairs(admin.client, mastersId)
     expect(await attendancesOf(admin.client, mastersId)).toEqual(new Map())
 
@@ -229,7 +229,7 @@ describe('the masters', () => {
     const { admin, seasonId, disciplineId, squad } = await buildScene()
     await playRegularSeason(admin, seasonId, squad)
 
-    const mastersId = await createMasters(admin.client, seasonId, '2026-12-20')
+    const mastersId = await createMasters(admin.client, disciplineId, '2026-12-20')
     await generateMastersPairs(admin.client, mastersId)
     await openMatchday(admin.client, mastersId)
     for (const matchId of await matchIdsOf(mastersId)) {
@@ -264,7 +264,7 @@ describe('the masters', () => {
     const { admin, disciplineId, seasonId, squad } = await buildScene()
     await playRegularSeason(admin, seasonId, squad)
 
-    const mastersId = await createMasters(admin.client, seasonId, '2026-12-20')
+    const mastersId = await createMasters(admin.client, disciplineId, '2026-12-20')
     await generateMastersPairs(admin.client, mastersId)
     await openMatchday(admin.client, mastersId)
     for (const matchId of await matchIdsOf(mastersId)) {
@@ -290,7 +290,7 @@ describe('the masters', () => {
     const { admin, seasonId, disciplineId, squad } = await buildScene()
     await playRegularSeason(admin, seasonId, squad)
 
-    const mastersId = await createMasters(admin.client, seasonId, '2026-12-20')
+    const mastersId = await createMasters(admin.client, disciplineId, '2026-12-20')
     await generateMastersPairs(admin.client, mastersId)
     await openMatchday(admin.client, mastersId)
 
@@ -365,7 +365,7 @@ describe('create_masters reads disciplines.config, not seasons.config', () => {
     // la DISCIPLINA (primaryDiscipline(header).config), que ahora dice 1.
     await playRegularSeason(admin, seasonId, squad)
 
-    const mastersId = await createMasters(admin.client, seasonId, '2026-12-20')
+    const mastersId = await createMasters(admin.client, disciplineId, '2026-12-20')
 
     const db = adminClient()
     const { data: matchday, error } = await db
@@ -429,7 +429,7 @@ describe('a discipline without a masters (has_masters=false)', () => {
     await setHasMasters(disciplineId, false)
     await playRegularSeason(admin, seasonId, squad)
 
-    await expect(createMasters(admin.client, seasonId, '2026-12-20')).rejects.toThrow(
+    await expect(createMasters(admin.client, disciplineId, '2026-12-20')).rejects.toThrow(
       'Esta disciplina no juega Masters',
     )
   })
@@ -738,5 +738,101 @@ describe('a matchday drawn with a guest', () => {
     expect(detail.sides).toHaveLength(4)
     expect(detail.guestIds).toEqual([guestId])
     expect(detail.sides.some((side) => sameSide(side, pair(guestId, guestId)))).toBe(false)
+  })
+})
+
+// ── C36: un torneo de DOS disciplinas tiene que poder terminar ──────────────
+// Decisión #4035: cada disciplina juega SU PROPIO Masters.
+//
+// Lo que midió `verify-report-go-no-go` (#4034): Pádel + FIFA, las dos en
+// "Parejas" —el DEFAULT del wizard (`wizard.tsx:397`)— dejaba un torneo que
+// NO PODÍA TERMINAR NUNCA:
+//
+//   * las dos nacen `has_masters = true`, así que su único camino a FINISHED
+//     es un Masters (el `elsif REGULAR` de `0056` exige `not v_has_masters`);
+//   * `create_masters` resolvía la disciplina con `order by position,
+//     created_at limit 1` (`0050:46-48`), o sea SIEMPRE la primaria;
+//   * el segundo llamado rebotaba con "Ya hay un Masters…", y FIFA quedaba
+//     ACTIVE para siempre. Con ella, la temporada.
+//
+// La base ya lo soportaba: `matchdays_one_masters` es unique sobre
+// `discipline_id`, no sobre `season_id`. Lo único que faltaba era que la
+// función recibiera QUIÉN lo pidió.
+describe('C36 — cada disciplina juega su propio Masters', () => {
+  it('las dos disciplinas de a dos llegan a FINISHED, y la temporada termina', async () => {
+    const admin = await createTestUser()
+    const config = shortSeason()
+    const { seasonId, disciplineIds } = await createSeason({
+      admin,
+      config,
+      squad: await fillerPlayers(config.squadSize),
+      // El default del wizard, textual: las dos en "Parejas".
+      disciplines: [
+        { kind: 'PADEL', config, pairSize: 2 },
+        { kind: 'FIFA', config, pairSize: 2 },
+      ],
+    })
+    const [padelId, fifaId] = disciplineIds
+    if (padelId === undefined || fifaId === undefined) throw new Error('La escena no armó las 2 disciplinas.')
+
+    const squad = (await entriesOf(admin.client, seasonId, padelId))
+      .filter((entry) => entry.kind === 'SQUAD')
+      .map((entry) => entry.id)
+
+    async function playMasters(disciplineId: DisciplineId): Promise<void> {
+      const mastersId = await createMasters(admin.client, disciplineId, '2026-12-20')
+      await generateMastersPairs(admin.client, mastersId)
+      await openMatchday(admin.client, mastersId)
+      for (const matchId of await matchIdsOf(mastersId)) {
+        await saveResult(admin.client, matchId, [{ gamesA: 4, gamesB: 0 }])
+      }
+      await closeMatchday(admin.client, mastersId)
+    }
+
+    await playRegularSeason(admin, seasonId, squad, padelId)
+    await playRegularSeason(admin, seasonId, squad, fifaId)
+
+    await playMasters(padelId)
+    expect(await disciplineStatusOf(padelId)).toBe('FINISHED')
+    // Acá se moría el torneo: el segundo Masters rebotaba y FIFA no tenía
+    // ningún otro camino a FINISHED.
+    expect(await disciplineStatusOf(fifaId)).toBe('ACTIVE')
+
+    await playMasters(fifaId)
+    expect(await disciplineStatusOf(fifaId)).toBe('FINISHED')
+
+    //REQ-D3-3: con TODAS en FINISHED, la temporada termina. Es lo que
+    // `/torneos` dibuja como "Terminado" y lo que #4034 midió diciendo
+    // "En curso" para siempre.
+    expect((await seasonHeader(admin.client, seasonId)).status).toBe('FINISHED')
+  })
+
+  it('el Masters de una disciplina no se puede armar desde otra que no terminó sus fechas', async () => {
+    const admin = await createTestUser()
+    const config = shortSeason()
+    const { seasonId, disciplineIds } = await createSeason({
+      admin,
+      config,
+      squad: await fillerPlayers(config.squadSize),
+      disciplines: [
+        { kind: 'PADEL', config, pairSize: 2 },
+        { kind: 'FIFA', config, pairSize: 2 },
+      ],
+    })
+    const [padelId, fifaId] = disciplineIds
+    if (padelId === undefined || fifaId === undefined) throw new Error('La escena no armó las 2 disciplinas.')
+
+    const squad = (await entriesOf(admin.client, seasonId, padelId))
+      .filter((entry) => entry.kind === 'SQUAD')
+      .map((entry) => entry.id)
+
+    // Sólo Pádel juega. FIFA no tiene ni una fecha cerrada, así que su
+    // Masters tiene que rebotar POR SU PROPIA cuenta de fechas — no por la de
+    // la primaria, que sí terminó.
+    await playRegularSeason(admin, seasonId, squad, padelId)
+
+    await expect(createMasters(admin.client, fifaId, '2026-12-20')).rejects.toThrow(
+      /El Masters se juega al terminar las 1 fechas: faltan 1\./,
+    )
   })
 })

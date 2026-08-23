@@ -176,7 +176,7 @@ async function guestEntriesOf(matchdayId: string): Promise<Array<{ id: string; d
 /** El plantel de la temporada — sólo SQUAD, nunca tocado por cancelar una fecha (spec 1.3). */
 async function squadEntriesOf(
   seasonId: string,
-): Promise<Array<{ id: string; seed_position: number; display_name: string }>> {
+): Promise<Array<{ id: string; seed_position: number | null; display_name: string }>> {
   const db = adminClient()
   const { data, error } = await db
     .from('entries')

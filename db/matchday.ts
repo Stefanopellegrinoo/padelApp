@@ -172,7 +172,7 @@ export async function pairingContextFor(
         )
 
   const present = [
-    ...(await playingEntryIds(supabase, matchdayId)),
+    ...(await playingEntryIds(supabase, matchdayId, matchday.discipline_id)),
     ...guests.map((guest) => guest.entryId),
   ]
   assertMatchdaySize(present, pairSize)
@@ -279,7 +279,7 @@ export async function setMatchdayFormat(
   if (formato.kind === 'GROUPS_KNOCKOUT') {
     const { pairSize } = await disciplineConfig(supabase, matchday.discipline_id)
     const present = [
-      ...(await playingEntryIds(supabase, matchdayId)),
+      ...(await playingEntryIds(supabase, matchdayId, matchday.discipline_id)),
       ...(await guestsOf(supabase, matchdayId)).map((guest) => guest.entryId),
     ]
     const sides = Math.floor(present.length / pairSize)
@@ -552,7 +552,7 @@ export async function syncGuestSeat(supabase: Client, matchdayId: string): Promi
   const { pairSize } = await disciplineConfig(supabase, matchday.discipline_id)
   if (pairSize !== 2) return
 
-  const playing = await playingEntryIds(supabase, matchdayId)
+  const playing = await playingEntryIds(supabase, matchdayId, matchday.discipline_id)
   const guests = await guestsOf(supabase, matchdayId)
   const locks = await locksOf(supabase, matchdayId)
   const isOdd = playing.length % 2 !== 0
@@ -1049,21 +1049,33 @@ export async function generateMastersPairs(supabase: Client, matchdayId: string)
   await insertMatches(supabase, matches)
 }
 
-/** Crea la fecha del Masters. `kind` no está en el grant de columnas de `matchdays`, así que sólo la función de 0007 la puede crear. */
+/**
+ * Crea la fecha del Masters DE UNA DISCIPLINA. `kind` no está en el grant de
+ * columnas de `matchdays`, así que sólo la función de la base la puede crear.
+ *
+ * Recibe la disciplina, no la temporada (C36, decisión #4035): cada
+ * disciplina juega su propio Masters. Antes llamaba a `create_masters`, que
+ * resolvía la primaria ella misma — y con eso la SEGUNDA disciplina de un
+ * torneo no podía armar el suyo, no podía llegar a FINISHED, y la temporada
+ * no podía terminar nunca.
+ */
 export async function createMasters(
   supabase: Client,
-  seasonId: string,
+  disciplineId: DisciplineId,
   playedOn: string,
 ): Promise<string> {
-  const { data, error } = await supabase.rpc('create_masters', {
-    p_season: seasonId,
+  const { data, error } = await supabase.rpc('create_discipline_masters', {
+    p_discipline: disciplineId,
     p_played_on: playedOn,
   })
   if (error !== null) {
     // `matchdays_one_masters` y `matchdays_one_live` levantan las dos un 23505,
-    // y el mensaje crudo de Postgres nombra un índice que nadie conoce.
+    // y el mensaje crudo de Postgres nombra un índice que nadie conoce. Los
+    // dos son unique sobre `discipline_id`, así que el mensaje dice "en esta
+    // disciplina" — decía "en esta temporada", que era falso desde PR 7 y
+    // habría mandado a buscar el Masters de otra disciplina.
     if (error.code === '23505') {
-      throw new EdgeError('Ya hay un Masters, o una fecha sin cerrar en esta temporada.')
+      throw new EdgeError('Ya hay un Masters, o una fecha sin cerrar en esta disciplina.')
     }
     throw new EdgeError(error.message)
   }
@@ -1348,10 +1360,26 @@ async function locksOf(supabase: Client, matchdayId: string): Promise<PairLock[]
   return (data ?? []).map((row) => ({ a: row.entry_a, b: row.entry_b }))
 }
 
-// `attendances` has two foreign keys into `entries` (kind and season_id), so a
-// PostgREST embed would need a disambiguating hint either way — two plain
-// reads plus an in-memory sort is the same number of round trips without it.
-async function playingEntryIds(supabase: Client, matchdayId: string): Promise<EntryId[]> {
+/**
+ * Quién juega esta fecha, EN EL ORDEN DE LA DISCIPLINA.
+ *
+ * El orden salía de `entries.seed_position` (C37), y era la numeración
+ * equivocada por dos motivos a la vez: es la de LA TEMPORADA —el orden real
+ * del plantel de una disciplina vive en `discipline_entries` desde PR 7, el
+ * mismo defecto que C9 arregló en `entriesOf` sin llegar hasta acá— y encima
+ * esa columna se relaja para el SQUAD en el contract, así que su `?? 0` iba a
+ * dejar el orden de entrada al sorteo al azar SIN un solo error.
+ *
+ * El `.filter` no puede perder a nadie: `attendances_entry_discipline` es una
+ * FK a `discipline_entries(discipline_id, entry_id)`, así que todo presente
+ * tiene fila en la disciplina de su fecha. Es la base la que lo garantiza, no
+ * esta función.
+ */
+async function playingEntryIds(
+  supabase: Client,
+  matchdayId: string,
+  disciplineId: DisciplineId,
+): Promise<EntryId[]> {
   const { data: attendances, error: attendancesError } = await supabase
     .from('attendances')
     .select('entry_id')
@@ -1360,19 +1388,10 @@ async function playingEntryIds(supabase: Client, matchdayId: string): Promise<En
   if (attendancesError) {
     throw new EdgeError(`No se pudo leer el presentismo: ${attendancesError.message}`)
   }
-  const entryIds = (attendances ?? []).map((row) => row.entry_id)
-  if (entryIds.length === 0) return []
+  const playing = new Set((attendances ?? []).map((row) => row.entry_id))
+  if (playing.size === 0) return []
 
-  const { data: entries, error: entriesError } = await supabase
-    .from('entries')
-    .select('id, seed_position')
-    .in('id', entryIds)
-  if (entriesError) throw new EdgeError(`No se pudieron leer los asientos: ${entriesError.message}`)
-
-  const seedPosition = new Map((entries ?? []).map((row) => [row.id, row.seed_position]))
-  return [...entryIds].sort(
-    (left, right) => (seedPosition.get(left) ?? 0) - (seedPosition.get(right) ?? 0),
-  )
+  return (await squadSeedOrder(supabase, disciplineId)).filter((entryId) => playing.has(entryId))
 }
 
 /** Borra las parejas de la fecha. Cascadea a matches y match_sets. */

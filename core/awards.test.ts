@@ -36,13 +36,18 @@ describe('computeAwards', () => {
    * S89 (verify-report-pre-contract #4026): `lines` se armaba UNA sola vez,
    * fuera del loop que reparte los dos `Award` de una pareja -- los dos
    * apuntaban al MISMO array. Un `.toEqual` que sólo compara CONTENIDO pasa
-   * igual con el bug (los dos arrays arrancan iguales); hace falta mutar el
-   * de uno y mirar que el del otro no se mueva.
+   * igual con el bug (los dos arrays arrancan iguales).
+   *
+   * S99: este test MUTABA el de uno (`first.lines.push(...)`) para mirar que
+   * el del otro no se moviera. Desde que `Award.lines` es `readonly` eso no
+   * compila -- que es exactamente el punto de S99: la garantía pasó de la
+   * disciplina al compilador. Comparar la IDENTIDAD de las dos referencias
+   * afirma lo mismo, directo y sin mutar nada.
    */
   it('no comparte la misma instancia de `lines` entre los dos miembros de una pareja', () => {
     const awards = computeAwards([standing('a1', 'a2', 1)], CONFIG, [])
     const [first, second] = awards
-    first?.lines.push({ reason: 'bonus de prueba', points: 99 })
+    expect(first?.lines).not.toBe(second?.lines)
     expect(second?.lines).toEqual([{ reason: `${ordinal(1)} de la fecha`, points: 10 }])
   })
 

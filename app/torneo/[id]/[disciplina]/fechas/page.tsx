@@ -13,7 +13,6 @@ import {
 import {
   entriesOf,
   matchdayDetail,
-  primaryDiscipline,
   seasonAwardsOf,
   seasonHeader,
   seasonMatchdaysOf,
@@ -248,15 +247,21 @@ export default async function FechasPage({ params }: PageProps) {
         })}
       </div>
 
-      {/* El Masters es UNO por temporada (`create_masters`, 0021, resuelve
-          `order by position, created_at limit 1` del lado de la base — no
-          recibe qué disciplina lo pidió) y hoy sólo se puede crear en la
-          disciplina [0]. Antes de PR13c ninguna otra disciplina llegaba a
-          `remainingForMasters === 0` (C12 lo impedía). Mostrar el bloque en
-          una disciplina no-primary invitaría a un CTA que crea el Masters en
-          la disciplina EQUIVOCADA sin decirlo. Volver esto multi-disciplina
-          es de Fase 4 (D7); acá se lo deja fuera con esta guarda. */}
-      {discipline.id === primaryDiscipline(header).id && (
+      {/* El Masters es UNO POR DISCIPLINA y cada una juega el suyo (C36,
+          decisión #4035): `create_discipline_masters` (0064) recibe cuál lo
+          pidió, y `matchdays_one_masters` siempre fue unique sobre
+          `discipline_id`. La guarda era `discipline.id ===
+          primaryDiscipline(header).id`, y con eso la SEGUNDA disciplina no
+          tenía dónde armar el suyo: no llegaba a FINISHED y la temporada no
+          podía terminar nunca (medido en #4034 sobre el default del wizard).
+
+          Ahora la guarda es `hasMasters`, que es la pregunta correcta y de
+          paso cierra W89: una disciplina que declaró que NO juega Masters
+          —una de a uno, decisión #4029— igual dibujaba el bloque, prometía
+          "se juega con los 4 primeros" y ofrecía un CTA que rebotaba
+          SIEMPRE. El dato estaba a mano desde `973d9a2`
+          (`DisciplineHeader.hasMasters`) y esta pantalla no lo leía. */}
+      {discipline.hasMasters && (
         <div className="rounded-[18px] border-[1.5px] border-dashed border-line bg-surface px-[18px] py-5">
           <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">Cierre del año</p>
           <h2 className="mt-1 text-[24px] font-extrabold">Masters</h2>
@@ -276,7 +281,7 @@ export default async function FechasPage({ params }: PageProps) {
               {mastersMatchday.status === 'CLOSED' ? 'Jugado' : 'En juego'}
             </Link>
           ) : header.isAdmin && remainingForMasters === 0 && !hasLiveMatchday ? (
-            <ArmarMasters seasonId={seasonId} />
+            <ArmarMasters seasonId={seasonId} disciplineId={discipline.id} />
           ) : (
             <span className="mt-3 inline-block rounded-full bg-chip px-[10px] py-[6px] text-[10.5px] font-extrabold text-muted">
               Bloqueado

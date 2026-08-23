@@ -11,6 +11,7 @@ import {
   defaultConfig,
   disciplineProfile,
   formatsLabel,
+  pointsCountError,
   pointsErrors,
   type MatchFormat,
   type SeasonConfig,
@@ -476,17 +477,37 @@ export function configForPairSizeChange(
 /**
  * Los errores del paso 4.
  *
- * Los de puntos NO se escriben acá: salen de `pointsErrors`, la misma función
- * que corre `validateConfig` antes de escribir. Esta pantalla tenía su propia
- * copia y se separaron — cuando el 0 pasó a ser legal, el paso 4 siguió
- * rechazándolo y trababa el "Continuar" sobre un valor que el stepper te
- * dejaba elegir. Con una sola implementación eso no puede volver a pasar.
+ * Los de puntos NO se escriben acá: salen de `pointsErrors` y de
+ * `pointsCountError`, las mismas funciones que corre `validateConfig` antes de
+ * escribir. Esta pantalla tenía su propia copia y se separaron — cuando el 0
+ * pasó a ser legal, el paso 4 siguió rechazándolo y trababa el "Continuar"
+ * sobre un valor que el stepper te dejaba elegir. Con una sola
+ * implementación eso no puede volver a pasar.
+ *
+ * `sideSize` es el EFECTIVO de la curva compartida —`configSideSize(picked,
+ * pairSizes)`— y no un `2` literal (W88/W90, #4034). Es obligatorio por lo
+ * mismo que en `configFor`/`resizeConfig` (#3994): con un default, los call
+ * sites que dejen de pasarlo validan contra parejas en silencio, que es el
+ * bug de esta familia entera.
+ *
+ * `pointsErrors` mira los VALORES y `pointsCountError` la CANTIDAD. Faltaba
+ * la segunda, y es la única que cambia cuando el admin marca o desmarca
+ * disciplinas: `onToggle` no rehace `config` a propósito (con 2+ marcadas no
+ * debe, C29/W76), así que la curva editada podía dejar de corresponder sin
+ * que nada lo dijera. Medido en #4034: la pantalla mostraba `[20,12,6,2]` y
+ * la base guardaba `[10,7,5,3,2,1,0,0]`. La salida ya existía —"Usar los
+ * defaults", `wizard.tsx:698`, que rehace la curva con `configSideSize`—;
+ * lo que faltaba era decirle al admin que la necesitaba.
  *
  * La de `countBestOf` sí es propia, y a propósito: es la frase corta del
  * handoff, que en el wizard entra al lado del stepper que la causó.
  */
-export function formatErrors(config: SeasonConfig): string[] {
-  const errors = pointsErrors(config.points)
+export function formatErrors(config: SeasonConfig, sideSize: SideSize): string[] {
+  const errors: string[] = []
+
+  const countError = pointsCountError(config.squadSize, sideSize, config.points.length)
+  if (countError !== null) errors.push(countError)
+  errors.push(...pointsErrors(config.points))
 
   if (config.countBestOf > config.regularMatchdays) {
     errors.push('No pueden contar más fechas de las que se juegan.')

@@ -130,6 +130,27 @@ export function disciplineProfile(
  * decisión de producto ni migración. El PISO sí sobrevive sin ajuste: 8
  * personas son 8 competidores válidos también en sideSize=1.
  */
+/**
+ * "¿Esta lista de puntos tiene la cantidad que corresponde?", o `null`.
+ *
+ * Un lado por cada `sideSize` jugadores, así que un plantel de 10 son 5 lados
+ * de a dos y 10 de a uno. Dividía siempre por 2 hasta W30, y eso le pedía a un
+ * 1v1 la MITAD de los valores que necesita.
+ *
+ * Extraída de `validateConfig` (W88/W90): el paso 4 del wizard necesita hacer
+ * la MISMA pregunta —su curva es compartida y su `sideSize` efectivo cambia
+ * cuando se marcan o desmarcan disciplinas— y escribirla dos veces es
+ * exactamente cómo empezó la familia W69 → W76 → W83: la pantalla y la base
+ * diciendo cosas distintas sobre la misma curva. Con una sola implementación,
+ * el aviso del wizard no puede divergir del que rechaza el submit.
+ */
+export function pointsCountError(squadSize: number, sideSize: SideSize, count: number): string | null {
+  const expected = Math.floor(squadSize / sideSize)
+  return count === expected
+    ? null
+    : `Con un plantel de ${squadSize} hacen falta ${expected} valores de puntos, no ${count}.`
+}
+
 export function validateConfig(config: SeasonConfig, sideSize: SideSize): string[] {
   const errors: string[] = []
   const { squadSize, matchFormat, points, regularMatchdays, countBestOf, tiebreakSnapshotEvery } =
@@ -145,15 +166,8 @@ export function validateConfig(config: SeasonConfig, sideSize: SideSize): string
     errors.push(`El plantel no puede pasar de ${MAX_PLAYERS} jugadores.`)
   }
 
-  //Dividía siempre por 2, así que un 1v1
-  // pedía la MITAD de los valores de puntos que en verdad necesita — un
-  // plantel de 10 en sideSize=1 son 10 lados, no 5.
-  const expectedPoints = Math.floor(squadSize / sideSize)
-  if (points.length !== expectedPoints) {
-    errors.push(
-      `Con un plantel de ${squadSize} hacen falta ${expectedPoints} valores de puntos, no ${points.length}.`,
-    )
-  }
+  const countError = pointsCountError(squadSize, sideSize, points.length)
+  if (countError !== null) errors.push(countError)
   errors.push(...pointsErrors(points))
 
   // Con marcador abierto no hay set ni número objetivo, así que estos dos

@@ -1,0 +1,32 @@
+-- Prepara `entries.seed_position` para el CONTRACT (verify-report-go-no-go
+-- #4034, C37) ──────────────────────────────────────────────────────────────
+--
+-- `entries.seed_position` es `int not null` (0001_schema.sql) y hoy significa
+-- dos cosas distintas según `kind`:
+--
+--   * GUEST — correlativo POR FECHA, `entries_guest_order` unique
+--     `(matchday_id, seed_position)`. Es la numeración REAL de los invitados
+--     y NO se toca: el contract se la exige `not null`.
+--   * SQUAD — el orden del plantel de la TEMPORADA, `entries_seed` unique
+--     `(season_id, seed_position)`. Es dual-write tail-only desde PR 7
+--     (0023_discipline_entries.sql): el orden real vive en
+--     `discipline_entries.seed_position`, POR DISCIPLINA, y esta columna
+--     quedó como réplica degradada que ya nadie posiciona.
+--
+-- El CONTRACT (design #3801, paso 11) cobra esa factura: dropea el índice,
+-- pone en `null` el SQUAD y ata la forma con un CHECK. Lo que faltaba, y es
+-- lo que esta tanda hizo, era que ningún consumidor VIVO dependiera de la
+-- columna para el SQUAD. Diez lo hacían — ocho los midió el informe, dos
+-- aparecieron al inventariar por COLUMNA en vez de por función
+-- (`playingEntryIds`, y la factory de tests).
+--
+-- Regla de orden del design ("aditivo -> schema ANTES que código"), la misma
+-- que siguió `0059` con `seasons.config`: esta migración SOLO relaja el `not
+-- null`. Sin ella, los tres escritores no pueden dejar de mandar la columna.
+-- El `drop index` + `update ... set null` + `add constraint`, irreversibles,
+-- quedan para el CONTRACT.
+--
+-- `entries_seed` sobrevive a esta migración a propósito: un índice unique
+-- ignora los NULL, así que sigue protegiendo a las filas que hoy tienen
+-- valor sin estorbar a las que nacen sin él.
+alter table public.entries alter column seed_position drop not null;

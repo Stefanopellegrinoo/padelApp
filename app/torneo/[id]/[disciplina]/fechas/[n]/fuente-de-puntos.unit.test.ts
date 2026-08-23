@@ -76,6 +76,29 @@ function sinStrings(source: string): string {
   return sinComentarios(source).replace(/'[^'\n]*'|"[^"\n]*"|`[^`]*`/g, ' ')
 }
 
+/**
+ * Corta un `condición ? (rama A) : (rama B)` en sus dos mitades de TEXTO,
+ * partiendo por el `) : (` literal que separa el `?` del `:` — no por
+ * distancia de caracteres (S88: un regex laxo del tipo `? (…{0,N}…rama` puede
+ * "atravesar" el `) : (` y leer contenido de la OTRA rama como si fuera
+ * propio, porque el regex no entiende balanceo de JSX). `partida` corta
+ * desde el `?` hasta el `) : (`; `sinPartir` sigue desde ahí hasta el techo
+ * fijo `limite` — no hasta el cierre real del ternario (encontrarlo pediría
+ * balancear paréntesis, que es exactamente lo que este helper evita), así
+ * que sólo sirve para mirar el PRINCIPIO de la rama sin partir, que es todo
+ * lo que este archivo necesita.
+ */
+function ramasDelSplit(fuente: string, limite = 400): { partida: string; sinPartir: string } {
+  const inicio = fuente.indexOf('groupedStandings.length > 0 ?')
+  if (inicio === -1) return { partida: '', sinPartir: '' }
+  const separador = fuente.indexOf(') : (', inicio)
+  if (separador === -1) return { partida: '', sinPartir: '' }
+  return {
+    partida: fuente.slice(inicio, separador),
+    sinPartir: fuente.slice(separador, separador + limite),
+  }
+}
+
 const PAGE = join(
   process.cwd(),
   'app/torneo/[id]/[disciplina]/fechas/[n]/page.tsx',
@@ -242,9 +265,53 @@ describe('la pantalla de una fecha no recalcula sus puntos', () => {
   //   miente con un número plausible, que es la peor clase.
   it('le pasa a la tabla las filas congeladas, los empates de la fecha y el drawn real', () => {
     const fuente = sinComentarios(source)
-    expect(fuente).toMatch(/filas=\{\s*tableRows\s*\.\s*map\b/)
+    // S88 (verify-report-pr21-cierre #4016): antes esto pinchaba
+    // `filas={tableRows.map` SUELTO, en cualquier parte del archivo. Desde
+    // S82, `tableRows.map` sólo vive en la rama SIN partir — la que
+    // `page.tsx` usa cuando NO se separa por grupo (CLOSED, ROUND_ROBIN, o
+    // ahora también el OPEN con un lado sin partido de GRUPO, W82) — y la
+    // rama partida (OPEN + GROUPS_KNOCKOUT completo) usa `rows.map`. Un
+    // chequeo que sólo busca "el archivo menciona esa forma en algún lado"
+    // seguiría verde aunque las dos ramas se intercambiaran: pasó de probar
+    // "la pantalla usa las filas congeladas" a probar que el string existe.
+    //
+    // `ramasDelSplit` (abajo) aísla las dos mitades del ternario
+    // `groupedStandings.length > 0 ? (rama A) : (rama B)` CORTANDO el texto
+    // en el `) : (` literal — no con un regex laxo de distancia, que ya se
+    // probó que puede "atravesar" el `) : (` y leer la rama de al lado como
+    // si fuera la propia (medido en el test de mutación de abajo).
+    const { partida, sinPartir } = ramasDelSplit(fuente)
+    expect(partida).toMatch(/filas=\{\s*rows\s*\.\s*map\b/)
+    expect(sinPartir).toMatch(/filas=\{\s*tableRows\s*\.\s*map\b/)
     expect(fuente).toMatch(/muestraEmpates=\{\s*matchday\.allowsDraw\s*\}/)
     expect(fuente).toMatch(/\bdrawn:\s*row\.drawn\b/)
+  })
+
+  // S88, mutación: si alguien intercambiara las dos ramas —la partida (OPEN,
+  // `GROUPS_KNOCKOUT` completo) pasa a usar `tableRows.map` y la sin partir
+  // pasa a usar `rows.map`—, el chequeo VIEJO (sólo el nombre, sin anclar al
+  // ternario) seguía viendo `tableRows.map` en el archivo y pasaba igual,
+  // aunque la rama que de verdad protege W55/W57 (la que corre en CLOSED) ya
+  // no fuera esa. `ramasDelSplit` sí lo nota: cada mitad queda con el `.map`
+  // que no le corresponde. Sintético, mismo idioma que el resto del archivo
+  // (`misWire` más abajo) — no se muta `page.tsx` de verdad para no dejar
+  // una mutación mal revertida en un archivo de producción.
+  it('y con las ramas intercambiadas: el chequeo viejo no se daba cuenta, el nuevo sí', () => {
+    const intercambiado = `
+      {groupedStandings.length > 0 ? (
+        <div>
+          <TablaDelDia filas={tableRows.map((row) => ({ key: row.side }))} />
+        </div>
+      ) : (
+        <TablaDelDia filas={rows.map((row) => ({ key: row.side }))} />
+      )}
+    `
+    const checkViejo = /filas=\{\s*tableRows\s*\.\s*map\b/
+    expect(intercambiado).toMatch(checkViejo) // el viejo no se entera: sigue viendo el string
+
+    const { partida, sinPartir } = ramasDelSplit(intercambiado)
+    expect(partida).not.toMatch(/filas=\{\s*rows\s*\.\s*map\b/) // la partida quedó con tableRows.map
+    expect(sinPartir).not.toMatch(/filas=\{\s*tableRows\s*\.\s*map\b/) // la sin partir quedó con rows.map
   })
 
   // El error de la ronda 18, que la 22 ya tuvo que corregir una vez: pinchar el

@@ -124,6 +124,11 @@ export { computeAwards } from './awards'
 // `SelectorDeFormato` (`armado.tsx`) es su primer consumidor real — antes el
 // selector sólo dejaba aceptar o rechazar el único formato sugerido, nunca
 // elegir "otro" de verdad (REQ-D8-1).
+// `KNOCKOUT_GROUP_COUNTS` sale ahora (W81, verify-report-pr21-cierre #4016):
+// la fuente única de qué `groups` sabe armar `knockoutMatchups`, de la que
+// `offerableFormats` deriva en vez de repetir `[2, 4]` a mano —
+// `db/matchday-format.db.test.ts` es su primer consumidor real fuera de
+// core/, el tripwire que la ata al check SQL del catálogo.
 export {
   suggestFormat,
   groupSides,
@@ -138,6 +143,7 @@ export {
   drawIsLegal,
   matchCountForFormat,
   offerableFormats,
+  KNOCKOUT_GROUP_COUNTS,
 } from './knockout'
 
 // ── The season ───────────────────────────────────────────────────────────────

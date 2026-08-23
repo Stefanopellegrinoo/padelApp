@@ -13,6 +13,7 @@ import {
 } from './matchday'
 import { adminClient } from './test/admin'
 import type { Json } from './database.types'
+import { EdgeError } from './errors'
 import { createSeason } from './test/factories'
 import { createTestUser, type TestUser } from './test/users'
 
@@ -557,5 +558,49 @@ describe('closeMatchday con llave (GROUPS_KNOCKOUT, Rebanada D1)', () => {
     expect(data?.status).toBe('OPEN') // no cerró con una tabla mezclada
     const { data: awards } = await db.from('awards').select('id').eq('matchday_id', matchdayId)
     expect(awards).toHaveLength(0)
+  })
+
+  /**
+   * W78, "aparte" (verify-report-pr21-cierre, #4016): `qualifierAt`/
+   * `winnerOf`/`loserOf`/`losingMatchup` (`core/knockout.ts`) tiran `Error`
+   * PELADOS — es la familia que ya causó C30, C32 y C33. `core/` no puede
+   * importar `EdgeError` (vive en `db/errors.ts`, capa de arriba), así que
+   * la conversión tiene que pasar en el BORDE, donde `db/matchday.ts` llama
+   * a `core`.
+   *
+   * Reproducido acá con `service_role` SÓLO para plantar una llave con un
+   * semifinal borrado — el camino normal ya no llega a esta forma (C33 lo
+   * cerró con un `unique`), pero nada impide que una intervención manual, un
+   * bug futuro, o una migración de datos deje una llave así. La acción bajo
+   * prueba (`advancePhase`) se ejecuta como `authenticated`, nunca como
+   * `service_role`.
+   */
+  it('W78: una llave con un semifinal borrado no revienta con un Error pelado -- avancePhase rechaza prolijo', async () => {
+    const { admin, matchdayId, matches } = await openGroupsKnockout(8, {
+      kind: 'GROUPS_KNOCKOUT',
+      groups: 2,
+      qualifiersPerGroup: 2,
+    })
+    for (const match of matches) {
+      await saveResult(admin.client, match.id, [{ gamesA: 3, gamesB: 0 }])
+    }
+    await advancePhase(admin.client, matchdayId) // GRUPO -> SEMI
+    const semis = (await matchesOf(matchdayId)).filter((match) => match.fase === 'SEMI')
+    expect(semis).toHaveLength(2)
+    const [keep, discard] = semis
+    if (keep === undefined || discard === undefined) throw new Error('unreachable')
+
+    const db = adminClient()
+    const { error: deleteError } = await db.from('matches').delete().eq('id', discard.id)
+    if (deleteError) throw new Error(deleteError.message)
+    await saveResult(admin.client, keep.id, [{ gamesA: 3, gamesB: 0 }])
+
+    // `nextRoundMatchups` (core/knockout.ts) tira un `Error` pelado con una
+    // ronda impar -- acá, 1 semifinal en vez de 2. Antes de este fix,
+    // `advancePhase` lo dejaba pasar sin convertir y el error boundary de
+    // Next.js lo mostraba como "Algo se rompió" (HTTP 500).
+    const caught: unknown = await advancePhase(admin.client, matchdayId).catch((error: unknown) => error)
+    expect(caught).toBeInstanceOf(EdgeError)
+    expect((caught as Error).message).toMatch(/parejas completas/)
   })
 })

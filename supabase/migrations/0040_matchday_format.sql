@@ -22,9 +22,17 @@
 --
 -- `groups ∈ {1,2,4}` y `qualifiersPerGroup = 2` son EXACTAMENTE lo que
 -- `knockoutMatchups` (`core/knockout.ts`) sabe armar — las dos listas están
--- acopladas A PROPÓSITO y tienen que moverse JUNTAS: si mañana
--- `knockoutMatchups` aprende a armar 8 grupos, este check es el segundo
--- lugar que hay que tocar.
+-- acopladas A PROPÓSITO y tienen que moverse JUNTAS.
+--
+-- CORRECCIÓN (W81, verify-report-pr21-cierre #4016, el mismo día que se
+-- escribió lo de arriba): esto NO son dos lugares, son TRES —
+-- `offerableFormats` (`core/knockout.ts`) tenía su propia copia hardcodeada
+-- (`[2, 4]`) que nadie ataba acá. Ahora `offerableFormats` DERIVA de
+-- `KNOCKOUT_GROUP_COUNTS` (la misma constante que documenta lo que
+-- `knockoutMatchups` sabe armar), así que si mañana `knockoutMatchups`
+-- aprende a armar 8 grupos, los lugares que hay que tocar son ESTE check y
+-- `KNOCKOUT_GROUP_COUNTS` — nada más, y `db/matchday-format.db.test.ts`
+-- (W74+W81) los ata a los dos contra el catálogo real.
 --
 -- El CASE anidado (no un AND plano) es lo que hace que un `groups` no
 -- numérico RECHACE la fila en vez de reventar en un error de casteo: la

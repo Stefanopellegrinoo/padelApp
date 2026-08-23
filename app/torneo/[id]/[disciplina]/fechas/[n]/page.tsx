@@ -413,12 +413,29 @@ export default async function FechaDetailPage({ params }: PageProps) {
       groupOfSide.set(sideKey(match.sideB), match.grupo)
     }
     const formatoAbierto = matchday.formato
+    // W82 (verify-report-pr21-cierre #4016): `formatoAbierto.groups` fija
+    // CUÁNTOS bloques dibujar sin mirar si `groupOfSide` de verdad cubre a
+    // todos los lados. Si `matchday.formato` y `matches.grupo` divergen (el
+    // fixture roto de C32: formato cambiado después de sortear, sin volver a
+    // sortear), un lado sin ningún partido de GRUPO no cae en NINGÚN
+    // `index + 1` — no sale en su bloque ni en ningún otro: desaparece de la
+    // pantalla sin que nada lo diga. `allSidesGrouped` es el guard: sólo se
+    // parte si el reparto es completo. Con un hueco, la pantalla NO adivina
+    // en qué grupo cae el lado que falta —esa es justo la pregunta que C32
+    // deja sin responder—: cae a la tabla ÚNICA (misma que ROUND_ROBIN/CLOSED
+    // ya usan) para que los ocho sigan visibles, y `groupMismatchNote` (más
+    // abajo) explica por qué no se pudo partir.
+    const allSidesGrouped = standings.every((row) => groupOfSide.has(sideKey(row.side)))
     const groupedStandings: SideStanding[][] =
-      status === 'OPEN' && formatoAbierto.kind === 'GROUPS_KNOCKOUT'
+      status === 'OPEN' && formatoAbierto.kind === 'GROUPS_KNOCKOUT' && allSidesGrouped
         ? Array.from({ length: formatoAbierto.groups }, (_, index) =>
             standings.filter((row) => groupOfSide.get(sideKey(row.side)) === index + 1),
           )
         : []
+    const groupMismatchNote =
+      status === 'OPEN' && formatoAbierto.kind === 'GROUPS_KNOCKOUT' && !allSidesGrouped
+        ? 'El formato cambió después de sortear: esta tabla no se puede partir por grupo todavía. Volvé al armado y sorteá de nuevo.'
+        : null
 
     const phase = currentPhase(detail.matches)
     const phaseComplete = phase !== null && phaseIsComplete(detail.matches, phase)
@@ -827,6 +844,10 @@ export default async function FechaDetailPage({ params }: PageProps) {
                       ),
               }))}
             />
+          )}
+
+          {groupMismatchNote !== null && (
+            <p className="rounded-field bg-warn-bg px-3 py-2 text-[12.5px] font-bold">{groupMismatchNote}</p>
           )}
 
           {status === 'OPEN' && (

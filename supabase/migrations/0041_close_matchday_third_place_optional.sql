@@ -24,6 +24,23 @@
 -- rendija sólo se abre para una fase que el camino de pádel jamás produce.
 --
 -- El resto de la función (0030:36-129) no cambia una línea.
+--
+-- CORRECCIÓN (S87, verify-report-pr21-cierre #4016): las DOS premisas de
+-- arriba son FALSAS -- `0044_close_matchday_third_place_scoped_to_bracket.sql`
+-- las corrige y las desarrolla con el camino reproducido. En una línea cada
+-- una:
+-- (a) el pádel SÍ puede tener una llave con TERCER_PUESTO --
+--     `suggestFormat(12, 2)` (core/knockout.ts) propone `GROUPS_KNOCKOUT`
+--     para el pádel de 12 (W32/decisión #3863), así que "no existe ni puede
+--     existir" era cierto sólo hasta que se abrió el formato de grupos a
+--     toda disciplina, y esta migración quedó atrás de ese cambio.
+-- (b) "una fecha ROUND_ROBIN nunca manda fase distinta de GRUPO" es cierto
+--     SÓLO al ARMAR -- `redraft_matchday` (0011) no borra `matches`, así que
+--     una fecha puede LLEGAR a ROUND_ROBIN con filas de fase de llave que
+--     un armado anterior dejó, y la rendija de acá abajo no distingue eso
+--     (era C31, cerrado por 0044).
+-- Esta migración YA está aplicada -- no se toca una línea de SQL, sólo el
+-- comentario, siguiendo la misma convención que 0033/0037/0039/0040.
 create or replace function public.close_matchday(p_matchday uuid, p_awards jsonb)
 returns void
 language plpgsql

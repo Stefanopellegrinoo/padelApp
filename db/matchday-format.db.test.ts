@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import { describe, expect, it } from 'vitest'
-import { defaultConfig, knockoutMatchups, single, type MatchdayFormat, type SideStanding } from '@/core'
+import { defaultConfig, KNOCKOUT_GROUP_COUNTS, knockoutMatchups, single, type MatchdayFormat, type SideStanding } from '@/core'
 import {
   closeMatchday,
   createMatchday,
@@ -53,6 +53,28 @@ async function markAllPlaying(admin: TestUser, matchdayId: string, entryIds: str
   for (const entryId of entryIds) {
     await setAttendance(admin.client, matchdayId, entryId, 'PLAYING')
   }
+}
+
+/**
+ * Una fecha en DRAFT con `count` presentes confirmados y lados de tamaño
+ * `pairSize` — lo que necesita el guard de W78 (abajo) para saber "cuántos
+ * lados hay hoy" sin adivinar. `sides = count / pairSize`.
+ */
+async function draftMatchdayWithSides(
+  count: number,
+  pairSize: 1 | 2,
+): Promise<{ admin: TestUser; matchdayId: string }> {
+  const admin = await createTestUser()
+  const players = await fillerPlayers(count)
+  const { seasonId, entryIds } = await createSeason({
+    admin,
+    config: defaultConfig(count, pairSize),
+    squad: players,
+    disciplines: [{ pairSize }],
+  })
+  const matchdayId = await createMatchday(admin.client, seasonId, '2026-03-05')
+  await markAllPlaying(admin, matchdayId, entryIds)
+  return { admin, matchdayId }
 }
 
 /**
@@ -157,11 +179,15 @@ describe('matchdays.formato — column-grant contra authenticated (REQ-D8-1)', (
  * no sólo que el update no falle (#3957, la regla de las seis veces) —los dos
  * primeros tests eligen kinds DISTINTOS a propósito, para que copiar el
  * default de columna no alcance para pasar los dos.
+ *
+ * Los dos primeros usan `draftMatchdayWithSides(12, 2)` (6 lados) en vez de
+ * `scene()` — desde W78 (abajo) `groupsFormat` (2 grupos) sólo se guarda si
+ * es OFRECIBLE para los lados de HOY, y `scene()` no sienta a nadie: con
+ * `sides=0` ya no pasaría.
  */
 describe('setMatchdayFormat — primer escritor de producción del grant (REQ-D8-1)', () => {
   it('el formato elegido (GROUPS_KNOCKOUT) llega a la fila', async () => {
-    const { admin, seasonId, disciplineId } = await scene()
-    const matchdayId = await createMatchday(admin.client, seasonId, '2026-03-05', disciplineId)
+    const { admin, matchdayId } = await draftMatchdayWithSides(12, 2)
 
     await setMatchdayFormat(admin.client, matchdayId, groupsFormat)
 
@@ -172,8 +198,7 @@ describe('setMatchdayFormat — primer escritor de producción del grant (REQ-D8
   })
 
   it('elegir ROUND_ROBIN después de GROUPS_KNOCKOUT también llega — no es un default fijo', async () => {
-    const { admin, seasonId, disciplineId } = await scene()
-    const matchdayId = await createMatchday(admin.client, seasonId, '2026-03-05', disciplineId)
+    const { admin, matchdayId } = await draftMatchdayWithSides(12, 2)
     await setMatchdayFormat(admin.client, matchdayId, groupsFormat)
 
     await setMatchdayFormat(admin.client, matchdayId, { kind: 'ROUND_ROBIN' })
@@ -199,6 +224,65 @@ describe('setMatchdayFormat — primer escritor de producción del grant (REQ-D8
     const { data, error } = await db.from('matchdays').select('formato').eq('id', matchdayId).single()
     if (error || data === null) throw new Error(error?.message)
     expect(data.formato).toEqual({ kind: 'ROUND_ROBIN' }) // no cambió
+  })
+})
+
+/**
+ * W78 (verify-report-pr21-cierre, #4016): `matchdays_formato_kind` (0040)
+ * sólo valida la FORMA (`groups ∈ {1,2,4}`), nunca si esos grupos tienen
+ * sentido para cuántos lados hay hoy — y `changeMatchdayFormat`
+ * (`app/.../actions.ts`) reenvía lo que le llega del cliente sin volver a
+ * mirarlo. Medido en el reporte: una fecha FIFA de 8 lados guardaba
+ * `groups: 4` (grupos de 2, eliminación cero — descartado por la decisión
+ * #4014) y `groups: 1` (siempre round robin + 1 partido, "nunca ahorra
+ * nada" según la misma decisión).
+ *
+ * `offerableFormats` (`core/knockout.ts`) YA es la fuente única de qué
+ * `groups` tienen sentido para `sides` lados — el guard la reusa, no repite
+ * la regla.
+ */
+describe('setMatchdayFormat — el groups elegido tiene que ser OFRECIBLE para los lados de HOY (W78)', () => {
+  it('rechaza 4 grupos con 8 lados: offerableFormats(8) no los ofrece (decisión #4014)', async () => {
+    const { admin, matchdayId } = await draftMatchdayWithSides(8, 1)
+
+    await expect(
+      setMatchdayFormat(admin.client, matchdayId, { kind: 'GROUPS_KNOCKOUT', groups: 4, qualifiersPerGroup: 2 }),
+    ).rejects.toThrow(/8 lados/)
+
+    const db = adminClient()
+    const { data, error } = await db.from('matchdays').select('formato').eq('id', matchdayId).single()
+    if (error || data === null) throw new Error(error?.message)
+    expect(data.formato).toEqual({ kind: 'ROUND_ROBIN' }) // no cambió
+  })
+
+  it('rechaza groups=1 SIEMPRE, sin importar los lados: "1 grupo + llave" nunca se ofrece (decisión #4014)', async () => {
+    const { admin, matchdayId } = await draftMatchdayWithSides(12, 1)
+
+    await expect(
+      setMatchdayFormat(admin.client, matchdayId, { kind: 'GROUPS_KNOCKOUT', groups: 1, qualifiersPerGroup: 2 }),
+    ).rejects.toThrow(/12 lados/)
+  })
+
+  it('acepta 2 grupos con 8 lados: SÍ está entre lo ofrecible', async () => {
+    const { admin, matchdayId } = await draftMatchdayWithSides(8, 1)
+
+    await setMatchdayFormat(admin.client, matchdayId, { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 })
+
+    const db = adminClient()
+    const { data, error } = await db.from('matchdays').select('formato').eq('id', matchdayId).single()
+    if (error || data === null) throw new Error(error?.message)
+    expect(data.formato).toEqual({ kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 })
+  })
+
+  it('acepta ROUND_ROBIN con cualquier cantidad de lados, sin mirar offerableFormats', async () => {
+    const { admin, matchdayId } = await draftMatchdayWithSides(8, 2) // 4 lados: offerableFormats(4) sólo tiene RR
+
+    await setMatchdayFormat(admin.client, matchdayId, { kind: 'ROUND_ROBIN' })
+
+    const db = adminClient()
+    const { data, error } = await db.from('matchdays').select('formato').eq('id', matchdayId).single()
+    if (error || data === null) throw new Error(error?.message)
+    expect(data.formato).toEqual({ kind: 'ROUND_ROBIN' })
   })
 })
 
@@ -393,6 +477,20 @@ function fakeGroups(groupCount: number): SideStanding[][] {
   return Array.from({ length: groupCount }, (_unused, index) => [standingAt(index * 2 + 1), standingAt(index * 2 + 2)])
 }
 
+/** Qué `groups` sabe armar `knockoutMatchups` HOY, probado con fixtures reales — no una lista repetida a mano. */
+function probeSupportedGroupCounts(): Set<number> {
+  const actualGroups = new Set<number>()
+  for (let groupCount = 1; groupCount <= 8; groupCount++) {
+    try {
+      knockoutMatchups(fakeGroups(groupCount), 2)
+      actualGroups.add(groupCount)
+    } catch {
+      // knockoutMatchups no sabe armar cruces para esta cantidad de grupos
+    }
+  }
+  return actualGroups
+}
+
 /**
  * `groups ∈ {1,2,4}` y `qualifiersPerGroup = 2` están escritos DOS veces: el
  * check `matchdays_formato_kind` (0040, SQL) y `knockoutMatchups`
@@ -418,17 +516,7 @@ describe('groups ∈ {1,2,4} + qualifiersPerGroup=2 no driftea entre matchdays_f
     }
     const sqlGroups = new Set(arrayLiteral[1].split(',').map((value) => Number(value.trim())))
 
-    const actualGroups = new Set<number>()
-    for (let groupCount = 1; groupCount <= 8; groupCount++) {
-      try {
-        knockoutMatchups(fakeGroups(groupCount), 2)
-        actualGroups.add(groupCount)
-      } catch {
-        // knockoutMatchups no sabe armar cruces para esta cantidad de grupos
-      }
-    }
-
-    expect(actualGroups).toEqual(sqlGroups)
+    expect(probeSupportedGroupCounts()).toEqual(sqlGroups)
   })
 
   it('el qualifiersPerGroup del check SQL es EXACTAMENTE el que knockoutMatchups sabe armar', () => {
@@ -453,5 +541,25 @@ describe('groups ∈ {1,2,4} + qualifiersPerGroup=2 no driftea entre matchdays_f
     }
 
     expect(actualQualifiers).toEqual(new Set([sqlQualifiers]))
+  })
+
+  /**
+   * W81 (verify-report-pr21-cierre, #4016): `offerableFormats`
+   * (`core/knockout.ts`) tenía su PROPIA lista hardcodeada (`[2, 4]`) — una
+   * TERCERA copia de "qué `groups` sabe armar `knockoutMatchups`" que este
+   * tripwire (arriba) sólo ataba de a DOS: si mañana `knockoutMatchups`
+   * aprendiera a armar 8 grupos y el check SQL se actualizara junto con él,
+   * los dos tests de arriba seguían verdes y `offerableFormats` seguía
+   * ofreciendo sólo 2 y 4 en silencio.
+   *
+   * `KNOCKOUT_GROUP_COUNTS` es ahora la fuente ÚNICA: `offerableFormats` LEE
+   * de ahí (filtrando el `1`, que la decisión #4014 excluye siempre por
+   * motivo de negocio, no de forma) en vez de repetir la lista. Este test
+   * ata esa fuente al mismo catálogo real que ya prueban los dos de arriba
+   * — la tercera copia deja de poder existir porque no hay una tercera
+   * lista, hay una sola constante que los tres lugares comparten.
+   */
+  it('KNOCKOUT_GROUP_COUNTS (la fuente de offerableFormats) es EXACTAMENTE lo que knockoutMatchups sabe armar', () => {
+    expect(new Set(KNOCKOUT_GROUP_COUNTS)).toEqual(probeSupportedGroupCounts())
   })
 })

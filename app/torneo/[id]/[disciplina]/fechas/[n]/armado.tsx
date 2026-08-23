@@ -59,32 +59,50 @@ export interface GroupPreviewVM {
  * El vocabulario de la disciplina. Un lado de uno no es "una pareja" y su
  * fecha no tiene "parejas invitadas": son jugadores invitados que juegan
  * solos, igual que todos.
+ *
+ * `drawNote` (W80, verify-report-pr21-cierre #4016): antes dependía SÓLO de
+ * `sideSize`, nunca del `formato` elegido — con "N grupos + llave" elegido,
+ * la vista previa de S83 ("Cómo quedan los grupos") dibujaba arriba un
+ * reparto en grupos y esta nota, dos pantallazos más abajo, seguía
+ * prometiendo "todos contra todos, en el orden de la tabla" (o el cruce de
+ * defensores del pádel): la misma clase de contradicción que W55-W57.
+ * `formato.qualifiersPerGroup` es literal en el texto — no un "2" fijo — para
+ * que la nota se rompa sola si algún día deja de ser siempre 2 (`core/knockout.ts`,
+ * `knockoutMatchups` hoy sólo arma cruces con 2 clasificados por grupo).
  */
-function words(sideSize: SideSize) {
-  return sideSize === 1
-    ? {
-        sides: 'jugadores',
-        guestSection: 'Jugadores invitados',
-        guestNote:
-          'Juegan solos, como todos, y no suman puntos para el campeonato. Entran de a dos.',
-        addGuest: '+ Agregar 2 invitados',
-        removeGuest: 'Sacar los dos invitados',
-        draw: 'Ordenar jugadores',
-        drawn: 'Orden de la fecha',
-        drawNote: 'Juegan todos contra todos, en el orden de la tabla.',
-      }
-    : {
-        sides: 'parejas',
-        guestSection: 'Parejas invitadas',
-        guestNote:
-          'Juegan juntos y no suman puntos para el campeonato: es un amistoso adentro de la fecha.',
-        addGuest: '+ Agregar pareja invitada',
-        removeGuest: 'Sacar la pareja invitada',
-        draw: 'Generar parejas',
-        drawn: 'Parejas',
-        drawNote:
-          'Los defensores quedan fijos. El resto se arma cruzando la tabla: 1° con último, 2° con anteúltimo, y así.',
-      }
+function words(sideSize: SideSize, formato: MatchdayFormat) {
+  const base =
+    sideSize === 1
+      ? {
+          sides: 'jugadores',
+          guestSection: 'Jugadores invitados',
+          guestNote:
+            'Juegan solos, como todos, y no suman puntos para el campeonato. Entran de a dos.',
+          addGuest: '+ Agregar 2 invitados',
+          removeGuest: 'Sacar los dos invitados',
+          draw: 'Ordenar jugadores',
+          drawn: 'Orden de la fecha',
+          drawNote: 'Juegan todos contra todos, en el orden de la tabla.',
+        }
+      : {
+          sides: 'parejas',
+          guestSection: 'Parejas invitadas',
+          guestNote:
+            'Juegan juntos y no suman puntos para el campeonato: es un amistoso adentro de la fecha.',
+          addGuest: '+ Agregar pareja invitada',
+          removeGuest: 'Sacar la pareja invitada',
+          draw: 'Generar parejas',
+          drawn: 'Parejas',
+          drawNote:
+            'Los defensores quedan fijos. El resto se arma cruzando la tabla: 1° con último, 2° con anteúltimo, y así.',
+        }
+  return {
+    ...base,
+    drawNote:
+      formato.kind === 'GROUPS_KNOCKOUT'
+        ? `Juegan por grupos: todos contra todos adentro de cada grupo, y los ${formato.qualifiersPerGroup} primeros de cada uno pasan a la llave.`
+        : base.drawNote,
+  }
 }
 
 interface ArmadoProps {
@@ -229,8 +247,8 @@ export function Armado({
     // partidos del formato que ya está en la base, no asumir round robin.
     formato,
   })
-  const { size, sides, matches, complete, needsLooseGuest, eventualSize, tooFew, tooMany } = shape
-  const label = words(sideSize)
+  const { size, sides, matches, complete, needsLooseGuest, eventualSize, tooFew, tooMany, suggestedFormat } = shape
+  const label = words(sideSize, formato)
   const guestUnnamed = [
     ...looseGuests.map((guest) => guest.name),
     ...guestPairs.flatMap((pair) => [pair.a.name, pair.b.name]),
@@ -282,6 +300,7 @@ export function Armado({
         // `SelectorDeFormato` con el `formato` guardado (W73) deja ver
         // exactamente lo mismo que antes de settear.
         sides={sizeSettled ? shape.sides : 0}
+        suggested={suggestedFormat}
         pending={pending}
         onChange={(next) => run(() => changeMatchdayFormat(seasonId, matchdayId, matchdayNumber, next))}
       />
@@ -432,7 +451,11 @@ export function Armado({
                 pair.defending ? 'border-up' : 'border-line'
               }`}
             >
-              <span className="w-4 shrink-0 text-[14px] font-extrabold text-muted">{index + 1}</span>
+              {/* S85 (verify-report-pr21-cierre #4016): `w-4` (16px) recorta "10"/"11"/"12"
+                  (18px medidos con Chromium real, Archivo 800) — sólo muerde con 10+
+                  lados, la capacidad que abrió esta cadena. `w-5` (20px) los contiene
+                  sin overflow, medido a 360 px y 390 px. */}
+              <span className="w-5 shrink-0 text-[14px] font-extrabold text-muted">{index + 1}</span>
               <span className="flex-1 text-[14.5px] font-[750]">{pair.names}</span>
               {pair.defending && (
                 <span className="shrink-0 rounded-full bg-ok-bg px-[10px] py-[6px] text-[10.5px] font-extrabold text-up">
@@ -504,9 +527,40 @@ export function Armado({
   )
 }
 
+/**
+ * S86 (verify-report-pr21-cierre #4016, decisión #4014 sobre el techo de
+ * tres botones): con 12 lados a 360px, "Todos contra todos" envuelve en tres
+ * renglones ("Todos" / "contra" / "todos") y fija la altura de toda la fila
+ * de botones — sin overflow horizontal, y legible (medido con Chromium real,
+ * fuente Archivo 800: `scrollWidth === innerWidth` en las dos anchuras).
+ *
+ * QUEDA ASÍ, decisión escrita: las dos alternativas baratas que se probaron
+ * (medido con Chromium, el mismo layout — `flex gap-2` de tres `flex-1`
+ * dentro de 320px útiles a 360px) cuestan más de lo que arreglan.
+ * - **Achicar sólo la tipografía de este botón**: rompe la equivalencia
+ *   visual de un `role="radiogroup"` — tres opciones mutuamente excluyentes
+ *   con tamaños de letra distintos leen como si una pesara menos que las
+ *   otras, justo lo que S81/W77 ya cuidaron con `aria-checked` en vez de
+ *   apoyarse sólo en la clase.
+ * - **Acortar el texto** ("Todos vs. todos"): sí baja la fila a dos líneas
+ *   (medido: 71px → 56px), pero `formatoLabel` es el MISMO texto para el
+ *   botón y para la leyenda "Sugerido:" (línea de abajo), así que cambiarlo
+ *   tocaría 7+ asserts en dos archivos de test y la copia que el resto del
+ *   código escribe siempre entera ("todos contra todos", en comentarios y en
+ *   `core/knockout.ts`) — por 15px de fila, a cambio de una abreviatura que
+ *   no está en ningún otro lado de la app.
+ *
+ * El techo de tres botones ya lo aceptó #4014; esto es sólo la primera vez
+ * que se vio el wrinkle y se lo mide en vez de forzar un arreglo.
+ */
 const FORMATO_BOTON = 'flex-1 rounded-field border-[1.5px] p-3 text-[13.5px] font-extrabold'
 const FORMATO_ELEGIDO = 'border-accent bg-accent text-accent-text'
 const FORMATO_LIBRE = 'border-line'
+
+/** "Todos contra todos" o "N grupos + llave" — el mismo texto para el botón y para la leyenda de "Sugerido". */
+function formatoLabel(formato: MatchdayFormat): string {
+  return formato.kind === 'ROUND_ROBIN' ? 'Todos contra todos' : `${formato.groups} grupos + llave`
+}
 
 /**
  * El selector de formato de la fecha (REQ-D8-1): "todos contra todos"
@@ -540,16 +594,35 @@ const FORMATO_LIBRE = 'border-line'
  * ARIA Authoring Practices para un conjunto de opciones mutuamente
  * excluyentes, sobre `<button>` en vez de `<input type="radio">` porque acá
  * no hay un `<form>` que serialice el valor — el estado lo maneja `onChange`.
+ *
+ * `suggested` (W77, verify-report-pr21-cierre #4016 / decisión #4022):
+ * `suggestFormat` (`core/knockout.ts`) se había quedado sin consumidor de
+ * producción, y con eso desaparecía de la pantalla el primer GIVEN de
+ * REQ-D8-1 ("propone 2 grupos de 4"). La marca es una LEYENDA de texto
+ * aparte (`Sugerido: …`), nunca una clase ni un `aria-checked` sobre el
+ * botón — a propósito, para que no repita el error de S81: "sugerido" y
+ * "elegido" son preguntas distintas y un lector de pantalla (o un test) no
+ * tiene por qué confundirlas.
+ *
+ * La leyenda sólo se dibuja si `suggested` es de verdad una de las opciones
+ * que este selector está mostrando (ofrecida hoy, o el `formato` guardado
+ * como huérfano de W73) — nunca nombra un botón que no existe. `suggested`
+ * llega con `eventualSize` (cuenta al invitado suelto que todavía no está
+ * sentado, `armado-state.ts`) mientras que `sides` acá es el tamaño de HOY;
+ * en el hueco donde los dos difieren, la leyenda calla en vez de mentir.
  */
 export function SelectorDeFormato({
   formato,
   sides,
+  suggested,
   pending,
   onChange,
 }: {
   formato: MatchdayFormat
   /** Lados de HOY: de acá sale qué botones de grupos se ofrecen (`offerableFormats`), no de una sugerencia. */
   sides: number
+  /** El formato que `suggestFormat` propone (REQ-D8-1) — se marca con una leyenda, no reemplaza los botones de #4014. */
+  suggested: MatchdayFormat
   pending: boolean
   onChange: (formato: MatchdayFormat) => void
 }) {
@@ -560,9 +633,14 @@ export function SelectorDeFormato({
     formato.kind === 'GROUPS_KNOCKOUT' && !ofertados.some((candidato) => candidato.groups === formato.groups)
       ? [...ofertados, formato]
       : ofertados
+  const suggestedIsShown =
+    suggested.kind === 'ROUND_ROBIN' || grupos.some((candidato) => candidato.groups === suggested.groups)
   return (
     <section className="flex flex-col gap-2">
       <h2 className={`${STEP_TITLE} border-b border-line pb-2`}>Formato de la fecha</h2>
+      {suggestedIsShown && (
+        <p className="text-[11.5px] font-[600] text-muted">Sugerido: {formatoLabel(suggested)}</p>
+      )}
       <div className="flex gap-2" role="radiogroup" aria-label="Formato de la fecha">
         <button
           type="button"

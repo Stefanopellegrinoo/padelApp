@@ -191,6 +191,8 @@ function qualifierAt(group: readonly SideStanding[] | undefined, index: number):
  * del design, "knockoutMatchups sólo soporta G∈{1,2,4} y P=2"): cualquier
  * otra combinación tira, no se tolera en silencio.
  */
+export const KNOCKOUT_GROUP_COUNTS = [1, 2, 4] as const
+
 export function knockoutMatchups(
   groups: readonly (readonly SideStanding[])[],
   qualifiersPerGroup: number,
@@ -371,20 +373,32 @@ export function knockoutPositions(
 
 /**
  * Sugerencia de formato según cuántos lados entran (REQ-D8-1) — propone, no
- * decide: editable antes de armar. Umbrales del design (PUNTO 7).
+ * decide: editable antes de armar.
+ *
+ * W77 (verify-report-pr21-cierre, #4016) / decisión #4022: ANTES tenía sus
+ * propios umbrales (`sides > 8` → 4 grupos), copiados a mano de
+ * `offerableFormats` y desalineados con ella entre 9 y 11 lados —
+ * `suggestFormat` proponía 4 grupos ahí y el selector no los ofrecía. Ahora
+ * DERIVA de `offerableFormats` (abajo): propone el `GROUPS_KNOCKOUT` con más
+ * grupos que esté ofrecible para `sides`, o `ROUND_ROBIN` si ninguno lo está
+ * — la contradicción deja de poder existir porque no hay dos umbrales que
+ * puedan desalinearse, hay una sola fuente. `offerableFormats` ya ordena sus
+ * candidatos de menos a más grupos (`[2, 4]`), así que el último elemento es
+ * siempre el de más grupos.
  *
  * Es la salida real de W32 (decisión #3863): sin grupos, una fecha de 12
  * jugadores de a uno son C(12,2)=66 partidos de round robin puro. Con
- * `sides=12` entra acá en `groups: 4`, y la llave completa (grupos + cuartos
- * + semis + final) da 19 partidos — verificado con las funciones reales en
- * el test "12 lados de a uno..." de `core/knockout.test.ts`, no sólo en este
- * comentario.
+ * `sides=12` esto sigue proponiendo `groups: 4`, y la llave completa (grupos
+ * + cuartos + semis + final) da 19 partidos — verificado con las funciones
+ * reales en el test "12 lados de a uno..." de `core/knockout.test.ts`, no
+ * sólo en este comentario.
  */
 export function suggestFormat(headcount: number, sideSize: SideSize): MatchdayFormat {
   const sides = Math.floor(headcount / sideSize)
-  if (sides <= 5) return { kind: 'ROUND_ROBIN' }
-  if (sides <= 8) return { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 }
-  return { kind: 'GROUPS_KNOCKOUT', groups: 4, qualifiersPerGroup: 2 }
+  const groupFormats = offerableFormats(sides).filter(
+    (format): format is Extract<MatchdayFormat, { kind: 'GROUPS_KNOCKOUT' }> => format.kind === 'GROUPS_KNOCKOUT',
+  )
+  return groupFormats.at(-1) ?? { kind: 'ROUND_ROBIN' }
 }
 
 function combinations(n: number): number {
@@ -441,22 +455,34 @@ function smallestGroupSize(sides: number, groups: number): number {
  * Los formatos que el selector puede OFRECER para `sides` lados (W75,
  * verify-report-pr21 #4004 / decisión de Stefano en
  * `decisions/formatos-ofrecidos-en-el-armado`): `ROUND_ROBIN` siempre, más
- * cada `GROUPS_KNOCKOUT` de `groups ∈ {2, 4}` (`knockoutMatchups` sabe armar
- * también 1, ver abajo por qué queda afuera) donde CADA grupo tenga 3 lados o
- * más (`smallestGroupSize(sides, groups) >= 3`).
+ * cada `GROUPS_KNOCKOUT` de `KNOCKOUT_GROUP_COUNTS` (arriba) donde CADA
+ * grupo tenga 3 lados o más (`smallestGroupSize(sides, groups) >= 3`).
  *
- * Dos razones, no una:
- * 1. `groups = 1` queda afuera SIEMPRE, sin excepción: un grupo + llave es
- *    el mismo round robin de siempre más un partido extra
- *    (`matchCountForFormat` de 1 grupo = `combinations(sides) + 1`) — nunca
- *    ahorra nada, y `suggestFormat` tampoco lo propone jamás.
+ * Dos razones, no una, para lo que queda afuera:
+ * 1. `groups = 1` queda afuera SIEMPRE, sin excepción — filtrado acá, no en
+ *    `KNOCKOUT_GROUP_COUNTS`: es una regla de NEGOCIO (decisión #4014), no
+ *    de forma. Un grupo + llave es el mismo round robin de siempre más un
+ *    partido extra (`matchCountForFormat` de 1 grupo =
+ *    `combinations(sides) + 1`) — nunca ahorra nada, y `suggestFormat`
+ *    (deriva de ESTA función) tampoco lo propone jamás.
  * 2. Un grupo de 2 lados con `qualifiersPerGroup = 2` tiene tasa de
  *    eliminación CERO: pasan los dos, el grupo no decide nada. No es una
  *    regla estética, es aritmética.
+ *
+ * W81 (verify-report-pr21-cierre, #4016): ANTES iteraba `[2, 4] as const`,
+ * una copia a mano — una TERCERA, junto con el check SQL (`matchdays_formato_kind`,
+ * 0040) y `knockoutMatchups` (arriba) — que el tripwire de W74
+ * (`db/matchday-format.db.test.ts`) no ataba: si `knockoutMatchups`
+ * aprendiera a armar 8 grupos, esta lista podía seguir ofreciendo sólo 2 y 4
+ * en silencio. Ahora DERIVA de `KNOCKOUT_GROUP_COUNTS`, la misma constante
+ * que documenta lo que `knockoutMatchups` sabe armar — no puede haber una
+ * tercera copia si no hay una segunda lista, sólo un filtro de negocio sobre
+ * la única fuente.
  */
 export function offerableFormats(sides: number): MatchdayFormat[] {
   const formats: MatchdayFormat[] = [{ kind: 'ROUND_ROBIN' }]
-  for (const groups of [2, 4] as const) {
+  for (const groups of KNOCKOUT_GROUP_COUNTS) {
+    if (groups === 1) continue // decisión #4014: "1 grupo + llave" nunca ahorra nada
     if (smallestGroupSize(sides, groups) >= 3) {
       formats.push({ kind: 'GROUPS_KNOCKOUT', groups, qualifiersPerGroup: 2 })
     }

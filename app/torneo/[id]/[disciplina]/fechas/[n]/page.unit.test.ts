@@ -289,6 +289,63 @@ describe('la fecha GROUPS_KNOCKOUT abierta — la tabla del día separa por grup
   })
 })
 
+describe('la fecha GROUPS_KNOCKOUT abierta — un lado sin partidos de grupo NO desaparece (W82, verify-report-pr21-cierre #4016)', () => {
+  /**
+   * `formatoAbierto.groups` (2) promete dos grupos, pero `standingsMatches`
+   * sólo tiene partidos del grupo 1 — el fixture real de C32 (cambiar el
+   * formato después de sortear sin volver a sortear) deja exactamente esta
+   * forma: `matchday.formato` dice una cosa, `matches.grupo` dice otra. Antes
+   * del fix, `groupedStandings` armaba igual los 2 bloques que `formatoAbierto`
+   * pedía, y el lado 5-8 —sin ninguna fila en `groupOfSide`— no entraba en
+   * NINGÚN filtro: "GRUPO 2" salía con el título y cero filas, y esos cuatro
+   * lados no aparecían en ningún otro lugar de la pantalla.
+   *
+   * Decisión (W82): en vez de partir con bloques huérfanos, la pantalla NO
+   * separa por grupo cuando hay un lado sin partido de grupo — cae a la
+   * MISMA tabla única que ya usa CLOSED/ROUND_ROBIN (así nadie desaparece,
+   * los ocho lados que sí tienen resultado se ven ahí) — y agrega una nota
+   * explícita diciendo por qué esta fecha no se puede partir todavía. Elegida
+   * sobre inventar un grupo "sin asignar": la pantalla no puede saber en qué
+   * grupo cae el lado que falta (esa es la pregunta que el propio C32 deja
+   * sin responder), así que separarlo iría a adivinar.
+   */
+  it('con un lado sin partidos de grupo, la tabla NO parte en bloques huérfanos: los ocho siguen visibles y hay una nota', async () => {
+    escena.status = 'OPEN'
+    escena.formato = { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 }
+    escena.sides = [1, 2, 3, 4, 5, 6, 7, 8].map(side)
+    // Sólo el grupo 1 tiene partidos -- 5, 6, 7, 8 no aparecen en ningún
+    // `match.grupo`, exactamente el fixture roto de C32.
+    escena.matches = [
+      playedMatch('GRUPO', 1, 1, 1, 2),
+      playedMatch('GRUPO', 1, 1, 3, 4),
+      playedMatch('GRUPO', 1, 2, 1, 3),
+      playedMatch('GRUPO', 1, 2, 2, 4),
+      playedMatch('GRUPO', 1, 3, 1, 4),
+      playedMatch('GRUPO', 1, 3, 2, 3),
+    ]
+
+    const html = await render()
+
+    const inicio = html.indexOf('Tabla de la fecha')
+    expect(inicio).toBeGreaterThan(-1)
+    const tabla = html.slice(inicio)
+
+    // Nadie desaparece: los ocho lados siguen en la tabla, no sólo los cuatro
+    // del grupo 1 con partidos.
+    for (const n of [1, 2, 3, 4, 5, 6, 7, 8]) {
+      expect(tabla).toContain(`Jugador ${n}`)
+    }
+    // No se dibuja un bloque "Grupo 2" vacío -- ni ningún bloque partido: cae
+    // a la tabla única.
+    expect(tabla).not.toContain('Grupo 1')
+    expect(tabla).not.toContain('Grupo 2')
+    // Y dice por qué.
+    expect(tabla).toContain(
+      'El formato cambió después de sortear: esta tabla no se puede partir por grupo todavía. Volvé al armado y sorteá de nuevo.',
+    )
+  })
+})
+
 describe('la fecha GROUPS_KNOCKOUT cerrada — sigue con UNA sola tabla (decisión #3962, no se toca)', () => {
   it('no separa por grupo: el orden cruza los grupos a propósito', async () => {
     escena.status = 'CLOSED'
@@ -482,6 +539,16 @@ describe('no-regresión — una fecha ROUND_ROBIN sigue viendo exactamente lo de
 })
 
 describe('el armado — el selector de formato pasa el `formato` guardado, no un valor fijo', () => {
+  /**
+   * S84 (verify-report-pr21-cierre #4016): este test seguía decidiendo "cuál
+   * botón está marcado" con `bg-accent`, la clase de Tailwind — sin ninguna
+   * señal semántica, así que un cambio de estilo (o un lector de pantalla)
+   * no tenía forma de confiar en esto. `armado.unit.test.ts` ya había
+   * migrado a `aria-checked` (S81) el mismo día que este archivo, gemelo,
+   * recibió +305 líneas y se pasó por al lado. `SelectorDeFormato`
+   * (`armado.tsx`) ya dibuja `role="radio"` + `aria-checked` por botón desde
+   * S81 — acá no cambia una línea de producción, sólo lo que el test mira.
+   */
   it('con GROUPS_KNOCKOUT ya elegido, el botón marcado es el de grupos', async () => {
     escena.status = 'DRAFT'
     escena.isAdmin = true
@@ -493,8 +560,45 @@ describe('el armado — el selector de formato pasa el `formato` guardado, no un
 
     const btnGrupos = /<button[^>]*>2 grupos \+ llave<\/button>/.exec(html)?.[0] ?? ''
     const btnTodos = /<button[^>]*>Todos contra todos<\/button>/.exec(html)?.[0] ?? ''
-    expect(btnGrupos).toContain('bg-accent')
-    expect(btnTodos).not.toContain('bg-accent')
+    expect(btnGrupos).toContain('aria-checked="true"')
+    expect(btnTodos).toContain('aria-checked="false"')
+  })
+})
+
+describe('el armado en DRAFT — la nota del reparto coincide con el formato elegido (W80, verify-report-pr21-cierre #4016)', () => {
+  /**
+   * `drawNote` (`armado.tsx`, dentro de `words(sideSize)`) dependía SÓLO del
+   * tamaño del lado y nunca del `formato` — con "4 grupos + llave" elegido,
+   * "Cómo quedan los grupos" (S83) dibujaba arriba un reparto en grupos y,
+   * dos pantallazos más abajo, la nota seguía prometiendo "todos contra
+   * todos": la misma contradicción que W55-W57 (comportamiento y relato
+   * dichos por dos caminos que dejaron de estar de acuerdo).
+   */
+  it('con grupos elegidos, la nota describe grupos + llave, no "todos contra todos"', async () => {
+    escena.status = 'DRAFT'
+    escena.isAdmin = true
+    escena.formato = { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 }
+    escena.sides = ALL_SIDES
+    escena.matches = []
+
+    const html = await render()
+
+    expect(html).not.toContain('Juegan todos contra todos, en el orden de la tabla.')
+    expect(html).toContain(
+      'Juegan por grupos: todos contra todos adentro de cada grupo, y los 2 primeros de cada uno pasan a la llave.',
+    )
+  })
+
+  it('no-regresión: con "todos contra todos" elegido, la nota sigue siendo la de siempre', async () => {
+    escena.status = 'DRAFT'
+    escena.isAdmin = true
+    escena.formato = { kind: 'ROUND_ROBIN' }
+    escena.sides = [1, 2, 3, 4].map(side)
+    escena.matches = []
+
+    const html = await render()
+
+    expect(html).toContain('Juegan todos contra todos, en el orden de la tabla.')
   })
 })
 
@@ -545,5 +649,29 @@ describe('el armado en DRAFT — vista previa del reparto en grupos (S83, verify
     const html = await render()
 
     expect(html).not.toContain('Cómo quedan los grupos')
+  })
+})
+
+describe('el armado en DRAFT — el número de asiento no se recorta desde el 10 (S85, verify-report-pr21-cierre #4016)', () => {
+  /**
+   * `w-4` (16px) más `text-[14px] font-extrabold` mide 18px para "10"/"11" —
+   * medido con Chromium real (Archivo 800, ver apply-progress de esta
+   * tanda): `scrollWidth 18 > clientWidth 16`. Acá no hay layout real
+   * (`renderToStaticMarkup`), así que lo que se pincha es la CLASE — `w-5`
+   * (20px) es la que la medición real confirmó sin overflow.
+   */
+  it('con 10 lados, el décimo asiento usa w-5, no w-4', async () => {
+    escena.status = 'DRAFT'
+    escena.isAdmin = true
+    escena.formato = { kind: 'ROUND_ROBIN' }
+    escena.sides = Array.from({ length: 10 }, (_, index) => side(index + 1))
+    escena.matches = []
+
+    const html = await render()
+
+    const orden = html.slice(html.indexOf('Orden de la fecha'))
+    const decimo = /<span class="[^"]*">10<\/span>/.exec(orden)?.[0] ?? ''
+    expect(decimo).toContain('w-5')
+    expect(decimo).not.toContain('w-4')
   })
 })

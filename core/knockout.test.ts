@@ -516,3 +516,20 @@ describe('offerableFormats', () => {
     }
   })
 })
+
+/**
+ * W77 (verify-report-pr21-cierre, #4016) / decisión #4022: `suggestFormat`
+ * proponía 4 grupos con `sides > 8` y `offerableFormats` sólo los ofrece con
+ * `sides >= 12` (grupos de 3 o más) — entre 9 y 11 lados la app sugería un
+ * formato que el selector no ofrecía, y ningún test las cruzaba para
+ * notarlo. Éste las cruza para TODO el rango real: `sides` 4 a 12 (las dos
+ * funciones sólo miran `sides`, así que sweepearlo con `sideSize=1` alcanza
+ * sin necesitar más de un `sideSize` — `sides === headcount` ahí).
+ */
+describe('suggestFormat × offerableFormats: lo sugerido nunca contradice lo ofrecido (W77, decisión #4022)', () => {
+  it.each([4, 5, 6, 7, 8, 9, 10, 11, 12])('con %i lados, lo sugerido está entre lo ofrecido', (sides) => {
+    const suggested = suggestFormat(sides, 1)
+    const offered = offerableFormats(sides)
+    expect(offered).toContainEqual(suggested)
+  })
+})

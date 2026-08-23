@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest'
 import { defaultConfig } from '@/core'
 import { createMatchday, matchdayContextFor } from './matchday'
 import { addDiscipline, disciplineConfig, updateDisciplineConfig, updateDisciplineHasMasters } from './discipline'
-import { awardsOf, derivedSeasonStatus } from './read'
+import { awardsOf, seasonHeader } from './read'
 import { squadSeedOrder } from './season'
 import { adminClient } from './test/admin'
 import { createSeason } from './test/factories'
@@ -152,12 +152,15 @@ describe('matchdays.discipline_id (PR 2)', () => {
 // SETUP → ACTIVE") ya tiene su prueba unitaria en core/season.test.ts, y su
 // prueba end-to-end con dos disciplinas de verdad vive en PR 4, que es donde
 // el tripwire cae y dos disciplinas concurrentes dejan de ser hipotéticas.
-describe('derivedSeasonStatus (PR 3)', () => {
+// W91: estos dos llamaban a `derivedSeasonStatus`, que tenía CERO callers de
+// producción — `seasonHeader` deriva inline con `seasonStatusOf` sobre las
+// filas que ya trae. Ahora ejercitan ese camino, que es el que corre la app.
+describe('el estado derivado de la temporada (REQ-D3-3)', () => {
   it('temporada recién creada: SETUP', async () => {
     const admin = await createTestUser()
     const { seasonId } = await createSeason({ admin })
 
-    expect(await derivedSeasonStatus(admin.client, seasonId)).toBe('SETUP')
+    expect((await seasonHeader(admin.client, seasonId)).status).toBe('SETUP')
   })
 
   it('con la disciplina en ACTIVE: ACTIVE', async () => {
@@ -167,7 +170,7 @@ describe('derivedSeasonStatus (PR 3)', () => {
     const { error } = await db.from('disciplines').update({ status: 'ACTIVE' }).eq('id', disciplineId)
     if (error) throw new Error(error.message)
 
-    expect(await derivedSeasonStatus(admin.client, seasonId)).toBe('ACTIVE')
+    expect((await seasonHeader(admin.client, seasonId)).status).toBe('ACTIVE')
   })
 })
 
@@ -766,7 +769,7 @@ describe('updateDisciplineHasMasters (decisión #4029, parte 2)', () => {
   /**
    * Parte 3 de la decisión: NO se puede encender el Masters en una
    * disciplina de a uno -- ahí sigue roto (`generateMastersPairs`,
-   * `db/matchday.ts:985`, rechaza siempre `pair_size=1`). Ofrecerlo sería
+   * `db/matchday.ts`, rechaza siempre `pair_size=1`). Ofrecerlo sería
    * ofrecer algo que la app rechaza después.
    */
   it('rechaza encender el Masters en una disciplina de a uno, y no escribe nada', async () => {

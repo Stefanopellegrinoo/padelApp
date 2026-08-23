@@ -145,7 +145,7 @@ export async function updateDisciplineConfig(
  * organizador lo cambia después.
  *
  * El guard de la parte 3 (no se puede ENCENDER el Masters en una disciplina
- * de a uno — `generateMastersPairs`, `db/matchday.ts:985`, rechaza siempre
+ * de a uno — `generateMastersPairs`, `db/matchday.ts`, rechaza siempre
  * `pair_size=1`) vive ACÁ y TAMBIÉN en la base
  * (`disciplines_has_masters_needs_pair`, 0053): `grant update (..., has_masters,
  * ...)` (`0015_disciplines.sql:70`) es de COLUMNA, no de función, así que un
@@ -243,8 +243,8 @@ export async function addDiscipline(
       position: (maxRow?.position ?? -1) + 1,
       pair_size: spec.pairSize ?? 2,
       allows_draw: spec.allowsDraw ?? false,
-      // Decisión #4029, parte 1: de a uno nace SIN Masters -- `openMatchday`
-      // (`db/matchday.ts:985`) rechaza siempre una fecha MASTERS con
+      // Decisión #4029, parte 1: de a uno nace SIN Masters --
+      // `generateMastersPairs` (`db/matchday.ts`) rechaza siempre una fecha MASTERS con
       // `pair_size=1`, así que ofrecer el check encendido ahí sería ofrecer
       // algo que la app ya rechaza. De a dos sigue naciendo en `true`, el
       // default de siempre (`0015_disciplines.sql:21`).

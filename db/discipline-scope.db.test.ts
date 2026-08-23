@@ -11,7 +11,7 @@ import {
   setAttendance,
   syncGuestSeat,
 } from './matchday'
-import { awardsOf, closedHistoryAll, derivedSeasonStatus, matchdaysOf } from './read'
+import { awardsOf, closedHistoryAll, matchdaysOf, seasonHeader } from './read'
 import { awardsBefore, closedHistory } from './season'
 import { adminClient } from './test/admin'
 import { createSeason } from './test/factories'
@@ -236,14 +236,14 @@ describe('dos disciplinas concurrentes (PR 4)', () => {
 })
 
 //── C1/C2 (0019_discipline_status_moves.sql) — el camino REAL, no fabricado ─
-// Antes de 0019, disciplines.status nunca se movía: `derivedSeasonStatus`
+// Antes de 0019, disciplines.status nunca se movía: el estado derivado
 // hubiera dicho SETUP para un torneo con una disciplina en curso. Este test
 // llega al estado "pádel ACTIVE, FIFA SETUP" abriendo una fecha de verdad
 // (generatePairs + openMatchday), no con un update de service_role — es
 //Justo el escenario que REQ-D3-3 pide y que el marcó
 // sin cobertura end-to-end.
 describe('estado derivado real: abrir una fecha por el camino real', () => {
-  it('abrir la primera fecha de pádel mueve su disciplina a ACTIVE sin tocar a FIFA, y derivedSeasonStatus lo refleja', async () => {
+  it('abrir la primera fecha de pádel mueve su disciplina a ACTIVE sin tocar a FIFA, y el header lo refleja', async () => {
     const admin = await createTestUser()
     const filler = await fillerPlayers(8)
     const { seasonId, disciplineIds, entryIds } = await createSeason({
@@ -256,7 +256,7 @@ describe('estado derivado real: abrir una fecha por el camino real', () => {
     if (padelId === undefined || fifaId === undefined) throw new Error('Faltan disciplinas.')
 
     // Recién creada: las dos disciplinas en SETUP, la temporada también.
-    expect(await derivedSeasonStatus(admin.client, seasonId)).toBe('SETUP')
+    expect((await seasonHeader(admin.client, seasonId)).status).toBe('SETUP')
 
     //`disciplineId` explícito (S26, guarda de ambigüedad): la temporada
     // tiene dos disciplinas, así que omitirlo ahora tira en vez de adivinar
@@ -272,7 +272,7 @@ describe('estado derivado real: abrir una fecha por el camino real', () => {
     expect(await disciplineStatus(fifaId), 'FIFA no arrancó: nadie le abrió una fecha').toBe('SETUP')
 
     //El caso exacto de REQ-D3-3: una disciplina ACTIVE y otra SETUP -> ACTIVE.
-    expect(await derivedSeasonStatus(admin.client, seasonId)).toBe('ACTIVE')
+    expect((await seasonHeader(admin.client, seasonId)).status).toBe('ACTIVE')
   })
 })
 

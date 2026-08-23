@@ -2,7 +2,7 @@
 --
 -- Una disciplina de a uno (`pair_size=1`) crea su Masters sin que nada la
 -- valide, y ese Masters rechaza para siempre armarse (`generateMastersPairs`,
--- `db/matchday.ts:985`, "El Masters se juega de a parejas: una disciplina de
+-- `db/matchday.ts`, "El Masters se juega de a parejas: una disciplina de
 -- a uno no lo arma."). `close_matchday` del Masters es lo ÚNICO que pone
 -- `disciplines.status = 'FINISHED'`: la disciplina queda trabada y la
 -- temporada no se puede terminar NUNCA.

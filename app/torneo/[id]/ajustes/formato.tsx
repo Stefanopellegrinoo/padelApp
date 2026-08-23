@@ -150,8 +150,8 @@ export function Formato({
       </div>
 
       {/* Decisión #4029: editable acá (parte 2), pero deshabilitado -- no sólo
-          apagado -- en una disciplina de a uno (parte 3). `openMatchday`
-          (`db/matchday.ts:985`) rechaza siempre una fecha MASTERS con
+          apagado -- en una disciplina de a uno (parte 3).
+          `generateMastersPairs` (`db/matchday.ts`) rechaza siempre una fecha MASTERS con
           `pair_size=1`; ofrecer el check encendido ahí sería ofrecer algo
           que la app ya rechaza. */}
       <div className="overflow-hidden rounded-[14px] border border-line bg-surface">

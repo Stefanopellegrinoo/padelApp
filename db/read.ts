@@ -318,9 +318,21 @@ export async function mySeasons(supabase: Client): Promise<SeasonHeader[]> {
   const seasons = data ?? []
   if (seasons.length === 0) return []
 
-  const { data: disciplineRows, error: disciplinesError } = await supabase
+  // `count: 'exact'` y el guard de abajo (S98): PostgREST corta CADA select
+  // en `PGRST_DB_MAX_ROWS` (1000, `supabase/config.toml`) y NO avisa. Antes
+  // `status` era un escalar por temporada; desde REQ-D3-3 es un AGREGADO sobre
+  // estas filas (`seasonStatusOf`), y perder filas CAMBIA el resultado:
+  // `every(FINISHED)` sobre un subconjunto puede decir "Terminado" de un torneo
+  // en curso. Es la misma trampa que el tripwire de `db/discipline.db.test.ts`
+  // documenta desde que un cruce truncado le reportó 248 huérfanas que no
+  // existían.
+  const {
+    data: disciplineRows,
+    error: disciplinesError,
+    count,
+  } = await supabase
     .from('disciplines')
-    .select(DISCIPLINE_HEADER_COLUMNS)
+    .select(DISCIPLINE_HEADER_COLUMNS, { count: 'exact' })
     .in(
       'season_id',
       seasons.map((season) => season.id),
@@ -329,6 +341,16 @@ export async function mySeasons(supabase: Client): Promise<SeasonHeader[]> {
     .order('created_at', { ascending: true })
   if (disciplinesError) {
     throw new EdgeError(`No se pudieron leer las disciplinas: ${disciplinesError.message}`)
+  }
+  // Falla RUIDOSO en vez de derivar un estado sobre filas que faltan: un error
+  // en pantalla se ve y se arregla, un "Terminado" que no lo es no.
+  // ponytail: se corta en el techo de PostgREST, no pagina. Hacen falta ~1000
+  // disciplinas de UN mismo usuario para llegar; si alguna vez pasa, el
+  // upgrade es paginar con `.range()` en bucle, no subir el techo.
+  if (count !== null && (disciplineRows ?? []).length < count) {
+    throw new EdgeError(
+      `No se pudieron leer todas las disciplinas (${(disciplineRows ?? []).length} de ${count}). Recargá la pantalla.`,
+    )
   }
 
   const disciplineRowsBySeason = new Map<string, DisciplineHeaderRow[]>()
@@ -372,22 +394,6 @@ export async function seasonHeader(supabase: Client, seasonId: string): Promise<
     seasonStatusOf(rows as { status: SeasonStatus }[]),
     userId,
   )
-}
-
-/**
- * El estado REAL de un torneo con más de una disciplina (REQ-D3-3):
- * derivado de `disciplines.status`, no de `seasons.status` (que sigue
- * existiendo en dual-write hasta el contract, PR 27, pero deja de ser fuente
- * de verdad en cuanto una temporada tiene más de una disciplina).
- *
- * Ningún consumidor de `SeasonHeader.status` se cambia todavía a esto — esa
- * migración de pantallas es de una fase posterior. Esta función existe para
- * que quien la necesite ya la tenga.
- */
-export async function derivedSeasonStatus(supabase: Client, seasonId: string): Promise<SeasonStatus> {
-  const { data, error } = await supabase.from('disciplines').select('status').eq('season_id', seasonId)
-  if (error) throw new EdgeError(`No se pudo leer las disciplinas: ${error.message}`)
-  return seasonStatusOf((data ?? []) as { status: SeasonStatus }[])
 }
 
 /**

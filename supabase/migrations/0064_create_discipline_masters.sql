@@ -60,6 +60,22 @@ begin
     raise exception 'Esta disciplina no juega Masters: termina con su última fecha regular.';
   end if;
 
+  -- S97: `0049` sacó el `if v_regular is null` que `0021` tenía, al mudar la
+  -- lectura de `seasons` a `disciplines`. Sin él, un `disciplines.config` sin
+  -- `regularMatchdays` deja `v_regular` en NULL y el `if v_closed < v_regular`
+  -- de abajo evalúa NULL -> falso: el Masters se armaría SIN NINGUNA compuerta,
+  -- en silencio. Hoy es inalcanzable (`SeasonConfig` lo declara obligatorio y
+  -- `assertValidConfig` valida `>= 1`), pero esa premisa la sostiene sólo
+  -- TypeScript, y esta función es `security definer`: se llega por RPC directo.
+  --
+  -- La otra mitad de S97 —`close_matchday` (`0056:124`), donde un `v_regular`
+  -- NULL deja la disciplina sin terminar NUNCA— queda ABIERTA a propósito:
+  -- cerrarla pide un restatement entero de la función más crítica del schema,
+  -- verificada por 8 mutaciones en #4034, por un caso igual de inalcanzable.
+  if v_regular is null then
+    raise exception 'La disciplina no tiene definida la cantidad de fechas.';
+  end if;
+
   select count(*) into v_closed
     from public.matchdays
    where discipline_id = p_discipline and kind = 'REGULAR' and status = 'CLOSED';

@@ -418,9 +418,9 @@ export function knockoutPositions(
  * reales en el test "12 lados de a uno..." de `core/knockout.test.ts`, no
  * sólo en este comentario.
  */
-export function suggestFormat(headcount: number, sideSize: SideSize): MatchdayFormat {
+export function suggestFormat(headcount: number, sideSize: SideSize, maxMatches: number): MatchdayFormat {
   const sides = Math.floor(headcount / sideSize)
-  const groupFormats = offerableFormats(sides).filter(
+  const groupFormats = offerableFormats(sides, maxMatches).filter(
     (format): format is Extract<MatchdayFormat, { kind: 'GROUPS_KNOCKOUT' }> => format.kind === 'GROUPS_KNOCKOUT',
   )
   const mostGroups = groupFormats.reduce<Extract<MatchdayFormat, { kind: 'GROUPS_KNOCKOUT' }> | null>(
@@ -428,6 +428,23 @@ export function suggestFormat(headcount: number, sideSize: SideSize): MatchdayFo
     null,
   )
   return mostGroups ?? { kind: 'ROUND_ROBIN' }
+}
+
+/**
+ * ¿Este formato exacto está en el menú de `sides` lados?
+ *
+ * Vive acá y no en cada guard porque comparar una UNIÓN DISCRIMINADA es
+ * precisamente donde una de dos copias se equivoca: los dos guards de
+ * `db/matchday.ts` miraban `kind === 'GROUPS_KNOCKOUT' && groups === ...` y por
+ * eso dejaban pasar ROUND_ROBIN sin chequear nada — el agujero por el que una
+ * disciplina de a uno con 12 presentes armaba 66 partidos.
+ */
+export function formatoOfrecible(formato: MatchdayFormat, sides: number, maxMatches: number): boolean {
+  return offerableFormats(sides, maxMatches).some((candidato) =>
+    formato.kind === 'GROUPS_KNOCKOUT'
+      ? candidato.kind === 'GROUPS_KNOCKOUT' && candidato.groups === formato.groups
+      : candidato.kind === 'ROUND_ROBIN',
+  )
 }
 
 function combinations(n: number): number {
@@ -508,7 +525,7 @@ function smallestGroupSize(sides: number, groups: number): number {
  * tercera copia si no hay una segunda lista, sólo un filtro de negocio sobre
  * la única fuente.
  */
-export function offerableFormats(sides: number): MatchdayFormat[] {
+export function offerableFormats(sides: number, maxMatches: number): MatchdayFormat[] {
   const formats: MatchdayFormat[] = [{ kind: 'ROUND_ROBIN' }]
   for (const groups of KNOCKOUT_GROUP_COUNTS) {
     if (groups === 1) continue // decisión #4014: "1 grupo + llave" nunca ahorra nada
@@ -516,5 +533,29 @@ export function offerableFormats(sides: number): MatchdayFormat[] {
       formats.push({ kind: 'GROUPS_KNOCKOUT', groups, qualifiersPerGroup: 2 })
     }
   }
-  return formats
+  // El techo de la fecha se mide en PARTIDOS (`MAX_MATCHES`), no en jugadores.
+  // Filtrar ACÁ y no en cada llamador es lo que cierra el agujero de una vez:
+  // esta función es la ÚNICA fuente del menú —la UI, `suggestFormat` y los dos
+  // guards de `db/matchday.ts` derivan todos de ella—, así que un formato que
+  // no pasa por este filtro no queda ofrecible en ninguna capa.
+  //
+  // ROUND_ROBIN entra al filtro como cualquier otro, y ese es el cambio: hasta
+  // acá era incondicional en las tres capas (el botón "Todos contra todos"
+  // hardcodeado en `armado.tsx`, y los dos guards mirando sólo
+  // GROUPS_KNOCKOUT), que es exactamente por qué una disciplina de a uno con 12
+  // presentes podía armar 66 partidos sin que nada la frenara.
+  const bajoElTecho = formats.filter((format) => matchCountForFormat(format, sides) <= maxMatches)
+  if (bajoElTecho.length > 0) return bajoElTecho
+
+  // Con el techo bajo, un tamaño puede no tener NINGÚN formato que lo cumpla —
+  // devolver el MÁS BARATO en vez de una lista vacía. Un menú vacío es una
+  // fecha que no se puede armar y nadie sabe por qué, que es peor que una
+  // fecha larga. El techo es una preferencia con salida, no una imposibilidad.
+  // Con los defaults no se llega acá; con un `maxMatches` puesto a mano por el
+  // organizador, sí.
+  return [
+    formats.reduce((mejor, format) =>
+      matchCountForFormat(format, sides) < matchCountForFormat(mejor, sides) ? format : mejor,
+    ),
+  ]
 }

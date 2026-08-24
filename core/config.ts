@@ -166,6 +166,24 @@ export function validateConfig(config: SeasonConfig, sideSize: SideSize): string
     errors.push(`El plantel no puede pasar de ${MAX_PLAYERS} jugadores.`)
   }
 
+  // El techo de partidos entra por un formulario, así que se valida acá como
+  // cualquier otro número del config. La clave es OPCIONAL —sin ella rige
+  // `defaultMaxMatches(sideSize)`— pero si viene, tiene que servir para algo:
+  // un techo de 0 o negativo deja la disciplina sin ningún formato que lo
+  // cumpla, y `offerableFormats` cae siempre a su salida del más barato.
+  //
+  // No se le pide que alcance para el plantel de HOY a propósito: la
+  // asistencia cambia fecha a fecha y un techo que hoy no entra puede entrar
+  // la que viene con dos ausentes. Rechazarlo acá sería atar una regla de
+  // TORNEO a un dato de UNA fecha.
+  if (config.maxMatches !== undefined) {
+    if (!Number.isInteger(config.maxMatches)) {
+      errors.push('El máximo de partidos por fecha tiene que ser un número entero.')
+    } else if (config.maxMatches < 1) {
+      errors.push('El máximo de partidos por fecha tiene que ser 1 o más.')
+    }
+  }
+
   const countError = pointsCountError(squadSize, sideSize, points.length)
   if (countError !== null) errors.push(countError)
   errors.push(...pointsErrors(points))
@@ -187,7 +205,7 @@ export function validateConfig(config: SeasonConfig, sideSize: SideSize): string
   // y ESO se corta en `db/validate.ts`, no acá. Acá sólo se deja de pedir
   // coherencia a un número muerto.
   //
-  //Nota: el techo es que una disciplina abierta puede guardar
+  // ponytail: el techo es que una disciplina abierta puede guardar
   // `gamesPerSet: 0` y, si alguien apaga `openScore` después, queda con un
   // formato que no acepta ningún resultado. Hoy ninguna pantalla escribe
   // `openScore`, así que no hay camino para llegar ahí; el día que una lo

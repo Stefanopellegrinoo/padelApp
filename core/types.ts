@@ -52,6 +52,14 @@ export interface SeasonConfig {
   regularMatchdays: number
   countBestOf: number
   tiebreakSnapshotEvery: number
+  /**
+   * Cuántos partidos como mucho puede tener una fecha de esta disciplina.
+   * OPCIONAL: sin la clave rige `defaultMaxMatches(sideSize)` — 15 de a dos,
+   * 36 de a uno. Es el techo que `MAX_PLAYERS` intentaba ser y no podía, por
+   * medir jugadores en vez de partidos: 12 jugadores son 15 partidos de a dos
+   * y 66 de a uno.
+   */
+  maxMatches?: number
 }
 
 /**

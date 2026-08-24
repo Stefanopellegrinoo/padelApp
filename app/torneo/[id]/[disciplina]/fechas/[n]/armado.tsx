@@ -139,6 +139,13 @@ interface ArmadoProps {
    * donde no hay a quién emparejar, y dividía el plantel por 2.
    */
   sideSize: SideSize
+  /**
+   * El techo de partidos de ESTA disciplina (`config.maxMatches`, con el
+   * default de su `sideSize`). Viaja desde `page.tsx` porque el menú de
+   * formatos es suyo: sin esto la pantalla ofrecía el techo por default y
+   * `generatePairs` rechazaba después lo que la pantalla había ofrecido.
+   */
+  maxMatches: number
   matchdayNumber: number
   /** El plantel en orden de siembra. Los invitados van aparte: son un asiento de esta fecha, no del torneo. */
   seats: SeatVM[]
@@ -192,6 +199,7 @@ export function Armado({
   matchdayId,
   disciplina,
   sideSize,
+  maxMatches,
   matchdayNumber,
   seats,
   looseGuests,
@@ -266,7 +274,7 @@ export function Armado({
   // el servidor confirme.
   const sizeSettled = !seatPending
   // Toda la aritmética vive en `armado-state.ts`, condicionada por `sideSize`
-  //Acá estaba suelta con el 2 hardcodeado en las dos puntas, y por eso
+  // acá estaba suelta con el 2 hardcodeado en las dos puntas, y por eso
   // una disciplina de a uno pedía un invitado para emparejar y mostraba media
   // pareja. Tiene test propio; adentro de esta pantalla no lo podía tener.
   const shape = matchdayShape({
@@ -274,6 +282,7 @@ export function Armado({
     looseGuests: looseGuests.length,
     guestPairs: guestPairs.length,
     sideSize,
+    maxMatches,
     // El GUARDADO, no la sugerencia (W72): `matches` tiene que contar los
     // partidos del formato que ya está en la base, no asumir round robin.
     formato,
@@ -308,7 +317,7 @@ export function Armado({
             // Los partidos se muestran porque son el costo real de la fecha, y
             // de a uno crecen distinto: 12 jugadores son 66 partidos donde 12
             // de a dos son 15. Ese número es el que hace pedir el formato de
-            //Grupos (REQ-D8-1, PR21), que es la salida a W32.
+            // grupos (REQ-D8-1, PR21), que es la salida a W32.
             <p className="mt-2 text-center text-[12.5px] font-[600] text-muted">
               La fecha es de {size} · {sides} {label.sides} · {matches} partidos
             </p>
@@ -331,6 +340,7 @@ export function Armado({
         // `SelectorDeFormato` con el `formato` guardado (W73) deja ver
         // exactamente lo mismo que antes de settear.
         sides={sizeSettled ? shape.sides : 0}
+        maxMatches={shape.maxMatches}
         suggested={suggestedFormat}
         pending={pending}
         onChange={(next) => run(() => changeMatchdayFormat(seasonId, matchdayId, matchdayNumber, next))}
@@ -394,7 +404,7 @@ export function Armado({
             </span>
             <span className="flex flex-1 flex-col">
               <span className="text-[14.5px] font-bold">{seat.name}</span>
-              {/*Nota: `attendances` no guarda quién escribió la fila, así que
+              {/* ponytail: `attendances` no guarda quién escribió la fila, así que
                   "avisó" es todo ausente. Si algún día importa distinguir al que
                   avisó del que sacó el admin, es una columna nueva. */}
               {!seat.playing && <span className="text-[11.5px] font-[600] text-muted">Avisó que no va</span>}
@@ -451,7 +461,7 @@ export function Armado({
           />
         ))}
 
-        {/*Nota: `addGuestPair` no tiene guard de `pairSize` y suma los
+        {/* ponytail: `addGuestPair` no tiene guard de `pairSize` y suma los
             invitados de a DOS incluso donde no hay parejas — con `sideSize=1`
             el lock que los traba lo ignora `buildSides` entero (su propio
             comentario: "a constraint on a pairing that never happens
@@ -645,6 +655,7 @@ function formatoLabel(formato: MatchdayFormat): string {
 export function SelectorDeFormato({
   formato,
   sides,
+  maxMatches,
   suggested,
   pending,
   onChange,
@@ -652,14 +663,31 @@ export function SelectorDeFormato({
   formato: MatchdayFormat
   /** Lados de HOY: de acá sale qué botones de grupos se ofrecen (`offerableFormats`), no de una sugerencia. */
   sides: number
+  /** El techo de partidos de ESTA disciplina (`config.maxMatches`): con él se arma el menú. */
+  maxMatches: number
   /** El formato que `suggestFormat` propone (REQ-D8-1) — se marca con una leyenda, no reemplaza los botones de #4014. */
   suggested: MatchdayFormat
   pending: boolean
   onChange: (formato: MatchdayFormat) => void
 }) {
-  const ofertados = offerableFormats(sides).filter(
+  const menu = offerableFormats(sides, maxMatches)
+  const ofertados = menu.filter(
     (candidato): candidato is Extract<MatchdayFormat, { kind: 'GROUPS_KNOCKOUT' }> => candidato.kind === 'GROUPS_KNOCKOUT',
   )
+  // El botón de todos contra todos estaba HARDCODEADO: se dibujaba siempre,
+  // mientras los de grupos salían de `offerableFormats`. Con el techo de la
+  // disciplina (`config.maxMatches`) dejó de ser incondicional —12 lados de a
+  // uno son 66 partidos— así que ahora sale del menú como cualquier otro.
+  //
+  // Y NO lleva la escotilla de "mostralo igual si es el formato guardado" que
+  // sí tiene `grupos` acá abajo, aunque parezca el mismo caso. No lo es: un
+  // `GROUPS_KNOCKOUT` guardado es siempre una elección deliberada, mientras que
+  // un `ROUND_ROBIN` guardado puede ser el DEFAULT DE COLUMNA (`0040`) que
+  // nadie eligió. Con la escotilla, toda fecha recién creada ofrecía el botón
+  // aunque el techo lo prohibiera —medido en el navegador— y `generatePairs` lo
+  // rechazaba después: la pantalla ofreciendo lo que la base rebota, que es
+  // exactamente el patrón de guards en serie de #3989.
+  const ofreceRoundRobin = menu.some((candidato) => candidato.kind === 'ROUND_ROBIN')
   const grupos =
     formato.kind === 'GROUPS_KNOCKOUT' && !ofertados.some((candidato) => candidato.groups === formato.groups)
       ? [...ofertados, formato]
@@ -673,16 +701,18 @@ export function SelectorDeFormato({
         <p className="text-[11.5px] font-[600] text-muted">Sugerido: {formatoLabel(suggested)}</p>
       )}
       <div className="flex gap-2" role="radiogroup" aria-label="Formato de la fecha">
-        <button
-          type="button"
-          role="radio"
-          aria-checked={formato.kind === 'ROUND_ROBIN'}
-          disabled={pending}
-          onClick={() => onChange({ kind: 'ROUND_ROBIN' })}
-          className={`${FORMATO_BOTON} ${formato.kind === 'ROUND_ROBIN' ? FORMATO_ELEGIDO : FORMATO_LIBRE}`}
-        >
-          Todos contra todos
-        </button>
+        {ofreceRoundRobin && (
+          <button
+            type="button"
+            role="radio"
+            aria-checked={formato.kind === 'ROUND_ROBIN'}
+            disabled={pending}
+            onClick={() => onChange({ kind: 'ROUND_ROBIN' })}
+            className={`${FORMATO_BOTON} ${formato.kind === 'ROUND_ROBIN' ? FORMATO_ELEGIDO : FORMATO_LIBRE}`}
+          >
+            Todos contra todos
+          </button>
+        )}
         {grupos.map((candidato) => (
           <button
             key={candidato.groups}

@@ -21,7 +21,7 @@ describe('validateConfig', () => {
     expect(errors).toContain('El plantel tiene que ser un número par.')
   })
 
-  //REQ-D2-2/REQ-D5-2: la paridad es una regla DE LA PAREJA, no del
+  // REQ-D2-2/REQ-D5-2: la paridad es una regla DE LA PAREJA, no del
   // plantel. Con sideSize=1 cada presente es su propio lado — no hay nada
   // que emparejar, así que un plantel impar es perfectamente jugable.
   //
@@ -29,7 +29,7 @@ describe('validateConfig', () => {
   // todavía un piso COMPARTIDO entre disciplinas (PUNTO 3 del design, sin
   // hacer en esta tanda: separar minPlayers/maxPlayers por disciplina). Un
   // 7 acá tropezaría con ese piso —gap real, ya señalado, deliberadamente
-  //Afuera de W24— y taparía la señal de esta prueba. Se usa 9: impar,
+  // afuera de W24— y taparía la señal de esta prueba. Se usa 9: impar,
   // dentro del piso/techo de hoy, aislando sólo la paridad.
   it('accepts an odd squad size when the side is a single (REQ-D2-2)', () => {
     const errors = validateConfig({ ...valid, squadSize: 9, points: [10, 7, 5, 3] }, 1)
@@ -51,7 +51,7 @@ describe('validateConfig', () => {
     expect(errors).toContain('Con un plantel de 12 hacen falta 6 valores de puntos, no 4.')
   })
 
-  //ExpectedPoints dividía siempre por 2, así
+  // ExpectedPoints dividía siempre por 2, así
   // que un 1v1 de 10 pedía la MITAD de los valores que necesita — y
   // rechazaba los 10 que un plantel de 10 lados-de-uno sí necesita.
   it('expects one value per side, not always per pair', () => {
@@ -166,7 +166,7 @@ describe('defaultConfig', () => {
     expect(defaultConfig(12).points[0]).toBe(10)
   })
 
-  //PairCount dividía siempre por 2 — 4 lados
+  // PairCount dividía siempre por 2 — 4 lados
   // de a uno necesitan la misma tabla que 4 parejas (8 jugadores), no la
   // tabla vacía que le tocaba por casualidad.
   it('divides by the real side size, not always by 2', () => {
@@ -302,5 +302,27 @@ describe('DEFAULT_POINTS con lados de uno', () => {
     expect(defaultConfig(8, 2).points).toEqual([10, 6, 3, 1])
     expect(defaultConfig(10, 2).points).toEqual([10, 7, 5, 3, 1])
     expect(defaultConfig(12, 2).points).toEqual([10, 7, 5, 3, 2, 1])
+  })
+})
+
+describe('maxMatches — el techo de partidos de la disciplina', () => {
+  it('sin la clave la config es válida: rige el default de su sideSize', () => {
+    expect(validateConfig(defaultConfig(8), 2)).toEqual([])
+  })
+
+  it('acepta un techo propio', () => {
+    expect(validateConfig({ ...defaultConfig(8), maxMatches: 20 }, 2)).toEqual([])
+  })
+
+  it('rechaza 0: dejaría a la disciplina sin ningún formato que lo cumpla', () => {
+    expect(validateConfig({ ...defaultConfig(8), maxMatches: 0 }, 2)).toContain(
+      'El máximo de partidos por fecha tiene que ser 1 o más.',
+    )
+  })
+
+  it('rechaza un decimal', () => {
+    expect(validateConfig({ ...defaultConfig(8), maxMatches: 6.5 }, 2)).toContain(
+      'El máximo de partidos por fecha tiene que ser un número entero.',
+    )
   })
 })

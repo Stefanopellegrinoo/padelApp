@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import type { ReactNode } from 'react'
 import {
+  maxMatchesOf,
   bracketOrderNote,
   buildSides,
   computeRanking,
@@ -102,7 +103,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
     seasonMatchdaysOf(supabase, seasonId),
   ])
 
-  //REQ-NR-5: slug desconocido, o de otra temporada — mismo `notFound()` que
+  // REQ-NR-5: slug desconocido, o de otra temporada — mismo `notFound()` que
   // `jugador/[entryId]/page.tsx` usa para un `entryId` que no resuelve.
   const discipline = resolveDisciplineBySlug(header.disciplines, disciplina)
   if (discipline === undefined) notFound()
@@ -331,6 +332,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
         matchdayId={matchday.id}
         disciplina={disciplina}
         sideSize={discipline.pairSize}
+        maxMatches={maxMatchesOf(discipline.config, discipline.pairSize)}
         matchdayNumber={matchday.number}
         seats={seats}
         looseGuests={looseGuests}
@@ -361,7 +363,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
       closedHistory(supabase, matchday.disciplineId, matchdayNumber - 1),
       closedHistory(supabase, matchday.disciplineId, matchdayNumber - 2),
       // Los awards CONGELADOS de ESTA fecha. Alimentan DOS cosas: la tarjeta
-      //De "Sumar invitado" y —desde C21, — la columna
+      // de "Sumar invitado" y —desde C21, — la columna
       // de puntos de la tabla del día. Por eso la condición ya no es
       // `canPromote` (admin) sino la fecha cerrada: cualquiera que mire una
       // fecha cerrada necesita estos puntos, no sólo quien organiza.
@@ -514,7 +516,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
 
     // Los puntos de la fecha cerrada son los CONGELADOS, no un recálculo.
     //
-    //Acá se llamaba a `computeAwards` con los
+    // Acá se llamaba a `computeAwards` con los
     // `guestIds` de HOY. Mientras el conjunto de lados que cobran no cambiara
     // después del cierre las dos fuentes coincidían — y PR18c es lo primero en
     // toda la cadena que hace que cambie. Al promover al invitado que jugó
@@ -530,22 +532,22 @@ export default async function FechaDetailPage({ params }: PageProps) {
     // Es el mismo argumento que ya estaba escrito para la tarjeta de promoción
     // veinte líneas más abajo —"leer `awards` hoy no cambia lo que se ve,
     // cambia DE QUÉ DEPENDE lo que se ve"— que resultó ser cierto también acá.
-    //De paso cierra W43 y saca la posibilidad de que esta tabla contradiga a
+    // De paso cierra W43 y saca la posibilidad de que esta tabla contradiga a
     // la de la temporada, que lee `awards`.
     //
     // El Masters queda en cero como antes: no reparte puntos (spec 2.7), así
     // que no tiene filas en `awards` y `frozenPointsOf` ni se consulta.
     const pointsByEntry = frozenPoints
 
-    //Las filas de una fecha CERRADA se ordenan
+    // Las filas de una fecha CERRADA se ordenan
     // por el puesto CONGELADO, no por el que `computeStandings` calcula hoy.
     // El criterio vive en `tabla-congelada.ts` —módulo puro, testeable— porque
-    //Entró sin una sola aserción y de ahí salieron W56 y W57.
+    // entró sin una sola aserción y de ahí salieron W56 y W57.
     //
     // PG y Dif se siguen tomando de `standings`: salen de los resultados, que
     // una fecha cerrada ya no cambia.
     //
-    //La condición es la MISMA que la de la carga de `frozenPoints` de
+    // La condición es la MISMA que la de la carga de `frozenPoints` de
     // arriba, `!isMasters` incluido. El Masters no reparte puntos (spec 2.7),
     // así que su Map llega vacío y el orden se preservaba igual — pero por la
     // estabilidad de `Array.prototype.sort`, una garantía que ningún test fijaba
@@ -673,7 +675,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
 
     const hasGuest = (side: Side) => members(side).some((entryId) => detail.guestIds.includes(entryId))
     const anyGuestInTable = status === 'CLOSED' && standings.some((row) => hasGuest(row.side))
-    //El pie describe el orden que la tabla
+    // El pie describe el orden que la tabla
     // DIBUJA, o no se dibuja. `tiebreakNote` sale de `standings` e imprime
     // `worse.position`, el puesto que `computeStandings` calcula hoy; desde que
     // la tabla se ordena por el puesto congelado las dos fuentes se pueden
@@ -721,14 +723,14 @@ export default async function FechaDetailPage({ params }: PageProps) {
     //
     // Los puntos de la tarjeta salen de `awards` —la tabla CONGELADA, la misma
     // fila que `promote_guest` copia con su `join`—, igual que la tabla del
-    //Día de arriba: desde C21 las dos leen
+    // día de arriba: desde C21 las dos leen
     // `frozenPoints` y son LA MISMA fuente.
     //
-    //Hasta C21 este párrafo distinguía la
+    // Hasta C21 este párrafo distinguía la
     // tarjeta de `pointsByEntry`, que era un recálculo en vivo, y la
     // distinción era real — medido en una temporada de 12, después de promover
     // la pantalla mostraba al invitado con 5 puntos que no existían en ninguna
-    //Fila de `awards` y a su compañero con 3 donde la tabla tenía 5. C21
+    // fila de `awards` y a su compañero con 3 donde la tabla tenía 5. C21
     // borró esa diferencia haciendo que la tabla también lea los congelados,
     // así que el párrafo pasó a distinguir `pointsByEntry` de sí mismo.
     //

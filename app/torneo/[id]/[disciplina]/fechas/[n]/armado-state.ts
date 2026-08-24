@@ -4,7 +4,15 @@
  * server'`, así que la suite pura no lo puede importar.
  */
 
-import { MAX_PLAYERS, matchCountForFormat, MIN_PLAYERS, suggestFormat, type MatchdayFormat, type SideSize } from '@/core'
+import {
+  defaultMaxMatches,
+  MAX_PLAYERS,
+  matchCountForFormat,
+  MIN_PLAYERS,
+  suggestFormat,
+  type MatchdayFormat,
+  type SideSize,
+} from '@/core'
 
 /** Un asiento del plantel, como lo dibuja el armado. */
 export interface SeatVM {
@@ -47,6 +55,8 @@ export interface MatchdayShape {
   size: number
   /** Lados que salen de esas personas. De a uno, uno por cabeza. */
   sides: number
+  /** El techo de partidos de esta disciplina — el selector ofrece su menú, no el de un techo global. */
+  maxMatches: number
   /**
    * Los partidos reales de la fecha, según el `formato` GUARDADO — round
    * robin completo (`C(sides, 2)`) si es `ROUND_ROBIN`, grupos + llave si es
@@ -108,6 +118,7 @@ export function matchdayShape({
   looseGuests,
   guestPairs,
   sideSize,
+  maxMatches = defaultMaxMatches(sideSize),
   formato,
 }: {
   confirmed: number
@@ -116,6 +127,8 @@ export function matchdayShape({
   /** Parejas invitadas: suman DOS personas cada una. */
   guestPairs: number
   sideSize: SideSize
+  /** El techo de partidos de ESTA disciplina. Sin pasarlo rige el default de su `sideSize`. */
+  maxMatches?: number
   /** El `matchdays.formato` GUARDADO hoy — no la sugerencia. */
   formato: MatchdayFormat
 }): MatchdayShape {
@@ -135,6 +148,9 @@ export function matchdayShape({
     eventualSize,
     tooFew: eventualSize < MIN_PLAYERS,
     tooMany: eventualSize > MAX_PLAYERS,
-    suggestedFormat: suggestFormat(eventualSize, sideSize),
+    suggestedFormat: suggestFormat(eventualSize, sideSize, maxMatches),
+    // Viaja en el shape para que el selector ofrezca el menú de ESTA disciplina
+    // y no el de un techo global — es todo el punto de que el techo sea suyo.
+    maxMatches,
   }
 }

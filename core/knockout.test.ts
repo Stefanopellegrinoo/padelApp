@@ -17,6 +17,7 @@ import {
   groupPhaseMatches,
   KNOCKOUT_GROUP_COUNTS,
 } from './knockout'
+import { defaultMaxMatches, MAX_PLAYERS, MIN_PLAYERS } from './constants'
 import { pair, single } from './side'
 import type { MatchdayFormat, MatchResult, Phase, Side, SideStanding } from './types'
 
@@ -90,7 +91,7 @@ describe('faseForCount', () => {
 })
 
 describe('knockoutMatchups', () => {
-  // decisión (a) — el design NO dice cómo se cruza la llave. Regla elegida
+  // Decisión (a) — el design NO dice cómo se cruza la llave. Regla elegida
   // (ver `core/knockout.ts`): cruzar grupos para que los primeros no se
   // encuentren antes de semifinales, y ningún grupo se enfrente a su propio
   // 2º puesto en el primer cruce.
@@ -120,7 +121,7 @@ describe('knockoutMatchups', () => {
   })
 
   it('con 4 grupos, separa los 4 primeros en mitades distintas del cuadro', () => {
-    // nextRoundMatchups empareja de a dos EN ORDEN: [0]+[1] arman una semi,
+    // NextRoundMatchups empareja de a dos EN ORDEN: [0]+[1] arman una semi,
     // [2]+[3] la otra. Con este orden, A1 y C1 quedan de un lado (sólo se
     // pueden cruzar en semifinal), B1 y D1 del otro — y ningún grupo se
     // enfrenta a su propio 2º puesto en cuartos.
@@ -204,7 +205,7 @@ describe('losingMatchup', () => {
 })
 
 describe('knockoutPositions', () => {
-  // decisión (b) — agujero del design: REQ-D7-4 dice a secas "3º/4º
+  // Decisión (b) — agujero del design: REQ-D7-4 dice a secas "3º/4º
   // semifinalistas perdedores", pero PHASE_ORDER tiene una fase
   // TERCER_PUESTO que el design genera junto con FINAL. Regla elegida (ver
   // JSDoc de `thirdAndFourth` en `core/knockout.ts`): si el partido de
@@ -408,11 +409,11 @@ describe('groupSides', () => {
 
 describe('suggestFormat', () => {
   it('8 presentes de a dos (4 lados) sugiere round robin', () => {
-    expect(suggestFormat(8, 2)).toEqual({ kind: 'ROUND_ROBIN' })
+    expect(suggestFormat(8, 2, defaultMaxMatches(2))).toEqual({ kind: 'ROUND_ROBIN' })
   })
 
   it('8 presentes de a uno (8 lados) sugiere 2 grupos de 4 + semis + final (REQ-D8-1, GIVEN literal)', () => {
-    const format = suggestFormat(8, 1)
+    const format = suggestFormat(8, 1, defaultMaxMatches(1))
     expect(format).toEqual({ kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 })
     if (format.kind !== 'GROUPS_KNOCKOUT') throw new Error('unreachable')
     expect(8 / format.groups).toBe(4) // "2 grupos DE 4"
@@ -433,7 +434,7 @@ describe('suggestFormat', () => {
     mutable.length = 0
     mutable.push(1, 4, 2)
     try {
-      expect(suggestFormat(12, 1)).toEqual({ kind: 'GROUPS_KNOCKOUT', groups: 4, qualifiersPerGroup: 2 })
+      expect(suggestFormat(12, 1, defaultMaxMatches(1))).toEqual({ kind: 'GROUPS_KNOCKOUT', groups: 4, qualifiersPerGroup: 2 })
     } finally {
       mutable.length = 0
       mutable.push(...original)
@@ -441,7 +442,7 @@ describe('suggestFormat', () => {
   })
 
   it('12 lados de a uno: grupos + llave completa dan 19 partidos, no 66 (razón de W32, decisión #3863)', () => {
-    const format = suggestFormat(12, 1)
+    const format = suggestFormat(12, 1, defaultMaxMatches(1))
     expect(format).toEqual({ kind: 'GROUPS_KNOCKOUT', groups: 4, qualifiersPerGroup: 2 })
     if (format.kind !== 'GROUPS_KNOCKOUT') throw new Error('unreachable')
 
@@ -539,34 +540,37 @@ describe('matchCountForFormat', () => {
  */
 describe('offerableFormats', () => {
   it('4 lados: sólo round robin — 2 grupos daría grupos de 2, eliminación cero', () => {
-    expect(offerableFormats(4)).toEqual([{ kind: 'ROUND_ROBIN' }])
+    expect(offerableFormats(4, defaultMaxMatches(1))).toEqual([{ kind: 'ROUND_ROBIN' }])
   })
 
   it('6 lados: round robin + 2 grupos (grupos de 3, la aritmética alcanza)', () => {
-    expect(offerableFormats(6)).toEqual([
+    expect(offerableFormats(6, defaultMaxMatches(1))).toEqual([
       { kind: 'ROUND_ROBIN' },
       { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 },
     ])
   })
 
-  it('8 lados: round robin + 2 grupos, NUNCA 4 — 4 grupos de 8 lados da grupos de 2, eliminación cero', () => {
-    expect(offerableFormats(8)).toEqual([
-      { kind: 'ROUND_ROBIN' },
-      { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 },
-    ])
+  // Estos dos afirman QUÉ CANTIDADES DE GRUPO son estructuralmente ofrecibles,
+  // que es la regla #4014 y no depende del techo de partidos. Antes comparaban
+  // la lista ENTERA y por eso los rompía `MAX_MATCHES`: con 8 y 12 lados el
+  // round robin son 28 y 66 partidos y ya no se ofrece. Afirmar los grupos
+  // deja el test midiendo su propia regla y no la de al lado.
+  const gruposDe = (sides: number): number[] =>
+    offerableFormats(sides, defaultMaxMatches(1))
+      .filter((format) => format.kind === 'GROUPS_KNOCKOUT')
+      .map((format) => format.groups)
+
+  it('8 lados: 2 grupos, NUNCA 4 — 4 grupos de 8 lados da grupos de 2, eliminación cero', () => {
+    expect(gruposDe(8)).toEqual([2])
   })
 
-  it('12 lados: round robin + 2 grupos + 4 grupos (grupos de 3, el mínimo que decide algo)', () => {
-    expect(offerableFormats(12)).toEqual([
-      { kind: 'ROUND_ROBIN' },
-      { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 },
-      { kind: 'GROUPS_KNOCKOUT', groups: 4, qualifiersPerGroup: 2 },
-    ])
+  it('12 lados: 2 y 4 grupos (de 3, el mínimo que decide algo)', () => {
+    expect(gruposDe(12)).toEqual([2, 4])
   })
 
   it('nunca ofrece "1 grupo + llave": siempre es el round robin de siempre más un partido', () => {
     for (const sides of [4, 6, 8, 12]) {
-      const formats = offerableFormats(sides)
+      const formats = offerableFormats(sides, defaultMaxMatches(1))
       expect(formats.some((format) => format.kind === 'GROUPS_KNOCKOUT' && format.groups === 1)).toBe(false)
     }
   })
@@ -583,8 +587,73 @@ describe('offerableFormats', () => {
  */
 describe('suggestFormat × offerableFormats: lo sugerido nunca contradice lo ofrecido (W77, decisión #4022)', () => {
   it.each([4, 5, 6, 7, 8, 9, 10, 11, 12])('con %i lados, lo sugerido está entre lo ofrecido', (sides) => {
-    const suggested = suggestFormat(sides, 1)
-    const offered = offerableFormats(sides)
+    const suggested = suggestFormat(sides, 1, defaultMaxMatches(1))
+    const offered = offerableFormats(sides, defaultMaxMatches(1))
     expect(offered).toContainEqual(suggested)
+  })
+})
+
+describe('el techo de una fecha se mide en PARTIDOS y es de CADA disciplina', () => {
+  // El número lo dio la medición, no la intuición. Round robin, en partidos:
+  //   de a dos:  4 lados=6 · 5=10 · 6=15   ← 15 es el PEOR caso de pádel
+  //   de a uno:  8 lados=28 · 9=36 · 10=45 · 11=55 · 12=66
+  // Un solo número global no puede decir que 15 partidos de pádel y 36 de FIFA
+  // son la misma tarde: uno dura media hora y el otro diez minutos. Por eso el
+  // techo vive en `config.maxMatches` de cada disciplina, con un default por
+  // `sideSize` para las configs que se guardaron antes de que esto existiera.
+  const PADEL = defaultMaxMatches(2) // 15
+  const SINGLES = defaultMaxMatches(1) // 36
+
+  it('respeta el techo que se le pasa, sea cual sea', () => {
+    for (const maxMatches of [PADEL, SINGLES, 20]) {
+      for (const sides of [6, 8, 10, 12]) {
+        const menu = offerableFormats(sides, maxMatches)
+        // Puede devolver UNO por encima del techo cuando ninguno lo cumple
+        // (la salida de abajo), pero nunca dos.
+        const porEncima = menu.filter((f) => matchCountForFormat(f, sides) > maxMatches)
+        expect(porEncima.length, `${sides} lados con techo ${maxMatches}`).toBeLessThanOrEqual(1)
+        if (menu.length > 1) expect(porEncima).toEqual([])
+      }
+    }
+  })
+
+  it('de a uno, 12 lados ya no ofrecen todos contra todos: eran 66 partidos', () => {
+    expect(offerableFormats(12, SINGLES)).not.toContainEqual({ kind: 'ROUND_ROBIN' })
+  })
+
+  it('de a uno, 10 lados tampoco: eran 45', () => {
+    expect(offerableFormats(10, SINGLES)).not.toContainEqual({ kind: 'ROUND_ROBIN' })
+  })
+
+  it('de a uno, 8 y 9 lados SIGUEN ofreciéndolo (28 y 36) — es lo que la app arma hoy', () => {
+    expect(offerableFormats(8, SINGLES)).toContainEqual({ kind: 'ROUND_ROBIN' })
+    expect(offerableFormats(9, SINGLES)).toContainEqual({ kind: 'ROUND_ROBIN' })
+  })
+
+  it('pádel no cambia: su peor caso (6 lados, 15 partidos) sigue entero', () => {
+    expect(offerableFormats(6, PADEL)).toContainEqual({ kind: 'ROUND_ROBIN' })
+  })
+
+  it('un techo propio más bajo recorta el menú de ESA disciplina y de ninguna otra', () => {
+    expect(offerableFormats(6, 12)).not.toContainEqual({ kind: 'ROUND_ROBIN' }) // 15 > 12
+    expect(offerableFormats(6, PADEL)).toContainEqual({ kind: 'ROUND_ROBIN' }) // 15 <= 15
+  })
+
+  // La red de este cambio: filtrar puede dejar a alguien SIN ninguna opción, y
+  // un menú vacío es una fecha que no se puede armar y nadie sabe por qué.
+  it('con los defaults, el menú nunca queda vacío en todo el rango legal', () => {
+    for (const sideSize of [1, 2] as const) {
+      for (let jugadores = MIN_PLAYERS; jugadores <= MAX_PLAYERS; jugadores++) {
+        const sides = Math.floor(jugadores / sideSize)
+        const menu = offerableFormats(sides, defaultMaxMatches(sideSize))
+        expect(menu.length, `${sideSize}v${sideSize} con ${jugadores}`).toBeGreaterThan(0)
+      }
+    }
+  })
+
+  it('y con un techo puesto a mano que nada cumple, devuelve el más barato en vez de nada', () => {
+    const menu = offerableFormats(12, 1)
+    expect(menu).toHaveLength(1)
+    expect(matchCountForFormat(menu[0]!, 12)).toBe(20) // 4 grupos, el más barato de los tres
   })
 })

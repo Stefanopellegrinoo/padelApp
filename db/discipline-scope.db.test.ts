@@ -303,7 +303,7 @@ describe('createMatchday resuelve la disciplina por defecto', () => {
   // Con UNA sola disciplina, "no elegir" no es
   // ambiguo — hay una sola respuesta posible (el test de arriba). Con MÁS de
   // una, adivinar en silencio es exactamente la clase de bug que ya causó
-  //, C9, C12 y el de `matchdaysOf` en esta cadena: este test ANTES
+  // C9, C12 y el de `matchdaysOf` en esta cadena: este test ANTES
   // aseveraba ese default a propósito ("la fecha nueva queda scopeada a la
   // primera disciplina por position, no a la última creada") — ya no es el
   // comportamiento correcto, así que se reescribe en vez de mantenerlo: la

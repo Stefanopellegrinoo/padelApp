@@ -99,7 +99,7 @@ export function primaryDiscipline(header: SeasonHeader): DisciplineHeader {
  * La disciplina de UNA fecha puntual — no la [0] de la temporada. PR 10 pone
  * la disciplina en la URL de `fechas/[n]`, y ese mismo cambio deja a mano
  * `matchday.disciplineId` donde antes sólo estaba `primaryDiscipline(header)`
- *: con dos disciplinas del mismo
+ * con dos disciplinas del mismo
  * `kind` en la temporada (Fase 2), la [0] ya no es necesariamente la de ESTA
  * fecha.
  *

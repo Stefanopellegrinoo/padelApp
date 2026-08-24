@@ -232,7 +232,7 @@ describe('addSquadSeat colocando el nuevo asiento (spec 2.1, 2.2, 2.4, 2.5, 2.6)
     expect(after.filter((e) => e.id !== newId).map((e) => e.id)).toEqual(withHole.map((e) => e.id))
   })
 
-  //, — `squadSeedOrder` (db/season.ts) es la función
+  // `squadSeedOrder` (db/season.ts) es la función
   // que de verdad alimenta el sorteo y el desempate de cada fecha
   // (`matchdayContextFor` -> `snapshotForMatchday`): hasta esta tanda seguía
   // leyendo `entries.seed_position`, que desde PR 7 es dual-write tail-only.
@@ -295,7 +295,7 @@ describe('addSquadSeat colocando el nuevo asiento (spec 2.1, 2.2, 2.4, 2.5, 2.6)
     )
   })
 
-  //,: el fallback `?? row.seed_position` mezclaba dos
+  // El fallback `?? row.seed_position` mezclaba dos
   // numeraciones independientes — `entries.seed_position` es de LA TEMPORADA
   // (dual-write tail-only desde PR 7), `discipline_entries.seed_position` es
   // de LA DISCIPLINA — y con solape parcial entre disciplinas producía
@@ -342,7 +342,7 @@ describe('addSquadSeat colocando el nuevo asiento (spec 2.1, 2.2, 2.4, 2.5, 2.6)
     expect(new Set(positions).size).toBe(positions.length)
   })
 
-  //,: la pantalla de una fecha necesita el orden de
+  // La pantalla de una fecha necesita el orden de
   // SU disciplina, no el de la default (`entriesOf` la resolvía siempre por
   // dentro, sin forma de que el caller opine). `disciplineId` ahora es un
   // parámetro explícito.

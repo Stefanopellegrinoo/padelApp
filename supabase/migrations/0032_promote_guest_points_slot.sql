@@ -1,7 +1,7 @@
 -- PR 18c bis (torneo-multi-disciplina) ─────────────────────────────────────
 --
 -- ── promote_guest: restatement #3/3 — el casillero de puntos del promovido ─
---. PR18c dejo que un invitado que jugo solo se
+-- PR18c dejó que un invitado que jugó solo se
 -- sumara al plantel, y con eso la temporada quedaba trabada: 9 jugadores
 -- contra 8 valores de puntos. La fecha siguiente no se podia sortear, y
 -- reabrir la fecha ya jugada BORRABA sus 8 premios y despues no dejaba

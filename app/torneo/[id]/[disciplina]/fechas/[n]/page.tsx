@@ -118,7 +118,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
   )
   if (matchday === undefined) throw new EdgeError('La fecha no existe.')
 
-  //,: `entriesOf` sin `disciplineId` explícito
+  // `entriesOf` sin `disciplineId` explícito
   // resolvía la disciplina por dentro (`defaultDisciplineId`), que no tiene
   // por qué ser la de ESTA fecha — el desempate del día se armaba con el
   // plantel equivocado apenas hubiera más de una disciplina por temporada

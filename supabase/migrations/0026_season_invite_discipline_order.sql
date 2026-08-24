@@ -1,5 +1,5 @@
 -- ── season_invite ordena por discipline_entries, no por entries.seed_position ──
---, (tanda de cierre): el picker de Unirse
+-- (tanda de cierre): el picker de Unirse
 -- (`app/unirse/[token]`) seguía ordenando por `e.seed_position`
 -- (`entries.seed_position`, dual-write tail-only desde PR 7 —
 -- 0023_discipline_entries.sql), no por el orden real del plantel
@@ -23,8 +23,7 @@
 -- Ver C9, misma ronda) NO se excluye —el picker tiene que mostrar TODOS los
 -- asientos libres de la temporada para que un extraño pueda reclamar
 -- cualquiera, no sólo los de una disciplina— y cae al final, ordenado entre
--- sí por su propio `entries.seed_position` (deuda ya anotada para PR 11/27 en
---).
+-- sí por su propio `entries.seed_position` (deuda ya anotada para PR 11/27).
 create or replace function public.season_invite(p_token text)
 returns table (
   season_id     uuid,

@@ -182,7 +182,7 @@ describe('formatLabel', () => {
   })
 })
 
-//. Antes de PR20 rebanada D2 todas las
+// Antes de PR20 rebanada D2 todas las
 // disciplinas de una temporada compartían `matchFormat`, así que UNA línea de
 // formato era verdad. D2 hizo posibles dos formatos en el mismo torneo y por
 // eso convirtió esa frase en falsa: Reglas y Ajustes narraban

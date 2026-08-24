@@ -32,7 +32,7 @@ describe('attendances.discipline_id — FK contra discipline_entries (PR 8)', ()
     const fifaMatchdayId = await createMatchday(admin.client, seasonId, '2026-08-10', fifaId)
     const db = adminClient()
 
-    //,: matcher específico, no cualquier rechazo —
+    // Matcher específico, no cualquier rechazo —
     // sin él, este `rejects.toThrow()` pasaría igual con cualquier otro error.
     await expect(
       setAttendance(admin.client, fifaMatchdayId, padelOnlyEntry, 'PLAYING'),
@@ -76,7 +76,7 @@ describe('attendances.discipline_id — FK contra discipline_entries (PR 8)', ()
     expect(attendanceRows).toEqual([{ entry_id: bothEntry, discipline_id: fifaId, status: 'PLAYING' }])
   })
 
-  //,: `seedAttendances` pasó de leer el plantel de LA
+  // `seedAttendances` pasó de leer el plantel de LA
   // TEMPORADA a leer `discipline_entries` de LA DISCIPLINA (PR 8,
   // db/matchday.ts), pero ningún test lo probaba — la factory siembra TODOS
   // los asientos en TODAS las disciplinas, así que las dos lecturas coinciden

@@ -235,7 +235,7 @@ describe('Ajustes — el panel de Formato dice de qué disciplina habla', () => 
     expect(paneles).toHaveLength(2)
     expect(paneles[0]).toContain('>Formato · Pádel</h2>')
     expect(paneles[1]).toContain('>Formato · FIFA</h2>')
-    //Y el de FIFA es el de a UNO: su check de Masters sale deshabilitado
+    // Y el de FIFA es el de a UNO: su check de Masters sale deshabilitado
     // (decisión #4029 parte 3), que es justo lo que no se podía ver antes.
     expect(paneles[1]).toContain('Una disciplina de a uno no juega Masters')
   })

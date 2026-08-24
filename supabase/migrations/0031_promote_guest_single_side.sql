@@ -1,7 +1,7 @@
 -- PR 18c (torneo-multi-disciplina, slice D re-especificada) ────────────────
 --
 -- ── promote_guest: restatement #2/3 — un lado de uno no tiene compañero ────
---Midió `promote_guest` contra una disciplina
+-- midió `promote_guest` contra una disciplina
 -- `pair_size = 1` con la fecha CERRADA y encontró que el design se equivocaba
 -- en las dos puntas. El design decía que la copia final traía 0 filas EN
 -- SILENCIO y proponía agregar un `raise` para que fallara ruidoso. La medición
@@ -18,7 +18,7 @@
 --
 -- y con un lado de uno `pr.entry_b` es NULL, así que `a.entry_id = NULL` no
 -- matchea NUNCA, `not exists` da TRUE y el guard concluye "no cobró". Es la
---Misma lógica de tres valores que C17 con el
+-- misma lógica de tres valores que C17 con el
 -- resultado OPUESTO: acá el NULL cae del lado conservador y refusa de más.
 --
 -- Delta contra 0025, y nada más:

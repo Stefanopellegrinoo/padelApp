@@ -69,7 +69,7 @@ describe('buildPairs — the balanced default', () => {
   })
 
   it('pins the known boundary: with two players outside the snapshot, their pairing depends on arrival order in `present`', () => {
-    // out1/out2 are absent from SNAPSHOT and untracked in `points`, so both the
+    // Out1/out2 are absent from SNAPSHOT and untracked in `points`, so both the
     // points tie-break and the snapshot-rank tie-break land equal for them —
     // the sort falls back to arrival order, which orderByPoints takes from the
     // pool array, and pool preserves whatever order `present` arrived in.
@@ -325,7 +325,7 @@ describe('buildSides — sideSize 1 (design PUNTO 5, decisión #5/#6)', () => {
     expect(sides.map((side) => side.a).sort()).toEqual(['p1', 'p2', 'p3'])
   })
 
-  //REQ-D5-2: headcount parity is a rule of the PAIR, not the squad. With
+  // REQ-D5-2: headcount parity is a rule of the PAIR, not the squad. With
   // sideSize=1 there is nothing to pair, so an odd count is not an error.
   it('accepts an odd headcount', () => {
     const present = ['p1', 'p2', 'p3', 'p4', 'p5']

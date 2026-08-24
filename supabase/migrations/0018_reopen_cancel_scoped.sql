@@ -10,7 +10,7 @@
 
 -- ── reopen_matchday (restatement de 0005_matchday_moves.sql:134-199) ────────
 -- Único cambio real: las tres consultas que antes filtraban `season_id =
---V_season` ahora filtran `discipline_id = v_discipline` (REQ-D4-1) — "borrar
+-- v_season` ahora filtran `discipline_id = v_discipline` (REQ-D4-1) — "borrar
 -- la DRAFT vacía siguiente", "¿hay otra fecha sin cerrar?" y "¿hay una fecha
 -- posterior ya cerrada?" son preguntas sobre EL CALENDARIO DE ESA DISCIPLINA,
 -- no de todo el torneo. Con dos disciplinas, una fecha DRAFT de FIFA no tiene
@@ -104,7 +104,7 @@ grant  execute on function public.reopen_matchday(uuid) to authenticated;
 -- garantía cubre a `v_discipline` gratis: si la fila desaparece antes del
 -- lock, los dos quedan null juntos y la rama de arriba los frena a los dos.
 --
---Lo nuevo es el segundo trinquete (REQ-D4-2): el de `seasons.status`
+-- Lo nuevo es el segundo trinquete (REQ-D4-2): el de `seasons.status`
 -- (0012:131-134) sigue exactamente igual —season_id, sin tocar—, porque a
 -- nivel temporada "¿quedó alguna fecha en todo el torneo?" sigue siendo la
 -- pregunta correcta. Se agrega uno gemelo para `disciplines.status`,

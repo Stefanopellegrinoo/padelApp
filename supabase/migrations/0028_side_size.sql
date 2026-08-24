@@ -1,4 +1,4 @@
---PR 14 slice C (torneo-multi-disciplina, REQ-D5-1) ────────────────────────
+-- PR 14 slice C (torneo-multi-disciplina, REQ-D5-1) ────────────────────────
 --
 -- La BASE, no un `if` de aplicación, tiene que rechazar `pairs.entry_b` no
 -- nulo si `pair_size=1`, y nulo si `pair_size=2`. Hoy `pairs.entry_b` es
@@ -16,7 +16,7 @@
 -- `alter table`. `matchdays` no tiene ese volumen (una fecha por temporada
 -- por número), así que su FK nueva se valida directo, sin partir el archivo.
 --
---Si alguien armó una
+-- Si alguien armó una
 -- fecha de una disciplina `pair_size=1` ENTRE el deploy de slice A (que ya
 -- permite crear esa disciplina) y el de esta slice, `generatePairs` corrió
 -- por el camino viejo (sin `pairs.pair_size`, `entry_b` siempre no nulo) y

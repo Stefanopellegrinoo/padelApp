@@ -43,7 +43,7 @@ export function previousContext(
   // PAREJAS, y el sorteo de a uno no tiene ninguna (`buildSides` con
   // `sideSize === 1` las ignora enteras, core/pairing.ts). Por eso los lados de
   // uno se filtran: con una historia de a uno esto devuelve el mismo triple
-  //Neutro que `last === null`, que es lo que el guard de C19 hardcodea en
+  // neutro que `last === null`, que es lo que el guard de C19 hardcodea en
   // `pairingContextFor` — ahora derivado en vez de repetido.
   const previousPairs = duosOnly(last.sides)
   const alreadyRepeated =

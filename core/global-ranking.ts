@@ -5,7 +5,7 @@ import type { EntryId, RankingRow } from './types'
  * Una disciplina, tal como la tabla global la necesita: sus propias filas de
  * `computeRanking` (sin tocar) más el `weight` de `disciplines` — ya
  * `number` desde que sale de PostgREST (`db/read.ts: toDisciplineHeader`
- * hace un `Number` de cinturón, ver W21 en ``; no convierte
+ * hace un `Number` de cinturón (W21); no convierte
  * nada en la práctica).
  */
 export interface DisciplineRanking {

@@ -32,7 +32,7 @@ describe('disciplines', () => {
     expect(row?.id).toBe(disciplineId)
     expect(row?.kind).toBe('PADEL')
     expect(row?.status).toBe('SETUP')
-    //Dato crudo de PostgREST, sin `Number()` a
+    // Dato crudo de PostgREST, sin `Number()` a
     // propósito — `numeric(4,2)` YA llega `number`, esto es la prueba de eso
     // (con el wrapper el assert nunca podría detectar lo contrario).
     expect(row?.weight).toBe(1)
@@ -48,7 +48,7 @@ describe('disciplines', () => {
   // arregla reopen_matchday/cancel_matchday — nunca antes. Esta aserción
   // ("rechaza una segunda disciplina") queda reemplazada por lo opuesto en
   // db/discipline-scope.db.test.ts, que además prueba que reopen/cancel ya
-  //Operan scopeadas por discipline_id (REQ-D4-3).
+  // operan scopeadas por discipline_id (REQ-D4-3).
 
   // Sin el grant de columna, esto rebota con "permission denied for table
   // matchdays" — el mismo agujero silencioso que documenta 0002_rls.sql:236,
@@ -207,11 +207,11 @@ describe('REQ-NR-4 — ninguna temporada se queda sin disciplina', () => {
   })
 })
 
-//El gemelo de REQ-NR-4, un nivel más abajo: `supabase/seed.sql` dejaba el
+// El gemelo de REQ-NR-4, un nivel más abajo: `supabase/seed.sql` dejaba el
 // torneo demo con 8 `entries` SQUAD y CERO filas en `discipline_entries`
 // (setAttendance rebotaba con 23503, FK violation), y dos scaffolds de test
 // (`db/claim.db.test.ts`, `db/rls.db.test.ts`) armaban `entries` a mano sin su
-//Contraparte. Medido contra la base completa, igual que REQ-NR-4, para que
+// contraparte. Medido contra la base completa, igual que REQ-NR-4, para que
 // un futuro insert manual de `entries` (acá o en cualquier test nuevo) no
 // vuelva a dejar un asiento huérfano en silencio.
 //
@@ -480,7 +480,7 @@ describe('la config editada llega al motor de puntajes', () => {
 
 //── PR 13 — S19: (season_id, position) único ───────
 // El caso real nunca choca (`createSeason` escribe `position` explícito
-//Desde S13), así que el índice se prueba armando la colisión a mano: es la
+// desde S13), así que el índice se prueba armando la colisión a mano: es la
 // única forma de ejercitar `disciplines_season_position` (0027) sin esperar
 // a que un bug futuro la reproduzca sola.
 describe('disciplines_season_position (S19, 0027)', () => {
@@ -570,7 +570,7 @@ describe('addDiscipline (PR 13, REQ-D1-2)', () => {
     const { data: mdOpenRow } = await db.from('matchdays').select('status').eq('id', mdOpen).single()
     expect(mdOpenRow?.status, 'REQ-D3-1: la OPEN de pádel sigue OPEN mientras se suma FIFA').toBe('OPEN')
 
-    //FIFA: nueva, SETUP, position explícito (nunca el default 0 — S19).
+    // FIFA: nueva, SETUP, position explícito (nunca el default 0 — S19).
     const { data: fifaRow } = await db.from('disciplines').select('status, position').eq('id', fifaId).single()
     expect(fifaRow?.status).toBe('SETUP')
     expect(fifaRow?.position).toBe(1)
@@ -671,9 +671,9 @@ describe('addDiscipline (PR 13, REQ-D1-2)', () => {
     ])
   })
 
-  //PR14 slice A — mismo contrato que createSeason: addDiscipline también
+  // PR14 slice A — mismo contrato que createSeason: addDiscipline también
   // puede declarar pair_size/allows_draw explícitos al sumar una disciplina
-  //A un torneo en curso (REQ-D2-1, decisión #5).
+  // a un torneo en curso (REQ-D2-1, decisión #5).
   it('acepta pair_size/allows_draw explícitos al agregar una disciplina', async () => {
     const admin = await createTestUser()
     const { seasonId } = await createSeason({

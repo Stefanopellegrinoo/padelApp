@@ -133,7 +133,7 @@ export function matchError(
   // hasta que alguien LLEGUE a N, así que un 1-1 en un partido a 2 sets está a
   // mitad de camino y no cierra nada.
   //
-  //Esto antes devolvía `null` para ese 1-1
+  // Esto antes devolvía `null` para ese 1-1
   // —dando por terminado un partido sin terminar, que es la clase de cosa que
   // congela puntos mal—, amparado en un comentario que declaraba el caso
   // "inalcanzable porque el modelo de formato sólo puede expresar disciplinas

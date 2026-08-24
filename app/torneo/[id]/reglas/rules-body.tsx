@@ -30,7 +30,7 @@ const ROWS: Array<{
   // La ÚNICA fila que puede diferir entre las disciplinas de un torneo: los
   // puntos, las fechas y el desempate son de la temporada, el marcador no
   // (`disciplineProfile`, PR20 rebanada D2). Por eso es la única que recibe la
-  //Lista entera — W64,.
+  // lista entera — W64,.
   { title: 'Formato de partido', section: 'La fecha', value: (_c, formats) => formatsLabel(formats) },
   {
     title: 'Cómo se arman las parejas',

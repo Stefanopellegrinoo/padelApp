@@ -125,7 +125,7 @@ async function createWalkthroughSeason(
   if (openSeatEntryId === undefined) throw new Error('Falta el asiento libre de test.')
   return {
     seasonId: season.id,
-    //Único cast de esta función: esta temporada no pasa por
+    // Único cast de esta función: esta temporada no pasa por
     // db/test/factories.ts, así que nace su propio DisciplineId acá.
     disciplineId: discipline.id as DisciplineId,
     entryIds,
@@ -344,7 +344,7 @@ async function buildWalkthroughSeason(): Promise<WalkthroughSeason> {
 
   const recordClose = async (matchdayId: string, number: number): Promise<void> => {
     matchdayIds[number - 1] = matchdayId
-    //Idem arriba — sideOfRow(2,...) inline.
+    // Idem arriba — sideOfRow(2,...) inline.
     pairsByMatchday.set(
       number,
       (await pairsOf(matchdayId)).map((row) => {

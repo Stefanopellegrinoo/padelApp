@@ -1,9 +1,9 @@
 --── S19 — (season_id, position) pasa a ser único ────
 -- `disciplines.position` tiene `default 0` (0015) y hasta acá NINGÚN índice
 -- lo protegía de empatar: sólo la escritura lo evitaba (`createSeason`,
---Contrato S13 desde la ), nunca la base. Con el desempate
+-- contrato S13), nunca la base. Con el desempate
 -- de la tabla global cayendo en la disciplina `position=0` en caso de empate
---De puntos (W18, ronda 6: "puntos globales desc → puntos de la disciplina
+-- de puntos (W18, ronda 6: "puntos globales desc → puntos de la disciplina
 -- [0] desc → seed_position"), un empate de `position` deja de ser
 -- cosmético: decide el podio entero. `addDiscipline` (PR 13, db/discipline.ts)
 -- es la primera función que inserta una disciplina en un torneo YA

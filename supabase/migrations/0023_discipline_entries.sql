@@ -1,8 +1,8 @@
---PR 7 (torneo-multi-disciplina, REQ-D1-3/D1-4) ────────────────────────────
+-- PR 7 (torneo-multi-disciplina, REQ-D1-3/D1-4) ────────────────────────────
 --
 -- `entries` sigue siendo el plantel del TORNEO (un asiento, una persona, sin
---Duplicar por disciplina — REQ-D1-3). Lo que faltaba es DÓNDE juega cada
---Asiento: `discipline_entries` es el subconjunto por disciplina (REQ-D1-4,
+-- duplicar por disciplina — REQ-D1-3). Lo que faltaba es DÓNDE juega cada
+-- asiento: `discipline_entries` es el subconjunto por disciplina (REQ-D1-4,
 -- "no todos juegan todo") con su PROPIO `seed_position`, independiente del de
 -- las demás disciplinas del mismo torneo.
 --
@@ -143,7 +143,7 @@ revoke all on public.discipline_entries from anon;
 -- rol activo YA es el dueño de esa función; una función plana llamada desde
 -- adentro hereda ese rol sin pedirlo.
 --
---Nota: dos admins agregando a la vez en la misma disciplina leen el
+-- ponytail: dos admins agregando a la vez en la misma disciplina leen el
 -- mismo `max(seed_position)` y calculan el mismo `v_park`, así que el segundo
 -- corre la cola con un `v_park` que se le quedó viejo apenas el primero
 -- commiteó. Techo conocido y aceptado desde 0013, no resuelto acá: si dos

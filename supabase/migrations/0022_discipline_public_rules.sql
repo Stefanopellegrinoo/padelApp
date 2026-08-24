@@ -1,4 +1,4 @@
---PR 5 (torneo-multi-disciplina, REQ-D2-1) ─────────────────────────────────
+-- PR 5 (torneo-multi-disciplina, REQ-D2-1) ─────────────────────────────────
 --
 -- `season_public_rules` (0007_write_screens.sql:124) devolvía `s.config`, la
 -- config de `seasons`. Desde 0015_disciplines.sql esa columna dejó de ser la

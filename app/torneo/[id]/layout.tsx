@@ -52,7 +52,7 @@ export default async function TorneoLayout({ children, params }: TorneoLayoutPro
   // fallback que ya usa `defaultDisciplineId`/`primaryDiscipline` — para
   // cuando la pantalla actual no trae ninguna en su URL (Tabla global,
   // Ajustes, Stats, Reglas). El `throw` es el mismo supuesto sin efecto
-  //Práctico que `disciplineOf`/`primaryDiscipline`: garantizado por REQ-NR-4.
+  // práctico que `disciplineOf`/`primaryDiscipline`: garantizado por REQ-NR-4.
   const defaultDisciplineSlug = disciplineSlugs(header.disciplines).get(primaryDiscipline(header).id)
   if (defaultDisciplineSlug === undefined) throw new EdgeError('La disciplina de la temporada no existe.')
 

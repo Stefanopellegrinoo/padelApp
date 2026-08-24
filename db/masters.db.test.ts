@@ -801,7 +801,7 @@ describe('C36 — cada disciplina juega su propio Masters', () => {
     await playMasters(fifaId)
     expect(await disciplineStatusOf(fifaId)).toBe('FINISHED')
 
-    //REQ-D3-3: con TODAS en FINISHED, la temporada termina. Es lo que
+    // REQ-D3-3: con TODAS en FINISHED, la temporada termina. Es lo que
     // `/torneos` dibuja como "Terminado" y lo que #4034 midió diciendo
     // "En curso" para siempre.
     expect((await seasonHeader(admin.client, seasonId)).status).toBe('FINISHED')
@@ -891,7 +891,7 @@ describe('S97 — close_matchday con un config sin regularMatchdays', () => {
     })
 
     expect(error?.message).toMatch(/no tiene definida la cantidad de fechas/)
-    //Y no terminó a medias: la fecha sigue OPEN, la disciplina sin FINISHED.
+    // Y no terminó a medias: la fecha sigue OPEN, la disciplina sin FINISHED.
     expect(await disciplineStatusOf(disciplineId)).not.toBe('FINISHED')
   })
 })

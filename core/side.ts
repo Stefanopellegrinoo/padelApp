@@ -49,7 +49,7 @@ export function partnerOf(side: Side, entryId: EntryId): EntryId | null {
  */
 export function sideOfRow(size: SideSize, a: EntryId, b: EntryId | null): Side {
   if (size === 1) {
-    //Simétrico con la rama de abajo — antes
+    // Simétrico con la rama de abajo — antes
     // descartaba un `b` que sobraba EN SILENCIO, exactamente el modo de falla
     // que este constructor existe para cerrar (comentario de arriba).
     if (b !== null) throw new Error('Un lado de a uno con segundo miembro. La fila está rota.')

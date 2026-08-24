@@ -38,7 +38,7 @@ describe('createSeason con múltiples disciplinas (REQ-D1-1, contrato S13)', () 
     expect(header.disciplines.map((d) => d.kind)).toEqual(['PADEL', 'FIFA'])
   })
 
-  //Sin `position` explícito,
+  // Sin `position` explícito,
   // N filas insertadas para la misma temporada comparten `position` (default
   // 0) Y `created_at` (misma transacción) — `disciplineSlugs` ordena
   // exactamente por esa clave. Esta prueba fallaría contra cualquier
@@ -87,11 +87,11 @@ describe('createSeason con múltiples disciplinas (REQ-D1-1, contrato S13)', () 
     expect(header.disciplines.map((d) => slugs.get(d.id))).toEqual(['padel', 'padel-2'])
   })
 
-  //REQ-D1-3/D1-4, decisión de este slice: el asiento entra a TODAS las
+  // REQ-D1-3/D1-4, decisión de este slice: el asiento entra a TODAS las
   // disciplinas creadas en el mismo submit — no hay pantalla de "quién juega
   // qué" en este wizard (PR13 la agrega para sumar una disciplina en curso).
   // Sin esto, un asiento SQUAD sin fila en discipline_entries tumba la
-  //Aserción de no-regresión de `db/discipline.db.test.ts`.
+  // aserción de no-regresión de `db/discipline.db.test.ts`.
   it('cada asiento SQUAD entra a discipline_entries de las N disciplinas', async () => {
     const admin = await createTestUser()
     const config = defaultConfig(8)

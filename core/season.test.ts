@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { seasonStatusOf } from './season'
 
-//REQ-D3-3: el estado de la temporada se DERIVA del de sus disciplinas, no
+// REQ-D3-3: el estado de la temporada se DERIVA del de sus disciplinas, no
 // vive suelto. `seasons.status` sigue existiendo (dual-write hasta el
 // contract, PR 27) pero esta función es la que manda para cualquier pantalla
 // que necesite el estado real de un torneo con más de una disciplina.

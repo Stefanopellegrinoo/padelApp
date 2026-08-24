@@ -41,7 +41,7 @@ function columnaDePuntos(
 
 describe('frozenTableRows', () => {
   it('de a dos, la pareja de invitados que ganó todo conserva su lugar deportivo', () => {
-    //Escena medida por la:
+    // Escena medida por la:
     // `pair_size = 2`, la pareja de dos invitados gana los 4 partidos con +16 y
     // `computeStandings` la pone PRIMERA. No tiene fila en `awards` porque
     // ninguno de los dos está en el campeonato.
@@ -68,13 +68,13 @@ describe('frozenTableRows', () => {
 
     expect(dibujadas[0]?.side).toEqual(invitados)
     expect(dibujadas.at(-1)?.side).not.toEqual(invitados)
-    //Monótona decreciente entre los que sí cobran, que es lo que W55 vino a
+    // Monótona decreciente entre los que sí cobran, que es lo que W55 vino a
     // arreglar: la fila de arriba nunca muestra menos puntos que la de abajo.
     expect(columnaDePuntos(dibujadas, frozen)).toEqual([4, 3, 2, 1])
   })
 
   it('los lados que SÍ cobran quedan en orden de puesto congelado, no del vivo', () => {
-    //No-regresión de W55: bajar `setsToWin` después de cerrar reordena
+    // No-regresión de W55: bajar `setsToWin` después de cerrar reordena
     // `computeStandings` mientras `awards` sigue congelado. Sin esto la tabla
     // mostraba al primero con 6 puntos y al segundo con 8.
     const filas = [
@@ -145,7 +145,7 @@ describe('orderMoved', () => {
   })
 
   it('un lado sin premio que conserva su lugar no cuenta como movimiento', () => {
-    //Dejó a los invitados donde estaban; si eso contara como movimiento, el
+    // Dejó a los invitados donde estaban; si eso contara como movimiento, el
     // pie desaparecería de toda fecha con invitados aunque diga la verdad.
     const conInvitado = [
       standing(single('invi'), 1),

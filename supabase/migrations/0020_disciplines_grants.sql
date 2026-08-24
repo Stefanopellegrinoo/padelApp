@@ -1,5 +1,5 @@
 -- ── superficie de `disciplines` para `anon` y `authenticated` ───────────────
---Tres hallazgos de la de la Fase 0, los tres sobre
+-- tres hallazgos de la Fase 0, los tres sobre
 -- privilegios de tabla/función — nada de RLS ni de lógica.
 
 --── W1 — `disciplines` es la ÚNICA de las 11 tablas con ACL para `anon` ─────

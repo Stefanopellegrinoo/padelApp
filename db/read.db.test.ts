@@ -161,7 +161,7 @@ describe('db/read', () => {
       expect(header.isAdmin).toBe(false)
     })
 
-    //Reemplaza `db/read.unit.test.ts`, que
+    // Reemplaza `db/read.unit.test.ts`, que
     // fabricaba su propio input (`'0.50' as unknown as number`) y sólo
     // probaba que `Number()` funciona. Esto lee `weight` de una fila REAL
     // vía PostgREST — el dato real es `number` (JSON sin comillas), no
@@ -266,7 +266,7 @@ describe('db/read', () => {
     })
   })
 
-  //REQ-D9: la tabla global necesita el plantel y los premios de TODAS las
+  // REQ-D9: la tabla global necesita el plantel y los premios de TODAS las
   // disciplinas, no de la default (`entriesOf`/`awardsOf`) — mismo criterio
   // que `seasonMatchdaysOf` (PR 10) sobre `matchdaysOf`. Los awards se
   // insertan directo (no se juega la fecha entera): lo que prueba esto es el
@@ -285,7 +285,7 @@ describe('db/read', () => {
       const firstEntryId = entryIds[0]
       if (firstEntryId === undefined) throw new Error('createSeason no armó el plantel.')
 
-      //Solape parcial (REQ-D1-4): un asiento sólo juega pádel. `seasonSquadOf`
+      // Solape parcial (REQ-D1-4): un asiento sólo juega pádel. `seasonSquadOf`
       // no lo excluye por eso — a diferencia de `entriesOf`, no pasa por
       // `discipline_entries` de UNA disciplina.
       const db = adminClient()
@@ -300,8 +300,8 @@ describe('db/read', () => {
       expect(members.map((member) => member.id)).toEqual(entryIds)
       expect(members.every((member) => member.displayName.length > 0)).toBe(true)
 
-      //Mismo número (1) en las dos: REQ-D3-2 lo permite, y es el caso que C10
-      //Probó que el redirect legacy desempataba mal —
+      // Mismo número (1) en las dos: REQ-D3-2 lo permite, y es el caso que C10
+      // probó que el redirect legacy desempataba mal —
       // `seasonAwardsOf` lo desambigua por `disciplineId`, no por `number` solo.
       async function seedClosed(disciplineId: string): Promise<void> {
         const { data: matchday, error } = await db
@@ -559,7 +559,7 @@ describe('db/read', () => {
       expect(await closedHistoryAll(stranger.client, seasonId)).toEqual([])
       expect(await awardsOf(stranger.client, seasonId)).toEqual(new Map())
 
-      //SeasonSquadOf/seasonAwardsOf (REQ-D9): mismo criterio que
+      // SeasonSquadOf/seasonAwardsOf (REQ-D9): mismo criterio que
       // seasonMatchdaysOf arriba — filtran directo por season_id, RLS da 0
       // filas para quien no participa, sin error. Se le pasa a
       // seasonAwardsOf la lista REAL de fechas cerradas (vista por admin),
@@ -568,7 +568,7 @@ describe('db/read', () => {
       expect(await seasonSquadOf(stranger.client, seasonId)).toEqual([])
       //`seasonSquadMembersOf` (PR12b slice 2)
       // es la única de las tres lectoras nuevas de temporada entera que
-      //Faltaba acá — mismo criterio que sus hermanas, mismo hueco que W16.
+      // faltaba acá — mismo criterio que sus hermanas, mismo hueco que W16.
       expect(await seasonSquadMembersOf(stranger.client, seasonId)).toEqual([])
       const realMatchdays = await seasonMatchdaysOf(admin.client, seasonId)
       expect(await seasonAwardsOf(stranger.client, realMatchdays)).toEqual(new Map())

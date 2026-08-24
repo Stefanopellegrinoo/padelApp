@@ -291,7 +291,7 @@ function toMatchdaySummary(row: MatchdayRow): MatchdaySummary {
     kind: row.kind as 'REGULAR' | 'MASTERS',
     status: row.status as 'DRAFT' | 'OPEN' | 'CLOSED',
     playedOn: row.played_on,
-    //Única marca de esta función: de acá en más `disciplineId` es
+    // Única marca de esta función: de acá en más `disciplineId` es
     // `DisciplineId`, no `string` a secas.
     disciplineId: row.discipline_id as DisciplineId,
     allowsDraw: row.allows_draw,
@@ -507,7 +507,7 @@ export async function entriesOf(
   }
 
   const entries: EntryRow[] = []
-  //Sólo para la rama sin disciplina resoluble: numera el SQUAD 0,1,2… en el
+  // Sólo para la rama sin disciplina resoluble: numera el SQUAD 0,1,2… en el
   // orden de entrada. Antes ese número salía de `entries.seed_position`
   // (C37), que el contract deja en `null` para el SQUAD — habría devuelto
   // `null` en un campo tipado `number`. Acá no hay orden real que dar (no hay
@@ -937,7 +937,7 @@ export async function awardsOf(supabase: Client, seasonId: string): Promise<Map<
 
 // ── helpers privados, compartidos por matchdayDetail y closedHistoryAll ─────
 
-//CERRADO acá: hasta PR18b este lector componía
+// CERRADO acá: hasta PR18b este lector componía
 // `pairFromRow`, que TIRABA con una fila `pair_size=1` — o sea, una fecha de a
 // uno se podía jugar y cerrar en la base pero ninguna pantalla de su
 // disciplina la podía dibujar. `sideOfRow` devuelve el lado con su forma real,

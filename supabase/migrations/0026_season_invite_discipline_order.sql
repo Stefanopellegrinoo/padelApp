@@ -5,7 +5,7 @@
 -- 0023_discipline_entries.sql), no por el orden real del plantel
 -- (`discipline_entries.seed_position`). Efecto medido: el admin agrega un
 -- asiento "antes de Juan", `discipline_entries` lo guarda en su lugar, y el
---Picker lo muestra ÚLTIMO igual — el mismo síntoma de C6 (ronda 3), acá en
+-- picker lo muestra ÚLTIMO igual — el mismo síntoma de C6 (ronda 3), acá en
 -- la pantalla de Unirse.
 --
 -- `create or replace` alcanza: esta migración no toca ni el `returns table`
@@ -16,11 +16,11 @@
 --
 -- Se ordena por la disciplina POR DEFECTO (`position, created_at`, mismo
 -- criterio que `defaultDisciplineId`, db/season.ts): la invitación es de LA
---TEMPORADA (REQ-D1-3, `entries` sigue siendo el plantel compartido), no de
+-- TEMPORADA (REQ-D1-3, `entries` sigue siendo el plantel compartido), no de
 -- una disciplina en particular, así que no hay otra disciplina "correcta"
 -- para elegir acá sin el wizard multi-disciplina (PR 11). Un asiento sin fila
 -- en `discipline_entries` de esa disciplina por defecto (hoy inalcanzable:
---Ver C9, misma ronda) NO se excluye —el picker tiene que mostrar TODOS los
+-- Ver C9, misma ronda) NO se excluye —el picker tiene que mostrar TODOS los
 -- asientos libres de la temporada para que un extraño pueda reclamar
 -- cualquiera, no sólo los de una disciplina— y cae al final, ordenado entre
 -- sí por su propio `entries.seed_position` (deuda ya anotada para PR 11/27 en

@@ -78,7 +78,7 @@ describe('sameSide', () => {
   })
 })
 
-//Con un discriminante VARIABLE (no un literal)
+// Con un discriminante VARIABLE (no un literal)
 // `{ size: row.pair_size as SideSize, a: row.entry_a, b: row.entry_b }`
 // compila limpio y, si `pair_size` es 1, pierde el `b` de la fila en
 // silencio — exactamente la forma del mapper que va a leer `pairs`.
@@ -96,7 +96,7 @@ describe('sideOfRow', () => {
     expect(() => sideOfRow(2, 'a', null)).toThrow(/segundo miembro/)
   })
 
-  //La rama size===1 tapaba sólo la mitad del
+  // La rama size===1 tapaba sólo la mitad del
   // agujero que este describe documenta arriba — tiraba con size=2/b=null,
   // pero descartaba un `b` en silencio con size=1/b!==null. Simétrico con el
   // test de arriba.

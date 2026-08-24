@@ -136,7 +136,7 @@ describe('narrateRules', () => {
 // Esta página es la que leen los jugadores para saber cómo funciona el torneo.
 // Con marcador abierto no hay set, ni games, ni tie-break: hay un marcador de
 // goles. Narrar "Cada partido se define a un set de 4 games con tie-break"
-//Sobre una liga de FIFA es la misma clase de mentira que W47, W51 y W56 —
+// sobre una liga de FIFA es la misma clase de mentira que W47, W51 y W56 —
 // copy que describe algo que la app no hace.
 describe('narrateRules con marcador abierto', () => {
   const FIFA: SeasonConfig = {

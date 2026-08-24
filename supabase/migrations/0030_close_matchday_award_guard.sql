@@ -9,8 +9,8 @@
 -- NULL)` es NULL —nunca TRUE— para CUALQUIER `X`. El `where` no matchea, el
 -- `exists` da false, y el `raise` queda inalcanzable para la fecha ENTERA:
 -- quien organiza puede pagar puntos de campeonato a cualquier asiento del
---Plantel que no jugó, en silencio. Medido de punta a punta (
---Ronda 10, C17): control pádel rechaza con el mensaje de siempre; el mismo
+-- plantel que no jugó, en silencio. Medido de punta a punta (
+-- ronda 10, C17): control pádel rechaza con el mensaje de siempre; el mismo
 -- premio sobre una fecha de a uno con dos singles legales quedaba ACEPTADO.
 --
 -- Se reemplaza `not in (select ... union select ...)` por un `not exists`
@@ -18,13 +18,13 @@
 -- No es sólo el parche de este bug puntual: un `IN`/`NOT IN` de Postgres es
 -- NULL en cuanto el conjunto de la derecha contiene un NULL sin matchear, así
 -- que cualquier columna nullable futura que entre a este guard por la misma
---Puerta reproduciría C17. `NOT EXISTS` no tiene ese modo de falla —una fila
+-- puerta reproduciría C17. `NOT EXISTS` no tiene ese modo de falla —una fila
 -- con `entry_b is null` simplemente no aporta un match por esa columna, sin
 -- volver NULL el resultado de la fila entera— y es el mismo idioma que ya
 -- usan `open_matchday`/`reopen_matchday` (0019) y `promote_guest` (0025) para
 -- lo mismo. El resto de la función (0019:75-162) no cambia una línea.
 --
---La forma nueva tiene un segundo efecto, no
+-- La forma nueva tiene un segundo efecto, no
 -- documentado hasta acá. Con `NOT IN`, un premio sin `entryId` o con
 -- `entryId: null` daba `NULL not in (…)` = NULL —el guard no disparaba— y el
 -- payload seguía hasta el `insert into awards`, que reventaba con un `23502`
@@ -72,7 +72,7 @@ begin
   -- sin este control, un admin paga puntos a un jugador que ni jugó esta
   -- fecha (o a cualquier uuid inventado). Sólo entra quien está en alguna
   -- pareja de la fecha que se está cerrando. `not exists` correlacionado,
-  --No `not in` sobre un `union`: ver comentario de cabecera.
+  -- no `not in` sobre un `union`: ver comentario de cabecera.
   if exists (
     select 1
       from jsonb_array_elements(p_awards) as award

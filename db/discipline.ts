@@ -93,11 +93,25 @@ export async function disciplineConfig(
  * una diferencia ahí no puede venir del formulario: sólo de que la fila cambió
  * abajo mientras estaba abierto.
  *
- * ponytail: es un lock optimista pobre, sobre dos campos elegidos a mano y no
- * sobre la fila entera. Alcanza porque hoy hay UN solo escritor automático y
- * toca esos dos campos. El día que aparezca otro que toque cualquier otra
- * cosa, esto no lo ve — ahí corresponde una columna de versión y comparar la
- * fila, no dos campos.
+ * ponytail: esto detecta que cambió la FORMA (cuántos puntos, cuántos del
+ * plantel), no que se haya perdido una edición. `SeasonConfig` tiene 6 campos
+ * y acá se miran 2, así que dos organizadores editando A LA VEZ los VALORES
+ * —uno pone los puntos en `[12,7,5]` y el otro en `[10,8,5]`— pasan los dos:
+ * mismo largo, mismo `squadSize`, gana el último y en silencio.
+ *
+ * Y NO se arregla comparando la config entera contra `vigente`: la config que
+ * llega es la NUEVA, así que cualquier edición legítima difiere. Un lock
+ * optimista de verdad necesita saber DE QUÉ PARTIÓ el cliente, y hoy
+ * `saveConfig` (`app/torneo/[id]/ajustes/actions.ts`) manda sólo la nueva.
+ *
+ * Dos upgrades reales, medidos, el día que haga falta:
+ *   · que el cliente mande también la config que leyó y comparar ESA contra
+ *     `vigente` — ~15 líneas en 3 archivos, sin tocar el schema;
+ *   · una columna de versión en `disciplines` — más sólido, pero pide
+ *     migración propia, que desde el push ya no es gratis (#3981).
+ *
+ * Se acepta el techo porque hoy hay UN organizador por torneo: dos editando el
+ * mismo formato en el mismo momento no es un escenario que exista todavía.
  */
 export async function updateDisciplineConfig(
   supabase: Client,
@@ -116,10 +130,10 @@ export async function updateDisciplineConfig(
     config.points.length !== vigente.points.length ||
     config.squadSize !== vigente.squadSize
   ) {
-    //El mensaje decía "—alguien sumó un jugador
+    // Antes el mensaje decía "—alguien sumó un jugador
     // al plantel—". El guard dispara ante CUALQUIER diferencia de largo o de
     // `squadSize`, en cualquier dirección; hoy la causa es cierta sólo porque
-    //El único escritor automático suma, y el `Nota: ` de arriba dice que va
+    // el único escritor automático suma, y el `ponytail:` de arriba dice que va
     // a haber más. Sin la causa dice lo mismo y no envejece.
     throw new EdgeError(
       'La configuración cambió mientras editabas. Recargá la pantalla y volvé a aplicar el cambio.',
@@ -253,7 +267,7 @@ export async function addDiscipline(
     .select('id')
     .single()
   if (disciplineError !== null) {
-    //Mismo patrón que createMatchday (matchday.ts:237) —
+    // Mismo patrón que createMatchday (matchday.ts:237) —
     // traducir los códigos conocidos en vez de dejar pasar el mensaje crudo de Postgres.
     if (disciplineError.code === '23505') {
       throw new EdgeError('Alguien acaba de agregar otra disciplina. Probá de nuevo.')
@@ -281,7 +295,7 @@ export async function addDiscipline(
   const { data: seats, error: seatsReadError } = await seatQuery
   if (seatsReadError) throw new EdgeError(`No se pudo leer el plantel: ${seatsReadError.message}`)
 
-  //Misma guarda que createSeason (season.ts:240)
+  // Misma guarda que createSeason (season.ts:240)
   // — sin esto, la config podía describir un plantel que no era el sembrado.
   const seatCount = seats?.length ?? 0
   if (seatCount !== spec.config.squadSize) {

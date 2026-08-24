@@ -119,7 +119,7 @@ async function matchdayStatus(matchdayId: string): Promise<string> {
   return data.status
 }
 
-//PR18a hizo que `insertPairs` SÍ escriba una
+// PR18a hizo que `insertPairs` SÍ escriba una
 // fila `pair_size=1` (`generatePairs` ya arma sola una disciplina de a uno,
 // ver `full_matchday_proof` más abajo y `db/generate.db.test.ts`) — este
 // helper con service_role sigue siendo el más corto para ESTE test puntual:
@@ -608,7 +608,7 @@ describe('closeMatchday', () => {
     expect(stored).toHaveLength(8)
     expect(new Set(stored.map((row) => row.entry_id))).toEqual(new Set(entryIds))
 
-    //Con la fecha 1 CLOSED, el draw de la fecha 2 pasa por
+    // Con la fecha 1 CLOSED, el draw de la fecha 2 pasa por
     // `pairingContextFor` → `closedHistory(discipline, 1)` — exactamente el
     // camino que moría antes de este fix.
     const matchday2Id = await createMatchday(admin.client, seasonId, '2026-08-17')
@@ -653,7 +653,7 @@ describe('closeMatchday', () => {
     // El de `pair_a` gana siempre: con el round robin completo eso deja un
     // orden total y estricto, así que la tabla del día no se resuelve por
     // desempate y el primero es el que ganó de verdad — que es justo lo que
-    //Decía que ningún test comprobaba.
+    // decía que ningún test comprobaba.
     await playAllMatches(admin, matchdayId, (pairA) => pairA)
 
     // 1) `resultsOf` + `computeStandings` + `computeAwards`, por el wrapper.
@@ -714,7 +714,7 @@ describe('closeMatchday', () => {
     expect(error?.message).toBe('La lista de puntos llegó mal formada.')
   })
 
-  //G1 no tenía ni un test — cancel.db.test.ts:528
+  // G1 no tenía ni un test — cancel.db.test.ts:528
   // cubre la misma frase para `cancel_matchday`, una función distinta.
   it('rejects a direct RPC call for a matchday that does not exist', async () => {
     const { admin } = await buildSeasonWithSquad(defaultConfig(8), 8)
@@ -727,7 +727,7 @@ describe('closeMatchday', () => {
     expect(error?.message).toBe('La fecha no existe.')
   })
 
-  //La mitad de G4 (`p_awards` no nulo pero tampoco array) no tenía test —
+  // La mitad de G4 (`p_awards` no nulo pero tampoco array) no tenía test —
   // sólo el caso `null`, arriba, cubría la otra mitad del `or`.
   it('rejects a direct RPC call with a malformed (non-array) awards payload', async () => {
     const { admin, seasonId, squad } = await buildSeasonWithSquad(defaultConfig(8), 8)
@@ -744,7 +744,7 @@ describe('closeMatchday', () => {
     expect(error?.message).toBe('La lista de puntos llegó mal formada.')
   })
 
-  //G6 tampoco tenía test de su `raise` — masters.db.test.ts:225 sólo
+  // G6 tampoco tenía test de su `raise` — masters.db.test.ts:225 sólo
   // prueba el paso a través con lista vacía. El premio tiene que ser para
   // alguien que SÍ jugó: el guard de premios (G5) corre antes y taparía a G6.
   it('rejects a direct RPC call awarding points on the Masters', async () => {

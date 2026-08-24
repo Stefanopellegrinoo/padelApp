@@ -88,9 +88,9 @@ describe('migraciones — una restatement toca una sola función', () => {
   )
 
   it('mira TODAS las migraciones que definen funciones, no una lista de nombres', () => {
-    //Antes filtraba por nombres de función
+    // Antes filtraba por nombres de función
     // conocidos y miraba 6 de 30 archivos, así que una restatement de
-    //Cualquier otra función pasaba inadvertida — la lo probó con
+    // cualquier otra función pasaba inadvertida — la lo probó con
     // una sonda que definía dos y no la cazó.
     expect(RESTATEMENTS.length).toBeGreaterThan(15)
   })

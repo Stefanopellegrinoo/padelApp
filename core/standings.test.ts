@@ -201,7 +201,7 @@ function soloMatch(left: number, right: number, gamesA: number, gamesB: number):
 
 describe('computeStandings con lados de uno (pair_size=1)', () => {
   it('ordena por partidos ganados, igual que de a dos', () => {
-    // p1 gana 3, p2 gana 2, p3 gana 1, p4 gana 0.
+    // P1 gana 3, p2 gana 2, p3 gana 1, p4 gana 0.
     const matches = [
       soloMatch(0, 1, 4, 2), soloMatch(0, 2, 4, 1), soloMatch(0, 3, 4, 0),
       soloMatch(1, 2, 4, 2), soloMatch(1, 3, 4, 1),
@@ -221,7 +221,7 @@ describe('computeStandings con lados de uno (pair_size=1)', () => {
   })
 
   it('corta un empate de dos por el resultado directo entre los dos jugadores', () => {
-    // p1 y p2 ganan 2 y quedan los dos +4 de games. p2 le ganó a p1 4-1, así
+    // P1 y p2 ganan 2 y quedan los dos +4 de games. p2 le ganó a p1 4-1, así
     // que el cruce directo —`sameSide` sobre un lado de uno— tiene que cortar.
     const matches = [
       soloMatch(0, 1, 1, 4), soloMatch(0, 2, 4, 0), soloMatch(0, 3, 4, 1),
@@ -247,7 +247,7 @@ describe('computeStandings con lados de uno (pair_size=1)', () => {
   })
 
   it('con 9 jugadores impares tabula los 9: la paridad es de las parejas, no de la tabla', () => {
-    //REQ-D5-2: un plantel impar es perfectamente jugable de a uno. La tabla
+    // REQ-D5-2: un plantel impar es perfectamente jugable de a uno. La tabla
     // no puede tener un agujero por eso.
     const nine = Array.from({ length: 9 }, (_, index) => single(`s${index + 1}`))
     const standings = computeStandings(nine, [], CONFIG, nine.map((side) => side.a), false)

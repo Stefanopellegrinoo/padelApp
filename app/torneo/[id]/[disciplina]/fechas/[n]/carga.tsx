@@ -73,7 +73,7 @@ function Goles({
         aria-label={`Goles de ${side}`}
         aria-invalid={invalid || undefined}
         onChange={(event) => onChange(event.target.value)}
-        //El `focus-visible:ring` es S72: el
+        // El `focus-visible:ring` es S72: el
         // `outline-none` dejaba el panel 100% operable por teclado y sin que se
         // viera dónde estabas (medido: `outlineStyle: none`, `boxShadow:
         // none`). Va SÓLO acá: `outline-none` está en 19 inputs de 11 archivos

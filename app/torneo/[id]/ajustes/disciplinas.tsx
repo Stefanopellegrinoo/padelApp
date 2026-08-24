@@ -158,7 +158,7 @@ export function Disciplinas({
   // que siempre — no-regresión de la Rebanada F, mismo default que el wizard.
   const [pairSize, setPairSize] = useState<SideSize>(2)
   const [selected, setSelected] = useState<Set<string>>(() => new Set(squad.map((member) => member.entryId)))
-  //El Set inicial no se resincroniza si `squad` cambia bajo el
+  // El Set inicial no se resincroniza si `squad` cambia bajo el
   // formulario abierto (ej. sacar un asiento en Plantel) — derivar contra
   // `squad` en cada render evita mandar/mostrar un asiento que ya no existe.
   const validSelected = [...selected].filter((id) => squad.some((member) => member.entryId === id))

@@ -50,7 +50,7 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
     seasonRules(supabase, seasonId),
     myEntryId(supabase, seasonId),
     matchdaysOf(supabase, seasonId),
-    //Temporada ENTERA, no la disciplina por defecto (C14, 
+    // Temporada ENTERA, no la disciplina por defecto (C14, 
     // ronda 8): "Plantel" administra el asiento de la TEMPORADA (renombrar,
     // reclamar, sacar), no el de una disciplina — usar `entriesOf(seasonId)`
     // sin disciplina caía en la disciplina por defecto y perdía a cualquier
@@ -85,7 +85,7 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
 
   // `formatsLabel` sobre TODAS las disciplinas y no `formatLabel` sobre la
   // [0]: esta fila decía "1 set a 4 games" en un torneo que tiene una mitad
-  //Que se juega a goles. Con una sola
+  // que se juega a goles. Con una sola
   // disciplina dice exactamente lo que decía. Es la misma etiqueta que
   // muestran Reglas y el resumen del wizard — antes eran tres copias, y ésa es
   // la razón por la que las tres mentían igual.

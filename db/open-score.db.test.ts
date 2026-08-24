@@ -178,8 +178,8 @@ describe('marcador abierto: un partido se carga con goles (decisión #3933)', ()
 })
 
 // ── El pin de no-regresión: el pádel no se movió un milímetro ────────────────
-//REQ-NR-1 (los mismos awards con la config por defecto, palabra por palabra en
-//Los mensajes) y REQ-NR-2 (la fecha sigue jugable de punta a punta). Estos
+// REQ-NR-1 (los mismos awards con la config por defecto, palabra por palabra en
+// los mensajes) y REQ-NR-2 (la fecha sigue jugable de punta a punta). Estos
 // dos pasan DESDE EL RED.
 describe('no-regresión: el pádel sigue haciendo exactamente lo mismo (REQ-NR-1, REQ-NR-2)', () => {
   it('una fecha de pádel se juega y cierra con los mismos premios', async () => {
@@ -229,7 +229,7 @@ describe('no-regresión: el pádel sigue haciendo exactamente lo mismo (REQ-NR-1
 
 // ── El tripwire del backfill (`0037`) ────────────────────────────────────────
 // Un campo nuevo con default permisivo esconde a los escritores que no lo
-//Escriben — pasó con `pair_size` y con `allows_draw`. Del lado
+// escriben — pasó con `pair_size` y con `allows_draw`. Del lado
 // de TypeScript la red es `tsc` (el campo es OBLIGATORIO en `MatchFormat`).
 // Del lado del jsonb no hay compilador, así que la red es esta consulta: una
 // fila de `disciplines` sin `openScore` en su config es una fila que el código

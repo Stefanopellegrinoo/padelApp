@@ -57,7 +57,7 @@ async function createOpenSeason(
     entryIds.push(entry.id)
   }
 
-  //Cada asiento SQUAD entra también a la disciplina (W8, ronda
+  // Cada asiento SQUAD entra también a la disciplina (W8, ronda
   // 3): sin esto un asiento de este scaffold queda sin fila en
   // discipline_entries y `seedAttendances` (que lee discipline_entries desde
   // PR 8) lo trata como si no jugara nada.

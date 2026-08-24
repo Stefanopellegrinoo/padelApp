@@ -63,7 +63,7 @@ export async function defaultDisciplineId(supabase: Client, seasonId: string): P
     .limit(1)
     .maybeSingle()
   if (error) throw new EdgeError(`No se pudo leer la disciplina de la temporada: ${error.message}`)
-  //Única marca de esta función: de acá en más el id que circula es
+  // Única marca de esta función: de acá en más el id que circula es
   // `DisciplineId`, no `string` a secas — así lo lee todo el que lo reciba.
   return (data?.id as DisciplineId | undefined) ?? null
 }
@@ -138,9 +138,9 @@ export async function closedHistory(
   if (awardsError) throw new EdgeError(`No se pudieron leer los premios: ${awardsError.message}`)
 
   return {
-    //CERRADO (ver `db/read.ts: pairsAndMatchesOf`): antes esto componía
+    // CERRADO (ver `db/read.ts: pairsAndMatchesOf`): antes esto componía
     // `pairFromRow`, que TIRABA con una fila `pair_size=1`. Ese throw es el
-    //Que C19 tuvo que esquivar con un guard en `pairingContextFor`; ahora la
+    // que C19 tuvo que esquivar con un guard en `pairingContextFor`; ahora la
     // historia de una disciplina de a uno se lee de verdad.
     sides: (pairs ?? []).map((row) =>
       sideOfRow(row.pair_size as SideSize, row.entry_a, row.entry_b),

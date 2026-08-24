@@ -115,7 +115,7 @@ begin
   -- sin este control, un admin paga puntos a un jugador que ni jugó esta
   -- fecha (o a cualquier uuid inventado). Sólo entra quien está en alguna
   -- pareja de la fecha que se está cerrando. `not exists` correlacionado,
-  --No `not in` sobre un `union`: ver comentario de cabecera.
+  -- no `not in` sobre un `union`: ver comentario de cabecera.
   if exists (
     select 1
       from jsonb_array_elements(p_awards) as award

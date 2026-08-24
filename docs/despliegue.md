@@ -11,9 +11,53 @@ ningún otro lado: si este documento se pierde, hay que redescubrirlo.
 |---|---|
 | **Código en GitHub** | [`Stefanopellegrinoo/padelApp`](https://github.com/Stefanopellegrinoo/padelApp), **privado**. `main` es la rama por defecto. También están subidas las tres ramas de plan que nombra `estado.md` |
 | **Base de producción** | Supabase Cloud, proyecto **`padelApp`** — ref `<tu-proyecto-ref>`, región `sa-east-1` (São Paulo), plan free |
-| **Las 10 migraciones** | Aplicadas y verificadas con SQL: 10 tablas, **las 10 con RLS**, 21 políticas, 15 funciones `security definer` |
-| **La base está vacía** | 0 usuarios, 0 temporadas, y **sin el usuario del seed** — `supabase/seed.sql` nunca corre contra la nube |
+| **Las migraciones aplicadas** | **14** (`0001_schema` → `0014_promote_guest`), o sea **exactamente `main`**. 10 tablas, **las 10 con RLS**. Medido el 2026-08-24 contra `supabase_migrations.schema_migrations` |
+| **La base TIENE datos reales** | 12 players · 2 torneos (los dos `ACTIVE`) · 22 entries · 3 fechas (2 cerradas) · 27 partidos · **15 premios otorgados**. `supabase/seed.sql` nunca corrió contra la nube: esto lo cargó gente usando la app |
 | **El trigger de alta** | Probado **en producción**: un alta de prueba creó su `players` con el nombre del metadata. Después se borró |
+
+> **Este cuadro es una FOTO, y ya mintió una vez.** Hasta el 2026-08-24 decía
+> *"las 10 migraciones"* y *"la base está vacía: 0 usuarios, 0 temporadas"* —
+> las dos cosas falsas, y sobre esa base se armó un análisis de riesgo
+> equivocado para el merge a `main`. Antes de decidir cualquier cosa contra
+> producción, **medila**, no la leas de acá:
+>
+> ```sql
+> select count(*) from supabase_migrations.schema_migrations;  -- migraciones
+> select count(*) from public.seasons;                          -- ¿vacía?
+> ```
+>
+> Es el mismo error que el repo ya tiene documentado para las migraciones y
+> para los verify-report: tomar un artefacto histórico por el estado presente.
+
+---
+
+## Lo que falta para que `main` funcione en producción
+
+La rama `feature/torneo-multi-disciplina` está **52 migraciones adelante** de
+lo que hay aplicado (66 archivos contra 14). Tres cosas que conviene saber
+antes de mergear:
+
+1. **Nada automatiza el `db push`.** El CI (`.github/workflows/ci.yml`) sólo
+   levanta Supabase *en el runner*; no toca la nube. Las 52 se aplican a mano.
+2. **`vercel.json` no desactiva el deploy**, así que un merge a `main` deploya
+   código que busca `disciplines`, `discipline_entries` y `award_lines` —
+   tres tablas que producción todavía no tiene.
+3. **No hay procedimiento de backup escrito en este repo.** Antes de aplicar
+   el CONTRACT (`0066`, irreversible: dropea dos columnas y anula 21
+   `seed_position`), sacar el dump:
+
+   ```bash
+   npx supabase link --project-ref <tu-proyecto-ref>
+   npx supabase db dump --linked --data-only --use-copy -f prod-$(date +%F).sql
+   ```
+
+   `link` deja `supabase/.temp/project-ref` escrito, y a partir de ahí un
+   `db push` distraído llega a la nube. Hoy el repo NO está linkeado.
+
+**La cadena ya se ensayó contra la forma real de producción** (2026-08-24): las
+52 aplicadas sobre los datos de prod preservaron todo — los 21 `seed_position`
+del plantel aparecieron intactos en `discipline_entries`, las 2 configs
+migraron a `disciplines.config` y los 15 premios quedaron donde estaban.
 
 ---
 

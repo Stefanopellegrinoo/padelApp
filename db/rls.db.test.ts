@@ -199,7 +199,7 @@ describe('RLS — lectura', () => {
 
     for (const table of TABLES) {
       const { data, error } = await anon.from(table).select('*').limit(1)
-      // anon queda afuera del grant de base: no tiene ni el privilegio de
+      // Anon queda afuera del grant de base: no tiene ni el privilegio de
       // tabla, así que esto es un permission denied, no una lista vacía por
       // RLS. Si algún día `anon` entrara al grant, este assert dejaría de
       // pasar (pasaría a dar data: []) y avisaría del agujero.
@@ -297,8 +297,8 @@ describe('RLS — escritura', () => {
     if (newEntryId === undefined) throw new Error('Falta el id del asiento recién insertado.')
 
     // discipline_entries_write (0023) también deja escribir al admin del
-    //Torneo — sin esto, este mismo insert es el scaffold que W8
-    //Encontró dejando asientos huérfanos.
+    // torneo — sin esto, este mismo insert es el scaffold que W8
+    // encontró dejando asientos huérfanos.
     const newSeat = await admin.client
       .from('discipline_entries')
       .insert({ discipline_id: disciplineId, entry_id: newEntryId, season_id: seasonId, seed_position: 1 })

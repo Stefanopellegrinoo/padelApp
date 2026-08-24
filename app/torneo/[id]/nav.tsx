@@ -52,11 +52,11 @@ export function TorneoNav({ seasonId, defaultDisciplineSlug }: TorneoNavProps) {
     },
     {
       label: 'Fechas',
-      //PR13c slice B: la lista vive bajo `${base}/{disciplina}/fechas`
+      // PR13c slice B: la lista vive bajo `${base}/{disciplina}/fechas`
       // desde ahora — a la disciplina de la pantalla actual si hay una, si no
       // a la [0] de la temporada.
       href: `${base}/${currentDisciplineSlug ?? defaultDisciplineSlug}/fechas`,
-      //La ruta de una fecha lleva la disciplina
+      // La ruta de una fecha lleva la disciplina
       // en el medio (`${base}/{disciplina}/fechas/{n}`, PR 10) — `startsWith`
       // ya no la agarra. `includes` sobre lo que sigue de `base` la vuelve a
       // encender sin abrir la pestaña de otra sección (ninguna `kind` se

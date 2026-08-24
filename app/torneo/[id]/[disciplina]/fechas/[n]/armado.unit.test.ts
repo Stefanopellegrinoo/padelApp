@@ -1,4 +1,5 @@
 import { createElement } from 'react'
+import { defaultMaxMatches } from '@/core'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import type { MatchdayFormat } from '@/core'
@@ -21,9 +22,19 @@ import { SelectorDeFormato } from './armado'
  * correcto queda sin cubrir por esa misma razón (ver el reporte de esta
  * rebanada).
  */
-function html(formato: MatchdayFormat, sides: number, suggested: MatchdayFormat = formato): string {
+// El techo por default de una disciplina de a uno (36). Los tamaños que estos
+// tests usan —8, 10, 12 lados— sólo se dan de a uno: de a dos serían 16, 20 y
+// 24 jugadores, muy por encima de `MAX_PLAYERS`.
+const TECHO_DE_A_UNO = defaultMaxMatches(1)
+
+function html(
+  formato: MatchdayFormat,
+  sides: number,
+  suggested: MatchdayFormat = formato,
+  maxMatches: number = TECHO_DE_A_UNO,
+): string {
   return renderToStaticMarkup(
-    createElement(SelectorDeFormato, { formato, sides, suggested, pending: false, onChange: () => {} }),
+    createElement(SelectorDeFormato, { formato, sides, maxMatches, suggested, pending: false, onChange: () => {} }),
   )
 }
 
@@ -57,10 +68,29 @@ describe('SelectorDeFormato', () => {
     expect(markup).not.toContain('4 grupos + llave')
   })
 
-  it('12 lados: ofrece "2 grupos + llave" Y "4 grupos + llave" — nunca más de tres botones', () => {
-    const markup = html(ROUND_ROBIN, 12)
+  // Antes este test pedía 2 Y 4 grupos con 12 lados. Con el techo de partidos
+  // (`MAX_MATCHES`) ya no conviven: 12 lados en 2 grupos son 34 partidos y en 4
+  // son 20. Y 12 lados sólo se dan de a uno (de a dos serían 24 jugadores, muy
+  // por encima de `MAX_PLAYERS`), que es exactamente el caso que el techo vino
+  // a acotar. Los dos escalones que SÍ conviven hoy son 6 lados.
+  it('6 lados: ofrece "Todos contra todos" (15) Y "2 grupos + llave" (10)', () => {
+    const markup = html(ROUND_ROBIN, 6)
+    expect(markup).toContain('Todos contra todos')
     expect(markup).toContain('2 grupos + llave')
+  })
+
+  it('12 lados de a uno: los dos tamaños de grupo, pero NO todos contra todos (66 partidos)', () => {
+    const markup = html(GROUPS_4, 12)
     expect(markup).toContain('4 grupos + llave')
+    expect(markup).toContain('2 grupos + llave') // 34 partidos, entra en el techo de a uno (36)
+    expect(markup).not.toContain('Todos contra todos')
+  })
+
+  it('y con el techo de pádel (15) no entra ninguno de los tres: queda el más barato', () => {
+    const markup = html(GROUPS_4, 12, GROUPS_4, defaultMaxMatches(2))
+    expect(markup).toContain('4 grupos + llave') // 20, el más barato de los tres
+    expect(markup).not.toContain('2 grupos + llave')
+    expect(markup).not.toContain('Todos contra todos')
   })
 
   /**
@@ -78,17 +108,15 @@ describe('SelectorDeFormato', () => {
    * APG); el test ahora lee `aria-checked`.
    */
   it('marca como elegido el `formato` que llega, no el primero ofrecido', () => {
-    const eligioGrupos2 = html(GROUPS_2, 12)
+    const eligioGrupos2 = html(GROUPS_2, 6)
     const btnGrupos2 = /<button[^>]*>2 grupos \+ llave<\/button>/.exec(eligioGrupos2)?.[0] ?? ''
-    const btnGrupos4 = /<button[^>]*>4 grupos \+ llave<\/button>/.exec(eligioGrupos2)?.[0] ?? ''
     const btnTodos = /<button[^>]*>Todos contra todos<\/button>/.exec(eligioGrupos2)?.[0] ?? ''
     expect(btnGrupos2).toContain('aria-checked="true"')
-    expect(btnGrupos4).toContain('aria-checked="false"')
     expect(btnTodos).toContain('aria-checked="false"')
   })
 
   it('y al revés: con formato ROUND_ROBIN elegido, el marcado es "Todos contra todos"', () => {
-    const eligioTodos = html(ROUND_ROBIN, 12)
+    const eligioTodos = html(ROUND_ROBIN, 6)
     const btnGrupos2 = /<button[^>]*>2 grupos \+ llave<\/button>/.exec(eligioTodos)?.[0] ?? ''
     const btnTodos = /<button[^>]*>Todos contra todos<\/button>/.exec(eligioTodos)?.[0] ?? ''
     expect(btnTodos).toContain('aria-checked="true"')
@@ -109,12 +137,16 @@ describe('SelectorDeFormato', () => {
     const huerfano = html(GROUPS_4, 10)
     expect(huerfano).toContain('4 grupos + llave')
     expect(huerfano).toContain('2 grupos + llave')
+    // Y el botón de todos contra todos NO está: con 10 lados son 45 partidos.
+    // Un `formato` guardado se sigue dibujando aunque ya no se ofrezca —esa es
+    // la regla de este test—, pero un formato que NUNCA se eligió y encima
+    // pasa el techo no tiene por qué aparecer.
+    expect(huerfano).not.toContain('Todos contra todos')
     const btnGrupos4 = /<button[^>]*>4 grupos \+ llave<\/button>/.exec(huerfano)?.[0] ?? ''
     const btnGrupos2 = /<button[^>]*>2 grupos \+ llave<\/button>/.exec(huerfano)?.[0] ?? ''
-    const btnTodos = /<button[^>]*>Todos contra todos<\/button>/.exec(huerfano)?.[0] ?? ''
+
     expect(btnGrupos4).toContain('aria-checked="true"')
     expect(btnGrupos2).toContain('aria-checked="false"')
-    expect(btnTodos).toContain('aria-checked="false"')
   })
 
   /**
@@ -127,7 +159,7 @@ describe('SelectorDeFormato', () => {
    */
   describe('la marca de "sugerido" (W77, decisión #4022)', () => {
     it('nombra el formato sugerido en una leyenda propia, separada de los botones', () => {
-      const markup = html(ROUND_ROBIN, 12, GROUPS_2)
+      const markup = html(ROUND_ROBIN, 6, GROUPS_2)
       expect(markup).toContain('Sugerido: 2 grupos + llave')
     })
 
@@ -146,7 +178,7 @@ describe('SelectorDeFormato', () => {
      * `aria-checked="false"` igual, y la leyenda nombra la sugerencia aparte.
      */
     it('sugerido y seleccionado son señales independientes: uno no pisa al otro', () => {
-      const markup = html(ROUND_ROBIN, 12, GROUPS_2)
+      const markup = html(ROUND_ROBIN, 6, GROUPS_2)
       const btnGrupos2 = /<button[^>]*>2 grupos \+ llave<\/button>/.exec(markup)?.[0] ?? ''
       expect(btnGrupos2).toContain('aria-checked="false"') // sugerido, no elegido
       expect(markup).toContain('Sugerido: 2 grupos + llave')

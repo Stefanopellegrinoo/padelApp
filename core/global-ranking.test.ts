@@ -7,7 +7,7 @@ function row(entryId: string, points: number): RankingRow {
 }
 
 describe('computeGlobalRanking', () => {
-  //REQ-D9-1, primer caso literal de spec: weight=1 en ambas -> suma directa.
+  // REQ-D9-1, primer caso literal de spec: weight=1 en ambas -> suma directa.
   it('sums points straight across disciplines when every weight is 1', () => {
     const disciplines: DisciplineRanking[] = [
       { weight: 1, ranking: [row('e1', 5), row('e2', 2)] },
@@ -18,7 +18,7 @@ describe('computeGlobalRanking', () => {
     expect(global.find((r) => r.entryId === 'e2')?.points).toBe(6)
   })
 
-  //REQ-D9-1, segundo caso literal: weight=0.5 -> aporta la mitad.
+  // REQ-D9-1, segundo caso literal: weight=0.5 -> aporta la mitad.
   it('halves the contribution of a discipline with weight 0.5', () => {
     const disciplines: DisciplineRanking[] = [
       { weight: 1, ranking: [row('e1', 5)] },
@@ -28,7 +28,7 @@ describe('computeGlobalRanking', () => {
     expect(global.find((r) => r.entryId === 'e1')?.points).toBe(7) // 5 + 4*0.5
   })
 
-  //REQ-D9-2: weight=0 excluye del global, pero no muta la fila de origen —
+  // REQ-D9-2: weight=0 excluye del global, pero no muta la fila de origen —
   // "su tabla propia sigue mostrando sus puntos reales".
   it('contributes zero for weight=0 without touching the discipline\'s own ranking rows', () => {
     const fifaRanking = [row('e1', 10)]

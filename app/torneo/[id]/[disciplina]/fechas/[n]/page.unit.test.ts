@@ -35,6 +35,10 @@ const escena = vi.hoisted(() => ({
   // hardcodeado en `1` acá abajo -- para el armado de PÁDEL (sideSize=2)
   // hace falta poder tocarlo por test, mismo patrón que `status`/`formato`.
   pairSize: 1 as 1 | 2,
+  // El techo de partidos de la disciplina. `undefined` = sin la clave en el
+  // jsonb, o sea el default de su `sideSize` — que es como están las dos
+  // configs vivas de producción.
+  maxMatches: undefined as number | undefined,
   // Vacío salvo en los tests que necesitan `frozenTableRows` reordenando de
   // verdad (W70, verify-report-pr21 #4004): con el Map vacío de siempre
   // ninguna fila tiene puesto congelado, así que `tableRows` es LITERALMENTE
@@ -69,6 +73,14 @@ vi.mock('@/db/matchday', async (importOriginal) => {
   }
 })
 
+// `notFound()` de Next tira un error especial que el router atrapa; acá se
+// espía para poder afirmar QUE SE LLAMÓ, que es lo que distingue un 404 propio
+// de un error boundary con mensaje.
+vi.mock('next/navigation', async (importOriginal) => {
+  const real = await importOriginal<typeof import('next/navigation')>()
+  return { ...real, notFound: vi.fn(() => { throw new Error('NEXT_NOT_FOUND') }) }
+})
+
 vi.mock('@/db/server', () => ({
   serverClient: async () => ({}),
 }))
@@ -85,12 +97,18 @@ vi.mock('@/db/season', async (importOriginal) => {
 
 vi.mock('@/db/read', async (importOriginal) => {
   const real = await importOriginal<typeof import('@/db/read')>()
-  const config = { ...defaultConfig(8, 1), matchFormat: { ...defaultConfig(8, 1).matchFormat, openScore: true } }
+  // Función y no un const por el mismo motivo que `discipline()` de abajo:
+  // `escena.maxMatches` se toca por test y tiene que leerse cuando corre.
+  const config = () => ({
+    ...defaultConfig(8, 1),
+    matchFormat: { ...defaultConfig(8, 1).matchFormat, openScore: true },
+    ...(escena.maxMatches === undefined ? {} : { maxMatches: escena.maxMatches }),
+  })
   // Función, no un literal fijado al importar el mock: `escena.pairSize` se
   // toca por test (S93/S94, verify-report-pre-contract #4026), así que
   // `sideSize` tiene que leerse en el momento en que `seasonHeader` corre.
   function discipline(): DisciplineHeader {
-    return { id: D1, kind: 'FIFA', config, weight: 1, pairSize: escena.pairSize, hasMasters: false }
+    return { id: D1, kind: 'FIFA', config: config(), weight: 1, pairSize: escena.pairSize, hasMasters: false }
   }
   const entries = Array.from({ length: 8 }, (_, index) => ({
     id: `e${index + 1}`,
@@ -152,12 +170,62 @@ function unplayedMatch(fase: MatchWithId['fase'], grupo: number, round: number, 
   return { id: `${fase}-${grupo}-${round}-${a}-${b}`, round, fase, grupo, sideA: side(a), sideB: side(b), sets: [] }
 }
 
-async function render(): Promise<string> {
+async function render(n = '1'): Promise<string> {
   const { default: FechaDetailPage } = await import('./page')
   return renderToStaticMarkup(
-    await FechaDetailPage({ params: Promise.resolve({ id: 's1', disciplina: 'fifa', n: '1' }) }),
+    await FechaDetailPage({ params: Promise.resolve({ id: 's1', disciplina: 'fifa', n }) }),
   )
 }
+
+describe('una fecha que no existe da 404, no un error boundary', () => {
+  /**
+   * Las DOS rutas de esta pantalla fallaban distinto: un slug de disciplina
+   * desconocido llamaba `notFound()` (REQ-NR-5, 404 propio) y un NÚMERO de
+   * fecha inexistente tiraba `EdgeError`, que cae en el error boundary. Misma
+   * pantalla, misma clase de URL inválida, dos respuestas.
+   */
+  it('con un número de fecha que no existe llama notFound()', async () => {
+    const { notFound } = await import('next/navigation')
+
+    await expect(render('999')).rejects.toThrow('NEXT_NOT_FOUND')
+    expect(notFound).toHaveBeenCalled()
+  })
+})
+
+describe('el techo de partidos de la disciplina llega hasta el menú de formatos', () => {
+  /**
+   * Ese cableado —`page.tsx` → `Armado` → `matchdayShape` →
+   * `SelectorDeFormato`— no lo cubría NADA: los unit probaban
+   * `offerableFormats`, los db probaban el guard, y entre las dos puntas el
+   * valor no viajaba, así que la pantalla ofrecía el techo por default y
+   * `generatePairs` rechazaba después lo que la pantalla había ofrecido.
+   * Lo encontró el navegador; vive acá porque acá es más barato.
+   *
+   * 8 presentes de a uno son 8 lados = 28 partidos de todos contra todos.
+   */
+  it('con un techo propio de 20, los 28 de todos contra todos no se ofrecen', async () => {
+    escena.status = 'DRAFT'
+    escena.isAdmin = true
+    escena.pairSize = 1
+    escena.maxMatches = 20
+
+    const html = await render()
+
+    expect(/<button[^>]*>Todos contra todos<\/button>/.test(html)).toBe(false)
+    expect(html).toContain('2 grupos + llave') // 16 partidos, ése sí entra
+  })
+
+  it('no-regresión: sin techo propio rige el default de a uno (36) y sí se ofrece', async () => {
+    escena.status = 'DRAFT'
+    escena.isAdmin = true
+    escena.pairSize = 1
+    escena.maxMatches = undefined
+
+    const html = await render()
+
+    expect(/<button[^>]*>Todos contra todos<\/button>/.test(html)).toBe(true)
+  })
+})
 
 describe('la fecha GROUPS_KNOCKOUT en juego — fase y llave (REQ-D8-1, decisión #3979)', () => {
   it('con la fase de grupos sin terminar: cuenta la fase y los grupos, sin botón de cerrar fase', async () => {
@@ -550,7 +618,7 @@ describe('la fecha GROUPS_KNOCKOUT cerrada — la llave no se pierde al cerrar (
 
     const tabla = html.slice(html.indexOf('Tabla de la fecha'))
     const fila = /Jugador 1<\/span><span[^>]*>(\d+)<\/span>/.exec(tabla)
-    // side1 ganó 1 partido de GRUPO, 1 de SEMI y la FINAL — 3 en total —, pero
+    // Side1 ganó 1 partido de GRUPO, 1 de SEMI y la FINAL — 3 en total —, pero
     // `standingsFromBracket` calculó su award con SÓLO el partido de grupo: el
     // PG que se dibuja tiene que decir lo mismo que la tabla que pagó.
     expect(fila?.[1]).toBe('1')

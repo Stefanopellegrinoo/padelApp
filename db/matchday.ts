@@ -17,7 +17,8 @@ import {
   mastersQualifiers,
   members,
   nextRoundMatchups,
-  offerableFormats,
+  formatoOfrecible,
+  maxMatchesOf,
   phaseIsComplete,
   previousContext,
   pair,
@@ -152,13 +153,13 @@ export async function pairingContextFor(
   const ranking = computeRanking(awardsByMatchday, seedOrder, config, snapshot)
   const points = new Map(ranking.map((row) => [row.entryId, row.points]))
 
-  //Con un lado de uno, `buildSides` (design
+  // Con un lado de uno, `buildSides` (design
   // PUNTO 5) ignora `defenders`/`previousPairs`/`fixedPairs` enteros — no hay
   // compañero que defender ni pareja que repetir. Antes de este guard,
   // `closedHistory` corría igual y calculaba ese dato descartado, y encima
   // TIRABA: leía `pairs` de la fecha CERRADA anterior con `pairFromRow`, que
   // no sabía leer un `pair_size=1`. Ninguna disciplina de a uno llegaba a la
-  //Fecha 2. Ese throw ya no existe (W40, PR18b: `closedHistory` devuelve
+  // fecha 2. Ese throw ya no existe (W40, PR18b: `closedHistory` devuelve
   // `Side[]`), así que este guard queda por su OTRO motivo, que sigue en pie:
   // ahorrarse dos consultas cuyo resultado se descarta entero. Los valores
   // neutros son los mismos que `previousContext` devuelve para una historia
@@ -276,18 +277,25 @@ export async function setMatchdayFormat(
   // 0045) — y si igual pasara, el guard de `advancePhase` (C32, más abajo)
   // convierte cualquier desalineación entre `formato` y el fixture ya
   // armado en un `EdgeError` prolijo, nunca en un 500.
-  if (formato.kind === 'GROUPS_KNOCKOUT') {
-    const { pairSize } = await disciplineConfig(supabase, matchday.discipline_id)
+  //
+  // El guard YA NO se saltea con ROUND_ROBIN, y ese era el agujero: el techo de
+  // la fecha se mide en PARTIDOS (`MAX_MATCHES`) y un round robin es el formato
+  // que más produce — 12 lados de a uno son 66, contra los 15 del peor caso de
+  // pádel. Mientras este `if` preguntaba por `GROUPS_KNOCKOUT`, el formato más
+  // caro era el único que entraba sin que nadie lo mirara.
+  {
+    const { config, pairSize } = await disciplineConfig(supabase, matchday.discipline_id)
     const present = [
       ...(await playingEntryIds(supabase, matchdayId, matchday.discipline_id)),
       ...(await guestsOf(supabase, matchdayId)).map((guest) => guest.entryId),
     ]
     const sides = Math.floor(present.length / pairSize)
-    const esOfrecible = offerableFormats(sides).some(
-      (candidato) => candidato.kind === 'GROUPS_KNOCKOUT' && candidato.groups === formato.groups,
-    )
-    if (!esOfrecible) {
-      throw new EdgeError(`Con ${sides} lados, ${formato.groups} grupos no es un formato ofrecible.`)
+    if (!formatoOfrecible(formato, sides, maxMatchesOf(config, pairSize))) {
+      throw new EdgeError(
+        formato.kind === 'GROUPS_KNOCKOUT'
+          ? `Con ${sides} lados, ${formato.groups} grupos no es un formato ofrecible.`
+          : `Con ${sides} lados, todos contra todos son demasiados partidos para una fecha. Elegí grupos + llave.`,
+      )
     }
   }
 
@@ -322,10 +330,10 @@ export async function createMatchday(
   playedOn: string,
   disciplineId?: string,
 ): Promise<string> {
-  //Omitir `disciplineId` no es ambiguo con UNA
+  // Omitir `disciplineId` no es ambiguo con UNA
   // disciplina — es la única respuesta posible, y sigue resolviendo por
   // default más abajo. Con DOS o más, adivinar en silencio es la misma
-  //Clase de bug que ya causó C8, C9, C12 y el de `matchdaysOf` en esta
+  // clase de bug que ya causó C8, C9, C12 y el de `matchdaysOf` en esta
   // cadena: mismo criterio tripwire que `0021` (create_masters, empate de
   // disciplina) y `0027` (empate de position) — el estado ambiguo se vuelve
   // ruidoso en vez de silencioso.
@@ -660,7 +668,7 @@ export async function generatePairs(supabase: Client, matchdayId: string): Promi
   // sin cambios (desde PR19 ya devuelve `Side[]` solo); con `sideSize=1` cada
   // presente es su propio lado. `pairSize` sale del mismo `pairingContextFor`
   // que ya trae `input` — ningún select nuevo.
-  const { input, pairSize } = await pairingContextFor(supabase, matchdayId)
+  const { input, pairSize, config } = await pairingContextFor(supabase, matchdayId)
   const sides = buildSides({ ...input, sideSize: pairSize })
 
   //`matchday.formato` generaliza el armado (REQ-D8-1, Rebanada C1): con
@@ -692,17 +700,35 @@ export async function generatePairs(supabase: Client, matchdayId: string): Promi
   // cuenta que ya usa `setMatchdayFormat`), y todavía no se tocó ninguna
   // fila — un rechazo acá no deja la fecha a medio armar (S69,
   // `generatePairs` no corre en una transacción).
-  if (
-    formato.kind === 'GROUPS_KNOCKOUT' &&
-    !offerableFormats(sides.length).some(
-      (candidato) => candidato.kind === 'GROUPS_KNOCKOUT' && candidato.groups === formato.groups,
-    )
-  ) {
+  //
+  // Idem la revalidación de arriba: cubre ROUND_ROBIN también. Es el ÚLTIMO
+  // lugar donde se puede frenar una fecha de 66 partidos, porque la fila puede
+  // haber llegado con el `formato` DEFAULT de columna ('ROUND_ROBIN', 0040) sin
+  // que `setMatchdayFormat` haya corrido nunca — nadie eligió round robin, y
+  // sin embargo es lo que se va a armar.
+  if (!formatoOfrecible(formato, sides.length, maxMatchesOf(config, pairSize))) {
     throw new EdgeError(
-      `Con ${sides.length} lados, ${formato.groups} grupos no es un formato ofrecible. Volvé al armado y elegí otro formato.`,
+      formato.kind === 'GROUPS_KNOCKOUT'
+        ? `Con ${sides.length} lados, ${formato.groups} grupos no es un formato ofrecible. Volvé al armado y elegí otro formato.`
+        : `Con ${sides.length} lados, todos contra todos son demasiados partidos para una fecha. Volvé al armado y elegí grupos + llave.`,
     )
   }
 
+  // ponytail: S69 — de acá hasta `insertMatches` son TRES escrituras sueltas
+  // (`deletePairs`, `insertPairs`, `insertMatches`) sin transacción que las
+  // ate. Un fallo en el medio deja la fecha a medio armar; medido, la forma
+  // que sale es `pairs=4, matches=0`, y el armado se rehace y ya.
+  //
+  // Los dos guards de arriba —el del formato ofrecible y el del techo de
+  // partidos— rechazan ANTES de la primera escritura, así que el caso
+  // frecuente (elegiste un formato que ya no entra) nunca llega acá. Lo que
+  // queda sin cubrir es un fallo de RED o de la base entre las tres.
+  //
+  // El upgrade es mover las tres a una función `security definer`, que corre
+  // en una sola transacción. No se hizo porque desde el push eso pide su
+  // propia migración y porque el estado roto es VISIBLE y se arregla
+  // rearmando: no se pierde un resultado, la fecha está en DRAFT.
+  //
   // Deleting the pairs cascades to matches and match_sets. A DRAFT matchday
   // usually has no results to lose, but `redraft_matchday` can land one here
   // WITH results already loaded — it goes back from OPEN without deleting
@@ -998,10 +1024,10 @@ export async function generateMastersPairs(supabase: Client, matchdayId: string)
   if (matchday.status !== 'DRAFT') {
     throw new EdgeError('El Masters ya está armado.')
   }
-  //Sin este guard, una disciplina pair_size=1
+  // Sin este guard, una disciplina pair_size=1
   // llegaba hasta el insert y `pairs_matchday_size` (FK real, no `season_id`
   // suelta — ver el comentario de `insertPairs` más abajo) la rebotaba con el
-  //Mensaje genérico de carrera de W34/S35: "El plantel o la fecha cambiaron
+  // mensaje genérico de carrera de W34/S35: "El plantel o la fecha cambiaron
   // mientras armabas las parejas. Volvé a intentar." — falso acá, porque el
   // Masters es estructuralmente de a dos (mastersFixture/assertValidConfig
   // más abajo, siempre `size: 2`) y reintentar falla siempre igual.
@@ -1121,7 +1147,7 @@ export async function openMatchday(supabase: Client, matchdayId: string): Promis
  * matchday be replayed and come out the same.
  */
 export async function closeMatchday(supabase: Client, matchdayId: string): Promise<void> {
-  // matchdayContextFor, NO pairingContextFor: cerrar no es sortear. Pasar por
+  // MatchdayContextFor, NO pairingContextFor: cerrar no es sortear. Pasar por
   // el contexto del sorteo correría las validaciones de asistencia y de tamaño
   // sobre quién viene HOY en vez de sobre quiénes jugaron, y previousContext
   // podría tirar por un problema de la fecha anterior mientras cerrás ésta.
@@ -1432,21 +1458,21 @@ async function insertPairs(
       .select('id')
       .single()
     if (error || data === null) {
-      //Traducía acá un mensaje fijo de
+      // Traducía acá un mensaje fijo de
       // "disciplina de a uno todavía no puede armar parejas automáticamente"
       // para el rebote de `pairs_matchday_size` — correcto en ese momento,
       // porque este insert no mandaba `pair_size`. Ahora lo manda (arriba), y
       // el mensaje se BORRA en vez de reescribirse: una disciplina de a uno
       // SÍ arma sola desde acá, así que no queda nada honesto que decir sobre
-      //Ese caso EN EL DRAW. S35 sigue vigente para
+      // ese caso EN EL DRAW. S35 sigue vigente para
       // las otras tres FK reales del mismo insert (`pairs_entry_a_season_id_fkey`,
       // `pairs_entry_b_season_id_fkey`, `pairs_matchday_id_season_id_fkey` —
-      //No hay FK de `season_id` sola sobre `pairs`, corregido W39 verify-
+      // no hay FK de `season_id` sola sobre `pairs`, corregido W39 verify-
       // report ronda 12): esas sí son una carrera real —alguien tocó el
       // plantel o la fecha mientras se armaba— y comparten este único mensaje
       // genérico. `pairs_matchday_size` SIGUE pudiendo disparar acá, pero sólo
       // por el camino de `generateMastersPairs`, que ahora corta antes con su
-      //Propio guard (W39, arriba) en vez de llegar a este insert.
+      // propio guard (W39, arriba) en vez de llegar a este insert.
       if (error?.code === '23503') {
         throw new EdgeError('El plantel o la fecha cambiaron mientras armabas las parejas. Volvé a intentar.')
       }

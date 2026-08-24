@@ -3,7 +3,7 @@
 -- (0018:153) ya escribían esta columna; hasta acá, ningún camino de
 -- open/close/reopen la tocaba, así que quedaba fija en SETUP para siempre.
 -- Medido tras 0018 sobre un reset limpio: 81 de 201 disciplinas
---Desincronizadas de su propia temporada (ver, hallazgo C1).
+-- desincronizadas de su propia temporada (hallazgo C1).
 -- Esta migración restatea `open_matchday`, `close_matchday` y
 -- `reopen_matchday` para que cada una escriba `disciplines.status` con el
 -- MISMO trinquete que ya usa para `seasons.status`, sólo que scopeado por
@@ -16,7 +16,7 @@
 -- f3d520d) ya está commiteada, y esta corrida tiene explícitamente prohibido
 -- reescribir esa historia. Insertar un `0017` nuevo hoy aterrizaría FUERA DE
 -- ORDEN sobre una base que ya corrió `0018` — exactamente la trampa que
---Anotaba S1 del: el CLI de Supabase aplica y trackea por
+-- anotaba S1: el CLI de Supabase aplica y trackea por
 -- versión en `supabase_migrations.schema_migrations`, y una migración
 -- insertada retroactivamente por debajo de la última aplicada puede terminar
 -- salteada o aplicada en un orden que nadie probó contra datos reales.
@@ -165,7 +165,7 @@ revoke execute on function public.close_matchday(uuid, jsonb) from public, anon;
 grant  execute on function public.close_matchday(uuid, jsonb) to authenticated;
 
 -- ── reopen_matchday (restatement de 0018_reopen_cancel_scoped.sql) ─────────
---El scoping por discipline_id de las tres consultas (REQ-D4-1) ya lo dejó
+-- el scoping por discipline_id de las tres consultas (REQ-D4-1) ya lo dejó
 -- 0018 — eso no se toca. Lo único que agrega esta migración es el trinquete
 -- que faltaba: reabrir el Masters revierte disciplines.status a ACTIVE,
 -- gemelo del que ya existe para seasons.status (0005:190-193), scopeado por

@@ -40,7 +40,7 @@ describe('assertValidConfig', () => {
     }
   })
 
-  //REQ-D2-2: un plantel impar es válido con sideSize=1 — la paridad
+  // REQ-D2-2: un plantel impar es válido con sideSize=1 — la paridad
   // es una regla de la pareja, no del plantel. 9, no 7 como en el GIVEN del
   // spec: MIN_PLAYERS=8 sigue siendo un piso compartido (PUNTO 3 del
   // design, afuera de esta tanda), y 7 tropezaría con él sin decir nada
@@ -140,7 +140,7 @@ describe('matchError', () => {
 //
 // El formato es `gamesPerSet: 2` porque con marcador CERRADO el empate legal
 // es el que llega al corte: con tie-break el set termina en `gamesPerSet`
-//Exacto, así que el único empate representable es `N-N` (S68, 
+// exacto, así que el único empate representable es `N-N` (S68, 
 // ronda 20 — la regla es para cualquier `gamesPerSet`, no sólo el 2, y el
 // formato de pádel por defecto ya admite un `4-4`; sin tie-break no hay
 // ninguno).
@@ -200,7 +200,7 @@ describe('assertMatchdaySize', () => {
     expect(() => assertMatchdaySize(players(9), 2)).toThrow(/de a pares/)
   })
 
-  //REQ-D5-2: FIFA (sideSize=1) con 7 presentes no tiene error de paridad —
+  // REQ-D5-2: FIFA (sideSize=1) con 7 presentes no tiene error de paridad —
   // cada presente es su propio lado.
   it('accepts an odd number on a side of one (REQ-D5-2)', () => {
     expect(() => assertMatchdaySize(players(9), 1)).not.toThrow()
@@ -301,7 +301,7 @@ describe('assertPointsCoverMatchday', () => {
     expect(() => assertPointsCoverMatchday(present, guests, locks, config, 2)).toThrow(EdgeError)
   })
 
-  //Dividía siempre por 2 — con sideSize=1, 10
+  // Dividía siempre por 2 — con sideSize=1, 10
   // presentes son 10 lados, no 5, y el guard que existe para avisar "faltan
   // valores de puntos" ANTES del sorteo quedaba ciego.
   it('divides by the real side size, not always by 2', () => {
@@ -484,7 +484,7 @@ describe('W62 — un empate a mitad de camino no cierra el partido', () => {
     expect(matchError(sets, twoSets, true)).toMatch(/no lo cierra/)
   })
 
-  //El pin del otro lado: `REQ-D6-1` (el 2-2 que dejó andando la rebanada C)
+  // El pin del otro lado: `REQ-D6-1` (el 2-2 que dejó andando la rebanada C)
   // no se mueve. Con `setsToWin: 1` se jugó todo lo que había para jugar.
   it('pero un set empatado en un formato a UN set sí cierra (REQ-D6-1)', () => {
     const oneSet: MatchFormat = { setsToWin: 1, gamesPerSet: 2, tieBreak: true, openScore: false }

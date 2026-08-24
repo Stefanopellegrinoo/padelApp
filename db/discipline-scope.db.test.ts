@@ -38,7 +38,7 @@ async function insertMatchday(
   const db = adminClient()
   //`matchdays_discipline_size` (0028, REQ-D5-1) exige que `pair_size` de la
   // fecha coincida con el de SU disciplina — este helper crea fechas para
-  //Disciplinas pair_size=1 (W30, C15 abajo) y pair_size=2 (el resto), así
+  // disciplinas pair_size=1 (W30, C15 abajo) y pair_size=2 (el resto), así
   // que no puede confiar en el default de columna (2).
   const { data: discipline, error: disciplineError } = await db
     .from('disciplines')
@@ -240,7 +240,7 @@ describe('dos disciplinas concurrentes (PR 4)', () => {
 // hubiera dicho SETUP para un torneo con una disciplina en curso. Este test
 // llega al estado "pádel ACTIVE, FIFA SETUP" abriendo una fecha de verdad
 // (generatePairs + openMatchday), no con un update de service_role — es
-//Justo el escenario que REQ-D3-3 pide y que el marcó
+// justo el escenario que REQ-D3-3 pide y que el marcó
 // sin cobertura end-to-end.
 describe('estado derivado real: abrir una fecha por el camino real', () => {
   it('abrir la primera fecha de pádel mueve su disciplina a ACTIVE sin tocar a FIFA, y el header lo refleja', async () => {
@@ -271,12 +271,12 @@ describe('estado derivado real: abrir una fecha por el camino real', () => {
     expect(await disciplineStatus(padelId)).toBe('ACTIVE')
     expect(await disciplineStatus(fifaId), 'FIFA no arrancó: nadie le abrió una fecha').toBe('SETUP')
 
-    //El caso exacto de REQ-D3-3: una disciplina ACTIVE y otra SETUP -> ACTIVE.
+    // El caso exacto de REQ-D3-3: una disciplina ACTIVE y otra SETUP -> ACTIVE.
     expect((await seasonHeader(admin.client, seasonId)).status).toBe('ACTIVE')
   })
 })
 
-//El test de C1/C2 de arriba YA ejercita esto de rebote (createMatchday con
+// El test de C1/C2 de arriba YA ejercita esto de rebote (createMatchday con
 // 2 disciplinas, antes rompía con PGRST116 vía `.single()` sobre season_id),
 // pero su asunto declarado es derivedSeasonStatus, no createMatchday. Este
 // test tiene una sola pregunta: ¿a qué disciplina queda scopeada la fecha
@@ -300,10 +300,10 @@ describe('createMatchday resuelve la disciplina por defecto', () => {
     expect(matchday.discipline_id).toBe(disciplineId)
   })
 
-  //Con UNA sola disciplina, "no elegir" no es
+  // Con UNA sola disciplina, "no elegir" no es
   // ambiguo — hay una sola respuesta posible (el test de arriba). Con MÁS de
   // una, adivinar en silencio es exactamente la clase de bug que ya causó
-  //, C9, C12 y el de `matchdaysOf` en esta cadena: este test ANTES
+  // C9, C12 y el de `matchdaysOf` en esta cadena: este test ANTES
   // aseveraba ese default a propósito ("la fecha nueva queda scopeada a la
   // primera disciplina por position, no a la última creada") — ya no es el
   // comportamiento correcto, así que se reescribe en vez de mantenerlo: la
@@ -327,8 +327,8 @@ describe('createMatchday resuelve la disciplina por defecto', () => {
 // faltaba: el escritor puede apuntar CADA fecha a la disciplina que le
 // corresponde, y dos disciplinas pueden tener cada una su fecha sin cerrar A
 // LA VEZ pasando por el mismo `createMatchday` real (no fabricado) —
-//REQ-D3-1 de punta a punta, no sólo a nivel de índice. Las dos llamadas
-//Pasan `disciplineId` explícito (S26, guarda de ambigüedad): con dos
+// REQ-D3-1 de punta a punta, no sólo a nivel de índice. Las dos llamadas
+// pasan `disciplineId` explícito (S26, guarda de ambigüedad): con dos
 // disciplinas, omitirlo ya no resuelve por default, tira.
 describe('createMatchday con disciplineId explícito', () => {
   it('la fecha nueva queda en la disciplina que se le pasa, y las dos coexisten sin cerrar', async () => {

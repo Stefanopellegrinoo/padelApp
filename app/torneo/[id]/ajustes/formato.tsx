@@ -1,5 +1,7 @@
 'use client'
 
+import { maxMatchesOf } from '@/core'
+
 import { useState, useTransition } from 'react'
 import type { DisciplineId, SeasonConfig, SideSize } from '@/core'
 import { steppersFor } from '@/app/torneos/nuevo/wizard-state'
@@ -147,6 +149,31 @@ export function Formato({
             )}
           </div>
         ))}
+      </div>
+
+      {/* El techo de la fecha, en PARTIDOS. Vive acá y NO en `STEPPERS` a
+          propósito: `STEPPERS` alimenta también el paso 4 del wizard, que
+          edita la config compartida por TODAS las disciplinas marcadas, y un
+          techo por disciplina puesto ahí valdría lo mismo para pádel y para
+          FIFA — que es exactamente lo que este número vino a dejar de hacer.
+          Ajustes es la única pantalla que edita UNA disciplina.
+
+          No es la grieta de W63 al revés: aquélla era un campo COMPARTIDO que
+          una pantalla filtraba y la otra no. Éste no es compartido. */}
+      <div className="overflow-hidden rounded-[14px] border border-line bg-surface">
+        <div className="flex min-h-[56px] items-center justify-between gap-2 px-3 py-2">
+          <div className="min-w-0">
+            <p className="text-[14px] font-bold">Partidos por fecha</p>
+            <p className="text-pretty text-[11.5px] font-semibold text-muted">
+              {pairSize === 1
+                ? 'De a uno cada presente es su propio lado, así que los partidos crecen rápido: con 12 son 66 todos contra todos.'
+                : 'El máximo que entra en una tarde. Con 12 jugadores, todos contra todos son 15.'}
+            </p>
+          </div>
+          {stepper(maxMatchesOf(config, pairSize), 1, 66, (next) =>
+            save({ ...config, maxMatches: next }),
+          )}
+        </div>
       </div>
 
       {/* Decisión #4029: editable acá (parte 2), pero deshabilitado -- no sólo

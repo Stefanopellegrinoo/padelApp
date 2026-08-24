@@ -1,4 +1,4 @@
-import { MAX_PLAYERS } from './constants'
+import { MAX_PAIRING_POOL } from './constants'
 import { pair, type Duo } from './side'
 import type { EntryId } from './types'
 
@@ -14,9 +14,9 @@ export function allMatchings(pool: EntryId[]): Duo[][] {
   if (pool.length % 2 !== 0) {
     throw new Error(`No se puede emparejar un pool impar: son ${pool.length} jugadores.`)
   }
-  if (pool.length > MAX_PLAYERS) {
+  if (pool.length > MAX_PAIRING_POOL) {
     throw new Error(
-      `El pool es demasiado grande para emparejar: son ${pool.length}, el máximo es ${MAX_PLAYERS}.`,
+      `El pool es demasiado grande para emparejar: son ${pool.length}, el máximo es ${MAX_PAIRING_POOL}.`,
     )
   }
   if (pool.length === 0) return [[]]

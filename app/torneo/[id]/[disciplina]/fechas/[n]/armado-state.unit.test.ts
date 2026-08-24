@@ -140,7 +140,7 @@ describe('matchdayShape', () => {
     })
 
     it('cuenta los partidos que la fecha va a tener de verdad', () => {
-      //El número que W32 nombra y la pantalla nunca mostró: 12 de a uno son
+      // El número que W32 nombra y la pantalla nunca mostró: 12 de a uno son
       // 66 partidos donde 12 de a dos son 15.
       expect(matchdayShape({ confirmed: 8, looseGuests: 0, guestPairs: 0, sideSize: 1, formato: ROUND_ROBIN }).matches).toBe(28)
       expect(matchdayShape({ confirmed: 12, looseGuests: 0, guestPairs: 0, sideSize: 1, formato: ROUND_ROBIN }).matches).toBe(66)
@@ -161,7 +161,7 @@ describe('matchdayShape', () => {
     })
 
     it('una pareja invitada suma dos jugadores que juegan solos', () => {
-      //La matriz tenía `guestPairs` sólo con
+      // La matriz tenía `guestPairs` sólo con
       //`sideSize: 2`. Este es el caso que produjo W41 — el servidor rechazaba
       // esta misma fecha mientras la pantalla la mostraba armable.
       const shape = matchdayShape({ confirmed: 8, looseGuests: 0, guestPairs: 1, sideSize: 1, formato: ROUND_ROBIN })
@@ -170,10 +170,10 @@ describe('matchdayShape', () => {
       expect(shape.matches).toBe(45)
       expect(shape.complete).toBe(true)
       expect(shape.needsLooseGuest).toBe(false)
-      //Y el servidor tiene que estar de acuerdo: con W41 arreglado,
+      // Y el servidor tiene que estar de acuerdo: con W41 arreglado,
       // `assertPointsCoverMatchday` cuenta 8 competidores del torneo para esta
       // misma fecha —los 2 invitados son dos lados que no cobran—, así que la
-      //Pantalla y la base dicen lo mismo. Antes de W41 el botón estaba
+      // pantalla y la base dicen lo mismo. Antes de W41 el botón estaba
       // habilitado y el sorteo rebotaba.
       expect(shape.tooMany).toBe(false)
     })

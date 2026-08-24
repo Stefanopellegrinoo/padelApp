@@ -39,7 +39,7 @@ export function tiebreakNote(
   sideSize: SideSize,
 ): string | null {
   const label = (side: Side) => sideLabel(side, nameOf)
-  //El slice anterior normalizó "parejas"→
+  // El slice anterior normalizó "parejas"→
   // "jugadores" en cinco lugares y dejó éste, que es el único texto largo de
   // la pantalla — "Jugador de test 3 QUEDARON 3° ... EMPATARON en partidos
   // ganados" sobre una persona sola.
@@ -75,7 +75,7 @@ export function tiebreakNote(
       return `${label(worse.side)} ${quedaron} ${worse.position}° por ${scoreDiff}: ${empataron} en ${nivelados} con ${label(better.side)}.`
     }
 
-    //Nota: con todo empatado (partidos ganados y diferencia de games) el
+    // ponytail: con todo empatado (partidos ganados y diferencia de games) el
     // corte real pasa por el resultado directo o, en un triple empate, por el
     // snapshot — ambos viven adentro de `computeStandings` y no se reexponen.
     // No hay copy contractual para ese caso puntual y no ocurre con el formato

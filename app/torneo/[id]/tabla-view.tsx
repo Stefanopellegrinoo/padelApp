@@ -78,7 +78,7 @@ export function TablaView({ header, discipline, entries, matchdays, awardsByMatc
 
   const liveMatchday = regularMatchdays.find((matchday) => matchday.status !== 'CLOSED') ?? null
 
-  //La derivación vive en `tabla-state.ts`, con
+  // La derivación vive en `tabla-state.ts`, con
   // test propio, y ahora recibe `pairSize` — de a uno no hay defensores, y
   // esta pantalla los anunciaba igual sobre un jugador solo.
   const defenders = defendersOf(
@@ -92,7 +92,7 @@ export function TablaView({ header, discipline, entries, matchdays, awardsByMatc
 
   return (
     <div className="flex flex-col gap-3 pt-4">
-      {/*Esta Tabla es por-disciplina, no la
+      {/* Esta Tabla es por-disciplina, no la
           raíz — "volver" tiene que subir a la tabla global del torneo
           (`/torneo/{id}`), la única otra pantalla donde enciende la misma
           pestaña "Tabla" (`nav.tsx`). Antes apuntaba a "Mis torneos",

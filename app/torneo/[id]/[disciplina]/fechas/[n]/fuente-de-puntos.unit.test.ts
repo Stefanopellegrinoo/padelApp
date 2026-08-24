@@ -133,7 +133,7 @@ describe('la pantalla de una fecha no recalcula sus puntos', () => {
       // dinámico (`await import('@/core')`), el `require` con acceso por
       // propiedad, y hasta una llamada suelta sin import.
       //
-      //NO se mira sólo la línea de `import`. Se probó y perdía los dos
+      // NO se mira sólo la línea de `import`. Se probó y perdía los dos
       // últimos casos en silencio; el detalle está en el bloque de arriba.
       //
       // `computeAwards` reparte según los `guestIds` de HOY, y después de
@@ -144,7 +144,7 @@ describe('la pantalla de una fecha no recalcula sus puntos', () => {
   }
 
   it('el chequeo hace trabajo real sobre page.tsx, que la nombra en prosa', () => {
-    //La versión anterior afirmaba esto sobre un string sintético que ella
+    // La versión anterior afirmaba esto sobre un string sintético que ella
     // misma escribía, así que se podía romper el assert de arriba y ésta seguía
     // verde. `page.tsx` menciona `computeAwards` EN PROSA (`:360`, `:365`,
     // `:582`), así que las dos mitades juntas —el fuente crudo SÍ la menciona,
@@ -159,7 +159,7 @@ describe('la pantalla de una fecha no recalcula sus puntos', () => {
   })
 
   it('caza el alias y el import dinámico, y no se rompe con un string ni con un import comentado', () => {
-    //Éste es sintético por necesidad —`page.tsx` no puede a la vez
+    // Éste es sintético por necesidad —`page.tsx` no puede a la vez
     // nombrarla y no nombrarla— pero ya no es una tautología. Cada mitad falla
     // contra una versión anterior del chequeo:
     // · el alias, contra el regex de llamada de antes de W52
@@ -183,34 +183,34 @@ describe('la pantalla de una fecha no recalcula sus puntos', () => {
     // La otra mitad: que no recalcule no alcanza si tampoco lee. `frozenPointsOf`
     // es la consulta a `awards` tal cual quedaron al cerrar.
     //
-    //Esto miraba el fuente CRUDO, así que borrar la llamada y dejar un
-    //Comentario que la nombre pasaba verde — el defecto exacto que W52 arregló
-    //Cinco líneas más arriba, del lado que protege contra C21.
+    // Esto miraba el fuente CRUDO, así que borrar la llamada y dejar un
+    // comentario que la nombre pasaba verde — el defecto exacto que W52 arregló
+    // cinco líneas más arriba, del lado que protege contra C21.
     expect(sinComentarios(source)).toMatch(/frozenPointsOf\s*\(/)
   })
 
   it('usa el orden congelado y gatea el pie con las MISMAS filas', () => {
-    //La ronda 17 extrajo el criterio de orden a
+    // La ronda 17 extrajo el criterio de orden a
     // `tabla-congelada.ts` y le puso 6 tests buenos, pero extraer mueve el
-    //Riesgo al PUNTO DE UNIÓN, y ahí no había nada. Medido por la 
-    // sobre el archivo real, suite entera: tres ediciones de UNA línea en
+    // riesgo al PUNTO DE UNIÓN, y ahí no había nada. Medido sobre el
+    // archivo real, suite entera: tres ediciones de UNA línea en
     //`page.tsx` reabren W55, W56 y W57 EN PANTALLA y pasaban 459/459.
     // · `const tableRows = standings` → W55 y W57
     // · `const note = status === 'CLOSED' ? tiebreakNote(…)` → W56
     // · `orderMoved(standings.map((r) => ({...r })), …)` → W56
     //
-    //Mismo defecto que W58 —cubrir un lado y no el gemelo— y mismo remedio que
+    // Mismo defecto que W58 —cubrir un lado y no el gemelo— y mismo remedio que
     // el assert de `frozenPointsOf` de acá arriba: no prueban que la pantalla
     // esté bien, prueban que no dejó de hacer las dos cosas que la arreglaron.
     //
-    //Los ARGUMENTOS van pinchados, no sólo el nombre, porque los dos contratos
+    // Los ARGUMENTOS van pinchados, no sólo el nombre, porque los dos contratos
     // son de IDENTIDAD DE FILA: `frozenTableRows` devuelve los mismos objetos y
     // `orderMoved` es `drawn[index] !== row`. Colar un `.map((r) => ({ ...r }))`
     // en cualquiera de los dos lados deja el nombre intacto, da "se movió"
     // siempre, y el pie desaparece de TODA fecha cerrada. Ésa es la sonda L, y
     // contra un regex de sólo el nombre pasa verde.
     //
-    //Nota: pinchar los nombres de las variables se rompe si alguien las
+    // ponytail: pinchar los nombres de las variables se rompe si alguien las
     // renombra. El error posible es un falso POSITIVO ruidoso —el test se pone
     // rojo y se lee este comentario—, que es el lado correcto del que
     // equivocarse para un chequeo estático.

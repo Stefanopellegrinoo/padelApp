@@ -1,12 +1,12 @@
 -- PR 18c bis (torneo-multi-disciplina) ─────────────────────────────────────
 --
 -- ── promote_guest: restatement #3/3 — el casillero de puntos del promovido ─
---. PR18c dejo que un invitado que jugo solo se
+-- PR18c dejó que un invitado que jugó solo se
 -- sumara al plantel, y con eso la temporada quedaba trabada: 9 jugadores
 -- contra 8 valores de puntos. La fecha siguiente no se podia sortear, y
 -- reabrir la fecha ya jugada BORRABA sus 8 premios y despues no dejaba
 -- cerrarla — sin salida desde ninguna pantalla, porque Ajustes → Formato no
---Tiene control para agregar un valor a la lista.
+-- tiene control para agregar un valor a la lista.
 --
 -- Delta contra 0031, y nada mas: con `pair_size = 1`, despues de validar todo
 -- y antes del flip, se agrega un 0 al final de `config.points` y se sube
@@ -138,7 +138,7 @@ begin
   -- sideSize)`), y el 0 ya significa "de aca para abajo no se suma"
   -- (`pointsErrors`). Lo que trababa la temporada nunca fue una regla de
   -- reparto: era el LARGO. Sin esto, promover dejaba 9 jugadores contra 8
-  --Valores, la fecha siguiente no se podia sortear y —C22, 
+  -- valores, la fecha siguiente no se podia sortear y —C22, 
   -- ronda 15— reabrir ESTA borraba los 8 premios y despues no dejaba cerrar.
   --
   -- Cambia a proposito la convencion de "agregar un asiento no toca squadSize

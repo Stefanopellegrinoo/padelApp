@@ -16,7 +16,7 @@
 // Not configuration. A matchday below MIN_PLAYERS is lopsided, above
 // MAX_PLAYERS does not fit an afternoon, and the Masters' three rotating
 // matches exist because there are exactly four players.
-export { MIN_PLAYERS, MAX_PLAYERS, MASTERS_SIZE, MASTERS_MATCHES } from './constants'
+export { MIN_PLAYERS, MAX_PLAYERS, MAX_PAIRING_POOL, defaultMaxMatches, maxMatchesOf, MASTERS_SIZE, MASTERS_MATCHES } from './constants'
 
 //── El slug de una disciplina en la URL (PR 10, REQ-NR-5) ────────────────────
 // Derivado, no persistido: no hay columna `slug`.
@@ -71,7 +71,7 @@ export { validateConfig, defaultConfig, disciplineProfile, pointsCountError, poi
 // `buildSides` (PR16, design PUNTO 5) is the Side-native entry point: with
 // `sideSize=2` it is `buildPairs`, que desde PR19 ya devuelve `Side[]` solo.
 // `buildPairs`/`PairingInput` stay exported for `core/`-internal callers and
-//Tests (`buildSides` itself, `core/pairing.test.ts`) — N27 (
+// tests (`buildSides` itself, `core/pairing.test.ts`) — N27 (
 // ronda 12): `db/matchday.ts` no llama `buildPairs` directo desde PR18a, sólo
 // `buildSides`/`type PairingInput`.
 export type { PairingInput, SideBuildInput } from './pairing'
@@ -149,6 +149,7 @@ export {
   drawIsLegal,
   matchCountForFormat,
   offerableFormats,
+  formatoOfrecible,
   KNOCKOUT_GROUP_COUNTS,
 } from './knockout'
 

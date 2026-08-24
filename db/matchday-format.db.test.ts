@@ -376,6 +376,85 @@ describe('generatePairs — el groups elegido tiene que seguir siendo OFRECIBLE 
  * casteo (`22P02`) — un CHECK que TIRA no es lo mismo que un CHECK que
  * RECHAZA.
  */
+describe('el techo de la fecha se mide en PARTIDOS, y ROUND_ROBIN también lo respeta (MAX_MATCHES)', () => {
+  /**
+   * Hasta acá los dos guards de `db/matchday.ts` preguntaban
+   * `formato.kind === 'GROUPS_KNOCKOUT'` antes de mirar nada — o sea el
+   * formato que MÁS partidos produce era el único que entraba sin chequeo.
+   * Con `pairSize=1` y 12 presentes son 12 lados: **66 partidos** de round
+   * robin, contra los 15 del peor caso de pádel. `MAX_PLAYERS` los dejaba
+   * pasar porque cuenta JUGADORES, y 12 <= 12.
+   *
+   * Son dos guards en serie (#3989) y por eso van dos tests: el de
+   * `setMatchdayFormat` es de momento de escritura, el de `generatePairs` es
+   * el último antes de crear las filas — y es el que importa, porque el
+   * `formato` puede llegar del DEFAULT de columna ('ROUND_ROBIN', 0040) sin
+   * que nadie lo haya elegido nunca.
+   */
+  it('setMatchdayFormat rechaza todos contra todos con 12 lados de a uno (66 partidos)', async () => {
+    const { admin, matchdayId } = await draftMatchdayWithSides(12, 1)
+
+    await expect(
+      setMatchdayFormat(admin.client, matchdayId, { kind: 'ROUND_ROBIN' }),
+    ).rejects.toThrow(/12 lados/)
+  })
+
+  it('generatePairs tampoco arma el round robin que llegó por el DEFAULT de columna', async () => {
+    // Nadie llama a `setMatchdayFormat`: la fila nace con 'ROUND_ROBIN' (0040).
+    const { admin, matchdayId } = await draftMatchdayWithSides(12, 1)
+
+    await expect(generatePairs(admin.client, matchdayId)).rejects.toThrow(/12 lados/)
+
+    // Y rechaza ANTES de tocar una fila, igual que el guard de W84.
+    const db = adminClient()
+    const { data: pairs } = await db.from('pairs').select('id').eq('matchday_id', matchdayId)
+    expect(pairs).toEqual([])
+  })
+
+  /**
+   * Lo que de verdad cambió: el techo es de CADA disciplina, no un número
+   * global. Sin esto, los dos tests de arriba pasarían igual con una constante
+   * — miden el DEFAULT, no que el default se pueda mover.
+   */
+  it('el techo propio de la disciplina manda sobre el default', async () => {
+    const { admin, matchdayId } = await draftMatchdayWithSides(12, 2)
+    const db = adminClient()
+    const { data: fecha } = await db
+      .from('matchdays')
+      .select('discipline_id')
+      .eq('id', matchdayId)
+      .single()
+    const disciplineId = fecha!.discipline_id as string
+
+    // Pádel de 12 son 6 lados = 15 partidos, y con el default (15) arma.
+    // Bajado a 10, el mismo round robin deja de entrar.
+    const { data: disc } = await db
+      .from('disciplines')
+      .select('config')
+      .eq('id', disciplineId)
+      .single()
+    const config = disc!.config as Record<string, unknown>
+    const { error } = await db
+      .from('disciplines')
+      .update({ config: { ...config, maxMatches: 10 } })
+      .eq('id', disciplineId)
+    if (error) throw new Error(error.message)
+
+    await expect(generatePairs(admin.client, matchdayId)).rejects.toThrow(/6 lados/)
+  })
+
+  it('no-regresión: pádel de 12 sigue armando todos contra todos (6 lados, 15 partidos)', async () => {
+    const { admin, matchdayId } = await draftMatchdayWithSides(12, 2)
+
+    await expect(generatePairs(admin.client, matchdayId)).resolves.toBeUndefined()
+
+    const db = adminClient()
+    const { data: matches, error } = await db.from('matches').select('id').eq('matchday_id', matchdayId)
+    if (error) throw new Error(error.message)
+    expect(matches).toHaveLength(15)
+  })
+})
+
 describe('matchdays_formato_kind — GROUPS_KNOCKOUT exige su forma completa (REQ-D5-1)', () => {
   it('rechaza GROUPS_KNOCKOUT sin groups/qualifiersPerGroup', async () => {
     const { admin, seasonId, disciplineId } = await scene()
@@ -425,7 +504,7 @@ describe('matchdays_formato_kind — GROUPS_KNOCKOUT exige su forma completa (RE
     })
 
     expect(error).not.toBeNull()
-    // check_violation (23514), NO invalid_text_representation (22P02): el
+    // Check_violation (23514), NO invalid_text_representation (22P02): el
     // check tiene que RECHAZAR el dato basura, no reventar tratando de
     // castearlo a entero.
     expect(error?.code).toBe('23514')
@@ -554,7 +633,7 @@ function probeSupportedGroupCounts(): Set<number> {
       knockoutMatchups(fakeGroups(groupCount), 2)
       actualGroups.add(groupCount)
     } catch {
-      // knockoutMatchups no sabe armar cruces para esta cantidad de grupos
+      // KnockoutMatchups no sabe armar cruces para esta cantidad de grupos
     }
   }
   return actualGroups
@@ -605,7 +684,7 @@ describe('groups ∈ {1,2,4} + qualifiersPerGroup=2 no driftea entre matchdays_f
         knockoutMatchups(fakeGroups(2), qualifiers)
         actualQualifiers.add(qualifiers)
       } catch {
-        // knockoutMatchups sólo arma cruces con 2 clasificados por grupo
+        // KnockoutMatchups sólo arma cruces con 2 clasificados por grupo
       }
     }
 

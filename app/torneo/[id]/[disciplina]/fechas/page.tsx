@@ -56,7 +56,7 @@ export default async function FechasPage({ params }: PageProps) {
     seasonMatchdaysOf(supabase, seasonId),
   ])
 
-  //Esta pantalla vivía a nivel temporada y
+  // Esta pantalla vivía a nivel temporada y
   // contaba fechas de la disciplina por DEFECTO nada más — con 2+
   // disciplinas, mentía ("10 FECHAS · 1 JUGADAS" medido). Mismo patrón de
   // resolución que `fechas/[n]/page.tsx` y la Tabla (`[disciplina]/page.tsx`):
@@ -137,7 +137,7 @@ export default async function FechasPage({ params }: PageProps) {
   // tampoco distingue el Masters.
   const hasLiveMatchday = disciplineMatchdays.some((matchday) => matchday.status !== 'CLOSED')
   // El mismo `coalesce(max(number), 0) + 1` que hace `createMatchday` PARA ESTA
-  //Disciplina (REQ-D3-2, `number` es único por disciplina): si el botón dice
+  // disciplina (REQ-D3-2, `number` es único por disciplina): si el botón dice
   // "Abrir fecha 7" y la base crea la 8, la app queda mintiendo.
   const nextNumber = Math.max(0, ...disciplineMatchdays.map((matchday) => matchday.number)) + 1
 

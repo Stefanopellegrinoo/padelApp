@@ -98,7 +98,7 @@
 -- El caso 2 con dos parejas no lo produce la app —`generatePairs`
 -- (db/matchday.ts:458) borra las `pairs` de la fecha antes de insertar, así que
 -- `buildPairs` nunca mete un entry en dos— pero sí se arma a mano contra la
---Base, está adentro del contrato que esta función defiende, y tiene su test.
+-- base, está adentro del contrato que esta función defiende, y tiene su test.
 -- "el compañero tiene award" es literalmente el predicado `paying` que usa
 -- `computeAwards` (core/awards.ts:26-28: `championshipMembers(row).length >
 -- 0`), así que preguntar por el award es una prueba MÁS fuerte que preguntar

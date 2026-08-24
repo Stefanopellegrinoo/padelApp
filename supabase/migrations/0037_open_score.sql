@@ -19,11 +19,11 @@
 -- SeasonConfig` —un cast, no una validación—, así que una fila sin la clave le
 -- da `undefined` a un campo que el tipo declara `boolean`. Es `false` por
 -- casualidad (falsy), no por decisión, y es exactamente la asimetría que este
---Proyecto ya pisó dos veces con `pair_size` y `allows_draw`.
+-- proyecto ya pisó dos veces con `pair_size` y `allows_draw`.
 --
 -- `false` y no `true` para todas: la única disciplina que existe hoy en
 -- producción es de pádel, que se juega con marcador cerrado. `openScore = false`
---Deja `setError`/`matchError` en el camino de siempre, byte a byte (REQ-NR-1).
+-- deja `setError`/`matchError` en el camino de siempre, byte a byte (REQ-NR-1).
 --
 -- `where not (config ? 'openScore')` en vez de un update ciego: es idempotente
 -- y no le pisa el valor a nadie que ya lo haya elegido.
@@ -56,7 +56,7 @@ update public.seasons
 -- backfill silencioso a medias es peor que uno que falla. Si alguna fila tiene
 -- `matchFormat` sin `openScore` después del update, la migración no terminó.
 --
---Las DOS tablas, no sólo `disciplines`. El
+-- Las DOS tablas, no sólo `disciplines`. El
 -- comentario de arriba argumenta que `seasons` importa —"dejar la fuente del
 -- seed diciendo una cosa y la copia otra"— y sin embargo el único update que se
 -- verificaba era el otro. La asimetría no es teórica: medido en psql, un

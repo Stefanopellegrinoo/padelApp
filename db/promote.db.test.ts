@@ -486,7 +486,7 @@ describe('promoteGuest — spec 3.6: usa la ubicación de la Capability 2', () =
 
     const after = await squadSeedPositions(seasonId)
     expect(after).toHaveLength(9)
-    //El promovido entra al SQUAD sin posición en `entries`...
+    // El promovido entra al SQUAD sin posición en `entries`...
     expect(after.find((e) => e.id === guestId)?.seed_position).toBeNull()
     // ...y los 8 preexistentes tampoco tienen una: nadie escribe esa columna
     // para el SQUAD desde C37.
@@ -680,9 +680,9 @@ describe('promoteGuest — el unique de awards protege contra una pareja duplica
 //── S23 — discipline_entries de LA FECHA, no la default
 // `promote_guest` (0025_promote_guest_discipline_entries.sql) ya siembra la
 // disciplina de la fecha en la que jugó el invitado, no la default — la
-//Siembra estaba bien desde el restatement de esa migración, pero C12
+// siembra estaba bien desde el restatement de esa migración, pero C12
 // bloqueaba llegar a este escenario (no se podía abrir una fecha fuera de la
-//Default). Con C12 cerrado, esto ya es alcanzable: se prueba de punta a
+// default). Con C12 cerrado, esto ya es alcanzable: se prueba de punta a
 // punta, con `entriesOf` (la misma función que lee "Plantel" en Ajustes) del
 // lado de la disciplina correcta y del lado de la default.
 describe('promoteGuest — discipline_entries de la disciplina de la fecha, no la default', () => {
@@ -734,11 +734,11 @@ describe('promoteGuest — discipline_entries de la disciplina de la fecha, no l
     expect(padelSeat).toBeNull()
 
     // Misma función que arma "Plantel" en Ajustes: aparece del lado de FIFA,
-    //No del lado de la default (padel) — ahí es donde S23 mordía.
+    // no del lado de la default (padel) — ahí es donde S23 mordía.
     expect((await entriesOf(admin.client, seasonId, fifaId)).some((entry) => entry.id === guestId)).toBe(true)
     expect((await entriesOf(admin.client, seasonId, padelId)).some((entry) => entry.id === guestId)).toBe(false)
 
-    //Lo de arriba es exactamente lo que hace que
+    // Lo de arriba es exactamente lo que hace que
     // Ajustes → Plantel pierda a esta persona — `ajustes/page.tsx:50` llama
     // `entriesOf(seasonId)` SIN disciplineId, que cae en la disciplina por
     // defecto (padel acá), igual que la aserción de arriba. Lo que Plantel
@@ -756,7 +756,7 @@ describe('promoteGuest — discipline_entries de la disciplina de la fecha, no l
 //
 // El design (#3801) traía un "HALLAZGO NUEVO" que decía que `promote_guest`
 // con `pair_size=1` sobre una fecha CERRADA copiaba 0 puntos EN SILENCIO, y
-//Proponía agregar un `raise` para que fallara ruidoso. W35 midió eso contra
+// proponía agregar un `raise` para que fallara ruidoso. W35 midió eso contra
 // la función real y encontró que la premisa era FALSA en las dos puntas: ya
 // falla ruidoso, y falla por el guard EQUIVOCADO.
 //
@@ -764,7 +764,7 @@ describe('promoteGuest — discipline_entries de la disciplina de la fecha, no l
 // guard de "¿el compañero cobró?" arma `case when pr.entry_a = p_entry then
 // pr.entry_b else pr.entry_a end`, y con un lado de uno eso da NULL, así que
 // `a.entry_id = NULL` no matchea nunca y "el compañero no cobró" sale TRUE.
-//Misma lógica de tres valores que C17, en la dirección conservadora.
+// Misma lógica de tres valores que C17, en la dirección conservadora.
 //
 // Por eso la re-especificación NO es agregar un raise: es SALTEAR el guard del
 // compañero y la copia cuando `pair_size = 1`, y dejar que la promoción
@@ -920,7 +920,7 @@ describe('promoteGuest — disciplina de a uno: se promueve, sin copiar nada', (
   })
 
   it('la fecha se puede reabrir y volver a cerrar después de promover', async () => {
-    //Esto borraba los 8 premios y después no
+    // Esto borraba los 8 premios y después no
     // dejaba cerrar — la fecha quedaba OPEN con cero puntos repartidos y sin
     // salida por ninguna pantalla. Con el casillero agregado, el re-cierre
     // reparte 9 premios y el noveno es 0.

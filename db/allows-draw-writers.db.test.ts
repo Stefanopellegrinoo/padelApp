@@ -263,7 +263,7 @@ describe('la cadena de allows_draw contra los escritores de producción (W61, RE
 })
 
 // ── El pin de no-regresión: el pádel no se movió un milímetro ────────────────
-//REQ-NR-1 (los mismos awards con la config por defecto) y REQ-NR-2 (la fecha
+// REQ-NR-1 (los mismos awards con la config por defecto) y REQ-NR-2 (la fecha
 // sigue jugable de punta a punta). Ninguno de estos tres manda `allows_draw` a
 // ningún lado: dependen sólo de los defaults, así que corren SIN CAMBIOS antes
 // y después del arreglo, igual que el pin que dejó la rebanada A.

@@ -134,9 +134,9 @@ function PromoteGuestCard({
   // Con un lado de uno no hay puntos que prometer y la frase tiene que
   // decirlo, no callarlo: el invitado fue su propio lado y `computeAwards`
   // saltea los lados hechos sólo de invitados, así que no cobró nada. La base
-  //Lo promueve igual (`0031_promote_guest_single_side.sql`, W35) justamente
+  // lo promueve igual (`0031_promote_guest_single_side.sql`, W35) justamente
   // porque no hay nada que copiar NI posiciones ajenas que correr.
-  //La frase mandaba a "actualizar Formato" y
+  // La frase mandaba a "actualizar Formato" y
   // ese control NO EXISTE — Formato deja cambiar los valores que hay, no
   // agregar uno. De a uno eso dejaba la temporada sin salida por pantalla.
   // Ahora `promote_guest` (0032) agrega el casillero solo, con 0, así que la

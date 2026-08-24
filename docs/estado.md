@@ -1,6 +1,12 @@
 # Estado del proyecto
 
-**Última actualización:** 11 de agosto de 2026. Plan 4 terminado, base de producción creada, y cuatro cambios de producto encima.
+**Última actualización:** 24 de agosto de 2026. `torneo-multi-disciplina` terminada
+y verificada en la rama, **sin publicar**.
+
+> **Lo que este documento describe abajo —planes 2, 3 y 4— es la app que está
+> ONLINE hoy: un torneo, un deporte.** Encima de eso hay 364 commits en
+> `feature/torneo-multi-disciplina` que la vuelven multi-disciplina y que
+> todavía NO se publicaron. Lo de esa rama está en "Dónde estamos".
 
 Este documento es el punto de entrada. Dice qué está hecho, qué falta, y qué hay
 que decidir antes de seguir. Los detalles viven en los documentos que se enlazan.
@@ -9,11 +15,16 @@ que decidir antes de seguir. Los detalles viven en los documentos que se enlazan
 
 ## Producción
 
-La base de producción existe y está lista: proyecto **`padelApp`** en Supabase
-Cloud (`<tu-proyecto-ref>`, São Paulo), con las **10 migraciones aplicadas** y
-verificada con SQL, no asumida: 10 tablas, **las 10 con RLS**, 21 políticas, 15
-funciones `security definer`, **0 usuarios y 0 temporadas**, y sin rastro del
-usuario del seed.
+La base de producción existe y **tiene datos reales**: proyecto **`padelApp`** en
+Supabase Cloud (`<tu-proyecto-ref>`, São Paulo), con **14 migraciones aplicadas**
+—exactamente las de `main`— y **12 jugadores, 2 torneos activos, 3 fechas (2
+cerradas) y 15 premios otorgados**. Medido el 2026-08-24, no asumido.
+
+> **Este párrafo decía "las 10 migraciones" y "0 usuarios y 0 temporadas" hasta
+> el 24/08.** Las dos cosas eran falsas y sobre ellas se armó un análisis de
+> riesgo equivocado para publicar. **Antes de decidir algo contra producción,
+> medila** — las dos consultas están en [`despliegue.md`](despliegue.md), que
+> manda sobre todo esto.
 
 **Lo que encontró subirla, y sólo pasa en la nube:** Supabase Cloud le otorga a
 `anon` select/insert/update/delete sobre cada tabla nueva del schema `public`.
@@ -47,18 +58,27 @@ sólo se resume.
 | **2. Datos y auth** | Schema Supabase, migraciones, RLS, login + Google | [Completado] **Terminado**, rama `plan-2-data-and-auth` |
 | **3. Pantallas de lectura** | Tabla, Fechas, Estadísticas, Reglas, Perfil | [Completado] **Terminado**, rama `plan-3-read-screens` |
 | **4. Pantallas de escritura** | Crear torneo, abrir fecha, cargar resultados, Ajustes, Masters | [Completado] **Terminado** (13 de 14 tareas; la 7 se descartó), rama `plan-4-write-screens` |
+| **5. `torneo-multi-disciplina`** | Un torneo con VARIAS disciplinas: pádel y FIFA, de a dos y de a uno, cada una con su formato, su tabla y su Masters | **Terminada y verificada, SIN PUBLICAR.** Rama `feature/torneo-multi-disciplina`, 364 commits, 52 migraciones nuevas |
 
-> **Si estás retomando, el producto está terminado y en `main`.** No queda una
-> sola pantalla por construir: se juega una temporada entera, de crear el torneo
-> a coronar al campeón del año, y está recorrido con navegador, no deducido.
+> **Si estás retomando: hay DOS versiones de esta app y conviene no confundirlas.**
 >
-> **Lo próximo es ponerlo online, y eso está en [`despliegue.md`](despliegue.md)**
-> — son cuatro pasos y ninguno es de código.
+> **La que está ONLINE** es `main`: un torneo, un deporte. Terminada, jugada por
+> gente de verdad — 12 jugadores y 2 torneos en producción.
+>
+> **La que está EN LA RAMA** es multi-disciplina: 364 commits encima, terminada
+> y verificada (typecheck 0 · 770 tests · 425 tests de base · navegador 52/52),
+> **y deliberadamente sin publicar**. Publicarla son dos pasos que van JUNTOS
+> —aplicar las 52 migraciones y mergear a `main`— porque el código viejo no
+> sobrevive al schema nuevo: hay una ventana de unos 5 minutos con la app caída.
+> El detalle está en [`despliegue.md`](despliegue.md), con el backup ya hecho.
+>
+> **Lo que falta antes de publicar no es código: es que alguien la USE.** Los
+> gates los corrió un agente; nadie recorrió todavía la app nueva a mano.
 >
 > Si en cambio venís a tocar código, lo que queda es la deuda chica del final de
 > esta página. El detalle de cada decisión y cada desvío vive en "Dónde quedó la
 > ejecución" y "Aparecidos" del
-> [plan 4](superpowers/plans/2026-08-11-write-screens.md); esta página resume,
+> el plan 4 (borrado en el commit de public release); esta página resume,
 > ese documento manda.
 
 **`core/` en números:** 13 módulos, 145 tests, cero dependencias de producción.
@@ -82,15 +102,15 @@ adentro a propósito: `allMatchings` (sólo la usa `buildPairs`) y `orderByPoint
 
 | Documento | Qué es |
 |---|---|
-| [`superpowers/specs/2026-08-09-padel-championship-design.md`](superpowers/specs/2026-08-09-padel-championship-design.md) | **Las reglas del juego.** Fuente de verdad de todo lo que es el campeonato: formato, puntos, armado de parejas, desempates, Masters. Ante cualquier duda de comportamiento, manda este. |
+| _(borrado en el commit de public release)_ | **Las reglas del juego.** Fuente de verdad de todo lo que es el campeonato: formato, puntos, armado de parejas, desempates, Masters. Ante cualquier duda de comportamiento, manda este. |
 | [`despliegue.md`](despliegue.md) | **Producción.** Las credenciales, qué está hecho y qué falta para estar online: Vercel, las URLs de Auth, la confirmación de mail y Google. Manda sobre cualquier cosa de despliegue. |
 | [`ui-screens.md`](ui-screens.md) | **La app.** Las 13 pantallas con su contenido, roles y estados. La navegación y por qué es como es. |
 | [`hacia-una-app-de-torneos.md`](hacia-una-app-de-torneos.md) | **A futuro, sin fecha.** Qué costaría que esto sirva para cualquier juego, cualquier tamaño de equipo y otros formatos (zonas, llaves). Trae las mediciones hechas —qué parte del código ya es agnóstica al deporte y cuántos lugares asumen que el equipo son dos— para no tener que volver a medir. No es un plan: es la foto para decidir. |
 | [`padel_design/README.md`](padel_design/README.md) | **El handoff visual** de Google Stitch, ya adaptado al formato de 8 a 12. Colores, tipografía, medidas, copys. Los `.dc.html` muestran el caso de 8 y no se pueden regenerar. |
-| [`superpowers/plans/2026-08-10-core-championship-logic.md`](superpowers/plans/2026-08-10-core-championship-logic.md) | **El plan 1**, ya ejecutado. Su tabla final —"Qué queda afuera de este plan, a propósito"— es la lista de requisitos que hereda el plan 2. |
-| [`superpowers/plans/2026-08-10-data-and-auth.md`](superpowers/plans/2026-08-10-data-and-auth.md) | **El plan 2**, ejecutado. 14 tareas. Sus secciones "Las tres decisiones" y "Decisiones registradas" son las que mandan sobre cualquier cosa que diga este documento. Su "Aparecidos" tiene lo que quedó sin hacer. |
-| [`superpowers/plans/2026-08-10-read-screens.md`](superpowers/plans/2026-08-10-read-screens.md) | **El plan 3**, ejecutado. 11 tareas, formato liviano: interfaces y "qué NO hace", con bloques de código completos sólo donde había lógica nueva. Su "Aparecidos" es la deuda conocida de las pantallas. |
-| [`superpowers/plans/2026-08-11-write-screens.md`](superpowers/plans/2026-08-11-write-screens.md) | **El plan 4**, ejecutado: 13 de 14 tareas (la 7 se descartó). Su tabla "El trazado" dice qué dato necesita cada pantalla y de ahí salen las primeras cuatro tareas; sus "Decisiones registradas" mandan sobre lo que dice este documento —una de ellas corrige el alcance de acá abajo—. |
+| _(borrado en el commit de public release)_ | **El plan 1**, ya ejecutado. Su tabla final —"Qué queda afuera de este plan, a propósito"— es la lista de requisitos que hereda el plan 2. |
+| _(borrado en el commit de public release)_ | **El plan 2**, ejecutado. 14 tareas. Sus secciones "Las tres decisiones" y "Decisiones registradas" son las que mandan sobre cualquier cosa que diga este documento. Su "Aparecidos" tiene lo que quedó sin hacer. |
+| _(borrado en el commit de public release)_ | **El plan 3**, ejecutado. 11 tareas, formato liviano: interfaces y "qué NO hace", con bloques de código completos sólo donde había lógica nueva. Su "Aparecidos" es la deuda conocida de las pantallas. |
+| _(borrado en el commit de public release)_ | **El plan 4**, ejecutado: 13 de 14 tareas (la 7 se descartó). Su tabla "El trazado" dice qué dato necesita cada pantalla y de ahí salen las primeras cuatro tareas; sus "Decisiones registradas" mandan sobre lo que dice este documento —una de ellas corrige el alcance de acá abajo—. |
 | `.superpowers/sdd/2026-08-10-core-championship-logic/progress.md` | **El ledger de ejecución.** Cada fix round, cada minor diferido, cada decisión tomada y por qué. No está versionado (es scratch), pero es donde está el detalle de cada hallazgo. |
 
 ---

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import type { DisciplineId } from '@/core'
 import { openNextMatchday } from '../../actions'
 
@@ -8,12 +8,19 @@ import { openNextMatchday } from '../../actions'
  * Hoy, en el `YYYY-MM-DD` que pide `<input type="date">`, armado con los
  * componentes locales: `toISOString()` es UTC y con huso negativo devuelve ayer.
  *
- * ponytail: el default lo calcula quien renderiza primero, así que con el
- * servidor en otro huso que el navegador el picker puede arrancar un día
- * corrido. Corriendo local son la misma máquina. Si algún día se despliega en
- * UTC, el arreglo es calcularlo en un efecto después de montar.
+ * Se exporta para poder probarla: lo que hay que garantizar es que use los
+ * componentes LOCALES y no `toISOString()`, que con huso negativo devuelve
+ * ayer.
+ *
+ * El techo que este comentario declaraba —"el default lo calcula quien
+ * renderiza primero"— YA NO ES TEÓRICO y por eso se cerró: `vercel.json`
+ * existe y `docs/despliegue.md` documenta el deploy, y las funciones de Vercel
+ * corren en UTC (la región `gru1` es latencia, no huso). Con Argentina en
+ * UTC-3, entre las 21:00 y la medianoche el servidor calculaba MAÑANA. El
+ * arreglo es el que el propio comentario nombraba: recalcularlo en un efecto
+ * después de montar, que corre siempre en el navegador.
  */
-function today(): string {
+export function today(): string {
   const now = new Date()
   const month = `${now.getMonth() + 1}`.padStart(2, '0')
   const day = `${now.getDate()}`.padStart(2, '0')
@@ -30,6 +37,18 @@ interface AbrirFechaProps {
 export function AbrirFecha({ seasonId, disciplineId, number }: AbrirFechaProps) {
   const [playedOn, setPlayedOn] = useState(today)
   const [error, setError] = useState<string | null>(null)
+  // El `useState` de arriba corre TAMBIÉN en el servidor (este componente es
+  // cliente, pero Next igual lo renderiza del lado del server para el HTML
+  // inicial), y ahí el huso es el de Vercel: UTC. Este efecto corre sólo en el
+  // navegador y pisa el valor con el día LOCAL de quien está mirando.
+  //
+  // Sin dependencias: corre una vez al montar. Si el servidor ya había
+  // acertado, `setPlayedOn` recibe el mismo string y no re-renderiza nada. Y
+  // no pisa lo que el usuario elija, porque para cuando puede elegir el efecto
+  // ya corrió.
+  useEffect(() => {
+    setPlayedOn(today())
+  }, [])
   const [pending, startTransition] = useTransition()
 
   const blocked = pending || playedOn === ''

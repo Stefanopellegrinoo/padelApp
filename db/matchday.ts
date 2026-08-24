@@ -714,6 +714,21 @@ export async function generatePairs(supabase: Client, matchdayId: string): Promi
     )
   }
 
+  // ponytail: S69 — de acá hasta `insertMatches` son TRES escrituras sueltas
+  // (`deletePairs`, `insertPairs`, `insertMatches`) sin transacción que las
+  // ate. Un fallo en el medio deja la fecha a medio armar; medido, la forma
+  // que sale es `pairs=4, matches=0`, y el armado se rehace y ya.
+  //
+  // Los dos guards de arriba —el del formato ofrecible y el del techo de
+  // partidos— rechazan ANTES de la primera escritura, así que el caso
+  // frecuente (elegiste un formato que ya no entra) nunca llega acá. Lo que
+  // queda sin cubrir es un fallo de RED o de la base entre las tres.
+  //
+  // El upgrade es mover las tres a una función `security definer`, que corre
+  // en una sola transacción. No se hizo porque desde el push eso pide su
+  // propia migración y porque el estado roto es VISIBLE y se arregla
+  // rearmando: no se pierde un resultado, la fecha está en DRAFT.
+  //
   // Deleting the pairs cascades to matches and match_sets. A DRAFT matchday
   // usually has no results to lose, but `redraft_matchday` can land one here
   // WITH results already loaded — it goes back from OPEN without deleting

@@ -73,6 +73,14 @@ vi.mock('@/db/matchday', async (importOriginal) => {
   }
 })
 
+// `notFound()` de Next tira un error especial que el router atrapa; acá se
+// espía para poder afirmar QUE SE LLAMÓ, que es lo que distingue un 404 propio
+// de un error boundary con mensaje.
+vi.mock('next/navigation', async (importOriginal) => {
+  const real = await importOriginal<typeof import('next/navigation')>()
+  return { ...real, notFound: vi.fn(() => { throw new Error('NEXT_NOT_FOUND') }) }
+})
+
 vi.mock('@/db/server', () => ({
   serverClient: async () => ({}),
 }))
@@ -162,12 +170,27 @@ function unplayedMatch(fase: MatchWithId['fase'], grupo: number, round: number, 
   return { id: `${fase}-${grupo}-${round}-${a}-${b}`, round, fase, grupo, sideA: side(a), sideB: side(b), sets: [] }
 }
 
-async function render(): Promise<string> {
+async function render(n = '1'): Promise<string> {
   const { default: FechaDetailPage } = await import('./page')
   return renderToStaticMarkup(
-    await FechaDetailPage({ params: Promise.resolve({ id: 's1', disciplina: 'fifa', n: '1' }) }),
+    await FechaDetailPage({ params: Promise.resolve({ id: 's1', disciplina: 'fifa', n }) }),
   )
 }
+
+describe('una fecha que no existe da 404, no un error boundary', () => {
+  /**
+   * Las DOS rutas de esta pantalla fallaban distinto: un slug de disciplina
+   * desconocido llamaba `notFound()` (REQ-NR-5, 404 propio) y un NÚMERO de
+   * fecha inexistente tiraba `EdgeError`, que cae en el error boundary. Misma
+   * pantalla, misma clase de URL inválida, dos respuestas.
+   */
+  it('con un número de fecha que no existe llama notFound()', async () => {
+    const { notFound } = await import('next/navigation')
+
+    await expect(render('999')).rejects.toThrow('NEXT_NOT_FOUND')
+    expect(notFound).toHaveBeenCalled()
+  })
+})
 
 describe('el techo de partidos de la disciplina llega hasta el menú de formatos', () => {
   /**

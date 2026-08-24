@@ -116,7 +116,11 @@ export default async function FechaDetailPage({ params }: PageProps) {
   const matchday = matchdays.find(
     (candidate) => candidate.number === matchdayNumber && candidate.disciplineId === discipline.id,
   )
-  if (matchday === undefined) throw new EdgeError('La fecha no existe.')
+  // `notFound()` y no un `EdgeError`, por lo mismo que el slug de arriba: una
+  // URL que apunta a una fecha que no existe es un 404, no un error de la app.
+  // Las dos rutas de esta pantalla fallaban distinto —el slug daba 404 y el
+  // número caía en el error boundary— siendo la misma clase de URL inválida.
+  if (matchday === undefined) notFound()
 
   // `entriesOf` sin `disciplineId` explícito
   // resolvía la disciplina por dentro (`defaultDisciplineId`), que no tiene

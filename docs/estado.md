@@ -4,7 +4,7 @@
 y verificada en la rama, **sin publicar**.
 
 > **Lo que este documento describe abajo —planes 2, 3 y 4— es la app que está
-> ONLINE hoy: un torneo, un deporte.** Encima de eso hay 368 commits en
+> ONLINE hoy: un torneo, un deporte.** Encima de eso hay **52 migraciones y una feature entera** en
 > `feature/torneo-multi-disciplina` que la vuelven multi-disciplina y que
 > todavía NO se publicaron. Lo de esa rama está en "Dónde estamos".
 
@@ -65,7 +65,7 @@ sólo se resume.
 > **La que está ONLINE** es `main`: un torneo, un deporte. Terminada, jugada por
 > gente de verdad — 12 jugadores y 2 torneos en producción.
 >
-> **La que está EN LA RAMA** es multi-disciplina: 368 commits encima, terminada
+> **La que está EN LA RAMA** es multi-disciplina: 52 migraciones encima, terminada
 > y verificada (typecheck 0 · 770 tests · 425 tests de base · navegador 52/52),
 > **y deliberadamente sin publicar**. Publicarla son dos pasos que van JUNTOS
 > —aplicar las 52 migraciones y mergear a `main`— porque el código viejo no

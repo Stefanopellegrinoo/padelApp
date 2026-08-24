@@ -16,7 +16,7 @@
 // Not configuration. A matchday below MIN_PLAYERS is lopsided, above
 // MAX_PLAYERS does not fit an afternoon, and the Masters' three rotating
 // matches exist because there are exactly four players.
-export { MIN_PLAYERS, MAX_PLAYERS, defaultMaxMatches, maxMatchesOf, MASTERS_SIZE, MASTERS_MATCHES } from './constants'
+export { MIN_PLAYERS, MAX_PLAYERS, MAX_PAIRING_POOL, defaultMaxMatches, maxMatchesOf, MASTERS_SIZE, MASTERS_MATCHES } from './constants'
 
 //── El slug de una disciplina en la URL (PR 10, REQ-NR-5) ────────────────────
 // Derivado, no persistido: no hay columna `slug`.

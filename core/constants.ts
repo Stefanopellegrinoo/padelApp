@@ -8,8 +8,13 @@ export const MIN_PLAYERS = 8
  * W32: the UNIT this protects is matches, not
  * players, and it changes with `sideSize` — 12 players are 12 sides at
  * `sideSize=1`, which is 66 matches, not 15. That hole is now closed by
- * `MAX_MATCHES` (below), which measures the real unit; this constant keeps
- * only the job it was always right about: how big a SQUAD may get.
+ * `config.maxMatches` (per discipline, below), which measures the real unit.
+ *
+ * Este número tenía TRES trabajos y ahora tiene UNO. Se fueron: el techo de la
+ * fecha, que es de partidos y de cada disciplina (`maxMatches`), y el techo de
+ * CPU de `allMatchings`, que es `MAX_PAIRING_POOL`. Lo que queda es lo único
+ * que siempre midió bien: **cuánta gente entra en un PLANTEL**. Moverlo es una
+ * decisión de producto y no arrastra a los otros dos.
  */
 export const MAX_PLAYERS = 12
 
@@ -53,6 +58,19 @@ export function maxMatchesOf(
 ): number {
   return config.maxMatches ?? defaultMaxMatches(sideSize)
 }
+
+/**
+ * El techo del pool que `allMatchings` (`core/matchings.ts`) puede emparejar
+ * por fuerza bruta. Es (n-1)!!: 105 con ocho, **10395 con doce**, 135135 con
+ * catorce — o sea 13 veces más por sumar dos.
+ *
+ * Vale lo mismo que `MAX_PLAYERS` **de casualidad**, y por eso es una constante
+ * propia (design PUNTO 3): son dos reglas distintas colgadas del mismo número.
+ * `MAX_PLAYERS` es de PRODUCTO —cuánta gente entra en un plantel— y algún día
+ * lo puede mover una decisión de Stefano. Esto es un límite de CPU y NO debe
+ * moverse desde ninguna pantalla ni seguir a la otra cuando cambie.
+ */
+export const MAX_PAIRING_POOL = 12
 
 /** The four-player Masters field. */
 export const MASTERS_SIZE = 4

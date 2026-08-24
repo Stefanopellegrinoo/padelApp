@@ -1,5 +1,30 @@
 # Hacia una app de torneos, no sólo de pádel
 
+> ## ⚠️ ESTO YA SE CONSTRUYÓ — leelo como historia, no como plan
+>
+> `torneo-multi-disciplina` (terminada el 24/08, **sin publicar**) abrió **los
+> cuatro ejes** que este documento medía como cerrados:
+>
+> | eje | cómo se abrió |
+> |---|---|
+> | 1 · el equipo son exactamente dos | `Side` es una unión discriminada sobre `size`, y `pair_size in (1,2)` en la base |
+> | 2 · el fixture es siempre round robin | se agregó `GROUPS_KNOCKOUT`: grupos + llave, con su fase y su tercer puesto |
+> | 3 · el formato está hardcodeado | `matchFormat` configurable por disciplina, con `openScore` (goles) y `allows_draw` (empates) |
+> | 4 · un torneo es de un solo deporte | varias disciplinas por torneo, cada una con su tabla, su plantel y su Masters |
+>
+> **Con dos salvedades que importan y que este documento anticipó:**
+>
+> El eje 1 se abrió **exactamente como acá se advertía que NO se hiciera**: no
+> es "equipo de N", es una unión de `1 | 2`. La advertencia sigue en pie — el
+> día que alguien pida 3 o 4, hay que volver a abrir el modelo.
+>
+> Y **la lista de juegos sigue cerrada**: `kind` es un CHECK de dos valores
+> (`PADEL`, `FIFA`). Agregar un tercero pide migración.
+>
+> El estado real está en [`estado.md`](estado.md).
+
+---
+
 **Qué es esto:** una foto medida del 12 de agosto de 2026, no un plan y no una
 promesa. La idea a futuro es que esto sirva para armar **cualquier torneo, de
 cualquier juego, con cualquier cantidad de gente y de fechas**. Este documento

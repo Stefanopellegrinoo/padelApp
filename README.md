@@ -1,6 +1,6 @@
-# Padel Championship Manager
+# Championship Manager
 
-A web app to organize amateur padel championships with friends without relying on spreadsheets or notes in WhatsApp groups.
+A web app to organize amateur championships with friends without relying on spreadsheets or notes in WhatsApp groups. It started as a padel tool and now runs several disciplines inside the same tournament — 2v2 padel and 1v1 FIFA, each with its own format, standings and Masters.
 
 It is designed for groups that play recurring matchdays throughout the season with rotating pairs and an individual leaderboard.
 

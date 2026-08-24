@@ -4,7 +4,7 @@
 y verificada en la rama, **sin publicar**.
 
 > **Lo que este documento describe abajo —planes 2, 3 y 4— es la app que está
-> ONLINE hoy: un torneo, un deporte.** Encima de eso hay 364 commits en
+> ONLINE hoy: un torneo, un deporte.** Encima de eso hay 368 commits en
 > `feature/torneo-multi-disciplina` que la vuelven multi-disciplina y que
 > todavía NO se publicaron. Lo de esa rama está en "Dónde estamos".
 
@@ -58,14 +58,14 @@ sólo se resume.
 | **2. Datos y auth** | Schema Supabase, migraciones, RLS, login + Google | [Completado] **Terminado**, rama `plan-2-data-and-auth` |
 | **3. Pantallas de lectura** | Tabla, Fechas, Estadísticas, Reglas, Perfil | [Completado] **Terminado**, rama `plan-3-read-screens` |
 | **4. Pantallas de escritura** | Crear torneo, abrir fecha, cargar resultados, Ajustes, Masters | [Completado] **Terminado** (13 de 14 tareas; la 7 se descartó), rama `plan-4-write-screens` |
-| **5. `torneo-multi-disciplina`** | Un torneo con VARIAS disciplinas: pádel y FIFA, de a dos y de a uno, cada una con su formato, su tabla y su Masters | **Terminada y verificada, SIN PUBLICAR.** Rama `feature/torneo-multi-disciplina`, 364 commits, 52 migraciones nuevas |
+| **5. `torneo-multi-disciplina`** | Un torneo con VARIAS disciplinas: pádel y FIFA, de a dos y de a uno, cada una con su formato, su tabla y su Masters | **Terminada y verificada, SIN PUBLICAR.** Rama `feature/torneo-multi-disciplina`, 368 commits, 52 migraciones nuevas |
 
 > **Si estás retomando: hay DOS versiones de esta app y conviene no confundirlas.**
 >
 > **La que está ONLINE** es `main`: un torneo, un deporte. Terminada, jugada por
 > gente de verdad — 12 jugadores y 2 torneos en producción.
 >
-> **La que está EN LA RAMA** es multi-disciplina: 364 commits encima, terminada
+> **La que está EN LA RAMA** es multi-disciplina: 368 commits encima, terminada
 > y verificada (typecheck 0 · 770 tests · 425 tests de base · navegador 52/52),
 > **y deliberadamente sin publicar**. Publicarla son dos pasos que van JUNTOS
 > —aplicar las 52 migraciones y mergear a `main`— porque el código viejo no
@@ -81,7 +81,7 @@ sólo se resume.
 > el plan 4 (borrado en el commit de public release); esta página resume,
 > ese documento manda.
 
-**`core/` en números:** 13 módulos, 145 tests, cero dependencias de producción.
+**`core/` en números:** 23 módulos, 391 tests, cero dependencias de producción. (Eran 13 y 145 antes de multi-disciplina.)
 Verificado de forma independiente: ningún archivo usa `Date`, `Math.random`,
 `fetch` ni `process`; nada importa fuera de `core/`; el grafo de dependencias es
 acíclico. Eso es lo que permite recalcular una fecha vieja y obtener exactamente

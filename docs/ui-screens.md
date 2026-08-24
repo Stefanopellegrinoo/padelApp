@@ -2,8 +2,15 @@
 
 **Fecha:** 10 de agosto de 2026
 **Uso:** input para diseñar en Google Stitch, una pantalla por vez.
-**Complementa:** `superpowers/specs/2026-08-09-padel-championship-design.md` (las reglas del
-campeonato). Este documento define **la app**; aquel define **el juego**.
+**Complementa:** las reglas del campeonato, que vivían en
+`superpowers/specs/2026-08-09-padel-championship-design.md` —**borrado en el
+commit de public release**. Este documento define **la app**; aquel definía
+**el juego**.
+
+> **HISTÓRICO.** Es del 10 de agosto y describe la app de UN deporte. No conoce
+> las disciplinas: no hay `[disciplina]` en ninguna ruta de acá, ni el selector
+> de formato, ni los dos paneles de Ajustes. La navegación real está en el
+> código; el estado, en [`estado.md`](estado.md).
 
 ---
 

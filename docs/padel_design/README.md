@@ -1,5 +1,10 @@
 # Handoff: Padel Liga — app de campeonato para grupos
 
+> **HISTÓRICO — el handoff de diseño original.** Describe la app de pádel, un
+> deporte por torneo, que es lo que está ONLINE hoy. `torneo-multi-disciplina`
+> (en la rama, sin publicar) le agrega varias disciplinas por torneo, lados de
+> a uno y grupos + llave. Ver [`../estado.md`](../estado.md).
+
 ## Overview
 
 App móvil para grupos que juegan un campeonato de pádel a lo largo del año (12 fechas + Masters). El plantel es de 8 a 12 jugadores; cada fecha la juegan los que confirman, y la app arma las parejas, registra los resultados y mantiene la tabla general.

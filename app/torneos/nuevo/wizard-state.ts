@@ -46,7 +46,7 @@ export const STEPPERS: Stepper[] = [
     key: 'regularMatchdays',
     label: 'Fechas del año',
     hint: 'Sin contar el Masters, que va al final.',
-    min: 4,
+    min: 1,
     max: 24,
   },
   {

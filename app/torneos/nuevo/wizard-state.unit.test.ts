@@ -710,3 +710,31 @@ describe('formatErrors mira el sideSize efectivo (W88, W90)', () => {
     expect(formatErrors(configFor(12, 2), 2)).toEqual([])
   })
 })
+
+// ── El torneo de un día (docs/tipos-de-torneo.md §2.1) ──────────────────────
+//
+// `core/config.ts:227` valida `regularMatchdays >= 1` desde siempre: el modelo
+// nunca prohibió un torneo de una sola fecha. El único que lo prohibía era el
+// stepper del paso 4, con un `min: 4` que no protegía nada — no hay ninguna
+// regla del dominio detrás de ese 4.
+//
+// Este bloque es el PIN: si alguien vuelve a subir el mínimo, el torneo de un
+// día se muere otra vez en silencio, sin que ningún otro test se entere.
+describe('un torneo de una sola fecha', () => {
+  it('el stepper de fechas baja hasta 1', () => {
+    expect(STEPPERS.find((row) => row.key === 'regularMatchdays')?.min).toBe(1)
+  })
+
+  it('con una fecha y contando una, el paso 4 no protesta', () => {
+    const config = { ...configFor(8, 2), regularMatchdays: 1, countBestOf: 1 }
+    expect(formatErrors(config, 2)).toEqual([])
+    expect(validateConfig(config, 2)).toEqual([])
+  })
+
+  // El descarte de las peores no existe con una sola fecha, y el aviso que ya
+  // había es el que lo dice. No hace falta clamp: el paso 4 no deja seguir.
+  it('con una fecha y contando más de una, avisa con el error que ya existía', () => {
+    const config = { ...configFor(8, 2), regularMatchdays: 1, countBestOf: 8 }
+    expect(formatErrors(config, 2)).toEqual(['No pueden contar más fechas de las que se juegan.'])
+  })
+})

@@ -15,6 +15,12 @@ export interface DisciplineConfigRow {
    * nuevo, misma razón por la que `pairSize` vive acá desde W30.
    */
   allowsDraw: boolean
+  /**
+   * El `fixed_teams` real de la disciplina (0068, docs/tipos-de-torneo.md §1),
+   * del mismo select y por el mismo motivo que `allowsDraw`. Decide si la
+   * fecha ROTA parejas o si los equipos ya vienen dados.
+   */
+  fixedTeams: boolean
 }
 
 /**
@@ -38,7 +44,7 @@ export async function disciplineConfig(
 ): Promise<DisciplineConfigRow> {
   const { data, error } = await supabase
     .from('disciplines')
-    .select('config, pair_size, allows_draw')
+    .select('config, pair_size, allows_draw, fixed_teams')
     .eq('id', disciplineId)
     .maybeSingle()
   if (error) {
@@ -49,6 +55,7 @@ export async function disciplineConfig(
     config: data.config as unknown as SeasonConfig,
     pairSize: data.pair_size as SideSize,
     allowsDraw: data.allows_draw,
+    fixedTeams: data.fixed_teams,
   }
 }
 

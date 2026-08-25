@@ -100,6 +100,8 @@ export interface MatchdayContext {
   snapshot: EntryId[]
   guests: GuestSeat[]
   locks: PairLock[]
+  /** `disciplines.fixed_teams`: si la fecha ROTA parejas, o los equipos ya vienen dados (0068). */
+  fixedTeams: boolean
 }
 
 export async function matchdayContextFor(
@@ -107,7 +109,7 @@ export async function matchdayContextFor(
   matchdayId: string,
 ): Promise<MatchdayContext> {
   const matchday = await requireMatchday(supabase, matchdayId)
-  const { config, pairSize } = await disciplineConfig(supabase, matchday.discipline_id)
+  const { config, pairSize, fixedTeams } = await disciplineConfig(supabase, matchday.discipline_id)
   assertValidConfig(config, pairSize)
 
   // The seed order is also the squad, and it must be stable: buildPairs falls
@@ -124,7 +126,7 @@ export async function matchdayContextFor(
   const locks = await locksOf(supabase, matchdayId)
   assertLocksAndGuests(guests, locks)
 
-  return { matchday, config, pairSize, seedOrder, awardsByMatchday, snapshot, guests, locks }
+  return { matchday, config, pairSize, seedOrder, awardsByMatchday, snapshot, guests, locks, fixedTeams }
 }
 
 export interface PairingContext extends MatchdayContext {
@@ -145,7 +147,8 @@ export async function pairingContextFor(
   matchdayId: string,
 ): Promise<PairingContext> {
   const context = await matchdayContextFor(supabase, matchdayId)
-  const { matchday, config, pairSize, seedOrder, awardsByMatchday, snapshot, guests, locks } = context
+  const { matchday, config, pairSize, seedOrder, awardsByMatchday, snapshot, guests, locks, fixedTeams } =
+    context
 
   // Decision 3: the pool is ordered by the ranking — best N of M — and never by
   // a running total. The table you look at is the table that pairs you, and the
@@ -165,7 +168,7 @@ export async function pairingContextFor(
   // neutros son los mismos que `previousContext` devuelve para una historia
   // de lados de uno (core/history.ts) — no una invención de acá.
   const { defenders, defendersAlreadyRepeated, previousPairs } =
-    pairSize === 1
+    pairSize === 1 || fixedTeams
       ? { defenders: null, defendersAlreadyRepeated: false, previousPairs: [] }
       : previousContext(
           await closedHistory(supabase, matchday.discipline_id, matchday.number - 1),
@@ -176,6 +179,28 @@ export async function pairingContextFor(
     ...(await playingEntryIds(supabase, matchdayId, matchday.discipline_id)),
     ...guests.map((guest) => guest.entryId),
   ]
+  // Los equipos fijos entran al sorteo como parejas YA resueltas, igual que un
+  // lock, pero sólo los que vinieron enteros.
+  //
+  // Un equipo a medias no es una fecha rara: es estado inválido. El
+  // presentismo de una disciplina de equipos se marca de a dos
+  // (docs/tipos-de-torneo.md §1). Si igual llega uno solo, esto FALLA, y falla
+  // acá porque es el único lugar donde se conocen las dos mitades del dato:
+  // quién vino y quién es de quién. La alternativa —dejarlo pasar— es que el
+  // que vino se caiga al sorteo suelto y termine de pareja con un rival, en
+  // silencio y con el equipo roto.
+  const teams = fixedTeams ? await teamsOf(supabase, matchday.discipline_id) : []
+  const playing = new Set(present)
+  const halved = teams.filter((team) => playing.has(team.a) !== playing.has(team.b))
+  if (halved.length > 0) {
+    throw new EdgeError(
+      halved.length === 1
+        ? 'Hay un equipo con un solo integrante presente: en equipos fijos se viene de a dos.'
+        : `Hay ${halved.length} equipos con un solo integrante presente: en equipos fijos se viene de a dos.`,
+    )
+  }
+  const presentTeams = teams.filter((team) => playing.has(team.a))
+
   assertMatchdaySize(present, pairSize)
   assertPointsCoverMatchday(present, guests, locks, config, pairSize)
 
@@ -194,7 +219,10 @@ export async function pairingContextFor(
       // `Side`, así que se construye con `pair()` en vez de pasar la fila
       // cruda — el constructor pone el discriminante y `requireDuo`
       // (core/pairing.ts) rechazaría cualquier cosa que llegara mal formada.
-      fixedPairs: locks.map((lock) => pair(lock.a, lock.b)),
+      fixedPairs: [
+        ...presentTeams.map((team) => pair(team.a, team.b)),
+        ...locks.map((lock) => pair(lock.a, lock.b)),
+      ],
     },
   }
 }
@@ -1374,6 +1402,24 @@ async function guestsOf(supabase: Client, matchdayId: string): Promise<GuestSeat
     .order('seed_position', { ascending: true })
   if (error) throw new EdgeError(`No se pudieron leer los invitados: ${error.message}`)
   return (data ?? []).map((row) => ({ entryId: row.id, displayName: row.display_name }))
+}
+
+/**
+ * Los equipos fijos de la disciplina — `discipline_teams` (0068,
+ * docs/tipos-de-torneo.md §1).
+ *
+ * Mismo lugar y misma forma que `locksOf`, y la diferencia es de QUÉ dependen:
+ * un lock es de una FECHA y muere con ella; un equipo es de la DISCIPLINA y
+ * sobrevive a todas. Por eso la clave es `discipline_id` y no `matchday_id`.
+ */
+async function teamsOf(supabase: Client, disciplineId: string): Promise<PairLock[]> {
+  const { data, error } = await supabase
+    .from('discipline_teams')
+    .select('entry_a, entry_b')
+    .eq('discipline_id', disciplineId)
+    .order('id', { ascending: true })
+  if (error) throw new EdgeError(`No se pudieron leer los equipos fijos: ${error.message}`)
+  return (data ?? []).map((row) => ({ a: row.entry_a, b: row.entry_b }))
 }
 
 async function locksOf(supabase: Client, matchdayId: string): Promise<PairLock[]> {

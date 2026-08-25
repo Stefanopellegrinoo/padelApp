@@ -226,11 +226,71 @@ export type Database = {
           },
         ]
       }
+      discipline_teams: {
+        Row: {
+          created_at: string
+          discipline_id: string
+          entry_a: string
+          entry_b: string
+          id: string
+          pair_size: number
+          season_id: string
+        }
+        Insert: {
+          created_at?: string
+          discipline_id: string
+          entry_a: string
+          entry_b: string
+          id?: string
+          pair_size?: number
+          season_id: string
+        }
+        Update: {
+          created_at?: string
+          discipline_id?: string
+          entry_a?: string
+          entry_b?: string
+          id?: string
+          pair_size?: number
+          season_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "discipline_teams_discipline_id_entry_a_fkey"
+            columns: ["discipline_id", "entry_a"]
+            isOneToOne: true
+            referencedRelation: "discipline_entries"
+            referencedColumns: ["discipline_id", "entry_id"]
+          },
+          {
+            foreignKeyName: "discipline_teams_discipline_id_entry_b_fkey"
+            columns: ["discipline_id", "entry_b"]
+            isOneToOne: true
+            referencedRelation: "discipline_entries"
+            referencedColumns: ["discipline_id", "entry_id"]
+          },
+          {
+            foreignKeyName: "discipline_teams_discipline_id_pair_size_fkey"
+            columns: ["discipline_id", "pair_size"]
+            isOneToOne: false
+            referencedRelation: "disciplines"
+            referencedColumns: ["id", "pair_size"]
+          },
+          {
+            foreignKeyName: "discipline_teams_discipline_id_season_id_fkey"
+            columns: ["discipline_id", "season_id"]
+            isOneToOne: false
+            referencedRelation: "disciplines"
+            referencedColumns: ["id", "season_id"]
+          },
+        ]
+      }
       disciplines: {
         Row: {
           allows_draw: boolean
           config: Json
           created_at: string
+          fixed_teams: boolean
           has_masters: boolean
           id: string
           kind: string
@@ -244,6 +304,7 @@ export type Database = {
           allows_draw?: boolean
           config: Json
           created_at?: string
+          fixed_teams?: boolean
           has_masters?: boolean
           id?: string
           kind: string
@@ -257,6 +318,7 @@ export type Database = {
           allows_draw?: boolean
           config?: Json
           created_at?: string
+          fixed_teams?: boolean
           has_masters?: boolean
           id?: string
           kind?: string

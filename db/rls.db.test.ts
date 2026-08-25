@@ -14,6 +14,7 @@ const TABLES = [
   'entries',
   'attendances',
   'pair_locks',
+  'discipline_teams',
   'pairs',
   'matches',
   'match_sets',
@@ -194,7 +195,7 @@ describe('RLS — lectura', () => {
     expect(error?.code).toBe('42501')
   })
 
-  it('anon no ve una sola fila de ninguna de las once tablas', async () => {
+  it('anon no ve una sola fila de ninguna de las doce tablas', async () => {
     const anon = anonClient()
 
     for (const table of TABLES) {
@@ -369,7 +370,7 @@ describe('RLS — escritura', () => {
     expect(error?.code).toBe('42501')
   })
 
-  it('a participant who is not the admin cannot insert into any of the eleven tables', async () => {
+  it('a participant who is not the admin cannot insert into any of the twelve tables', async () => {
     const admin = await createTestUser()
     const member = await createTestUser()
     const filler = await fillerPlayers(3)

@@ -38,3 +38,55 @@ export function applySeatTick(current: SeatVM[], tick: SeatTick): SeatVM[] {
     seat.entryId === tick.entryId ? { ...seat, playing: tick.playing } : seat,
   )
 }
+
+/** Lo que el sorteo tiene para repartir en esta fecha. */
+export interface DrawRoom {
+  /** Invitados sueltos librados al sorteo: sin compañero elegido a mano. */
+  toTheDraw: number
+  /** Jugadores del torneo que vienen y todavía no están con ningún invitado. */
+  freeSquad: number
+}
+
+/**
+ * La cuenta que decide si el sorteo puede con los invitados que hay.
+ *
+ * Espeja `assertSquadCoversLooseGuests` (db/validate.ts), y espejarla es el
+ * punto: el borde rebota la fecha con `toTheDraw > freeSquad`, así que la
+ * pantalla apaga "Generar parejas" con la MISMA cuenta en vez de ofrecer un
+ * click que vuelve con un error.
+ *
+ * Por qué el sorteo los separa: `orderPool` manda a los invitados al fondo del
+ * pool y `buildPairs` elige el armado de menor desbalance, que empareja el
+ * fondo con la cabeza. Cada invitado sale con un jugador del torneo DISTINTO
+ * mientras alcancen; pasado eso, el pigeonhole obliga a una pareja
+ * invitado-invitado, que no cobra ninguno de los dos.
+ *
+ * Las parejas invitadas no entran en ninguna de las dos cuentas: van trabadas
+ * consigo mismas desde que se crean y nunca tocan al plantel.
+ */
+export function drawRoom(
+  seats: readonly SeatVM[],
+  looseGuests: readonly { partnerId: string | null }[],
+): DrawRoom {
+  const taken = partnersTakenBy(looseGuests)
+  return {
+    toTheDraw: looseGuests.filter((guest) => guest.partnerId === null).length,
+    freeSquad: seats.filter((seat) => seat.playing && !taken.has(seat.entryId)).length,
+  }
+}
+
+/**
+ * Los jugadores del torneo ya trabados con algún invitado.
+ *
+ * Una sola derivación para dos usos que TIENEN que coincidir: el `<select>` de
+ * "Juega con" no los ofrece —elegirlos rebota con "Alguien está fijado en dos
+ * parejas a la vez"— y `drawRoom` no los cuenta como libres. Si se separan, la
+ * pantalla ofrece un compañero que la cuenta ya dio por gastado.
+ */
+export function partnersTakenBy(
+  looseGuests: readonly { partnerId: string | null }[],
+): ReadonlySet<string> {
+  return new Set(
+    looseGuests.flatMap((guest) => (guest.partnerId === null ? [] : [guest.partnerId])),
+  )
+}

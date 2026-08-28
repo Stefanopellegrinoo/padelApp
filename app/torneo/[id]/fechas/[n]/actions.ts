@@ -106,8 +106,10 @@ export async function saveGuestName(
 }
 
 /**
- * Con quién juega el invitado (spec 2.6). `null` es "el que toque": se destraba
- * y el sorteo decide.
+ * Con quién juega el invitado (spec 2.6). Las DOS opciones del invitado pasan
+ * por acá: un asiento del torneo lo traba con ése, y `null` lo manda al sorteo
+ * —destraba y decide `buildPairs`—. En la pantalla es "El que salga en el
+ * sorteo".
  *
  * Borra las parejas ya generadas por el mismo motivo que las borra un cambio de
  * asistencia: quedaron contestando otra pregunta. `openMatchday` sólo compara
@@ -299,11 +301,12 @@ export async function addGuestPair(
  * ese compañero sí cobra (spec 2.6). No viene trabado con nadie al crearse, a
  * diferencia de la pareja invitada, que se traba consigo misma.
  *
- * Al PRIMER suelto lo empareja el sorteo si el admin no elige compañero. Del
- * SEGUNDO en adelante no: `assertLocksAndGuests` sólo deja UN suelto librado
- * al sorteo, así que cada invitado extra necesita su compañero elegido a mano
- * desde el `<select>` "Juega con" o la fecha no se genera. La pantalla apaga
- * "Generar parejas" mientras eso falte.
+ * A cualquiera de ellos lo empareja el sorteo si el admin no le elige
+ * compañero, y el sorteo los SEPARA: `orderPool` los manda al fondo del pool y
+ * `buildPairs` empareja el fondo con la cabeza, así que cada uno sale con un
+ * jugador del torneo distinto. El tope es ése —cuántos jugadores del torneo
+ * quedan libres—, y lo pone `assertSquadCoversLooseGuests`; pasado el tope la
+ * pantalla apaga "Generar parejas" en vez de dejar que la fecha rebote.
  *
  * Antes sólo podía existir un suelto: el que agrega `syncGuestSeat` cuando el
  * plantel da impar. Este botón es la forma de sumar OTRO a mano — el caso de

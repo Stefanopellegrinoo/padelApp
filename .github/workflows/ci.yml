@@ -1,0 +1,99 @@
+# Los cuatro gates del repo, en cada PR y en cada push a main.
+#
+# Hasta acá `main` no tenía CI: lo único que corría sobre un PR era el deploy
+# de preview de Vercel, o sea el `build` y nada más. Los otros tres gates
+# —`typecheck`, `npm test` y sobre todo `npm run test:db`, contra una Postgres
+# real— dependían de que alguien se acordara de correrlos en su máquina. Un PR
+# cuya única señal automática es "compila" se revisa a ciegas, y así estuvo a
+# punto de salir el hotfix que trajo este archivo.
+#
+# Sin conteos de tests en este comentario, a propósito: un número escrito acá
+# se vuelve falso en el commit siguiente y el que lo lee no tiene cómo saberlo.
+#
+# Dos jobs y no uno: `gates` tarda ~1 min y `db` ~5 (tiene que levantar el
+# stack de Supabase en Docker). Separados, un error de tipos se ve enseguida en
+# vez de esperar al final.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Una corrida por rama: un push nuevo cancela la anterior, que ya no interesa.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gates:
+    name: typecheck · unit · build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: typecheck
+        run: npm run typecheck
+
+      - name: unit
+        run: npm test
+
+      # Las dos variables públicas van con los valores del stack LOCAL de
+      # Supabase (las mismas que `supabase start` genera para todos, no son
+      # secretos). `next build` las inlinea, y sin ellas el bundle quedaría con
+      # un string vacío donde va la URL.
+      - name: build
+        run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: build-time-placeholder
+
+  db:
+    name: test:db (Postgres real)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # `supabase start` levanta Postgres + PostgREST + GoTrue y aplica las
+      # migraciones y el seed. Los tests necesitan las tres cosas: crean
+      # usuarios con `auth.admin.createUser` y escriben con `service_role`.
+      - name: supabase start
+        run: npx supabase start
+
+      # Las claves salen del CLI y no se hardcodean: cambian con la versión del
+      # stack, y hardcodearlas es una falla silenciosa el día que cambien.
+      #
+      # `NEXT_PUBLIC_SUPABASE_URL` tiene que quedar apuntando a 127.0.0.1: la
+      # guarda de `db/test/env.ts` aborta la suite si no es un host local, y
+      # está para que un `test:db` distraído no borre la base del grupo.
+      - name: exportar las claves del stack
+        run: |
+          npx supabase status -o env | grep -E '^(API_URL|ANON_KEY|SERVICE_ROLE_KEY)=' > /tmp/sb.env
+          echo "NEXT_PUBLIC_SUPABASE_URL=$(grep '^API_URL=' /tmp/sb.env | cut -d= -f2- | tr -d '"')" >> "$GITHUB_ENV"
+          echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$(grep '^ANON_KEY=' /tmp/sb.env | cut -d= -f2- | tr -d '"')" >> "$GITHUB_ENV"
+          echo "SUPABASE_SERVICE_ROLE_KEY=$(grep '^SERVICE_ROLE_KEY=' /tmp/sb.env | cut -d= -f2- | tr -d '"')" >> "$GITHUB_ENV"
+
+      - name: test:db
+        run: npm run test:db
+
+      # El stack arranca limpio, así que no hace falta `db:reset` antes de la
+      # suite. Este paso corre DESPUÉS y sólo si algo falló: los logs de
+      # Postgres son lo primero que se mira cuando un test de base se cae por
+      # algo que no es una aserción.
+      - name: logs de Postgres si algo falló
+        if: failure()
+        run: docker logs supabase_db_padelApp --tail 100 || true

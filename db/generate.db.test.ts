@@ -193,6 +193,37 @@ describe('generatePairs', () => {
     )
     expect(mixedPair).toBe(true)
   })
+
+  it('respeta dos parejas trabadas de invitado con jugadores distintos del torneo', async () => {
+    // El caso real que motiva esto: un plantel de 12 confirma 10 porque dos se
+    // bajaron después de armada la fecha por equipos, y cada hueco se tapa con
+    // un invitado suelto trabado a un jugador distinto — no una pareja
+    // invitada entre sí. Vuelve a haber 12 en cancha y 6 parejas.
+    const { admin, seasonId, squad } = await buildSeasonWithSquad(defaultConfig(12), 12)
+    const playing = squad.slice(0, 10)
+    const [partnerA, partnerB] = playing
+    if (partnerA === undefined || partnerB === undefined) {
+      throw new Error('Faltan jugadores para el test.')
+    }
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
+    await markAllPlaying(admin, matchdayId, playing)
+    const guestA = await addGuest(admin.client, matchdayId, { displayName: 'Invitado A' })
+    const guestB = await addGuest(admin.client, matchdayId, { displayName: 'Invitado B' })
+    await addLock(seasonId, matchdayId, guestA, partnerA)
+    await addLock(seasonId, matchdayId, guestB, partnerB)
+
+    await generatePairs(admin.client, matchdayId)
+
+    const pairs = await pairsOf(matchdayId)
+    const locked = (a: string, b: string) =>
+      pairs.some(
+        (pair) =>
+          (pair.entry_a === a && pair.entry_b === b) || (pair.entry_a === b && pair.entry_b === a),
+      )
+    expect(pairs).toHaveLength(6)
+    expect(locked(guestA, partnerA)).toBe(true)
+    expect(locked(guestB, partnerB)).toBe(true)
+  })
 })
 
 describe('openMatchday', () => {

@@ -83,7 +83,7 @@ export function BorrarFecha({
               if (!result.ok) setError(result.error)
             })
           }}
-          className={`flex-1 rounded-field p-3 text-center text-[14px] font-extrabold ${
+          className={`min-h-11 flex-1 rounded-field p-3 text-center text-[14px] font-extrabold ${
             pending ? 'bg-chip text-muted' : 'bg-live text-bg'
           }`}
         >
@@ -96,13 +96,15 @@ export function BorrarFecha({
             setError(null)
             setAsking(false)
           }}
-          className="flex-1 rounded-field bg-chip p-3 text-center text-[14px] font-extrabold text-muted"
+          className="min-h-11 flex-1 rounded-field bg-chip p-3 text-center text-[14px] font-extrabold text-muted"
         >
           Cancelar
         </button>
       </div>
       {error !== null && (
-        <p className="rounded-field bg-live-bg px-3 py-2.5 text-[12.5px] font-bold text-live">{error}</p>
+        <p role="alert" className="rounded-field bg-live-bg px-3 py-2.5 text-[12.5px] font-bold text-live">
+          {error}
+        </p>
       )}
     </div>
   )

@@ -20,6 +20,7 @@ import {
   generatePairs,
   lockPair,
   openMatchday,
+  removeLooseGuestSeat,
   saveResult,
   seedAttendances,
   setAttendance,
@@ -353,6 +354,29 @@ describe('syncGuestSeat', () => {
     )
     // 8 + 2 = 10: no falta ni sobra nadie.
     expect(guests).toHaveLength(2)
+  })
+
+  // El asiento que la paridad exige no se puede perder por un click: sacarlo
+  // con el plantel impar tiene que devolver la fecha a donde estaba, no
+  // dejarla en 7 y sin poder generar parejas.
+  it('vuelve a poner el asiento cuando le sacan el invitado automático con el plantel impar', async () => {
+    const { admin, seasonId, squad } = await buildScene()
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-03-05')
+    await seedAttendances(admin.client, matchdayId)
+    await setAttendance(admin.client, matchdayId, squad[7]!, 'ABSENT')
+    await syncGuestSeat(admin.client, matchdayId)
+
+    const guestId = (await entriesOf(admin.client, seasonId)).find(
+      (entry) => entry.kind === 'GUEST' && entry.matchdayId === matchdayId,
+    )!.id
+
+    await removeLooseGuestSeat(admin.client, matchdayId, guestId)
+
+    const guests = (await entriesOf(admin.client, seasonId)).filter(
+      (entry) => entry.kind === 'GUEST' && entry.matchdayId === matchdayId,
+    )
+    expect(guests).toHaveLength(1)
+    expect(guests[0]?.displayName).toBe('')
   })
 })
 

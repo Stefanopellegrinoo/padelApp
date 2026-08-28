@@ -7,6 +7,7 @@ import { EdgeError } from '@/db/errors'
 import { promoteGuest } from '@/db/entries'
 import {
   addGuest,
+  addLooseGuestSeat,
   cancelMatchday,
   clearPairs,
   closeMatchday,
@@ -18,6 +19,7 @@ import {
   openMatchday,
   redraftMatchday,
   removeGuest,
+  removeLooseGuestSeat,
   reopenMatchday,
   saveResult,
   seedAttendances,
@@ -38,6 +40,12 @@ export type WriteResult = { ok: true } | { ok: false; error: string }
  * PLAYING existentes: sin la siembra, el panel diría "10 confirmados" y la
  * fecha tendría 0 presentes. El admin puede además no haber tocado un solo
  * tilde, así que "Generar parejas" y "Confirmar fecha" también la llaman.
+ *
+ * El `finally` no es cosmético: `work` compone varias escrituras —
+ * `setGuestPartner` destraba ANTES de trabar— y si la última rebota, las
+ * anteriores YA están en la base. Revalidando sólo en el camino feliz, la
+ * pantalla se quedaba mostrando el compañero viejo que la base ya no tiene.
+ * Revalidar siempre cuesta un render y deja pantalla y base de acuerdo.
  */
 async function inDraft(
   seasonId: string,
@@ -49,12 +57,13 @@ async function inDraft(
     const supabase = await serverClient()
     await seedAttendances(supabase, matchdayId)
     await work(supabase)
-    revalidatePath(`/torneo/${seasonId}/fechas/${matchdayNumber}`)
-    revalidatePath(`/torneo/${seasonId}/fechas`)
     return { ok: true }
   } catch (error) {
     if (error instanceof EdgeError) return { ok: false, error: error.message }
     throw error
+  } finally {
+    revalidatePath(`/torneo/${seasonId}/fechas/${matchdayNumber}`)
+    revalidatePath(`/torneo/${seasonId}/fechas`)
   }
 }
 
@@ -97,8 +106,10 @@ export async function saveGuestName(
 }
 
 /**
- * Con quién juega el invitado (spec 2.6). `null` es "el que toque": se destraba
- * y el sorteo decide.
+ * Con quién juega el invitado (spec 2.6). Las DOS opciones del invitado pasan
+ * por acá: un asiento del torneo lo traba con ése, y `null` lo manda al sorteo
+ * —destraba y decide `buildPairs`—. En la pantalla es "El que salga en el
+ * sorteo".
  *
  * Borra las parejas ya generadas por el mismo motivo que las borra un cambio de
  * asistencia: quedaron contestando otra pregunta. `openMatchday` sólo compara
@@ -282,6 +293,45 @@ export async function addGuestPair(
     const two = await addGuest(supabase, matchdayId, { displayName: '' })
     await lockPair(supabase, matchdayId, one, two)
     await syncGuestSeat(supabase, matchdayId)
+  })
+}
+
+/**
+ * Suma un invitado suelto: un asiento más que juega con alguien del torneo, y
+ * ese compañero sí cobra (spec 2.6). No viene trabado con nadie al crearse, a
+ * diferencia de la pareja invitada, que se traba consigo misma.
+ *
+ * A cualquiera de ellos lo empareja el sorteo si el admin no le elige
+ * compañero, y el sorteo los SEPARA: `orderPool` los manda al fondo del pool y
+ * `buildPairs` empareja el fondo con la cabeza, así que cada uno sale con un
+ * jugador del torneo distinto. El tope es ése —cuántos jugadores del torneo
+ * quedan libres—, y lo pone `assertSquadCoversLooseGuests`; pasado el tope la
+ * pantalla apaga "Generar parejas" en vez de dejar que la fecha rebote.
+ *
+ * Antes sólo podía existir un suelto: el que agrega `syncGuestSeat` cuando el
+ * plantel da impar. Este botón es la forma de sumar OTRO a mano — el caso de
+ * dos confirmados que se bajan después de armada la fecha por equipos, y cada
+ * hueco se tapa con un invitado propio.
+ */
+export async function addLooseGuest(
+  seasonId: string,
+  matchdayId: string,
+  matchdayNumber: number,
+): Promise<WriteResult> {
+  return inDraft(seasonId, matchdayId, matchdayNumber, async (supabase) => {
+    await addLooseGuestSeat(supabase, matchdayId)
+  })
+}
+
+/** Saca un invitado suelto. El cuerpo vive en `db/matchday.ts`: cierra con `syncGuestSeat`. */
+export async function removeLooseGuest(
+  seasonId: string,
+  matchdayId: string,
+  matchdayNumber: number,
+  entryId: string,
+): Promise<WriteResult> {
+  return inDraft(seasonId, matchdayId, matchdayNumber, async (supabase) => {
+    await removeLooseGuestSeat(supabase, matchdayId, entryId)
   })
 }
 

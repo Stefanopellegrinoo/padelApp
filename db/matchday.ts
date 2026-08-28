@@ -23,6 +23,8 @@ import { awardsBefore, closedHistory, seasonConfig, squadSeedOrder, type Client 
 import {
   assertGuestsNamed,
   assertLocksAndGuests,
+  assertLocksArePlaying,
+  assertSquadCoversLooseGuests,
   assertMatchdaySize,
   assertPointsCoverMatchday,
   assertValidConfig,
@@ -114,6 +116,20 @@ export async function pairingContextFor(
     ...guests.map((guest) => guest.entryId),
   ]
   assertMatchdaySize(present)
+  // Van acá y no en `matchdayContextFor` porque es la primera vez que el
+  // presentismo existe, y correr una validación del sorteo al CERRAR es como
+  // una fecha se traba (ver el docstring de esta función).
+  assertLocksArePlaying(present, locks)
+  // Los defensores salen del pool ANTES del sorteo, así que no son
+  // acompañantes disponibles. El filtro es el mismo que hace `resolveDefenders`
+  // del otro lado: si gastaron la repetición no hay defensores, y si falta uno
+  // la pareja se disuelve — eso último lo resuelve el guard, que ve `present`.
+  assertSquadCoversLooseGuests(
+    present,
+    guests,
+    locks,
+    defendersAlreadyRepeated ? null : defenders,
+  )
   assertPointsCoverMatchday(present, guests, locks, config)
 
   return {
@@ -334,8 +350,10 @@ export async function removeGuest(supabase: Client, entryId: string): Promise<vo
  * que si los confirmados dan impar la app suma un lugar de invitado.
  *
  * Lo que NO hace, y es a propósito:
- * - con dos o más invitados no toca nada. Eso es el equipo invitado que vino a
- *   jugar junto, lo cargó alguien a mano y no es de esta función deshacerlo
+ * - con dos o más invitados SUELTOS no toca nada. Los puso el admin a mano, uno
+ *   por hueco, y decidir a cuál sacar no es de esta función. (Decía que dos
+ *   invitados eran siempre el equipo que vino a jugar junto: dejó de ser cierto
+ *   cuando "+ Agregar invitado" hizo válido mandar varios sueltos al sorteo.)
  * - con número par y un invitado YA NOMBRADO tampoco. Alguien lo puso a
  *   propósito; sacarlo porque cambió un tilde es perder un dato cargado
  */
@@ -370,6 +388,46 @@ export async function syncGuestSeat(supabase: Client, matchdayId: string): Promi
     await clearPairs(supabase, matchdayId)
     await removeGuest(supabase, only.entryId)
   }
+}
+
+/**
+ * Suma un invitado suelto a mano: un asiento más que juega con alguien del
+ * torneo, y ese compañero sí cobra (spec 2.6).
+ *
+ * `syncGuestSeat` NO se llama acá: con plantel par borraría en el mismo
+ * momento el asiento que se acaba de crear.
+ *
+ * ponytail: un suelto agregado a mano, sin nombre y con plantel par es
+ * indistinguible del asiento automático que `syncGuestSeat` pone y saca, así
+ * que el próximo sync —cualquier tilde de asistencia o nombre guardado— se lo
+ * lleva sin aviso. Techo conocido: separarlos pide una columna nueva en
+ * `entries` (un `added_by_admin`), que es una migración. Mientras tanto se
+ * salva ponténdole nombre, o sumando el segundo invitado (con dos sueltos el
+ * guard `loose.length === 1` del sync ya no aplica).
+ */
+export async function addLooseGuestSeat(supabase: Client, matchdayId: string): Promise<void> {
+  await clearPairs(supabase, matchdayId)
+  await addGuest(supabase, matchdayId, { displayName: '' })
+}
+
+/**
+ * Saca un invitado suelto. Si tenía un compañero trabado, el lock cae solo con
+ * el asiento.
+ *
+ * Cierra con `syncGuestSeat`, igual que sacar una pareja invitada: sacar el
+ * asiento que la paridad EXIGE dejaba la fecha impar y sin nadie que la
+ * arreglara —`generatePairs` no sincroniza— y el admin quedaba encerrado
+ * hasta tocar un tilde cualquiera. La pantalla además no ofrece la cruz sobre
+ * ese asiento, así que este sync es la red y no el camino normal.
+ */
+export async function removeLooseGuestSeat(
+  supabase: Client,
+  matchdayId: string,
+  entryId: string,
+): Promise<void> {
+  await clearPairs(supabase, matchdayId)
+  await removeGuest(supabase, entryId)
+  await syncGuestSeat(supabase, matchdayId)
 }
 
 /** Agrega un asiento GUEST. `seed_position` correlativo entre los invitados de esta fecha; `displayName` puede ir vacío. */

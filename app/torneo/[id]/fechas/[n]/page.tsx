@@ -196,8 +196,9 @@ export default async function FechaDetailPage({ params }: PageProps) {
     // distinto porque el campeonato las trata distinto: los que están trabados
     // con otro invitado son una **pareja invitada** —juegan de amistoso y no
     // cobran ninguno de los dos— y el resto son **sueltos**, que juegan con
-    // alguien del torneo y le hacen cobrar a su compañero. Como máximo hay un
-    // suelto: es el que aparece cuando el plantel da impar.
+    // alguien del torneo y le hacen cobrar a su compañero. Puede haber más de
+    // uno: el que aparece cuando el plantel da impar, y los que el admin suma
+    // a mano para tapar huecos de jugadores que se bajaron.
     const guestEntries = entries
       .filter((entry) => entry.kind === 'GUEST' && entry.matchdayId === matchday.id)
       .sort((a, b) => a.seedPosition - b.seedPosition)
@@ -244,6 +245,10 @@ export default async function FechaDetailPage({ params }: PageProps) {
         looseGuests={looseGuests}
         guestPairs={guestPairs}
         pairs={draftPairs}
+        // El mismo dato que marca el chip "Defensora". La pantalla lo necesita
+        // además para la cuenta de invitados que puede el sorteo: `buildPairs`
+        // los saca del pool antes de sortear, así que no acompañan a nadie.
+        defenders={effectiveDefenders}
         loadedResults={detail.matches.filter((match) => match.sets.length > 0).length}
       />
     )

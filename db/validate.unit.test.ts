@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { defaultConfig, type MatchFormat } from '@/core'
+import { buildPairs, defaultConfig, type MatchFormat } from '@/core'
 import { EdgeError } from './errors'
 import {
   assertValidConfig,
@@ -219,7 +219,7 @@ describe('assertSquadCoversLooseGuests', () => {
     // una pareja de invitados — está pinneado en `core/pairing.test.ts:186`.
     const guests = guestSeats(2)
     const present = [...players(6), 'g1', 'g2']
-    expect(() => assertSquadCoversLooseGuests(present, guests, [])).not.toThrow()
+    expect(() => assertSquadCoversLooseGuests(present, guests, [], null)).not.toThrow()
   })
 
   it('rejects more loose guests than free squad players', () => {
@@ -228,7 +228,7 @@ describe('assertSquadCoversLooseGuests', () => {
     // `assertPointsCoverMatchday` no la ve, porque cuenta sobre `pair_locks`.
     const guests = guestSeats(6)
     const present = [...players(2), ...guests.map((guest) => guest.entryId)]
-    expect(() => assertSquadCoversLooseGuests(present, guests, [])).toThrow(EdgeError)
+    expect(() => assertSquadCoversLooseGuests(present, guests, [], null)).toThrow(EdgeError)
   })
 
   it('accepts the same guests once the extras are locked into guest pairs', () => {
@@ -240,7 +240,75 @@ describe('assertSquadCoversLooseGuests', () => {
       { a: 'g1', b: 'g2' },
       { a: 'g3', b: 'g4' },
     ]
-    expect(() => assertSquadCoversLooseGuests(present, guests, locks)).not.toThrow()
+    expect(() => assertSquadCoversLooseGuests(present, guests, locks, null)).not.toThrow()
+  })
+
+  // ── El borde, que es la única línea que esta función decide ────────────────
+  // Los dos casos de arriba son 2-vs-6 y 6-vs-2: ninguno toca `loose === free`.
+  // Sin estos dos, mutar `loose <= free` a `loose <= free + 1` deja la suite
+  // entera en verde.
+
+  it('accepts exactly as many loose guests as free squad players', () => {
+    const guests = guestSeats(4)
+    const present = [...players(4), ...guests.map((guest) => guest.entryId)]
+    expect(() => assertSquadCoversLooseGuests(present, guests, [], null)).not.toThrow()
+  })
+
+  it('rejects one loose guest more than free squad players', () => {
+    const guests = guestSeats(5)
+    const present = [...players(4), ...guests.map((guest) => guest.entryId)]
+    expect(() => assertSquadCoversLooseGuests(present, guests, [], null)).toThrow(EdgeError)
+  })
+
+  // ── Los defensores, que el sorteo saca del pool y la cuenta ignoraba ───────
+
+  it('does not count the defending pair among the free squad players', () => {
+    // `buildPairs` arma `settled` con los defensores ANTES de que exista el
+    // pool, igual que con los locks. Los locks ya se descontaban; los
+    // defensores no, y no están en `pair_locks` para que se noten.
+    const guests = guestSeats(6)
+    const present = [...players(6), ...guests.map((guest) => guest.entryId)]
+
+    expect(() => assertSquadCoversLooseGuests(present, guests, [], null)).not.toThrow()
+    expect(() =>
+      assertSquadCoversLooseGuests(present, guests, [], { a: 'p0', b: 'p1' }),
+    ).toThrow(EdgeError)
+  })
+
+  it('counts the defenders as free when one of them is not playing', () => {
+    // Mismo criterio que `resolveDefenders` en core/pairing.ts: si falta uno,
+    // la pareja se disuelve y el que sí vino vuelve al pool.
+    const guests = guestSeats(6)
+    const present = [...players(6), ...guests.map((guest) => guest.entryId)]
+    expect(() =>
+      assertSquadCoversLooseGuests(present, guests, [], { a: 'p0', b: 'ausente' }),
+    ).not.toThrow()
+  })
+
+  it('rejects the matchday whose draw actually came out with a guest-guest pair', () => {
+    // Ejecutado, no razonado. Seis del plantel, seis invitados sueltos y la
+    // pareja defensora en pie: `loose === free` para la cuenta vieja, así que
+    // la fecha entraba — y el sorteo devolvía {g1,g2}, que no cobra ninguno de
+    // los dos y `assertPointsCoverMatchday` no ve porque cuenta sobre locks.
+    const squad = players(6)
+    const guests = guestSeats(6)
+    const guestIds = guests.map((guest) => guest.entryId)
+    const present = [...squad, ...guestIds]
+    const defenders = { a: 'p0', b: 'p1' }
+
+    const drawn = buildPairs({
+      present,
+      points: new Map(squad.map((entryId, index) => [entryId, 100 - index])),
+      snapshot: squad,
+      defenders,
+      defendersAlreadyRepeated: false,
+      previousPairs: [defenders],
+      guestIds,
+      fixedPairs: [],
+    })
+    expect(drawn).toContainEqual({ a: 'g1', b: 'g2' })
+
+    expect(() => assertSquadCoversLooseGuests(present, guests, [], defenders)).toThrow(EdgeError)
   })
 })
 

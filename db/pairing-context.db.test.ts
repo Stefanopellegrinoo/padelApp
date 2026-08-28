@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { defaultConfig, type SeasonConfig } from '@/core'
+import { EdgeError } from './errors'
 import { matchdayContextFor, pairingContextFor } from './matchday'
 import { adminClient } from './test/admin'
 import { createSeason } from './test/factories'
@@ -392,6 +393,92 @@ describe('pairingContextFor', () => {
 
     await expect(pairingContextFor(admin.client, matchdayId)).rejects.toThrow(
       /jugadores del torneo libres/,
+    )
+  })
+
+  // Seis del plantel y seis invitados sueltos: `loose === free` mientras nadie
+  // descuente a los defensores, y la fecha entraba. Pero `buildPairs` saca a la
+  // pareja defensora del pool ANTES del sorteo —igual que un lock, sólo que sin
+  // fila en `pair_locks` que la haga visible— y quedan cuatro acompañantes para
+  // seis invitados: el sorteo devolvía una pareja invitado-invitado, que no
+  // cobra ninguno de los dos y `assertPointsCoverMatchday` no puede ver.
+  it('fails when the defending pair leaves fewer free squad players than loose guests', async () => {
+    const { admin, seasonId, squad } = await buildSeasonWithSquad(defaultConfig(12), 12)
+    const playing = squad.slice(0, 6)
+    const absent = squad.slice(6)
+    const [q1, q2] = playing
+    if (q1 === undefined || q2 === undefined) throw new Error('Faltan asientos para el test.')
+
+    await closeMatchday(
+      seasonId,
+      1,
+      [{ a: q1, b: q2 }],
+      [
+        { entryId: q1, position: 1, points: 10 },
+        { entryId: q2, position: 1, points: 10 },
+      ],
+    )
+    const matchdayId = await openMatchday(seasonId, 2, playing, absent)
+    for (let seed = 0; seed < 6; seed += 1) {
+      await addGuest(seasonId, matchdayId, seed)
+    }
+
+    await expect(pairingContextFor(admin.client, matchdayId)).rejects.toThrow(
+      /jugadores del torneo libres/,
+    )
+  })
+
+  // El mismo input, con los defensores que ya gastaron su repetición: el sorteo
+  // los manda al pool como a cualquiera, así que los seis vuelven a estar
+  // libres y la fecha tiene que entrar. El descuento sigue el criterio de
+  // `resolveDefenders`, no "hay defensores en la fecha anterior".
+  it('takes the same matchday when the defenders already used their repeat', async () => {
+    const { admin, seasonId, squad } = await buildSeasonWithSquad(defaultConfig(12), 12)
+    const playing = squad.slice(0, 6)
+    const absent = squad.slice(6)
+    const [q1, q2] = playing
+    if (q1 === undefined || q2 === undefined) throw new Error('Faltan asientos para el test.')
+
+    await closeMatchday(seasonId, 1, [{ a: q1, b: q2 }], [])
+    await closeMatchday(
+      seasonId,
+      2,
+      [{ a: q1, b: q2 }],
+      [
+        { entryId: q1, position: 1, points: 10 },
+        { entryId: q2, position: 1, points: 10 },
+      ],
+    )
+    const matchdayId = await openMatchday(seasonId, 3, playing, absent)
+    for (let seed = 0; seed < 6; seed += 1) {
+      await addGuest(seasonId, matchdayId, seed)
+    }
+
+    const context = await pairingContextFor(admin.client, matchdayId)
+
+    expect(context.input.defendersAlreadyRepeated).toBe(true)
+    expect(context.input.guestIds).toHaveLength(6)
+  })
+
+  // El compañero que el admin traba y después se marca ausente: `pair_locks` no
+  // se toca al destildar, así que el lock sigue apuntando a alguien que no
+  // juega. Todos los guards lo dejaban pasar y el que reventaba era
+  // `resolveSettled`, con un `Error` crudo que `inDraft` traduce a "No pudimos
+  // guardar el cambio. Probá de nuevo." — un 500 por click, y reintentar no
+  // arregla nada.
+  it('fails legibly when a locked partner is not playing this matchday', async () => {
+    const { admin, seasonId, squad } = await buildSeasonWithSquad(defaultConfig(10), 10)
+    const playing = squad.slice(0, 7)
+    const absent = squad.slice(7)
+    const missing = absent[0]
+    if (missing === undefined) throw new Error('Falta un ausente para el test.')
+    const matchdayId = await openMatchday(seasonId, 1, playing, absent)
+    const guest = await addGuest(seasonId, matchdayId, 0)
+    await addLock(seasonId, matchdayId, guest, missing)
+
+    await expect(pairingContextFor(admin.client, matchdayId)).rejects.toThrow(EdgeError)
+    await expect(pairingContextFor(admin.client, matchdayId)).rejects.toThrow(
+      /no juega esta fecha/,
     )
   })
 })

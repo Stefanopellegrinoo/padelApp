@@ -339,8 +339,10 @@ export async function removeGuest(supabase: Client, entryId: string): Promise<vo
  * que si los confirmados dan impar la app suma un lugar de invitado.
  *
  * Lo que NO hace, y es a propósito:
- * - con dos o más invitados no toca nada. Eso es el equipo invitado que vino a
- *   jugar junto, lo cargó alguien a mano y no es de esta función deshacerlo
+ * - con dos o más invitados SUELTOS no toca nada. Los puso el admin a mano, uno
+ *   por hueco, y decidir a cuál sacar no es de esta función. (Decía que dos
+ *   invitados eran siempre el equipo que vino a jugar junto: dejó de ser cierto
+ *   cuando "+ Agregar invitado" hizo válido mandar varios sueltos al sorteo.)
  * - con número par y un invitado YA NOMBRADO tampoco. Alguien lo puso a
  *   propósito; sacarlo porque cambió un tilde es perder un dato cargado
  */

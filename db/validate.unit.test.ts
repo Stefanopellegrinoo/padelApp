@@ -7,6 +7,7 @@ import {
   matchError,
   assertMatchdaySize,
   assertLocksAndGuests,
+  assertLocksArePlaying,
   assertSquadCoversLooseGuests,
   assertPointsCoverMatchday,
   assertGuestsNamed,
@@ -203,6 +204,31 @@ describe('assertLocksAndGuests', () => {
       { a: 'g1', b: 'player2' },
     ]
     expect(() => assertLocksAndGuests(guests, locks)).toThrow(/fijado en dos parejas/)
+  })
+})
+
+describe('assertLocksArePlaying', () => {
+  it('accepts a lock whose two entries are playing', () => {
+    const locks: PairLock[] = [{ a: 'g1', b: 'p0' }]
+    expect(() => assertLocksArePlaying(['p0', 'p1', 'g1'], locks)).not.toThrow()
+  })
+
+  it('rejects a lock whose partner was marked absent after it was made', () => {
+    // `setAttendance` no toca `pair_locks`: el lock sobrevive apuntando a
+    // alguien que ya no está en `present`.
+    const locks: PairLock[] = [{ a: 'g1', b: 'p9' }]
+    expect(() => assertLocksArePlaying(['p0', 'p1', 'g1'], locks)).toThrow(EdgeError)
+  })
+
+  it('names the two ways out instead of a bare id', () => {
+    const locks: PairLock[] = [{ a: 'g1', b: 'p9' }]
+    expect(() => assertLocksArePlaying(['g1'], locks)).toThrow(
+      /Elegile otro compañero al invitado, o volvé a tildar que viene/,
+    )
+  })
+
+  it('accepts a matchday with no locks at all', () => {
+    expect(() => assertLocksArePlaying(['p0', 'p1'], [])).not.toThrow()
   })
 })
 

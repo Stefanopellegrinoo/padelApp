@@ -23,6 +23,7 @@ import { awardsBefore, closedHistory, seasonConfig, squadSeedOrder, type Client 
 import {
   assertGuestsNamed,
   assertLocksAndGuests,
+  assertLocksArePlaying,
   assertSquadCoversLooseGuests,
   assertMatchdaySize,
   assertPointsCoverMatchday,
@@ -115,10 +116,20 @@ export async function pairingContextFor(
     ...guests.map((guest) => guest.entryId),
   ]
   assertMatchdaySize(present)
-  // Va acá y no en `matchdayContextFor` porque es la primera vez que el
+  // Van acá y no en `matchdayContextFor` porque es la primera vez que el
   // presentismo existe, y correr una validación del sorteo al CERRAR es como
   // una fecha se traba (ver el docstring de esta función).
-  assertSquadCoversLooseGuests(present, guests, locks)
+  assertLocksArePlaying(present, locks)
+  // Los defensores salen del pool ANTES del sorteo, así que no son
+  // acompañantes disponibles. El filtro es el mismo que hace `resolveDefenders`
+  // del otro lado: si gastaron la repetición no hay defensores, y si falta uno
+  // la pareja se disuelve — eso último lo resuelve el guard, que ve `present`.
+  assertSquadCoversLooseGuests(
+    present,
+    guests,
+    locks,
+    defendersAlreadyRepeated ? null : defenders,
+  )
   assertPointsCoverMatchday(present, guests, locks, config)
 
   return {

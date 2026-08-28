@@ -3,6 +3,7 @@ import {
   MIN_PLAYERS,
   validateConfig,
   type MatchFormat,
+  type Pair,
   type SeasonConfig,
   type SetScore,
 } from '@/core'
@@ -143,6 +144,35 @@ export function assertLocksAndGuests(
 }
 
 /**
+ * Every entry in a lock has to be playing this matchday.
+ *
+ * `setAttendance` does not touch `pair_locks`, so the admin can lock a guest
+ * with a squad player and then untick that player: the lock survives pointing
+ * at somebody who is not in `present`. Every other guard let that through —
+ * the absent partner is not a guest, is not free, and is not counted anywhere —
+ * and the first thing to notice was `resolveSettled`, which throws a bare
+ * `Error`. `inDraft` rethrows anything that is not an `EdgeError`, so the admin
+ * read "No pudimos guardar el cambio. Probá de nuevo." and retrying changed
+ * nothing.
+ *
+ * Same reason as the guard below for living on the draw path only: it needs
+ * the attendance, and running an attendance check while CLOSING a matchday is
+ * how a matchday gets stuck.
+ */
+export function assertLocksArePlaying(
+  present: readonly string[],
+  locks: readonly PairLock[],
+): void {
+  const playing = new Set(present)
+  for (const lock of locks) {
+    if (playing.has(lock.a) && playing.has(lock.b)) continue
+    throw new EdgeError(
+      'Una pareja fija incluye a alguien que no juega esta fecha. Elegile otro compañero al invitado, o volvé a tildar que viene el que falta.',
+    )
+  }
+}
+
+/**
  * How many guests can be left to the draw: as many as there are squad players
  * free to partner them, and not one more.
  *
@@ -161,6 +191,17 @@ export function assertLocksAndGuests(
  * `pair_locks`, so a pair the DRAW produced is invisible to it. Holding the
  * line here is what keeps that lock-only count exact.
  *
+ * `S` is who reaches the POOL, and that is where this count was wrong. The
+ * pool is `present` minus `settled`, and `settled` is the locks **plus the
+ * defending pair** (`core/pairing.ts:71`). The locks were already subtracted;
+ * the defenders were not, and they have no row in `pair_locks` to make them
+ * visible. With six of the squad, six loose guests and the champions standing,
+ * `loose === free` passed and the draw came out with a guest-guest pair — the
+ * guarantee this docstring claims was false whenever the title was defended.
+ * `defenders` therefore comes in already filtered by the repeat rule, and both
+ * of them have to be `present`: that is exactly `resolveDefenders`, the
+ * function that decides it on the other side.
+ *
  * Lives apart from `assertLocksAndGuests` because it needs the attendance, and
  * that is only read on the draw path (`pairingContextFor`): asking for it in
  * `matchdayContextFor` would run a draw validation while CLOSING a matchday,
@@ -170,13 +211,20 @@ export function assertSquadCoversLooseGuests(
   present: readonly string[],
   guests: readonly GuestSeat[],
   locks: readonly PairLock[],
+  /** Los defensores YA filtrados por la repetición: `null` si la gastaron. */
+  defenders: Pair | null,
 ): void {
   const isGuest = new Set(guests.map((guest) => guest.entryId))
   const locked = new Set(locks.flatMap((lock) => [lock.a, lock.b]))
+  const defending = new Set(
+    defenders !== null && present.includes(defenders.a) && present.includes(defenders.b)
+      ? [defenders.a, defenders.b]
+      : [],
+  )
 
   const loose = guests.filter((guest) => !locked.has(guest.entryId)).length
   const free = present.filter(
-    (entryId) => !isGuest.has(entryId) && !locked.has(entryId),
+    (entryId) => !isGuest.has(entryId) && !locked.has(entryId) && !defending.has(entryId),
   ).length
   if (loose <= free) return
 

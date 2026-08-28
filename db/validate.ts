@@ -115,9 +115,10 @@ export function assertMatchdaySize(present: readonly string[]): void {
  * the no-repeat rule, and that rule IS the format: it is the one thing the whole
  * pairing algorithm exists to enforce.
  *
- * And at most one guest may be left to the draw — the one who fills in for
- * whoever was left without a partner. Everyone else came as a team, or was
- * placed next to somebody on purpose (spec 2.6).
+ * How MANY guests may be left to the draw is NOT decided here. Every guest gets
+ * both options — a partner picked by hand, or the draw (spec 2.6) — and how many
+ * the draw can take is a count of who is playing, which this function never
+ * sees. That count lives in `assertSquadCoversLooseGuests`, below.
  */
 export function assertLocksAndGuests(
   guests: readonly GuestSeat[],
@@ -139,13 +140,49 @@ export function assertLocksAndGuests(
       locked.add(entryId)
     }
   }
+}
+
+/**
+ * How many guests can be left to the draw: as many as there are squad players
+ * free to partner them, and not one more.
+ *
+ * The draw hands out exactly one squad player per loose guest, by construction.
+ * `orderPool` sends the guests to the TAIL of the pool and `buildPairs` picks
+ * the matching of lowest imbalance, which is the one pairing position `i` with
+ * position `n+1-i`. A guest sitting at position `p` only draws another guest
+ * when `p > S` AND `n+1-p > S`, and both hold only if `G > S`. So while the
+ * loose guests do not outnumber the free squad players, every one of them comes
+ * out with a different squad player — that is the mechanism, not luck, and
+ * `core/pairing.test.ts:186` pins it.
+ *
+ * Past that line the pigeonhole takes over and at least one pair comes out
+ * guest-guest. That pair is unpaid (`computeAwards` drops it) and
+ * `assertPointsCoverMatchday` cannot see it: it counts guest-only pairs over
+ * `pair_locks`, so a pair the DRAW produced is invisible to it. Holding the
+ * line here is what keeps that lock-only count exact.
+ *
+ * Lives apart from `assertLocksAndGuests` because it needs the attendance, and
+ * that is only read on the draw path (`pairingContextFor`): asking for it in
+ * `matchdayContextFor` would run a draw validation while CLOSING a matchday,
+ * which is how a matchday gets stuck.
+ */
+export function assertSquadCoversLooseGuests(
+  present: readonly string[],
+  guests: readonly GuestSeat[],
+  locks: readonly PairLock[],
+): void {
+  const isGuest = new Set(guests.map((guest) => guest.entryId))
+  const locked = new Set(locks.flatMap((lock) => [lock.a, lock.b]))
 
   const loose = guests.filter((guest) => !locked.has(guest.entryId)).length
-  if (loose > 1) {
-    throw new EdgeError(
-      `Hay ${loose} invitados sueltos. Sólo uno puede jugar con alguien del torneo: al resto hay que ponerlos en pareja.`,
-    )
-  }
+  const free = present.filter(
+    (entryId) => !isGuest.has(entryId) && !locked.has(entryId),
+  ).length
+  if (loose <= free) return
+
+  throw new EdgeError(
+    `Hay ${loose} invitados sueltos y quedan ${free} jugadores del torneo libres para acompañarlos. Poné en pareja invitada a los que sobran, o sacalos de la fecha.`,
+  )
 }
 
 /**
@@ -157,6 +194,10 @@ export function assertLocksAndGuests(
  * A lock made of two guests is the only kind of pair that does not get paid, so
  * it is the only one subtracted. A lock of guest plus squad player does get
  * paid — the partner played and earned it.
+ *
+ * Counting over `pair_locks` alone is exact only because
+ * `assertSquadCoversLooseGuests` already ruled out a guest-guest pair coming out
+ * of the DRAW, which has no lock to be counted by.
  */
 export function assertPointsCoverMatchday(
   present: readonly string[],

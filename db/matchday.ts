@@ -23,6 +23,7 @@ import { awardsBefore, closedHistory, seasonConfig, squadSeedOrder, type Client 
 import {
   assertGuestsNamed,
   assertLocksAndGuests,
+  assertSquadCoversLooseGuests,
   assertMatchdaySize,
   assertPointsCoverMatchday,
   assertValidConfig,
@@ -114,6 +115,10 @@ export async function pairingContextFor(
     ...guests.map((guest) => guest.entryId),
   ]
   assertMatchdaySize(present)
+  // Va acá y no en `matchdayContextFor` porque es la primera vez que el
+  // presentismo existe, y correr una validación del sorteo al CERRAR es como
+  // una fecha se traba (ver el docstring de esta función).
+  assertSquadCoversLooseGuests(present, guests, locks)
   assertPointsCoverMatchday(present, guests, locks, config)
 
   return {

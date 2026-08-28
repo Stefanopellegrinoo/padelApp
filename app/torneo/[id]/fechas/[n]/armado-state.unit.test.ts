@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applySeatTick, type SeatVM } from './armado-state'
+import { applySeatTick, drawRoom, type SeatVM } from './armado-state'
 
 const squad: SeatVM[] = [
   { entryId: 'a', name: 'Ana', playing: true },
@@ -56,5 +56,48 @@ describe('applySeatTick', () => {
     const next = applySeatTick(squad, { entryId: 'fantasma', playing: false })
 
     expect(next.map((seat) => seat.playing)).toEqual([true, true, false])
+  })
+})
+
+/**
+ * Cuántos invitados puede acomodar el sorteo, que es la cuenta que decide si
+ * "Generar parejas" se ofrece o se apaga.
+ *
+ * Espeja `assertSquadCoversLooseGuests` (db/validate.ts): el sorteo le da a
+ * cada invitado suelto un jugador del torneo DISTINTO mientras alcancen, y
+ * pasado eso el pigeonhole obliga a una pareja invitado-invitado que la fecha
+ * rebota. Sin este test, volver a poner el tope en uno —el defecto que esta
+ * tanda revierte— deja todo en verde y le saca al admin una opción que el
+ * dueño del producto pidió.
+ */
+describe('drawRoom', () => {
+  it('cuenta a los dos invitados sin compañero y al plantel que los puede acompañar', () => {
+    const room = drawRoom(squad, [{ partnerId: null }, { partnerId: null }])
+
+    expect(room).toEqual({ toTheDraw: 2, freeSquad: 2 })
+  })
+
+  it('no cuenta al invitado que ya tiene compañero elegido', () => {
+    const room = drawRoom(squad, [{ partnerId: 'a' }, { partnerId: null }])
+
+    expect(room.toTheDraw).toBe(1)
+  })
+
+  it('no cuenta como libre al jugador ya elegido como compañero', () => {
+    const room = drawRoom(squad, [{ partnerId: 'a' }])
+
+    expect(room.freeSquad).toBe(1)
+  })
+
+  it('no cuenta como libre al que avisó que no va', () => {
+    const room = drawRoom(squad, [])
+
+    expect(room.freeSquad).toBe(2)
+  })
+
+  it('deja ver cuándo los invitados pasan al plantel libre', () => {
+    const room = drawRoom(squad, [{ partnerId: null }, { partnerId: null }, { partnerId: null }])
+
+    expect(room.toTheDraw > room.freeSquad).toBe(true)
   })
 })

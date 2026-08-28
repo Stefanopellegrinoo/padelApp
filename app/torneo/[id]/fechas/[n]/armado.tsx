@@ -182,7 +182,34 @@ export function Armado({
     ...guestPairs.flatMap((pair) => [pair.a.name, pair.b.name]),
   ].some((name) => name.trim().length === 0)
 
-  const canDraw = !tooFew && !tooMany && !pending
+  // El asiento que la paridad EXIGE, y por eso el único sin cruz: con el plantel
+  // impar y un solo suelto, sacarlo es un no-op —`removeLooseGuestSeat` cierra
+  // con `syncGuestSeat`, que lo repone en el acto— y una cruz que no hace nada
+  // confunde igual que una que rompe. Con el plantel par, o con un segundo
+  // suelto en pantalla, el asiento lo puso el admin y se lo puede llevar.
+  const parityGuestSeat = confirmed % 2 !== 0 && looseGuests.length === 1
+
+  // Los jugadores del torneo que ya están trabados con un invitado. Ofrecerlos
+  // en el `<select>` de OTRO invitado es ofrecer algo que siempre rebota
+  // ("Alguien está fijado en dos parejas a la vez"), el defecto que ya apareció
+  // en "Reabrir fecha". Incluye al compañero propio: el filtro lo readmite
+  // aparte, o el select no podría mostrar su propio valor.
+  const partnersTaken = new Set(
+    looseGuests.flatMap((guest) => (guest.partnerId === null ? [] : [guest.partnerId])),
+  )
+
+  // `assertLocksAndGuests` deja UN solo invitado suelto librado al sorteo: al
+  // resto hay que elegirles compañero. Es el default apenas se agrega el
+  // segundo, así que el botón se apaga en vez de rebotar después del click.
+  const guestsWithoutPartner = looseGuests.filter((guest) => guest.partnerId === null).length
+  const freeGuestsPileUp = guestsWithoutPartner > 1
+
+  // La paridad nunca estuvo en `canDraw` y hasta ahora no hacía falta: nada
+  // dejaba la fecha impar de a un asiento, porque la pareja invitada suma dos.
+  // "+ Agregar invitado" suma UNO, así que un plantel par más un invitado da 11
+  // y el botón tiene que apagarse en vez de rebotar con el mismo texto que la
+  // banda ya muestra arriba.
+  const canDraw = !tooFew && !tooMany && eventualSize % 2 === 0 && !freeGuestsPileUp && !pending
   const canConfirm = canDraw && pairs.length > 0 && !guestUnnamed
 
   return (
@@ -262,23 +289,43 @@ export function Armado({
         ))}
       </section>
 
-      {looseGuests.map((guest) => (
-        <GuestCard
-          key={guest.entryId}
-          guest={guest}
-          seats={optimisticSeats}
-          pending={pending}
-          onName={(name) =>
-            run(() => saveGuestName(seasonId, matchdayId, matchdayNumber, guest.entryId, name))
-          }
-          onPartner={(partnerId) =>
-            run(() => setGuestPartner(seasonId, matchdayId, matchdayNumber, guest.entryId, partnerId))
-          }
-          onRemove={() =>
-            run(() => removeLooseGuest(seasonId, matchdayId, matchdayNumber, guest.entryId))
-          }
-        />
-      ))}
+      {/* El botón va acá, pegado a las tarjetas que crea. Vivía adentro de
+          "Parejas invitadas", debajo del párrafo que dice que los invitados
+          juegan juntos y no cobran — lo contrario de lo que hace un suelto— y
+          la tarjeta que creaba aparecía arriba, fuera de la vista. */}
+      <section className="flex flex-col gap-2">
+        {looseGuests.map((guest, index) => (
+          <GuestCard
+            key={guest.entryId}
+            guest={guest}
+            seats={optimisticSeats}
+            partnersTaken={partnersTaken}
+            position={looseGuests.length === 1 ? null : index + 1}
+            required={parityGuestSeat}
+            pending={pending}
+            onName={(name) =>
+              run(() => saveGuestName(seasonId, matchdayId, matchdayNumber, guest.entryId, name))
+            }
+            onPartner={(partnerId) =>
+              run(() =>
+                setGuestPartner(seasonId, matchdayId, matchdayNumber, guest.entryId, partnerId),
+              )
+            }
+            onRemove={() =>
+              run(() => removeLooseGuest(seasonId, matchdayId, matchdayNumber, guest.entryId))
+            }
+          />
+        ))}
+
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() => run(() => addLooseGuest(seasonId, matchdayId, matchdayNumber))}
+          className="rounded-field border-[1.5px] border-line p-3 text-[13.5px] font-extrabold"
+        >
+          + Agregar invitado
+        </button>
+      </section>
 
       <section className="flex flex-col gap-2">
         <h2 className={`${STEP_TITLE} border-b border-line pb-2`}>Parejas invitadas</h2>
@@ -309,24 +356,14 @@ export function Armado({
           Juegan juntos y no suman puntos para el campeonato: es un amistoso adentro de la fecha.
         </p>
 
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() => run(() => addLooseGuest(seasonId, matchdayId, matchdayNumber))}
-            className="flex-1 rounded-field border-[1.5px] border-line p-3 text-[13.5px] font-extrabold"
-          >
-            + Agregar invitado
-          </button>
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() => run(() => addGuestPair(seasonId, matchdayId, matchdayNumber))}
-            className="flex-1 rounded-field border-[1.5px] border-line p-3 text-[13.5px] font-extrabold"
-          >
-            + Agregar pareja invitada
-          </button>
-        </div>
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() => run(() => addGuestPair(seasonId, matchdayId, matchdayNumber))}
+          className="rounded-field border-[1.5px] border-line p-3 text-[13.5px] font-extrabold"
+        >
+          + Agregar pareja invitada
+        </button>
       </section>
 
       {pairs.length > 0 && (
@@ -372,6 +409,16 @@ export function Armado({
       {sizeSettled && tooMany && (
         <p className="rounded-field bg-live-bg px-3 py-2.5 text-[12.5px] font-bold text-live">
           Son {confirmed} y entran hasta {MAX_PLAYERS}. Con más, la fecha no termina nunca.
+        </p>
+      )}
+      {/* El estado en el que queda la fecha apenas se agrega el segundo
+          invitado, así que este cartel se lee tanto como los de arriba: el
+          sorteo acomoda a UN invitado suelto y a los demás hay que elegirles
+          compañero a mano. */}
+      {freeGuestsPileUp && (
+        <p className="rounded-field bg-live-bg px-3 py-2.5 text-[12.5px] font-bold text-live">
+          Hay {guestsWithoutPartner} invitados sin compañero. Elegí en “Juega con” con quién juega
+          cada uno: el sorteo sólo puede acomodar a uno.
         </p>
       )}
       {guestUnnamed && pairs.length > 0 && (
@@ -488,6 +535,12 @@ function ParejaInvitada({
 interface GuestCardProps {
   guest: GuestVM
   seats: SeatVM[]
+  /** Los del torneo ya trabados con algún invitado, el propio incluido. */
+  partnersTaken: ReadonlySet<string>
+  /** `null` si es el único invitado suelto; si no, su número en la lista. */
+  position: number | null
+  /** El asiento que la paridad exige: va sin cruz porque sacarlo lo repondría en el acto. */
+  required: boolean
   pending: boolean
   onName: (name: string) => void
   onPartner: (partnerId: string | null) => void
@@ -507,11 +560,34 @@ interface GuestCardProps {
  *
  * La cruz sigue el mismo patrón que `ParejaInvitada`: aparece cuando la
  * tarjeta pierde el foco, y sólo escucha sobre los campos —no sobre sí
- * misma— para no ocultarse al recibir el foco de su propio click.
+ * misma— para no ocultarse al recibir el foco de su propio click. Con
+ * `required` no aparece nunca: ver `parityGuestSeat` en `Armado`.
+ *
+ * Los textos hablan de UNA tarjeta o de varias: "El invitado" y "Falta uno
+ * para armar parejas" se escribieron para el asiento único que pone
+ * `syncGuestSeat`, y repetidos en dos tarjetas dejaban de ser ciertos.
  */
-function GuestCard({ guest, seats, pending, onName, onPartner, onRemove }: GuestCardProps) {
+function GuestCard({
+  guest,
+  seats,
+  partnersTaken,
+  position,
+  required,
+  pending,
+  onName,
+  onPartner,
+  onRemove,
+}: GuestCardProps) {
   const [name, setName] = useState(guest.name)
   const [focused, setFocused] = useState(false)
+
+  const heading = position === null ? 'El invitado' : `Invitado ${position}`
+  const removeLabel =
+    guest.name.trim().length > 0
+      ? `Sacar a ${guest.name.trim()}`
+      : position === null
+        ? 'Sacar al invitado'
+        : `Sacar al invitado ${position}`
 
   return (
     <section className="relative rounded-card border-[1.5px] border-dashed border-line bg-surface p-4">
@@ -523,9 +599,9 @@ function GuestCard({ guest, seats, pending, onName, onPartner, onRemove }: Guest
           setFocused(false)
         }}
       >
-        <h2 className={STEP_TITLE}>El invitado</h2>
+        <h2 className={STEP_TITLE}>{heading}</h2>
         <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
-          Falta uno para armar parejas
+          {required ? 'Falta uno para armar parejas' : 'Lo agregaste a mano'}
         </p>
 
         <input
@@ -554,7 +630,15 @@ function GuestCard({ guest, seats, pending, onName, onPartner, onRemove }: Guest
           >
             <option value="">El que toque</option>
             {seats
-              .filter((seat) => seat.playing)
+              // El que ya está trabado con OTRO invitado no se ofrece: elegirlo
+              // rebota en el acto con "Alguien está fijado en dos parejas a la
+              // vez". El compañero propio sí se ofrece, o el select no podría
+              // mostrar su propio valor.
+              .filter(
+                (seat) =>
+                  seat.playing &&
+                  (seat.entryId === guest.partnerId || !partnersTaken.has(seat.entryId)),
+              )
               .map((seat) => (
                 <option key={seat.entryId} value={seat.entryId}>
                   {seat.name}
@@ -568,12 +652,12 @@ function GuestCard({ guest, seats, pending, onName, onPartner, onRemove }: Guest
         </p>
       </div>
 
-      {!focused && (
+      {!focused && !required && (
         <button
           type="button"
           disabled={pending}
           onClick={onRemove}
-          aria-label="Sacar al invitado"
+          aria-label={removeLabel}
           className="absolute top-0 right-0 flex h-11 w-11 items-center justify-center"
         >
           <span className="flex h-7 w-7 items-center justify-center rounded-full bg-chip text-[15px] font-extrabold text-muted">

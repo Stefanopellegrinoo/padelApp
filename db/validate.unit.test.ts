@@ -162,6 +162,20 @@ describe('assertLocksAndGuests', () => {
     expect(() => assertLocksAndGuests(guests, locks)).not.toThrow()
   })
 
+  // El caso canónico de "más de un invitado suelto": dos invitados en la fecha,
+  // uno con compañero elegido a mano y el otro librado al sorteo. Es lo que
+  // estrena el botón "+ Agregar invitado", y el único arreglo del sorteo que
+  // NO es endurecer `loose > 1` a `loose > 0` — sin este test, hacerlo mata la
+  // feature entera sin que nada se ponga en rojo.
+  it('accepts two loose guests when one is locked to a squad player', () => {
+    const guests: GuestSeat[] = [
+      { entryId: 'g1', displayName: 'G1' },
+      { entryId: 'g2', displayName: 'G2' },
+    ]
+    const locks: PairLock[] = [{ a: 'g1', b: 'player1' }]
+    expect(() => assertLocksAndGuests(guests, locks)).not.toThrow()
+  })
+
   it('rejects two lone guests', () => {
     const guests: GuestSeat[] = [
       { entryId: 'g1', displayName: 'G1' },

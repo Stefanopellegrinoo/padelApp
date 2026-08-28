@@ -369,14 +369,29 @@ describe('pairingContextFor', () => {
     )
   })
 
-  it('fails with two loose guests', async () => {
+  // Las DOS opciones para cada invitado, punta a punta: los dos van al sorteo y
+  // la fecha se arma igual. `orderPool` los manda al fondo del pool y
+  // `buildPairs` empareja el fondo con la cabeza, así que salen en dos parejas
+  // mixtas mientras haya con quién.
+  it('takes two guests left to the draw when the squad has players to spare', async () => {
     const { admin, seasonId, squad } = await buildSeasonWithSquad(defaultConfig(8), 8)
-    const matchdayId = await openMatchday(seasonId, 1, squad)
+    const matchdayId = await openMatchday(seasonId, 1, squad.slice(0, 6))
     await addGuest(seasonId, matchdayId, 0)
     await addGuest(seasonId, matchdayId, 1)
 
+    const context = await pairingContextFor(admin.client, matchdayId)
+    expect(context.input.guestIds).toHaveLength(2)
+  })
+
+  it('fails when the loose guests outnumber the squad players playing', async () => {
+    const { admin, seasonId, squad } = await buildSeasonWithSquad(defaultConfig(8), 8)
+    const matchdayId = await openMatchday(seasonId, 1, squad.slice(0, 2))
+    for (let seed = 0; seed < 6; seed += 1) {
+      await addGuest(seasonId, matchdayId, seed)
+    }
+
     await expect(pairingContextFor(admin.client, matchdayId)).rejects.toThrow(
-      /invitados sueltos/,
+      /jugadores del torneo libres/,
     )
   })
 })

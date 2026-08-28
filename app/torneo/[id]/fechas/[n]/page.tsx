@@ -245,6 +245,10 @@ export default async function FechaDetailPage({ params }: PageProps) {
         looseGuests={looseGuests}
         guestPairs={guestPairs}
         pairs={draftPairs}
+        // El mismo dato que marca el chip "Defensora". La pantalla lo necesita
+        // además para la cuenta de invitados que puede el sorteo: `buildPairs`
+        // los saca del pool antes de sortear, así que no acompañan a nadie.
+        defenders={effectiveDefenders}
         loadedResults={detail.matches.filter((match) => match.sets.length > 0).length}
       />
     )

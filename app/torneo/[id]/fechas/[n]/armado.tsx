@@ -1,7 +1,7 @@
 'use client'
 
 import { useOptimistic, useState, useTransition } from 'react'
-import { MAX_PLAYERS, MIN_PLAYERS } from '@/core'
+import { MAX_PLAYERS, MIN_PLAYERS, type Pair } from '@/core'
 import { initials } from '@/app/format'
 import {
   addGuestPair,
@@ -15,7 +15,14 @@ import {
   toggleAttendance,
   type WriteResult,
 } from './actions'
-import { applySeatTick, drawRoom, partnersTakenBy, type SeatVM } from './armado-state'
+import {
+  applySeatTick,
+  drawRoom,
+  guestPartnerAbsent,
+  parityGuestSeat,
+  partnersTakenBy,
+  type SeatVM,
+} from './armado-state'
 import { BorrarFecha } from './borrar'
 
 // `SeatVM` vive en `armado-state.ts` —con el reducer que lo usa— y se re-exporta
@@ -59,6 +66,14 @@ interface ArmadoProps {
   guestPairs: GuestPairVM[]
   pairs: DraftPairVM[]
   /**
+   * Los defensores del título, ya filtrados por la repetición: `null` cuando
+   * no hay o cuando la gastaron. Es el mismo dato que dibuja el chip
+   * "Defensora", y acá se usa para la cuenta de invitados que puede el sorteo
+   * — `buildPairs` los saca del pool antes de sortear, así que no son
+   * acompañantes disponibles.
+   */
+  defenders: Pair | null
+  /**
    * Cuántos partidos ya tienen sets cargados. En DRAFT no siempre es cero:
    * `redraft_matchday` trae una fecha de OPEN a DRAFT sin borrar un solo
    * resultado. Sólo lo usa el aviso de "Borrar fecha", para nombrar lo que
@@ -91,6 +106,7 @@ export function Armado({
   looseGuests,
   guestPairs,
   pairs,
+  defenders,
   loadedResults,
 }: ArmadoProps) {
   const [pending, startTransition] = useTransition()
@@ -184,12 +200,10 @@ export function Armado({
     ...guestPairs.flatMap((pair) => [pair.a.name, pair.b.name]),
   ].some((name) => name.trim().length === 0)
 
-  // El asiento que la paridad EXIGE, y por eso el único sin cruz: con el plantel
-  // impar y un solo suelto, sacarlo es un no-op —`removeLooseGuestSeat` cierra
-  // con `syncGuestSeat`, que lo repone en el acto— y una cruz que no hace nada
-  // confunde igual que una que rompe. Con el plantel par, o con un segundo
-  // suelto en pantalla, el asiento lo puso el admin y se lo puede llevar.
-  const parityGuestSeat = confirmed % 2 !== 0 && looseGuests.length === 1
+  // El asiento que la paridad EXIGE, y por eso el único sin cruz. La cuenta
+  // vive en `armado-state.ts` y tiene test propio: decide qué se puede sacar y
+  // qué no, y acá adentro no la podía tener.
+  const requiredGuestSeat = parityGuestSeat(optimisticSeats, looseGuests.length)
 
   // Los jugadores del torneo que ya están trabados con un invitado. Ofrecerlos
   // en el `<select>` de OTRO invitado es ofrecer algo que siempre rebota
@@ -206,9 +220,19 @@ export function Armado({
   // Lo que no entra es que sean MÁS que los libres: ahí el pigeonhole obliga a
   // una pareja invitado-invitado y `assertSquadCoversLooseGuests` rebota la
   // fecha, así que el botón se apaga en vez de rebotar después del click. La
-  // cuenta vive en `armado-state.ts` y espeja a la del borde.
-  const { toTheDraw, freeSquad } = drawRoom(optimisticSeats, looseGuests)
+  // cuenta vive en `armado-state.ts` y espeja a la del borde, defensores
+  // incluidos: la pareja que defiende sale del pool antes del sorteo y no
+  // acompaña a nadie.
+  const { toTheDraw, freeSquad } = drawRoom(optimisticSeats, looseGuests, defenders)
   const guestsOutnumberSquad = toTheDraw > freeSquad
+
+  // El compañero que el admin trabó y que después avisó que no va: el lock
+  // sobrevive al destilde y `assertLocksArePlaying` rebota la fecha. Sin esto
+  // el botón quedaba verde y el click volvía con "No pudimos guardar el
+  // cambio. Probá de nuevo.", que no describe nada y no se arregla insistiendo.
+  const someGuestPartnerAbsent = looseGuests.some((guest) =>
+    guestPartnerAbsent(optimisticSeats, guest),
+  )
 
   // La paridad nunca estuvo en `canDraw` y hasta ahora no hacía falta: nada
   // dejaba la fecha impar de a un asiento, porque la pareja invitada suma dos.
@@ -216,7 +240,12 @@ export function Armado({
   // y el botón tiene que apagarse en vez de rebotar con el mismo texto que la
   // banda ya muestra arriba.
   const canDraw =
-    !tooFew && !tooMany && eventualSize % 2 === 0 && !guestsOutnumberSquad && !pending
+    !tooFew &&
+    !tooMany &&
+    eventualSize % 2 === 0 &&
+    !guestsOutnumberSquad &&
+    !someGuestPartnerAbsent &&
+    !pending
   const canConfirm = canDraw && pairs.length > 0 && !guestUnnamed
 
   return (
@@ -308,7 +337,9 @@ export function Armado({
             seats={optimisticSeats}
             partnersTaken={partnersTaken}
             position={looseGuests.length === 1 ? null : index + 1}
-            required={parityGuestSeat}
+            required={requiredGuestSeat}
+            partnerAbsent={guestPartnerAbsent(optimisticSeats, guest)}
+            toTheDraw={toTheDraw}
             pending={pending}
             onName={(name) =>
               run(() => saveGuestName(seasonId, matchdayId, matchdayNumber, guest.entryId, name))
@@ -575,6 +606,10 @@ interface GuestCardProps {
   position: number | null
   /** El asiento que la paridad exige: va sin cruz porque sacarlo lo repondría en el acto. */
   required: boolean
+  /** El compañero elegido a mano no juega esta fecha: la fecha no se puede sortear así. */
+  partnerAbsent: boolean
+  /** Cuántos invitados van al sorteo en total, este incluido. Decide si "va último" o va al fondo con otros. */
+  toTheDraw: number
   pending: boolean
   onName: (name: string) => void
   onPartner: (partnerId: string | null) => void
@@ -595,7 +630,7 @@ interface GuestCardProps {
  * La cruz sigue el mismo patrón que `ParejaInvitada`: aparece cuando la
  * tarjeta pierde el foco, y sólo escucha sobre los campos —no sobre sí
  * misma— para no ocultarse al recibir el foco de su propio click. Con
- * `required` no aparece nunca: ver `parityGuestSeat` en `Armado`.
+ * `required` no aparece nunca: ver `parityGuestSeat` en `armado-state.ts`.
  *
  * Los textos hablan de UNA tarjeta o de varias: "El invitado" y "Falta uno
  * para armar parejas" se escribieron para el asiento único que pone
@@ -607,6 +642,8 @@ function GuestCard({
   partnersTaken,
   position,
   required,
+  partnerAbsent,
+  toTheDraw,
   pending,
   onName,
   onPartner,
@@ -639,8 +676,16 @@ function GuestCard({
         }}
       >
         <h2 className={STEP_TITLE}>{heading}</h2>
+        {/* Decía "Lo agregaste a mano" y eso es la PROCEDENCIA del asiento, que
+            la pantalla no sabe: `required` sale de la paridad. Con 9
+            confirmados la app agrega el asiento, el admin lo nombra, se baja
+            otro y quedan 8 — `syncGuestSeat` lo conserva, `required` pasa a
+            false y la tarjeta afirmaba que lo había puesto el admin. Separarlo
+            de verdad pide una columna nueva en `entries` (ver
+            `addLooseGuestSeat`), así que el texto dice lo que la pantalla SÍ
+            sabe: si la paridad exige ese asiento, o si se lo puede llevar. */}
         <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
-          {required ? 'Falta uno para armar parejas' : 'Lo agregaste a mano'}
+          {required ? 'Falta uno para armar parejas' : 'Lo podés sacar'}
         </p>
 
         <input
@@ -697,22 +742,50 @@ function GuestCard({
           </select>
         </label>
 
-        {/* La diferencia que le cambia el campeonato al admin: un invitado
-            suelto le hace cobrar puntos a su compañero del torneo, y una pareja
-            invitada no le hace cobrar a ninguno de los dos. */}
-        <p className="text-[11.5px] font-[600] text-muted">
-          Los puntos de la pareja los cobra{' '}
-          {partnerName === null ? 'el que salga en el sorteo' : partnerName}. En una pareja invitada
-          no cobra ninguno de los dos.
-        </p>
+        {/* El compañero trabado que después avisó que no va. El `<select>` de
+            arriba filtra por `seat.playing`, así que muestra "El que salga en
+            el sorteo" mientras este párrafo —que busca en `seats`, ausentes
+            incluidos— afirmaba que los puntos los cobra alguien que no viene.
+            La fecha además rebota: el lock sobrevive al destilde. */}
+        {partnerAbsent ? (
+          <p
+            role="alert"
+            className="rounded-field bg-live-bg px-3 py-2.5 text-[11.5px] font-bold text-live"
+          >
+            {partnerName ?? 'El compañero elegido'} no juega esta fecha. Elegile otro compañero, o
+            dejalo al sorteo.
+          </p>
+        ) : (
+          /* La diferencia que le cambia el campeonato al admin: un invitado
+             suelto le hace cobrar puntos a su compañero del torneo, y una
+             pareja invitada no le hace cobrar a ninguno de los dos. */
+          <p className="text-[11.5px] font-[600] text-muted">
+            Los puntos de la pareja los cobra{' '}
+            {partnerName === null ? 'el que salga en el sorteo' : partnerName}. En una pareja
+            invitada no cobra ninguno de los dos.
+          </p>
+        )}
 
         {/* Decía "Movelo si lo conocés" y no hay con qué: `orderPool` manda a
             los invitados al fondo del pool siempre, así que el control para
             moverlo no existe ni se puede construir (decisión registrada 2). Lo
-            que sí se puede es elegirle compañero, que es el control de arriba. */}
-        <p className="text-[11.5px] font-[600] text-muted">
-          Va último en el sorteo: nadie sabe cómo juega. Si lo conocés, elegile compañero.
-        </p>
+            que sí se puede es elegirle compañero, que es el control de arriba.
+
+            Sale sólo con el invitado librado al sorteo: con compañero elegido
+            entra en `fixedPairs` y `resolveSettled` lo saca del pool ANTES de
+            que exista un orden, así que no va último ni está en el sorteo — y
+            "elegile compañero" le pedía lo que acababa de hacer.
+
+            "Va último" es de a uno. Con varios al sorteo los tres decían lo
+            mismo y sólo uno lo es: el ÚLTIMO de la lista es el que cae con el
+            líder de la tabla (ver `PairingInput.guestIds`). */}
+        {guest.partnerId === null && (
+          <p className="text-[11.5px] font-[600] text-muted">
+            {toTheDraw > 1
+              ? 'Va al fondo del sorteo, con los otros invitados: nadie sabe cómo juegan. Si lo conocés, elegile compañero.'
+              : 'Va último en el sorteo: nadie sabe cómo juega. Si lo conocés, elegile compañero.'}
+          </p>
+        )}
       </div>
 
       {!focused && !required && (

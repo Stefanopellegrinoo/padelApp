@@ -7,6 +7,7 @@ import { EdgeError } from '@/db/errors'
 import { promoteGuest } from '@/db/entries'
 import {
   addGuest,
+  addLooseGuestSeat,
   cancelMatchday,
   clearPairs,
   closeMatchday,
@@ -18,6 +19,7 @@ import {
   openMatchday,
   redraftMatchday,
   removeGuest,
+  removeLooseGuestSeat,
   reopenMatchday,
   saveResult,
   seedAttendances,
@@ -38,6 +40,12 @@ export type WriteResult = { ok: true } | { ok: false; error: string }
  * PLAYING existentes: sin la siembra, el panel diría "10 confirmados" y la
  * fecha tendría 0 presentes. El admin puede además no haber tocado un solo
  * tilde, así que "Generar parejas" y "Confirmar fecha" también la llaman.
+ *
+ * El `finally` no es cosmético: `work` compone varias escrituras —
+ * `setGuestPartner` destraba ANTES de trabar— y si la última rebota, las
+ * anteriores YA están en la base. Revalidando sólo en el camino feliz, la
+ * pantalla se quedaba mostrando el compañero viejo que la base ya no tiene.
+ * Revalidar siempre cuesta un render y deja pantalla y base de acuerdo.
  */
 async function inDraft(
   seasonId: string,
@@ -49,12 +57,13 @@ async function inDraft(
     const supabase = await serverClient()
     await seedAttendances(supabase, matchdayId)
     await work(supabase)
-    revalidatePath(`/torneo/${seasonId}/fechas/${matchdayNumber}`)
-    revalidatePath(`/torneo/${seasonId}/fechas`)
     return { ok: true }
   } catch (error) {
     if (error instanceof EdgeError) return { ok: false, error: error.message }
     throw error
+  } finally {
+    revalidatePath(`/torneo/${seasonId}/fechas/${matchdayNumber}`)
+    revalidatePath(`/torneo/${seasonId}/fechas`)
   }
 }
 
@@ -287,21 +296,19 @@ export async function addGuestPair(
 
 /**
  * Suma un invitado suelto: un asiento más que juega con alguien del torneo, y
- * ese compañero sí cobra (spec 2.6). No viene trabado con nadie al crearse —a
- * diferencia de la pareja invitada, que se traba consigo misma— el sorteo lo
- * empareja con quien toque hasta que el admin elija un compañero desde el
- * `<select>` "Juega con" de su tarjeta.
+ * ese compañero sí cobra (spec 2.6). No viene trabado con nadie al crearse, a
+ * diferencia de la pareja invitada, que se traba consigo misma.
+ *
+ * Al PRIMER suelto lo empareja el sorteo si el admin no elige compañero. Del
+ * SEGUNDO en adelante no: `assertLocksAndGuests` sólo deja UN suelto librado
+ * al sorteo, así que cada invitado extra necesita su compañero elegido a mano
+ * desde el `<select>` "Juega con" o la fecha no se genera. La pantalla apaga
+ * "Generar parejas" mientras eso falte.
  *
  * Antes sólo podía existir un suelto: el que agrega `syncGuestSeat` cuando el
  * plantel da impar. Este botón es la forma de sumar OTRO a mano — el caso de
  * dos confirmados que se bajan después de armada la fecha por equipos, y cada
  * hueco se tapa con un invitado propio.
- *
- * `syncGuestSeat` NO se llama acá, a propósito: ese sync borra al suelto sin
- * nombre cuando el plantel da par porque asume que es el asiento automático
- * que perdió sentido — y el que se acaba de sumar a mano es exactamente ese
- * mismo patrón (sin nombre, plantel par). Llamarlo lo borraría en el mismo
- * click que lo crea.
  */
 export async function addLooseGuest(
   seasonId: string,
@@ -309,12 +316,11 @@ export async function addLooseGuest(
   matchdayNumber: number,
 ): Promise<WriteResult> {
   return inDraft(seasonId, matchdayId, matchdayNumber, async (supabase) => {
-    await clearPairs(supabase, matchdayId)
-    await addGuest(supabase, matchdayId, { displayName: '' })
+    await addLooseGuestSeat(supabase, matchdayId)
   })
 }
 
-/** Saca un invitado suelto. Si tenía un compañero trabado, el lock cae solo con el asiento. */
+/** Saca un invitado suelto. El cuerpo vive en `db/matchday.ts`: cierra con `syncGuestSeat`. */
 export async function removeLooseGuest(
   seasonId: string,
   matchdayId: string,
@@ -322,8 +328,7 @@ export async function removeLooseGuest(
   entryId: string,
 ): Promise<WriteResult> {
   return inDraft(seasonId, matchdayId, matchdayNumber, async (supabase) => {
-    await clearPairs(supabase, matchdayId)
-    await removeGuest(supabase, entryId)
+    await removeLooseGuestSeat(supabase, matchdayId, entryId)
   })
 }
 

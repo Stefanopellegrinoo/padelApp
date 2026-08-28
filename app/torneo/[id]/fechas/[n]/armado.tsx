@@ -166,10 +166,12 @@ export function Armado({
   // dos y no la cambia. Se muestra sólo cuando todavía no hay ningún suelto, que
   // es exactamente el momento que la frase explica.
   //
-  // ponytail: queda un caso que esto no dibuja — plantel par con un invitado
-  // suelto YA NOMBRADO, que `syncGuestSeat` conserva a propósito. Ahí la fecha
-  // es impar; lo agarra `assertMatchdaySize` al generar, con su mensaje, y se
-  // sale borrándole el nombre al invitado o sumándole una pareja.
+  // Queda un caso que esta línea no dibuja — plantel par con un invitado suelto
+  // que `syncGuestSeat` conserva (ya nombrado) o que el admin acaba de agregar.
+  // Ahí la fecha es impar y lo dice la rama de abajo, "Son N y sólo se juega de
+  // a pares"; `canDraw` mira la paridad, así que además el botón queda apagado
+  // en vez de rebotar con `assertMatchdaySize`. Se sale sacando al invitado,
+  // borrándole el nombre, o sumándole una pareja.
   const needsLooseGuest = confirmed % 2 !== 0 && looseGuests.length === 0
 
   // Los bloqueos se miden sobre el tamaño que la fecha VA a tener, contando el

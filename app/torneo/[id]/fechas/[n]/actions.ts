@@ -285,6 +285,48 @@ export async function addGuestPair(
   })
 }
 
+/**
+ * Suma un invitado suelto: un asiento más que juega con alguien del torneo, y
+ * ese compañero sí cobra (spec 2.6). No viene trabado con nadie al crearse —a
+ * diferencia de la pareja invitada, que se traba consigo misma— el sorteo lo
+ * empareja con quien toque hasta que el admin elija un compañero desde el
+ * `<select>` "Juega con" de su tarjeta.
+ *
+ * Antes sólo podía existir un suelto: el que agrega `syncGuestSeat` cuando el
+ * plantel da impar. Este botón es la forma de sumar OTRO a mano — el caso de
+ * dos confirmados que se bajan después de armada la fecha por equipos, y cada
+ * hueco se tapa con un invitado propio.
+ *
+ * `syncGuestSeat` NO se llama acá, a propósito: ese sync borra al suelto sin
+ * nombre cuando el plantel da par porque asume que es el asiento automático
+ * que perdió sentido — y el que se acaba de sumar a mano es exactamente ese
+ * mismo patrón (sin nombre, plantel par). Llamarlo lo borraría en el mismo
+ * click que lo crea.
+ */
+export async function addLooseGuest(
+  seasonId: string,
+  matchdayId: string,
+  matchdayNumber: number,
+): Promise<WriteResult> {
+  return inDraft(seasonId, matchdayId, matchdayNumber, async (supabase) => {
+    await clearPairs(supabase, matchdayId)
+    await addGuest(supabase, matchdayId, { displayName: '' })
+  })
+}
+
+/** Saca un invitado suelto. Si tenía un compañero trabado, el lock cae solo con el asiento. */
+export async function removeLooseGuest(
+  seasonId: string,
+  matchdayId: string,
+  matchdayNumber: number,
+  entryId: string,
+): Promise<WriteResult> {
+  return inDraft(seasonId, matchdayId, matchdayNumber, async (supabase) => {
+    await clearPairs(supabase, matchdayId)
+    await removeGuest(supabase, entryId)
+  })
+}
+
 /** Saca la pareja invitada entera. El lock se va solo: `pair_locks` cae en cascada con el asiento. */
 export async function removeGuestPair(
   seasonId: string,

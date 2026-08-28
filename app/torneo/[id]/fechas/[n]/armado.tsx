@@ -5,9 +5,11 @@ import { MAX_PLAYERS, MIN_PLAYERS } from '@/core'
 import { initials } from '@/app/format'
 import {
   addGuestPair,
+  addLooseGuest,
   confirmMatchday,
   drawPairs,
   removeGuestPair,
+  removeLooseGuest,
   saveGuestName,
   setGuestPartner,
   toggleAttendance,
@@ -48,7 +50,11 @@ interface ArmadoProps {
   matchdayNumber: number
   /** El plantel en orden de siembra. Los invitados van aparte: son un asiento de esta fecha, no del torneo. */
   seats: SeatVM[]
-  /** Como máximo uno: el que aparece cuando el plantel da impar. */
+  /**
+   * Uno o más: el que aparece cuando el plantel da impar, y los que el admin
+   * suma a mano con "+ Agregar invitado" para tapar huecos que se abrieron
+   * después de armada la fecha por equipos.
+   */
   looseGuests: GuestVM[]
   guestPairs: GuestPairVM[]
   pairs: DraftPairVM[]
@@ -268,6 +274,9 @@ export function Armado({
           onPartner={(partnerId) =>
             run(() => setGuestPartner(seasonId, matchdayId, matchdayNumber, guest.entryId, partnerId))
           }
+          onRemove={() =>
+            run(() => removeLooseGuest(seasonId, matchdayId, matchdayNumber, guest.entryId))
+          }
         />
       ))}
 
@@ -300,14 +309,24 @@ export function Armado({
           Juegan juntos y no suman puntos para el campeonato: es un amistoso adentro de la fecha.
         </p>
 
-        <button
-          type="button"
-          disabled={pending}
-          onClick={() => run(() => addGuestPair(seasonId, matchdayId, matchdayNumber))}
-          className="rounded-field border-[1.5px] border-line p-3 text-[13.5px] font-extrabold"
-        >
-          + Agregar pareja invitada
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => run(() => addLooseGuest(seasonId, matchdayId, matchdayNumber))}
+            className="flex-1 rounded-field border-[1.5px] border-line p-3 text-[13.5px] font-extrabold"
+          >
+            + Agregar invitado
+          </button>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => run(() => addGuestPair(seasonId, matchdayId, matchdayNumber))}
+            className="flex-1 rounded-field border-[1.5px] border-line p-3 text-[13.5px] font-extrabold"
+          >
+            + Agregar pareja invitada
+          </button>
+        </div>
       </section>
 
       {pairs.length > 0 && (
@@ -472,66 +491,96 @@ interface GuestCardProps {
   pending: boolean
   onName: (name: string) => void
   onPartner: (partnerId: string | null) => void
+  onRemove: () => void
 }
 
 /**
- * El invitado de la fecha. Va montado con `key={guest.entryId}` para que el
- * nombre a medio tipear se vaya con el asiento cuando `syncGuestSeat` lo saca.
+ * Un invitado suelto de la fecha. Va montado con `key={guest.entryId}` para
+ * que el nombre a medio tipear se vaya con el asiento cuando `syncGuestSeat`
+ * lo saca.
  *
  * El handoff dibuja acá un `⠿` y dos flechas para moverlo en el orden. Ese
  * control no se puede construir: `orderPool` manda a los invitados al final del
  * pool siempre, así que arrastrarlo no cambiaría nada (decisión registrada 2).
  * Lo que sí implementa el spec 2.6 es elegir con quién juega, y eso es lo que
  * hay acá.
+ *
+ * La cruz sigue el mismo patrón que `ParejaInvitada`: aparece cuando la
+ * tarjeta pierde el foco, y sólo escucha sobre los campos —no sobre sí
+ * misma— para no ocultarse al recibir el foco de su propio click.
  */
-function GuestCard({ guest, seats, pending, onName, onPartner }: GuestCardProps) {
+function GuestCard({ guest, seats, pending, onName, onPartner, onRemove }: GuestCardProps) {
   const [name, setName] = useState(guest.name)
+  const [focused, setFocused] = useState(false)
 
   return (
-    <section className="flex flex-col gap-2 rounded-card border-[1.5px] border-dashed border-line bg-surface p-4">
-      <h2 className={STEP_TITLE}>El invitado</h2>
-      <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
-        Falta uno para armar parejas
-      </p>
-
-      <input
-        value={name}
-        onChange={(event) => setName(event.target.value)}
-        onBlur={() => {
-          if (name.trim() !== guest.name.trim()) onName(name)
+    <section className="relative rounded-card border-[1.5px] border-dashed border-line bg-surface p-4">
+      <div
+        className="flex flex-col gap-2"
+        onFocus={() => setFocused(true)}
+        onBlur={(event) => {
+          if (event.currentTarget.contains(event.relatedTarget)) return
+          setFocused(false)
         }}
-        disabled={pending}
-        className={`rounded-field border-[1.5px] bg-surface p-[15px] text-[16px] font-[750] outline-none ${
-          name.trim().length === 0 ? 'border-accent' : 'border-line'
-        }`}
-      />
+      >
+        <h2 className={STEP_TITLE}>El invitado</h2>
+        <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
+          Falta uno para armar parejas
+        </p>
 
-      <p className="text-[11.5px] font-[600] text-muted">
-        No suma puntos para el campeonato, pero su compañero sí.
-      </p>
-
-      <label className="flex items-center gap-2 text-[12.5px] font-bold">
-        Juega con
-        <select
-          value={guest.partnerId ?? ''}
+        <input
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          onBlur={() => {
+            if (name.trim() !== guest.name.trim()) onName(name)
+          }}
           disabled={pending}
-          onChange={(event) => onPartner(event.target.value === '' ? null : event.target.value)}
-          className="flex-1 rounded-field border border-line bg-surface p-[10px] text-[13.5px] font-bold outline-none"
-        >
-          <option value="">El que toque</option>
-          {seats
-            .filter((seat) => seat.playing)
-            .map((seat) => (
-              <option key={seat.entryId} value={seat.entryId}>
-                {seat.name}
-              </option>
-            ))}
-        </select>
-      </label>
+          className={`rounded-field border-[1.5px] bg-surface p-[15px] text-[16px] font-[750] outline-none ${
+            name.trim().length === 0 ? 'border-accent' : 'border-line'
+          }`}
+        />
 
-      <p className="text-[11.5px] font-[600] text-muted">
-        Va último porque nadie sabe cómo juega. Movelo si lo conocés.
-      </p>
+        <p className="text-[11.5px] font-[600] text-muted">
+          No suma puntos para el campeonato, pero su compañero sí.
+        </p>
+
+        <label className="flex items-center gap-2 text-[12.5px] font-bold">
+          Juega con
+          <select
+            value={guest.partnerId ?? ''}
+            disabled={pending}
+            onChange={(event) => onPartner(event.target.value === '' ? null : event.target.value)}
+            className="flex-1 rounded-field border border-line bg-surface p-[10px] text-[13.5px] font-bold outline-none"
+          >
+            <option value="">El que toque</option>
+            {seats
+              .filter((seat) => seat.playing)
+              .map((seat) => (
+                <option key={seat.entryId} value={seat.entryId}>
+                  {seat.name}
+                </option>
+              ))}
+          </select>
+        </label>
+
+        <p className="text-[11.5px] font-[600] text-muted">
+          Va último porque nadie sabe cómo juega. Movelo si lo conocés.
+        </p>
+      </div>
+
+      {!focused && (
+        <button
+          type="button"
+          disabled={pending}
+          onClick={onRemove}
+          aria-label="Sacar al invitado"
+          className="absolute top-0 right-0 flex h-11 w-11 items-center justify-center"
+        >
+          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-chip text-[15px] font-extrabold text-muted">
+            ×
+          </span>
+        </button>
+      )}
     </section>
   )
 }

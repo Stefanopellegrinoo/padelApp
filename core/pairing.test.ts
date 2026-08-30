@@ -280,6 +280,27 @@ describe('buildPairs — fixed pairs', () => {
       buildPairs(input({ defenders: pair('p1', 'p2'), fixedPairs: [pair('p2', 'p3')] })),
     ).toThrow(/p2 ya está en la pareja defensora/)
   })
+
+  it('respects two simultaneous guest+squad locks, each guest with a different partner', () => {
+    // El caso real: dos jugadores del plantel se bajaron después de armada la
+    // fecha por equipos, y cada hueco se tapa con un invitado distinto trabado
+    // a un jugador — no una pareja invitada entre sí. `take()` no distingue
+    // invitado de plantel: procesa `fixedPairs` uno por uno, así que dos locks
+    // mixtos simultáneos no son un caso especial.
+    const pairs = buildPairs(
+      input({
+        present: ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'g1', 'g2'],
+        guestIds: ['g1', 'g2'],
+        fixedPairs: [
+          pair('g1', 'p1'),
+          pair('g2', 'p2'),
+        ],
+      }),
+    )
+    expect(keys(pairs)).toContain('g1-p1')
+    expect(keys(pairs)).toContain('g2-p2')
+    expect(pairs).toHaveLength(4)
+  })
 })
 
 describe('buildPairs — refusing the impossible', () => {

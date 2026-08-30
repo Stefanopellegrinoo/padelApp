@@ -1,11 +1,14 @@
 # Los cuatro gates del repo, en cada PR y en cada push a main.
 #
-# Hasta acá NO había CI: lo único que corría sobre un PR era el deploy de
-# preview de Vercel, o sea el `build` y nada más. Los otros tres gates
-# —`typecheck`, `npm test` y sobre todo `npm run test:db`, 421 tests contra
-# una Postgres real— dependían de que alguien se acordara de correrlos en su
-# máquina. Una cadena de PRs cuya única señal automática es "compila" se
-# revisa a ciegas.
+# Hasta acá `main` no tenía CI: lo único que corría sobre un PR era el deploy
+# de preview de Vercel, o sea el `build` y nada más. Los otros tres gates
+# —`typecheck`, `npm test` y sobre todo `npm run test:db`, contra una Postgres
+# real— dependían de que alguien se acordara de correrlos en su máquina. Un PR
+# cuya única señal automática es "compila" se revisa a ciegas, y así estuvo a
+# punto de salir el hotfix que trajo este archivo.
+#
+# Sin conteos de tests en este comentario, a propósito: un número escrito acá
+# se vuelve falso en el commit siguiente y el que lo lee no tiene cómo saberlo.
 #
 # Dos jobs y no uno: `gates` tarda ~1 min y `db` ~5 (tiene que levantar el
 # stack de Supabase en Docker). Separados, un error de tipos se ve enseguida en

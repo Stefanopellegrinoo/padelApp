@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { defaultConfig, validateConfig, type MatchFormat } from '@/core'
+import { buildPairs, defaultConfig, pair, validateConfig, type MatchFormat } from '@/core'
 import { EdgeError } from './errors'
 import {
   assertValidConfig,
@@ -7,6 +7,8 @@ import {
   matchError,
   assertMatchdaySize,
   assertLocksAndGuests,
+  assertLocksArePlaying,
+  assertSquadCoversLooseGuests,
   assertPointsCoverMatchday,
   assertGuestsNamed,
   type GuestSeat,
@@ -243,12 +245,29 @@ describe('assertLocksAndGuests', () => {
     expect(() => assertLocksAndGuests(guests, locks)).not.toThrow()
   })
 
-  it('rejects two lone guests', () => {
+  // El caso canónico de "más de un invitado suelto": dos invitados en la fecha,
+  // uno con compañero elegido a mano y el otro librado al sorteo. Es lo que
+  // estrena el botón "+ Agregar invitado".
+  it('accepts two loose guests when one is locked to a squad player', () => {
     const guests: GuestSeat[] = [
       { entryId: 'g1', displayName: 'G1' },
       { entryId: 'g2', displayName: 'G2' },
     ]
-    expect(() => assertLocksAndGuests(guests, [])).toThrow(EdgeError)
+    const locks: PairLock[] = [{ a: 'g1', b: 'player1' }]
+    expect(() => assertLocksAndGuests(guests, locks)).not.toThrow()
+  })
+
+  // Las DOS opciones para cada invitado: elegirle compañero a mano, o tirarlo
+  // al sorteo. Que dos vayan al sorteo es válido y el sorteo los separa —
+  // `orderPool` los manda al fondo del pool y `buildPairs` empareja el fondo
+  // con la cabeza (`core/pairing.test.ts:186`). Cuántos entran es una cuenta de
+  // plantel, y la hace `assertSquadCoversLooseGuests`: acá no se cuenta nada.
+  it('accepts two guests left to the draw: counting them is not this function', () => {
+    const guests: GuestSeat[] = [
+      { entryId: 'g1', displayName: 'G1' },
+      { entryId: 'g2', displayName: 'G2' },
+    ]
+    expect(() => assertLocksAndGuests(guests, [])).not.toThrow()
   })
 
   it('rejects locking two squad players together', () => {
@@ -266,6 +285,137 @@ describe('assertLocksAndGuests', () => {
       { a: 'g1', b: 'player2' },
     ]
     expect(() => assertLocksAndGuests(guests, locks)).toThrow(/fijado en dos parejas/)
+  })
+})
+
+describe('assertLocksArePlaying', () => {
+  it('accepts a lock whose two entries are playing', () => {
+    const locks: PairLock[] = [{ a: 'g1', b: 'p0' }]
+    expect(() => assertLocksArePlaying(['p0', 'p1', 'g1'], locks)).not.toThrow()
+  })
+
+  it('rejects a lock whose partner was marked absent after it was made', () => {
+    // `setAttendance` no toca `pair_locks`: el lock sobrevive apuntando a
+    // alguien que ya no está en `present`.
+    const locks: PairLock[] = [{ a: 'g1', b: 'p9' }]
+    expect(() => assertLocksArePlaying(['p0', 'p1', 'g1'], locks)).toThrow(EdgeError)
+  })
+
+  it('names the two ways out instead of a bare id', () => {
+    const locks: PairLock[] = [{ a: 'g1', b: 'p9' }]
+    expect(() => assertLocksArePlaying(['g1'], locks)).toThrow(
+      /Elegile otro compañero al invitado, o volvé a tildar que viene/,
+    )
+  })
+
+  it('accepts a matchday with no locks at all', () => {
+    expect(() => assertLocksArePlaying(['p0', 'p1'], [])).not.toThrow()
+  })
+})
+
+describe('assertSquadCoversLooseGuests', () => {
+  function guestSeats(count: number): GuestSeat[] {
+    return Array.from({ length: count }, (_, i) => ({
+      entryId: `g${i + 1}`,
+      displayName: `G${i + 1}`,
+    }))
+  }
+
+  it('accepts two guests left to the draw when the squad has players to spare', () => {
+    // Seis del plantel y dos invitados: el sorteo saca DOS parejas mixtas, no
+    // una pareja de invitados — está pinneado en `core/pairing.test.ts:186`.
+    const guests = guestSeats(2)
+    const present = [...players(6), 'g1', 'g2']
+    expect(() => assertSquadCoversLooseGuests(present, guests, [], null)).not.toThrow()
+  })
+
+  it('rejects more loose guests than free squad players', () => {
+    // Dos del torneo y seis invitados sueltos: por pigeonhole, al menos una
+    // pareja sale invitado-invitado. Esa pareja no cobra y
+    // `assertPointsCoverMatchday` no la ve, porque cuenta sobre `pair_locks`.
+    const guests = guestSeats(6)
+    const present = [...players(2), ...guests.map((guest) => guest.entryId)]
+    expect(() => assertSquadCoversLooseGuests(present, guests, [], null)).toThrow(EdgeError)
+  })
+
+  it('accepts the same guests once the extras are locked into guest pairs', () => {
+    // La salida que nombra el mensaje de error. Un lock invitado-invitado saca
+    // DOS de la cuenta de sueltos y no consume ningún jugador del torneo.
+    const guests = guestSeats(6)
+    const present = [...players(2), ...guests.map((guest) => guest.entryId)]
+    const locks: PairLock[] = [
+      { a: 'g1', b: 'g2' },
+      { a: 'g3', b: 'g4' },
+    ]
+    expect(() => assertSquadCoversLooseGuests(present, guests, locks, null)).not.toThrow()
+  })
+
+  // ── El borde, que es la única línea que esta función decide ────────────────
+  // Los dos casos de arriba son 2-vs-6 y 6-vs-2: ninguno toca `loose === free`.
+  // Sin estos dos, mutar `loose <= free` a `loose <= free + 1` deja la suite
+  // entera en verde.
+
+  it('accepts exactly as many loose guests as free squad players', () => {
+    const guests = guestSeats(4)
+    const present = [...players(4), ...guests.map((guest) => guest.entryId)]
+    expect(() => assertSquadCoversLooseGuests(present, guests, [], null)).not.toThrow()
+  })
+
+  it('rejects one loose guest more than free squad players', () => {
+    const guests = guestSeats(5)
+    const present = [...players(4), ...guests.map((guest) => guest.entryId)]
+    expect(() => assertSquadCoversLooseGuests(present, guests, [], null)).toThrow(EdgeError)
+  })
+
+  // ── Los defensores, que el sorteo saca del pool y la cuenta ignoraba ───────
+
+  it('does not count the defending pair among the free squad players', () => {
+    // `buildPairs` arma `settled` con los defensores ANTES de que exista el
+    // pool, igual que con los locks. Los locks ya se descontaban; los
+    // defensores no, y no están en `pair_locks` para que se noten.
+    const guests = guestSeats(6)
+    const present = [...players(6), ...guests.map((guest) => guest.entryId)]
+
+    expect(() => assertSquadCoversLooseGuests(present, guests, [], null)).not.toThrow()
+    expect(() =>
+      assertSquadCoversLooseGuests(present, guests, [], pair('p0', 'p1')),
+    ).toThrow(EdgeError)
+  })
+
+  it('counts the defenders as free when one of them is not playing', () => {
+    // Mismo criterio que `resolveDefenders` en core/pairing.ts: si falta uno,
+    // la pareja se disuelve y el que sí vino vuelve al pool.
+    const guests = guestSeats(6)
+    const present = [...players(6), ...guests.map((guest) => guest.entryId)]
+    expect(() =>
+      assertSquadCoversLooseGuests(present, guests, [], pair('p0', 'ausente')),
+    ).not.toThrow()
+  })
+
+  it('rejects the matchday whose draw actually came out with a guest-guest pair', () => {
+    // Ejecutado, no razonado. Seis del plantel, seis invitados sueltos y la
+    // pareja defensora en pie: `loose === free` para la cuenta vieja, así que
+    // la fecha entraba — y el sorteo devolvía {g1,g2}, que no cobra ninguno de
+    // los dos y `assertPointsCoverMatchday` no ve porque cuenta sobre locks.
+    const squad = players(6)
+    const guests = guestSeats(6)
+    const guestIds = guests.map((guest) => guest.entryId)
+    const present = [...squad, ...guestIds]
+    const defenders = pair('p0', 'p1')
+
+    const drawn = buildPairs({
+      present,
+      points: new Map(squad.map((entryId, index) => [entryId, 100 - index])),
+      snapshot: squad,
+      defenders,
+      defendersAlreadyRepeated: false,
+      previousPairs: [defenders],
+      guestIds,
+      fixedPairs: [],
+    })
+    expect(drawn).toContainEqual(pair('g1', 'g2'))
+
+    expect(() => assertSquadCoversLooseGuests(present, guests, [], defenders)).toThrow(EdgeError)
   })
 })
 

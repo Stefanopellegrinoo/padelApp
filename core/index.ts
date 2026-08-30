@@ -55,6 +55,7 @@ export { PHASE_ORDER } from './types'
 // `core/pair-compat.ts` enteros**: ya no hay adaptador ni tipo paralelo, y
 // `Side` es la única forma de nombrar un lado en todo el repo.
 export { single, pair, members, includes, partnerOf, sameSide, sideOfRow } from './side'
+export type { Duo } from './side'
 
 // ── Season configuration ─────────────────────────────────────────────────────
 // `validateConfig` RETURNS its problems in Spanish, it never throws — so it

@@ -9,9 +9,9 @@ ningún otro lado: si este documento se pierde, hay que redescubrirlo.
 
 | | |
 |---|---|
-| **Código en GitHub** | [`Stefanopellegrinoo/padelApp`](https://github.com/Stefanopellegrinoo/padelApp), **privado**. `main` es la rama por defecto. También están subidas las tres ramas de plan que nombra `estado.md` |
+| **Código en GitHub** | [`Stefanopellegrinoo/padelApp`](https://github.com/Stefanopellegrinoo/padelApp), **privado**. `main` es la rama por defecto. La otra rama subida es `feature/torneo-multi-disciplina`. Las ramas de plan se borraron el 30/08: su contenido está adentro de `main` |
 | **Base de producción** | Supabase Cloud, proyecto **`padelApp`** — ref `<tu-proyecto-ref>`, región `sa-east-1` (São Paulo), plan free |
-| **Las migraciones aplicadas** | **14** (`0001_schema` → `0014_promote_guest`), o sea **exactamente `main`**. 10 tablas, **las 10 con RLS**. Medido el 2026-08-24 contra `supabase_migrations.schema_migrations` |
+| **Las migraciones aplicadas** | **14** (`0001_schema` → `0014_promote_guest`), o sea **exactamente `main`**. 10 tablas, **las 10 con RLS**. Medido el 2026-08-24 contra `supabase_migrations.schema_migrations`. El PR #16 (28/08) movió `main` pero **no trajo migraciones**, así que el 14 sigue valiendo |
 | **La base TIENE datos reales** | 12 players · 2 torneos (los dos `ACTIVE`) · 22 entries · 3 fechas (2 cerradas) · 27 partidos · **15 premios otorgados**. `supabase/seed.sql` nunca corrió contra la nube: esto lo cargó gente usando la app |
 | **El trigger de alta** | Probado **en producción**: un alta de prueba creó su `players` con el nombre del metadata. Después se borró |
 
@@ -33,12 +33,14 @@ ningún otro lado: si este documento se pierde, hay que redescubrirlo.
 
 ## Lo que falta para que `main` funcione en producción
 
-La rama `feature/torneo-multi-disciplina` está **52 migraciones adelante** de
-lo que hay aplicado (66 archivos contra 14). Tres cosas que conviene saber
-antes de mergear:
+La rama `feature/torneo-multi-disciplina` tiene **todas las migraciones de la
+`0015` en adelante** sin aplicar contra la nube. El punto de corte es lo estable
+—producción está en la `0014`—; la CANTIDAD sube con cada migración nueva, así
+que contala vos y no la leas de acá. Tres cosas que conviene saber antes de
+mergear:
 
 1. **Nada automatiza el `db push`.** El CI (`.github/workflows/ci.yml`) sólo
-   levanta Supabase *en el runner*; no toca la nube. Las 52 se aplican a mano.
+   levanta Supabase *en el runner*; no toca la nube. Se aplican a mano.
 2. **`vercel.json` no desactiva el deploy**, así que un merge a `main` deploya
    código que busca `disciplines`, `discipline_entries` y `award_lines` —
    tres tablas que producción todavía no tiene.

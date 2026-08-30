@@ -1,10 +1,11 @@
 # Estado del proyecto
 
-**Última actualización:** 24 de agosto de 2026. `torneo-multi-disciplina` terminada
-y verificada en la rama, **sin publicar**.
+**Última actualización:** 30 de agosto de 2026. `torneo-multi-disciplina` terminada
+y verificada en la rama, **sin publicar** — y ahora también con el hotfix de
+producción adentro (ver "Producción").
 
 > **Lo que este documento describe abajo —planes 2, 3 y 4— es la app que está
-> ONLINE hoy: un torneo, un deporte.** Encima de eso hay **52 migraciones y una feature entera** en
+> ONLINE hoy: un torneo, un deporte.** Encima de eso hay **una feature entera y todas las migraciones de la `0015` en adelante** en
 > `feature/torneo-multi-disciplina` que la vuelven multi-disciplina y que
 > todavía NO se publicaron. Lo de esa rama está en "Dónde estamos".
 
@@ -19,6 +20,14 @@ La base de producción existe y **tiene datos reales**: proyecto **`padelApp`** 
 Supabase Cloud (`<tu-proyecto-ref>`, São Paulo), con **14 migraciones aplicadas**
 —exactamente las de `main`— y **12 jugadores, 2 torneos activos, 3 fechas (2
 cerradas) y 15 premios otorgados**. Medido el 2026-08-24, no asumido.
+
+**`main` se movió el 28/08, y eso es nuevo desde esa foto.** El PR
+[#16](https://github.com/Stefanopellegrinoo/padelApp/pull/16) (`5dd5794`) arregló
+en producción que una fecha admita **más de un invitado suelto**, cada uno trabado
+a un jugador distinto del torneo. **No trajo ninguna migración**, así que las 14
+de arriba siguen siendo la cuenta exacta de `main` y no hace falta re-medir la
+base por esto. Ese hotfix ya está adentro de `feature/torneo-multi-disciplina`
+(merge `60c9418`, 30/08), probado en la app.
 
 > **Este párrafo decía "las 10 migraciones" y "0 usuarios y 0 temporadas" hasta
 > el 24/08.** Las dos cosas eran falsas y sobre ellas se armó un análisis de
@@ -39,7 +48,8 @@ función, `season_public_rules`.
 
 **El código está en GitHub:**
 [`Stefanopellegrinoo/padelApp`](https://github.com/Stefanopellegrinoo/padelApp),
-privado, con `main` y las tres ramas de plan.
+privado, con dos ramas: `main` y `feature/torneo-multi-disciplina`. Las
+ramas de plan se borraron el 30/08 — su contenido está entero adentro de `main`.
 
 **Lo que falta para que esté online está todo en
 [`despliegue.md`](despliegue.md)**, con las credenciales y los pasos exactos:
@@ -55,20 +65,20 @@ sólo se resume.
 | Plan | Qué produce | Estado |
 |---|---|---|
 | **1. `core/`** | Toda la lógica del campeonato, funciones puras | [Completado] **Terminado y en `main`** |
-| **2. Datos y auth** | Schema Supabase, migraciones, RLS, login + Google | [Completado] **Terminado**, rama `plan-2-data-and-auth` |
-| **3. Pantallas de lectura** | Tabla, Fechas, Estadísticas, Reglas, Perfil | [Completado] **Terminado**, rama `plan-3-read-screens` |
-| **4. Pantallas de escritura** | Crear torneo, abrir fecha, cargar resultados, Ajustes, Masters | [Completado] **Terminado** (13 de 14 tareas; la 7 se descartó), rama `plan-4-write-screens` |
-| **5. `torneo-multi-disciplina`** | Un torneo con VARIAS disciplinas: pádel y FIFA, de a dos y de a uno, cada una con su formato, su tabla y su Masters | **Terminada y verificada, SIN PUBLICAR.** Rama `feature/torneo-multi-disciplina`, 52 migraciones nuevas |
+| **2. Datos y auth** | Schema Supabase, migraciones, RLS, login + Google | [Completado] **Terminado**, en `main` |
+| **3. Pantallas de lectura** | Tabla, Fechas, Estadísticas, Reglas, Perfil | [Completado] **Terminado**, en `main` |
+| **4. Pantallas de escritura** | Crear torneo, abrir fecha, cargar resultados, Ajustes, Masters | [Completado] **Terminado** (13 de 14 tareas; la 7 se descartó), en `main` |
+| **5. `torneo-multi-disciplina`** | Un torneo con VARIAS disciplinas: pádel y FIFA, de a dos y de a uno, cada una con su formato, su tabla y su Masters | **Terminada y verificada, SIN PUBLICAR.** Rama `feature/torneo-multi-disciplina`, todas las migraciones de la `0015` en adelante |
 
 > **Si estás retomando: hay DOS versiones de esta app y conviene no confundirlas.**
 >
 > **La que está ONLINE** es `main`: un torneo, un deporte. Terminada, jugada por
 > gente de verdad — 12 jugadores y 2 torneos en producción.
 >
-> **La que está EN LA RAMA** es multi-disciplina: 52 migraciones encima, terminada
+> **La que está EN LA RAMA** es multi-disciplina: todas las migraciones de la `0015` en adelante, terminada
 > y verificada (typecheck 0 · 770 tests · 425 tests de base · navegador 52/52),
 > **y deliberadamente sin publicar**. Publicarla son dos pasos que van JUNTOS
-> —aplicar las 52 migraciones y mergear a `main`— porque el código viejo no
+> —aplicar esas migraciones y mergear a `main`— porque el código viejo no
 > sobrevive al schema nuevo: hay una ventana de unos 5 minutos con la app caída.
 > El detalle está en [`despliegue.md`](despliegue.md), con el backup ya hecho.
 >
@@ -271,7 +281,7 @@ las funciones de datos.**
 
 ### Plan 4 — pantallas de escritura [En progreso]
 
-**Hecho: 13 de las 14 tareas** (la 7 se descartó), rama `plan-4-write-screens`.
+**Hecho: 13 de las 14 tareas** (la 7 se descartó), en `main`.
 Toda la capa de datos, "Mis torneos", el wizard de crear torneo, **el flujo
 entero de jugar una fecha** —abrirla, tildar quién viene, el invitado con su
 compañero, el sorteo, confirmar, cargar los resultados en dos toques, cerrar y

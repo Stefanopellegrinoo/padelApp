@@ -4,10 +4,10 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import type { DisciplineId, SeasonConfig, SideSize } from '@/core'
 import { type DisciplineKind, newDisciplineSpec } from '@/app/torneos/nuevo/wizard-state'
-import { addDiscipline, updateDisciplineConfig, updateDisciplineHasMasters } from '@/db/discipline'
+import { addDiscipline, updateDisciplineConfig, updateDisciplineHasMasters, updateDisciplineRules } from '@/db/discipline'
 import { addSquadSeat, claimOwnSeat, removeSeat, renameSeat, unlinkSeat } from '@/db/entries'
 import { EdgeError } from '@/db/errors'
-import { deleteSeason, renameSeason, updateSeasonRules } from '@/db/season'
+import { deleteSeason, renameSeason } from '@/db/season'
 import { serverClient } from '@/db/server'
 
 export type WriteResult = { ok: true } | { ok: false; error: string }
@@ -194,9 +194,9 @@ export async function addDisciplineToSeason(
   })
 }
 
-export async function saveRules(seasonId: string, text: string): Promise<WriteResult> {
+export async function saveRules(seasonId: string, disciplineId: DisciplineId, text: string): Promise<WriteResult> {
   return onSeason(seasonId, async (supabase) => {
-    await updateSeasonRules(supabase, seasonId, text)
+    await updateDisciplineRules(supabase, seasonId, disciplineId, text)
   })
 }
 

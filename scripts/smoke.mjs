@@ -276,13 +276,25 @@ async function main() {
   )
 
   await go(page, `/torneo/${seasonId}/ajustes`)
-  const rules = page.locator('textarea')
+  // `.first()`: desde la rebanada 2 de "reglas por disciplina" Ajustes dibuja
+  // UN textarea por disciplina. El torneo demo tiene una sola, así que hoy
+  // esto es puro blindaje (`page.locator('textarea')` a secas ya quedaría
+  // ambiguo en modo estricto en cuanto el demo sume una segunda).
+  const rules = page.locator('textarea').first()
   await rules.fill('Se juega **los jueves** a las 20. <script>alert(1)</script>')
   await rules.blur()
   await page.waitForTimeout(2500)
+  // `disciplines.rules_text`, no `seasons.rules_text` (0069): el escritor de
+  // Ajustes se mudó de tabla en esta rebanada. `seasons.rules_text` sigue
+  // recibiendo el mismo texto por el dual-write de `updateDisciplineRules`
+  // mientras la disciplina editada sea la default —la única que existe acá—,
+  // pero la columna que este check tiene que mirar es la nueva fuente real.
   check(
     'el texto de reglas quedó guardado',
-    query(`select rules_text like '%los jueves%' from public.seasons where id = '${seasonId}'`) === 't',
+    query(
+      `select rules_text like '%los jueves%' from public.disciplines
+        where season_id = '${seasonId}' order by position, created_at limit 1`,
+    ) === 't',
   )
   check(
     'y la vista previa escapa el markdown del admin',

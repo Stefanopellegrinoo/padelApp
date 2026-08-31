@@ -2,7 +2,13 @@ import { execFileSync } from 'node:child_process'
 import { describe, it, expect } from 'vitest'
 import { defaultConfig } from '@/core'
 import { createMatchday, matchdayContextFor } from './matchday'
-import { addDiscipline, disciplineConfig, updateDisciplineConfig, updateDisciplineHasMasters } from './discipline'
+import {
+  addDiscipline,
+  disciplineConfig,
+  updateDisciplineConfig,
+  updateDisciplineHasMasters,
+  updateDisciplineRules,
+} from './discipline'
 import { awardsOf, seasonHeader } from './read'
 import { squadSeedOrder } from './season'
 import { adminClient } from './test/admin'
@@ -863,5 +869,99 @@ describe('disciplines_has_masters_needs_pair (decisión #4029, parte 3, guard de
     expect(pairsOn.error).toBeNull()
     expect(pairsOff.error).toBeNull()
     expect(soloOff.error).toBeNull()
+  })
+})
+
+//── Rebanada 2 de "reglas por disciplina" — updateDisciplineRules (R8, R12) ──
+// Reemplaza a `updateSeasonRules` (db/season.ts, borrada en esta misma
+// rebanada): mismo patrón `count: 'exact'` que `updateDisciplineConfig`/
+// `updateDisciplineHasMasters` de arriba, más el dual-write a
+// `seasons.rules_text` en la disciplina DEFAULT (design rev 2 §4) -- eso es
+// lo que mantiene un `git revert` de esta rebanada sin pérdida de datos.
+describe('updateDisciplineRules (rebanada 2, R8/R12)', () => {
+  it('un admin guarda el texto de su disciplina -- prueba el grant de columna, no un 403 silencioso', async () => {
+    const admin = await createTestUser()
+    const { seasonId, disciplineId } = await createSeason({ admin })
+
+    await expect(
+      updateDisciplineRules(admin.client, seasonId, disciplineId, 'Se juega los jueves.'),
+    ).resolves.toBeUndefined()
+
+    const { data } = await adminClient().from('disciplines').select('rules_text').eq('id', disciplineId).single()
+    expect(data?.rules_text).toBe('Se juega los jueves.')
+  })
+
+  it('a un participante que no organiza le avisa que no guardó (mismo posture que updateSeasonRules)', async () => {
+    const admin = await createTestUser()
+    const member = await createTestUser()
+    const { seasonId, disciplineId } = await createSeason({ admin, squad: [member.playerId] })
+
+    await expect(
+      updateDisciplineRules(member.client, seasonId, disciplineId, 'texto ajeno'),
+    ).rejects.toThrow(/sólo puede hacerlo quien organiza/)
+
+    const { data } = await adminClient().from('disciplines').select('rules_text').eq('id', disciplineId).single()
+    expect(data?.rules_text).toBe('')
+  })
+
+  it('editar el texto de una disciplina no toca el de la otra', async () => {
+    const admin = await createTestUser()
+    const { seasonId, disciplineIds } = await createSeason({
+      admin,
+      disciplines: [{}, { kind: 'FIFA' }],
+    })
+    const [padelId, fifaId] = disciplineIds
+    if (padelId === undefined || fifaId === undefined) throw new Error('Faltan disciplinas.')
+
+    await updateDisciplineRules(admin.client, seasonId, fifaId, 'Reglas de FIFA')
+
+    const db = adminClient()
+    const { data: padelRow } = await db.from('disciplines').select('rules_text').eq('id', padelId).single()
+    const { data: fifaRow } = await db.from('disciplines').select('rules_text').eq('id', fifaId).single()
+    expect(padelRow?.rules_text).toBe('')
+    expect(fifaRow?.rules_text).toBe('Reglas de FIFA')
+  })
+
+  it('escribir la disciplina DEFAULT también actualiza seasons.rules_text (dual-write)', async () => {
+    const admin = await createTestUser()
+    const { seasonId, disciplineId } = await createSeason({ admin }) // única disciplina = default
+
+    await updateDisciplineRules(admin.client, seasonId, disciplineId, 'Reglas nuevas')
+
+    const { data } = await adminClient().from('seasons').select('rules_text').eq('id', seasonId).single()
+    expect(data?.rules_text).toBe('Reglas nuevas')
+  })
+
+  it('escribir una disciplina NO default deja seasons.rules_text intacto', async () => {
+    const admin = await createTestUser()
+    const { seasonId, disciplineIds } = await createSeason({
+      admin,
+      disciplines: [{}, { kind: 'FIFA' }],
+    })
+    const [, fifaId] = disciplineIds
+    if (fifaId === undefined) throw new Error('Falta la segunda disciplina.')
+
+    await updateDisciplineRules(admin.client, seasonId, fifaId, 'Reglas de FIFA')
+
+    const { data } = await adminClient().from('seasons').select('rules_text').eq('id', seasonId).single()
+    expect(data?.rules_text).toBe('')
+  })
+
+  // Confused-deputy (design rev 2 §4): un admin de DOS temporadas no puede
+  // escribir la disciplina de la temporada B pasando el seasonId de la A --
+  // el `.eq('season_id', seasonId)` corta el update ANTES de que RLS decida,
+  // porque RLS sola SÍ autorizaría (el admin organiza la B real).
+  it('.eq(season_id) bloquea escribir la disciplina de otra temporada propia', async () => {
+    const admin = await createTestUser()
+    const { seasonId: seasonAId } = await createSeason({ admin })
+    const { seasonId: seasonBId, disciplineId: disciplineBId } = await createSeason({ admin })
+    void seasonBId
+
+    await expect(
+      updateDisciplineRules(admin.client, seasonAId, disciplineBId, 'intento cruzado'),
+    ).rejects.toThrow(/sólo puede hacerlo quien organiza/)
+
+    const { data } = await adminClient().from('disciplines').select('rules_text').eq('id', disciplineBId).single()
+    expect(data?.rules_text).toBe('')
   })
 })

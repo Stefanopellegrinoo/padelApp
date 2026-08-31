@@ -9,8 +9,8 @@ import {
   saveResult,
   setAttendance,
 } from './matchday'
-import { entriesOf, seasonHeader, seasonRules } from './read'
-import { createSeason, deleteSeason, renameSeason, updateSeasonRules } from './season'
+import { entriesOf, seasonHeader } from './read'
+import { createSeason, deleteSeason, renameSeason } from './season'
 import { adminClient } from './test/admin'
 import { createSeason as buildSeasonScene } from './test/factories'
 import { createTestUser, type TestUser } from './test/users'
@@ -267,7 +267,10 @@ describe('createSeason', () => {
   })
 })
 
-// ── renameSeason y updateSeasonRules ────────────────────────────────────────
+// ── renameSeason ─────────────────────────────────────────────────────────────
+// `updateSeasonRules` se probaba acá; se borró junto con la función
+// (rebanada 2 de "reglas por disciplina") -- su reemplazo,
+// `updateDisciplineRules`, tiene su propia batería en `db/discipline.db.test.ts`.
 
 describe('renameSeason', () => {
   it('changes the name and refuses an empty one', async () => {
@@ -282,24 +285,6 @@ describe('renameSeason', () => {
     expect((await seasonHeader(admin.client, seasonId)).name).toBe('Los Jueves 2026')
 
     await expect(renameSeason(admin.client, seasonId, '  ')).rejects.toThrow(/necesita un nombre/)
-  })
-})
-
-describe('updateSeasonRules', () => {
-  it('stores the text and stamps when it changed', async () => {
-    const admin = await createTestUser()
-    const { seasonId } = await createSeason(admin.client, {
-      name: 'Los Jueves 2026',
-      squadNames: squadNames(8),
-      config: defaultConfig(8),
-    })
-    expect((await seasonRules(admin.client, seasonId)).updatedAt).toBeNull()
-
-    await updateSeasonRules(admin.client, seasonId, 'Cancha 3, 20:30. Las pelotas las trae el último.')
-
-    const rules = await seasonRules(admin.client, seasonId)
-    expect(rules.text).toContain('Cancha 3')
-    expect(rules.updatedAt).not.toBeNull()
   })
 })
 

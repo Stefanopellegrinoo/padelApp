@@ -202,6 +202,60 @@ export async function updateDisciplineHasMasters(
   }
 }
 
+/**
+ * El único escritor de `disciplines.rules_text` (0069) -- reemplaza a
+ * `updateSeasonRules` (`db/season.ts`, borrada en esta misma rebanada).
+ * Mismo patrón que `updateDisciplineConfig`/`updateDisciplineHasMasters` de
+ * arriba: `count: 'exact'`, sin chequeo de admin propio, se apoya en RLS
+ * (`disciplines_write`, `is_season_admin`).
+ *
+ * `.eq('season_id', seasonId)` además de `.eq('id', disciplineId)` --
+ * a diferencia de los dos escritores de arriba, deliberado (design rev 2
+ * §4): `disciplineId` llega del cliente vía `saveRules`, un server action.
+ * RLS sola deja pasar a un admin-de-dos-temporadas que arma un pedido con el
+ * `seasonId` de la temporada A pero el `disciplineId` de una disciplina de
+ * la B que también organiza -- porque `disciplines_write` mira el
+ * `season_id` REAL de la fila, no el que viaja en el pedido. El `.eq` extra
+ * hace que ese pedido no matchee ninguna fila y caiga por el mismo
+ * `count === 0` que un participante sin permiso.
+ *
+ * Dual-write a `seasons.rules_text`, sólo en la disciplina DEFAULT
+ * (`defaultDisciplineId`, mismo criterio que `season_public_rules`
+ * 0022:41-42): sin esto, un `git revert` de esta rebanada perdería en
+ * silencio cualquier edición hecha después del deploy, porque
+ * `season_public_rules` -- viva en producción -- sigue sirviendo
+ * `seasons.rules_text`. Misma postura que `seasons.config`
+ * (`read.ts:73-80`): aditivo hasta el contract que borre la columna vieja.
+ */
+export async function updateDisciplineRules(
+  supabase: Client,
+  seasonId: string,
+  disciplineId: DisciplineId,
+  text: string,
+): Promise<void> {
+  const { error, count } = await supabase
+    .from('disciplines')
+    .update({ rules_text: text }, { count: 'exact' })
+    .eq('id', disciplineId)
+    .eq('season_id', seasonId)
+  if (error !== null) {
+    throw new EdgeError(`No se pudieron guardar las reglas: ${error.message}`)
+  }
+  if (count === 0) {
+    throw new EdgeError('No se pudieron guardar las reglas: sólo puede hacerlo quien organiza.')
+  }
+
+  const defaultId = await defaultDisciplineId(supabase, seasonId)
+  if (disciplineId !== defaultId) return
+  const { error: seasonError } = await supabase
+    .from('seasons')
+    .update({ rules_text: text, rules_updated_at: new Date().toISOString() })
+    .eq('id', seasonId)
+  if (seasonError !== null) {
+    throw new EdgeError(`No se pudieron guardar las reglas: ${seasonError.message}`)
+  }
+}
+
 /** Una disciplina a agregar a un torneo ya en curso — `addDiscipline`, no el wizard. */
 export interface NewDiscipline {
   kind?: 'PADEL' | 'FIFA'

@@ -2,12 +2,12 @@ import { redirect } from 'next/navigation'
 import { DISCIPLINE_LABELS } from '@/app/torneos/nuevo/wizard-state'
 import { disciplineSlugs, formatsLabel, validateConfig } from '@/core'
 import {
+  disciplineRulesOf,
   matchdaysOf,
   myEntryId,
   playerNames,
   primaryDiscipline,
   seasonHeader,
-  seasonRules,
   seasonSquadMembersOf,
 } from '@/db/read'
 import { serverClient } from '@/db/server'
@@ -45,9 +45,9 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
   const { error: renameError } = await searchParams
   const supabase = await serverClient()
 
-  const [header, rules, myEntry, matchdays, squadMembers] = await Promise.all([
+  const [header, rulesByDiscipline, myEntry, matchdays, squadMembers] = await Promise.all([
     seasonHeader(supabase, seasonId),
-    seasonRules(supabase, seasonId),
+    disciplineRulesOf(supabase, seasonId),
     myEntryId(supabase, seasonId),
     matchdaysOf(supabase, seasonId),
     // Temporada ENTERA, no la disciplina por defecto (C14, 
@@ -207,7 +207,21 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
         }))}
         squad={squadMembers.map((member) => ({ entryId: member.id, name: member.displayName }))}
       />
-      <Reglas seasonId={seasonId} text={rules.text} />
+      {/* UN editor POR DISCIPLINA (rebanada 2 de "reglas por disciplina"),
+          mismo criterio de suplantar el título que ya usa `Formato` arriba:
+          con una sola disciplina el título sale como el mismo nodo de texto
+          de siempre. */}
+      <div className="flex flex-col gap-5">
+        {header.disciplines.map((candidate) => (
+          <Reglas
+            key={candidate.id}
+            seasonId={seasonId}
+            disciplineId={candidate.id}
+            text={rulesByDiscipline.get(candidate.id) ?? ''}
+            disciplineLabel={header.disciplines.length > 1 ? DISCIPLINE_LABELS[candidate.kind] : null}
+          />
+        ))}
+      </div>
 
       {/* Acá estaba "Cerrar sesión", que no es de esta pantalla: es de la
           cuenta, no del torneo, y encima esta pantalla redirige a quien no es

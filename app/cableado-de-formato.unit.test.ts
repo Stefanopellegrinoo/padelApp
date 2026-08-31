@@ -78,6 +78,11 @@ vi.mock('@/db/read', async (importOriginal) => {
       disciplines: escena.disciplines,
     }),
     seasonRules: async () => ({ text: '', updatedAt: null }),
+    // Rebanada 2 de "reglas por disciplina": Ajustes lee esto para armar un
+    // editor por disciplina (`disciplineId -> rules_text`). Vacío alcanza acá
+    // -- este archivo no asierta sobre el texto de reglas, sólo sobre el
+    // panel de Formato, que es lo que este describe existe para cubrir.
+    disciplineRulesOf: async () => new Map<DisciplineId, string>(),
     // La rama SIN SESIÓN. `season_public_rules` (0022) devuelve la config de
     // UNA disciplina —la de por defecto— y ni su `kind`, así que sola no
     // alcanza para narrar un torneo con dos formatos: eso es S76.

@@ -460,12 +460,12 @@ export async function seasonRules(
 
 /**
  * `disciplines.rules_text` de TODAS las disciplinas de la temporada (0069),
- * una consulta, mapeada por `DisciplineId`. Slice 1 de "reglas por
- * disciplina": todavía sin consumidor — `seasonRules` de acá arriba sigue
- * siendo la que las pantallas usan hasta la rebanada 3, que reemplaza el
- * llamado y borra `seasonRules`. Nace ahora y no entonces porque la capa de
- * lectura completa (columna + tipo + esta función) es lo que esta rebanada
- * entrega, sin comportamiento nuevo todavía.
+ * una consulta, mapeada por `DisciplineId`. Desde la rebanada 2 de "reglas
+ * por disciplina" es lo que lee Ajustes (`ajustes/page.tsx`) para armar un
+ * editor por disciplina. Reglas (`reglas/page.tsx`) sigue leyendo
+ * `seasonRules` de acá arriba hasta la rebanada 3, que reemplaza ese llamado
+ * y borra `seasonRules` — hasta entonces el dual-write de
+ * `updateDisciplineRules` (`db/discipline.ts`) mantiene esa lectura vigente.
  *
  * `disciplines_read` (0015:56-57) usa el MISMO gate `is_participant(season_id)`
  * que `seasons_read` — un extraño sigue sin poder leer esto, igual que hoy.

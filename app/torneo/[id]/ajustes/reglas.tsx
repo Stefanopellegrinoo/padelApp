@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import type { DisciplineId } from '@/core'
 import { renderAdminMarkdown } from '@/app/torneo/[id]/reglas/markdown'
 import { saveRules } from './actions'
 
@@ -14,7 +15,18 @@ import { saveRules } from './actions'
  *
  * Guarda al salir del campo. El plan no trae copy de "Guardar" y no se inventa.
  */
-export function Reglas({ seasonId, text }: { seasonId: string; text: string }) {
+export function Reglas({
+  seasonId,
+  disciplineId,
+  text,
+  disciplineLabel,
+}: {
+  seasonId: string
+  disciplineId: DisciplineId
+  text: string
+  /** `null` con una sola disciplina -- mismo contrato que `Formato.disciplineLabel`. */
+  disciplineLabel: string | null
+}) {
   const [draft, setDraft] = useState(text)
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
@@ -22,7 +34,7 @@ export function Reglas({ seasonId, text }: { seasonId: string; text: string }) {
   return (
     <section className="flex flex-col gap-2">
       <h2 className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
-        Texto de reglas
+        {disciplineLabel === null ? 'Texto de reglas' : `Texto de reglas · ${disciplineLabel}`}
       </h2>
 
       <textarea
@@ -34,7 +46,7 @@ export function Reglas({ seasonId, text }: { seasonId: string; text: string }) {
           if (draft === text) return
           setError(null)
           startTransition(async () => {
-            const result = await saveRules(seasonId, draft)
+            const result = await saveRules(seasonId, disciplineId, draft)
             if (!result.ok) setError(result.error)
           })
         }}

@@ -448,31 +448,7 @@ export async function renameSeason(
   }
 }
 
-/**
- * El texto libre del admin. Mueve el sello de última actualización, que la
- * página de reglas muestra.
- *
- * `count: 'exact'` por el mismo motivo que `setMatchdayDate` (W49):
- * un update que no toca ninguna fila NO es un error
- * en PostgREST. Estas escrituras se apoyan en RLS y no chequean admin por su
- * cuenta, así que a un participante que no organiza le decían que guardó y al
- * recargar volvía el valor viejo. La ronda 15 lo midió con un participante
- * real en las cuatro.
- */
-export async function updateSeasonRules(
-  supabase: Client,
-  seasonId: string,
-  text: string,
-): Promise<void> {
-  const { error, count } = await supabase
-    .from('seasons')
-    .update(
-      { rules_text: text, rules_updated_at: new Date().toISOString() },
-      { count: 'exact' },
-    )
-    .eq('id', seasonId)
-  if (error !== null) throw new EdgeError(`No se pudieron guardar las reglas: ${error.message}`)
-  if (count === 0) {
-    throw new EdgeError('No se pudieron guardar las reglas: sólo puede hacerlo quien organiza.')
-  }
-}
+// `updateSeasonRules` se borró acá (rebanada 2 de "reglas por disciplina"):
+// su reemplazo es `updateDisciplineRules` (`db/discipline.ts`), que además
+// dual-escribe `seasons.rules_text` en la disciplina default -- ver ese
+// comentario para el porqué del dual-write.

@@ -303,8 +303,54 @@ async function main() {
   )
 
   // ── 11. Reglas sin sesión ─────────────────────────────────────────────────
+  //
+  // Este paso decía "salteado: es la Task 12 y está sin construir" hasta la
+  // rebanada de arreglos de "reglas por disciplina". La Task 12 se construyó en
+  // el Plan 4 y el salteo quedó mintiendo: el ÚNICO paso que mira la única
+  // superficie pública de la app estaba apagado por un motivo vencido.
+  //
+  // Y es el paso que más falta hacía. La rama anónima no lee `seasons` sino dos
+  // funciones `security definer`, así que es la que se rompe sin que ninguna
+  // otra pantalla se entere: `0069` hace `drop function` sobre
+  // `season_public_formats` y la vuelve a crear, y si el `grant` de después se
+  // olvidara, TODO ESTO daría error mientras la app con sesión sigue perfecta.
+  // `psql` puede probar el grant; esto prueba la pantalla.
   heading('Reglas sin login')
-  console.log('  – salteado: es la Task 12 y está sin construir')
+  const anon = await browser.newContext({ viewport: { width: 390, height: 844 } })
+  const anonPage = await anon.newPage()
+  anonPage.on('pageerror', (error) => errors.push(`[anon] ${String(error)}`))
+  anonPage.on('response', (response) => {
+    if (response.status() >= 500) errors.push(`[anon] ${response.status()} en ${response.url()}`)
+  })
+
+  await go(anonPage, `/torneo/${seasonId}/reglas`)
+  const anonHtml = await anonPage.content()
+
+  check('el texto que escribió quien organiza se ve sin cuenta', anonHtml.includes('los jueves'))
+  check(
+    'y su <script> sigue escapado para un extraño',
+    !anonHtml.includes('<script>alert(1)</script>'),
+    'el script del admin llegó crudo al DOM anónimo',
+  )
+  // La prosa generada es lo que prueba que `season_public_formats` sirvió las
+  // seis columnas: sin `has_masters`/`pair_size`/`allows_draw` el `shape` llega
+  // incompleto y `narrateRules` no puede armar estas filas.
+  check(
+    'y la prosa generada llega entera, no sólo el texto libre',
+    ['Puntos por posición', 'Orden de desempate', 'Masters'].every((row) => anonHtml.includes(row)),
+    'falta alguna fila del acordeón: el shape de la disciplina no llegó completo',
+  )
+
+  // El resto del torneo NO se abre sin cuenta: Reglas es la excepción, no la
+  // regla. Si esto empieza a devolver 200 con contenido, se filtró el torneo.
+  const tablaAnon = await anonPage.goto(`${BASE}/torneo/${seasonId}`, { waitUntil: 'networkidle' })
+  check(
+    'pero la Tabla del mismo torneo manda a login',
+    anonPage.url().includes('/login'),
+    `terminó en ${anonPage.url()} con status ${tablaAnon?.status()}`,
+  )
+
+  await anon.close()
 
   // ── 12. Las cuatro pestañas, en claro y en oscuro ─────────────────────────
   heading('Las cuatro pestañas del torneo demo, en claro y en oscuro')

@@ -32,10 +32,13 @@ alter table public.friendships enable row level security;
 -- 1. El CLI de Supabase no le da DML a los roles de la API: sin este `grant`,
 --    `authenticated` recibe 42501 y toda la RLS de abajo es decorativa
 --    (0002_rls.sql lo documenta).
--- 2. Supabase Cloud SÍ le otorga a `anon` select/insert/update/delete sobre
---    cada tabla nueva del schema public — medido en producción, no supuesto
---    (0009_anon_surface.sql). En local no pasa, así que sin este `revoke` el
---    agujero aparece recién en la nube.
+-- 2. Supabase Cloud SE MEDÍA otorgándole a `anon` select/insert/update/delete
+--    sobre cada tabla nueva del schema public (0009_anon_surface.sql, medido
+--    en producción en su momento). Ese default YA CAMBIÓ: `supabase/config.
+--    toml:19-24` documenta que la nube ya no expone entidades nuevas sin un
+--    grant explícito. El `revoke` de abajo se queda igual — no depende de
+--    cuál sea el default de la plataforma hoy, y es la misma defensa que ya
+--    valió la pena una vez cuando ese default era el opuesto.
 --
 -- `update` sale de la lista de abajo a propósito: un `with check` no puede
 -- comparar la fila nueva contra la vieja, así que ninguna política puede

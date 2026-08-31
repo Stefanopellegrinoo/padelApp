@@ -19,7 +19,16 @@ const TABLES = [
   'matches',
   'match_sets',
   'awards',
+  'friendships',
 ] as const
+
+// `match_participants` (0071) va en un array aparte, no adentro de `TABLES`:
+// es una VISTA, y el `.from()` que genera supabase-js separa Tablas y Vistas
+// en dos overloads distintos -- una unión que abarque los dos no matchea
+// ninguno de los dos (`TS2769`, medido al mezclarlos acá). Mismo motivo por
+// el que el loop de abajo corre dos veces, una por array, en vez de una sola
+// vez sobre `[...TABLES, ...VIEWS]`.
+const VIEWS = ['match_participants'] as const
 
 // Cliente sin sesión: es el rol `anon` de PostgREST, no un `authenticated` de
 // mentira. No confundir con `adminClient()`, que es `service_role`.
@@ -195,7 +204,7 @@ describe('RLS — lectura', () => {
     expect(error?.code).toBe('42501')
   })
 
-  it('anon no ve una sola fila de ninguna de las doce tablas', async () => {
+  it('anon no ve una sola fila de ninguna de las catorce tablas', async () => {
     const anon = anonClient()
 
     for (const table of TABLES) {
@@ -206,6 +215,12 @@ describe('RLS — lectura', () => {
       // pasar (pasaría a dar data: []) y avisaría del agujero.
       expect(data, `tabla ${table}`).toBeNull()
       expect(error?.code, `tabla ${table}`).toBe('42501')
+    }
+
+    for (const view of VIEWS) {
+      const { data, error } = await anon.from(view).select('*').limit(1)
+      expect(data, `vista ${view}`).toBeNull()
+      expect(error?.code, `vista ${view}`).toBe('42501')
     }
   })
 

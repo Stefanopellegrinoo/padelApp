@@ -236,7 +236,10 @@ describe('friendships', () => {
       accepted_at: new Date().toISOString(),
     })
 
-    expect(error).not.toBeNull()
+    // Pineado y verificado corriendo el test contra la base local (42501,
+    // permission denied): el `with check` de `friendships_request` incluye
+    // `accepted_at is null` (0070) -- es el cover que cierra ese clause.
+    expect(error?.code).toBe('42501')
   })
 
   it('quien recibe una solicitud no puede reapuntarla a un par fabricado', async () => {
@@ -469,6 +472,32 @@ describe('requestFriendship', () => {
     await requestFriendship(uno.client, dos.playerId)
 
     await expect(requestFriendship(dos.client, uno.playerId)).rejects.toThrow(EdgeError)
+  })
+
+  // Los dos tests de acá abajo son Item 5 del fix wave: un uuid bien formado
+  // que no es de nadie da 23503 (FK), uno mal formado da 22P02 (cast). Los
+  // dos hoy llegan crudos al mensaje del EdgeError -- nombre de constraint o
+  // "invalid input syntax" en inglés -- y eso es lo que estos tests fijan
+  // ANTES de agregar las ramas, para verlos fallar por el motivo correcto.
+  it('un uuid bien formado que no es de nadie da un mensaje legible, no el nombre del constraint', async () => {
+    const uno = await createTestUser()
+    const fantasma = '00000000-0000-0000-0000-000000000000'
+
+    const error: unknown = await requestFriendship(uno.client, fantasma).catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(EdgeError)
+    expect((error as EdgeError).message).not.toMatch(/fkey|constraint/i)
+    expect((error as EdgeError).message).toBe('No existe ningún jugador con ese ID.')
+  })
+
+  it('un uuid mal formado da un mensaje legible, no el error crudo de Postgres', async () => {
+    const uno = await createTestUser()
+
+    const error: unknown = await requestFriendship(uno.client, 'no-es-un-uuid').catch(
+      (e: unknown) => e,
+    )
+    expect(error).toBeInstanceOf(EdgeError)
+    expect((error as EdgeError).message).not.toMatch(/invalid input syntax/i)
+    expect((error as EdgeError).message).toBe('Ese ID no es válido.')
   })
 })
 

@@ -30,6 +30,18 @@ export interface SharedMatch {
  * No hace falta chequear que sean amigos ni que el caller sea quien dice: la
  * vista es `security_invoker`, así que la RLS de `matches` ya limita esto a
  * las temporadas en las que el caller participa (0071).
+ *
+ * `count: 'exact'` y el guard de abajo, MISMO tripwire que `mySeasons`
+ * (`db/read.ts:341-374`): PostgREST corta cada select en `PGRST_DB_MAX_ROWS`
+ * (1000, `supabase/config.toml`) y no avisa. Acá es peor que en `mySeasons`
+ * en dos sentidos: sin `.order()` no había ningún criterio para decidir qué
+ * filas sobreviven el corte -- era arbitrario, corrida a corrida -- y el
+ * filtro de abajo (`v.mio !== undefined && v.suyo !== undefined`) exige LAS
+ * DOS filas de un partido; perder una sola (la del caller o la del amigo)
+ * borra el partido entero del historial en silencio. El resultado nunca se
+ * muestra fila por fila -- se agrega en "Juntos N · En contra M"
+ * (`app/amigos/historial.tsx`) --, así que un corte no es una respuesta
+ * parcial: es un número mal, con toda la confianza de uno bien.
  */
 export async function historyWith(
   supabase: Client,
@@ -45,12 +57,27 @@ export async function historyWith(
   // UNA consulta. Trae las filas del caller y las del amigo, y el cruce se
   // hace acá: PostgREST no expresa un self-join, y hacer una consulta por
   // partido sería el N+1 que `pairsAndMatchesOf` (db/read.ts:985) ya tiene y
-  // que acá crecería con cada temporada compartida.
-  const { data, error } = await supabase
+  // que acá crecería con cada temporada compartida. El `.order()` no elige
+  // qué partido "importa más" -- sólo hace que, SI hay corte, sea el mismo
+  // corte en cada corrida, para que el guard de abajo sea reproducible.
+  const {
+    data,
+    error,
+    count,
+  } = await supabase
     .from('match_participants')
-    .select('match_id, matchday_id, side, player_id')
+    .select('match_id, matchday_id, side, player_id', { count: 'exact' })
     .in('player_id', [me, friendPlayerId])
+    .order('match_id', { ascending: true })
+    .order('player_id', { ascending: true })
   if (error !== null) throw new EdgeError(`No se pudo leer el historial: ${error.message}`)
+  // Falla RUIDOSO en vez de devolver un historial recortado: un error en
+  // pantalla se ve y se recarga, un "Juntos 3" que en realidad son 5 no.
+  if (count !== null && (data ?? []).length < count) {
+    throw new EdgeError(
+      `No se pudo leer el historial completo (${(data ?? []).length} de ${count}). Recargá la pantalla.`,
+    )
+  }
 
   const porPartido = new Map<string, { matchdayId: string; mio?: string; suyo?: string }>()
   for (const fila of data ?? []) {
@@ -122,6 +149,20 @@ export async function requestFriendship(supabase: Client, friendPlayerId: string
   if (error !== null) {
     if (error.code === '23505') {
       throw new EdgeError('Ya hay una amistad, o una solicitud, con esa persona.')
+    }
+    // 23503: uuid bien formado que no referencia ningún `players.id` -- el
+    // camino más probable acá no es un ataque, es un ID mal copiado o
+    // truncado, la única escritura que este feature tiene. Sin esta rama el
+    // mensaje trae crudo el nombre del constraint (`friendships_player_a_fkey`
+    // o `_player_b_fkey`, según el orden), que no dice nada a quien lo lee.
+    if (error.code === '23503') {
+      throw new EdgeError('No existe ningún jugador con ese ID.')
+    }
+    // 22P02: ni siquiera castea a uuid -- un typo, no un id truncado. Postgres
+    // lo rechaza antes de tocar la tabla, así que ni el 23503 de arriba llega
+    // a evaluarse.
+    if (error.code === '22P02') {
+      throw new EdgeError('Ese ID no es válido.')
     }
     throw new EdgeError(`No se pudo enviar la solicitud: ${error.message}`)
   }

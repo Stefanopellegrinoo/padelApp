@@ -33,9 +33,27 @@ with (security_invoker = on) as
     from public.matches m
     join public.pairs   p on p.id = m.pair_a or p.id = m.pair_b
     join public.entries e on e.id = p.entry_a or e.id = p.entry_b
+   -- Un INVITADO (`entries` sin `player_id`, GUEST) queda afuera acá, no por
+   -- accidente: sin este filtro entraría con `player_id` null y
+   -- `requireColumn` (db/friends.ts:59-62) explotaría en CADA partido con un
+   -- invitado en vez de sólo excluirlo. Consecuencia de producto, no bug: un
+   -- amigo que jugó como invitado nunca aparece en el historial -- es una
+   -- limitación de diseño documentada (docs/historial-entre-amigos.md §5.4),
+   -- no un defecto.
    where e.player_id is not null;
 
--- Mismo par que toda tabla y vista nueva de este repo. `anon` no tiene nada
--- que hacer acá: la única superficie pública del sistema es Reglas.
+-- Esta vista deja a matches.{id,matchday_id,pair_a,pair_b},
+-- pairs.{id,entry_a,entry_b} y entries.{id,player_id} como objetos de los
+-- que depende: Postgres va a rechazar un `drop column` o un `alter column
+-- ... type` sobre esas columnas sin un `drop view ... cascade` antes. `add
+-- column`, `add constraint` y `drop not null` -- lo que este repo usa en la
+-- práctica -- no se ven afectados.
+
+-- Mismo par que toda TABLA nueva de este repo: grant explícito + revoke de
+-- anon. No hay precedente de VISTA para copiar -- `match_participants` es la
+-- PRIMERA vista de este repo (`rg "create view" supabase/migrations/` sólo
+-- devuelve este archivo). `season_public_rules` es una función `security
+-- definer`, no una vista. `anon` no tiene nada que hacer acá igual: la única
+-- superficie pública del sistema es Reglas.
 grant select on public.match_participants to authenticated, service_role;
 revoke all on public.match_participants from anon;

@@ -44,4 +44,88 @@ describe('friendships', () => {
       .insert({ player_a: b, player_b: a, requested_by: a })
     expect(error?.code).toBe('23514')
   })
+
+  // Los tres tests de acá abajo usan el cliente logueado (`.client`), no
+  // `adminClient()`: son los únicos que de verdad pasan por las políticas
+  // RLS de escritura, no por los CHECK/UNIQUE de la tabla.
+  it('un caller no puede insertar una amistad que ya nace aceptada', async () => {
+    const uno = await createTestUser()
+    const dos = await createTestUser()
+    const [a, b] =
+      uno.playerId < dos.playerId ? [uno.playerId, dos.playerId] : [dos.playerId, uno.playerId]
+
+    const { error } = await uno.client.from('friendships').insert({
+      player_a: a,
+      player_b: b,
+      requested_by: uno.playerId,
+      accepted_at: new Date().toISOString(),
+    })
+
+    expect(error).not.toBeNull()
+  })
+
+  it('quien recibe una solicitud no puede reapuntarla a un par fabricado', async () => {
+    const uno = await createTestUser()
+    const dos = await createTestUser()
+    const tres = await createTestUser()
+    const [a, b] =
+      uno.playerId < dos.playerId ? [uno.playerId, dos.playerId] : [dos.playerId, uno.playerId]
+
+    const { data: creada, error: pedidoError } = await uno.client
+      .from('friendships')
+      .insert({ player_a: a, player_b: b, requested_by: uno.playerId })
+      .select('id')
+      .single()
+    expect(pedidoError).toBeNull()
+
+    // `dos` es la contraparte: recibió la solicitud de `uno`, nunca la pidió.
+    const [fa, fb] =
+      dos.playerId < tres.playerId ? [dos.playerId, tres.playerId] : [tres.playerId, dos.playerId]
+    await dos.client
+      .from('friendships')
+      .update({
+        player_a: fa,
+        player_b: fb,
+        requested_by: tres.playerId,
+        accepted_at: new Date().toISOString(),
+      })
+      .eq('id', creada?.id ?? '')
+
+    const { data: fila } = await adminClient()
+      .from('friendships')
+      .select('player_a, player_b, requested_by, accepted_at')
+      .eq('id', creada?.id ?? '')
+      .single()
+    expect(fila?.player_a).toBe(a)
+    expect(fila?.player_b).toBe(b)
+    expect(fila?.requested_by).toBe(uno.playerId)
+    expect(fila?.accepted_at).toBeNull()
+  })
+
+  it('aceptar una solicitud genuina sigue funcionando', async () => {
+    const uno = await createTestUser()
+    const dos = await createTestUser()
+    const [a, b] =
+      uno.playerId < dos.playerId ? [uno.playerId, dos.playerId] : [dos.playerId, uno.playerId]
+
+    const { data: creada, error: pedidoError } = await uno.client
+      .from('friendships')
+      .insert({ player_a: a, player_b: b, requested_by: uno.playerId })
+      .select('id')
+      .single()
+    expect(pedidoError).toBeNull()
+
+    const { error: aceptarError } = await dos.client
+      .from('friendships')
+      .update({ accepted_at: new Date().toISOString() })
+      .eq('id', creada?.id ?? '')
+    expect(aceptarError).toBeNull()
+
+    const { data: fila } = await adminClient()
+      .from('friendships')
+      .select('accepted_at')
+      .eq('id', creada?.id ?? '')
+      .single()
+    expect(fila?.accepted_at).not.toBeNull()
+  })
 })

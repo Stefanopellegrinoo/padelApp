@@ -36,9 +36,23 @@ alter table public.friendships enable row level security;
 --    cada tabla nueva del schema public — medido en producción, no supuesto
 --    (0009_anon_surface.sql). En local no pasa, así que sin este `revoke` el
 --    agujero aparece recién en la nube.
-grant select, insert, update, delete on public.friendships to authenticated;
+--
+-- `update` sale de la lista de abajo a propósito: un `with check` no puede
+-- comparar la fila nueva contra la vieja, así que ninguna política puede
+-- impedir que quien acepta reapunte `player_a`/`player_b`/`requested_by` a
+-- un par fabricado — mismo motivo que 0015_disciplines.sql:69-70 y
+-- 0069_discipline_rules.sql:59. El grant de columna de más abajo es lo que
+-- de verdad lo impide: sin permiso de UPDATE sobre esas tres columnas, ni
+-- llegan a evaluarse contra una política.
+grant select, insert, delete on public.friendships to authenticated;
 grant all on public.friendships to service_role;
 revoke all on public.friendships from anon;
+
+-- Sólo `accepted_at` es escribible por un UPDATE de `authenticated`. Aceptar
+-- una solicitud es la única escritura que le corresponde a la contraparte;
+-- `player_a`, `player_b` y `requested_by` son identidad de la fila y se fijan
+-- al pedir la amistad, no se editan después.
+grant update (accepted_at) on public.friendships to authenticated;
 
 -- ── políticas ───────────────────────────────────────────────────────────────
 -- `my_player_id()` (0006) y no un join contra `players`: `players.user_id` no
@@ -48,13 +62,16 @@ create policy friendships_read on public.friendships
   for select to authenticated
   using (public.my_player_id() in (player_a, player_b));
 
--- Pedir: sólo en nombre propio. Sin esto, cualquiera inventa una amistad
--- entre dos terceros.
+-- Pedir: sólo en nombre propio, y siempre pendiente. Sin el primer check,
+-- cualquiera inventa una amistad entre dos terceros; sin `accepted_at is
+-- null`, cualquiera se auto-declara ya amigo de otro jugador real sin que la
+-- contraparte haga nada — el flujo pedir→aceptar quedaría decorativo.
 create policy friendships_request on public.friendships
   for insert to authenticated
   with check (
     public.my_player_id() = requested_by
     and public.my_player_id() in (player_a, player_b)
+    and accepted_at is null
   );
 
 -- Aceptar: la contraparte, nunca quien pidió. El `using` mira la fila como

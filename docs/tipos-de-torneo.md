@@ -1,7 +1,12 @@
 # Tipos de torneo — diseño
 
-> **Estado: diseño aprobado, sin implementar.** Ni una línea de código escrita.
-> El siguiente paso es el plan de implementación, no el código.
+> **Estado, 31/08/2026:** de las seis piezas de este documento, **cuatro están
+> implementadas y verificadas** en `feature/torneo-multi-disciplina`, sin
+> publicar: **1** (equipos fijos, migración `0068`), **2.1** (torneo de una
+> fecha, `wizard-state.ts` con `min: 1`), **2.2** (Masters/año condicionales) y
+> **2.3** (reglas por disciplina — SDD `reglas-por-disciplina`, commits
+> `8f1f04d`..`1bae705`). Quedan **2.4**, **2.5** y **2.6** — orden sugerido en
+> la sección 6.
 >
 > Rama de trabajo: `feature/torneo-multi-disciplina` (tracker). `main` y
 > producción siguen sin tocar — ver [`estado.md`](estado.md).
@@ -141,35 +146,66 @@ Ninguna pide modelo nuevo salvo donde se aclara.
 modelo ya acepta 1 (`core/config.ts:227`). **Es el único obstáculo real para un
 torneo de una fecha.** Bajar el mínimo a 1.
 
-### 2.2 La prosa habla del año y del Masters aunque estén apagados
+### 2.2 La prosa habla del año y del Masters aunque estén apagados — [Implementado]
 
-`core/narrate.ts:73` cierra con *"El año cierra con un Masters entre los N
-mejores"* y `:107` dibuja una sección **"El Masters"** entera — las dos
+`core/narrate.ts:73` cerraba con *"El año cierra con un Masters entre los N
+mejores"* y `:107` dibujaba una sección **"El Masters"** entera — las dos
 **incondicionales**, aunque `has_masters = false`. En un torneo de un día, las
-dos frases son falsas.
+dos frases eran falsas.
 
-Condicionar ambas a `has_masters`, y sacar la palabra "año" cuando el torneo no
-dura un año.
+**Hecho** (`d77b535`, SDD `reglas-por-disciplina`): las dos quedaron
+condicionadas a `has_masters`, y la palabra "año" se fue gratis con ellas — las
+dos apariciones vivían adentro de la prosa del Masters, no en una frase
+aparte.
 
-### 2.3 Las reglas describen sólo la primera disciplina
+### 2.3 Las reglas describen sólo la primera disciplina — [Implementado]
 
-`seasons.rules_text` (`0001_schema.sql:17`) es **uno solo para todo el torneo**,
-y `app/torneo/[id]/reglas/page.tsx:108` pasa
+**Hecho en `feature/torneo-multi-disciplina`** (SDD `reglas-por-disciplina`,
+commits `8f1f04d`..`1bae705`), sin publicar. `disciplines.rules_text` existe
+desde la migración `0069`, `narrateRules` corre una vez por disciplina con su
+propio `config` y su propio `shape`, y `app/torneo/[id]/reglas/rules-body.tsx`
+dibuja un bloque por disciplina.
+
+`seasons.rules_text` (`0001_schema.sql:17`) era **uno solo para todo el torneo**,
+y `app/torneo/[id]/reglas/page.tsx:108` pasaba
 `config={primaryDiscipline(header).config}`. Con pádel + FIFA juntos, la prosa
-generada miente sobre la segunda:
+generada le mentía a la segunda.
 
-| sección | dice | con FIFA de a uno |
-|---|---|---|
-| La fecha | *"entre 8 y 12"* (`narrate.ts:78`, `MIN_PLAYERS`/`MAX_PLAYERS` hardcodeados) | ignora `config.maxMatches` |
-| La fecha | *"se arman parejas"* | falso |
-| La fecha | *"si da impar se suma un invitado"* | falso |
-| Los puntos | *"los dos integrantes de una pareja"* | falso |
+**La tabla de abajo, tal como quedó escrita al diseñar esto, estaba
+INCOMPLETA: tenía cuatro mentiras y en realidad había seis, más una séptima
+que se encontró y se dejó adentro a propósito.** Las dos que faltaban no las
+vio este documento — las encontró recién `sdd-design`, leyendo el código antes
+de escribir. Quedan agregadas acá con la columna de dónde salieron, para que
+la próxima persona que escriba un documento de diseño sepa que "leer el
+código" no es opcional aunque el defecto parezca obvio:
 
-**Arreglo:** `rules_text` se muda de `seasons` a `disciplines` (migración con
-backfill — producción tiene el reglamento de PnP-1000 escrito, no se puede
-perder), y `narrateRules` corre una vez por disciplina con **su** config. Las
-vistas `0007_write_screens.sql:128` y `0022_discipline_public_rules.sql:23` leen
-`rules_text` y hay que moverlas con él.
+| sección | decía | con FIFA de a uno | dónde se encontró |
+|---|---|---|---|
+| La fecha | *"entre 8 y 12"* (`narrate.ts:78`, `MIN_PLAYERS`/`MAX_PLAYERS` hardcodeados) | ignoraba `config.maxMatches` | acá (25/08) |
+| La fecha | *"se arman parejas"* | falso | acá (25/08) |
+| La fecha | *"si da impar se suma un invitado"* | falso | acá (25/08) |
+| Los puntos | *"los dos integrantes de una pareja"* | falso | acá (25/08) |
+| **Cómo se arman las parejas** (la sección entera) | ordena la tabla, arma primero-con-último, prohíbe repetir pareja | **falso de punta a punta**: con `pair_size=1` no hay pareja que armar — `core/pairing.ts:135-147` lo dice en su propio comentario ("no defenders, no fixed pairs, no no-repeat rule") | recién en `sdd-design` (30/08), no acá |
+| La fecha → el formato | *"Puede terminar empatado."* (`describeFormat`, incondicional) | falso cuando `disciplines.allows_draw = false` (el default de hoy) | recién en `sdd-design` (30/08) — "la cuarta mentira" |
+
+**Una séptima se encontró y se dejó deliberadamente sin tocar:** "El Masters"
+afirma *"compañeros rotativos: cada uno juega una vez con cada uno"* sin mirar
+`pair_size`, pero esa combinación (`has_masters=true` con `pair_size=1`) es
+**inalcanzable en producción** — `0053_disciplines_has_masters_needs_pair.sql`
+la prohíbe con un `check`, y los dos escritores de disciplinas la respetan al
+crear. Corregir `narrateRules` para un caso que la base ya hace imposible es
+defender contra una entrada que nunca llega; queda anotado, no corregido.
+
+**Arreglo, tal como se hizo:** `rules_text` se mudó de `seasons` a
+`disciplines` (migración `0069`, con backfill — producción tenía el reglamento
+de PnP-1000 escrito y no se perdió), y `narrateRules` corre una vez por
+disciplina con su propio `config` y su propio `shape`
+(`hasMasters`/`pairSize`/`allowsDraw`, que viven en `disciplines`, no en
+`config`). Las vistas `0007_write_screens.sql:128` y
+`0022_discipline_public_rules.sql:23` **no se movieron**: siguen sirviendo
+`seasons.rules_text` sin cambiar una letra, y `updateDisciplineRules`
+(`db/discipline.ts`) las mantiene al día con un dual-write hacia la disciplina
+por defecto de cada temporada.
 
 Stefano sobre este punto: *"esto es importante hacerlo bien, con cabeza porque
 si no nada tiene sentido."*
@@ -239,6 +275,18 @@ donde descansa uno, pero permite 10, donde también descansa uno). `MAX_PLAYERS 
 junto con los tipos de torneo, y la respuesta que salió es que los tipos de
 torneo **no** dependen de esos números. Merece su propio cambio.
 
+**Corrección, encontrada implementando §2.3 (costó una ronda del spec SDD):**
+"queda fuera" se puede leer, a primera vista, como que la fila 1 de la tabla de
+§2.3 —la frase *"entre 8 y 12"*— también quedaba afuera. No es así. Lo que este
+párrafo saca de alcance son los VALORES de `MIN_PLAYERS`/`MAX_PLAYERS` (8 y 12)
+y su borrado, que sí piden migración y siguen postergados. La PROSA de "La
+fecha" que los cita sin mirar la disciplina (`narrate.ts:78`) es exactamente el
+defecto que §2.3 vino a arreglar, y ya se arregló: el tope real por fecha que
+esa prosa dice ahora es `maxMatchesOf(config, sideSize)`
+(`core/constants.ts:55-59`), no `MAX_PLAYERS`. `MIN_PLAYERS`/`MAX_PLAYERS`
+mismos siguen sin tocarse, y `squadSize` en `validateConfig` sigue gateado por
+ellos exactamente igual que antes.
+
 ---
 
 ## 4 · Lo que este spec NO hace
@@ -260,18 +308,26 @@ torneo **no** dependen de esos números. Merece su propio cambio.
 | **Pérdida del reglamento de producción** | migración de `rules_text` a `disciplines` | backfill explícito + verificación contra la fila real de PnP-1000 antes del contract |
 | **Equipo a medias en el sorteo** | presentismo | guarda en el borde: con `fixed_teams`, si un miembro está PLAYING el otro también. Falla fuerte, no en silencio |
 | Un equipo con alguien que no juega esa disciplina | `discipline_teams` | FK compuesta contra `discipline_entries`, igual que `attendances` |
+| **Ventana de despliegue al ensanchar `season_public_formats`** | migración `0069`, `drop function` + recreate | **No se materializó.** La función no tiene consumidor en producción porque toda la cadena `0015+` sigue sin publicar (producción corre `main`, migraciones `0001`-`0014`). Por eso §2.3 se adelantó en el orden y se hizo ahora: tocarla es gratis mientras nadie la lee; después de publicar, el mismo `drop function` costaría la ventana de despliegue real |
 
 ---
 
 ## 6 · Orden sugerido
 
-1. **2.1** (`min: 1`) — una línea, destraba el torneo de un día ya mismo.
-2. **1** (equipos fijos) — columna, tabla, inyección, apagar defensores.
-3. **2.2** (la prosa condicional) — cae sola una vez que existe el torneo corto.
-4. **2.4** (desempate global + tabla única).
-5. **2.5** (formato por default).
-6. **2.3** (`rules_text` a `disciplines`) — la única con migración de datos de
-   producción; va última y con su propia verificación.
+1. [Hecho] **2.1** (`min: 1`) — `a1f956b`.
+2. [Hecho] **1** (equipos fijos) — `535b8a8`, migración `0068`.
+3. [Hecho] **2.2** (la prosa condicional) — `d77b535`.
+4. [Hecho] **2.3** (`rules_text` a `disciplines`) — SDD `reglas-por-disciplina`,
+   `8f1f04d`..`1bae705`. Se adelantó respecto de este orden —iba último, por
+   ser la única pieza con migración de datos de producción— porque
+   `season_public_formats` (`0038`) todavía no tenía consumidor en producción;
+   ver la fila de "ventana de despliegue" en la sección 5, que por eso no se
+   materializó.
+
+Queda por hacer, en el orden que sigue teniendo sentido:
+
+5. **2.4** (desempate global + tabla única).
+6. **2.5** (formato por default en la disciplina).
 7. **2.6** (historial del grupo) — independiente, cuando se quiera.
 
 ---
@@ -279,4 +335,6 @@ torneo **no** dependen de esos números. Merece su propio cambio.
 **Fuentes:** brainstorming en engram `sdd/tipos-de-torneo/brainstorming` (#4108)
 y `sdd/tipos-de-torneo/equipos-fijos` (#4112). Todas las referencias
 `archivo:línea` de este documento fueron verificadas contra el árbol del
-2026-08-25.
+2026-08-25, salvo las de §2.2 y §2.3 —reverificadas contra `1bae705` al
+archivar el SDD `reglas-por-disciplina` el 31/08— y las de §1/§2.1, ya
+implementadas antes de esa fecha (`535b8a8`, `a1f956b`).

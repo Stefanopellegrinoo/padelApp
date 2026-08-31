@@ -1,8 +1,10 @@
 # Estado del proyecto
 
-**Última actualización:** 30 de agosto de 2026. `torneo-multi-disciplina` terminada
-y verificada en la rama, **sin publicar** — y ahora también con el hotfix de
-producción adentro (ver "Producción").
+**Última actualización:** 31 de agosto de 2026. `torneo-multi-disciplina` terminada
+y verificada en la rama, **sin publicar** — con el hotfix de producción
+adentro (ver "Producción") y, desde ayer, con el SDD `reglas-por-disciplina`
+también cerrado encima (seis commits, `8f1f04d`..`1bae705`: las reglas pasan a
+ser por disciplina).
 
 > **Lo que este documento describe abajo —planes 2, 3 y 4— es la app que está
 > ONLINE hoy: un torneo, un deporte.** Encima de eso hay **una feature entera y todas las migraciones de la `0015` en adelante** en
@@ -76,11 +78,27 @@ sólo se resume.
 > gente de verdad — 12 jugadores y 2 torneos en producción.
 >
 > **La que está EN LA RAMA** es multi-disciplina: todas las migraciones de la `0015` en adelante, terminada
-> y verificada (typecheck 0 · 770 tests · 425 tests de base · navegador 52/52),
-> **y deliberadamente sin publicar**. Publicarla son dos pasos que van JUNTOS
-> —aplicar esas migraciones y mergear a `main`— porque el código viejo no
-> sobrevive al schema nuevo: hay una ventana de unos 5 minutos con la app caída.
-> El detalle está en [`despliegue.md`](despliegue.md), con el backup ya hecho.
+> y verificada (typecheck 0 · **826 tests · 446 tests de base** · navegador
+> de punta a punta con `scripts/smoke.mjs`), **y deliberadamente sin
+> publicar**. Los números subieron desde la foto anterior (770/425) porque
+> después de ella se cerró **`reglas-por-disciplina`** — ver el párrafo de
+> abajo. Publicarla son dos pasos que van JUNTOS —aplicar esas migraciones y
+> mergear a `main`— porque el código viejo no sobrevive al schema nuevo: hay
+> una ventana de unos 5 minutos con la app caída. El detalle está en
+> [`despliegue.md`](despliegue.md), con el backup ya hecho.
+>
+> **Lo que agregó `reglas-por-disciplina` (30-31/08), encima de la rama:** las
+> reglas dejaron de ser una sola por torneo. `disciplines.rules_text`
+> (migración `0069`) más `narrateRules(config, shape)` corriendo una vez por
+> disciplina hacen que la pantalla de Reglas —con sesión y sin ella— dibuje un
+> bloque por disciplina, cada uno con su propio Masters, su propia regla de
+> parejas, su propio empate y su propio tope de partidos. Con una sola
+> disciplina (el 100% de lo que hay hoy) la pantalla sale byte a byte como
+> salía antes — probado con `.toBe()` contra el HTML real, no asumido. Costo
+> de despliegue: cero — `0069` toca `season_public_formats`, una función que
+> todavía no existe en producción, así que no hay ventana que abrir. **No está
+> commiteado a `main` ni pusheado**: vive entero en
+> `feature/torneo-multi-disciplina`.
 >
 > **Lo que falta antes de publicar no es código: es que alguien la USE.** Los
 > gates los corrió un agente; nadie recorrió todavía la app nueva a mano.
@@ -91,7 +109,7 @@ sólo se resume.
 > el plan 4 (borrado en el commit de public release); esta página resume,
 > ese documento manda.
 
-**`core/` en números:** 23 módulos, 391 tests, cero dependencias de producción. (Eran 13 y 145 antes de multi-disciplina.)
+**`core/` en números:** 23 módulos, 403 tests, cero dependencias de producción. (Eran 13 y 145 antes de multi-disciplina; 391 antes de `reglas-por-disciplina`, que sumó los 12 de `narrate`.)
 Verificado de forma independiente: ningún archivo usa `Date`, `Math.random`,
 `fetch` ni `process`; nada importa fuera de `core/`; el grafo de dependencias es
 acíclico. Eso es lo que permite recalcular una fecha vieja y obtener exactamente
@@ -279,7 +297,7 @@ preguntas sobre quien mira: "¿estoy anotado?" y "¿cuál asiento soy yo?". Ante
 escribir el Plan 4, **trazar qué dato necesita cada pantalla y recién ahí definir
 las funciones de datos.**
 
-### Plan 4 — pantallas de escritura [En progreso]
+### Plan 4 — pantallas de escritura [Completado]
 
 **Hecho: 13 de las 14 tareas** (la 7 se descartó), en `main`.
 Toda la capa de datos, "Mis torneos", el wizard de crear torneo, **el flujo
@@ -421,17 +439,19 @@ falla que este documento ya tenía anotado del Plan 2.
   el caso especial de "una sola temporada, directo a su tabla" se borró, porque
   un camino distinto para el mismo destino es una rama más que puede quedar mal.
 - [Completado] **La lectura de asistencias** (`attendancesOf`), y el permiso para que un
-  jugador escriba la suya (`set_my_attendance`). **Falta el toggle en la Tabla**,
-  que es la Task 7 y está en la tanda B.
-- ⬜ **El flujo `DRAFT`** y **la carga de resultados**: son las Tasks 9 y 10, lo
-  próximo que hay que hacer. Todo lo que necesitan de `db/` ya está.
-- ⬜ **Editar las reglas** desde Ajustes: `updateSeasonRules` está hecha y
-  probada; falta la pantalla (Task 11, tanda B).
-- ⬜ **El flujo del Masters.** La base ya lo puede crear, armar, abrir y cerrar
-  —lo prueba `db/masters.db.test.ts` de punta a punta—; falta la pantalla
-  (Task 13, tanda B).
-- ⬜ **La página de Reglas pública.** `season_public_rules` está hecha y `anon` ya
-  la puede llamar; falta aflojar la guardia del layout (Task 12, tanda B).
+  jugador escriba la suya (`set_my_attendance`). **La Task 7 (el toggle en la
+  Tabla) se descartó** por decisión de producto: el jugador no marca su propia
+  asistencia, la marca el admin en el armado.
+- [Completado] **El flujo `DRAFT`** y **la carga de resultados** (Tasks 9 y 10): abrir la
+  fecha, armar, cargar resultados en dos toques, cerrar y reabrir.
+- [Completado] **Editar las reglas** desde Ajustes (Task 11). La función que las escribe
+  ya no es `updateSeasonRules` — el SDD `reglas-por-disciplina` la reemplazó
+  por `updateDisciplineRules` (`db/discipline.ts`), que escribe por
+  disciplina y mantiene `seasons.rules_text` al día con un dual-write. Ver
+  "Dónde estamos".
+- [Completado] **El flujo del Masters** (Task 13): armar, abrir y cerrar, con su pantalla.
+- [Completado] **La página de Reglas pública** (Task 12): guardia del layout aflojada,
+  `anon` la lee vía `season_public_rules`.
 
 **Cómo escribirlo, aprendido a los golpes en el Plan 3:**
 

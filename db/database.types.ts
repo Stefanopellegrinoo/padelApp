@@ -396,6 +396,55 @@ export type Database = {
           },
         ]
       }
+      friendships: {
+        Row: {
+          accepted_at: string | null
+          created_at: string
+          id: string
+          player_a: string
+          player_b: string
+          requested_by: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          created_at?: string
+          id?: string
+          player_a: string
+          player_b: string
+          requested_by: string
+        }
+        Update: {
+          accepted_at?: string | null
+          created_at?: string
+          id?: string
+          player_a?: string
+          player_b?: string
+          requested_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "friendships_player_a_fkey"
+            columns: ["player_a"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "friendships_player_b_fkey"
+            columns: ["player_b"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "friendships_requested_by_fkey"
+            columns: ["requested_by"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       match_sets: {
         Row: {
           allows_draw: boolean
@@ -438,6 +487,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "matches"
             referencedColumns: ["id", "fase"]
+          },
+          {
+            foreignKeyName: "match_sets_match_id_fkey"
+            columns: ["match_id"]
+            isOneToOne: false
+            referencedRelation: "match_participants"
+            referencedColumns: ["match_id"]
           },
           {
             foreignKeyName: "match_sets_match_id_fkey"
@@ -736,7 +792,31 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      match_participants: {
+        Row: {
+          match_id: string | null
+          matchday_id: string | null
+          pair_id: string | null
+          player_id: string | null
+          side: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "entries_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "matches_matchday_id_fkey"
+            columns: ["matchday_id"]
+            isOneToOne: false
+            referencedRelation: "matchdays"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       add_squad_seat: {

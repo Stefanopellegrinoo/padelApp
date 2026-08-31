@@ -1,0 +1,38 @@
+import { notFound } from 'next/navigation'
+import { historyWith } from '@/db/friends'
+import { playerNames } from '@/db/read'
+import { serverClient } from '@/db/server'
+import { Historial } from '../historial'
+
+interface PageProps {
+  params: Promise<{ playerId: string }>
+}
+
+/**
+ * El historial de torneo con un amigo. `historyWith` no chequea que sean
+ * amigos (comentario en `db/friends.ts`): la RLS de `matches` ya acota esto a
+ * las temporadas donde el caller participa, así que cualquier `playerId` es
+ * seguro de pedir -- en el peor caso, cero partidos compartidos.
+ *
+ * `notFound()` cuando `playerId` no es un jugador real: `players_read` está
+ * abierta (diseño §5.5), así que no encontrar el nombre es un link roto, no
+ * un problema de permisos.
+ */
+export default async function AmigoPage({ params }: PageProps) {
+  const { playerId } = await params
+  const supabase = await serverClient()
+
+  const [nombres, partidos] = await Promise.all([
+    playerNames(supabase, [playerId]),
+    historyWith(supabase, playerId),
+  ])
+
+  const nombre = nombres.get(playerId)
+  if (nombre === undefined) notFound()
+
+  return (
+    <main className="mx-auto flex min-h-dvh w-full max-w-lg flex-col gap-4 bg-bg px-5 pb-6 text-text">
+      <Historial nombre={nombre} partidos={partidos} />
+    </main>
+  )
+}

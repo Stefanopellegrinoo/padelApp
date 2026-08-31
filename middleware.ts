@@ -72,6 +72,10 @@ function isPrivatePath(pathname: string): boolean {
   // no haber hecho nada.
   const path = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname
   if (path === '/torneos') return true
+  // `/amigos` entero: sin sesión, `friendsOf`/`historyWith` tiran `EdgeError`
+  // ("Entrá con tu cuenta...") y sin nadie que lo agarre es la misma página
+  // blanca en inglés que motivó agregar `/torneos` acá arriba.
+  if (path === '/amigos' || path.startsWith('/amigos/')) return true
   return path.startsWith('/torneo/') && !path.endsWith('/reglas')
 }
 

@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
 import { initials } from '@/app/format'
 import { signOut } from '@/app/auth/actions'
@@ -63,6 +64,13 @@ export function Cuenta({ name }: { name: string }) {
               {name}
             </p>
           )}
+          <Link
+            href="/amigos"
+            role="menuitem"
+            className="block w-full border-b border-line px-3 py-3 text-left text-[14px] font-[750] text-text"
+          >
+            Amigos
+          </Link>
           <form action={signOut}>
             <SubmitButton
               role="menuitem"

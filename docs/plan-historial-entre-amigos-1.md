@@ -422,8 +422,14 @@ Expected: PASS, 9/9.
 
 - [ ] **Step 5: Break the nullable case on purpose**
 
-Cambiá el `or` del join a `entries` por `join public.entries e on e.id = p.entry_a`, corré `db:reset` y la suite.
-Expected: **el test de a uno FALLA** (devuelve 1 fila en vez de 2) y el de parejas también. Eso prueba que el test cubre exactamente la trampa que motivó la vista. Restaurá.
+Cambiá el `or` del join a `entries` por `join public.entries e on e.id = p.entry_b`, corré `db:reset` y la suite.
+Expected: **el test de a uno FALLA con 0 filas** — el partido individual desaparece entero, que es exactamente la trampa que motivó la vista. Restaurá.
+
+> **Ojo con la mitad que se rompe, porque cuesta de ver.** Este paso decía
+> `e.id = p.entry_a` y estaba MAL: sacar el brazo `entry_b` no rompe el caso de a
+> uno, porque ahí `entry_b` ya es null y ese brazo nunca hizo nada — sólo rompe
+> dobles, que pierden al compañero. La que borra el partido individual es la
+> otra. Medido corriendo las dos mutaciones, no deducido.
 
 - [ ] **Step 6: Run all four gates and commit**
 

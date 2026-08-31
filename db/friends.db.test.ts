@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { defaultConfig, type SideSize } from '@/core'
+import { EdgeError } from './errors'
+import { historyWith, requestFriendship, acceptFriendship, friendsOf } from './friends'
 import { createMatchday, generatePairs, setAttendance } from './matchday'
 import { adminClient } from './test/admin'
 import { createSeason } from './test/factories'
@@ -30,18 +32,27 @@ async function fillerPlayers(count: number): Promise<string[]> {
  * flujo que `db/entries.db.test.ts:56-77` y `db/close.db.test.ts:535-551`.
  * Devuelve el primer partido armado, para ejercitar `match_participants`
  * sobre un partido de verdad, con RLS real de por medio.
+ *
+ * `squad`, agregado para Task 4 (`dosFechasConYContra` más abajo): el plantel
+ * a usar, YA en el orden que se le quiere dar al sorteo — sin especificar,
+ * 8 jugadores de relleno anónimos, el caso de siempre. El orden importa
+ * porque es literalmente el seed (`squadSeedOrder`, `db/season.ts:23-34`) y
+ * el sorteo de la fecha 1 desempata por ese seed (`snapshotForMatchday`,
+ * `core/snapshots.ts:24`, sin puntos previos que lo tapen).
  */
 async function unaFechaJugada({
   admin,
   pairSize,
+  squad,
 }: {
   admin: TestUser
   pairSize: SideSize
-}): Promise<{ matchId: string; entryIds: string[] }> {
-  const filler = await fillerPlayers(8)
+  squad?: string[]
+}): Promise<{ matchId: string; matchdayId: string; entryIds: string[] }> {
+  const jugadores = squad ?? (await fillerPlayers(8))
   const { seasonId, entryIds, disciplineId } = await createSeason({
     admin,
-    squad: filler,
+    squad: jugadores,
     disciplines: [
       {
         kind: pairSize === 1 ? 'FIFA' : 'PADEL',
@@ -68,7 +79,102 @@ async function unaFechaJugada({
     throw new Error(`No se pudo leer el partido de test: ${error?.message}`)
   }
 
-  return { matchId: match.id, entryIds }
+  return { matchId: match.id, matchdayId, entryIds }
+}
+
+/** El partido de la fecha donde juegan LOS DOS jugadores dados (a los dos lados de un `match_participants`). */
+async function partidoDeLosDos(matchdayId: string, a: string, b: string): Promise<string> {
+  const { data, error } = await adminClient()
+    .from('match_participants')
+    .select('match_id, player_id')
+    .eq('matchday_id', matchdayId)
+    .in('player_id', [a, b])
+  if (error) throw new Error(error.message)
+
+  const porPartido = new Map<string, Set<string>>()
+  for (const fila of data ?? []) {
+    // `match_participants` es una vista: el generador tipa todo `| null`
+    // aunque las columnas base sean NOT NULL (mismo punto que `db/friends.ts`).
+    if (fila.match_id === null || fila.player_id === null) {
+      throw new Error('match_participants trajo match_id o player_id en null.')
+    }
+    const jugadores = porPartido.get(fila.match_id) ?? new Set<string>()
+    jugadores.add(fila.player_id)
+    porPartido.set(fila.match_id, jugadores)
+  }
+  const conLosDos = [...porPartido.entries()].find(([, jugadores]) => jugadores.size === 2)
+  if (conLosDos === undefined) {
+    throw new Error(`Ningún partido de la fecha ${matchdayId} tiene a los dos jugadores.`)
+  }
+  return conLosDos[0]
+}
+
+/**
+ * Dos fechas — dos temporadas, cada una la fecha 1 de su disciplina — que
+ * ponen a `admin` y a `otro` una vez de compañeros y una vez enfrentados.
+ *
+ * Por qué DOS TEMPORADAS y no dos fechas de la misma: el "no repetir pareja"
+ * (`previousContext`, alimentado por `closedHistory`) sólo mira fechas
+ * CLOSED (`db/season.ts:126`). Encadenar las dos fechas pediría cerrar la
+ * primera --cargar sets, cerrarla-- sólo para forzar el sorteo de la
+ * segunda: más aparato del que hace falta para lo que este helper necesita.
+ *
+ * Por qué NO se usa `lockPair`: es la vía obvia para fijar una pareja antes
+ * del sorteo, y se descartó porque no aplica acá.
+ * `assertLocksAndGuests` (`db/validate.ts:207-211`) exige que toda pareja
+ * fijada a mano incluya a un invitado -- "dos jugadores del torneo no se
+ * pueden poner juntos" -- y un invitado (`addGuest`, `db/matchday.ts` arriba
+ * de `lockPair`) se crea SIN `player_id`. `match_participants` exige
+ * `player_id is not null` (0071): un invitado nunca aparece ahí. Fijar a
+ * `admin`+`otro` con un lock es imposible sin volver a uno de los dos un
+ * invitado invisible para la vista que este mismo historial necesita leer.
+ *
+ * Lo que sí se usa es que el sorteo (`buildPairs`, `core/pairing.ts`) es
+ * DETERMINISTA y público en su regla: en la fecha 1 de una disciplina nadie
+ * tiene puntos todavía, así que el desempate cae entero en el snapshot, que
+ * en la fecha 1 ES el orden de seed (`snapshotForMatchday` con
+ * `matchdayNumber=1` da `refreshes=0` y devuelve `seedOrder` tal cual,
+ * `core/snapshots.ts:21-24`) -- y el seed es el orden de `squad` acá
+ * (`squadSeedOrder`, `db/season.ts:23-34`, el mismo que `createSeason` usa
+ * para `discipline_entries.seed_position`). `imbalance` (`core/pairing.ts:
+ * 259-266`) puntúa cada armado por qué tan lejos queda cada pareja de sumar
+ * `n+1`, y con 8 jugadores rankeados 1..8 el ÚNICO armado con score CERO en
+ * las cuatro parejas es el que empareja el rank i con el rank `9-i` -- es la
+ * única suma-9 posible para cada pareja, así que no hay otro candidato con
+ * el que pueda empatar.
+ *
+ * - `juntos`: `admin` en el rank 1 (primero en `squad`) y `otro` en el rank 8
+ *   (último) -- son complementarios (1+8=9), el sorteo los empareja.
+ * - `enContra`: `admin` rank 1, `otro` rank 2 -- ninguno es complementario
+ *   del otro, así que caen en parejas distintas. Y como el round robin de 4
+ *   lados es COMPLETO (verificado en Task 3: 4 lados, 6 partidos, todos
+ *   contra todos), la pareja de `admin` se cruza con la de `otro` en
+ *   exactamente un partido de la fecha.
+ */
+async function dosFechasConYContra({
+  admin,
+  otro,
+}: {
+  admin: TestUser
+  otro: TestUser
+}): Promise<{ juntos: string; enContra: string }> {
+  const rellenoJuntos = await fillerPlayers(6)
+  const { matchdayId: fechaJuntos } = await unaFechaJugada({
+    admin,
+    pairSize: 2,
+    squad: [admin.playerId, ...rellenoJuntos, otro.playerId],
+  })
+  const juntos = await partidoDeLosDos(fechaJuntos, admin.playerId, otro.playerId)
+
+  const rellenoEnContra = await fillerPlayers(6)
+  const { matchdayId: fechaEnContra } = await unaFechaJugada({
+    admin,
+    pairSize: 2,
+    squad: [admin.playerId, otro.playerId, ...rellenoEnContra],
+  })
+  const enContra = await partidoDeLosDos(fechaEnContra, admin.playerId, otro.playerId)
+
+  return { juntos, enContra }
 }
 
 describe('friendships', () => {
@@ -307,5 +413,140 @@ describe('match_participants', () => {
       .select('match_id')
       .eq('match_id', matchId)
     expect(data).toEqual([])
+  })
+})
+
+describe('historyWith', () => {
+  it('distingue los partidos jugados juntos de los jugados en contra', async () => {
+    const admin = await createTestUser()
+    const otro = await createTestUser()
+    // Una temporada donde los dos juegan: una fecha los pone en la MISMA
+    // pareja, otra en parejas ENFRENTADAS. Ver `dosFechasConYContra` arriba.
+    const { juntos, enContra } = await dosFechasConYContra({ admin, otro })
+
+    const historia = await historyWith(admin.client, otro.playerId)
+
+    expect(historia.find((m) => m.matchId === juntos)?.together).toBe(true)
+    expect(historia.find((m) => m.matchId === enContra)?.together).toBe(false)
+  })
+
+  it('no devuelve nada de una temporada en la que el caller no está', async () => {
+    const ajeno = await createTestUser()
+    const admin = await createTestUser()
+    const otro = await createTestUser()
+    await dosFechasConYContra({ admin, otro })
+
+    const historia = await historyWith(ajeno.client, otro.playerId)
+    expect(historia).toEqual([])
+  })
+})
+
+describe('requestFriendship', () => {
+  it('crea una solicitud pendiente que la contraparte puede ver', async () => {
+    const uno = await createTestUser()
+    const dos = await createTestUser()
+
+    await requestFriendship(uno.client, dos.playerId)
+
+    const { data: fila } = await adminClient()
+      .from('friendships')
+      .select('player_a, player_b, requested_by, accepted_at')
+      .or(`player_a.eq.${uno.playerId},player_b.eq.${uno.playerId}`)
+      .single()
+    expect(fila?.requested_by).toBe(uno.playerId)
+    expect(fila?.accepted_at).toBeNull()
+    expect([fila?.player_a, fila?.player_b].sort()).toEqual([uno.playerId, dos.playerId].sort())
+  })
+
+  it('no deja pedirse amistad a uno mismo', async () => {
+    const uno = await createTestUser()
+    await expect(requestFriendship(uno.client, uno.playerId)).rejects.toThrow(EdgeError)
+  })
+
+  it('rechaza una segunda solicitud entre el mismo par, con un mensaje legible', async () => {
+    const uno = await createTestUser()
+    const dos = await createTestUser()
+    await requestFriendship(uno.client, dos.playerId)
+
+    await expect(requestFriendship(dos.client, uno.playerId)).rejects.toThrow(EdgeError)
+  })
+})
+
+describe('acceptFriendship', () => {
+  it('la contraparte acepta y la amistad queda activa', async () => {
+    const uno = await createTestUser()
+    const dos = await createTestUser()
+    const [a, b] =
+      uno.playerId < dos.playerId ? [uno.playerId, dos.playerId] : [dos.playerId, uno.playerId]
+    const { data: creada } = await adminClient()
+      .from('friendships')
+      .insert({ player_a: a, player_b: b, requested_by: uno.playerId })
+      .select('id')
+      .single()
+
+    await acceptFriendship(dos.client, creada!.id)
+
+    const { data: fila } = await adminClient()
+      .from('friendships')
+      .select('accepted_at')
+      .eq('id', creada!.id)
+      .single()
+    expect(fila?.accepted_at).not.toBeNull()
+  })
+
+  it('quien pidió no puede aceptar su propia solicitud', async () => {
+    const uno = await createTestUser()
+    const dos = await createTestUser()
+    const [a, b] =
+      uno.playerId < dos.playerId ? [uno.playerId, dos.playerId] : [dos.playerId, uno.playerId]
+    const pidio = uno.playerId === a ? uno : dos
+    const { data: creada } = await adminClient()
+      .from('friendships')
+      .insert({ player_a: a, player_b: b, requested_by: a })
+      .select('id')
+      .single()
+
+    await expect(acceptFriendship(pidio.client, creada!.id)).rejects.toThrow(EdgeError)
+  })
+})
+
+describe('friendsOf', () => {
+  it('lista amistades aceptadas y pendientes, con quién las pidió', async () => {
+    const uno = await createTestUser()
+    const dos = await createTestUser()
+    const tres = await createTestUser()
+
+    // `dos` le pide a `uno`, y `uno` acepta.
+    await requestFriendship(dos.client, uno.playerId)
+    const { data: pendienteConDos } = await adminClient()
+      .from('friendships')
+      .select('id')
+      .or(`player_a.eq.${dos.playerId},player_b.eq.${dos.playerId}`)
+      .single()
+    await acceptFriendship(uno.client, pendienteConDos!.id)
+
+    // `uno` le pide a `tres`, sin aceptar todavía.
+    await requestFriendship(uno.client, tres.playerId)
+
+    const amigos = await friendsOf(uno.client)
+
+    const conDos = amigos.find((f) => f.playerId === dos.playerId)
+    expect(conDos?.accepted).toBe(true)
+    expect(conDos?.theyAsked).toBe(true)
+    expect(conDos?.displayName.length).toBeGreaterThan(0)
+
+    const conTres = amigos.find((f) => f.playerId === tres.playerId)
+    expect(conTres?.accepted).toBe(false)
+    expect(conTres?.theyAsked).toBe(false)
+  })
+
+  it('no ve amistades ajenas', async () => {
+    const uno = await createTestUser()
+    const dos = await createTestUser()
+    const ajeno = await createTestUser()
+    await requestFriendship(uno.client, dos.playerId)
+
+    const amigos = await friendsOf(ajeno.client)
+    expect(amigos).toEqual([])
   })
 })

@@ -492,6 +492,13 @@ export type Database = {
             foreignKeyName: "match_sets_match_id_fkey"
             columns: ["match_id"]
             isOneToOne: false
+            referencedRelation: "match_participants"
+            referencedColumns: ["match_id"]
+          },
+          {
+            foreignKeyName: "match_sets_match_id_fkey"
+            columns: ["match_id"]
+            isOneToOne: false
             referencedRelation: "matches"
             referencedColumns: ["id"]
           },
@@ -785,7 +792,31 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      match_participants: {
+        Row: {
+          match_id: string | null
+          matchday_id: string | null
+          pair_id: string | null
+          player_id: string | null
+          side: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "entries_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "matches_matchday_id_fkey"
+            columns: ["matchday_id"]
+            isOneToOne: false
+            referencedRelation: "matchdays"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       add_squad_seat: {

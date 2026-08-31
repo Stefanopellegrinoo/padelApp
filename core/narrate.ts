@@ -1,7 +1,7 @@
-import { MASTERS_MATCHES, MASTERS_SIZE, MAX_PLAYERS, MIN_PLAYERS } from './constants'
+import { MASTERS_MATCHES, MASTERS_SIZE, MAX_PLAYERS, MIN_PLAYERS, maxMatchesOf } from './constants'
 import { thirdPlaceByGroupTable } from './knockout'
 import { usesSetsDiff } from './standings'
-import type { MatchFormat, MatchResult, SeasonConfig } from './types'
+import type { DisciplineShape, MatchFormat, MatchResult, SeasonConfig } from './types'
 
 /**
  * La etiqueta corta del formato: "1 set a 4 games", "3 sets a 4 games",
@@ -53,44 +53,92 @@ export interface RulesSection {
 }
 
 /**
- * The rules page, told from the config.
+ * The rules page, told from the config AND the discipline's own shape.
  *
  * Everything the app can derive, it derives. If the admin wrote "the winner
  * takes 10 points" by hand and then changed the config to 12, the page would
  * be lying — and a rules page that disagrees with the app is worse than none.
  *
+ * `shape` is required and has no default (same reasoning as
+ * `MatchFormat.openScore`): `hasMasters`, `pairSize` and `allowsDraw` live on
+ * `disciplines`, not in `config`, and a caller that forgot one would
+ * otherwise narrate a discipline it does not have.
+ *
  * The output is in Spanish because the group reads it.
  */
-export function narrateRules(config: SeasonConfig): RulesSection[] {
+export function narrateRules(config: SeasonConfig, shape: DisciplineShape): RulesSection[] {
   const { points, matchFormat, regularMatchdays, countBestOf, tiebreakSnapshotEvery } = config
+  const { hasMasters, pairSize, allowsDraw } = shape
 
-  return [
+  // El "8 y 12" es el piso/techo de PLANTEL (`squadSize`), que rige igual sin
+  // importar `pairSize` (core/types.ts: "Even only when sideSize=2"). Lo que
+  // SÍ varía por disciplina es el TOPE DE PARTIDOS de la fecha
+  // (`maxMatchesOf`, W32): 15 de a dos, 36 de a uno por default. Se omite el
+  // tramo cuando coincide con el default de pádel de HOY (pairSize=2, sin
+  // `maxMatches` propio) para que esa única forma que existe en producción
+  // siga leyendo carácter a carácter como siempre — con `maxMatches`
+  // explícito o `pairSize=1` el tope pasa a nombrarse.
+  const cap = maxMatchesOf(config, pairSize)
+  const isTodaysPadelDefault = pairSize === 2 && config.maxMatches === undefined
+  const capClause = isTodaysPadelDefault ? '' : `, con un tope de ${cap} partidos por fecha`
+
+  // Con `pairSize === 1` no hay pareja que armar (core/pairing.ts:135-147:
+  // "no defenders, no fixed pairs, no no-repeat rule") ni impar que resolver
+  // con un invitado (core/types.ts: "with sideSize=1 an odd squad is
+  // perfectly playable").
+  const sides =
+    pairSize === 1
+      ? 'Cada uno juega por su cuenta y todos contra todos. '
+      : 'Se arman parejas con todos y juegan todos contra todos. '
+  const guestClause =
+    pairSize === 1
+      ? ''
+      : ` Si el número de confirmados da impar, se suma un invitado para poder armar las parejas: ` +
+        `el invitado no suma puntos, pero su compañero sí.`
+
+  const pointsIntro =
+    pairSize === 1
+      ? 'Cada uno suma según dónde terminó: '
+      : 'Los dos integrantes de una pareja suman siempre lo mismo, según dónde terminó la pareja: '
+  const pointsMiddle =
+    pairSize === 1
+      ? 'Cuando juegan menos jugadores se usan los primeros valores, así ganar la fecha '
+      : 'Cuando juegan menos parejas se usan los primeros valores, así ganar la fecha '
+
+  const sections: RulesSection[] = [
     {
       title: 'El torneo',
       body:
         `El campeonato son ${regularMatchdays} fechas. Para cada jugador cuentan sus ` +
         `${countBestOf} mejores resultados, así que se puede faltar alguna vez sin quedar ` +
-        `afuera de la pelea. El año cierra con un Masters entre los ${MASTERS_SIZE} mejores.`,
+        `afuera de la pelea.` +
+        (hasMasters ? ` El año cierra con un Masters entre los ${MASTERS_SIZE} mejores.` : ''),
     },
     {
       title: 'La fecha',
       body:
-        `Cada fecha la juegan los que confirman, entre ${MIN_PLAYERS} y ${MAX_PLAYERS}. ` +
-        `Se arman parejas con todos y juegan todos contra todos. ` +
-        describeFormat(matchFormat) +
-        ` Si el número de confirmados da impar, se suma un invitado para poder armar las parejas: ` +
-        `el invitado no suma puntos, pero su compañero sí.`,
+        `Cada fecha la juegan los que confirman, entre ${MIN_PLAYERS} y ${MAX_PLAYERS}${capClause}. ` +
+        sides +
+        describeFormat(matchFormat, allowsDraw) +
+        guestClause,
     },
     {
       title: 'Los puntos',
       body:
-        `Los dos integrantes de una pareja suman siempre lo mismo, según dónde terminó la pareja: ` +
+        pointsIntro +
         points.map((value, index) => `${ordinal(index + 1)}, ${value}`).join('; ') +
-        `. Cuando juegan menos parejas se usan los primeros valores, así ganar la fecha ` +
+        `. ${pointsMiddle}` +
         `siempre suma ${points[0] ?? 0}. ` +
         zeroTail(points),
     },
-    {
+  ]
+
+  // "Cómo se arman las parejas" narra tres mecanismos (ordenar la tabla,
+  // primero-con-último, la regla de no repetir) que son falsos de punta a
+  // punta con `pairSize === 1` (core/pairing.ts:135-147) — no hay pareja que
+  // armar, así que no hay sección que mostrarla.
+  if (pairSize !== 1) {
+    sections.push({
       title: 'Cómo se arman las parejas',
       body:
         `Las parejas se arman con la tabla del campeonato: se ordena a los presentes por puntos ` +
@@ -98,20 +146,26 @@ export function narrateRules(config: SeasonConfig): RulesSection[] {
         `Ninguna pareja se repite dos fechas seguidas, con una sola excepción: la pareja que ` +
         `gana una fecha se mantiene junta en la siguiente. Después se separa, gane o pierda, ` +
         `así que toda pareja campeona juega exactamente 2 fechas junta.`,
-    },
-    {
-      title: 'Los desempates',
-      body: describeTiebreak(matchFormat, tiebreakSnapshotEvery),
-    },
-    {
+    })
+  }
+
+  sections.push({
+    title: 'Los desempates',
+    body: describeTiebreak(matchFormat, tiebreakSnapshotEvery),
+  })
+
+  if (hasMasters) {
+    sections.push({
       title: 'El Masters',
       body:
         `Los ${MASTERS_SIZE} mejores del año juegan una jornada final de ${MASTERS_MATCHES} partidos con ` +
         `compañeros rotativos: cada uno juega una vez con cada uno. Se cuentan los partidos ` +
         `ganados de forma individual. Si hay empate, gana el que llegó mejor posicionado en el ` +
         `ranking anual.`,
-    },
-  ]
+    })
+  }
+
+  return sections
 }
 
 /**
@@ -154,14 +208,28 @@ function describeTiebreak(format: MatchFormat, snapshotEvery: number): string {
   )
 }
 
-function describeFormat(format: MatchFormat): string {
+/**
+ * `allowsDraw` sola y no el `DisciplineShape` entero: ésta es la única
+ * llamadora (línea de abajo, dentro de `narrateRules`) y sólo necesita este
+ * campo — la firma más chica que funciona.
+ *
+ * La cuarta mentira (design rev 2 §2): con marcador abierto y `allows_draw =
+ * false`, la base rechaza un resultado en igualdad (`match_sets_no_draw`,
+ * 0034) y esta frase igual prometía "Puede terminar empatado." Una página de
+ * reglas que promete lo que la base va a rechazar es peor que no decir nada
+ * — así que cuando no se puede, se dice la negativa, no se calla.
+ */
+function describeFormat(format: MatchFormat, allowsDraw: boolean): string {
   // Con marcador abierto no hay set, ni número al que llegar, ni tie-break:
   // hay dos números de goles y ahí termina el partido. Narrar el set de pádel
   // acá era describirle a los jugadores un formato que la app no juega.
   if (format.openScore) {
+    const drawClause = allowsDraw
+      ? 'Puede terminar empatado.'
+      : 'Tiene que salir con un ganador: no puede quedar en igualdad.'
     return (
       `Cada partido se carga con el marcador de goles: los dos números como quedaron, sin ` +
-      `un número al que haya que llegar. Puede terminar empatado.`
+      `un número al que haya que llegar. ${drawClause}`
     )
   }
   const setWord = format.setsToWin === 1 ? 'un set' : `${format.setsToWin} sets ganados`

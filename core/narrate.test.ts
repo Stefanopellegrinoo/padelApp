@@ -1,8 +1,90 @@
 import { describe, it, expect } from 'vitest'
 import { bracketOrderNote, formatLabel, formatsLabel, narrateRules, thirdPlaceNote } from './narrate'
 import { MASTERS_MATCHES, MASTERS_SIZE } from './constants'
+import { defaultConfig } from './config'
 import { pair } from './side'
-import type { MatchResult, Phase, Side, SeasonConfig } from './types'
+import type { DisciplineShape, MatchResult, Phase, Side, SeasonConfig } from './types'
+
+/**
+ * Tarea 3a.1 (reglas-por-disciplina): pin de byte-identidad sobre la salida
+ * DE HOY de `narrateRules(defaultConfig(8))` — la llamada de UN solo
+ * argumento, tal cual existe antes de que `narrateRules` reciba
+ * `DisciplineShape`. Copiado literal de `narrate.ts:67-114` con
+ * `defaultConfig(8)` (squadSize=8, sideSize=2 default ⇒ `DEFAULT_POINTS[4]`
+ * = `[10, 6, 3, 1]`), que es hoy el único shape que existe en producción
+ * (hasMasters=true, pairSize=2, allowsDraw=true).
+ *
+ * Corrido y visto en VERDE contra el `narrate.ts` SIN TOCAR, antes de escribir
+ * una sola línea de `DisciplineShape` — es la garantía de que este pin mide
+ * lo que hoy renderiza la app y no lo que el código YA cambiado renderiza.
+ *
+ * (3a.4, después de implementar): con `narrateRules` pidiendo ya el segundo
+ * argumento obligatorio, este mismo test pasó de la llamada de un argumento a
+ * `narrateRules(PIN_CONFIG, { hasMasters: true, pairSize: 2, allowsDraw: true
+ * })` — el shape de HOY — sin tocar un solo carácter de los seis textos
+ * pinneados abajo. Es exactamente la prueba de que nada de lo que ya rendía
+ * cambió: el pin se estableció contra el archivo sin tocar (arriba) y sigue
+ * verde contra el archivo ya implementado.
+ */
+describe('narrateRules — pin de byte-identidad (3a.1)', () => {
+  const PIN_CONFIG = defaultConfig(8)
+
+  it('reproduce las seis secciones de hoy, carácter a carácter', () => {
+    const sections = narrateRules(PIN_CONFIG, { hasMasters: true, pairSize: 2, allowsDraw: true })
+
+    expect(sections.map((section) => section.title)).toEqual([
+      'El torneo',
+      'La fecha',
+      'Los puntos',
+      'Cómo se arman las parejas',
+      'Los desempates',
+      'El Masters',
+    ])
+
+    expect(sections.find((s) => s.title === 'El torneo')?.body).toBe(
+      'El campeonato son 10 fechas. Para cada jugador cuentan sus 8 mejores resultados, así que se ' +
+        'puede faltar alguna vez sin quedar afuera de la pelea. El año cierra con un Masters entre ' +
+        'los 4 mejores.',
+    )
+
+    expect(sections.find((s) => s.title === 'La fecha')?.body).toBe(
+      'Cada fecha la juegan los que confirman, entre 8 y 12. Se arman parejas con todos y juegan ' +
+        'todos contra todos. Cada partido se define a un set de 4 games con tie-break. Si el número ' +
+        'de confirmados da impar, se suma un invitado para poder armar las parejas: el invitado no ' +
+        'suma puntos, pero su compañero sí.',
+    )
+
+    expect(sections.find((s) => s.title === 'Los puntos')?.body).toBe(
+      'Los dos integrantes de una pareja suman siempre lo mismo, según dónde terminó la pareja: el ' +
+        '1º, 10; el 2º, 6; el 3º, 3; el 4º, 1. Cuando juegan menos parejas se usan los primeros ' +
+        'valores, así ganar la fecha siempre suma 10. Nadie suma 0 por presentarse: si salir último ' +
+        'diera lo mismo que faltar, convendría faltar.',
+    )
+
+    expect(sections.find((s) => s.title === 'Cómo se arman las parejas')?.body).toBe(
+      'Las parejas se arman con la tabla del campeonato: se ordena a los presentes por puntos y se ' +
+        'junta al primero con el último, al segundo con el anteúltimo, y así. Ninguna pareja se ' +
+        'repite dos fechas seguidas, con una sola excepción: la pareja que gana una fecha se ' +
+        'mantiene junta en la siguiente. Después se separa, gane o pierda, así que toda pareja ' +
+        'campeona juega exactamente 2 fechas junta.',
+    )
+
+    expect(sections.find((s) => s.title === 'Los desempates')?.body).toBe(
+      'En la tabla de la fecha, si dos parejas ganan la misma cantidad de partidos, corta la ' +
+        'diferencia de games. Si empatan dos, el partido entre ellas lo decide; si empatan tres o ' +
+        'más, el partido entre ellas no alcanza porque se ganan en círculo, y corta el orden de ' +
+        'desempate. En la tabla del campeonato, si dos jugadores tienen los mismos puntos corta el ' +
+        'orden de desempate: una lista del mejor al peor que arranca en el orden que consensuó el ' +
+        'grupo y se actualiza cada 3 fechas con la tabla de ese momento.',
+    )
+
+    expect(sections.find((s) => s.title === 'El Masters')?.body).toBe(
+      'Los 4 mejores del año juegan una jornada final de 3 partidos con compañeros rotativos: cada ' +
+        'uno juega una vez con cada uno. Se cuentan los partidos ganados de forma individual. Si hay ' +
+        'empate, gana el que llegó mejor posicionado en el ranking anual.',
+    )
+  })
+})
 
 const CONFIG: SeasonConfig = {
   squadSize: 12,
@@ -13,15 +95,18 @@ const CONFIG: SeasonConfig = {
   tiebreakSnapshotEvery: 3,
 }
 
-function bodyOf(config: SeasonConfig, title: string): string {
-  const block = narrateRules(config).find((section) => section.title === title)
+/** La única forma que existía antes de `DisciplineShape`: pádel, con Masters. */
+const TODAY_SHAPE: DisciplineShape = { hasMasters: true, pairSize: 2, allowsDraw: true }
+
+function bodyOf(config: SeasonConfig, title: string, shape: DisciplineShape = TODAY_SHAPE): string {
+  const block = narrateRules(config, shape).find((section) => section.title === title)
   if (block === undefined) throw new Error(`No hay bloque "${title}"`)
   return block.body
 }
 
 describe('narrateRules', () => {
   it('returns a block per topic', () => {
-    const titles = narrateRules(CONFIG).map((section) => section.title)
+    const titles = narrateRules(CONFIG, TODAY_SHAPE).map((section) => section.title)
     expect(titles).toEqual([
       'El torneo',
       'La fecha',
@@ -93,7 +178,7 @@ describe('narrateRules', () => {
   })
 
   it('never leaves a placeholder in the output', () => {
-    for (const section of narrateRules(CONFIG)) {
+    for (const section of narrateRules(CONFIG, TODAY_SHAPE)) {
       expect(section.body).not.toMatch(/undefined|NaN|\{\{/)
       expect(section.body.length).toBeGreaterThan(0)
     }
@@ -128,6 +213,75 @@ describe('narrateRules', () => {
     const body = bodyOf(CONFIG, 'El Masters')
     expect(body).toContain(`${MASTERS_SIZE} mejores`)
     expect(body).toContain(`${MASTERS_MATCHES} partidos`)
+  })
+})
+
+// ── reglas-por-disciplina, slice 3a — `DisciplineShape` (tareas 3a.2-3a.7) ───
+//
+// Hasta acá `narrateRules` sólo conocía la config: no podía saber si ESTA
+// disciplina juega Masters, si sus lados son de uno o de dos, ni si un
+// empate es un resultado legal. Esas tres cosas viven en `disciplines`, no en
+// el jsonb, y por eso llegan como segundo argumento, obligatorio y sin
+// default (misma razón que `MatchFormat.openScore`: un default permisivo
+// esconde al llamador que no lo piensa).
+describe('narrateRules — DisciplineShape', () => {
+  it('sin Masters no hay sección "El Masters" y "El torneo" no la nombra [R1]', () => {
+    const sections = narrateRules(CONFIG, { hasMasters: false, pairSize: 2, allowsDraw: true })
+    expect(sections.map((s) => s.title)).not.toContain('El Masters')
+    const elTorneo = sections.find((s) => s.title === 'El torneo')?.body ?? ''
+    expect(elTorneo).not.toContain('Masters')
+  })
+
+  it('con lados de uno, "La fecha" y "Los puntos" no hablan de parejas y no hay sección de armado [R2, R3]', () => {
+    const sections = narrateRules(CONFIG, { hasMasters: true, pairSize: 1, allowsDraw: true })
+    const laFecha = sections.find((s) => s.title === 'La fecha')?.body ?? ''
+    expect(laFecha).not.toContain('pareja')
+    expect(laFecha).not.toContain('se suma un invitado')
+    const losPuntos = sections.find((s) => s.title === 'Los puntos')?.body ?? ''
+    expect(losPuntos).not.toContain('Los dos integrantes de una pareja')
+    expect(sections.map((s) => s.title)).not.toContain('Cómo se arman las parejas')
+  })
+
+  it('con hasMasters:true y pairSize:2 reproduce el pin de 3a.1 tal cual (regresión R1/R2/R3) [3a.4]', () => {
+    const sections = narrateRules(defaultConfig(8), TODAY_SHAPE)
+    expect(sections.find((s) => s.title === 'La fecha')?.body).toBe(
+      'Cada fecha la juegan los que confirman, entre 8 y 12. Se arman parejas con todos y juegan ' +
+        'todos contra todos. Cada partido se define a un set de 4 games con tie-break. Si el número ' +
+        'de confirmados da impar, se suma un invitado para poder armar las parejas: el invitado no ' +
+        'suma puntos, pero su compañero sí.',
+    )
+  })
+
+  it('FIFA 1v1 default: el tope de "La fecha" refleja maxMatchesOf, no el 8-12 de pádel a secas [R4]', () => {
+    const laFecha = bodyOf(CONFIG, 'La fecha', { hasMasters: false, pairSize: 1, allowsDraw: true })
+    // maxMatchesOf(CONFIG, 1) === defaultMaxMatches(1) === 36, porque CONFIG no trae `maxMatches`.
+    expect(laFecha).toContain('36 partidos por fecha')
+  })
+
+  it('un maxMatches explícito cambia el tope narrado, para cualquier pairSize [R4]', () => {
+    const conTope = { ...CONFIG, maxMatches: 20 }
+    const laFecha = bodyOf(conTope, 'La fecha', TODAY_SHAPE)
+    expect(laFecha).toContain('20 partidos por fecha')
+    expect(laFecha).not.toContain('15 partidos por fecha')
+  })
+
+  it('marcador abierto + empate permitido reproduce "Puede terminar empatado." tal cual [R5]', () => {
+    const FIFA = { ...CONFIG, matchFormat: { ...CONFIG.matchFormat, openScore: true } }
+    const body = bodyOf(FIFA, 'La fecha', { hasMasters: false, pairSize: 1, allowsDraw: true })
+    expect(body).toContain('Puede terminar empatado.')
+  })
+
+  it('marcador abierto + empate NO permitido dice lo contrario, sin la palabra "empatado" [R5]', () => {
+    const FIFA = { ...CONFIG, matchFormat: { ...CONFIG.matchFormat, openScore: true } }
+    const body = bodyOf(FIFA, 'La fecha', { hasMasters: false, pairSize: 1, allowsDraw: false })
+    expect(body).not.toContain('empatado')
+    expect(body).toContain('ganador')
+  })
+
+  it('sin marcador abierto, la frase del formato no depende de allowsDraw [R5]', () => {
+    const conEmpate = bodyOf(CONFIG, 'La fecha', { ...TODAY_SHAPE, allowsDraw: true })
+    const sinEmpate = bodyOf(CONFIG, 'La fecha', { ...TODAY_SHAPE, allowsDraw: false })
+    expect(conEmpate).toBe(sinEmpate)
   })
 })
 

@@ -70,6 +70,26 @@ export interface SeasonConfig {
 export type SideSize = 1 | 2
 
 /**
+ * Los tres hechos de una disciplina que `narrateRules` no puede leer de
+ * `SeasonConfig`: viven en columnas de `disciplines` (`has_masters`,
+ * `pair_size`, `allows_draw`), no en su jsonb. Copiarlos AL jsonb crearía una
+ * segunda fuente de verdad para columnas que la base ya vigila con FKs
+ * compuestas (`disciplines_size_anchor`, `disciplines_draw_anchor`,
+ * `0015_disciplines.sql:25-26`) — el mismo problema que `seasons.config`
+ * (`db/read.ts:73-80`).
+ *
+ * Segundo argumento OBLIGATORIO de `narrateRules`, sin default a propósito
+ * (misma razón que `MatchFormat.openScore`, arriba: un default permisivo
+ * esconde al llamador que no lo piensa, y esto ya mordió dos veces —
+ * `pair_size` en PR18a, `allows_draw` en W61).
+ */
+export interface DisciplineShape {
+  hasMasters: boolean
+  pairSize: SideSize
+  allowsDraw: boolean
+}
+
+/**
  * Unión DISCRIMINADA sobre `size`: leer `.b` de un `Side` sin haber
  * angostado `size` a `2` es error de COMPILACIÓN, no un `undefined` en
  * runtime. Antes de este tipo, `pair.a === guestId ? pair.b : pair.a`

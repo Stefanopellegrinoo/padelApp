@@ -52,7 +52,16 @@ const escena = vi.hoisted(() => ({
   disciplines: [] as DisciplineHeader[],
   /** `null` = nadie logueado, que es la rama pública de Reglas (S76). */
   user: { id: 'admin' } as { id: string } | null,
-  publicFormats: [] as { kind: 'PADEL' | 'FIFA'; config: unknown }[],
+  // Rebanada 3a de "reglas por disciplina": `hasMasters`/`pairSize`/
+  // `allowsDraw` reales (0069), mismo criterio que `disciplina()` abajo — sin
+  // esto la rama anónima le pasaría `undefined` a `RulesBody.shape`.
+  publicFormats: [] as {
+    kind: 'PADEL' | 'FIFA'
+    config: unknown
+    hasMasters: boolean
+    pairSize: 1 | 2
+    allowsDraw: boolean
+  }[],
 }))
 
 vi.mock('@/db/server', () => ({
@@ -129,6 +138,12 @@ function disciplina(id: string, kind: 'PADEL' | 'FIFA', config: SeasonConfig): D
 
 const SOLO_PADEL = [disciplina('d1', 'PADEL', PADEL)]
 const PADEL_Y_FIFA = [disciplina('d1', 'PADEL', PADEL), disciplina('d2', 'FIFA', FIFA)]
+
+/** El equivalente de `disciplina()` para la rama SIN SESIÓN: mismo criterio de `hasMasters`/`allowsDraw` por `kind`. */
+function publicFormat(kind: 'PADEL' | 'FIFA', config: unknown) {
+  const pairSize = kind === 'PADEL' ? (2 as const) : (1 as const)
+  return { kind, config, pairSize, hasMasters: pairSize === 2, allowsDraw: kind === 'FIFA' }
+}
 
 async function reglas(disciplines: DisciplineHeader[]): Promise<string> {
   escena.disciplines = disciplines
@@ -314,10 +329,7 @@ describe('el paso 4 del wizard — el cableado que ningún render alcanza', () =
 describe('Reglas SIN SESIÓN — la mitad pública, que es la que faltaba', () => {
   it('nombra el formato de CADA disciplina cuando el torneo tiene dos', async () => {
     escena.user = null
-    escena.publicFormats = [
-      { kind: 'PADEL', config: PADEL },
-      { kind: 'FIFA', config: FIFA },
-    ]
+    escena.publicFormats = [publicFormat('PADEL', PADEL), publicFormat('FIFA', FIFA)]
     const html = await reglas(PADEL_Y_FIFA)
     expect(html).toContain('Pádel: 1 set a 4 games')
     expect(html).toContain('FIFA: Marcador de goles')
@@ -325,7 +337,7 @@ describe('Reglas SIN SESIÓN — la mitad pública, que es la que faltaba', () =
 
   it('y con UNA sola sigue diciendo exactamente lo de siempre, sin prefijo', async () => {
     escena.user = null
-    escena.publicFormats = [{ kind: 'PADEL', config: PADEL }]
+    escena.publicFormats = [publicFormat('PADEL', PADEL)]
     const html = await reglas(SOLO_PADEL)
     expect(html).toContain('1 set a 4 games')
     expect(html).not.toContain('Pádel: 1 set a 4 games')

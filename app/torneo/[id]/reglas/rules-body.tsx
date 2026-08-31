@@ -3,6 +3,7 @@ import {
   MASTERS_SIZE,
   formatsLabel,
   narrateRules,
+  type DisciplineShape,
   type MatchFormat,
   type SeasonConfig,
 } from '@/core'
@@ -20,8 +21,15 @@ function introOf(adminName: string): string {
   return `Las reglas de este torneo, como quedaron cuando ${adminName} lo creó.`
 }
 
-/** Los seis títulos del acordeón son contractuales (handoff §12). El cuerpo de cada uno sale de
- * `narrateRules(config)` por título de sección — nunca se reescribe a mano. */
+/**
+ * Los seis títulos son el contrato de PÁDEL con Masters (handoff §12):
+ * `pairSize === 2 && hasMasters`, la única forma que existe hoy en
+ * producción. No es universal — FIFA 1v1 (`hasMasters: false, pairSize: 1`)
+ * pasa de seis filas a CUATRO, porque "Masters" y "Cómo se arman las
+ * parejas" se filtran (`sectionApplies`, abajo). El cuerpo de cada fila
+ * sigue saliendo de `narrateRules(config, shape)` por título de sección —
+ * nunca se reescribe a mano.
+ */
 const ROWS: Array<{
   title: string
   section: string
@@ -51,9 +59,27 @@ const ROWS: Array<{
   { title: 'Masters', section: 'El Masters', value: () => `Los ${MASTERS_SIZE} primeros` },
 ]
 
-function rulesRowsOf(config: SeasonConfig, formats: readonly FormatRow[]): RuleRow[] {
-  const sections = narrateRules(config)
-  return ROWS.map((row) => {
+/**
+ * El predicado que decide si una fila del acordeón tiene sentido para esta
+ * disciplina — el MISMO que usa `narrateRules` para decidir si produce la
+ * sección (design §Q4, "both, from one shared predicate"): así una fila
+ * nunca puede pedir una sección que `narrateRules` decidió no escribir, ni al
+ * revés. Toda sección que no está acá se considera SIEMPRE presente, así que
+ * si alguna vez falta de verdad, el `throw` de abajo la sigue atajando.
+ */
+function sectionApplies(section: string, shape: DisciplineShape): boolean {
+  if (section === 'El Masters') return shape.hasMasters
+  if (section === 'Cómo se arman las parejas') return shape.pairSize !== 1
+  return true
+}
+
+function rulesRowsOf(
+  config: SeasonConfig,
+  shape: DisciplineShape,
+  formats: readonly FormatRow[],
+): RuleRow[] {
+  const sections = narrateRules(config, shape)
+  return ROWS.filter((row) => sectionApplies(row.section, shape)).map((row) => {
     const section = sections.find((candidate) => candidate.title === row.section)
     if (section === undefined) {
       throw new Error(`narrateRules no tiene la sección "${row.section}". Esto es un bug.`)
@@ -65,6 +91,14 @@ function rulesRowsOf(config: SeasonConfig, formats: readonly FormatRow[]): RuleR
 export interface RulesBodyProps {
   seasonId: string
   config: SeasonConfig
+  /**
+   * `hasMasters`/`pairSize`/`allowsDraw` de la disciplina PRIMARIA (slice 3a:
+   * todavía un solo bloque, así que un solo shape). Viven en `disciplines`,
+   * no en `config`, y por eso llegan aparte — igual que `narrateRules` los
+   * pide como segundo argumento obligatorio, sin default (reglas-por-
+   * disciplina design §Q1).
+   */
+  shape: DisciplineShape
   /**
    * El formato de CADA disciplina del torneo. Con una sola la pantalla dice
    * exactamente lo de siempre; con dos formatos distintos los nombra a los dos
@@ -101,6 +135,7 @@ export interface RulesBodyProps {
 export function RulesBody({
   seasonId,
   config,
+  shape,
   formats,
   adminName,
   rulesText,
@@ -115,7 +150,7 @@ export function RulesBody({
         {introOf(adminName)}
       </p>
 
-      <RulesAccordion rows={rulesRowsOf(config, formats)} />
+      <RulesAccordion rows={rulesRowsOf(config, shape, formats)} />
 
       {hasAdminText && (
         <div

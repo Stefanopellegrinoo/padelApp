@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { DISCIPLINE_LABELS } from '@/app/torneos/nuevo/wizard-state'
+import type { DisciplineShape } from '@/core'
 import {
   primaryDiscipline,
   publicFormats,
@@ -62,11 +63,29 @@ export default async function ReglasPage({ params }: ReglasPageProps) {
       )
     }
 
+    // Rebanada 3a de "reglas por disciplina": el shape de la disciplina
+    // PRIMARIA (`formats[0]`) — todavía UN bloque, así que un solo shape.
+    // `season_public_formats` (0069) ya trae los tres campos reales; el
+    // fallback de abajo (temporada sin `formats`) es el mismo caso MUERTO que
+    // el de `formats` mismo — `season_public_rules` es un INNER JOIN contra
+    // `disciplines`, así que `rules !== null` y `formats.length === 0` no
+    // pueden pasar juntos (3b termina de borrar esta rama).
+    const primaryFormat = formats[0]
+    const anonShape: DisciplineShape =
+      primaryFormat === undefined
+        ? { hasMasters: true, pairSize: 2, allowsDraw: true }
+        : {
+            hasMasters: primaryFormat.hasMasters,
+            pairSize: primaryFormat.pairSize,
+            allowsDraw: primaryFormat.allowsDraw,
+          }
+
     return (
       <>
         <RulesBody
           seasonId={id}
           config={rules.config}
+          shape={anonShape}
           // TODAS las disciplinas, igual que la rama con sesión. Con una sola
           // `formatsLabel` no usa la etiqueta —agrupa por FORMATO, no por
           // disciplina— así que esa pantalla sale byte a byte como salía; con
@@ -103,10 +122,16 @@ export default async function ReglasPage({ params }: ReglasPageProps) {
     seasonAdminName(supabase, id),
   ])
 
+  const primary = primaryDiscipline(header)
+
   return (
     <RulesBody
       seasonId={id}
-      config={primaryDiscipline(header).config}
+      config={primary.config}
+      // Rebanada 3a: el shape de la disciplina primaria. `DisciplineHeader`
+      // ya trae los tres campos (0069) — `hasMasters`/`pairSize` desde
+      // slice 1, `allowsDraw` sumado en la misma slice.
+      shape={{ hasMasters: primary.hasMasters, pairSize: primary.pairSize, allowsDraw: primary.allowsDraw }}
       // La fila de formato mira TODAS las disciplinas, no la [0]: desde PR20
       // rebanada D2 cada una nace con la forma de marcador de su kind, y un
       // torneo de pádel + FIFA le decía al grupo "1 set a 4 games" sobre una

@@ -32,6 +32,7 @@ export type {
   MatchFormat,
   SeasonConfig,
   SideSize,
+  DisciplineShape,
   Side,
   SetScore,
   Phase,

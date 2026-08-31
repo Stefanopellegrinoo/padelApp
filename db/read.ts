@@ -444,28 +444,15 @@ export async function seasonAdminName(supabase: Client, seasonId: string): Promi
   return adminName
 }
 
-export async function seasonRules(
-  supabase: Client,
-  seasonId: string,
-): Promise<{ text: string; updatedAt: string | null }> {
-  const { data, error } = await supabase
-    .from('seasons')
-    .select('rules_text, rules_updated_at')
-    .eq('id', seasonId)
-    .maybeSingle()
-  if (error) throw new EdgeError(`No se pudieron leer las reglas: ${error.message}`)
-  if (data === null) throw new EdgeError('La temporada no existe.')
-  return { text: data.rules_text, updatedAt: data.rules_updated_at }
-}
-
 /**
  * `disciplines.rules_text` de TODAS las disciplinas de la temporada (0069),
- * una consulta, mapeada por `DisciplineId`. Desde la rebanada 2 de "reglas
- * por disciplina" es lo que lee Ajustes (`ajustes/page.tsx`) para armar un
- * editor por disciplina. Reglas (`reglas/page.tsx`) sigue leyendo
- * `seasonRules` de acá arriba hasta la rebanada 3, que reemplaza ese llamado
- * y borra `seasonRules` — hasta entonces el dual-write de
- * `updateDisciplineRules` (`db/discipline.ts`) mantiene esa lectura vigente.
+ * una consulta, mapeada por `DisciplineId`. Lo leen Ajustes
+ * (`ajustes/page.tsx`, un editor por disciplina) y Reglas (`reglas/page.tsx`,
+ * un bloque por disciplina, rebanada 3b) — reemplazó a `seasonRules`, que
+ * leía `seasons.rules_text` de la temporada entera y no distinguía entre
+ * disciplinas. `seasons.rules_text` sigue existiendo (dual-write de
+ * `updateDisciplineRules`, `db/discipline.ts`) hasta el contract; ya no tiene
+ * un lector de pantalla.
  *
  * `disciplines_read` (0015:56-57) usa el MISMO gate `is_participant(season_id)`
  * que `seasons_read` — un extraño sigue sin poder leer esto, igual que hoy.

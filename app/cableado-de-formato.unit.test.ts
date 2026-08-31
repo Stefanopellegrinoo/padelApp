@@ -16,8 +16,11 @@ import type { DisciplineHeader } from '@/db/read'
  * · M-A: `<PasoFormato picked={['PADEL']}>` — W63 vuelve para una liga de
  *   solo FIFA.
  * · M-B: el paso 4 se desconecta: `<PasoFormato/>` → `<p>paso 4</p>`.
- * · M-C: `reglas/page.tsx` vuelve a pasar UNA sola disciplina — W64 vuelve
- *   exacto.
+ * · M-C: `reglas/page.tsx` vuelve a pasar UNA sola disciplina (o vuelve a
+ *   fundir el formato de todas en una sola frase) — W64 vuelve, ahora como
+ *   "le falta un bloque entero" en vez de "la frase está mal" (rebanada 3b de
+ *   "reglas por disciplina": la pantalla pasó de UN bloque compartido a N
+ *   bloques, uno por disciplina).
  *
  * M-C es la que duele: el bug que W64 FUE vivía en `page.tsx`, no en
  * `RulesBody`, y el test del componente recibe `formats` a mano, así que
@@ -61,7 +64,11 @@ const escena = vi.hoisted(() => ({
     hasMasters: boolean
     pairSize: 1 | 2
     allowsDraw: boolean
+    rulesText: string
   }[],
+  // Rebanada 3b: el texto libre de CADA disciplina, para probar que el bloque
+  // de Pádel muestra el suyo y el de FIFA el suyo — nunca el del otro.
+  rulesByDiscipline: new Map<DisciplineId, string>(),
 }))
 
 vi.mock('@/db/server', () => ({
@@ -86,12 +93,13 @@ vi.mock('@/db/read', async (importOriginal) => {
       inviteToken: 'token',
       disciplines: escena.disciplines,
     }),
-    seasonRules: async () => ({ text: '', updatedAt: null }),
     // Rebanada 2 de "reglas por disciplina": Ajustes lee esto para armar un
-    // editor por disciplina (`disciplineId -> rules_text`). Vacío alcanza acá
-    // -- este archivo no asierta sobre el texto de reglas, sólo sobre el
-    // panel de Formato, que es lo que este describe existe para cubrir.
-    disciplineRulesOf: async () => new Map<DisciplineId, string>(),
+    // editor por disciplina (`disciplineId -> rules_text`). Rebanada 3b:
+    // Reglas CON SESIÓN también lo lee, un bloque por disciplina —
+    // `escena.rulesByDiscipline` vacío por default, lo que hace que ningún
+    // bloque muestre texto libre (caso válido, ya cubierto por los tests que
+    // sólo miran el panel de Formato).
+    disciplineRulesOf: async () => escena.rulesByDiscipline,
     // La rama SIN SESIÓN. `season_public_rules` (0022) devuelve la config de
     // UNA disciplina —la de por defecto— y ni su `kind`, así que sola no
     // alcanza para narrar un torneo con dos formatos: eso es S76.
@@ -140,9 +148,23 @@ const SOLO_PADEL = [disciplina('d1', 'PADEL', PADEL)]
 const PADEL_Y_FIFA = [disciplina('d1', 'PADEL', PADEL), disciplina('d2', 'FIFA', FIFA)]
 
 /** El equivalente de `disciplina()` para la rama SIN SESIÓN: mismo criterio de `hasMasters`/`allowsDraw` por `kind`. */
-function publicFormat(kind: 'PADEL' | 'FIFA', config: unknown) {
+function publicFormat(kind: 'PADEL' | 'FIFA', config: unknown, rulesText = '') {
   const pairSize = kind === 'PADEL' ? (2 as const) : (1 as const)
-  return { kind, config, pairSize, hasMasters: pairSize === 2, allowsDraw: kind === 'FIFA' }
+  return { kind, config, pairSize, hasMasters: pairSize === 2, allowsDraw: kind === 'FIFA', rulesText }
+}
+
+/**
+ * El bloque de UNA disciplina, recortado del HTML de la página entera:
+ * desde su encabezado `<h2>` (rebanada 3b: sólo aparece con más de una
+ * disciplina) hasta el próximo `<h2>` o el final del documento. Mismo
+ * espíritu que `panelesDeFormato` de más abajo para Ajustes, pero por texto
+ * de encabezado en vez de por atributo — Reglas no tiene `disciplineId` en
+ * la rama SIN SESIÓN (0069 lo deja afuera a propósito), así que no hay un
+ * identificador más chico que el nombre para cortar por acá.
+ */
+function bloqueDe(html: string, label: string): string {
+  const re = new RegExp(`<h2[^>]*>${label}</h2>([\\s\\S]*?)(?=<h2[^>]*>|$)`)
+  return re.exec(html)?.[1] ?? ''
 }
 
 async function reglas(disciplines: DisciplineHeader[]): Promise<string> {
@@ -161,19 +183,52 @@ async function ajustes(disciplines: DisciplineHeader[]): Promise<string> {
 
 describe('Reglas con sesión — la página entera, no el componente suelto', () => {
   /**
-   * M-C. Volver a `formats={[{ label: '', matchFormat: primaryDiscipline(
-   * header).config.matchFormat }]}` reintroduce W64 tal cual era, y con esto
-   * se pone rojo.
+   * M-C, rebanada 3b. Volver a construir `disciplines` sólo con
+   * `primaryDiscipline(header)` reintroduce W64: FIFA desaparece de la
+   * pantalla entera, no sólo de una frase. Con esto se pone rojo.
    */
-  it('nombra el formato de CADA disciplina del torneo', async () => {
-    expect(await reglas(PADEL_Y_FIFA)).toContain('Pádel: 1 set a 4 games · FIFA: Marcador de goles')
+  it('dibuja un bloque por disciplina, cada uno con su propio formato', async () => {
+    const html = await reglas(PADEL_Y_FIFA)
+    expect(html).toContain('>Pádel</h2>')
+    expect(html).toContain('>FIFA</h2>')
+    expect(bloqueDe(html, 'Pádel')).toContain('1 set a 4 games')
+    expect(bloqueDe(html, 'FIFA')).toContain('Marcador de goles')
+    // La frase combinada de antes de 3b ya no existe en ningún lado.
+    expect(html).not.toContain('Pádel: 1 set a 4 games · FIFA: Marcador de goles')
   })
 
-  /** PIN de no-regresión: un torneo de una sola disciplina dice lo de siempre. */
-  it('con una sola disciplina dice exactamente lo de siempre', async () => {
+  /**
+   * R11: el bloque de Pádel narra Masters y "Cómo se arman las parejas"
+   * (`hasMasters: true, pairSize: 2`); el de FIFA (`hasMasters: false,
+   * pairSize: 1`) no narra ninguna de las dos. Cada uno muestra SU PROPIO
+   * texto libre y nunca el del otro.
+   */
+  it('cada bloque narra su propia disciplina y su propio texto libre', async () => {
+    escena.rulesByDiscipline = new Map([
+      ['d1' as DisciplineId, 'Traer pelotas nuevas.'],
+      ['d2' as DisciplineId, 'Se juega con barro.'],
+    ])
+    const html = await reglas(PADEL_Y_FIFA)
+    const padel = bloqueDe(html, 'Pádel')
+    const fifa = bloqueDe(html, 'FIFA')
+
+    expect(padel).toContain('>Masters<')
+    expect(padel).toContain('Cómo se arman las parejas')
+    expect(padel).toContain('Traer pelotas nuevas.')
+
+    expect(fifa).not.toContain('>Masters<')
+    expect(fifa).not.toContain('Cómo se arman las parejas')
+    expect(fifa).toContain('Se juega con barro.')
+    expect(fifa).not.toContain('Traer pelotas nuevas.')
+  })
+
+  /** PIN de no-regresión (R10): un torneo de una sola disciplina dice lo de siempre, sin encabezado. */
+  it('con una sola disciplina dice exactamente lo de siempre, sin encabezado', async () => {
+    escena.rulesByDiscipline = new Map()
     const html = await reglas(SOLO_PADEL)
     expect(html).toContain('1 set a 4 games')
     expect(html).not.toContain('Pádel: 1 set a 4 games')
+    expect(html).not.toContain('<h2')
   })
 })
 
@@ -327,20 +382,40 @@ describe('el paso 4 del wizard — el cableado que ningún render alcanza', () =
 // Estos tests montan la PÁGINA con `user: null`, que es la rama que ningún
 // test tocaba nunca.
 describe('Reglas SIN SESIÓN — la mitad pública, que es la que faltaba', () => {
-  it('nombra el formato de CADA disciplina cuando el torneo tiene dos', async () => {
+  it('dibuja un bloque por disciplina cuando el torneo tiene dos', async () => {
     escena.user = null
     escena.publicFormats = [publicFormat('PADEL', PADEL), publicFormat('FIFA', FIFA)]
     const html = await reglas(PADEL_Y_FIFA)
-    expect(html).toContain('Pádel: 1 set a 4 games')
-    expect(html).toContain('FIFA: Marcador de goles')
+    expect(bloqueDe(html, 'Pádel')).toContain('1 set a 4 games')
+    expect(bloqueDe(html, 'FIFA')).toContain('Marcador de goles')
+    expect(html).not.toContain('Pádel: 1 set a 4 games · FIFA: Marcador de goles')
   })
 
-  it('y con UNA sola sigue diciendo exactamente lo de siempre, sin prefijo', async () => {
+  /** R11, rama anónima: mismo criterio que la rama con sesión — cada bloque narra su propia disciplina y su propio texto. */
+  it('cada bloque narra su propia disciplina y su propio texto libre', async () => {
+    escena.user = null
+    escena.publicFormats = [
+      publicFormat('PADEL', PADEL, 'Traer pelotas nuevas.'),
+      publicFormat('FIFA', FIFA, 'Se juega con barro.'),
+    ]
+    const html = await reglas(PADEL_Y_FIFA)
+    const padel = bloqueDe(html, 'Pádel')
+    const fifa = bloqueDe(html, 'FIFA')
+
+    expect(padel).toContain('>Masters<')
+    expect(padel).toContain('Traer pelotas nuevas.')
+    expect(fifa).not.toContain('>Masters<')
+    expect(fifa).toContain('Se juega con barro.')
+    expect(fifa).not.toContain('Traer pelotas nuevas.')
+  })
+
+  it('y con UNA sola sigue diciendo exactamente lo de siempre, sin prefijo ni encabezado', async () => {
     escena.user = null
     escena.publicFormats = [publicFormat('PADEL', PADEL)]
     const html = await reglas(SOLO_PADEL)
     expect(html).toContain('1 set a 4 games')
     expect(html).not.toContain('Pádel: 1 set a 4 games')
+    expect(html).not.toContain('<h2')
   })
 
   it('un link muerto sigue mostrando la frase de link muerto, no un error', async () => {

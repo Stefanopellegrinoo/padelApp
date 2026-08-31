@@ -1,20 +1,14 @@
+import { Fragment } from 'react'
 import Link from 'next/link'
 import {
   MASTERS_SIZE,
   formatsLabel,
   narrateRules,
   type DisciplineShape,
-  type MatchFormat,
   type SeasonConfig,
 } from '@/core'
 import { RulesAccordion, type RuleRow } from './accordion'
 import { renderAdminMarkdown } from './markdown'
-
-/** Una disciplina del torneo, como la nombra la fila de formato. */
-export interface FormatRow {
-  label: string
-  matchFormat: MatchFormat
-}
 
 /** "Marce" en el handoff (README línea 341) es el ejemplo, no un nombre fijo: se sustituye por quien organiza. */
 function introOf(adminName: string): string {
@@ -33,13 +27,25 @@ function introOf(adminName: string): string {
 const ROWS: Array<{
   title: string
   section: string
-  value: (config: SeasonConfig, formats: readonly FormatRow[]) => string
+  value: (config: SeasonConfig, label: string) => string
 }> = [
-  // La ÚNICA fila que puede diferir entre las disciplinas de un torneo: los
-  // puntos, las fechas y el desempate son de la temporada, el marcador no
-  // (`disciplineProfile`, PR20 rebanada D2). Por eso es la única que recibe la
-  // lista entera — W64,.
-  { title: 'Formato de partido', section: 'La fecha', value: (_c, formats) => formatsLabel(formats) },
+  // La ÚNICA fila que lee algo más que `config`: `formatsLabel` con un
+  // arreglo de UN elemento (el de este bloque) es byte a byte lo mismo que
+  // `formatLabel(config.matchFormat)` (`narrate.ts:44-46`, distinct.length
+  // <= 1 devuelve `distinct[0]` sin prefijo) — se llama así, y no con
+  // `formatLabel` directo, porque el barril de `core/` no la exporta a
+  // propósito (S77): esa puerta es por la que entró W64, y no hace falta
+  // abrirla para narrar un solo bloque.
+  //
+  // Desde la rebanada 3b cada bloque es una disciplina, así que esto ya NO
+  // agrupa varias — agrupar era el trabajo de `formatsLabel` cuando esta fila
+  // narraba el torneo entero (una fila, `formats: FormatRow[]`); ahora hay
+  // una fila por bloque y esta llamada siempre ve un arreglo de largo 1.
+  {
+    title: 'Formato de partido',
+    section: 'La fecha',
+    value: (config, label) => formatsLabel([{ label, matchFormat: config.matchFormat }]),
+  },
   {
     title: 'Cómo se arman las parejas',
     section: 'Cómo se arman las parejas',
@@ -73,54 +79,45 @@ function sectionApplies(section: string, shape: DisciplineShape): boolean {
   return true
 }
 
-function rulesRowsOf(
-  config: SeasonConfig,
-  shape: DisciplineShape,
-  formats: readonly FormatRow[],
-): RuleRow[] {
+function rulesRowsOf(config: SeasonConfig, shape: DisciplineShape, label: string): RuleRow[] {
   const sections = narrateRules(config, shape)
   return ROWS.filter((row) => sectionApplies(row.section, shape)).map((row) => {
     const section = sections.find((candidate) => candidate.title === row.section)
     if (section === undefined) {
       throw new Error(`narrateRules no tiene la sección "${row.section}". Esto es un bug.`)
     }
-    return { title: row.title, value: row.value(config, formats), body: section.body }
+    return { title: row.title, value: row.value(config, label), body: section.body }
   })
+}
+
+/**
+ * Un bloque de Reglas: una disciplina completa, con todo lo que necesita para
+ * narrarse sola — su config, su shape (`hasMasters`/`pairSize`/`allowsDraw`,
+ * que viven en `disciplines` y no en `config`) y su propio texto libre.
+ *
+ * Misma forma para las dos ramas de la pantalla: la CON sesión la arma desde
+ * `header.disciplines` + `disciplineRulesOf`, la SIN sesión desde
+ * `publicFormats` (`season_public_formats`, 0069) — ninguna de las dos
+ * necesita un id acá, así que no lo lleva (la rama pública no tiene uno que
+ * dar: `0038`/`0069` lo dejan afuera del RPC a propósito).
+ */
+export interface RulesBlock {
+  label: string
+  config: SeasonConfig
+  shape: DisciplineShape
+  text: string
 }
 
 export interface RulesBodyProps {
   seasonId: string
-  config: SeasonConfig
   /**
-   * `hasMasters`/`pairSize`/`allowsDraw` de la disciplina PRIMARIA (slice 3a:
-   * todavía un solo bloque, así que un solo shape). Viven en `disciplines`,
-   * no en `config`, y por eso llegan aparte — igual que `narrateRules` los
-   * pide como segundo argumento obligatorio, sin default (reglas-por-
-   * disciplina design §Q1).
+   * Un bloque por disciplina, en el orden `position, created_at` que ya traen
+   * las dos consultas de origen. Con UNA sola disciplina la pantalla sale
+   * byte a byte como salía antes de la rebanada 3b (design §Q2): no hay
+   * encabezado que agregar y no hay una segunda cosa que nombrar.
    */
-  shape: DisciplineShape
-  /**
-   * El formato de CADA disciplina del torneo. Con una sola la pantalla dice
-   * exactamente lo de siempre; con dos formatos distintos los nombra a los dos
-   * (W64).
-   *
-   * La rama SIN SESIÓN también los pasa todos, desde S76: va por
-   * `season_public_formats` (`0038`), una función NUEVA y ADITIVA al lado de
-   * `season_public_rules` (`0022`). No se le cambió la firma a la vieja porque
-   * eso pide `drop function` —Postgres rechaza cambiar el tipo de retorno con
-   * `create or replace`— y el drop se lleva los grants, dejando sin superficie
-   * pública la única pantalla que se comparte por link.
-   *
-   * (Este párrafo decía "la rama sin sesión pasa una sola entrada y no puede
-   * pasar más". Dejó de ser cierto con S76 y se corrigió acá, criterio de N48:
-   * la frase falsa vive en el código.)
-   *
-   * Lo que SÍ sigue saliendo de una sola config es el RESTO de la pantalla
-   * —puntos, fechas, desempates, Masters—, que lee `config` y no `formats`.
-   */
-  formats: readonly FormatRow[]
+  disciplines: readonly RulesBlock[]
   adminName: string
-  rulesText: string
   /** Con sesión y siendo quien organiza: aparece el link a Ajustes. Sin sesión es siempre `false`. */
   isAdmin: boolean
 }
@@ -130,18 +127,22 @@ export interface RulesBodyProps {
  *
  * Las dos ramas —con sesión y sin sesión— lo renderizan con los mismos props, y
  * por eso son la misma pantalla y no dos que se van a despegar. La sin sesión no
- * lee de `seasons` sino de `season_public_rules`, pero lo que dibuja es esto.
+ * lee de `seasons` sino de `season_public_formats`, pero lo que dibuja es esto.
+ *
+ * N bloques apilados, uno por disciplina (design §Q2). El título de cada uno
+ * sale SÓLO cuando hay más de uno (`disciplines.length > 1`) — la decisión
+ * vive ACÁ, no en lo que manda cada rama, para que haya un solo lugar que
+ * pueda olvidarla en vez de dos. Mismo criterio que `narrate.ts:34-37` usa
+ * para el prefijo de `formatsLabel`: el prefijo/encabezado aparece recién
+ * cuando hay dos cosas distintas que decir.
+ *
+ * Sin `<div>` extra por bloque: con una sola disciplina no hay encabezado que
+ * dibujar, así que un bloque de uno sale exactamente como salía la pantalla
+ * de un solo bloque compartido — el acordeón y el texto libre quedan hijos
+ * directos del contenedor de siempre, ni un tag de más.
  */
-export function RulesBody({
-  seasonId,
-  config,
-  shape,
-  formats,
-  adminName,
-  rulesText,
-  isAdmin,
-}: RulesBodyProps) {
-  const hasAdminText = rulesText.trim().length > 0
+export function RulesBody({ seasonId, disciplines, adminName, isAdmin }: RulesBodyProps) {
+  const showHeadings = disciplines.length > 1
 
   return (
     <div className="flex flex-col gap-4 pt-4">
@@ -150,16 +151,27 @@ export function RulesBody({
         {introOf(adminName)}
       </p>
 
-      <RulesAccordion rows={rulesRowsOf(config, shape, formats)} />
-
-      {hasAdminText && (
-        <div
-          className="space-y-2 text-pretty text-[13.5px] leading-[1.5] font-[550] text-text [&_li]:mt-1 [&_strong]:font-extrabold [&_ul]:list-disc [&_ul]:pl-5"
-          // El HTML viene de `renderAdminMarkdown`, que escapa todo el texto libre del admin
-          // antes de aplicarle el subconjunto de formato — ver `markdown.ts`.
-          dangerouslySetInnerHTML={{ __html: renderAdminMarkdown(rulesText) }}
-        />
-      )}
+      {disciplines.map((discipline, index) => {
+        const hasText = discipline.text.trim().length > 0
+        return (
+          <Fragment key={index}>
+            {showHeadings && (
+              <h2 className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
+                {discipline.label}
+              </h2>
+            )}
+            <RulesAccordion rows={rulesRowsOf(discipline.config, discipline.shape, discipline.label)} />
+            {hasText && (
+              <div
+                className="space-y-2 text-pretty text-[13.5px] leading-[1.5] font-[550] text-text [&_li]:mt-1 [&_strong]:font-extrabold [&_ul]:list-disc [&_ul]:pl-5"
+                // El HTML viene de `renderAdminMarkdown`, que escapa todo el texto libre del admin
+                // antes de aplicarle el subconjunto de formato — ver `markdown.ts`.
+                dangerouslySetInnerHTML={{ __html: renderAdminMarkdown(discipline.text) }}
+              />
+            )}
+          </Fragment>
+        )
+      })}
 
       {isAdmin && (
         <Link

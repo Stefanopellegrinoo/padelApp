@@ -1,16 +1,8 @@
 import Link from 'next/link'
 import { DISCIPLINE_LABELS } from '@/app/torneos/nuevo/wizard-state'
-import type { DisciplineShape } from '@/core'
-import {
-  primaryDiscipline,
-  publicFormats,
-  publicRules,
-  seasonAdminName,
-  seasonHeader,
-  seasonRules,
-} from '@/db/read'
+import { disciplineRulesOf, publicFormats, publicRules, seasonAdminName, seasonHeader } from '@/db/read'
 import { serverClient } from '@/db/server'
-import { RulesBody } from './rules-body'
+import { RulesBody, type RulesBlock } from './rules-body'
 
 interface ReglasPageProps {
   params: Promise<{ id: string }>
@@ -63,51 +55,22 @@ export default async function ReglasPage({ params }: ReglasPageProps) {
       )
     }
 
-    // Rebanada 3a de "reglas por disciplina": el shape de la disciplina
-    // PRIMARIA (`formats[0]`) — todavía UN bloque, así que un solo shape.
-    // `season_public_formats` (0069) ya trae los tres campos reales; el
-    // fallback de abajo (temporada sin `formats`) es el mismo caso MUERTO que
-    // el de `formats` mismo — `season_public_rules` es un INNER JOIN contra
-    // `disciplines`, así que `rules !== null` y `formats.length === 0` no
-    // pueden pasar juntos (3b termina de borrar esta rama).
-    const primaryFormat = formats[0]
-    const anonShape: DisciplineShape =
-      primaryFormat === undefined
-        ? { hasMasters: true, pairSize: 2, allowsDraw: true }
-        : {
-            hasMasters: primaryFormat.hasMasters,
-            pairSize: primaryFormat.pairSize,
-            allowsDraw: primaryFormat.allowsDraw,
-          }
+    // Rebanada 3b de "reglas por disciplina": un bloque por disciplina, en el
+    // orden que ya trae `season_public_formats` (`position, created_at`,
+    // 0069/0038). `formats` no puede estar vacío acá: `season_public_rules`
+    // (que ya devolvió `rules !== null`) es un INNER JOIN contra
+    // `disciplines`, así que las dos funciones ven la misma fila o ninguna —
+    // no hace falta un `??` para un caso que no puede pasar.
+    const disciplines: RulesBlock[] = formats.map((format) => ({
+      label: DISCIPLINE_LABELS[format.kind],
+      config: format.config,
+      shape: { hasMasters: format.hasMasters, pairSize: format.pairSize, allowsDraw: format.allowsDraw },
+      text: format.rulesText,
+    }))
 
     return (
       <>
-        <RulesBody
-          seasonId={id}
-          config={rules.config}
-          shape={anonShape}
-          // TODAS las disciplinas, igual que la rama con sesión. Con una sola
-          // `formatsLabel` no usa la etiqueta —agrupa por FORMATO, no por
-          // disciplina— así que esa pantalla sale byte a byte como salía; con
-          // dos, cada formato queda nombrado.
-          //
-          // El `??` no es defensa de cinturón: si `season_public_formats`
-          // devolviera vacío para una temporada que `season_public_rules` SÍ
-          // encontró, narrar el formato de la config que ya tenemos es mejor
-          // que narrar nada. No debería pasar —las dos leen `disciplines`—
-          // pero son dos viajes distintos.
-          formats={
-            formats.length > 0
-              ? formats.map((format) => ({
-                  label: DISCIPLINE_LABELS[format.kind],
-                  matchFormat: format.config.matchFormat,
-                }))
-              : [{ label: '', matchFormat: rules.config.matchFormat }]
-          }
-          adminName={rules.adminName}
-          rulesText={rules.text}
-          isAdmin={false}
-        />
+        <RulesBody seasonId={id} disciplines={disciplines} adminName={rules.adminName} isAdmin={false} />
         {/* Sin nav de torneo: quien llega por el link no tiene a dónde ir. */}
         <Link href="/" className="mt-4 text-[12.5px] font-bold text-accent-link">
           Ir al inicio
@@ -116,33 +79,23 @@ export default async function ReglasPage({ params }: ReglasPageProps) {
     )
   }
 
-  const [header, rules, adminName] = await Promise.all([
+  const [header, rulesByDiscipline, adminName] = await Promise.all([
     seasonHeader(supabase, id),
-    seasonRules(supabase, id),
+    disciplineRulesOf(supabase, id),
     seasonAdminName(supabase, id),
   ])
 
-  const primary = primaryDiscipline(header)
+  // Rebanada 3b: un bloque por disciplina, ya no sólo la primaria — cada uno
+  // con su propia config, su propio shape (0069) y su propio `rules_text`
+  // (`disciplineRulesOf`, rebanada 1).
+  const disciplines: RulesBlock[] = header.disciplines.map((discipline) => ({
+    label: DISCIPLINE_LABELS[discipline.kind],
+    config: discipline.config,
+    shape: { hasMasters: discipline.hasMasters, pairSize: discipline.pairSize, allowsDraw: discipline.allowsDraw },
+    text: rulesByDiscipline.get(discipline.id) ?? '',
+  }))
 
   return (
-    <RulesBody
-      seasonId={id}
-      config={primary.config}
-      // Rebanada 3a: el shape de la disciplina primaria. `DisciplineHeader`
-      // ya trae los tres campos (0069) — `hasMasters`/`pairSize` desde
-      // slice 1, `allowsDraw` sumado en la misma slice.
-      shape={{ hasMasters: primary.hasMasters, pairSize: primary.pairSize, allowsDraw: primary.allowsDraw }}
-      // La fila de formato mira TODAS las disciplinas, no la [0]: desde PR20
-      // rebanada D2 cada una nace con la forma de marcador de su kind, y un
-      // torneo de pádel + FIFA le decía al grupo "1 set a 4 games" sobre una
-      // mitad que se juega a goles.
-      formats={header.disciplines.map((discipline) => ({
-        label: DISCIPLINE_LABELS[discipline.kind],
-        matchFormat: discipline.config.matchFormat,
-      }))}
-      adminName={adminName}
-      rulesText={rules.text}
-      isAdmin={header.isAdmin}
-    />
+    <RulesBody seasonId={id} disciplines={disciplines} adminName={adminName} isAdmin={header.isAdmin} />
   )
 }

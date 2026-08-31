@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { computeGlobalRanking, computeRanking, defaultConfig } from '@/core'
+import { computeGlobalRanking, computeRanking, defaultConfig, type DisciplineId } from '@/core'
 import type { Database } from './database.types'
 import {
   addGuest,
@@ -16,6 +16,7 @@ import {
   attendancesOf,
   awardsOf,
   closedHistoryAll,
+  disciplineRulesOf,
   entriesOf,
   matchdayDetail,
   matchdaysOf,
@@ -27,7 +28,6 @@ import {
   seasonAwardsOf,
   seasonHeader,
   seasonMatchdaysOf,
-  seasonRules,
   seasonSquadMembersOf,
   seasonSquadOf,
 } from './read'
@@ -79,6 +79,7 @@ describe('db/read', () => {
   let stranger: TestUser
   let seasonId: string
   let otherSeasonId: string
+  let defaultDisciplineId: string
   let squad: string[]
   let matchday1Id: string
   let matchday2Id: string
@@ -98,6 +99,7 @@ describe('db/read', () => {
       squad: [member.playerId, ...fillers],
     })
     seasonId = sid
+    defaultDisciplineId = disciplineId
     squad = entryIds
 
     // Fecha 1: plantel completo, jugada y cerrada.
@@ -181,11 +183,15 @@ describe('db/read', () => {
     // nadie mira).
   })
 
-  describe('seasonRules', () => {
-    it('reads the rules text of the season', async () => {
-      const rules = await seasonRules(member.client, seasonId)
-      expect(rules.text).toBe('')
-      expect(rules.updatedAt).toBeNull()
+  describe('disciplineRulesOf', () => {
+    // Reemplaza al test gemelo de `seasonRules` (rebanada 3b de "reglas por
+    // disciplina"): la default de `disciplines.rules_text` (0069) es la misma
+    // cadena vacía que traía `seasons.rules_text`, así que esta temporada de
+    // prueba (nunca editada) sigue leyendo `''` — mismo comportamiento, otra
+    // columna.
+    it('reads the rules text of each discipline, mapped by id', async () => {
+      const rulesByDiscipline = await disciplineRulesOf(member.client, seasonId)
+      expect(rulesByDiscipline.get(defaultDisciplineId as DisciplineId)).toBe('')
     })
   })
 
@@ -542,7 +548,10 @@ describe('db/read', () => {
       expect(seasons.map((season) => season.id)).not.toContain(seasonId)
 
       await expect(seasonHeader(stranger.client, seasonId)).rejects.toThrow()
-      await expect(seasonRules(stranger.client, seasonId)).rejects.toThrow()
+      // `disciplineRulesOf` no tira: filtra por `.eq('season_id', seasonId)`
+      // directo, mismo criterio que `entriesOf`/`matchdaysOf` de acá abajo —
+      // RLS le da 0 filas al extraño, sin error.
+      expect(await disciplineRulesOf(stranger.client, seasonId)).toEqual(new Map())
       await expect(seasonAdminName(stranger.client, seasonId)).rejects.toThrow()
 
       expect(await entriesOf(stranger.client, seasonId)).toEqual([])

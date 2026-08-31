@@ -129,3 +129,63 @@ describe('friendships', () => {
     expect(fila?.accepted_at).not.toBeNull()
   })
 })
+
+describe('friendships — RLS', () => {
+  it('un tercero no ve la amistad ajena', async () => {
+    const uno = await createTestUser()
+    const dos = await createTestUser()
+    const ajeno = await createTestUser()
+    const [a, b] =
+      uno.playerId < dos.playerId ? [uno.playerId, dos.playerId] : [dos.playerId, uno.playerId]
+
+    const { data: fila } = await adminClient()
+      .from('friendships')
+      .insert({ player_a: a, player_b: b, requested_by: a })
+      .select('id')
+      .single()
+
+    // Chequeo positivo primero: si la lectura fuera negada para todos (no
+    // sólo acotada a los miembros), `uno` también vería `[]` y este test
+    // pasaría igual sin haber probado nada — como de hecho pasaba con la
+    // versión anterior, que sólo miraba a `ajeno`.
+    const { data: propia } = await uno.client.from('friendships').select('id')
+    expect(propia).toEqual([{ id: fila!.id }])
+
+    const { data: ajena } = await ajeno.client.from('friendships').select('id')
+    expect(ajena).toEqual([])
+  })
+
+  it('nadie puede inventar una amistad entre dos terceros', async () => {
+    const uno = await createTestUser()
+    const dos = await createTestUser()
+    const ajeno = await createTestUser()
+    const [a, b] =
+      uno.playerId < dos.playerId ? [uno.playerId, dos.playerId] : [dos.playerId, uno.playerId]
+
+    const { error } = await ajeno.client
+      .from('friendships')
+      .insert({ player_a: a, player_b: b, requested_by: a })
+    expect(error?.code).toBe('42501')
+  })
+
+  it('quien pidió no puede aceptar su propia solicitud', async () => {
+    const uno = await createTestUser()
+    const dos = await createTestUser()
+    const [a, b] =
+      uno.playerId < dos.playerId ? [uno.playerId, dos.playerId] : [dos.playerId, uno.playerId]
+    const pidio = uno.playerId === a ? uno : dos
+
+    const { data: fila } = await adminClient()
+      .from('friendships')
+      .insert({ player_a: a, player_b: b, requested_by: a })
+      .select('id')
+      .single()
+
+    const { data } = await pidio.client
+      .from('friendships')
+      .update({ accepted_at: new Date().toISOString() })
+      .eq('id', fila!.id)
+      .select('id')
+    expect(data).toEqual([])
+  })
+})

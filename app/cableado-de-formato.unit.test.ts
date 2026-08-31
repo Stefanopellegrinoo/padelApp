@@ -109,7 +109,17 @@ const FIFA: SeasonConfig = { ...PADEL, matchFormat: { ...PADEL.matchFormat, open
 
 function disciplina(id: string, kind: 'PADEL' | 'FIFA', config: SeasonConfig): DisciplineHeader {
   const pairSize = kind === 'PADEL' ? 2 : 1
-  return { id: id as DisciplineId, kind, config, weight: 1, pairSize, hasMasters: pairSize === 2 }
+  // Mismo criterio que `disciplineProfile` (core/config.ts): FIFA es la
+  // única disciplina de marcador abierto y la única con empate legal hoy.
+  return {
+    id: id as DisciplineId,
+    kind,
+    config,
+    weight: 1,
+    pairSize,
+    hasMasters: pairSize === 2,
+    allowsDraw: kind === 'FIFA',
+  }
 }
 
 const SOLO_PADEL = [disciplina('d1', 'PADEL', PADEL)]

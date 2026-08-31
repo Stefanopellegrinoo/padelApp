@@ -51,6 +51,15 @@ export interface DisciplineHeader {
    * de a uno).
    */
   hasMasters: boolean
+  /**
+   * `disciplines.allows_draw` real (design rev 2, la cuarta mentira) — mismo
+   * select que `pairSize`/`hasMasters`, una columna más. `describeFormat`
+   * (`core/narrate.ts`) le prometía "Puede terminar empatado" a CUALQUIER
+   * disciplina de marcador abierto sin mirar esta columna; a partir de acá
+   * la tiene disponible para dejar de mentir. Es identidad, no forma: se fija
+   * al crear la disciplina (`0015:66-68`) y esta rama sólo la LEE.
+   */
+  allowsDraw: boolean
 }
 
 export interface SeasonHeader {
@@ -155,6 +164,14 @@ export interface PublicRules {
 export interface PublicFormat {
   kind: 'PADEL' | 'FIFA'
   config: SeasonConfig
+  /** `disciplines.rules_text` real (0069) — la prosa libre de ESA disciplina, no la de `seasons`. */
+  rulesText: string
+  /** `disciplines.has_masters` real (0069) — mismo dato que `DisciplineHeader.hasMasters`, para quien no tiene sesión. */
+  hasMasters: boolean
+  /** `disciplines.pair_size` real (0069) — mismo dato que `DisciplineHeader.pairSize`. */
+  pairSize: SideSize
+  /** `disciplines.allows_draw` real (0069) — mismo dato que `DisciplineHeader.allowsDraw`. */
+  allowsDraw: boolean
 }
 
 /** A row of `pair_locks`: the same `{ a, b }` the draw uses, plus the id `unlockPair` deletes by. */
@@ -219,6 +236,7 @@ interface DisciplineHeaderRow {
   weight: number
   pair_size: number
   has_masters: boolean
+  allows_draw: boolean
   /**
    * `disciplines.status` — NO forma parte de `DisciplineHeader` (el tipo
    * público): ningún consumidor de pantalla lo necesita hoy, sólo
@@ -262,6 +280,7 @@ export function toDisciplineHeader(row: DisciplineHeaderRow): DisciplineHeader {
     weight: Number(row.weight),
     pairSize: row.pair_size as SideSize,
     hasMasters: row.has_masters,
+    allowsDraw: row.allows_draw,
   }
 }
 
@@ -306,7 +325,8 @@ function toMatchdaySummary(row: MatchdayRow): MatchdaySummary {
 // status` deriva de `disciplines.status` (REQ-D3-3, `seasonStatusOf`), con la
 // MISMA fila que `DISCIPLINE_HEADER_COLUMNS` ya trae — sin una consulta más.
 const SEASON_HEADER_COLUMNS = 'id, name, created_by, invite_token'
-const DISCIPLINE_HEADER_COLUMNS = 'id, season_id, kind, config, weight, pair_size, has_masters, status'
+const DISCIPLINE_HEADER_COLUMNS =
+  'id, season_id, kind, config, weight, pair_size, has_masters, allows_draw, status'
 
 /** Every season where the caller has a seat — admin or squad. RLS does the filtering; this only shapes the rows. */
 export async function mySeasons(supabase: Client): Promise<SeasonHeader[]> {
@@ -436,6 +456,30 @@ export async function seasonRules(
   if (error) throw new EdgeError(`No se pudieron leer las reglas: ${error.message}`)
   if (data === null) throw new EdgeError('La temporada no existe.')
   return { text: data.rules_text, updatedAt: data.rules_updated_at }
+}
+
+/**
+ * `disciplines.rules_text` de TODAS las disciplinas de la temporada (0069),
+ * una consulta, mapeada por `DisciplineId`. Slice 1 de "reglas por
+ * disciplina": todavía sin consumidor — `seasonRules` de acá arriba sigue
+ * siendo la que las pantallas usan hasta la rebanada 3, que reemplaza el
+ * llamado y borra `seasonRules`. Nace ahora y no entonces porque la capa de
+ * lectura completa (columna + tipo + esta función) es lo que esta rebanada
+ * entrega, sin comportamiento nuevo todavía.
+ *
+ * `disciplines_read` (0015:56-57) usa el MISMO gate `is_participant(season_id)`
+ * que `seasons_read` — un extraño sigue sin poder leer esto, igual que hoy.
+ */
+export async function disciplineRulesOf(
+  supabase: Client,
+  seasonId: string,
+): Promise<Map<DisciplineId, string>> {
+  const { data, error } = await supabase
+    .from('disciplines')
+    .select('id, rules_text')
+    .eq('season_id', seasonId)
+  if (error) throw new EdgeError(`No se pudieron leer las reglas: ${error.message}`)
+  return new Map((data ?? []).map((row) => [row.id as DisciplineId, row.rules_text]))
 }
 
 /**
@@ -660,7 +704,8 @@ export async function publicRules(supabase: Client, seasonId: string): Promise<P
  * replace`— y el drop se lleva los grants, dejando sin superficie pública la
  * única pantalla que se comparte por link.
  *
- * Devuelve `kind` y `config` y NADA más, y eso está fijado por test
+ * Devuelve `kind`, `config`, `rules_text`, `has_masters`, `pair_size` y
+ * `allows_draw` y NADA más (0069) — fijado por test
  * (`db/public-formats.db.test.ts`): un `id` de más le regalaría a `anon`
  * claves primarias, y `anon` hoy lee **cero** tablas.
  *
@@ -674,6 +719,12 @@ export async function publicFormats(supabase: Client, seasonId: string): Promise
   return (data ?? []).map((row) => ({
     kind: row.kind as 'PADEL' | 'FIFA',
     config: row.config as unknown as SeasonConfig,
+    rulesText: row.rules_text,
+    hasMasters: row.has_masters,
+    // `check (pair_size in (1, 2))` (0015:19) lo hace total: sin `as`, a
+    // diferencia del `row.kind as …` de arriba.
+    pairSize: row.pair_size === 1 ? 1 : 2,
+    allowsDraw: row.allows_draw,
   }))
 }
 

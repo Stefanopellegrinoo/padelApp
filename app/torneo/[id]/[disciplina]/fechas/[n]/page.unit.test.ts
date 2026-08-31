@@ -108,7 +108,15 @@ vi.mock('@/db/read', async (importOriginal) => {
   // toca por test (S93/S94, verify-report-pre-contract #4026), así que
   // `sideSize` tiene que leerse en el momento en que `seasonHeader` corre.
   function discipline(): DisciplineHeader {
-    return { id: D1, kind: 'FIFA', config: config(), weight: 1, pairSize: escena.pairSize, hasMasters: false }
+    return {
+      id: D1,
+      kind: 'FIFA',
+      config: config(),
+      weight: 1,
+      pairSize: escena.pairSize,
+      hasMasters: false,
+      allowsDraw: true,
+    }
   }
   const entries = Array.from({ length: 8 }, (_, index) => ({
     id: `e${index + 1}`,

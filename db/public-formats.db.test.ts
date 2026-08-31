@@ -110,20 +110,44 @@ describe('season_public_formats — lo que ve un extraño con el link', () => {
 
 describe('lo que la función NO expone', () => {
   /**
-   * El techo declarado de la rebanada. Un `returns setof public.disciplines` o
-   * un `d.id` de más le regalaría a `anon` claves primarias y las columnas
-   * `pair_size`, `allows_draw`, `has_masters`, `weight`, `status` y
-   * `season_id`, que hoy están detrás de `revoke all on all tables` (0009).
+   * El techo declarado de la rebanada, ensanchado por `0069` (reglas por
+   * disciplina). El principio, no cuatro excepciones sueltas: ESTRUCTURA
+   * INTERNA queda adentro, REGLAS DE JUEGO salen. `id`, `season_id`,
+   * `status`, `weight` y `position` son identidad y ciclo de vida — un
+   * `returns setof public.disciplines` o un `d.id` de más le regalaría a
+   * `anon` claves primarias, y siguen detrás de `revoke all on all tables`
+   * (0009). `rules_text`, `has_masters`, `pair_size` y `allows_draw` SÍ
+   * salen: son de la misma familia que `matchFormat.tieBreak`/`points`, que
+   * `config` ya le publica a `anon` hoy, y la página de Reglas ya le afirma
+   * (a veces mal) hechos sobre las tres primeras sin tener la columna —
+   * `allows_draw` es la única que agrega un bit genuinamente nuevo
+   * (`core/types.ts:35-37` la hace ortogonal a `openScore` a propósito), y se
+   * justifica porque una página de reglas que se calla una regla de juego se
+   * calla lo único que existe para publicar. Ver `0069_discipline_rules.sql`
+   * para el argumento completo, columna por columna.
+   *
    * Esto no es un comentario: es el assert.
    */
-  it('devuelve DOS columnas y nada más', async () => {
+  it('devuelve SEIS columnas y nada más, post drop+recreate de 0069', async () => {
     const { data, error } = await anonReadClient().rpc('season_public_formats', {
       p_season: seasonId,
     })
+    // El drop se lleva los grants (Postgres rechaza cambiar el `returns
+    // table` de una función con `create or replace`, medido en 0038): si
+    // `0069` se olvidara el re-`grant`, este `error` dejaría de ser `null`
+    // con "permission denied for function season_public_formats" — la única
+    // superficie pública del sistema, rota.
     expect(error).toBeNull()
     const fila = (data ?? [])[0]
     expect(fila).toBeDefined()
-    expect(Object.keys(fila as object).sort()).toEqual(['config', 'kind'])
+    expect(Object.keys(fila as object).sort()).toEqual([
+      'allows_draw',
+      'config',
+      'has_masters',
+      'kind',
+      'pair_size',
+      'rules_text',
+    ])
   })
 
   it('y `anon` sigue sin poder leer la tabla disciplines de frente', async () => {

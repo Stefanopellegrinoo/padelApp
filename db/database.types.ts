@@ -296,6 +296,7 @@ export type Database = {
           kind: string
           pair_size: number
           position: number
+          rules_text: string
           season_id: string
           status: string
           weight: number
@@ -310,6 +311,7 @@ export type Database = {
           kind: string
           pair_size?: number
           position?: number
+          rules_text?: string
           season_id: string
           status?: string
           weight?: number
@@ -324,6 +326,7 @@ export type Database = {
           kind?: string
           pair_size?: number
           position?: number
+          rules_text?: string
           season_id?: string
           status?: string
           weight?: number
@@ -794,8 +797,12 @@ export type Database = {
       season_public_formats: {
         Args: { p_season: string }
         Returns: {
+          allows_draw: boolean
           config: Json
+          has_masters: boolean
           kind: string
+          pair_size: number
+          rules_text: string
         }[]
       }
       season_public_rules: {

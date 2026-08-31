@@ -283,6 +283,26 @@ describe('narrateRules — DisciplineShape', () => {
     const sinEmpate = bodyOf(CONFIG, 'La fecha', { ...TODAY_SHAPE, allowsDraw: false })
     expect(conEmpate).toBe(sinEmpate)
   })
+
+  // W1 (verify-report reglas-por-disciplina): R2 sólo tenía scenarios para
+  // "La fecha" y "Los puntos" — "Los desempates" seguía diciendo "si dos
+  // parejas ganan..." sin importar `pairSize`, y como es la ÚNICA pantalla
+  // pública sin sesión, mentía a cualquiera con el link. `pairSize=1` no
+  // tiene pareja que ganar (core/pairing.ts:135-147): la tabla de la fecha
+  // ordena jugadores.
+  it('con lados de uno, "Los desempates" no afirma que ganan parejas [R2]', () => {
+    const body = bodyOf(CONFIG, 'Los desempates', { hasMasters: true, pairSize: 1, allowsDraw: true })
+    expect(body).not.toContain('pareja')
+    expect(body).toContain('si dos jugadores ganan la misma cantidad de partidos')
+    expect(body).toContain('el partido entre ellos lo decide')
+    expect(body).toContain('el partido entre ellos no alcanza')
+  })
+
+  it('con lados de dos, "Los desempates" sigue diciendo parejas tal cual (regresión) [R2]', () => {
+    const body = bodyOf(CONFIG, 'Los desempates', { hasMasters: true, pairSize: 2, allowsDraw: true })
+    expect(body).toContain('si dos parejas ganan la misma cantidad de partidos')
+    expect(body).toContain('el partido entre ellas lo decide')
+  })
 })
 
 // ── PR20 rebanada D2 — la página de Reglas dejó de describir un set de pádel ──

@@ -156,6 +156,11 @@ export function RulesBody({ seasonId, disciplines, adminName, isAdmin }: RulesBo
         return (
           <Fragment key={index}>
             {showHeadings && (
+              // ponytail: `discipline.label` es `DISCIPLINE_LABELS[kind]` — dos
+              // disciplinas del mismo `kind` (buildable desde PR13) muestran el
+              // mismo encabezado dos veces ("Pádel" y "Pádel"). Feo pero
+              // honesto: no afirma nada falso, sólo no distingue una de otra.
+              // Subir: una columna de nombre por disciplina, hoy no existe.
               <h2 className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
                 {discipline.label}
               </h2>

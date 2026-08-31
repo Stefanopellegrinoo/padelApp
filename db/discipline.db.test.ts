@@ -932,6 +932,35 @@ describe('updateDisciplineRules (rebanada 2, R8/R12)', () => {
     expect(data?.rules_text).toBe('Reglas nuevas')
   })
 
+  // W4 (verify-report reglas-por-disciplina): `updateSeasonRules` se borró
+  // (rebanada 2) y con ella su único test, que aserteaba el sello de
+  // `seasons.rules_updated_at` (`entries.db.test.ts`, "stores the text and
+  // stamps when it changed"). La ESCRITURA sobrevivió intacta en el
+  // dual-write de arriba -- y `season_public_rules` (0022:24,35), viva en
+  // producción, la sigue sirviendo -- pero la batería de reemplazo sólo
+  // asertea `rules_text`. Esto restaura la cobertura sobre el escritor de
+  // HOY, no resucita el describe de la función borrada.
+  it('escribir la disciplina DEFAULT también sella seasons.rules_updated_at (W4)', async () => {
+    const admin = await createTestUser()
+    const { seasonId, disciplineId } = await createSeason({ admin }) // única disciplina = default
+
+    const before = await adminClient()
+      .from('seasons')
+      .select('rules_updated_at')
+      .eq('id', seasonId)
+      .single()
+    expect(before.data?.rules_updated_at).toBeNull()
+
+    await updateDisciplineRules(admin.client, seasonId, disciplineId, 'Reglas nuevas')
+
+    const after = await adminClient()
+      .from('seasons')
+      .select('rules_updated_at')
+      .eq('id', seasonId)
+      .single()
+    expect(after.data?.rules_updated_at).not.toBeNull()
+  })
+
   it('escribir una disciplina NO default deja seasons.rules_text intacto', async () => {
     const admin = await createTestUser()
     const { seasonId, disciplineIds } = await createSeason({

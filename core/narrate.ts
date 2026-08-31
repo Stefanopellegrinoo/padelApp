@@ -1,7 +1,7 @@
 import { MASTERS_MATCHES, MASTERS_SIZE, MAX_PLAYERS, MIN_PLAYERS, maxMatchesOf } from './constants'
 import { thirdPlaceByGroupTable } from './knockout'
 import { usesSetsDiff } from './standings'
-import type { DisciplineShape, MatchFormat, MatchResult, SeasonConfig } from './types'
+import type { DisciplineShape, MatchFormat, MatchResult, SeasonConfig, SideSize } from './types'
 
 /**
  * La etiqueta corta del formato: "1 set a 4 games", "3 sets a 4 games",
@@ -151,7 +151,7 @@ export function narrateRules(config: SeasonConfig, shape: DisciplineShape): Rule
 
   sections.push({
     title: 'Los desempates',
-    body: describeTiebreak(matchFormat, tiebreakSnapshotEvery),
+    body: describeTiebreak(matchFormat, tiebreakSnapshotEvery, pairSize),
   })
 
   if (hasMasters) {
@@ -193,15 +193,33 @@ export function scoreDiffLabel(format: MatchFormat): string {
   return format.openScore ? 'diferencia de gol' : 'diferencia de games'
 }
 
-function describeTiebreak(format: MatchFormat, snapshotEvery: number): string {
+/**
+ * `pairSize` sola y no el `DisciplineShape` entero: ésta es la única
+ * llamadora (línea de arriba, dentro de `narrateRules`) y sólo necesita este
+ * campo — la firma más chica que funciona, mismo criterio que
+ * `describeFormat` usa para `allowsDraw`.
+ *
+ * W1 (verify-report reglas-por-disciplina): la primera frase decía siempre
+ * "si dos parejas ganan la misma cantidad de partidos", sin importar
+ * `pairSize` — con `pair_size = 1` la tabla de la fecha ordena JUGADORES, no
+ * parejas (core/pairing.ts:135-147: sin `pairSize=2` no hay pareja que
+ * armar). R2 sólo tenía scenarios para "La fecha" y "Los puntos", así que
+ * `core/narrate.test.ts` no cubría esta sección y la mentira quedó afuera de
+ * la tabla de edición sentence-by-sentence. `pronoun` cambia junto con
+ * `subject` porque "ellas" concuerda en género con "parejas": con
+ * `pairSize=1` el sujeto pasa a "jugadores" y el pronombre a "ellos".
+ */
+function describeTiebreak(format: MatchFormat, snapshotEvery: number, pairSize: SideSize): string {
   const setStep = usesSetsDiff(format) ? `corta la diferencia de sets, después ` : ''
   // Con marcador abierto los "games" son goles y no hay escalón de sets que
   // narrar: es el MISMO criterio que corre `computeStandings`, contado.
   const scoreDiff = scoreDiffLabel(format)
+  const subject = pairSize === 1 ? 'dos jugadores' : 'dos parejas'
+  const pronoun = pairSize === 1 ? 'ellos' : 'ellas'
   return (
-    `En la tabla de la fecha, si dos parejas ganan la misma cantidad de partidos, ${setStep}` +
-    `corta la ${scoreDiff}. Si empatan dos, el partido entre ellas lo decide; si empatan ` +
-    `tres o más, el partido entre ellas no alcanza porque se ganan en círculo, y corta el orden de ` +
+    `En la tabla de la fecha, si ${subject} ganan la misma cantidad de partidos, ${setStep}` +
+    `corta la ${scoreDiff}. Si empatan dos, el partido entre ${pronoun} lo decide; si empatan ` +
+    `tres o más, el partido entre ${pronoun} no alcanza porque se ganan en círculo, y corta el orden de ` +
     `desempate. En la tabla del campeonato, si dos jugadores tienen los mismos puntos corta el orden ` +
     `de desempate: una lista del mejor al peor que arranca en el orden que consensuó el ` +
     `grupo y se actualiza cada ${snapshotEvery} fechas con la tabla de ese momento.`
@@ -234,6 +252,15 @@ function describeFormat(format: MatchFormat, allowsDraw: boolean): string {
   }
   const setWord = format.setsToWin === 1 ? 'un set' : `${format.setsToWin} sets ganados`
   const tie = format.tieBreak ? ' con tie-break' : ''
+  // ponytail: esta rama no nombra `allowsDraw` — con sets, el empate lo saca
+  // el propio formato (alguien llega antes a `setsToWin`), así que la frase
+  // no necesita decir nada sobre empates HOY. El techo: `!openScore &&
+  // allowsDraw` (pádel con empate permitido) seguiría sin mencionar la regla,
+  // que es una omisión y no una afirmación falsa como la que arregla W1 —
+  // más débil, y hoy inexistente (`disciplineProfile('PADEL')` fija
+  // `allows_draw = false`, 0015_disciplines.sql:20 lo defaultea false).
+  // Subir: pasarle `allowsDraw` también a esta rama cuando exista una
+  // disciplina real con sets + empate.
   return `Cada partido se define a ${setWord} de ${format.gamesPerSet} games${tie}.`
 }
 

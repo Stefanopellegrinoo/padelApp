@@ -226,6 +226,19 @@ export async function updateDisciplineHasMasters(
  * `season_public_rules` -- viva en producción -- sigue sirviendo
  * `seasons.rules_text`. Misma postura que `seasons.config`
  * (`read.ts:73-80`): aditivo hasta el contract que borre la columna vieja.
+ *
+ * W2 (verify-report): este segundo update también lleva `count: 'exact'` +
+ * chequeo de `count === 0`, no sólo `error !== null` -- mismo motivo que el
+ * update de arriba y que el de `updateSeasonRules` (borrada acá, ronda 15:
+ * "un update que no toca ninguna fila NO es un error en PostgREST"). Hoy
+ * `disciplines_write` (`is_season_admin`) y `seasons_update` chequean el
+ * MISMO `seasons.created_by = auth.uid()` sobre la MISMA fila que ya validó
+ * el update de arriba, así que este `count === 0` no puede dispararse en
+ * producción -- pero nada en el esquema OBLIGA a que sigan alineadas, y si
+ * alguna vez se desalinean, un `count === 0` silencioso dejaría
+ * `season_public_rules` sirviendo texto viejo sin que nadie se entere. Se
+ * elige tirar (no seguir de largo): la disciplina ya quedó guardada, así
+ * que el mensaje lo distingue de "no organiza".
  */
 export async function updateDisciplineRules(
   supabase: Client,
@@ -247,12 +260,17 @@ export async function updateDisciplineRules(
 
   const defaultId = await defaultDisciplineId(supabase, seasonId)
   if (disciplineId !== defaultId) return
-  const { error: seasonError } = await supabase
+  const { error: seasonError, count: seasonCount } = await supabase
     .from('seasons')
-    .update({ rules_text: text, rules_updated_at: new Date().toISOString() })
+    .update({ rules_text: text, rules_updated_at: new Date().toISOString() }, { count: 'exact' })
     .eq('id', seasonId)
   if (seasonError !== null) {
     throw new EdgeError(`No se pudieron guardar las reglas: ${seasonError.message}`)
+  }
+  if (seasonCount === 0) {
+    throw new EdgeError(
+      'Las reglas de la disciplina se guardaron, pero no se pudo actualizar la copia de la temporada.',
+    )
   }
 }
 

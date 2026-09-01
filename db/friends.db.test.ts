@@ -805,9 +805,14 @@ describe('casual_matches', () => {
     const [a, b] =
       uno.playerId < dos.playerId ? [uno.playerId, dos.playerId] : [dos.playerId, uno.playerId]
     // Pendiente: mismo insert que `friendships_request`, sin `accepted_at`.
-    await adminClient()
+    // No se asertaba nada acá antes (Minor 4, review round 1): sin este check,
+    // "sin amistad" y "amistad pendiente" son el mismo escenario para el
+    // test si el seed fallara en silencio -- un typo futuro en `accepted_at`
+    // dejaría este test en verde sin haber sembrado una amistad pendiente.
+    const { error: seedError } = await adminClient()
       .from('friendships')
       .insert({ player_a: a, player_b: b, requested_by: uno.playerId })
+    expect(seedError).toBeNull()
 
     const { data, error } = await uno.client
       .from('casual_matches')
@@ -896,6 +901,145 @@ describe('casual_matches', () => {
       .from('casual_matches')
       .update({ player_a: otro.playerId })
       .eq('id', creado!.id)
+      .select()
+
+    expect(data).toBeNull()
+    expect(error?.code).toBe('42501')
+  })
+
+  // Los tres de acá abajo son la review round 1 (Important 1): las cinco
+  // tests originales no ejercitaban la RLS que de verdad protege el
+  // partido de un extraño -- `nadie puede mover player_a` de arriba se
+  // frena por el GRANT de columna, antes de que ninguna política corra.
+  it('un tercero no puede reescribir el partido de otros dos', async () => {
+    const uno = await createTestUser()
+    const dos = await createTestUser()
+    const ajeno = await createTestUser()
+    const [a, b] =
+      uno.playerId < dos.playerId ? [uno.playerId, dos.playerId] : [dos.playerId, uno.playerId]
+    await adminClient()
+      .from('friendships')
+      .insert({
+        player_a: a,
+        player_b: b,
+        requested_by: uno.playerId,
+        accepted_at: new Date().toISOString(),
+      })
+    const { data: creado } = await uno.client
+      .from('casual_matches')
+      .insert({
+        player_a: a,
+        player_b: b,
+        sport: 'FIFA',
+        played_on: '2026-08-30',
+        created_by: uno.playerId,
+        updated_by: uno.playerId,
+      })
+      .select('id')
+      .single()
+
+    // Verificado con sabotaje (fix report) que este ataque está frenado
+    // por TRES capas a la vez, no sólo por el `using` de
+    // `casual_matches_update`: Postgres además exige, para todo UPDATE, el
+    // `using` de la política de SELECT sobre la fila (`casual_matches_read`
+    // -- documentado en la página de `CREATE POLICY`), y el `with check`
+    // (`updated_by = my_player_id()`) también la rechaza sola, porque
+    // `ajeno` no toca esa columna y la fila conserva el `updated_by` de
+    // `uno`. Hizo falta anular las tres a la vez para ver esto en rojo.
+    //
+    // Un `using`/`with check` que falla FILTRA filas -- no tira error. Por
+    // eso el chequeo positivo de abajo, releído con `uno` (no con `ajeno`),
+    // es lo que de verdad prueba que el partido no cambió: un `data: []`
+    // solo no lo distingue de "actualizó cero filas porque no había ninguna".
+    const { data } = await ajeno.client
+      .from('casual_matches')
+      .update({ score_a: 99 })
+      .eq('id', creado!.id)
+      .select()
+    expect(data).toEqual([])
+
+    const { data: intacto } = await uno.client
+      .from('casual_matches')
+      .select('score_a')
+      .eq('id', creado!.id)
+      .single()
+    expect(intacto?.score_a).toBeNull()
+  })
+
+  it('un tercero no puede borrar el partido de otros dos', async () => {
+    const uno = await createTestUser()
+    const dos = await createTestUser()
+    const ajeno = await createTestUser()
+    const [a, b] =
+      uno.playerId < dos.playerId ? [uno.playerId, dos.playerId] : [dos.playerId, uno.playerId]
+    await adminClient()
+      .from('friendships')
+      .insert({
+        player_a: a,
+        player_b: b,
+        requested_by: uno.playerId,
+        accepted_at: new Date().toISOString(),
+      })
+    const { data: creado } = await uno.client
+      .from('casual_matches')
+      .insert({
+        player_a: a,
+        player_b: b,
+        sport: 'FIFA',
+        played_on: '2026-08-30',
+        created_by: uno.playerId,
+        updated_by: uno.playerId,
+      })
+      .select('id')
+      .single()
+
+    // Igual que en el update de arriba: Postgres exige, para todo DELETE,
+    // TANTO el `using` de `casual_matches_delete` COMO el de la política
+    // de SELECT (`casual_matches_read`) sobre la misma fila -- verificado
+    // con sabotaje (fix report), anular sólo uno de los dos no alcanzó
+    // para ver esto en rojo. Y un `delete` frenado por `using` no tira
+    // error, borra cero filas en silencio -- el positivo de abajo es la
+    // prueba real.
+    await ajeno.client.from('casual_matches').delete().eq('id', creado!.id)
+
+    const { data: sigue } = await uno.client.from('casual_matches').select('id')
+    expect(sigue).toEqual([{ id: creado!.id }])
+  })
+
+  it('un tercero no puede fabricar un partido entre otros dos, aunque sean amigos', async () => {
+    const uno = await createTestUser()
+    const dos = await createTestUser()
+    const ajeno = await createTestUser()
+    const [a, b] =
+      uno.playerId < dos.playerId ? [uno.playerId, dos.playerId] : [dos.playerId, uno.playerId]
+    // `uno` y `dos` SON amigos aceptados: no alcanza con que EL PAR sea
+    // amigo, `ajeno` tiene que ser uno de los dos. Verificado con sabotaje
+    // (fix report) que la condición 1 del insert es redundante en la
+    // práctica -- la propia RLS de `friendships_read` ya le niega a `ajeno`
+    // ver esa fila de amistad (no es uno de sus dos jugadores), así que el
+    // `exists(...)` de la condición 3 da falso para él aunque la amistad
+    // exista. Este test fija el COMPORTAMIENTO ("ajeno no puede fabricar
+    // esto"), no cuál capa específica lo frena -- eso puede cambiar sin que
+    // este test deba cambiar con él.
+    await adminClient()
+      .from('friendships')
+      .insert({
+        player_a: a,
+        player_b: b,
+        requested_by: uno.playerId,
+        accepted_at: new Date().toISOString(),
+      })
+
+    const { data, error } = await ajeno.client
+      .from('casual_matches')
+      .insert({
+        player_a: a,
+        player_b: b,
+        sport: 'FIFA',
+        played_on: '2026-08-30',
+        created_by: ajeno.playerId,
+        updated_by: ajeno.playerId,
+      })
       .select()
 
     expect(data).toBeNull()

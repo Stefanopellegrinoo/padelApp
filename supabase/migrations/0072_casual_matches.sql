@@ -21,8 +21,11 @@ create table public.casual_matches (
   winner      uuid references public.players,
   score_a     int,
   score_b     int,
-  team_a      text,
-  team_b      text,
+  -- `is null or length(trim(x)) > 0`: mismo criterio que `sport` arriba y
+  -- que `0001_schema.sql:6`/`0047_award_lines.sql:18` -- "sin equipo" tiene
+  -- una sola forma de decirse (`null`), no dos (`null` o `''`).
+  team_a      text check (team_a is null or length(trim(team_a)) > 0),
+  team_b      text check (team_b is null or length(trim(team_b)) > 0),
   created_by  uuid not null references public.players,
   updated_by  uuid not null references public.players,
   created_at  timestamptz not null default now(),
@@ -38,7 +41,16 @@ create table public.casual_matches (
   -- marcador. NO hay campo "por penales": es derivable de (marcador
   -- empatado + winner no nulo), y guardarlo aparte sólo permite un registro
   -- que se contradice solo (§4.3).
-  constraint casual_score_pair   check ((score_a is null) = (score_b is null))
+  constraint casual_score_pair   check ((score_a is null) = (score_b is null)),
+  -- Mismo argumento que `casual_winner_plays` de arriba, aplicado a quién
+  -- cargó/tocó el partido en vez de a quién ganó: sin este check, un insert
+  -- de `service_role` (o un futuro camino de servidor) puede grabar que un
+  -- tercero cargó o tocó último un partido que no jugó, y §3.2 le muestra
+  -- ese nombre a los dos jugadores como si fuera cierto. `friendships` tiene
+  -- el mismo par constraint/FK para su propio `requested_by` (0070:16,21).
+  constraint casual_authors_play check (
+    created_by in (player_a, player_b) and updated_by in (player_a, player_b)
+  )
 );
 
 -- Mismo par que `friendships` (0070:24-25) y por la misma razón: toda
@@ -51,7 +63,7 @@ alter table public.casual_matches enable row level security;
 
 -- ── permisos ────────────────────────────────────────────────────────────────
 -- Las dos cosas de siempre, y este repo ya se comió las dos por separado
--- (0002, 0009 -- detalle completo en 0070:27-35): el `grant` porque el CLI
+-- (0002, 0009 -- detalle completo en 0070:29-49): el `grant` porque el CLI
 -- de Supabase no le da DML a los roles de la API solo, y el `revoke` de
 -- `anon` porque la nube alguna vez otorgó DML por defecto a tabla nueva.
 grant select, insert, delete on public.casual_matches to authenticated;
@@ -64,8 +76,46 @@ revoke all on public.casual_matches from anon;
 -- la fila nueva contra la vieja (misma lección que 0069:59 y 0070:58), así
 -- que lo que de verdad las congela es no darles permiso de UPDATE -- sin
 -- él, ni llegan a evaluarse contra una política.
-grant update (sport, played_on, winner, score_a, score_b, team_a, team_b, updated_by, updated_at)
+--
+-- `updated_at` sale de esta lista por un motivo DISTINTO al de las cuatro de
+-- arriba: no es identidad, es la prueba de que algo cambió (§3.2 -- "que
+-- puedan ver que algo cambió"). Si el cliente pudiera mandarla, un update
+-- podría pisarla con cualquier fecha, incluso una pasada, y "tocado último
+-- por Juan" (que sí queda forzado por el `with check` de abajo) mentiría
+-- sobre CUÁNDO. La escribe el trigger de acá abajo, siempre -- así ningún
+-- camino de escritura, ni uno futuro (Tarea 4) que se olvide de setearla a
+-- mano, puede dejarla mintiendo.
+grant update (sport, played_on, winner, score_a, score_b, team_a, team_b, updated_by)
   on public.casual_matches to authenticated;
+
+-- El trigger, no la aplicación: mismo argumento que
+-- `0045_matchdays_formato_immutable_after_draft.sql` para `formato` -- un
+-- guard de TypeScript no cubre un PATCH directo, y acá la apuesta es
+-- mayor, porque tiene que valer para TODO camino de escritura, incluidos
+-- los que todavía no existen. Sin `security definer`: no toca otra tabla,
+-- sólo la fila que la misma sentencia ya está actualizando.
+create function public.casual_matches_touch_updated_at()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+create trigger casual_matches_touch_updated_at
+  before update on public.casual_matches
+  for each row execute function public.casual_matches_touch_updated_at();
+
+-- Postgres otorga EXECUTE a PUBLIC en toda función nueva -- la lección de
+-- `0002_rls.sql:83-93`, que ya mordió a este repo una vez. Un trigger no se
+-- invoca a mano (Postgres lo rechaza: "trigger functions can only be
+-- called as triggers"), así que esto no cierra un agujero real hoy, pero es
+-- el mismo reflejo que el resto del repo exige para TODA función nueva, sin
+-- excepción para "esta no se puede llamar directo".
+revoke execute on function public.casual_matches_touch_updated_at() from public, anon;
 
 -- ── políticas ───────────────────────────────────────────────────────────────
 -- Terreno nuevo: toda política de este repo hasta acá se apoya en la

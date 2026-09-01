@@ -140,22 +140,58 @@ async function partidoDeLosDos(matchdayId: string, a: string, b: string): Promis
 }
 
 /**
- * El lado ('A'/'B') de `playerId` en `matchId`, leído con `service_role` --
- * scaffolding para armar la expectativa del test, no un chequeo de permisos
- * (por eso `adminClient()` acá es correcto, a diferencia de los `historyWith`
- * de más abajo, que SÍ pasan por el cliente logueado).
+ * El lado ('A'/'B') ESPERADO de `playerId` en `matchId`, leído con
+ * `service_role` -- scaffolding para armar la expectativa del test, no un
+ * chequeo de permisos (por eso `adminClient()` acá es correcto, a diferencia
+ * de los `historyWith` de más abajo, que SÍ pasan por el cliente logueado).
+ *
+ * Calculado desde `matches.pair_a`/`pair_b` y `pairs.entry_a`/`entry_b` --
+ * las columnas BASE que la vista usa para definir `side`
+ * (`case when p.id = m.pair_a then 'A' else 'B' end`, 0071) --, NO leyendo
+ * `match_participants.side`. Antes este helper leía esa misma columna, la
+ * MISMA que `historyWith` lee: si la vista cambiara esa definición algún
+ * día, implementación y expectativa se moverían juntas y la suite seguiría
+ * en verde con el resultado invertido -- nada la fijaba. Calculado desde las
+ * tablas base, un cambio en la vista rompe ESTE test primero.
  */
 async function ladoDe(matchId: string, playerId: string): Promise<string> {
-  const { data, error } = await adminClient()
-    .from('match_participants')
-    .select('side')
-    .eq('match_id', matchId)
-    .eq('player_id', playerId)
+  const db = adminClient()
+  const { data: match, error: matchError } = await db
+    .from('matches')
+    .select('pair_a, pair_b')
+    .eq('id', matchId)
     .single()
-  if (error || data === null || data.side === null) {
-    throw new Error(`No se pudo leer el lado de ${playerId} en ${matchId}: ${error?.message}`)
+  if (matchError || match === null) {
+    throw new Error(`No se pudo leer el partido ${matchId}: ${matchError?.message}`)
   }
-  return data.side
+
+  const { data: pairs, error: pairsError } = await db
+    .from('pairs')
+    .select('id, entry_a, entry_b')
+    .in('id', [match.pair_a, match.pair_b])
+  if (pairsError || pairs === null) {
+    throw new Error(`No se pudieron leer las parejas de ${matchId}: ${pairsError?.message}`)
+  }
+
+  // `entry_b` es nullable con disciplinas de a uno (0028): el filtro de abajo
+  // sólo entra si no es null, mismo criterio que el `or` de la vista (0071).
+  const entryIds = pairs.flatMap((p) => (p.entry_b === null ? [p.entry_a] : [p.entry_a, p.entry_b]))
+  const { data: entries, error: entriesError } = await db
+    .from('entries')
+    .select('id, player_id')
+    .in('id', entryIds)
+  if (entriesError || entries === null) {
+    throw new Error(`No se pudieron leer las entries de ${matchId}: ${entriesError?.message}`)
+  }
+
+  const misEntryIds = new Set(entries.filter((e) => e.player_id === playerId).map((e) => e.id))
+  const miPar = pairs.find(
+    (p) => misEntryIds.has(p.entry_a) || (p.entry_b !== null && misEntryIds.has(p.entry_b)),
+  )
+  if (miPar === undefined) {
+    throw new Error(`${playerId} no juega en el partido ${matchId}.`)
+  }
+  return miPar.id === match.pair_a ? 'A' : 'B'
 }
 
 /**
@@ -525,6 +561,11 @@ describe('historyWith', () => {
     const lado = await ladoDe(enContra, admin.playerId)
     expect(partido?.seasonName).toBe(seasonName)
     expect(partido?.matchdayNumber).toBe(1)
+    // `unaFechaJugada` crea la fecha con '2026-08-10' (ver su doc) -- es lo
+    // único que hoy fija `playedOn`, del que dependen tanto el orden de la
+    // lista (`compararDescendente`, `app/amigos/historial.tsx`) como la
+    // fecha que muestra cada fila, y que ningún test de esta suite chequeaba.
+    expect(partido?.playedOn).toBe('2026-08-10')
     expect(partido?.score).toEqual(lado === 'A' ? { mine: 4, theirs: 1 } : { mine: 1, theirs: 4 })
     expect(partido?.outcome).toBe(lado === 'A' ? 'won' : 'lost')
 

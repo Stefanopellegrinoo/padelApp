@@ -71,10 +71,16 @@ export interface SharedMatch {
  * detalle que la pantalla necesita para listarlos en orden -- fecha, torneo
  * y resultado -- y no sólo agregarlos en dos contadores.
  *
- * CUATRO consultas de tamaño acotado, no una por partido:
- * participantes → fechas → temporadas → sets. `pairsAndMatchesOf`
- * (db/read.ts:985) se llama hoy adentro de un loop por fecha; acá eso sería
- * un N+1 que crece con cada temporada que jugaron juntos.
+ * CUATRO consultas, no una por partido: participantes → fechas → temporadas
+ * → sets. `pairsAndMatchesOf` (db/read.ts:985) se llama hoy adentro de un
+ * loop por fecha; acá eso sería un N+1 que crece con cada temporada que
+ * jugaron juntos.
+ *
+ * Las cuatro NO son de tamaño acotado por una constante: cada una trae de
+ * una sola vez TODO el historial compartido del par, así que su techo real
+ * es cuánto jugaron juntos, no un número fijo. Ese techo también llega antes
+ * que el de `assertComplete` (1000 filas) -- ver el `ponytail:` en la
+ * consulta de sets, más abajo, con la medición.
  *
  * Fechas y temporadas van por IN + Map, no por un embed
  * (`.select('..., seasons(name)')`): ningún `db/*.ts` de este repo arma un
@@ -184,6 +190,16 @@ export async function historyWith(
   // Consulta 4: los sets de los partidos compartidos. Sin sets, el partido
   // es una fecha abierta todavía sin resultado -- `outcome`/`score` quedan
   // en null, no en un 0-0 inventado.
+  //
+  // ponytail: `matchIds` (y `matchdayIds` arriba) crecen un id por partido
+  // compartido, sin techo -- medido contra este mismo proxy, un
+  // `match_id=in.(N uuids)` da 200 hasta N=218 (~8 KB de query string) y 414
+  // "URI too long" en N=219. A ~2 partidos compartidos por fecha y ~12
+  // fechas por temporada, dos amigos en la misma liga cruzan los 219 en unas
+  // 9 temporadas -- ese día el historial deja de cargar. Si alguna vez
+  // importa: partir `matchIds`/`matchdayIds` en tandas de ~150 y unir los
+  // resultados, o consultar `match_sets` por `matchday_id` en vez de por
+  // `match_id`.
   const matchIds = compartidos.map((c) => c.matchId)
   const setsResult = await supabase
     .from('match_sets')

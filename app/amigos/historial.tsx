@@ -17,8 +17,11 @@ const VERBOS_CONTRA: Record<Resultado, string> = { won: 'Ganaste', lost: 'Perdis
 /**
  * Orden cronológico descendente. `playedOn` es nullable (una fecha sin jugar
  * todavía, diseño §4.4), así que un orden que sólo mirara ese campo sería
- * inestable -- acá el desempate es `matchdayNumber` descendente, que sí es
- * total, y las fechas sin jugar quedan siempre al final.
+ * inestable -- acá el desempate es `matchdayNumber` descendente. No es un
+ * desempate total ENTRE TEMPORADAS: dos fechas número 1 sin jugar, de dos
+ * torneos distintos, comparan igual. Alcanza igual porque el sort de V8 es
+ * estable -- las que empatan quedan en el orden en que ya venían, no se
+ * mezclan al azar --, y las fechas sin jugar quedan siempre al final.
  */
 function compararDescendente(a: SharedMatch, b: SharedMatch): number {
   if (a.playedOn !== b.playedOn) {

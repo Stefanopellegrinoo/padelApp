@@ -585,8 +585,9 @@ describe('historyWith', () => {
     expect(partido.matchdayNumber).toBe(1)
     // `unaFechaJugada` crea la fecha con '2026-08-10' (ver su doc) -- es lo
     // único que hoy fija `playedOn`, del que dependen tanto el orden de la
-    // lista (`compararDescendente`, `app/amigos/historial.tsx`) como la
-    // fecha que muestra cada fila, y que ningún test de esta suite chequeaba.
+    // lista (`porFechaDescendente`, `db/friends.ts` -- el único lugar que lo
+    // define; la pantalla sólo dibuja lo que recibe) como la fecha que
+    // muestra cada fila, y que ningún test de esta suite chequeaba.
     expect(partido.playedOn).toBe('2026-08-10')
     expect(partido.score).toEqual(lado === 'A' ? { mine: 4, theirs: 1 } : { mine: 1, theirs: 4 })
     expect(partido.outcome).toBe(lado === 'A' ? 'won' : 'lost')

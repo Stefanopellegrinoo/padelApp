@@ -432,4 +432,45 @@ describe('historyWith — tripwire de truncamiento de PostgREST', () => {
     expect(historia.map((m) => m.matchId)).toEqual(['c1', 'm1'])
     expect(historia[1]?.playedOn).toBeNull()
   })
+
+  it('dos fechas de torneo compartidas, las dos sin jugar, desempatan por matchdayNumber descendente', async () => {
+    // Fix round 1 de Task 3 (plan-historial-entre-amigos-2b): la pantalla
+    // (`app/amigos/historial.tsx`) tenía este desempate en su propio sort, y
+    // se borró ahí sin reponerlo acá -- dos fechas de torneo compartidas y
+    // sin jugar quedaban en el orden arbitrario de `match_id` de la consulta
+    // de participantes en vez de por número de fecha. El desempate sólo
+    // puede vivir en `porFechaDescendente`: es el único lugar que define el
+    // orden ahora.
+    const client = fakeClient({
+      me: ME,
+      participants: {
+        rows: [
+          { match_id: 'm1', matchday_id: 'f1', side: 'A', player_id: ME },
+          { match_id: 'm1', matchday_id: 'f1', side: 'B', player_id: AMIGO },
+          { match_id: 'm2', matchday_id: 'f2', side: 'A', player_id: ME },
+          { match_id: 'm2', matchday_id: 'f2', side: 'B', player_id: AMIGO },
+        ],
+        count: 4,
+      },
+      matchdays: {
+        rows: [
+          { id: 'f1', number: 1, kind: 'REGULAR', played_on: null, season_id: 's1' },
+          { id: 'f2', number: 5, kind: 'REGULAR', played_on: null, season_id: 's1' },
+        ],
+        count: 2,
+      },
+      seasons: { rows: [{ id: 's1', name: 'Liga de test' }], count: 1 },
+      matchSets: { rows: [], count: 0 },
+      casualMatches: { rows: [], count: 0 },
+    })
+
+    const historia = await historyWith(client, AMIGO)
+
+    // 'm1' es fecha número 1, 'm2' es fecha número 5 -- las dos sin
+    // `played_on`. Sin el desempate, `porFechaDescendente` da `0` para las
+    // dos comparaciones y el sort estable las deja en el orden de llegada
+    // (`m1`, `m2`, el de la consulta de participantes) -- lo opuesto de lo
+    // que se assertea abajo.
+    expect(historia.map((m) => m.matchId)).toEqual(['m2', 'm1'])
+  })
 })

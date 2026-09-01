@@ -102,20 +102,32 @@ export type SharedMatch =
  * Orden final de `historyWith`: fecha descendente ENTRE las dos fuentes, no
  * cada una ordenada por su lado. Un torneo sin jugar todavía (`playedOn:
  * null`, fecha abierta) queda al final -- un casual nunca llega con
- * `playedOn: null`, la columna es `not null` (0072). No desempata con
- * `matchdayNumber` como sí hace la pantalla (`compararDescendente`,
- * `app/amigos/historial.tsx`): ese desempate sólo tiene sentido DENTRO del
- * torneo, y una vez mezcladas las dos fuentes ya no hay un `matchdayNumber`
- * común a las dos con qué desempatar. Una MISMA fecha exacta entre las dos
- * fuentes devuelve `0`: `Array.prototype.sort` es estable, así que quedan en
- * el orden en que ya venían concatenadas más abajo (torneo antes que
- * casual) -- determinista, pero no es un desempate elegido a propósito.
+ * `playedOn: null`, la columna es `not null` (0072).
+ *
+ * El desempate por `matchdayNumber` vive ACÁ, no en la pantalla -- fix round
+ * 1 de Task 3 (plan-historial-entre-amigos-2b). Antes vivía en el sort del
+ * componente (`app/amigos/historial.tsx`), y se borró ahí sin reponerlo acá:
+ * dos fechas de torneo compartidas, las dos sin jugar, quedaban en el orden
+ * arbitrario de `match_id` de la consulta de participantes en vez de por
+ * número de fecha -- un orden que depende de un campo nullable y no lo dice
+ * es un orden inestable (2a). Sólo aplica cuando LAS DOS son de torneo:
+ * `CasualMatch` no tiene `matchdayNumber` (diseño §7, ninguna migración de
+ * este plan se lo agrega). Fuera de ese caso -- una misma fecha exacta entre
+ * las dos fuentes, o dos casuales el mismo día -- devuelve `0`:
+ * `Array.prototype.sort` es estable, así que quedan en el orden en que ya
+ * venían concatenadas más abajo (torneo antes que casual) -- determinista,
+ * pero no es un desempate elegido a propósito.
  */
 function porFechaDescendente(a: SharedMatch, b: SharedMatch): number {
-  if (a.playedOn === b.playedOn) return 0
-  if (a.playedOn === null) return 1
-  if (b.playedOn === null) return -1
-  return a.playedOn < b.playedOn ? 1 : -1
+  if (a.playedOn !== b.playedOn) {
+    if (a.playedOn === null) return 1
+    if (b.playedOn === null) return -1
+    return a.playedOn < b.playedOn ? 1 : -1
+  }
+  if (a.kind === 'tournament' && b.kind === 'tournament') {
+    return b.matchdayNumber - a.matchdayNumber
+  }
+  return 0
 }
 
 /**

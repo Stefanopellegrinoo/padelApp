@@ -938,25 +938,36 @@ describe('casual_matches', () => {
       .select('id')
       .single()
 
-    // Verificado con sabotaje (fix report) que este ataque está frenado
-    // por TRES capas a la vez, no sólo por el `using` de
-    // `casual_matches_update`: Postgres además exige, para todo UPDATE, el
-    // `using` de la política de SELECT sobre la fila (`casual_matches_read`
-    // -- documentado en la página de `CREATE POLICY`), y el `with check`
-    // (`updated_by = my_player_id()`) también la rechaza sola, porque
-    // `ajeno` no toca esa columna y la fila conserva el `updated_by` de
-    // `uno`. Hizo falta anular las tres a la vez para ver esto en rojo.
+    // Corregido dos veces en la review round 2 -- la segunda vuelta encontró
+    // que la primera corrección no era aplicable a este repo. En orden:
     //
-    // Un `using`/`with check` que falla FILTRA filas -- no tira error. Por
-    // eso el chequeo positivo de abajo, releído con `uno` (no con `ajeno`),
-    // es lo que de verdad prueba que el partido no cambió: un `data: []`
-    // solo no lo distingue de "actualizó cero filas porque no había ninguna".
-    const { data } = await ajeno.client
-      .from('casual_matches')
-      .update({ score_a: 99 })
-      .eq('id', creado!.id)
-      .select()
-    expect(data).toEqual([])
+    // 1. El payload `{ score_a: 99 }` (round 1) violaba `casual_score_pair`
+    //    (0072) por su cuenta -- si las tres capas de RLS hubieran estado
+    //    anuladas, ESE constraint habría parado igual la escritura, y el
+    //    rojo no habría probado RLS. `score_b: 0` lo deja bien formado.
+    // 2. La propuesta de sacar `.eq(...)` para que el UPDATE quedara sin
+    //    `WHERE` (así Postgres aplicaría sólo `casual_matches_update.using`,
+    //    sin el AND con `casual_matches_read`) NO es viable acá: PostgREST
+    //    rechaza cualquier update/delete sin filtro con 400 ("UPDATE/DELETE
+    //    requires a WHERE clause") ANTES de llegar a Postgres -- verificado
+    //    en vivo. Y el AND con la política de SELECT tampoco depende de que
+    //    el filtro apunte a una fila puntual: se probó con `.eq('id', …)` Y
+    //    con un filtro "bulto" sobre `created_at` que no elige ninguna fila
+    //    en particular (`created_at >= '1970-01-01'`) -- en los dos casos
+    //    Postgres siguió exigiendo también el `using` de `casual_matches_
+    //    read`, incluso para EL DUEÑO legítimo de la fila (se le negó un
+    //    update propio con `casual_matches_read.using` saboteado a `false`,
+    //    aunque `casual_matches_update.using` lo dejaba pasar). Como
+    //    PostgREST no deja emitir un UPDATE/DELETE sin filtro, esta app NUNCA
+    //    puede invocar `casual_matches_update`/`_delete` sin que Postgres
+    //    también exija `casual_matches_read` -- las dos políticas están
+    //    combinadas por construcción en todo camino de escritura real, y
+    //    éste es el único test honesto para esa combinación.
+    // Sin `.select()`: un update de cero filas sin `RETURNING` da
+    // `data: null` igual que uno de cero filas por error -- no distingue
+    // nada. El positivo de abajo es la única prueba real, mismo criterio
+    // que el delete de más abajo.
+    await ajeno.client.from('casual_matches').update({ score_a: 99, score_b: 0 }).eq('id', creado!.id)
 
     const { data: intacto } = await uno.client
       .from('casual_matches')
@@ -993,13 +1004,21 @@ describe('casual_matches', () => {
       .select('id')
       .single()
 
-    // Igual que en el update de arriba: Postgres exige, para todo DELETE,
-    // TANTO el `using` de `casual_matches_delete` COMO el de la política
-    // de SELECT (`casual_matches_read`) sobre la misma fila -- verificado
-    // con sabotaje (fix report), anular sólo uno de los dos no alcanzó
-    // para ver esto en rojo. Y un `delete` frenado por `using` no tira
-    // error, borra cero filas en silencio -- el positivo de abajo es la
-    // prueba real.
+    // `.eq('id', ...)` es obligatorio, no una elección: PostgREST rechaza
+    // con 400 ("DELETE requires a WHERE clause") cualquier delete sin
+    // filtro, verificado en vivo -- así que "aislar" `casual_matches_delete.
+    // using` sacando el filtro no es alcanzable desde esta app. Y el AND con
+    // `casual_matches_read.using` tampoco depende de que el filtro sea por
+    // `id`: se probó también con un filtro "bulto" sobre `created_at` que no
+    // apunta a una fila puntual, y Postgres exigió igual las dos políticas
+    // -- le negó al DUEÑO legítimo de una fila su propio delete cuando sólo
+    // `casual_matches_read.using` estaba saboteado. Con PostgREST exigiendo
+    // SIEMPRE un filtro, esta app nunca ejecuta un DELETE sin que Postgres
+    // también exija `casual_matches_read` -- las dos políticas están
+    // combinadas por construcción en todo camino de escritura real.
+    //
+    // Un `delete` frenado por `using` no tira error, borra cero filas en
+    // silencio -- el positivo de abajo (releído con `uno`) es la prueba real.
     await ajeno.client.from('casual_matches').delete().eq('id', creado!.id)
 
     const { data: sigue } = await uno.client.from('casual_matches').select('id')
@@ -1021,7 +1040,12 @@ describe('casual_matches', () => {
     // exista. Este test fija el COMPORTAMIENTO ("ajeno no puede fabricar
     // esto"), no cuál capa específica lo frena -- eso puede cambiar sin que
     // este test deba cambiar con él.
-    await adminClient()
+    //
+    // El error del seed se assertea (Minor 4, mismo defecto): si esta
+    // amistad fallara en silencio, "aunque sean amigos" dejaría de ser
+    // cierto y el test seguiría en verde por la razón EQUIVOCADA (ajeno
+    // rechazado por no haber amistad, no por no ser miembro).
+    const { error: seedError } = await adminClient()
       .from('friendships')
       .insert({
         player_a: a,
@@ -1029,6 +1053,7 @@ describe('casual_matches', () => {
         requested_by: uno.playerId,
         accepted_at: new Date().toISOString(),
       })
+    expect(seedError).toBeNull()
 
     const { data, error } = await ajeno.client
       .from('casual_matches')
@@ -1044,5 +1069,140 @@ describe('casual_matches', () => {
 
     expect(data).toBeNull()
     expect(error?.code).toBe('42501')
+  })
+
+  // Los tres de acá abajo son la review round 2, items d/e/f: no son
+  // redundancia con lo de arriba -- son vectores de mentira sobre §3.2. Los
+  // dos primeros (d, e) los frena un MIEMBRO legítimo del partido que
+  // intenta apropiarse falsamente de `created_by`/`updated_by`, no un
+  // extraño -- así que ni `casual_matches_read` ni `casual_authors_play`
+  // entran en juego (el impostor SÍ es uno de los dos jugadores): lo único
+  // que puede pararlos es la condición 2 del insert y el `with check` del
+  // update, respectivamente.
+  it('un miembro no puede insertar diciendo que lo cargó el otro', async () => {
+    const uno = await createTestUser()
+    const dos = await createTestUser()
+    const [a, b] =
+      uno.playerId < dos.playerId ? [uno.playerId, dos.playerId] : [dos.playerId, uno.playerId]
+    const { error: seedError } = await adminClient()
+      .from('friendships')
+      .insert({
+        player_a: a,
+        player_b: b,
+        requested_by: uno.playerId,
+        accepted_at: new Date().toISOString(),
+      })
+    expect(seedError).toBeNull()
+
+    // `uno` inserta de verdad (es uno de los dos, la amistad existe), pero
+    // pone `created_by: dos.playerId` -- miente sobre quién lo cargó.
+    // `casual_authors_play` no lo frena (`dos` SÍ es uno de los dos); sólo
+    // la condición 2 (`created_by = my_player_id()`) lo hace.
+    const { data, error } = await uno.client
+      .from('casual_matches')
+      .insert({
+        player_a: a,
+        player_b: b,
+        sport: 'FIFA',
+        played_on: '2026-08-30',
+        created_by: dos.playerId,
+        updated_by: uno.playerId,
+      })
+      .select()
+
+    expect(data).toBeNull()
+    expect(error?.code).toBe('42501')
+  })
+
+  it('un miembro no puede editar diciendo que lo editó el otro', async () => {
+    const uno = await createTestUser()
+    const dos = await createTestUser()
+    const [a, b] =
+      uno.playerId < dos.playerId ? [uno.playerId, dos.playerId] : [dos.playerId, uno.playerId]
+    const { error: seedError } = await adminClient()
+      .from('friendships')
+      .insert({
+        player_a: a,
+        player_b: b,
+        requested_by: uno.playerId,
+        accepted_at: new Date().toISOString(),
+      })
+    expect(seedError).toBeNull()
+    const { data: creado } = await uno.client
+      .from('casual_matches')
+      .insert({
+        player_a: a,
+        player_b: b,
+        sport: 'FIFA',
+        played_on: '2026-08-30',
+        created_by: uno.playerId,
+        updated_by: uno.playerId,
+      })
+      .select('id')
+      .single()
+
+    // `dos` SÍ es dueño de la fila -- pasa el `using` del update sin
+    // problema -- pero pone `updated_by: uno.playerId`, mintiendo que fue
+    // `uno` quien editó. El `with check (updated_by = my_player_id())` lo
+    // frena a él solo, sin ayuda de ninguna otra capa.
+    await dos.client
+      .from('casual_matches')
+      .update({ score_a: 4, score_b: 1, updated_by: uno.playerId })
+      .eq('id', creado!.id)
+
+    const { data: intacto } = await uno.client
+      .from('casual_matches')
+      .select('score_a, updated_by')
+      .eq('id', creado!.id)
+      .single()
+    expect(intacto?.score_a).toBeNull()
+    expect(intacto?.updated_by).toBe(uno.playerId)
+  })
+
+  it('un miembro legítimo actualiza el partido, y el trigger avanza updated_at', async () => {
+    const uno = await createTestUser()
+    const dos = await createTestUser()
+    const [a, b] =
+      uno.playerId < dos.playerId ? [uno.playerId, dos.playerId] : [dos.playerId, uno.playerId]
+    const { error: seedError } = await adminClient()
+      .from('friendships')
+      .insert({
+        player_a: a,
+        player_b: b,
+        requested_by: uno.playerId,
+        accepted_at: new Date().toISOString(),
+      })
+    expect(seedError).toBeNull()
+    const { data: creado } = await uno.client
+      .from('casual_matches')
+      .insert({
+        player_a: a,
+        player_b: b,
+        sport: 'FIFA',
+        played_on: '2026-08-30',
+        created_by: uno.playerId,
+        updated_by: uno.playerId,
+      })
+      .select('id, updated_at')
+      .single()
+
+    // El positivo de todo lo de arriba: nada en la suite ejercitaba un
+    // escritor de verdad -- el trigger, el grant recortado, el camino que
+    // SÍ tiene que andar. `dos` es el OTRO miembro (§3.1, cualquiera de los
+    // dos edita), y firma como quien tocó último de verdad.
+    const { data: actualizado, error } = await dos.client
+      .from('casual_matches')
+      .update({ score_a: 4, score_b: 1, updated_by: dos.playerId })
+      .eq('id', creado!.id)
+      .select('updated_at, updated_by')
+      .single()
+
+    expect(error).toBeNull()
+    expect(actualizado?.updated_by).toBe(dos.playerId)
+    // `updated_at` la escribe el TRIGGER (0072), no el cliente -- ya no está
+    // en el grant de columna. Si el trigger se borrara o el grant volviera
+    // a incluirla sin que nadie la mande, esto seguiría en null-vs-null o
+    // en el mismo valor, y es lo único en la suite que lo notaría.
+    expect(actualizado?.updated_at).not.toBe(creado?.updated_at)
   })
 })

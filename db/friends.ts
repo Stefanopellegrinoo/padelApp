@@ -572,6 +572,22 @@ export type CasualOutcome = 'won' | 'lost' | 'drew'
 
 const CASUAL_DATE = /^\d{4}-\d{2}-\d{2}$/
 
+// El regex de arriba sólo valida la FORMA (`\d{4}-\d{2}-\d{2}`) -- deja pasar
+// "2026-02-31" y "2026-13-45", que Postgres rechaza recién al insertar con
+// `date/time field value out of range`, un mensaje crudo de la base en la
+// cara de quien carga el partido -- exactamente lo que este validador existe
+// para evitar. `Date.UTC` normaliza los desbordes (el día 31 de un mes de 28
+// días se corre al mes siguiente) en vez de rechazarlos, así que la vuelta
+// atrás a texto (`toISOString().slice(0, 10)`) es lo que expone la
+// normalización: si no matchea el string original, la fecha no era real.
+// Verificado: `<input type="date">` nunca puede mandar esto (el picker
+// nativo no ofrece un 31 de febrero) -- sólo llega por un POST armado a mano.
+function esFechaReal(value: string): boolean {
+  if (!CASUAL_DATE.test(value)) return false
+  const d = new Date(`${value}T00:00:00Z`)
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value
+}
+
 /**
  * Los siete campos del formulario de cargar/editar un partido casual, tal
  * cual los entrega `FormData.get()` -- todo texto, incluidos los números y el
@@ -627,7 +643,7 @@ function parseCasualInput(input: CasualMatchInput): ParsedCasualInput {
   const sport = input.sport.trim()
   if (sport.length === 0) throw new EdgeError('Escribí qué deporte jugaron.')
 
-  if (!CASUAL_DATE.test(input.playedOn)) throw new EdgeError('Elegí una fecha real.')
+  if (!esFechaReal(input.playedOn)) throw new EdgeError('Elegí una fecha real.')
 
   if (input.outcome !== 'won' && input.outcome !== 'lost' && input.outcome !== 'drew') {
     throw new EdgeError('Decinos quién ganó, o si empataron.')
@@ -643,8 +659,10 @@ function parseCasualInput(input: CasualMatchInput): ParsedCasualInput {
   if (scoreMineRaw !== '') {
     scoreMine = Number(scoreMineRaw)
     scoreTheirs = Number(scoreTheirsRaw)
-    if (!Number.isFinite(scoreMine) || !Number.isFinite(scoreTheirs)) {
-      throw new EdgeError('El marcador tiene que ser un número.')
+    // `Number.isFinite` dejaba pasar `3.5` hacia una columna `int` (0072) --
+    // `Number.isInteger` es el mismo chequeo, sin ese agujero.
+    if (!Number.isInteger(scoreMine) || !Number.isInteger(scoreTheirs)) {
+      throw new EdgeError('El marcador tiene que ser un número entero.')
     }
   }
 
@@ -688,6 +706,12 @@ export async function createCasualMatch(
   const { data: me, error: idError } = await supabase.rpc('my_player_id')
   if (idError !== null) throw new EdgeError(`No se pudo identificar tu cuenta: ${idError.message}`)
   if (me === null) throw new EdgeError('Entrá con tu cuenta para cargar un partido.')
+  // Mismo guard que `requestFriendship` más arriba, y por el mismo motivo:
+  // sin esto, `/amigos/{miPropioId}` -- una URL que cualquiera puede tipear,
+  // y donde `page.tsx` monta este formulario igual -- falla contra la base
+  // (`casual_ordered` o la falta de amistad con uno mismo) con un mensaje que
+  // no describe lo que pasó.
+  if (me === friendPlayerId) throw new EdgeError('No podés cargar un partido con vos mismo.')
 
   const parsed = parseCasualInput(input)
   // Mismo cálculo de orden canónico que `requestFriendship` más arriba --
@@ -721,6 +745,15 @@ export async function createCasualMatch(
     if (error.code === '42501') {
       throw new EdgeError('Para cargar un partido con esta persona, tienen que ser amigos aceptados.')
     }
+    // 22P02: `friendPlayerId` no castea a uuid -- mismo caso que
+    // `requestFriendship` más arriba, verificado igual acá (`friendPlayerId`
+    // viaja en un input oculto, así que sólo llega por un POST armado a
+    // mano, no por el flujo real). NO se traduce `23503` (uuid bien formado
+    // sin jugador): verificado en vivo que un `friendPlayerId` inexistente
+    // da 42501 primero, nunca 23503 -- no puede existir una amistad
+    // aceptada con un jugador que no existe, así que esa rama de la política
+    // de arriba ya lo frena antes de llegar al FK.
+    if (error.code === '22P02') throw new EdgeError('Ese ID no es válido.')
     throw new EdgeError(`No se pudo cargar el partido: ${error.message}`)
   }
   if (data === null) throw new EdgeError('No se pudo cargar el partido: no llegó ninguna fila.')
@@ -741,12 +774,19 @@ export async function createCasualMatch(
  * pertenencia: `casual_matches_read` (0072) ya acota a
  * `my_player_id() in (player_a, player_b)`, así que un tercero recibe cero
  * filas ACÁ, antes de intentar ningún UPDATE.
+ *
+ * Devuelve el `friendPlayerId` que dedujo -- lo necesita `editCasualMatch`
+ * (`app/amigos/actions.ts`) para el redirect: usar el valor del `<form>` ahí
+ * en vez de éste sería tener DOS fuentes para el mismo dato (una para
+ * escribir, otra para redirigir), y las dos podrían divergir con un formulario
+ * armado a mano -- consecuencia menor (redirect a la página equivocada
+ * después de una escritura correcta) pero evitable con esto.
  */
 export async function updateCasualMatch(
   supabase: Client,
   matchId: string,
   input: CasualMatchInput,
-): Promise<void> {
+): Promise<string> {
   const { data: me, error: idError } = await supabase.rpc('my_player_id')
   if (idError !== null) throw new EdgeError(`No se pudo identificar tu cuenta: ${idError.message}`)
   if (me === null) throw new EdgeError('Entrá con tu cuenta para editar un partido.')
@@ -756,7 +796,13 @@ export async function updateCasualMatch(
     .select('player_a, player_b')
     .eq('id', matchId)
     .maybeSingle()
-  if (filaError !== null) throw new EdgeError(`No se pudo leer el partido: ${filaError.message}`)
+  // 22P02: `matchId` no castea a uuid -- llega en un input oculto, así que
+  // sólo un POST armado a mano lo manda mal formado (verificado igual que en
+  // `createCasualMatch`: mismo código, mismo mensaje).
+  if (filaError !== null) {
+    if (filaError.code === '22P02') throw new EdgeError('Ese ID no es válido.')
+    throw new EdgeError(`No se pudo leer el partido: ${filaError.message}`)
+  }
   if (fila === null) {
     throw new EdgeError('No se pudo editar: el partido no existe o no te corresponde.')
   }
@@ -799,6 +845,7 @@ export async function updateCasualMatch(
   if (count === 0) {
     throw new EdgeError('No se pudo editar: el partido no existe o no te corresponde.')
   }
+  return friendPlayerId
 }
 
 /**
@@ -809,22 +856,46 @@ export async function updateCasualMatch(
  */
 export async function deleteCasualMatch(supabase: Client, matchId: string): Promise<void> {
   const { error, count } = await supabase.from('casual_matches').delete({ count: 'exact' }).eq('id', matchId)
-  if (error !== null) throw new EdgeError(`No se pudo borrar el partido: ${error.message}`)
+  if (error !== null) {
+    // 22P02: mismo caso que en `updateCasualMatch` -- `matchId` mal formado,
+    // sólo alcanzable por un POST armado a mano.
+    if (error.code === '22P02') throw new EdgeError('Ese ID no es válido.')
+    throw new EdgeError(`No se pudo borrar el partido: ${error.message}`)
+  }
   if (count === 0) {
     throw new EdgeError('No se pudo borrar: el partido no existe o no te corresponde.')
   }
 }
 
 /**
- * Los deportes que el caller ya cargó, para sugerirlos en el `datalist` de
- * "Cargar partido" (diseño §4.1) -- la normalización la hace la PANTALLA, no
- * un catálogo nuevo: sin esta sugerencia, "Fifa" y "FIFA" parten el
- * historial en dos sin que nadie lo note.
+ * Los deportes de TODOS los partidos casuales que jugó el caller, para
+ * sugerirlos en el `datalist` de "Cargar partido" (diseño §4.1) -- la
+ * normalización la hace la PANTALLA, no un catálogo nuevo: sin esta
+ * sugerencia, "Fifa" y "FIFA" parten el historial en dos sin que nadie lo
+ * note.
  *
- * Alcance: TODOS los partidos casuales del caller, con cualquier amigo -- no
- * sólo con `friendPlayerId` de la pantalla en la que está parado. Es lo que
- * "ya usaste" quiere decir en la frase del diseño, y es más útil: consistencia
- * de nombre entre amigos distintos es justamente el problema que esto evita.
+ * Dos cosas que el nombre de la función no dice, y que importa dejar
+ * escritas:
+ *
+ * 1. **No es "lo que el caller ESCRIBIÓ"**, es "lo que aparece en un partido
+ *    donde el caller jugó". El brief decía "los `sport` que ya CARGÓ quien
+ *    escribe" -- pero un deporte que el AMIGO cargó, en un partido donde el
+ *    caller también participa, sale igual acá. Es defendible (la consistencia
+ *    de nombre entre partidos es justamente el problema que esto evita) y es
+ *    la lectura más simple de la tabla, pero es una interpretación, no lo que
+ *    decía el brief textualmente.
+ * 2. Alcance: CUALQUIER amigo, no sólo `friendPlayerId` de la pantalla en la
+ *    que está parado -- es lo que "ya usaste" quiere decir en la frase del
+ *    diseño.
+ *
+ * ponytail: pasa TODAS las filas casuales del caller por `assertComplete`
+ * (el guard de truncado, `db/friends.ts` arriba) antes de dedup+`sort` en JS
+ * -- no hay `distinct` de PostgREST. El techo real es el mismo 1000 de
+ * siempre (`PGRST_DB_MAX_ROWS`), heredado de `assertComplete`, no nuevo de
+ * esta función. Pasado eso, la página del amigo entera revienta al pedir
+ * `sportsUsedBy` en vez de degradar (sin sugerencias). Si un caller llega a
+ * mil partidos casuales cargados: `select distinct sport` del lado de
+ * Postgres, o cortar la consulta con un `.limit()`.
  *
  * Mismo `.or()` que ya usa este archivo en los tests (`friends.db.test.ts`)
  * para "amistades donde soy cualquiera de los dos lados" -- PostgREST no

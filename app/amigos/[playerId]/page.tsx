@@ -2,8 +2,9 @@ import { notFound } from 'next/navigation'
 import { historyWith, sportsUsedBy } from '@/db/friends'
 import { playerNames } from '@/db/read'
 import { serverClient } from '@/db/server'
+import { loadCasualMatch } from '../actions'
 import { Historial } from '../historial'
-import { CargarPartido } from './cargar'
+import { CasualForm } from './cargar'
 
 interface PageProps {
   params: Promise<{ playerId: string }>
@@ -42,7 +43,13 @@ export default async function AmigoPage({ params }: PageProps) {
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-lg flex-col gap-4 bg-bg px-5 pb-6 text-text">
       <Historial nombre={nombre} friendPlayerId={playerId} partidos={partidos} />
-      <CargarPartido friendPlayerId={playerId} friendName={nombre} sports={sports} />
+      <CasualForm
+        friendPlayerId={playerId}
+        friendName={nombre}
+        sports={sports}
+        action={loadCasualMatch}
+        submitLabel="Cargar partido"
+      />
     </main>
   )
 }

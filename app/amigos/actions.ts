@@ -100,13 +100,23 @@ export async function loadCasualMatch(_state: CasualFormState, formData: FormDat
   redirect(`/amigos/${friendPlayerId}`)
 }
 
-/** Edita un partido casual existente -- mismo patrón que `loadCasualMatch`. */
+/**
+ * Edita un partido casual existente -- mismo patrón que `loadCasualMatch`.
+ *
+ * El redirect usa el `friendPlayerId` que DEVUELVE `updateCasualMatch`, no el
+ * del `<form>` (que igual viaja, para el hidden field que comparte con
+ * `loadCasualMatch`, pero esta action no lo lee): son dos fuentes para el
+ * mismo dato, una para escribir y otra para redirigir, y un formulario
+ * armado a mano podría hacerlas divergir -- consecuencia menor (redirect a
+ * la página equivocada después de una escritura correcta), pero evitable
+ * leyendo una sola vez.
+ */
 export async function editCasualMatch(_state: CasualFormState, formData: FormData): Promise<CasualFormState> {
-  const friendPlayerId = String(formData.get('friendPlayerId') ?? '')
   const matchId = String(formData.get('matchId') ?? '')
+  let friendPlayerId: string
   try {
     const supabase = await serverClient()
-    await updateCasualMatch(supabase, matchId, casualInputFrom(formData))
+    friendPlayerId = await updateCasualMatch(supabase, matchId, casualInputFrom(formData))
   } catch (error) {
     if (!(error instanceof EdgeError)) throw error
     return { error: error.message }

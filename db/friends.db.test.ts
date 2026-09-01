@@ -1445,7 +1445,12 @@ describe('createCasualMatch', () => {
       (e: unknown) => e,
     )
     expect(error).toBeInstanceOf(EdgeError)
-    expect((error as EdgeError).message).not.toContain('42501')
+    // Fix round 1, Important 1: `not.toContain('42501')` es vacuamente
+    // cierto -- PostgREST nunca mete el SQLSTATE en `error.message`, sale en
+    // `error.code`, así que esa aserción pasaba para CUALQUIER rechazo, no
+    // sólo el de la amistad. Pinnear el mensaje es lo único que prueba que
+    // ESTE es el motivo.
+    expect((error as EdgeError).message).toContain('amigos aceptados')
   })
 
   it('un marcador a medias se rechaza con un mensaje para humanos, no un 23514 crudo', async () => {
@@ -1459,7 +1464,11 @@ describe('createCasualMatch', () => {
       entradaCasual({ scoreMine: '3', scoreTheirs: '' }),
     ).catch((e: unknown) => e)
     expect(error).toBeInstanceOf(EdgeError)
-    expect((error as EdgeError).message).not.toContain('23514')
+    // Fix round 1, Important 2: `not.toContain('23514')` es vacuamente
+    // cierto por la misma razón que el de arriba -- el SQLSTATE nunca vive en
+    // `.message`. Pinnear el texto real es lo único que prueba que el mensaje
+    // es legible para una persona, que es lo que el título del test afirma.
+    expect((error as EdgeError).message).toContain('los dos números')
 
     // Nada se insertó: el rechazo es ANTES de tocar la base -- `parseCasualInput`
     // corre antes que cualquier `.insert()`.
@@ -1468,10 +1477,13 @@ describe('createCasualMatch', () => {
   })
 
   it('un equipo vacío no rompe contra el CHECK -- se guarda como null, no como string vacío', async () => {
-    // `casual_authors_play`/`team_a` (0072): `length(trim('')) > 0` es falso,
-    // así que un `''` sin normalizar tira 23514 en el caso MÁS común del
-    // formulario (nadie carga equipo en pádel). Prueba la normalización, no
-    // sólo que no explote.
+    // Fix round 1, Minor 7: el comentario original citaba `casual_authors_play`
+    // -- ese es el check de pertenencia de `created_by`/`updated_by` (0072:51-53),
+    // no tiene nada que ver con `team_a`. El que se ejercita acá es el CHECK
+    // sin nombre `team_a is null or length(trim(team_a)) > 0` (0072:27):
+    // `length(trim('')) > 0` es falso, así que un `''` sin normalizar tira
+    // 23514 en el caso MÁS común del formulario (nadie carga equipo en
+    // pádel). Prueba la normalización, no sólo que no explote.
     const uno = await createTestUser()
     const dos = await createTestUser()
     await amistadAceptada(uno.playerId, dos.playerId)
@@ -1489,6 +1501,63 @@ describe('createCasualMatch', () => {
     expect(fila?.team_a).toBeNull()
     expect(fila?.team_b).toBeNull()
   })
+
+  // Fix round 1, Minor 4: `CASUAL_DATE` sólo validaba la FORMA
+  // (`\d{4}-\d{2}-\d{2}`), no que la fecha exista -- un `<input type="date">`
+  // nunca manda un 31 de febrero, pero un POST armado a mano sí, y sin este
+  // chequeo llegaba a Postgres como `date/time field value out of range`, el
+  // mismo tipo de mensaje crudo que `parseCasualInput` existe para evitar.
+  it('una fecha que no existe en el calendario se rechaza con un mensaje legible, no el error crudo de Postgres', async () => {
+    const uno = await createTestUser()
+    const dos = await createTestUser()
+    await amistadAceptada(uno.playerId, dos.playerId)
+
+    const error: unknown = await createCasualMatch(
+      uno.client,
+      dos.playerId,
+      entradaCasual({ playedOn: '2026-02-31' }),
+    ).catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(EdgeError)
+    expect((error as EdgeError).message).toBe('Elegí una fecha real.')
+  })
+
+  // Fix round 1, Minor 4 (marcador): `Number.isFinite` dejaba pasar `3.5`
+  // hacia `score_a`/`score_b`, columnas `int` (0072).
+  it('un marcador con decimales se rechaza -- la columna es un entero', async () => {
+    const uno = await createTestUser()
+    const dos = await createTestUser()
+    await amistadAceptada(uno.playerId, dos.playerId)
+
+    const error: unknown = await createCasualMatch(
+      uno.client,
+      dos.playerId,
+      entradaCasual({ scoreMine: '3.5', scoreTheirs: '1' }),
+    ).catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(EdgeError)
+    expect((error as EdgeError).message).toContain('número entero')
+  })
+
+  // Fix round 1, Minor 5: mismo guard que `requestFriendship` ya tiene
+  // (`no deja pedirse amistad a uno mismo`, arriba) y por el mismo motivo --
+  // `/amigos/{miPropioId}` es una URL que cualquiera puede tipear, y
+  // `page.tsx` monta el formulario ahí igual.
+  it('no deja cargar un partido con uno mismo', async () => {
+    const uno = await createTestUser()
+    await expect(createCasualMatch(uno.client, uno.playerId, entradaCasual())).rejects.toThrow(EdgeError)
+  })
+
+  // Fix round 1, Minor 6: `requestFriendship` traduce un uuid mal formado a
+  // un mensaje legible (test "un uuid mal formado da un mensaje legible",
+  // arriba) -- `createCasualMatch` no lo hacía. `friendPlayerId` viaja en un
+  // input oculto, así que sólo un POST armado a mano lo manda así.
+  it('un friendPlayerId mal formado da un mensaje legible, no el error crudo de Postgres', async () => {
+    const uno = await createTestUser()
+    const error: unknown = await createCasualMatch(uno.client, 'no-es-un-uuid', entradaCasual()).catch(
+      (e: unknown) => e,
+    )
+    expect(error).toBeInstanceOf(EdgeError)
+    expect((error as EdgeError).message).toBe('Ese ID no es válido.')
+  })
 })
 
 describe('updateCasualMatch', () => {
@@ -1501,7 +1570,15 @@ describe('updateCasualMatch', () => {
     // `dos` NO cargó el partido -- es la contraparte, editando (§3.1).
     // `outcome: 'lost'` desde la perspectiva de `dos`: el mismo partido que
     // para `uno` fue "ganaste vos" pasa a guardarse como "ganó `uno`".
-    await updateCasualMatch(dos.client, matchId, entradaCasual({ outcome: 'lost', scoreMine: '1', scoreTheirs: '3' }))
+    const friendPlayerId = await updateCasualMatch(
+      dos.client,
+      matchId,
+      entradaCasual({ outcome: 'lost', scoreMine: '1', scoreTheirs: '3' }),
+    )
+    // Fix round 1, Minor 11: el valor que `editCasualMatch` (`app/amigos/actions.ts`)
+    // usa para el redirect. Desde la perspectiva de `dos` (quien editó), "el
+    // amigo" es `uno`.
+    expect(friendPlayerId).toBe(uno.playerId)
 
     const { data: fila } = await adminClient()
       .from('casual_matches')
@@ -1522,7 +1599,15 @@ describe('updateCasualMatch', () => {
     const error: unknown = await updateCasualMatch(ajeno.client, matchId, entradaCasual({ outcome: 'drew' })).catch(
       (e: unknown) => e,
     )
+    // Fix round 1, Important 3: `toBeInstanceOf(EdgeError)` sólo prueba que
+    // ALGO se rechazó -- todo camino de rechazo de `updateCasualMatch` tira
+    // `EdgeError` (uuid mal formado, partido inexistente, marcador a medias),
+    // así que esto pasaba igual si `ajeno` fuera rechazado por la razón
+    // equivocada. Este test nunca llega a `casual_matches_update`: el
+    // `select` previo (`db/friends.ts`) ya devuelve `null` para un no
+    // miembro, y ESE es el motivo que hay que pinnear.
     expect(error).toBeInstanceOf(EdgeError)
+    expect((error as EdgeError).message).toContain('no existe o no te corresponde')
 
     const { data: intacto } = await adminClient()
       .from('casual_matches')
@@ -1545,7 +1630,9 @@ describe('updateCasualMatch', () => {
       entradaCasual({ scoreMine: '', scoreTheirs: '5' }),
     ).catch((e: unknown) => e)
     expect(error).toBeInstanceOf(EdgeError)
-    expect((error as EdgeError).message).not.toContain('23514')
+    // Fix round 1, Important 2 (lado de `updateCasualMatch`): mismo defecto
+    // que su par en `createCasualMatch` -- `not.toContain` vacuamente cierto.
+    expect((error as EdgeError).message).toContain('los dos números')
 
     // `score_a` no es necesariamente "el de `uno`" -- depende de si `uno`
     // cayó del lado `a` o `b` en el orden canónico (0072), que se decide por
@@ -1558,6 +1645,18 @@ describe('updateCasualMatch', () => {
       .single()
     const scoreDeUno = intacto?.player_a === uno.playerId ? intacto?.score_a : intacto?.score_b
     expect(scoreDeUno).toBe(3)
+  })
+
+  // Fix round 1, Minor 6: mismo defecto que `createCasualMatch` -- un
+  // `matchId` mal formado (el hidden field de `editCasualMatch`) llegaba
+  // como el error crudo de Postgres.
+  it('un matchId mal formado da un mensaje legible, no el error crudo de Postgres', async () => {
+    const uno = await createTestUser()
+    const error: unknown = await updateCasualMatch(uno.client, 'no-es-un-uuid', entradaCasual()).catch(
+      (e: unknown) => e,
+    )
+    expect(error).toBeInstanceOf(EdgeError)
+    expect((error as EdgeError).message).toBe('Ese ID no es válido.')
   })
 })
 
@@ -1586,6 +1685,15 @@ describe('deleteCasualMatch', () => {
 
     const { data: sigue } = await adminClient().from('casual_matches').select('id').eq('id', matchId)
     expect(sigue).toEqual([{ id: matchId }])
+  })
+
+  // Fix round 1, Minor 6: mismo defecto -- `matchId` mal formado en el botón
+  // "Borrar" (`removeCasualMatch`, un hidden field también).
+  it('un matchId mal formado da un mensaje legible, no el error crudo de Postgres', async () => {
+    const uno = await createTestUser()
+    const error: unknown = await deleteCasualMatch(uno.client, 'no-es-un-uuid').catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(EdgeError)
+    expect((error as EdgeError).message).toBe('Ese ID no es válido.')
   })
 })
 

@@ -2,7 +2,7 @@
 
 import { useActionState, useId, useState, type ReactNode } from 'react'
 import type { CasualMatch } from '@/db/friends'
-import { loadCasualMatch, editCasualMatch, removeCasualMatch, type CasualFormState } from '../actions'
+import { editCasualMatch, removeCasualMatch, type CasualFormState } from '../actions'
 
 const INITIAL_STATE: CasualFormState = { error: null }
 
@@ -232,32 +232,6 @@ export function CasualForm({
         )}
       </div>
     </form>
-  )
-}
-
-/**
- * El formulario de "cargar partido nuevo", montado una vez arriba de
- * `Historial` (`app/amigos/[playerId]/page.tsx`). Envoltorio fino sobre
- * `CasualForm` para que la página no tenga que conocer `loadCasualMatch` ni
- * el copy del botón.
- */
-export function CargarPartido({
-  friendPlayerId,
-  friendName,
-  sports,
-}: {
-  friendPlayerId: string
-  friendName: string
-  sports: readonly string[]
-}) {
-  return (
-    <CasualForm
-      friendPlayerId={friendPlayerId}
-      friendName={friendName}
-      sports={sports}
-      action={loadCasualMatch}
-      submitLabel="Cargar partido"
-    />
   )
 }
 

@@ -250,6 +250,66 @@ modela.
 
 ---
 
+### 4.4 La pantalla es UNA lista cronológica, con detalle de cada partido
+
+Decidido el 01/09/2026, y lo define la frase del dueño del producto mejor que
+cualquier especificación:
+
+> *"la idea es poder tener un historial para acordarte bien de cada partido que
+> jugaste."*
+
+**Un contador no te hace acordar de nada.** Así que el perfil del amigo lista
+los partidos, uno por uno, en orden cronológico, mezclando las dos fuentes:
+
+```
+14/8 · Pádel · torneo Los Jueves · ganaron 6-3
+23/8 · FIFA  · perdiste 2-1, jugaste con Boca
+```
+
+Lo que esto reemplaza: la primera versión mostraba dos números —*"Juntos 3 · En
+contra 12"*— y **eso no fue una decisión de diseño, fue lo único dibujable**:
+`historyWith` traía `matchId` y `matchdayId` y nada más, así que no había qué
+mostrar de un partido de torneo.
+
+**Los datos del lado del torneo ya existen y no hay que guardar nada nuevo**: la
+fecha está en `matchdays.played_on` y el resultado en `match_sets`. Es un join,
+no un modelo nuevo.
+
+**Y lo que NO se hace, a propósito: sumar los casuales al contador de "En
+contra".** Tres derrotas al FIFA convertidas en *"En contra 15"* tiran el
+marcador, el equipo y el deporte — justamente los datos que §4.2 existe para
+guardar. Sería pagar por guardarlos y después descartarlos al mostrarlos.
+
+La distinción compañero-vs-rival (§5.3) no desaparece: pasa a ser un dato **de
+cada fila** en vez del criterio que parte la pantalla. Un partido casual es
+siempre "en contra", porque son dos personas (§7).
+
+### 4.5 Cargar un partido casual exige una amistad ACEPTADA
+
+Esto no estaba en el diseño y **es un agujero de acoso**, encontrado explorando
+el plan 2.
+
+Leer el historial no chequea amistad, y está bien: la RLS de `matches` ya acota
+todo a las temporadas donde el que consulta participa, así que pedir el
+historial de un desconocido devuelve cero partidos. No hay nada que filtrar.
+
+**El partido de torneo tiene esa RLS aguas arriba respaldándolo. El casual no
+tiene ninguna.** Si la política de insert sólo pidiera "soy uno de los dos",
+cualquiera podría cargar *"le gané 5-0 a [quien sea]"* contra el `player_id` de
+cualquier persona de la app — y esa persona lo vería en su historial, porque la
+lectura está abierta a propósito.
+
+Entonces: **el insert exige que exista una fila de `friendships` aceptada entre
+los dos**. La amistad deja de ser sólo el mecanismo por el que descubrís el
+`playerId` de alguien y pasa a ser, para escribir, una puerta.
+
+**Dejar de ser amigos no borra los partidos ya cargados.** Es historia, y la del
+torneo ya se comporta así. Por eso la fila del partido casual apunta a los dos
+`players` directamente y **no** por clave foránea a `friendships`: si apuntara
+ahí, romper la amistad se llevaría la historia puesta.
+
+---
+
 ## 5 · Lo medido — lo que hay que saber antes de escribir una línea
 
 Todo esto se verificó contra el árbol el 31/08/2026. Las primeras dos son
@@ -362,10 +422,11 @@ rankings**, así que no hay nada que agregarle. Los helpers de `core/side.ts`
 1. **Cómo se deshace una fusión.** Está identificado como riesgo y no diseñado.
 2. **Qué ve Juan cuando le aterrizan 20 partidos que no cargó.** Los ve, eso
    está decidido. Si además le llega algún aviso, no.
-3. **La forma exacta de la pantalla del amigo**, en particular si separa
-   "jugamos juntos" de "jugamos en contra" (§5.3).
-4. **Si el historial incluye los torneos donde jugaron pero no se enfrentaron
-   nunca.** Estuvieron en la misma temporada y no les tocó cruzarse: ¿aparece?
+
+> **Se cerraron dos (01/09/2026).** La forma de la pantalla, en §4.4. Y "si
+> aparece un torneo donde jugaron pero nunca se cruzaron" se contesta solo con
+> esa forma: si la pantalla lista partidos, un torneo sin partidos entre los dos
+> no tiene nada que listar. No aparece, y no hace falta una regla que lo diga.
 
 ---
 

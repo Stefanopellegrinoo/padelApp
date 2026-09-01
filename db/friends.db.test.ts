@@ -734,3 +734,171 @@ describe('friendsOf', () => {
     expect(amigos).toEqual([])
   })
 })
+
+// ── casual_matches (plan-historial-entre-amigos-2b, tarea 1) ────────────────
+// Sólo la tabla y su RLS -- todavía no hay `db/casual.ts` (tarea 2), así que
+// estos tests hablan con `casual_matches` directo, como los de `friendships`
+// de más arriba antes de que existiera esa capa. Todos por cliente
+// AUTENTICADO salvo el andamiaje de la amistad (crear la fila de
+// `friendships` en el estado que cada test necesita no es lo que se está
+// probando acá -- eso lo cubre `describe('friendships', ...)`).
+describe('casual_matches', () => {
+  it('dos amigos con amistad aceptada pueden cargar un partido casual', async () => {
+    const uno = await createTestUser()
+    const dos = await createTestUser()
+    const [a, b] =
+      uno.playerId < dos.playerId ? [uno.playerId, dos.playerId] : [dos.playerId, uno.playerId]
+    await adminClient()
+      .from('friendships')
+      .insert({
+        player_a: a,
+        player_b: b,
+        requested_by: uno.playerId,
+        accepted_at: new Date().toISOString(),
+      })
+
+    const { data, error } = await uno.client
+      .from('casual_matches')
+      .insert({
+        player_a: a,
+        player_b: b,
+        sport: 'FIFA',
+        played_on: '2026-08-30',
+        created_by: uno.playerId,
+        updated_by: uno.playerId,
+      })
+      .select('id')
+      .single()
+
+    expect(error).toBeNull()
+    expect(data).not.toBeNull()
+  })
+
+  // El test que cierra §4.5: sin ninguna fila de `friendships` entre los
+  // dos, el insert tiene que rebotar -- si esto pasara, cualquiera podría
+  // fabricar historial contra el `playerId` de un desconocido.
+  it('sin ninguna amistad, el insert se rechaza', async () => {
+    const uno = await createTestUser()
+    const dos = await createTestUser()
+    const [a, b] =
+      uno.playerId < dos.playerId ? [uno.playerId, dos.playerId] : [dos.playerId, uno.playerId]
+
+    const { data, error } = await uno.client
+      .from('casual_matches')
+      .insert({
+        player_a: a,
+        player_b: b,
+        sport: 'FIFA',
+        played_on: '2026-08-30',
+        created_by: uno.playerId,
+        updated_by: uno.playerId,
+      })
+      .select()
+
+    expect(data).toBeNull()
+    expect(error?.code).toBe('42501')
+  })
+
+  it('con la solicitud pendiente (sin aceptar), también se rechaza', async () => {
+    const uno = await createTestUser()
+    const dos = await createTestUser()
+    const [a, b] =
+      uno.playerId < dos.playerId ? [uno.playerId, dos.playerId] : [dos.playerId, uno.playerId]
+    // Pendiente: mismo insert que `friendships_request`, sin `accepted_at`.
+    await adminClient()
+      .from('friendships')
+      .insert({ player_a: a, player_b: b, requested_by: uno.playerId })
+
+    const { data, error } = await uno.client
+      .from('casual_matches')
+      .insert({
+        player_a: a,
+        player_b: b,
+        sport: 'FIFA',
+        played_on: '2026-08-30',
+        created_by: uno.playerId,
+        updated_by: uno.playerId,
+      })
+      .select()
+
+    expect(data).toBeNull()
+    expect(error?.code).toBe('42501')
+  })
+
+  it('un tercero no ve el partido casual de otros dos', async () => {
+    const uno = await createTestUser()
+    const dos = await createTestUser()
+    const ajeno = await createTestUser()
+    const [a, b] =
+      uno.playerId < dos.playerId ? [uno.playerId, dos.playerId] : [dos.playerId, uno.playerId]
+    await adminClient()
+      .from('friendships')
+      .insert({
+        player_a: a,
+        player_b: b,
+        requested_by: uno.playerId,
+        accepted_at: new Date().toISOString(),
+      })
+    const { data: creado } = await uno.client
+      .from('casual_matches')
+      .insert({
+        player_a: a,
+        player_b: b,
+        sport: 'FIFA',
+        played_on: '2026-08-30',
+        created_by: uno.playerId,
+        updated_by: uno.playerId,
+      })
+      .select('id')
+      .single()
+
+    // Chequeo positivo primero, mismo criterio que el resto del archivo: si
+    // la lectura estuviera cerrada para cualquiera (no sólo para quien no
+    // participa), `ajeno` también vería `[]` y este test pasaría sin haber
+    // probado el aislamiento.
+    const { data: propio } = await uno.client.from('casual_matches').select('id')
+    expect(propio).toEqual([{ id: creado!.id }])
+
+    const { data: ajenoVe } = await ajeno.client.from('casual_matches').select('id')
+    expect(ajenoVe).toEqual([])
+  })
+
+  it('nadie puede mover player_a con un update', async () => {
+    const uno = await createTestUser()
+    const dos = await createTestUser()
+    const otro = await createTestUser()
+    const [a, b] =
+      uno.playerId < dos.playerId ? [uno.playerId, dos.playerId] : [dos.playerId, uno.playerId]
+    await adminClient()
+      .from('friendships')
+      .insert({
+        player_a: a,
+        player_b: b,
+        requested_by: uno.playerId,
+        accepted_at: new Date().toISOString(),
+      })
+    const { data: creado } = await uno.client
+      .from('casual_matches')
+      .insert({
+        player_a: a,
+        player_b: b,
+        sport: 'FIFA',
+        played_on: '2026-08-30',
+        created_by: uno.playerId,
+        updated_by: uno.playerId,
+      })
+      .select('id')
+      .single()
+
+    // Lo frena el grant de columna, no una política: `player_a` no tiene
+    // permiso de UPDATE otorgado (0072), así que ni evalúa ninguna política.
+    const { data, error } = await uno.client
+      .from('casual_matches')
+      .update({ player_a: otro.playerId })
+      .eq('id', creado!.id)
+      .select()
+
+    expect(data).toBeNull()
+    expect(error?.code).toBe('42501')
+  })
+})

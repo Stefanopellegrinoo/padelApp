@@ -177,6 +177,93 @@ export type Database = {
           },
         ]
       }
+      casual_matches: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          played_on: string
+          player_a: string
+          player_b: string
+          score_a: number | null
+          score_b: number | null
+          sport: string
+          team_a: string | null
+          team_b: string | null
+          updated_at: string
+          updated_by: string
+          winner: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          played_on: string
+          player_a: string
+          player_b: string
+          score_a?: number | null
+          score_b?: number | null
+          sport: string
+          team_a?: string | null
+          team_b?: string | null
+          updated_at?: string
+          updated_by: string
+          winner?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          played_on?: string
+          player_a?: string
+          player_b?: string
+          score_a?: number | null
+          score_b?: number | null
+          sport?: string
+          team_a?: string | null
+          team_b?: string | null
+          updated_at?: string
+          updated_by?: string
+          winner?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "casual_matches_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "casual_matches_player_a_fkey"
+            columns: ["player_a"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "casual_matches_player_b_fkey"
+            columns: ["player_b"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "casual_matches_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "casual_matches_winner_fkey"
+            columns: ["winner"]
+            isOneToOne: false
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       discipline_entries: {
         Row: {
           created_at: string

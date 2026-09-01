@@ -1,3 +1,4 @@
+import { tallySets, type SetScore } from '@/core'
 import { EdgeError } from './errors'
 import type { Client } from './client'
 
@@ -18,30 +19,59 @@ export interface SharedMatch {
   matchdayId: string
   /** `true` si jugaron del mismo lado; `false` si se enfrentaron. */
   together: boolean
+  /** `matchdays.played_on`. `null` si la fecha no lo tiene cargado. */
+  playedOn: string | null
+  /** El número de fecha, para ordenar cuando `playedOn` es null. */
+  matchdayNumber: number
+  /** `'REGULAR'` o `'MASTERS'`. */
+  matchdayKind: string
+  /** El nombre del torneo, para que la fila diga de dónde salió. */
+  seasonName: string
+  /**
+   * Qué te pasó A VOS en ese partido. `null` cuando todavía no se cargó el
+   * resultado -- una fecha abierta tiene partidos sin sets. `together` y
+   * `outcome` conviven sin pisarse: de compañeros, es lo que le pasó a la
+   * PAREJA de los dos; enfrentados, es lo que te pasó a VOS contra él.
+   */
+  outcome: 'won' | 'lost' | 'drew' | null
+  /** Games tuyos y del otro lado, en el orden en que los mira quien consulta. */
+  score: { mine: number; theirs: number } | null
 }
 
 /**
- * Todos los partidos de torneo entre el caller y `friendPlayerId`.
+ * Todos los partidos de torneo entre el caller y `friendPlayerId`, con el
+ * detalle que la pantalla necesita para listarlos en orden -- fecha, torneo
+ * y resultado -- y no sólo agregarlos en dos contadores.
  *
- * UNA consulta, no una por fecha. `pairsAndMatchesOf` (db/read.ts:985) se
- * llama hoy adentro de un loop por fecha; acá eso sería un N+1 que crece con
- * cada temporada que jugaron juntos.
+ * CUATRO consultas de tamaño acotado, no una por partido:
+ * participantes → fechas → temporadas → sets. `pairsAndMatchesOf`
+ * (db/read.ts:985) se llama hoy adentro de un loop por fecha; acá eso sería
+ * un N+1 que crece con cada temporada que jugaron juntos.
+ *
+ * Fechas y temporadas van por IN + Map, no por un embed
+ * (`.select('..., seasons(name)')`): ningún `db/*.ts` de este repo arma un
+ * embed con hint de FK, por el mismo motivo que ya explica `friendsOf` más
+ * abajo -- es más aparato que una IN y un Map para el mismo resultado.
  *
  * No hace falta chequear que sean amigos ni que el caller sea quien dice: la
  * vista es `security_invoker`, así que la RLS de `matches` ya limita esto a
- * las temporadas en las que el caller participa (0071).
+ * las temporadas en las que el caller participa (0071); `matchdays`,
+ * `seasons` y `match_sets` tienen su propia RLS acotada al participante
+ * (`matchdays_read`, `seasons_read`, `match_sets_read`, 0002_rls.sql), así
+ * que las tres consultas nuevas heredan el mismo límite sin pedirlo.
  *
- * `count: 'exact'` y el guard de abajo, MISMO tripwire que `mySeasons`
- * (`db/read.ts:341-374`): PostgREST corta cada select en `PGRST_DB_MAX_ROWS`
- * (1000, `supabase/config.toml`) y no avisa. Acá es peor que en `mySeasons`
- * en dos sentidos: sin `.order()` no había ningún criterio para decidir qué
- * filas sobreviven el corte -- era arbitrario, corrida a corrida -- y el
- * filtro de abajo (`v.mio !== undefined && v.suyo !== undefined`) exige LAS
- * DOS filas de un partido; perder una sola (la del caller o la del amigo)
- * borra el partido entero del historial en silencio. El resultado nunca se
- * muestra fila por fila -- se agrega en "Juntos N · En contra M"
- * (`app/amigos/historial.tsx`) --, así que un corte no es una respuesta
- * parcial: es un número mal, con toda la confianza de uno bien.
+ * `count: 'exact'` y el guard de abajo, en LAS CUATRO consultas -- mismo
+ * tripwire que `mySeasons` (`db/read.ts:341-374`): PostgREST corta cada
+ * select en `PGRST_DB_MAX_ROWS` (1000, `supabase/config.toml`) y no avisa.
+ * En la primera es peor que en `mySeasons` en dos sentidos: sin `.order()`
+ * no había ningún criterio para decidir qué filas sobreviven el corte -- era
+ * arbitrario, corrida a corrida -- y el filtro de abajo
+ * (`v.mio !== undefined && v.suyo !== undefined`) exige LAS DOS filas de un
+ * partido; perder una sola (la del caller o la del amigo) borra el partido
+ * entero del historial en silencio. El resultado ya no se agrega sólo en
+ * "Juntos N · En contra M" -- Task 3 lo lista fila por fila --, así que un
+ * corte silencioso ahora también sería una fecha, un torneo o un resultado
+ * mal, con toda la confianza de uno bien.
  */
 export async function historyWith(
   supabase: Client,
@@ -54,12 +84,13 @@ export async function historyWith(
   if (idError !== null) throw new EdgeError(`No se pudo identificar tu cuenta: ${idError.message}`)
   if (me === null) throw new EdgeError('Entrá con tu cuenta para ver el historial.')
 
-  // UNA consulta. Trae las filas del caller y las del amigo, y el cruce se
-  // hace acá: PostgREST no expresa un self-join, y hacer una consulta por
-  // partido sería el N+1 que `pairsAndMatchesOf` (db/read.ts:985) ya tiene y
-  // que acá crecería con cada temporada compartida. El `.order()` no elige
-  // qué partido "importa más" -- sólo hace que, SI hay corte, sea el mismo
-  // corte en cada corrida, para que el guard de abajo sea reproducible.
+  // Consulta 1: participantes. Trae las filas del caller y las del amigo, y
+  // el cruce se hace acá: PostgREST no expresa un self-join, y hacer una
+  // consulta por partido sería el N+1 que `pairsAndMatchesOf` (db/read.ts:985)
+  // ya tiene y que acá crecería con cada temporada compartida. El `.order()`
+  // no elige qué partido "importa más" -- sólo hace que, SI hay corte, sea
+  // el mismo corte en cada corrida, para que el guard de abajo sea
+  // reproducible.
   const {
     data,
     error,
@@ -100,13 +131,130 @@ export async function historyWith(
 
   // Sólo los partidos donde están LOS DOS. Un partido donde jugué yo y el
   // amigo no, o al revés, no es un partido entre nosotros.
-  return [...porPartido.entries()]
+  const compartidos = [...porPartido.entries()]
     .filter(([, v]) => v.mio !== undefined && v.suyo !== undefined)
     .map(([matchId, v]) => ({
       matchId,
       matchdayId: v.matchdayId,
+      // El `.filter()` de arriba ya garantiza que `mio` está definido; el
+      // cast es sobre ESE hecho, no sobre un dato sin validar.
+      mySide: v.mio as string,
       together: v.mio === v.suyo,
     }))
+  if (compartidos.length === 0) return []
+
+  // Consulta 2: las fechas de esos partidos, con su temporada y su número
+  // -- `matchdayNumber` es lo único que ordena una fecha sin `played_on`
+  // cargado (columna nullable, 0001_schema.sql).
+  const matchdayIds = [...new Set(compartidos.map((c) => c.matchdayId))]
+  const {
+    data: matchdayRows,
+    error: matchdaysError,
+    count: matchdaysCount,
+  } = await supabase
+    .from('matchdays')
+    .select('id, number, kind, played_on, season_id', { count: 'exact' })
+    .in('id', matchdayIds)
+    .order('id', { ascending: true })
+  if (matchdaysError !== null) {
+    throw new EdgeError(`No se pudo leer el historial: ${matchdaysError.message}`)
+  }
+  if (matchdaysCount !== null && (matchdayRows ?? []).length < matchdaysCount) {
+    throw new EdgeError(
+      `No se pudo leer el historial completo (${(matchdayRows ?? []).length} de ${matchdaysCount}). Recargá la pantalla.`,
+    )
+  }
+  const matchdayById = new Map((matchdayRows ?? []).map((row) => [row.id, row]))
+
+  // Consulta 3: las temporadas de esas fechas -- ídem `friendsOf` más abajo,
+  // segunda consulta y cruce en JS en vez de un embed.
+  const seasonIds = [...new Set((matchdayRows ?? []).map((row) => row.season_id))]
+  const {
+    data: seasonRows,
+    error: seasonsError,
+    count: seasonsCount,
+  } = await supabase
+    .from('seasons')
+    .select('id, name', { count: 'exact' })
+    .in('id', seasonIds)
+    .order('id', { ascending: true })
+  if (seasonsError !== null) throw new EdgeError(`No se pudo leer el historial: ${seasonsError.message}`)
+  if (seasonsCount !== null && (seasonRows ?? []).length < seasonsCount) {
+    throw new EdgeError(
+      `No se pudo leer el historial completo (${(seasonRows ?? []).length} de ${seasonsCount}). Recargá la pantalla.`,
+    )
+  }
+  const seasonNameById = new Map((seasonRows ?? []).map((row) => [row.id, row.name]))
+
+  // Consulta 4: los sets de los partidos compartidos. Sin sets, el partido
+  // es una fecha abierta todavía sin resultado -- `outcome`/`score` quedan
+  // en null, no en un 0-0 inventado.
+  const matchIds = compartidos.map((c) => c.matchId)
+  const {
+    data: setRows,
+    error: setsError,
+    count: setsCount,
+  } = await supabase
+    .from('match_sets')
+    .select('match_id, games_a, games_b', { count: 'exact' })
+    .in('match_id', matchIds)
+    .order('match_id', { ascending: true })
+    .order('set_number', { ascending: true })
+  if (setsError !== null) throw new EdgeError(`No se pudo leer el historial: ${setsError.message}`)
+  if (setsCount !== null && (setRows ?? []).length < setsCount) {
+    throw new EdgeError(
+      `No se pudo leer el historial completo (${(setRows ?? []).length} de ${setsCount}). Recargá la pantalla.`,
+    )
+  }
+  const setsByMatch = new Map<string, SetScore[]>()
+  for (const row of setRows ?? []) {
+    const set = { gamesA: row.games_a, gamesB: row.games_b }
+    const bucket = setsByMatch.get(row.match_id)
+    if (bucket === undefined) setsByMatch.set(row.match_id, [set])
+    else bucket.push(set)
+  }
+
+  return compartidos.map(({ matchId, matchdayId, mySide, together }) => {
+    const matchday = matchdayById.get(matchdayId)
+    // Las tres consultas de arriba ya vinieron completas (los guards de
+    // arriba lo garantizan): que una fecha de `compartidos` no aparezca acá
+    // sería la vista o las tablas en desacuerdo entre sí, no un dato
+    // ausente -- mismo criterio que `requireColumn` arriba en este archivo.
+    if (matchday === undefined) {
+      throw new EdgeError(`No se pudo leer la fecha del partido ${matchId}.`)
+    }
+    const seasonName = seasonNameById.get(matchday.season_id)
+    if (seasonName === undefined) {
+      throw new EdgeError(`No se pudo leer el torneo de la fecha ${matchdayId}.`)
+    }
+
+    const sets = setsByMatch.get(matchId) ?? []
+    let outcome: SharedMatch['outcome'] = null
+    let score: SharedMatch['score'] = null
+    if (sets.length > 0) {
+      // `tallySets` (core/standings.ts): la ÚNICA definición de quién ganó
+      // un set y, con eso, un partido -- no se recalcula acá.
+      const { setsA, setsB, gamesA, gamesB } = tallySets(sets)
+      const mine = mySide === 'A' ? gamesA : gamesB
+      const theirs = mySide === 'A' ? gamesB : gamesA
+      score = { mine, theirs }
+      const misSets = mySide === 'A' ? setsA : setsB
+      const susSets = mySide === 'A' ? setsB : setsA
+      outcome = misSets > susSets ? 'won' : misSets < susSets ? 'lost' : 'drew'
+    }
+
+    return {
+      matchId,
+      matchdayId,
+      together,
+      playedOn: matchday.played_on,
+      matchdayNumber: matchday.number,
+      matchdayKind: matchday.kind,
+      seasonName,
+      outcome,
+      score,
+    }
+  })
 }
 
 // Un caso que este código maneja y conviene no "simplificar" después: con

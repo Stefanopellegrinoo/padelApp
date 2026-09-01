@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { defaultConfig, type SideSize } from '@/core'
 import { EdgeError } from './errors'
 import { historyWith, requestFriendship, acceptFriendship, friendsOf } from './friends'
-import { createMatchday, generatePairs, setAttendance } from './matchday'
+import { createMatchday, generatePairs, openMatchday, saveResult, setAttendance } from './matchday'
 import { adminClient } from './test/admin'
 import { createSeason } from './test/factories'
 import { createTestUser, type TestUser } from './test/users'
@@ -39,16 +39,27 @@ async function fillerPlayers(count: number): Promise<string[]> {
  * porque es literalmente el seed (`squadSeedOrder`, `db/season.ts:23-34`) y
  * el sorteo de la fecha 1 desempata por ese seed (`snapshotForMatchday`,
  * `core/snapshots.ts:24`, sin puntos previos que lo tapen).
+ *
+ * `abierta`, agregado para Task 2 (plan-historial-entre-amigos-2a): sin él,
+ * la fecha queda JUGADA de punta a punta -- parejas, partidos Y resultado --
+ * que es lo que promete el nombre del helper y lo que necesita el test que
+ * lee `outcome`/`score`. Con `abierta: true` se corta justo antes de cargar
+ * resultados: parejas y partidos armados, la fecha abierta, sin un solo set
+ * -- el caso real de una fecha que todavía se está jugando. No hay un
+ * segundo helper para esto: sería repetir temporada + fecha + parejas para
+ * variar sólo el último paso.
  */
 async function unaFechaJugada({
   admin,
   pairSize,
   squad,
+  abierta,
 }: {
   admin: TestUser
   pairSize: SideSize
   squad?: string[]
-}): Promise<{ matchId: string; matchdayId: string; entryIds: string[] }> {
+  abierta?: boolean
+}): Promise<{ matchId: string; matchdayId: string; seasonId: string; entryIds: string[] }> {
   const jugadores = squad ?? (await fillerPlayers(8))
   const { seasonId, entryIds, disciplineId } = await createSeason({
     admin,
@@ -67,19 +78,31 @@ async function unaFechaJugada({
     await setAttendance(admin.client, matchdayId, entryId, 'PLAYING')
   }
   await generatePairs(admin.client, matchdayId)
+  // `saveResult` exige la fecha OPEN (`match_sets_write`, 0002_rls.sql): sin
+  // este paso, cargar un resultado más abajo rebota con RLS en vez de guardar.
+  await openMatchday(admin.client, matchdayId)
 
   const db = adminClient()
-  const { data: match, error } = await db
-    .from('matches')
-    .select('id')
-    .eq('matchday_id', matchdayId)
-    .limit(1)
-    .single()
-  if (error || match === null) {
-    throw new Error(`No se pudo leer el partido de test: ${error?.message}`)
+  const { data: matches, error } = await db.from('matches').select('id').eq('matchday_id', matchdayId)
+  if (error || matches === null || matches.length === 0) {
+    throw new Error(`No se pudieron leer los partidos de test: ${error?.message}`)
   }
 
-  return { matchId: match.id, matchdayId, entryIds }
+  if (abierta !== true) {
+    // Un 4-1 cierra el set (`gamesPerSet: 4` de `defaultConfig`, tie-break):
+    // mismo marcador que usa `playAllMatches` en `db/cancel.db.test.ts`. A
+    // quién le toca ganar no importa acá -- ningún test de este archivo mira
+    // el resultado de un partido que no sea el compartido entre `admin` y
+    // `otro`, y ese SÍ sale con un resultado real, no un placeholder.
+    for (const match of matches) {
+      await saveResult(admin.client, match.id, [{ gamesA: 4, gamesB: 1 }])
+    }
+  }
+
+  const [primero] = matches
+  if (primero === undefined) throw new Error(`La fecha ${matchdayId} no generó partidos.`)
+
+  return { matchId: primero.id, matchdayId, seasonId, entryIds }
 }
 
 /** El partido de la fecha donde juegan LOS DOS jugadores dados (a los dos lados de un `match_participants`). */
@@ -150,6 +173,13 @@ async function partidoDeLosDos(matchdayId: string, a: string, b: string): Promis
  *   lados es COMPLETO (verificado en Task 3: 4 lados, 6 partidos, todos
  *   contra todos), la pareja de `admin` se cruza con la de `otro` en
  *   exactamente un partido de la fecha.
+ *
+ * `seasonName`, agregado para Task 2: el nombre de la temporada de
+ * `enContra` -- la única de las dos que los tests de Task 2 leen --, para
+ * comparar contra lo que `historyWith` diga que es el torneo de ese
+ * partido. `createSeason` (db/test/factories.ts) no lo devuelve -- sólo el
+ * id --, así que se relee con `service_role`, mismo criterio que el resto
+ * de este archivo usa para leer estado que la app no expone.
  */
 async function dosFechasConYContra({
   admin,
@@ -157,7 +187,7 @@ async function dosFechasConYContra({
 }: {
   admin: TestUser
   otro: TestUser
-}): Promise<{ juntos: string; enContra: string }> {
+}): Promise<{ juntos: string; enContra: string; seasonName: string }> {
   const rellenoJuntos = await fillerPlayers(6)
   const { matchdayId: fechaJuntos } = await unaFechaJugada({
     admin,
@@ -167,14 +197,23 @@ async function dosFechasConYContra({
   const juntos = await partidoDeLosDos(fechaJuntos, admin.playerId, otro.playerId)
 
   const rellenoEnContra = await fillerPlayers(6)
-  const { matchdayId: fechaEnContra } = await unaFechaJugada({
+  const { matchdayId: fechaEnContra, seasonId } = await unaFechaJugada({
     admin,
     pairSize: 2,
     squad: [admin.playerId, otro.playerId, ...rellenoEnContra],
   })
   const enContra = await partidoDeLosDos(fechaEnContra, admin.playerId, otro.playerId)
 
-  return { juntos, enContra }
+  const { data: season, error } = await adminClient()
+    .from('seasons')
+    .select('name')
+    .eq('id', seasonId)
+    .single()
+  if (error || season === null) {
+    throw new Error(`No se pudo leer la temporada de test: ${error?.message}`)
+  }
+
+  return { juntos, enContra, seasonName: season.name }
 }
 
 describe('friendships', () => {
@@ -441,6 +480,43 @@ describe('historyWith', () => {
 
     const historia = await historyWith(ajeno.client, otro.playerId)
     expect(historia).toEqual([])
+  })
+
+  it('trae la fecha, el torneo y el resultado de cada partido', async () => {
+    const admin = await createTestUser()
+    const otro = await createTestUser()
+    const { enContra, seasonName } = await dosFechasConYContra({ admin, otro })
+
+    const historia = await historyWith(admin.client, otro.playerId)
+    const partido = historia.find((m) => m.matchId === enContra)
+
+    expect(partido?.seasonName).toBe(seasonName)
+    expect(partido?.matchdayNumber).toBe(1)
+    expect(partido?.outcome).not.toBeNull()
+    expect(partido?.score).not.toBeNull()
+    // El marcador se mira desde quien consulta: los games propios primero.
+    expect(partido!.score!.mine + partido!.score!.theirs).toBeGreaterThan(0)
+  })
+
+  it('un partido sin resultado cargado sale con outcome y score en null', async () => {
+    const admin = await createTestUser()
+    const otro = await createTestUser()
+    const relleno = await fillerPlayers(6)
+    // Fecha ABIERTA (flag de `unaFechaJugada`): parejas y partidos armados,
+    // sin resultado -- el caso real de una fecha que todavía se está jugando.
+    const { matchdayId } = await unaFechaJugada({
+      admin,
+      pairSize: 2,
+      squad: [admin.playerId, otro.playerId, ...relleno],
+      abierta: true,
+    })
+    const matchId = await partidoDeLosDos(matchdayId, admin.playerId, otro.playerId)
+
+    const historia = await historyWith(admin.client, otro.playerId)
+    const partido = historia.find((m) => m.matchId === matchId)
+
+    expect(partido?.outcome).toBeNull()
+    expect(partido?.score).toBeNull()
   })
 })
 

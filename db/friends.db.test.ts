@@ -938,36 +938,41 @@ describe('casual_matches', () => {
       .select('id')
       .single()
 
-    // Corregido dos veces en la review round 2 -- la segunda vuelta encontró
-    // que la primera corrección no era aplicable a este repo. En orden:
+    // Corregido tres veces en la review round 2/3. En orden:
     //
     // 1. El payload `{ score_a: 99 }` (round 1) violaba `casual_score_pair`
     //    (0072) por su cuenta -- si las tres capas de RLS hubieran estado
     //    anuladas, ESE constraint habría parado igual la escritura, y el
     //    rojo no habría probado RLS. `score_b: 0` lo deja bien formado.
-    // 2. La propuesta de sacar `.eq(...)` para que el UPDATE quedara sin
-    //    `WHERE` (así Postgres aplicaría sólo `casual_matches_update.using`,
-    //    sin el AND con `casual_matches_read`) NO es viable acá: PostgREST
-    //    rechaza cualquier update/delete sin filtro con 400 ("UPDATE/DELETE
-    //    requires a WHERE clause") ANTES de llegar a Postgres -- verificado
-    //    en vivo. Y el AND con la política de SELECT tampoco depende de que
-    //    el filtro apunte a una fila puntual: se probó con `.eq('id', …)` Y
-    //    con un filtro "bulto" sobre `created_at` que no elige ninguna fila
-    //    en particular (`created_at >= '1970-01-01'`) -- en los dos casos
-    //    Postgres siguió exigiendo también el `using` de `casual_matches_
-    //    read`, incluso para EL DUEÑO legítimo de la fila (se le negó un
-    //    update propio con `casual_matches_read.using` saboteado a `false`,
-    //    aunque `casual_matches_update.using` lo dejaba pasar). Como
-    //    PostgREST no deja emitir un UPDATE/DELETE sin filtro, esta app NUNCA
-    //    puede invocar `casual_matches_update`/`_delete` sin que Postgres
-    //    también exija `casual_matches_read` -- las dos políticas están
-    //    combinadas por construcción en todo camino de escritura real, y
-    //    éste es el único test honesto para esa combinación.
-    // Sin `.select()`: un update de cero filas sin `RETURNING` da
-    // `data: null` igual que uno de cero filas por error -- no distingue
-    // nada. El positivo de abajo es la única prueba real, mismo criterio
-    // que el delete de más abajo.
-    await ajeno.client.from('casual_matches').update({ score_a: 99, score_b: 0 }).eq('id', creado!.id)
+    // 2. Sacar `.eq(...)` para lograr un UPDATE sin `WHERE` (round 2) no es
+    //    viable: `.eq('id', ...)` es obligatorio porque un update/delete sin
+    //    filtro da SQLSTATE 21000 (`cardinality_violation`) -- un error de
+    //    POSTGRES, no de PostgREST -- levantado por `safeupdate`, una
+    //    librería precargada en el rol `authenticator` de Supabase
+    //    (`pg_roles.rolconfig` de ese rol trae
+    //    `session_preload_libraries=supautils, safeupdate`, verificado
+    //    contra la base local). Round 2 decía "PostgREST lo rechaza antes de
+    //    llegar a Postgres" -- FALSO, el rechazo pasa DENTRO de Postgres, y
+    //    depende de un ajuste de rol de la plataforma que este repo ni fija
+    //    ni assertea en ningún lado: si `safeupdate` se sacara de
+    //    `authenticator`, esta protección se cae. Confirmado además con un
+    //    filtro "bulto" sobre `created_at` (no apunta a una fila puntual):
+    //    Postgres exigió igual `casual_matches_read.using`, incluso para EL
+    //    DUEÑO legítimo de la fila. Con `safeupdate` siempre exigiendo un
+    //    `WHERE`, esta app nunca invoca `casual_matches_update`/`_delete`
+    //    sin que Postgres también exija `casual_matches_read` -- éste es el
+    //    único test honesto para esa combinación (revisado también en
+    //    0072, junto a la política de lectura).
+    // 3. `data` en cero filas sin `RETURNING` da `null` igual que en un
+    //    error (round 2 lo asumía, pero nunca miró `error`) -- por eso el
+    //    positivo de abajo sigue siendo necesario, PERO `error` sí distingue:
+    //    un `using` que filtra da `error: null` (verificado: 204, sin
+    //    error), así que se assertea también.
+    const { error } = await ajeno.client
+      .from('casual_matches')
+      .update({ score_a: 99, score_b: 0 })
+      .eq('id', creado!.id)
+    expect(error).toBeNull()
 
     const { data: intacto } = await uno.client
       .from('casual_matches')
@@ -1004,22 +1009,26 @@ describe('casual_matches', () => {
       .select('id')
       .single()
 
-    // `.eq('id', ...)` es obligatorio, no una elección: PostgREST rechaza
-    // con 400 ("DELETE requires a WHERE clause") cualquier delete sin
-    // filtro, verificado en vivo -- así que "aislar" `casual_matches_delete.
-    // using` sacando el filtro no es alcanzable desde esta app. Y el AND con
-    // `casual_matches_read.using` tampoco depende de que el filtro sea por
-    // `id`: se probó también con un filtro "bulto" sobre `created_at` que no
-    // apunta a una fila puntual, y Postgres exigió igual las dos políticas
-    // -- le negó al DUEÑO legítimo de una fila su propio delete cuando sólo
-    // `casual_matches_read.using` estaba saboteado. Con PostgREST exigiendo
-    // SIEMPRE un filtro, esta app nunca ejecuta un DELETE sin que Postgres
-    // también exija `casual_matches_read` -- las dos políticas están
-    // combinadas por construcción en todo camino de escritura real.
+    // `.eq('id', ...)` es obligatorio, no una elección: un delete sin filtro
+    // da SQLSTATE 21000 (`cardinality_violation`), un error de POSTGRES
+    // levantado por `safeupdate` -- librería precargada en el rol
+    // `authenticator` (`session_preload_libraries=supautils, safeupdate` en
+    // `pg_roles.rolconfig`, verificado contra la base local), no un rechazo
+    // de PostgREST antes de tocar la base. Ver el comentario largo del
+    // update de arriba para el detalle completo -- mismo mecanismo acá:
+    // "aislar" `casual_matches_delete.using` sacando el filtro no es
+    // alcanzable desde esta app, y el AND con `casual_matches_read.using`
+    // tampoco depende de que el filtro sea por `id` (probado también con un
+    // filtro "bulto" sobre `created_at`, negándole al DUEÑO legítimo su
+    // propio delete). Las dos políticas están combinadas por construcción
+    // en todo camino de escritura real, mientras `safeupdate` siga en
+    // `authenticator` -- documentado también en 0072.
     //
-    // Un `delete` frenado por `using` no tira error, borra cero filas en
-    // silencio -- el positivo de abajo (releído con `uno`) es la prueba real.
-    await ajeno.client.from('casual_matches').delete().eq('id', creado!.id)
+    // Un `delete` frenado por `using` da `error: null` (verificado: 204) --
+    // se assertea, y el positivo de abajo (releído con `uno`) es la otra
+    // mitad de la prueba real.
+    const { error } = await ajeno.client.from('casual_matches').delete().eq('id', creado!.id)
+    expect(error).toBeNull()
 
     const { data: sigue } = await uno.client.from('casual_matches').select('id')
     expect(sigue).toEqual([{ id: creado!.id }])
@@ -1138,25 +1147,35 @@ describe('casual_matches', () => {
         created_by: uno.playerId,
         updated_by: uno.playerId,
       })
-      .select('id')
+      .select('id, updated_at')
       .single()
 
     // `dos` SÍ es dueño de la fila -- pasa el `using` del update sin
     // problema -- pero pone `updated_by: uno.playerId`, mintiendo que fue
     // `uno` quien editó. El `with check (updated_by = my_player_id())` lo
-    // frena a él solo, sin ayuda de ninguna otra capa.
-    await dos.client
+    // frena a él solo, sin ayuda de ninguna otra capa: acá SÍ hay error --
+    // a diferencia de un `using` que filtra en silencio, un `with check`
+    // que falla sobre una fila que el `using` YA aceptó tira 403/42501
+    // (verificado en vivo -- "new row violates row-level security policy").
+    const { error } = await dos.client
       .from('casual_matches')
       .update({ score_a: 4, score_b: 1, updated_by: uno.playerId })
       .eq('id', creado!.id)
+    expect(error?.code).toBe('42501')
 
+    // `updated_by` NO discrimina acá: ya nacía en `uno.playerId` (el insert)
+    // y el propio ataque también lo manda a `uno.playerId`, así que vale
+    // igual si el update pasó o no -- lo saqué. `updated_at`, que el
+    // TRIGGER (0072) avanza en cualquier update real, sí discrimina: si el
+    // ataque se hubiera colado, habría cambiado igual que en el positivo de
+    // "el trigger avanza updated_at" de abajo.
     const { data: intacto } = await uno.client
       .from('casual_matches')
-      .select('score_a, updated_by')
+      .select('score_a, updated_at')
       .eq('id', creado!.id)
       .single()
     expect(intacto?.score_a).toBeNull()
-    expect(intacto?.updated_by).toBe(uno.playerId)
+    expect(intacto?.updated_at).toBe(creado?.updated_at)
   })
 
   it('un miembro legítimo actualiza el partido, y el trigger avanza updated_at', async () => {

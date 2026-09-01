@@ -121,6 +121,23 @@ revoke execute on function public.casual_matches_touch_updated_at() from public,
 -- Terreno nuevo: toda política de este repo hasta acá se apoya en la
 -- temporada (`is_participant`, `is_season_admin`, 0002_rls.sql) -- acá no
 -- hay ninguna.
+--
+-- ESTA política y el `using` de `casual_matches_update`/`_delete` de más
+-- abajo están acoplados, y quien toque cualquiera de las tres tiene que
+-- saberlo: ningún camino de escritura real de esta app puede invocar un
+-- UPDATE/DELETE sin `WHERE` -- `safeupdate`, una librería precargada en el
+-- rol `authenticator` de Supabase (`session_preload_libraries=supautils,
+-- safeupdate` en `pg_roles.rolconfig` de ese rol), lo rechaza con SQLSTATE
+-- 21000 (`cardinality_violation`) DENTRO de Postgres antes de que la
+-- sentencia corra -- y todo UPDATE/DELETE con `WHERE` sobre esta tabla
+-- ANDea el `using` de la política de SELECT junto con el de su propio
+-- comando (verificado en vivo, incluso con un filtro que no apunta a una
+-- fila puntual). Como resultado, `casual_matches_update.using` y
+-- `casual_matches_delete.using` NUNCA actúan solos hoy: EL DÍA QUE ESTA
+-- política se ensanche, esos dos `using` pasan de redundantes a única
+-- puerta -- y ningún test de este repo los aísla, sólo los ejercita en
+-- combinación con ésta. Repetir esta advertencia si se toca cualquiera de
+-- las tres.
 create policy casual_matches_read on public.casual_matches
   for select to authenticated
   using (public.my_player_id() in (player_a, player_b));
@@ -166,7 +183,12 @@ create policy casual_matches_insert on public.casual_matches
 -- Actualizar: cualquiera de los dos puede editar (§3.1), y el `with check`
 -- sólo exige dejar asentado quién tocó último -- no repite la membresía
 -- porque `player_a`/`player_b` ya están congelados por el grant de columna
--- de arriba.
+-- de arriba. Y NO repite la condición 3 del insert: la puerta de amistad
+-- aceptada (§4.5) es de alta, no de por vida. Un miembro cuya amistad se
+-- borró después de cargar el partido lo sigue pudiendo editar -- es §4.5
+-- funcionando como se diseñó ("dejar de ser amigos no borra los partidos ya
+-- cargados. Es historia."), sólo que ese párrafo nunca dice que la puerta
+-- es sólo de insert, y acá queda dicho.
 create policy casual_matches_update on public.casual_matches
   for update to authenticated
   using (public.my_player_id() in (player_a, player_b))

@@ -49,7 +49,7 @@ describe('Historial', () => {
   // -- Torneo: sin cambios (Task 3, criterio 6: "la fila de torneo no cambió"). --
 
   it('lista cada partido con su fecha, su torneo y su marcador', () => {
-    const html = renderToStaticMarkup(Historial({ nombre: 'Juan', partidos: [partido()] }))
+    const html = renderToStaticMarkup(Historial({ nombre: 'Juan', friendPlayerId: 'amigo-1', partidos: [partido()] }))
     expect(html).toContain(matchdayDay('2026-08-14'))
     expect(html).toContain('Los Jueves')
     // El marcador COMO LO LEE una persona -- "6-3", no un dígito suelto que
@@ -64,7 +64,7 @@ describe('Historial', () => {
     // si el componente todavía ordenara acá, 'Nuevo' terminaría arriba.
     const viejo = partido({ matchId: 'v', playedOn: '2026-08-01', seasonName: 'Viejo' })
     const nuevo = partido({ matchId: 'n', playedOn: '2026-08-20', seasonName: 'Nuevo' })
-    const html = renderToStaticMarkup(Historial({ nombre: 'Juan', partidos: [viejo, nuevo] }))
+    const html = renderToStaticMarkup(Historial({ nombre: 'Juan', friendPlayerId: 'amigo-1', partidos: [viejo, nuevo] }))
     expect(html.indexOf('Viejo')).toBeLessThan(html.indexOf('Nuevo'))
   })
 
@@ -77,7 +77,7 @@ describe('Historial', () => {
     const numeroBajo = partido({ matchId: 'b', playedOn: null, matchdayNumber: 1, seasonName: 'Bajo' })
     const numeroAlto = partido({ matchId: 'a', playedOn: null, matchdayNumber: 5, seasonName: 'Alto' })
     const html = renderToStaticMarkup(
-      Historial({ nombre: 'Juan', partidos: [numeroBajo, numeroAlto] }),
+      Historial({ nombre: 'Juan', friendPlayerId: 'amigo-1', partidos: [numeroBajo, numeroAlto] }),
     )
     expect(html).toContain('Fecha 5')
     expect(html).toContain('Fecha 1')
@@ -89,13 +89,13 @@ describe('Historial', () => {
     // la que no tiene fecha: si algo todavía reordenara, este test lo agarra.
     const sinJugar = partido({ matchId: 's', playedOn: null, matchdayNumber: 99, seasonName: 'SinFecha' })
     const jugada = partido({ matchId: 'j', playedOn: '2026-01-01', seasonName: 'ConFecha' })
-    const html = renderToStaticMarkup(Historial({ nombre: 'Juan', partidos: [sinJugar, jugada] }))
+    const html = renderToStaticMarkup(Historial({ nombre: 'Juan', friendPlayerId: 'amigo-1', partidos: [sinJugar, jugada] }))
     expect(html.indexOf('SinFecha')).toBeLessThan(html.indexOf('ConFecha'))
   })
 
   it('dice si jugaron juntos, en cada fila', () => {
     const juntos = partido({ together: true })
-    const html = renderToStaticMarkup(Historial({ nombre: 'Juan', partidos: [juntos] }))
+    const html = renderToStaticMarkup(Historial({ nombre: 'Juan', friendPlayerId: 'amigo-1', partidos: [juntos] }))
     expect(html).toContain('Juntos')
     // De compañeros el resultado es el de LA PAREJA: "ganaron", no "ganaste".
     expect(html).toContain('Ganaron 6-3')
@@ -103,14 +103,14 @@ describe('Historial', () => {
 
   it('dice si se enfrentaron, en cada fila, con el resultado en primera persona', () => {
     const enContra = partido({ together: false, outcome: 'lost', score: { mine: 3, theirs: 6 } })
-    const html = renderToStaticMarkup(Historial({ nombre: 'Juan', partidos: [enContra] }))
+    const html = renderToStaticMarkup(Historial({ nombre: 'Juan', friendPlayerId: 'amigo-1', partidos: [enContra] }))
     expect(html).toContain('En contra')
     expect(html).toContain('Perdiste 3-6')
   })
 
   it('un empate de compañeros dice "empataron" -- el resultado de la pareja', () => {
     const empateJuntos = partido({ together: true, outcome: 'drew', score: { mine: 2, theirs: 2 } })
-    const html = renderToStaticMarkup(Historial({ nombre: 'Juan', partidos: [empateJuntos] }))
+    const html = renderToStaticMarkup(Historial({ nombre: 'Juan', friendPlayerId: 'amigo-1', partidos: [empateJuntos] }))
     expect(html).toContain('Juntos: Empataron 2-2')
   })
 
@@ -118,13 +118,13 @@ describe('Historial', () => {
     // Migración 0034 (`match_sets_no_draw` condicionado por `allows_draw`):
     // un empate es un resultado real y guardable, no un caso hipotético.
     const empateContra = partido({ together: false, outcome: 'drew', score: { mine: 2, theirs: 2 } })
-    const html = renderToStaticMarkup(Historial({ nombre: 'Juan', partidos: [empateContra] }))
+    const html = renderToStaticMarkup(Historial({ nombre: 'Juan', friendPlayerId: 'amigo-1', partidos: [empateContra] }))
     expect(html).toContain('En contra: Empataste 2-2')
   })
 
   it('un partido de torneo sin resultado no inventa uno', () => {
     const sinJugar = partido({ outcome: null, score: null })
-    const html = renderToStaticMarkup(Historial({ nombre: 'Juan', partidos: [sinJugar] }))
+    const html = renderToStaticMarkup(Historial({ nombre: 'Juan', friendPlayerId: 'amigo-1', partidos: [sinJugar] }))
     expect(html).not.toContain('Ganaste')
     expect(html).not.toContain('Perdiste')
     expect(html).not.toContain('Ganaron')
@@ -132,7 +132,7 @@ describe('Historial', () => {
   })
 
   it('con un amigo sin partidos dice qué falta, no una tabla vacía', () => {
-    const html = renderToStaticMarkup(Historial({ nombre: 'Juan', partidos: [] }))
+    const html = renderToStaticMarkup(Historial({ nombre: 'Juan', friendPlayerId: 'amigo-1', partidos: [] }))
     expect(html).toContain('Todavía no jugaron')
   })
 
@@ -143,6 +143,7 @@ describe('Historial', () => {
     const html = renderToStaticMarkup(
       Historial({
         nombre: 'Juan',
+        friendPlayerId: 'amigo-1',
         partidos: [
           partido({ matchId: '1', together: true }),
           partido({ matchId: '2', together: true }),
@@ -158,7 +159,7 @@ describe('Historial', () => {
 
   it('una fila de cada clase en la misma lista -- cada una con lo suyo', () => {
     const html = renderToStaticMarkup(
-      Historial({ nombre: 'Juan', partidos: [partido(), partidoCasual()] }),
+      Historial({ nombre: 'Juan', friendPlayerId: 'amigo-1', partidos: [partido(), partidoCasual()] }),
     )
     // Lo del torneo.
     expect(html).toContain('Los Jueves')
@@ -175,7 +176,7 @@ describe('Historial', () => {
   it('el orden entre las dos clases: un casual del 23/8 va arriba de un torneo del 14/8', () => {
     const casual = partidoCasual({ playedOn: '2026-08-23' })
     const torneo = partido({ playedOn: '2026-08-14' })
-    const html = renderToStaticMarkup(Historial({ nombre: 'Juan', partidos: [casual, torneo] }))
+    const html = renderToStaticMarkup(Historial({ nombre: 'Juan', friendPlayerId: 'amigo-1', partidos: [casual, torneo] }))
     // Las dos tienen que estar de verdad -- si una faltara, `indexOf` daría
     // -1 y "menor que" pasaría solo, sin haber probado nada sobre el orden.
     expect(html).toContain('FIFA')
@@ -185,7 +186,7 @@ describe('Historial', () => {
 
   it('la fila casual sin marcador no inventa uno', () => {
     const sinMarcador = partidoCasual({ score: null, teams: { mine: null, theirs: null } })
-    const html = renderToStaticMarkup(Historial({ nombre: 'Juan', partidos: [sinMarcador] }))
+    const html = renderToStaticMarkup(Historial({ nombre: 'Juan', friendPlayerId: 'amigo-1', partidos: [sinMarcador] }))
     expect(html).toContain('Perdiste')
     expect(html).not.toMatch(/Perdiste\s*\d/)
     expect(html).not.toContain('jugaste con')
@@ -197,14 +198,14 @@ describe('Historial', () => {
     // autoría -- el encabezado también dice "Juan", pero nunca precedido de
     // "editó ", así que esta aserción no puede pasar por casualidad.
     const editadoPorOtro = partidoCasual({ createdBy: 'Fede', updatedBy: 'Juan' })
-    const html = renderToStaticMarkup(Historial({ nombre: 'Juan', partidos: [editadoPorOtro] }))
+    const html = renderToStaticMarkup(Historial({ nombre: 'Juan', friendPlayerId: 'amigo-1', partidos: [editadoPorOtro] }))
     expect(html).toContain('Cargó Fede')
     expect(html).toContain('editó Juan')
   })
 
   it('cuando cargó y editó la misma persona, lo dice una sola vez', () => {
     const mismaPersona = partidoCasual({ createdBy: 'Fede', updatedBy: 'Fede' })
-    const html = renderToStaticMarkup(Historial({ nombre: 'Juan', partidos: [mismaPersona] }))
+    const html = renderToStaticMarkup(Historial({ nombre: 'Juan', friendPlayerId: 'amigo-1', partidos: [mismaPersona] }))
     expect(html).toContain('Cargó Fede')
     expect(html).not.toContain('editó')
   })
@@ -215,7 +216,7 @@ describe('Historial', () => {
     // Acá Juan (el amigo de esta pantalla) gana un partido que en el marcador
     // quedó 2-2.
     const empateConGanador = partidoCasual({ outcome: 'lost', score: { mine: 2, theirs: 2 } })
-    const html = renderToStaticMarkup(Historial({ nombre: 'Juan', partidos: [empateConGanador] }))
+    const html = renderToStaticMarkup(Historial({ nombre: 'Juan', friendPlayerId: 'amigo-1', partidos: [empateConGanador] }))
     expect(html).toContain('2-2')
     expect(html).toContain('Ganó Juan')
     expect(html).not.toContain('penales')

@@ -1,8 +1,9 @@
 import { notFound } from 'next/navigation'
-import { historyWith } from '@/db/friends'
+import { historyWith, sportsUsedBy } from '@/db/friends'
 import { playerNames } from '@/db/read'
 import { serverClient } from '@/db/server'
 import { Historial } from '../historial'
+import { CargarPartido } from './cargar'
 
 interface PageProps {
   params: Promise<{ playerId: string }>
@@ -20,14 +21,19 @@ interface PageProps {
  * `notFound()` cuando `playerId` no es un jugador real: `players_read` está
  * abierta (diseño §5.5), así que no encontrar el nombre es un link roto, no
  * un problema de permisos.
+ *
+ * `sportsUsedBy` (Task 4) es del CALLER, no de `playerId` -- las sugerencias
+ * del `datalist` de "Cargar partido" son para quien está tipeando, no para el
+ * amigo que se está mirando.
  */
 export default async function AmigoPage({ params }: PageProps) {
   const { playerId } = await params
   const supabase = await serverClient()
 
-  const [nombres, partidos] = await Promise.all([
+  const [nombres, partidos, sports] = await Promise.all([
     playerNames(supabase, [playerId]),
     historyWith(supabase, playerId),
+    sportsUsedBy(supabase),
   ])
 
   const nombre = nombres.get(playerId)
@@ -35,7 +41,8 @@ export default async function AmigoPage({ params }: PageProps) {
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-lg flex-col gap-4 bg-bg px-5 pb-6 text-text">
-      <Historial nombre={nombre} partidos={partidos} />
+      <Historial nombre={nombre} friendPlayerId={playerId} partidos={partidos} />
+      <CargarPartido friendPlayerId={playerId} friendName={nombre} sports={sports} />
     </main>
   )
 }

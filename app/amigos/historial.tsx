@@ -1,8 +1,17 @@
 import type { CasualMatch, SharedMatch, TournamentMatch } from '@/db/friends'
 import { matchdayDay } from '@/app/format'
+import { CasualMatchRow } from './[playerId]/cargar'
 
 export interface HistorialProps {
   nombre: string
+  /**
+   * El id del amigo de esta pantalla -- Task 4 lo necesita para Editar/Borrar
+   * (`CasualMatchRow`, `[playerId]/cargar.tsx`): el formulario de edición
+   * manda un `friendPlayerId` oculto, y borrar redirige a
+   * `/amigos/{friendPlayerId}`, no a la lista. No hace falta para las filas
+   * de torneo, pero `HistorialProps` es una sola interfaz para las dos clases.
+   */
+  friendPlayerId: string
   /**
    * Ya viene en el orden en que se tiene que dibujar -- `historyWith`
    * (`db/friends.ts`) mezcla torneo y casual y ordena por fecha descendente
@@ -93,7 +102,7 @@ function autoriaDe(partido: CasualMatch): string {
  * `historyWith` ya lo entrega por partido, así que agregarlo de nuevo en un
  * número sería tirar la mitad del dato que se acaba de pagar por leer.
  */
-export function Historial({ nombre, partidos }: HistorialProps) {
+export function Historial({ nombre, friendPlayerId, partidos }: HistorialProps) {
   return (
     <div className="flex flex-col gap-4 pt-4">
       <h1 className="text-[26px] font-extrabold tracking-[-.03em]">{nombre}</h1>
@@ -122,9 +131,11 @@ export function Historial({ nombre, partidos }: HistorialProps) {
 
             const equipo = equipoDe(partido)
             return (
-              <div
+              <CasualMatchRow
                 key={partido.matchId}
-                className="flex flex-col gap-1 rounded-field border-[1.5px] border-line p-[14px]"
+                friendPlayerId={friendPlayerId}
+                friendName={nombre}
+                partido={partido}
               >
                 <p className="text-[13.5px] font-[550] text-muted">
                   {matchdayDay(partido.playedOn)} · {partido.sport}
@@ -134,7 +145,7 @@ export function Historial({ nombre, partidos }: HistorialProps) {
                   {equipo !== null ? `, ${equipo}` : ''}
                 </p>
                 <p className="text-[13.5px] font-[550] text-muted">{autoriaDe(partido)}</p>
-              </div>
+              </CasualMatchRow>
             )
           })}
         </div>

@@ -6,8 +6,14 @@ import {
   requestFriendship,
   acceptFriendship,
   friendsOf,
+  createCasualMatch,
+  updateCasualMatch,
+  deleteCasualMatch,
+  sportsUsedBy,
   type SharedMatch,
   type TournamentMatch,
+  type CasualMatch,
+  type CasualMatchInput,
 } from './friends'
 import { createMatchday, generatePairs, openMatchday, saveResult, setAttendance } from './matchday'
 import { adminClient } from './test/admin'
@@ -1338,5 +1344,269 @@ describe('casual_matches', () => {
     // a incluirla sin que nadie la mande, esto seguiría en null-vs-null o
     // en el mismo valor, y es lo único en la suite que lo notaría.
     expect(actualizado?.updated_at).not.toBe(creado?.updated_at)
+  })
+})
+
+// ── camino de escritura (Task 4) ────────────────────────────────────────────
+// Todo lo de arriba habla con `casual_matches` directo -- fija la RLS. Acá
+// abajo se ejercita la CAPA que usa la pantalla: `createCasualMatch`,
+// `updateCasualMatch`, `deleteCasualMatch`. El riesgo de esta tarea es uno
+// solo (task-4-brief.md): que un camino de escritura se olvide de
+// `updated_by` y la garantía de §3.2 se pudra en silencio -- por eso cada uno
+// de los tres tiene su propio test que lo assertea explícitamente, no un
+// solo test de "editar" en general.
+
+async function amistadAceptada(a: string, b: string): Promise<void> {
+  const [playerA, playerB] = a < b ? [a, b] : [b, a]
+  const { error } = await adminClient()
+    .from('friendships')
+    .insert({ player_a: playerA, player_b: playerB, requested_by: a, accepted_at: new Date().toISOString() })
+  if (error !== null) throw new Error(`No se pudo sembrar la amistad de test: ${error.message}`)
+}
+
+// Los siete campos tal cual los manda un `<form>` -- string crudo, incluidos
+// los números y el marcador vacío (`''`, no `null`): es EXACTAMENTE lo que
+// `FormData.get()` entrega, y es a propósito que el helper no "ayude"
+// tipando mejor de lo que la capa de abajo puede confiar.
+function entradaCasual(overrides: Partial<CasualMatchInput> = {}): CasualMatchInput {
+  return {
+    sport: 'FIFA',
+    playedOn: '2026-08-30',
+    outcome: 'won',
+    scoreMine: '3',
+    scoreTheirs: '1',
+    teamMine: 'River',
+    teamTheirs: 'Boca',
+    ...overrides,
+  }
+}
+
+function comoCasual(partido: SharedMatch | undefined): CasualMatch {
+  if (partido === undefined) throw new Error('El partido casual no salió en el historial.')
+  if (partido.kind !== 'casual') throw new Error('El partido no es de kind "casual".')
+  return partido
+}
+
+describe('createCasualMatch', () => {
+  it('un partido cargado por el camino real aparece en historyWith, mezclado con uno de torneo', async () => {
+    const uno = await createTestUser()
+    const dos = await createTestUser()
+    await amistadAceptada(uno.playerId, dos.playerId)
+
+    // El de torneo: mismo andamiaje que la mezcla de Task 2/3, para probar
+    // que el camino de escritura de Task 4 se integra con lo que ya existía,
+    // no sólo que inserta una fila suelta.
+    const relleno = await fillerPlayers(6)
+    const { matchdayId } = await unaFechaJugada({
+      admin: uno,
+      pairSize: 2,
+      squad: [uno.playerId, dos.playerId, ...relleno],
+    })
+    const torneoMatchId = await partidoDeLosDos(matchdayId, uno.playerId, dos.playerId)
+
+    const matchId = await createCasualMatch(uno.client, dos.playerId, entradaCasual())
+
+    const historia = await historyWith(uno.client, dos.playerId)
+    const casual = comoCasual(historia.find((m) => m.matchId === matchId))
+    const torneo = historia.find((m) => m.matchId === torneoMatchId)
+    if (torneo === undefined) throw new Error('El partido de torneo no salió en el historial.')
+    expect(torneo.kind).toBe('tournament')
+
+    expect(casual.sport).toBe('FIFA')
+    expect(casual.playedOn).toBe('2026-08-30')
+    expect(casual.outcome).toBe('won')
+    expect(casual.score).toEqual({ mine: 3, theirs: 1 })
+    expect(casual.teams).toEqual({ mine: 'River', theirs: 'Boca' })
+  })
+
+  it('created_by y updated_by quedan en quien cargó -- el riesgo de esta tarea', async () => {
+    const uno = await createTestUser()
+    const dos = await createTestUser()
+    await amistadAceptada(uno.playerId, dos.playerId)
+
+    const matchId = await createCasualMatch(uno.client, dos.playerId, entradaCasual())
+
+    // Contra la fila real, no contra el nombre resuelto por `historyWith` --
+    // esta es la aserción que de verdad fija el riesgo de la tarea.
+    const { data: fila } = await adminClient()
+      .from('casual_matches')
+      .select('created_by, updated_by')
+      .eq('id', matchId)
+      .single()
+    expect(fila?.created_by).toBe(uno.playerId)
+    expect(fila?.updated_by).toBe(uno.playerId)
+  })
+
+  it('sin amistad aceptada, se rechaza con un mensaje legible, no un 42501 crudo', async () => {
+    const uno = await createTestUser()
+    const dos = await createTestUser()
+
+    const error: unknown = await createCasualMatch(uno.client, dos.playerId, entradaCasual()).catch(
+      (e: unknown) => e,
+    )
+    expect(error).toBeInstanceOf(EdgeError)
+    expect((error as EdgeError).message).not.toContain('42501')
+  })
+
+  it('un marcador a medias se rechaza con un mensaje para humanos, no un 23514 crudo', async () => {
+    const uno = await createTestUser()
+    const dos = await createTestUser()
+    await amistadAceptada(uno.playerId, dos.playerId)
+
+    const error: unknown = await createCasualMatch(
+      uno.client,
+      dos.playerId,
+      entradaCasual({ scoreMine: '3', scoreTheirs: '' }),
+    ).catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(EdgeError)
+    expect((error as EdgeError).message).not.toContain('23514')
+
+    // Nada se insertó: el rechazo es ANTES de tocar la base -- `parseCasualInput`
+    // corre antes que cualquier `.insert()`.
+    const { data: filas } = await uno.client.from('casual_matches').select('id')
+    expect(filas).toEqual([])
+  })
+
+  it('un equipo vacío no rompe contra el CHECK -- se guarda como null, no como string vacío', async () => {
+    // `casual_authors_play`/`team_a` (0072): `length(trim('')) > 0` es falso,
+    // así que un `''` sin normalizar tira 23514 en el caso MÁS común del
+    // formulario (nadie carga equipo en pádel). Prueba la normalización, no
+    // sólo que no explote.
+    const uno = await createTestUser()
+    const dos = await createTestUser()
+    await amistadAceptada(uno.playerId, dos.playerId)
+
+    const matchId = await createCasualMatch(
+      uno.client,
+      dos.playerId,
+      entradaCasual({ teamMine: '  ', teamTheirs: '' }),
+    )
+    const { data: fila } = await adminClient()
+      .from('casual_matches')
+      .select('team_a, team_b')
+      .eq('id', matchId)
+      .single()
+    expect(fila?.team_a).toBeNull()
+    expect(fila?.team_b).toBeNull()
+  })
+})
+
+describe('updateCasualMatch', () => {
+  it('el OTRO jugador edita, y funciona -- updated_by pasa a ser quien editó', async () => {
+    const uno = await createTestUser()
+    const dos = await createTestUser()
+    await amistadAceptada(uno.playerId, dos.playerId)
+    const matchId = await createCasualMatch(uno.client, dos.playerId, entradaCasual())
+
+    // `dos` NO cargó el partido -- es la contraparte, editando (§3.1).
+    // `outcome: 'lost'` desde la perspectiva de `dos`: el mismo partido que
+    // para `uno` fue "ganaste vos" pasa a guardarse como "ganó `uno`".
+    await updateCasualMatch(dos.client, matchId, entradaCasual({ outcome: 'lost', scoreMine: '1', scoreTheirs: '3' }))
+
+    const { data: fila } = await adminClient()
+      .from('casual_matches')
+      .select('updated_by, winner, score_a, score_b')
+      .eq('id', matchId)
+      .single()
+    expect(fila?.updated_by).toBe(dos.playerId)
+    expect(fila?.winner).toBe(uno.playerId)
+  })
+
+  it('un tercero no puede editar un partido ajeno', async () => {
+    const uno = await createTestUser()
+    const dos = await createTestUser()
+    const ajeno = await createTestUser()
+    await amistadAceptada(uno.playerId, dos.playerId)
+    const matchId = await createCasualMatch(uno.client, dos.playerId, entradaCasual())
+
+    const error: unknown = await updateCasualMatch(ajeno.client, matchId, entradaCasual({ outcome: 'drew' })).catch(
+      (e: unknown) => e,
+    )
+    expect(error).toBeInstanceOf(EdgeError)
+
+    const { data: intacto } = await adminClient()
+      .from('casual_matches')
+      .select('updated_by, winner')
+      .eq('id', matchId)
+      .single()
+    expect(intacto?.updated_by).toBe(uno.playerId)
+    expect(intacto?.winner).toBe(uno.playerId)
+  })
+
+  it('un marcador a medias se rechaza al editar también, sin tocar la fila', async () => {
+    const uno = await createTestUser()
+    const dos = await createTestUser()
+    await amistadAceptada(uno.playerId, dos.playerId)
+    const matchId = await createCasualMatch(uno.client, dos.playerId, entradaCasual())
+
+    const error: unknown = await updateCasualMatch(
+      uno.client,
+      matchId,
+      entradaCasual({ scoreMine: '', scoreTheirs: '5' }),
+    ).catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(EdgeError)
+    expect((error as EdgeError).message).not.toContain('23514')
+
+    // `score_a` no es necesariamente "el de `uno`" -- depende de si `uno`
+    // cayó del lado `a` o `b` en el orden canónico (0072), que se decide por
+    // comparación de uuid y no es determinista entre corridas. Se lee
+    // `player_a` para saber qué lado mirar, en vez de asumirlo.
+    const { data: intacto } = await adminClient()
+      .from('casual_matches')
+      .select('player_a, score_a, score_b')
+      .eq('id', matchId)
+      .single()
+    const scoreDeUno = intacto?.player_a === uno.playerId ? intacto?.score_a : intacto?.score_b
+    expect(scoreDeUno).toBe(3)
+  })
+})
+
+describe('deleteCasualMatch', () => {
+  it('el otro jugador puede borrar el partido, aunque no lo haya cargado', async () => {
+    const uno = await createTestUser()
+    const dos = await createTestUser()
+    await amistadAceptada(uno.playerId, dos.playerId)
+    const matchId = await createCasualMatch(uno.client, dos.playerId, entradaCasual())
+
+    await deleteCasualMatch(dos.client, matchId)
+
+    const { data: sigue } = await adminClient().from('casual_matches').select('id').eq('id', matchId)
+    expect(sigue).toEqual([])
+  })
+
+  it('un tercero no puede borrar un partido ajeno', async () => {
+    const uno = await createTestUser()
+    const dos = await createTestUser()
+    const ajeno = await createTestUser()
+    await amistadAceptada(uno.playerId, dos.playerId)
+    const matchId = await createCasualMatch(uno.client, dos.playerId, entradaCasual())
+
+    const error: unknown = await deleteCasualMatch(ajeno.client, matchId).catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(EdgeError)
+
+    const { data: sigue } = await adminClient().from('casual_matches').select('id').eq('id', matchId)
+    expect(sigue).toEqual([{ id: matchId }])
+  })
+})
+
+describe('sportsUsedBy', () => {
+  it('devuelve los deportes ya cargados por el caller, sin repetidos', async () => {
+    const uno = await createTestUser()
+    const dos = await createTestUser()
+    const tres = await createTestUser()
+    await amistadAceptada(uno.playerId, dos.playerId)
+    await amistadAceptada(uno.playerId, tres.playerId)
+
+    await createCasualMatch(uno.client, dos.playerId, entradaCasual({ sport: 'FIFA' }))
+    await createCasualMatch(uno.client, tres.playerId, entradaCasual({ sport: 'FIFA' }))
+    await createCasualMatch(uno.client, dos.playerId, entradaCasual({ sport: 'Ping pong' }))
+
+    const deportes = await sportsUsedBy(uno.client)
+    expect(deportes).toEqual(['FIFA', 'Ping pong'])
+  })
+
+  it('sin ningún partido casual cargado, devuelve una lista vacía', async () => {
+    const uno = await createTestUser()
+    expect(await sportsUsedBy(uno.client)).toEqual([])
   })
 })

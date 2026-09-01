@@ -1,8 +1,16 @@
-import type { SharedMatch, TournamentMatch } from '@/db/friends'
+import type { CasualMatch, SharedMatch, TournamentMatch } from '@/db/friends'
 import { matchdayDay } from '@/app/format'
 
 export interface HistorialProps {
   nombre: string
+  /**
+   * Ya viene en el orden en que se tiene que dibujar -- `historyWith`
+   * (`db/friends.ts`) mezcla torneo y casual y ordena por fecha descendente
+   * entre las dos fuentes (`porFechaDescendente`, ahí). Este componente NO
+   * vuelve a ordenar: dos comparadores sobre la misma regla es la forma en
+   * que un día divergen y dos pantallas terminan en desacuerdo sobre el
+   * mismo historial.
+   */
   partidos: readonly SharedMatch[]
 }
 
@@ -14,31 +22,11 @@ type Resultado = NonNullable<TournamentMatch['outcome']>
 const VERBOS_JUNTOS: Record<Resultado, string> = { won: 'Ganaron', lost: 'Perdieron', drew: 'Empataron' }
 const VERBOS_CONTRA: Record<Resultado, string> = { won: 'Ganaste', lost: 'Perdiste', drew: 'Empataste' }
 
-// `SharedMatch` (Task 2, `db/friends.ts`) ahora es una unión de torneo y
-// casual, y esta pantalla todavía sólo sabe dibujar el primero -- el casual
-// es Task 3, con su propia fila. Angostar acá, temprano, es lo que deja al
-// resto del archivo sin tocar: siguen escribiendo contra la forma de siempre.
-function esDeTorneo(partido: SharedMatch): partido is { kind: 'tournament' } & TournamentMatch {
-  return partido.kind === 'tournament'
-}
-
-/**
- * Orden cronológico descendente. `playedOn` es nullable (una fecha sin jugar
- * todavía, diseño §4.4), así que un orden que sólo mirara ese campo sería
- * inestable -- acá el desempate es `matchdayNumber` descendente. No es un
- * desempate total ENTRE TEMPORADAS: dos fechas número 1 sin jugar, de dos
- * torneos distintos, comparan igual. Alcanza igual porque el sort de V8 es
- * estable -- las que empatan quedan en el orden en que ya venían, no se
- * mezclan al azar --, y las fechas sin jugar quedan siempre al final.
- */
-function compararDescendente(a: TournamentMatch, b: TournamentMatch): number {
-  if (a.playedOn !== b.playedOn) {
-    if (a.playedOn === null) return 1
-    if (b.playedOn === null) return -1
-    return a.playedOn < b.playedOn ? 1 : -1
-  }
-  return b.matchdayNumber - a.matchdayNumber
-}
+// Un partido casual es SIEMPRE "en contra" -- son dos personas, nunca dobles
+// (diseño §7) -- así que reusa el mismo verbo en primera persona que el
+// torneo enfrentado, sin el prefijo "En contra:" que ahí distingue del caso
+// de compañeros: acá ese caso no existe y no hay campo `together` que lo diga.
+const VERBOS_CASUAL = VERBOS_CONTRA
 
 // Reusa `matchdayDay` (`app/format.ts`), la misma fecha que ya se lee en
 // Fechas, la tarjeta de próxima fecha y Mis torneos -- no hay motivo para que
@@ -58,45 +46,97 @@ function resultadoDe(partido: TournamentMatch): string {
 }
 
 /**
- * El historial de torneo con un amigo, sin leer nada -- recibe `SharedMatch[]`
- * por props. Mismo reparto que `rules-body.tsx`: la página lee, esto dibuja.
+ * El resultado de un partido casual, en primera persona. §4.3 manda mostrar
+ * el HECHO, no la interpretación: `winner` es un dato propio que no se
+ * deduce del marcador (un 2-2 puede cerrar empatado o resolverse aparte --
+ * por penales en FIFA, pero la app no sabe que "FIFA" es fútbol y no lo
+ * nombra). Cuando el marcador queda empatado y sin embargo hay un ganador
+ * (`outcome !== 'drew'`), decir "Ganaste 2-2" o "Perdiste 2-2" leería como un
+ * error de tipeo -- se nombra al ganador en cambio, como en el ejemplo del
+ * diseño: "2-2 · ganó Juan".
+ */
+function resultadoCasualDe(partido: CasualMatch, nombreAmigo: string): string {
+  const marcador = partido.score !== null ? `${partido.score.mine}-${partido.score.theirs}` : ''
+  const marcadorEmpatado = partido.score !== null && partido.score.mine === partido.score.theirs
+  if (marcadorEmpatado && partido.outcome !== 'drew') {
+    const ganador = partido.outcome === 'won' ? 'Ganaste' : `Ganó ${nombreAmigo}`
+    return `${marcador} · ${ganador}`
+  }
+  const verbo = VERBOS_CASUAL[partido.outcome]
+  return marcador !== '' ? `${verbo} ${marcador}` : verbo
+}
+
+// El equipo con el que jugaste VOS -- el ejemplo del diseño (§4.4) sólo
+// muestra ese lado ("jugaste con Boca"); el del amigo se guarda
+// (`CasualMatch.teams.theirs`) pero no hace falta para leer el partido en tu
+// propio historial.
+function equipoDe(partido: CasualMatch): string | null {
+  return partido.teams.mine !== null ? `jugaste con ${partido.teams.mine}` : null
+}
+
+// §3.2: dos datos y una línea, no un log de auditoría ni un historial de
+// versiones -- eso sí sería sobreconstruir, dice el diseño con esas palabras.
+// Si cargó y editó la misma persona, se dice una sola vez: dos líneas iguales
+// apiladas es ruido, no información.
+function autoriaDe(partido: CasualMatch): string {
+  if (partido.createdBy === partido.updatedBy) return `Cargó ${partido.createdBy}`
+  return `Cargó ${partido.createdBy} · editó ${partido.updatedBy}`
+}
+
+/**
+ * El historial (torneo + casual) con un amigo, sin leer nada -- recibe
+ * `SharedMatch[]` ya mezclado y ordenado por props (`historyWith`, Task 2).
+ * Mismo reparto que `rules-body.tsx`: la página lee, esto dibuja.
  *
  * Una lista, no dos contadores (diseño §4.4: *"un historial para acordarte
- * bien de cada partido que jugaste"*). Cada fila trae su fecha, su torneo, si
- * fue de compañeros o enfrentados, y cómo salió -- `historyWith` (Task 2) ya
- * trae ese detalle por partido, así que agregarlo de nuevo en un número sería
- * tirar la mitad del dato que se acaba de pagar por leer.
- *
- * Sólo dibuja el lado de torneo (`esDeTorneo` arriba) -- Task 3 agrega la fila
- * casual y la mezcla de verdad. Hasta que llegue, un partido casual cargado
- * ya existe en la base y ya sale de `historyWith`, pero todavía no aparece
- * acá: es la frontera de esta tarea, no un dato perdido.
+ * bien de cada partido que jugaste"*). Cada fila trae su propio detalle --
+ * `historyWith` ya lo entrega por partido, así que agregarlo de nuevo en un
+ * número sería tirar la mitad del dato que se acaba de pagar por leer.
  */
 export function Historial({ nombre, partidos }: HistorialProps) {
-  const ordenados = partidos.filter(esDeTorneo).sort(compararDescendente)
-
   return (
     <div className="flex flex-col gap-4 pt-4">
       <h1 className="text-[26px] font-extrabold tracking-[-.03em]">{nombre}</h1>
 
-      {ordenados.length === 0 ? (
+      {partidos.length === 0 ? (
         // Estado vacío: dice qué falta, no dibuja una tabla sin filas.
         <p className="text-pretty text-[13.5px] leading-[1.5] font-[550] text-muted">
           Todavía no jugaron ningún partido juntos.
         </p>
       ) : (
         <div className="flex flex-col gap-1.5">
-          {ordenados.map((partido) => (
-            <div
-              key={partido.matchId}
-              className="flex flex-col gap-1 rounded-field border-[1.5px] border-line p-[14px]"
-            >
-              <p className="text-[13.5px] font-[550] text-muted">
-                {fechaDe(partido)} · torneo {partido.seasonName}
-              </p>
-              <p className="text-[15px] font-extrabold tracking-[-.02em]">{resultadoDe(partido)}</p>
-            </div>
-          ))}
+          {partidos.map((partido) => {
+            if (partido.kind === 'tournament') {
+              return (
+                <div
+                  key={partido.matchId}
+                  className="flex flex-col gap-1 rounded-field border-[1.5px] border-line p-[14px]"
+                >
+                  <p className="text-[13.5px] font-[550] text-muted">
+                    {fechaDe(partido)} · torneo {partido.seasonName}
+                  </p>
+                  <p className="text-[15px] font-extrabold tracking-[-.02em]">{resultadoDe(partido)}</p>
+                </div>
+              )
+            }
+
+            const equipo = equipoDe(partido)
+            return (
+              <div
+                key={partido.matchId}
+                className="flex flex-col gap-1 rounded-field border-[1.5px] border-line p-[14px]"
+              >
+                <p className="text-[13.5px] font-[550] text-muted">
+                  {matchdayDay(partido.playedOn)} · {partido.sport}
+                </p>
+                <p className="text-[15px] font-extrabold tracking-[-.02em]">
+                  {resultadoCasualDe(partido, nombre)}
+                  {equipo !== null ? `, ${equipo}` : ''}
+                </p>
+                <p className="text-[13.5px] font-[550] text-muted">{autoriaDe(partido)}</p>
+              </div>
+            )
+          })}
         </div>
       )}
     </div>

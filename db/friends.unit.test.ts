@@ -318,8 +318,15 @@ describe('historyWith — tripwire de truncamiento de PostgREST', () => {
       matchdays: completo.matchdays,
       seasons: completo.seasons,
       matchSets: completo.matchSets,
-      // Jugado DESPUÉS del de torneo ('2026-01-15') -- tiene que salir
-      // primero en la lista final, mezclado entre las dos fuentes.
+      // Dos casuales a propósito, uno de cada lado del torneo (15/1): 'c1'
+      // DESPUÉS (1/2) y 'c2' ANTES (1/1). Sólo con los dos, en ese orden, la
+      // mezcla es distinguible de una concatenación -- `[...casuales,
+      // ...torneo]` (sin `porFechaDescendente`) pondría a 'c2' ANTES del
+      // torneo igual, por casualidad de qué lado se concatena primero, y
+      // este mismo test seguiría en verde. Con 'c2' fechado ANTES del
+      // torneo pero esperado DESPUÉS en la lista, sólo un sort real por
+      // fecha entre las dos fuentes lo deja en el lugar que se assertea
+      // abajo -- ver fix round 1, Important 2.
       casualMatches: {
         rows: [
           {
@@ -338,8 +345,20 @@ describe('historyWith — tripwire de truncamiento de PostgREST', () => {
             created_by: AMIGO,
             updated_by: ME,
           },
+          {
+            id: 'c2',
+            played_on: '2026-01-01',
+            sport: 'PADEL',
+            winner: ME,
+            score_a: 1,
+            score_b: 3,
+            team_a: null,
+            team_b: null,
+            created_by: ME,
+            updated_by: ME,
+          },
         ],
-        count: 1,
+        count: 2,
       },
       players: {
         rows: [
@@ -352,11 +371,15 @@ describe('historyWith — tripwire de truncamiento de PostgREST', () => {
 
     const historia = await historyWith(client, AMIGO)
 
-    expect(historia).toHaveLength(2)
-    // El casual (1/2) más nuevo que el de torneo (15/1): va primero.
-    expect(historia[0]?.matchId).toBe('c1')
+    expect(historia).toHaveLength(3)
+    // Orden esperado por fecha descendente ENTRE las dos fuentes:
+    // c1 (1/2) > torneo m1 (15/1) > c2 (1/1). Una concatenación simple
+    // (`[...casuales, ...torneo]` o al revés) nunca produce este orden,
+    // porque intercala una fuente en el medio de la otra.
+    expect(historia.map((m) => m.matchId)).toEqual(['c1', 'm1', 'c2'])
     expect(historia[0]?.kind).toBe('casual')
     expect(historia[1]?.kind).toBe('tournament')
+    expect(historia[2]?.kind).toBe('casual')
 
     const casual = historia[0]
     if (casual?.kind !== 'casual') throw new Error('El primer partido no salió casual.')
@@ -366,5 +389,47 @@ describe('historyWith — tripwire de truncamiento de PostgREST', () => {
     expect(casual.teams).toEqual({ mine: 'Boca', theirs: 'River' })
     expect(casual.createdBy).toBe('El amigo')
     expect(casual.updatedBy).toBe('Yo')
+  })
+
+  it('un torneo sin jugar (playedOn null) queda al final, mezclado con un casual que sí tiene fecha', async () => {
+    // El caso que la unión introduce de nuevo: el lado casual NUNCA llega
+    // con `playedOn: null` (`0072`, columna `not null`), sólo el de torneo
+    // puede -- una fecha abierta todavía sin `played_on` cargado.
+    const completo = unPartidoCompleto()
+    const client = fakeClient({
+      me: ME,
+      participants: completo.participants,
+      matchdays: {
+        rows: [{ id: 'f1', number: 3, kind: 'REGULAR', played_on: null, season_id: 's1' }],
+        count: 1,
+      },
+      seasons: completo.seasons,
+      matchSets: completo.matchSets,
+      casualMatches: {
+        rows: [
+          {
+            id: 'c1',
+            played_on: '2026-01-01',
+            sport: 'FIFA',
+            winner: null,
+            score_a: null,
+            score_b: null,
+            team_a: null,
+            team_b: null,
+            created_by: ME,
+            updated_by: ME,
+          },
+        ],
+        count: 1,
+      },
+      players: { rows: [{ id: ME, display_name: 'Yo' }], count: 1 },
+    })
+
+    const historia = await historyWith(client, AMIGO)
+
+    // El casual (con fecha) primero; el torneo sin jugar, al final -- nunca
+    // al revés, sin importar que su `matchId` ('m1') ordene antes en texto.
+    expect(historia.map((m) => m.matchId)).toEqual(['c1', 'm1'])
+    expect(historia[1]?.playedOn).toBeNull()
   })
 })

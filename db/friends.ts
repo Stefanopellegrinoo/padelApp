@@ -106,7 +106,10 @@ export type SharedMatch =
  * `matchdayNumber` como sí hace la pantalla (`compararDescendente`,
  * `app/amigos/historial.tsx`): ese desempate sólo tiene sentido DENTRO del
  * torneo, y una vez mezcladas las dos fuentes ya no hay un `matchdayNumber`
- * común a las dos con qué desempatar.
+ * común a las dos con qué desempatar. Una MISMA fecha exacta entre las dos
+ * fuentes devuelve `0`: `Array.prototype.sort` es estable, así que quedan en
+ * el orden en que ya venían concatenadas más abajo (torneo antes que
+ * casual) -- determinista, pero no es un desempate elegido a propósito.
  */
 function porFechaDescendente(a: SharedMatch, b: SharedMatch): number {
   if (a.playedOn === b.playedOn) return 0
@@ -332,15 +335,19 @@ export async function historyWith(
     })
   }
 
-  // Consulta 5: los partidos casuales entre el caller y el amigo.
-  // `casual_matches` exige el par en orden canónico (`casual_ordered`, 0072)
-  // -- mismo cálculo que ya hace `requestFriendship` más abajo --, así que
-  // para CUALQUIER par de uuids hay como máximo UNA fila posible: filtrar por
-  // igualdad exacta de las dos columnas alcanza, sin un `.or()` ni un `.in()`
-  // que pudiera crecer (a diferencia de `matchIds`/`matchdayIds` arriba, esta
-  // consulta no agrega ningún `.in()` nuevo). No hace falta chequear amistad
-  // ni membresía acá: `casual_matches_read` (0072) ya acota la lectura a
-  // `my_player_id() in (player_a, player_b)`.
+  // Consulta 5: los partidos casuales entre el caller y el amigo -- TODOS los
+  // que jugaron, no uno solo: `0072` no tiene ningún unique (ni índice ni
+  // constraint) sobre `(player_a, player_b)`, sólo el CHECK `casual_ordered`
+  // -- es un historial, muchas filas por par son el caso normal, no una
+  // excepción. Lo que SÍ da `casual_ordered` es que cualquier par de uuids
+  // tiene un ÚNICO arreglo posible de columnas (nunca las dos): por eso dos
+  // `.eq()` alcanzan para traer las filas de ese par, sin un `.or()` sobre
+  // las dos combinaciones -- mismo cálculo de orden canónico que ya hace
+  // `requestFriendship` más abajo. El filtro queda de tamaño constante
+  // (a diferencia de `matchIds`/`matchdayIds` arriba, esta consulta no
+  // agrega ningún `.in()` nuevo) sin importar cuántas filas devuelva. No hace
+  // falta chequear amistad ni membresía acá: `casual_matches_read` (0072) ya
+  // acota la lectura a `my_player_id() in (player_a, player_b)`.
   const [ladoA, ladoB] = me < friendPlayerId ? [me, friendPlayerId] : [friendPlayerId, me]
   const casualesResult = await supabase
     .from('casual_matches')
@@ -368,6 +375,7 @@ export async function historyWith(
       .from('players')
       .select('id, display_name', { count: 'exact' })
       .in('id', autorIds)
+      .order('id', { ascending: true })
     const autores = assertComplete(autoresResult, 'autores')
     for (const autor of autores) nombrePorId.set(autor.id, autor.display_name)
   }

@@ -9,10 +9,13 @@ interface PageProps {
 }
 
 /**
- * El historial de torneo con un amigo. `historyWith` no chequea que sean
- * amigos (comentario en `db/friends.ts`): la RLS de `matches` ya acota esto a
- * las temporadas donde el caller participa, así que cualquier `playerId` es
- * seguro de pedir -- en el peor caso, cero partidos compartidos.
+ * El historial (torneo + casual) con un amigo. `historyWith` no chequea que
+ * sean amigos (comentario en `db/friends.ts`): del lado de torneo, la RLS de
+ * `matches` ya acota esto a las temporadas donde el caller participa; del
+ * lado casual, `casual_matches_read` acota igual a ser uno de los dos
+ * jugadores de la fila, y la puerta de amistad ACEPTADA (diseño §4.5) sólo
+ * corre al insertar, no al leer. Cualquier `playerId` es entonces seguro de
+ * pedir -- en el peor caso, cero partidos compartidos.
  *
  * `notFound()` cuando `playerId` no es un jugador real: `players_read` está
  * abierta (diseño §5.5), así que no encontrar el nombre es un link roto, no

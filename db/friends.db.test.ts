@@ -661,6 +661,8 @@ describe('historyWith', () => {
         winner: a,
         score_a: 3,
         score_b: 1,
+        team_a: 'River',
+        team_b: 'Boca',
         created_by: admin.playerId,
         updated_by: admin.playerId,
       })
@@ -690,6 +692,24 @@ describe('historyWith', () => {
     const meEsA = admin.playerId === a
     expect(casualPartido.score).toEqual(meEsA ? { mine: 3, theirs: 1 } : { mine: 1, theirs: 3 })
     expect(casualPartido.outcome).toBe(meEsA ? 'won' : 'lost')
+    expect(casualPartido.teams).toEqual(
+      meEsA ? { mine: 'River', theirs: 'Boca' } : { mine: 'Boca', theirs: 'River' },
+    )
+    expect(casualPartido.sport).toBe('FIFA')
+    expect(casualPartido.playedOn).toBe('2026-08-30')
+
+    // `createdBy`/`updatedBy` corren la sexta consulta de verdad (RLS de
+    // `players` incluida) -- sin esto, un `?? ''` que fallara en silencio
+    // (mapa mal armado, id que no matchea) pasaría de punta a punta sin que
+    // ningún test lo note. `admin` cargó y no lo tocó nadie más: los dos
+    // campos son su propio nombre.
+    const { data: creador } = await adminClient()
+      .from('players')
+      .select('display_name')
+      .eq('id', admin.playerId)
+      .single()
+    expect(casualPartido.createdBy).toBe(creador?.display_name)
+    expect(casualPartido.updatedBy).toBe(creador?.display_name)
   })
 })
 

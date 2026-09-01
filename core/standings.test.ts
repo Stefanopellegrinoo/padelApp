@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeStandings, headToHead, usesSetsDiff } from './standings'
+import { computeStandings, headToHead, tallySets, usesSetsDiff } from './standings'
 import { pair, single } from './side'
 import type { MatchResult, SeasonConfig, Side } from './types'
 
@@ -31,6 +31,32 @@ function match(left: number, right: number, gamesA: number, gamesB: number): Mat
 function order(standings: ReturnType<typeof computeStandings>): string[] {
   return standings.map((row) => row.side.a)
 }
+
+describe('tallySets', () => {
+  it('cuenta el set para quien hizo más games, y suma los games de los dos', () => {
+    expect(tallySets([{ gamesA: 6, gamesB: 3 }])).toEqual({
+      setsA: 1, setsB: 0, gamesA: 6, gamesB: 3,
+    })
+  })
+
+  it('con dos sets repartidos no gana nadie el partido, y los games se acumulan', () => {
+    expect(tallySets([{ gamesA: 6, gamesB: 4 }, { gamesA: 2, gamesB: 6 }])).toEqual({
+      setsA: 1, setsB: 1, gamesA: 8, gamesB: 10,
+    })
+  })
+
+  it('un set igualado no le suma a ninguno de los dos', () => {
+    // Con marcador abierto y empate permitido esto es un resultado guardable
+    // (0034 condicionó `match_sets_no_draw` a `allows_draw`).
+    expect(tallySets([{ gamesA: 2, gamesB: 2 }])).toEqual({
+      setsA: 0, setsB: 0, gamesA: 2, gamesB: 2,
+    })
+  })
+
+  it('sin sets no cuenta nada', () => {
+    expect(tallySets([])).toEqual({ setsA: 0, setsB: 0, gamesA: 0, gamesB: 0 })
+  })
+})
 
 describe('computeStandings', () => {
   it('ranks by matches won, most first', () => {

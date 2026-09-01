@@ -91,6 +91,11 @@ export { previousContext } from './history'
 // lugares —la tabla, la frase del desempate de la fecha y la página de Reglas—
 // y eran tres copias de `setsToWin > 1`. Arreglar una sola las hacía discrepar.
 export { computeStandings, usesSetsDiff } from './standings'
+// `tallySets` sale ahora (plan-historial-entre-amigos-2a, tarea 1):
+// `db/friends.ts` necesita saber quién ganó un partido desde afuera de
+// `core/`, y esa regla ya vivía inline en `computeStandings` — mismo criterio
+// que `usesSetsDiff` arriba, se extrae en vez de copiarse.
+export { tallySets } from './standings'
 export { computeAwards } from './awards'
 
 //── Formato sugerido y grupos de una fecha (REQ-D8-1, PR21) ─────────────────

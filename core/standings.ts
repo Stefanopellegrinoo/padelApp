@@ -5,6 +5,7 @@ import type {
   MatchFormat,
   MatchResult,
   SeasonConfig,
+  SetScore,
   Side,
   SideStanding,
 } from './types'
@@ -76,6 +77,33 @@ interface Tally {
 }
 
 /**
+ * La ÚNICA definición de "quién ganó un set" —y con eso, un partido— en todo
+ * el proyecto: gana el set quien hizo más games, gana el partido quien ganó
+ * más sets, iguales es empate. Extraída de adentro de `computeStandings`
+ * porque `db/friends.ts` necesita la misma respuesta desde afuera de `core/`,
+ * y ese dato no se recalcula dos veces: el precedente ya está escrito en el
+ * comentario de `usesSetsDiff` más arriba en este mismo archivo — eran TRES
+ * copias de `setsToWin > 1` en tres archivos, y una segunda opinión sobre
+ * quién ganó un partido sería peor todavía, porque las dos pantallas se ven
+ * bien y dicen cosas distintas.
+ */
+export function tallySets(
+  sets: readonly SetScore[],
+): { setsA: number; setsB: number; gamesA: number; gamesB: number } {
+  let setsA = 0
+  let setsB = 0
+  let gamesA = 0
+  let gamesB = 0
+  for (const set of sets) {
+    gamesA += set.gamesA
+    gamesB += set.gamesB
+    if (set.gamesA > set.gamesB) setsA++
+    else if (set.gamesB > set.gamesA) setsB++
+  }
+  return { setsA, setsB, gamesA, gamesB }
+}
+
+/**
  * The matchday table. Ranks sides by the day's POINTS, then games difference,
  * then the head to head between the tied sides, and finally the snapshot.
  *
@@ -129,16 +157,7 @@ export function computeStandings(
     const right = find(match.sideB)
     if (left === undefined || right === undefined) continue
 
-    let setsA = 0
-    let setsB = 0
-    let gamesA = 0
-    let gamesB = 0
-    for (const set of match.sets) {
-      gamesA += set.gamesA
-      gamesB += set.gamesB
-      if (set.gamesA > set.gamesB) setsA++
-      else if (set.gamesB > set.gamesA) setsB++
-    }
+    const { setsA, setsB, gamesA, gamesB } = tallySets(match.sets)
 
     left.played++
     right.played++

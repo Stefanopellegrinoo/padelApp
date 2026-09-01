@@ -24,8 +24,27 @@
   --radius-card: 16px;
 }
 
+/* ── el tema oscuro va en `:root`, NO en un `@theme` ────────────────────────
+   Esto era `@media (prefers-color-scheme: dark) { @theme { ... } }` y la app
+   salió OSCURA SIEMPRE, para todos, desde el 10/08 hasta el 31/08.
+
+   `@theme` no es un bloque de CSS: Tailwind v4 lo procesa EN BUILD, declara el
+   sistema de diseño y vuelca sus variables a `:root`, **descartando el `@media`
+   que lo envuelve**. Los dos bloques terminaban en `:root`, el oscuro segundo,
+   pisando al claro. Medido en el CSS compilado antes de arreglarlo: cero
+   ocurrencias de `#ffffff`, cero de `prefers-color-scheme`.
+
+   El `@theme` de arriba se queda porque es el que DECLARA el sistema —de ahí
+   salen `bg-bg`, `text-muted` y las demás utilidades— y esas utilidades
+   referencian `var(--color-*)`, no el valor inlineado (verificado: 36 `var(
+   --color-` en el CSS servido). Por eso pisar la custom property en `:root`
+   alcanza para que el tema entero cambie, sin regenerar una sola utilidad.
+
+   Ningún gate lo agarró en tres planes: `scripts/smoke.mjs` recorre "en claro y
+   en oscuro" pero sólo asierta 200. Un recorrido de temas que no compara un
+   color prueba que las rutas existen, no que el tema exista. */
 @media (prefers-color-scheme: dark) {
-  @theme {
+  :root {
     --color-bg: #0d1512;
     --color-surface: #16201c;
     --color-chip: #1b2823;

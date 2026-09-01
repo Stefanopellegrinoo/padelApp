@@ -354,13 +354,35 @@ async function main() {
 
   // ── 12. Las cuatro pestañas, en claro y en oscuro ─────────────────────────
   heading('Las cuatro pestañas del torneo demo, en claro y en oscuro')
+  // Este paso recorría los dos esquemas y sólo asertaba 200, así que la app
+  // estuvo OSCURA SIEMPRE del 10/08 al 31/08 y el smoke pasó entero todos los
+  // días. Un recorrido de temas que no compara un color prueba que las rutas
+  // existen, no que el tema exista.
+  const fondoDe = () =>
+    page.evaluate(() => getComputedStyle(document.body).backgroundColor)
+  const fondos = {}
   for (const scheme of ['light', 'dark']) {
     await page.emulateMedia({ colorScheme: scheme })
     for (const tab of ['', '/fechas', '/stats', '/reglas']) {
       await go(page, `/torneo/${demoId}${tab}`)
     }
-    console.log(`  · ${scheme} recorrido`)
+    fondos[scheme] = await fondoDe()
+    console.log(`  · ${scheme} recorrido — fondo ${fondos[scheme]}`)
   }
+  // El corazón del chequeo: que sean DISTINTOS. Da igual el valor exacto —
+  // los tokens del handoff pueden cambiar— pero si los dos esquemas pintan el
+  // mismo fondo, uno de los dos temas no se está sirviendo.
+  check(
+    'el tema claro y el oscuro pintan fondos distintos',
+    fondos.light !== fondos.dark,
+    `los dos dan ${fondos.light}: hay un solo tema sirviéndose`,
+  )
+  // Y que el claro sea CLARO, para que no pasen dos oscuros distintos.
+  check(
+    'y el claro es efectivamente claro',
+    fondos.light === 'rgb(255, 255, 255)',
+    `esperaba blanco y da ${fondos.light}`,
+  )
 
   await browser.close()
 

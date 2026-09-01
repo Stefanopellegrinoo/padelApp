@@ -270,6 +270,27 @@ compila puede estar mintiendo en cada línea.** Hace falta un smoke test de
 navegador que abra cada ruta, asierte 200 y compare lo que dice contra el estado
 real de los datos.
 
+**Y hay una segunda mitad de esa lección, que costó veintiún días descubrir.**
+El 31/08 se encontró que **la app estuvo OSCURA SIEMPRE, para todos, desde el
+10/08**: `app/globals.css` tenía el tema oscuro adentro de un
+`@media (prefers-color-scheme: dark) { @theme { … } }`, y **`@theme` no es un
+bloque de CSS** — Tailwind v4 lo procesa en build, vuelca sus variables a
+`:root` y descarta el `@media` que lo envuelve. Los dos temas terminaban en
+`:root`, el oscuro segundo, pisando al claro. El tema claro estaba escrito y
+nunca se sirvió.
+
+Lo que importa no es el bug sino **por qué sobrevivió tres planes con todo en
+verde**: el paso 12 del smoke recorría las pantallas *"en claro y en oscuro"* y
+sólo asertaba **200**. Nunca comparó un color. Un recorrido de temas que no mira
+un píxel prueba que las rutas existen, no que el tema exista. Ahora compara el
+fondo computado de los dos esquemas y exige que sean distintos — verificado
+poniendo el bug de vuelta y viendo los dos chequeos en rojo.
+
+**Generalizado: asertar que una pantalla responde no es asertar que la pantalla
+está bien.** Es el mismo error de forma que dejó dos agujeros de RLS con los
+cuatro gates en verde (tests que consultaban con `service_role`, que saltea RLS
+por diseño).
+
 **Sobre el arreglo del JWT, para que nadie lo dé por probado:** la carrera **no se
 pudo reproducir a pedido**. Diez logins seguidos pasan igual con y sin el
 arreglo; la falla apareció con tres agentes cargando la máquina y no vuelve con

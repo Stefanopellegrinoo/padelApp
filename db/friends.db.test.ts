@@ -1,7 +1,14 @@
 import { describe, it, expect } from 'vitest'
 import { defaultConfig, type SideSize } from '@/core'
 import { EdgeError } from './errors'
-import { historyWith, requestFriendship, acceptFriendship, friendsOf } from './friends'
+import {
+  historyWith,
+  requestFriendship,
+  acceptFriendship,
+  friendsOf,
+  type SharedMatch,
+  type TournamentMatch,
+} from './friends'
 import { createMatchday, generatePairs, openMatchday, saveResult, setAttendance } from './matchday'
 import { adminClient } from './test/admin'
 import { createSeason } from './test/factories'
@@ -192,6 +199,21 @@ async function ladoDe(matchId: string, playerId: string): Promise<string> {
     throw new Error(`${playerId} no juega en el partido ${matchId}.`)
   }
   return miPar.id === match.pair_a ? 'A' : 'B'
+}
+
+/**
+ * Angosta un `SharedMatch` a su lado de torneo. Todo partido que este archivo
+ * arma con `unaFechaJugada`/`dosFechasConYContra` sale de esa fuente, nunca
+ * casual -- un `kind` distinto acá sería el test mal armado (un `matchId` que
+ * no corresponde), no un caso real que estos tests deban contemplar.
+ */
+function comoTorneo(
+  partido: SharedMatch | undefined,
+  matchId: string,
+): { kind: 'tournament' } & TournamentMatch {
+  if (partido === undefined) throw new Error(`El partido ${matchId} no salió en el historial.`)
+  if (partido.kind !== 'tournament') throw new Error(`El partido ${matchId} no es de torneo.`)
+  return partido
 }
 
 /**
@@ -530,8 +552,8 @@ describe('historyWith', () => {
 
     const historia = await historyWith(admin.client, otro.playerId)
 
-    expect(historia.find((m) => m.matchId === juntos)?.together).toBe(true)
-    expect(historia.find((m) => m.matchId === enContra)?.together).toBe(false)
+    expect(comoTorneo(historia.find((m) => m.matchId === juntos), juntos).together).toBe(true)
+    expect(comoTorneo(historia.find((m) => m.matchId === enContra), enContra).together).toBe(false)
   })
 
   it('no devuelve nada de una temporada en la que el caller no está', async () => {
@@ -557,24 +579,24 @@ describe('historyWith', () => {
     // opuesto. Sumar `mine + theirs` (como hacía la versión anterior de este
     // test) no distingue un 4-1 de un 1-4: pasa igual si `mine`/`theirs`
     // están invertidos. Esto sí lo distingue.
-    const partido = historia.find((m) => m.matchId === enContra)
+    const partido = comoTorneo(historia.find((m) => m.matchId === enContra), enContra)
     const lado = await ladoDe(enContra, admin.playerId)
-    expect(partido?.seasonName).toBe(seasonName)
-    expect(partido?.matchdayNumber).toBe(1)
+    expect(partido.seasonName).toBe(seasonName)
+    expect(partido.matchdayNumber).toBe(1)
     // `unaFechaJugada` crea la fecha con '2026-08-10' (ver su doc) -- es lo
     // único que hoy fija `playedOn`, del que dependen tanto el orden de la
     // lista (`compararDescendente`, `app/amigos/historial.tsx`) como la
     // fecha que muestra cada fila, y que ningún test de esta suite chequeaba.
-    expect(partido?.playedOn).toBe('2026-08-10')
-    expect(partido?.score).toEqual(lado === 'A' ? { mine: 4, theirs: 1 } : { mine: 1, theirs: 4 })
-    expect(partido?.outcome).toBe(lado === 'A' ? 'won' : 'lost')
+    expect(partido.playedOn).toBe('2026-08-10')
+    expect(partido.score).toEqual(lado === 'A' ? { mine: 4, theirs: 1 } : { mine: 1, theirs: 4 })
+    expect(partido.outcome).toBe(lado === 'A' ? 'won' : 'lost')
 
     // `juntos`: `admin` y `otro` comparten lado, así que `outcome` es lo que
     // le pasó a LA PAREJA -- no "lo mío contra nadie". Mismo mapeo lado→won,
     // ahora sobre el partido donde el lado de los dos es el mismo.
-    const partidoJuntos = historia.find((m) => m.matchId === juntos)
+    const partidoJuntos = comoTorneo(historia.find((m) => m.matchId === juntos), juntos)
     const ladoJuntos = await ladoDe(juntos, admin.playerId)
-    expect(partidoJuntos?.outcome).toBe(ladoJuntos === 'A' ? 'won' : 'lost')
+    expect(partidoJuntos.outcome).toBe(ladoJuntos === 'A' ? 'won' : 'lost')
   })
 
   it('un partido sin resultado cargado sale con outcome y score en null', async () => {
@@ -596,6 +618,78 @@ describe('historyWith', () => {
 
     expect(partido?.outcome).toBeNull()
     expect(partido?.score).toBeNull()
+  })
+
+  // El test que es el punto de la Tarea 2 (plan-historial-entre-amigos-2b):
+  // un casual y un torneo entre los mismos dos, mezclados y ordenados por
+  // fecha entre las DOS fuentes -- no cada fuente ordenada por su lado.
+  it('mezcla un partido casual con uno de torneo, ordenados por fecha descendente entre las dos fuentes', async () => {
+    const admin = await createTestUser()
+    const otro = await createTestUser()
+    const [a, b] =
+      admin.playerId < otro.playerId ? [admin.playerId, otro.playerId] : [otro.playerId, admin.playerId]
+    await adminClient()
+      .from('friendships')
+      .insert({
+        player_a: a,
+        player_b: b,
+        requested_by: admin.playerId,
+        accepted_at: new Date().toISOString(),
+      })
+
+    // El de torneo: `unaFechaJugada` lo juega el '2026-08-10' (ver su doc).
+    const relleno = await fillerPlayers(6)
+    const { matchdayId } = await unaFechaJugada({
+      admin,
+      pairSize: 2,
+      squad: [admin.playerId, otro.playerId, ...relleno],
+    })
+    const torneoMatchId = await partidoDeLosDos(matchdayId, admin.playerId, otro.playerId)
+
+    // El casual: cargado el '2026-08-30', DESPUÉS del de torneo -- tiene que
+    // salir primero en la lista. `winner: a` con un marcador asimétrico
+    // (3 contra 1, no 2 contra 2): si la orientación se calculara del lado
+    // fijo `player_a`/`player_b` en vez de `my_player_id()`, este test lo
+    // nota apenas `admin` resulte ser `b` en vez de `a`.
+    const { data: casual, error: casualError } = await admin.client
+      .from('casual_matches')
+      .insert({
+        player_a: a,
+        player_b: b,
+        sport: 'FIFA',
+        played_on: '2026-08-30',
+        winner: a,
+        score_a: 3,
+        score_b: 1,
+        created_by: admin.playerId,
+        updated_by: admin.playerId,
+      })
+      .select('id')
+      .single()
+    expect(casualError).toBeNull()
+    if (casual === null) throw new Error('No se pudo cargar el partido casual de test.')
+
+    const historia = await historyWith(admin.client, otro.playerId)
+
+    const casualPartido = historia.find((m) => m.matchId === casual.id)
+    const torneoPartido = historia.find((m) => m.matchId === torneoMatchId)
+    if (casualPartido === undefined) throw new Error('El partido casual no salió en el historial.')
+    if (torneoPartido === undefined) throw new Error('El partido de torneo no salió en el historial.')
+    expect(casualPartido.kind).toBe('casual')
+    expect(torneoPartido.kind).toBe('tournament')
+
+    // La mezcla es el punto del test: el casual (30/8) es más nuevo que el
+    // de torneo (10/8), así que va ANTES en la lista final -- ordenados
+    // entre las dos fuentes, no cada fuente por su lado.
+    expect(historia.indexOf(casualPartido)).toBeLessThan(historia.indexOf(torneoPartido))
+
+    // Orientación derivada de LA FILA BASE (`a`/`b`, lo que se insertó), no
+    // releída del propio resultado bajo test -- mismo criterio que `ladoDe`
+    // más arriba para el partido de torneo.
+    if (casualPartido.kind !== 'casual') throw new Error('El partido casual no tiene kind "casual".')
+    const meEsA = admin.playerId === a
+    expect(casualPartido.score).toEqual(meEsA ? { mine: 3, theirs: 1 } : { mine: 1, theirs: 3 })
+    expect(casualPartido.outcome).toBe(meEsA ? 'won' : 'lost')
   })
 })
 

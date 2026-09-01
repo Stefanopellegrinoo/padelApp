@@ -1,14 +1,19 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, it, expect } from 'vitest'
-import type { SharedMatch } from '@/db/friends'
+import type { SharedMatch, TournamentMatch } from '@/db/friends'
 import { matchdayDay } from '@/app/format'
 import { Historial } from './historial'
 
 // `SharedMatch` trae el detalle completo desde Task 2: fecha, torneo y
 // marcador. Un fixture acá completa TODOS los campos, como cualquier caller
 // real -- no hay forma corta que esconda un campo que la pantalla necesita.
-function partido(overrides: Partial<SharedMatch> = {}): SharedMatch {
+// `overrides` tipado sobre `TournamentMatch` (no `SharedMatch`): este archivo
+// sólo arma partidos de torneo -- el casual es Task 3, con su propia pantalla
+// --, y `Partial<union>` no angosta `kind`: lo ensancha a `'tournament' |
+// 'casual'` en el objeto final, rompiendo la asignación a `SharedMatch`.
+function partido(overrides: Partial<TournamentMatch> = {}): SharedMatch {
   return {
+    kind: 'tournament',
     matchId: '1',
     matchdayId: 'f1',
     together: false,

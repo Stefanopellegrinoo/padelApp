@@ -83,7 +83,14 @@ async function unaFechaJugada({
   await openMatchday(admin.client, matchdayId)
 
   const db = adminClient()
-  const { data: matches, error } = await db.from('matches').select('id').eq('matchday_id', matchdayId)
+  // `.order('id')`: sin esto, `matches[0]` más abajo -- el `matchId` que
+  // este helper devuelve -- es la fila que Postgres elija devolver primero,
+  // no reproducible entre corridas.
+  const { data: matches, error } = await db
+    .from('matches')
+    .select('id')
+    .eq('matchday_id', matchdayId)
+    .order('id', { ascending: true })
   if (error || matches === null || matches.length === 0) {
     throw new Error(`No se pudieron leer los partidos de test: ${error?.message}`)
   }
@@ -130,6 +137,25 @@ async function partidoDeLosDos(matchdayId: string, a: string, b: string): Promis
     throw new Error(`Ningún partido de la fecha ${matchdayId} tiene a los dos jugadores.`)
   }
   return conLosDos[0]
+}
+
+/**
+ * El lado ('A'/'B') de `playerId` en `matchId`, leído con `service_role` --
+ * scaffolding para armar la expectativa del test, no un chequeo de permisos
+ * (por eso `adminClient()` acá es correcto, a diferencia de los `historyWith`
+ * de más abajo, que SÍ pasan por el cliente logueado).
+ */
+async function ladoDe(matchId: string, playerId: string): Promise<string> {
+  const { data, error } = await adminClient()
+    .from('match_participants')
+    .select('side')
+    .eq('match_id', matchId)
+    .eq('player_id', playerId)
+    .single()
+  if (error || data === null || data.side === null) {
+    throw new Error(`No se pudo leer el lado de ${playerId} en ${matchId}: ${error?.message}`)
+  }
+  return data.side
 }
 
 /**
@@ -485,17 +511,29 @@ describe('historyWith', () => {
   it('trae la fecha, el torneo y el resultado de cada partido', async () => {
     const admin = await createTestUser()
     const otro = await createTestUser()
-    const { enContra, seasonName } = await dosFechasConYContra({ admin, otro })
+    const { juntos, enContra, seasonName } = await dosFechasConYContra({ admin, otro })
 
     const historia = await historyWith(admin.client, otro.playerId)
-    const partido = historia.find((m) => m.matchId === enContra)
 
+    // `enContra`: `unaFechaJugada` guarda 4-1 a favor de `pair_a` en TODO
+    // partido (ver su doc) -- el lado de `admin` en ESTE partido, leído de
+    // la vista real, decide si ese 4-1 es su `outcome`/`score` o el
+    // opuesto. Sumar `mine + theirs` (como hacía la versión anterior de este
+    // test) no distingue un 4-1 de un 1-4: pasa igual si `mine`/`theirs`
+    // están invertidos. Esto sí lo distingue.
+    const partido = historia.find((m) => m.matchId === enContra)
+    const lado = await ladoDe(enContra, admin.playerId)
     expect(partido?.seasonName).toBe(seasonName)
     expect(partido?.matchdayNumber).toBe(1)
-    expect(partido?.outcome).not.toBeNull()
-    expect(partido?.score).not.toBeNull()
-    // El marcador se mira desde quien consulta: los games propios primero.
-    expect(partido!.score!.mine + partido!.score!.theirs).toBeGreaterThan(0)
+    expect(partido?.score).toEqual(lado === 'A' ? { mine: 4, theirs: 1 } : { mine: 1, theirs: 4 })
+    expect(partido?.outcome).toBe(lado === 'A' ? 'won' : 'lost')
+
+    // `juntos`: `admin` y `otro` comparten lado, así que `outcome` es lo que
+    // le pasó a LA PAREJA -- no "lo mío contra nadie". Mismo mapeo lado→won,
+    // ahora sobre el partido donde el lado de los dos es el mismo.
+    const partidoJuntos = historia.find((m) => m.matchId === juntos)
+    const ladoJuntos = await ladoDe(juntos, admin.playerId)
+    expect(partidoJuntos?.outcome).toBe(ladoJuntos === 'A' ? 'won' : 'lost')
   })
 
   it('un partido sin resultado cargado sale con outcome y score en null', async () => {

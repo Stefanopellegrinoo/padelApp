@@ -66,13 +66,20 @@ function fakeClient(options: {
 const ME = 'jugador-yo'
 const AMIGO = 'jugador-amigo'
 
-/** Un partido compartido completo -- 'm1'/'f1'/'s1' --, para los tests que no vienen a probar SU guard. */
-function unPartidoCompleto() {
+/**
+ * Un partido compartido completo -- 'm1'/'f1'/'s1' --, para los tests que no
+ * vienen a probar SU guard. `mySide` parametriza de qué lado juega `ME`: el
+ * `4-1` de `matchSets` queda fijo (games_a=4, games_b=1), así que variar el
+ * lado es lo que deja probar que `score`/`outcome` de verdad se leen desde
+ * `mySide` y no desde `'A'` a fuego -- ver el test de orientación más abajo.
+ */
+function unPartidoCompleto(mySide: 'A' | 'B' = 'A') {
+  const suLado = mySide === 'A' ? 'B' : 'A'
   return {
     participants: {
       rows: [
-        { match_id: 'm1', matchday_id: 'f1', side: 'A', player_id: ME },
-        { match_id: 'm1', matchday_id: 'f1', side: 'B', player_id: AMIGO },
+        { match_id: 'm1', matchday_id: 'f1', side: mySide, player_id: ME },
+        { match_id: 'm1', matchday_id: 'f1', side: suLado, player_id: AMIGO },
       ] satisfies ParticipantRow[],
       count: 2,
     },
@@ -109,7 +116,11 @@ describe('historyWith — tripwire de truncamiento de PostgREST', () => {
       },
     })
 
-    await expect(historyWith(client, AMIGO)).rejects.toThrow(/no se pud/i)
+    // El mensaje nombra la consulta (`assertComplete`, db/friends.ts): sin
+    // eso, `/no se pud/i` matchea igual las cuatro consultas Y los dos throw
+    // de "vista/tablas en desacuerdo" del final -- este test podría estar
+    // rompiendo cualquiera de los seis y seguir en verde.
+    await expect(historyWith(client, AMIGO)).rejects.toThrow(/completo de participantes/)
   })
 
   it('fechas: falla ruidoso si el select de matchdays viene truncado', async () => {
@@ -122,7 +133,7 @@ describe('historyWith — tripwire de truncamiento de PostgREST', () => {
       matchdays: { rows: [], count: 1 },
     })
 
-    await expect(historyWith(client, AMIGO)).rejects.toThrow(/no se pud/i)
+    await expect(historyWith(client, AMIGO)).rejects.toThrow(/completo de fechas/)
   })
 
   it('temporadas: falla ruidoso si el select de seasons viene truncado', async () => {
@@ -134,7 +145,7 @@ describe('historyWith — tripwire de truncamiento de PostgREST', () => {
       seasons: { rows: [], count: 1 },
     })
 
-    await expect(historyWith(client, AMIGO)).rejects.toThrow(/no se pud/i)
+    await expect(historyWith(client, AMIGO)).rejects.toThrow(/completo de temporadas/)
   })
 
   it('sets: falla ruidoso si el select de match_sets viene truncado', async () => {
@@ -147,7 +158,7 @@ describe('historyWith — tripwire de truncamiento de PostgREST', () => {
       matchSets: { rows: [], count: 1 },
     })
 
-    await expect(historyWith(client, AMIGO)).rejects.toThrow(/no se pud/i)
+    await expect(historyWith(client, AMIGO)).rejects.toThrow(/completo de sets/)
   })
 
   it('con las cuatro consultas completas, arma el historial normal con su detalle', async () => {
@@ -169,6 +180,25 @@ describe('historyWith — tripwire de truncamiento de PostgREST', () => {
       },
     ])
   })
+
+  it.each([
+    ['A', { mine: 4, theirs: 1 }, 'won'],
+    ['B', { mine: 1, theirs: 4 }, 'lost'],
+  ] as const)(
+    'con mi lado %s, score/outcome se leen de ESE lado -- el fake no puede quedar hardcodeado en A',
+    async (mySide, score, outcome) => {
+      // El caso 'A' repite lo que ya prueba el test de arriba; el de 'B' es
+      // el que de verdad pone a prueba `mySide === 'A' ? … : …`
+      // (db/friends.ts) -- si esas dos ramas se invirtieran, SÓLO este caso
+      // lo notaría.
+      const client = fakeClient({ me: ME, ...unPartidoCompleto(mySide) })
+
+      const historia = await historyWith(client, AMIGO)
+
+      expect(historia[0]?.score).toEqual(score)
+      expect(historia[0]?.outcome).toBe(outcome)
+    },
+  )
 
   it('un partido sin sets sale con outcome y score en null, sin que el guard lo note', async () => {
     const completo = unPartidoCompleto()

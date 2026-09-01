@@ -14,6 +14,34 @@ function requireColumn<T>(value: T | null, column: string): T {
   return value
 }
 
+/**
+ * El guard de truncado de `historyWith`, UNA vez para sus cuatro consultas
+ * en vez de ocho bloques casi idénticos (uno por error y uno por corte, por
+ * consulta). `consulta` nombra CUÁL de las cuatro fue -- sin eso, un corte
+ * real en `seasons` o `match_sets` decía sólo "el historial", indistinguible
+ * de un corte en `matchdays` o en `match_participants`.
+ *
+ * `count: 'exact'` y este guard son el mismo tripwire que `mySeasons`
+ * (`db/read.ts:341-374`): PostgREST corta cada select en `PGRST_DB_MAX_ROWS`
+ * (1000, `supabase/config.toml`) y no avisa -- un corte silencioso acá sería
+ * una fecha, un torneo o un resultado mal, con toda la confianza de uno bien.
+ */
+function assertComplete<T>(
+  result: { data: T[] | null; error: { message: string } | null; count: number | null },
+  consulta: string,
+): T[] {
+  if (result.error !== null) {
+    throw new EdgeError(`No se pudo leer el historial (${consulta}): ${result.error.message}`)
+  }
+  const filas = result.data ?? []
+  if (result.count !== null && filas.length < result.count) {
+    throw new EdgeError(
+      `No se pudo leer el historial completo de ${consulta} (${filas.length} de ${result.count}). Recargá la pantalla.`,
+    )
+  }
+  return filas
+}
+
 export interface SharedMatch {
   matchId: string
   matchdayId: string
@@ -60,18 +88,16 @@ export interface SharedMatch {
  * (`matchdays_read`, `seasons_read`, `match_sets_read`, 0002_rls.sql), así
  * que las tres consultas nuevas heredan el mismo límite sin pedirlo.
  *
- * `count: 'exact'` y el guard de abajo, en LAS CUATRO consultas -- mismo
- * tripwire que `mySeasons` (`db/read.ts:341-374`): PostgREST corta cada
- * select en `PGRST_DB_MAX_ROWS` (1000, `supabase/config.toml`) y no avisa.
- * En la primera es peor que en `mySeasons` en dos sentidos: sin `.order()`
- * no había ningún criterio para decidir qué filas sobreviven el corte -- era
+ * Las cuatro pasan por `assertComplete` (arriba, con el porqué del guard).
+ * La de participantes es la más delicada de las cuatro: sin `.order()` no
+ * había ningún criterio para decidir qué filas sobreviven un corte -- era
  * arbitrario, corrida a corrida -- y el filtro de abajo
  * (`v.mio !== undefined && v.suyo !== undefined`) exige LAS DOS filas de un
  * partido; perder una sola (la del caller o la del amigo) borra el partido
- * entero del historial en silencio. El resultado ya no se agrega sólo en
- * "Juntos N · En contra M" -- Task 3 lo lista fila por fila --, así que un
- * corte silencioso ahora también sería una fecha, un torneo o un resultado
- * mal, con toda la confianza de uno bien.
+ * entero del historial. El resultado ya no se agrega sólo en "Juntos N · En
+ * contra M" -- Task 3 lo lista fila por fila --, así que un corte silencioso
+ * ahora también sería una fecha, un torneo o un resultado mal, con toda la
+ * confianza de uno bien.
  */
 export async function historyWith(
   supabase: Client,
@@ -91,27 +117,16 @@ export async function historyWith(
   // no elige qué partido "importa más" -- sólo hace que, SI hay corte, sea
   // el mismo corte en cada corrida, para que el guard de abajo sea
   // reproducible.
-  const {
-    data,
-    error,
-    count,
-  } = await supabase
+  const participantesResult = await supabase
     .from('match_participants')
     .select('match_id, matchday_id, side, player_id', { count: 'exact' })
     .in('player_id', [me, friendPlayerId])
     .order('match_id', { ascending: true })
     .order('player_id', { ascending: true })
-  if (error !== null) throw new EdgeError(`No se pudo leer el historial: ${error.message}`)
-  // Falla RUIDOSO en vez de devolver un historial recortado: un error en
-  // pantalla se ve y se recarga, un "Juntos 3" que en realidad son 5 no.
-  if (count !== null && (data ?? []).length < count) {
-    throw new EdgeError(
-      `No se pudo leer el historial completo (${(data ?? []).length} de ${count}). Recargá la pantalla.`,
-    )
-  }
+  const participantes = assertComplete(participantesResult, 'participantes')
 
   const porPartido = new Map<string, { matchdayId: string; mio?: string; suyo?: string }>()
-  for (const fila of data ?? []) {
+  for (const fila of participantes) {
     // `match_participants` es una VISTA (0071): el generador de tipos no
     // conserva el `not null` de sus columnas base, así que las cuatro llegan
     // tipadas `string | null` aunque en los datos nunca lo estén -- la vista
@@ -147,67 +162,38 @@ export async function historyWith(
   // -- `matchdayNumber` es lo único que ordena una fecha sin `played_on`
   // cargado (columna nullable, 0001_schema.sql).
   const matchdayIds = [...new Set(compartidos.map((c) => c.matchdayId))]
-  const {
-    data: matchdayRows,
-    error: matchdaysError,
-    count: matchdaysCount,
-  } = await supabase
+  const matchdaysResult = await supabase
     .from('matchdays')
     .select('id, number, kind, played_on, season_id', { count: 'exact' })
     .in('id', matchdayIds)
     .order('id', { ascending: true })
-  if (matchdaysError !== null) {
-    throw new EdgeError(`No se pudo leer el historial: ${matchdaysError.message}`)
-  }
-  if (matchdaysCount !== null && (matchdayRows ?? []).length < matchdaysCount) {
-    throw new EdgeError(
-      `No se pudo leer el historial completo (${(matchdayRows ?? []).length} de ${matchdaysCount}). Recargá la pantalla.`,
-    )
-  }
-  const matchdayById = new Map((matchdayRows ?? []).map((row) => [row.id, row]))
+  const matchdayRows = assertComplete(matchdaysResult, 'fechas')
+  const matchdayById = new Map(matchdayRows.map((row) => [row.id, row]))
 
   // Consulta 3: las temporadas de esas fechas -- ídem `friendsOf` más abajo,
   // segunda consulta y cruce en JS en vez de un embed.
-  const seasonIds = [...new Set((matchdayRows ?? []).map((row) => row.season_id))]
-  const {
-    data: seasonRows,
-    error: seasonsError,
-    count: seasonsCount,
-  } = await supabase
+  const seasonIds = [...new Set(matchdayRows.map((row) => row.season_id))]
+  const seasonsResult = await supabase
     .from('seasons')
     .select('id, name', { count: 'exact' })
     .in('id', seasonIds)
     .order('id', { ascending: true })
-  if (seasonsError !== null) throw new EdgeError(`No se pudo leer el historial: ${seasonsError.message}`)
-  if (seasonsCount !== null && (seasonRows ?? []).length < seasonsCount) {
-    throw new EdgeError(
-      `No se pudo leer el historial completo (${(seasonRows ?? []).length} de ${seasonsCount}). Recargá la pantalla.`,
-    )
-  }
-  const seasonNameById = new Map((seasonRows ?? []).map((row) => [row.id, row.name]))
+  const seasonRows = assertComplete(seasonsResult, 'temporadas')
+  const seasonNameById = new Map(seasonRows.map((row) => [row.id, row.name]))
 
   // Consulta 4: los sets de los partidos compartidos. Sin sets, el partido
   // es una fecha abierta todavía sin resultado -- `outcome`/`score` quedan
   // en null, no en un 0-0 inventado.
   const matchIds = compartidos.map((c) => c.matchId)
-  const {
-    data: setRows,
-    error: setsError,
-    count: setsCount,
-  } = await supabase
+  const setsResult = await supabase
     .from('match_sets')
     .select('match_id, games_a, games_b', { count: 'exact' })
     .in('match_id', matchIds)
     .order('match_id', { ascending: true })
     .order('set_number', { ascending: true })
-  if (setsError !== null) throw new EdgeError(`No se pudo leer el historial: ${setsError.message}`)
-  if (setsCount !== null && (setRows ?? []).length < setsCount) {
-    throw new EdgeError(
-      `No se pudo leer el historial completo (${(setRows ?? []).length} de ${setsCount}). Recargá la pantalla.`,
-    )
-  }
+  const setRows = assertComplete(setsResult, 'sets')
   const setsByMatch = new Map<string, SetScore[]>()
-  for (const row of setRows ?? []) {
+  for (const row of setRows) {
     const set = { gamesA: row.games_a, gamesB: row.games_b }
     const bucket = setsByMatch.get(row.match_id)
     if (bucket === undefined) setsByMatch.set(row.match_id, [set])
@@ -216,10 +202,17 @@ export async function historyWith(
 
   return compartidos.map(({ matchId, matchdayId, mySide, together }) => {
     const matchday = matchdayById.get(matchdayId)
-    // Las tres consultas de arriba ya vinieron completas (los guards de
-    // arriba lo garantizan): que una fecha de `compartidos` no aparezca acá
-    // sería la vista o las tablas en desacuerdo entre sí, no un dato
-    // ausente -- mismo criterio que `requireColumn` arriba en este archivo.
+    // No es el guard de truncado el que hace esto inalcanzable -- ESE sólo
+    // detecta que PostgREST cortó la respuesta, y una fila que RLS esconde
+    // reduce `count` y `filas.length` EN LA MISMA MEDIDA, así que pasa el
+    // guard igual de limpia. Lo que de verdad lo hace inalcanzable es que
+    // `matchdays_read`/`seasons_read`/`match_sets_read` filtran con el MISMO
+    // `is_participant(season)` que las tablas base de `match_participants`
+    // (`supabase/migrations/0002_rls.sql:146,169,219`): una fecha que salió
+    // de la vista ya pasó ese filtro, así que `matchdays_read` no puede
+    // esconderla acá. Que no aparezca sería la vista y las tablas en
+    // desacuerdo entre sí, no un dato ausente -- mismo criterio que
+    // `requireColumn` arriba en este archivo.
     if (matchday === undefined) {
       throw new EdgeError(`No se pudo leer la fecha del partido ${matchId}.`)
     }

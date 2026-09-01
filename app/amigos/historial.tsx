@@ -87,8 +87,16 @@ function equipoDe(partido: CasualMatch): string | null {
 // versiones -- eso sí sería sobreconstruir, dice el diseño con esas palabras.
 // Si cargó y editó la misma persona, se dice una sola vez: dos líneas iguales
 // apiladas es ruido, no información.
+//
+// La comparación es por ID (`createdById`/`updatedById`), NUNCA por nombre --
+// review final de 2b, Important 2: `display_name` es texto libre sin
+// `unique` (`players`, 0001_schema.sql), así que dos amigos DISTINTOS pueden
+// compartir nombre. Comparar `createdBy === updatedBy` (los nombres)
+// colapsaba ese caso exactamente en el momento en que §3.2 existe para
+// evitarlo: "Juan cargó, editó Juan" (dos Juanes distintos) leía como que
+// nadie tocó nada.
 function autoriaDe(partido: CasualMatch): string {
-  if (partido.createdBy === partido.updatedBy) return `Cargó ${partido.createdBy}`
+  if (partido.createdById === partido.updatedById) return `Cargó ${partido.createdBy}`
   return `Cargó ${partido.createdBy} · editó ${partido.updatedBy}`
 }
 

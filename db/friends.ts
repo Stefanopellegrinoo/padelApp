@@ -15,6 +15,23 @@ function requireColumn<T>(value: T | null, column: string): T {
 }
 
 /**
+ * El nombre de un autor de partido casual, o un `EdgeError` si `nombrePorId`
+ * no lo trae. Review final de 2b, Minor 8: antes era `?? ''` -- pero
+ * `nombrePorId` sale de `players`, con `players_read: using (true)` (lectura
+ * abierta a cualquier id real, 0002_rls.sql) y la consulta que la llena ya
+ * pasa por `assertComplete`, así que un id de `autorIds` sin nombre acá sólo
+ * puede ser la vista y la tabla en desacuerdo entre sí -- mismo criterio que
+ * `requireColumn` arriba, nunca un dato ausente de verdad. Dejar pasar `''`
+ * mostraba "Cargó " sin nombre, una oración a medias en vez de un error
+ * legible.
+ */
+function requireName(nombrePorId: Map<string, string>, playerId: string): string {
+  const nombre = nombrePorId.get(playerId)
+  if (nombre === undefined) throw new EdgeError(`No se pudo leer el nombre de ${playerId}.`)
+  return nombre
+}
+
+/**
  * El guard de truncado de `historyWith`, UNA vez para sus seis consultas
  * en vez de doce bloques casi idénticos (uno por error y uno por corte, por
  * consulta). `consulta` nombra CUÁL de las seis fue -- sin eso, un corte
@@ -82,9 +99,20 @@ export interface CasualMatch {
   score: { mine: number; theirs: number } | null
   /** Con qué equipo jugó cada uno ("Boca", "Real Madrid"). `null` si no se cargó. */
   teams: { mine: string | null; theirs: string | null }
-  /** Nombres, no ids: la pantalla los muestra (diseño §3.2). */
+  /** Nombres, para que la pantalla los muestre (diseño §3.2). */
   createdBy: string
   updatedBy: string
+  /**
+   * Los ids de quien cargó/tocó último, además de los nombres de arriba --
+   * review final de 2b, Important 2: `display_name` es texto libre
+   * (`players`, sin `unique`), así que dos amigos distintos pueden compartir
+   * nombre. `autoriaDe` (`app/amigos/historial.tsx`) compara ESTOS dos para
+   * decidir si cargó y editó "la misma persona" -- comparar `createdBy ===
+   * updatedBy` (los nombres) colapsaba ese caso en el peor momento posible:
+   * el mismo en que §3.2 existe para avisar que alguien más tocó el partido.
+   */
+  createdById: string
+  updatedById: string
 }
 
 /**
@@ -112,22 +140,34 @@ export type SharedMatch =
  * número de fecha -- un orden que depende de un campo nullable y no lo dice
  * es un orden inestable (2a). Sólo aplica cuando LAS DOS son de torneo:
  * `CasualMatch` no tiene `matchdayNumber` (diseño §7, ninguna migración de
- * este plan se lo agrega). Fuera de ese caso -- una misma fecha exacta entre
- * las dos fuentes, o dos casuales el mismo día -- devuelve `0`:
- * `Array.prototype.sort` es estable, así que quedan en el orden en que ya
- * venían concatenadas más abajo (torneo antes que casual) -- determinista,
- * pero no es un desempate elegido a propósito.
+ * este plan se lo agrega).
+ *
+ * Fuera de ese caso -- misma fecha, un torneo y un casual -- el desempate
+ * sigue por `kind` (torneo antes que casual) y por último por `matchId`.
+ * Review final de 2b, Minor 3: ANTES esa rama devolvía `0` a secas, confiada
+ * en que `Array.prototype.sort` es estable. La estabilidad sólo salva un
+ * comparador CONSISTENTE, y éste no lo era -- con un torneo T1(n=1), un
+ * torneo T2(n=5) y un casual C, los tres con la misma fecha: T1==C y C==T2
+ * (el `0` de esta rama), pero T1 != T2 (si se comparan directo, gana T2 por
+ * `matchdayNumber`). Esa relación es intransitiva, y con un comparador así
+ * el resultado de `sort` depende de qué pares llega a comparar el algoritmo
+ * -- que depende del ORDEN DE ENTRADA, no de los datos (`[T1,C,T2]` quedaba
+ * sin tocar; `[T1,T2,C]` sí reordenaba a `[T2,T1,C]`, mismo trío). Ahora la
+ * cadena de desempate es total -- todo par de partidos distintos cae en una
+ * rama que no devuelve `0` -- así que el resultado ya no depende del orden
+ * en que llegaron.
  */
-function porFechaDescendente(a: SharedMatch, b: SharedMatch): number {
+export function porFechaDescendente(a: SharedMatch, b: SharedMatch): number {
   if (a.playedOn !== b.playedOn) {
     if (a.playedOn === null) return 1
     if (b.playedOn === null) return -1
     return a.playedOn < b.playedOn ? 1 : -1
   }
-  if (a.kind === 'tournament' && b.kind === 'tournament') {
+  if (a.kind !== b.kind) return a.kind === 'tournament' ? -1 : 1
+  if (a.kind === 'tournament' && b.kind === 'tournament' && a.matchdayNumber !== b.matchdayNumber) {
     return b.matchdayNumber - a.matchdayNumber
   }
-  return 0
+  return a.matchId < b.matchId ? -1 : a.matchId > b.matchId ? 1 : 0
 }
 
 /**
@@ -418,8 +458,10 @@ export async function historyWith(
       outcome,
       score,
       teams,
-      createdBy: nombrePorId.get(row.created_by) ?? '',
-      updatedBy: nombrePorId.get(row.updated_by) ?? '',
+      createdBy: requireName(nombrePorId, row.created_by),
+      updatedBy: requireName(nombrePorId, row.updated_by),
+      createdById: row.created_by,
+      updatedById: row.updated_by,
     }
   })
 
@@ -851,20 +893,46 @@ export async function updateCasualMatch(
 /**
  * Borra un partido casual. Cualquiera de los dos puede, en cualquier momento
  * (§3.3) -- "si tu amigo te borra los partidos que perdió, tenés un problema
- * de amigo, no de software". No hay nada que validar ni derivar más allá del
- * id: `casual_matches_delete` (0072) hace todo el trabajo de permisos.
+ * de amigo, no de software".
+ *
+ * Devuelve el `friendPlayerId`, leído de la fila ANTES de borrarla -- mismo
+ * argumento y misma forma que `updateCasualMatch` de arriba (leer primero,
+ * escribir después): `removeCasualMatch` (`app/amigos/actions.ts`) lo
+ * necesita para el redirect, y usar el valor del `<form>` en vez de éste es
+ * la misma segunda fuente para el mismo dato que ya se sacó de editar (fix
+ * round 1) -- review final de 2b, Minor 4, la repone acá. La lectura previa
+ * hace además de chequeo de pertenencia, como en `updateCasualMatch`:
+ * `casual_matches_read` (0072) ya acota a `my_player_id() in (player_a,
+ * player_b)`, así que un tercero recibe `null` ACÁ, antes de intentar ningún
+ * DELETE.
  */
-export async function deleteCasualMatch(supabase: Client, matchId: string): Promise<void> {
-  const { error, count } = await supabase.from('casual_matches').delete({ count: 'exact' }).eq('id', matchId)
-  if (error !== null) {
-    // 22P02: mismo caso que en `updateCasualMatch` -- `matchId` mal formado,
-    // sólo alcanzable por un POST armado a mano.
-    if (error.code === '22P02') throw new EdgeError('Ese ID no es válido.')
-    throw new EdgeError(`No se pudo borrar el partido: ${error.message}`)
+export async function deleteCasualMatch(supabase: Client, matchId: string): Promise<string> {
+  const { data: me, error: idError } = await supabase.rpc('my_player_id')
+  if (idError !== null) throw new EdgeError(`No se pudo identificar tu cuenta: ${idError.message}`)
+  if (me === null) throw new EdgeError('Entrá con tu cuenta para borrar un partido.')
+
+  const { data: fila, error: filaError } = await supabase
+    .from('casual_matches')
+    .select('player_a, player_b')
+    .eq('id', matchId)
+    .maybeSingle()
+  // 22P02: mismo caso que en `updateCasualMatch` -- `matchId` mal formado,
+  // sólo alcanzable por un POST armado a mano.
+  if (filaError !== null) {
+    if (filaError.code === '22P02') throw new EdgeError('Ese ID no es válido.')
+    throw new EdgeError(`No se pudo leer el partido: ${filaError.message}`)
   }
+  if (fila === null) {
+    throw new EdgeError('No se pudo borrar: el partido no existe o no te corresponde.')
+  }
+  const friendPlayerId = fila.player_a === me ? fila.player_b : fila.player_a
+
+  const { error, count } = await supabase.from('casual_matches').delete({ count: 'exact' }).eq('id', matchId)
+  if (error !== null) throw new EdgeError(`No se pudo borrar el partido: ${error.message}`)
   if (count === 0) {
     throw new EdgeError('No se pudo borrar: el partido no existe o no te corresponde.')
   }
+  return friendPlayerId
 }
 
 /**

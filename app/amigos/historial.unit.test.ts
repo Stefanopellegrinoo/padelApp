@@ -41,6 +41,10 @@ function partidoCasual(overrides: Partial<CasualMatch> = {}): SharedMatch {
     teams: { mine: 'Boca', theirs: null },
     createdBy: 'Fede',
     updatedBy: 'Fede',
+    // Mismo id por default -- "cargó y editó la misma persona" (Fede) es el
+    // caso de siempre. Los tests de autoría por id pisan esto explícitamente.
+    createdById: 'fede-id',
+    updatedById: 'fede-id',
     ...overrides,
   }
 }
@@ -197,17 +201,48 @@ describe('Historial', () => {
     // ver que alguien lo cambió. `editó Juan` sólo puede salir de la línea de
     // autoría -- el encabezado también dice "Juan", pero nunca precedido de
     // "editó ", así que esta aserción no puede pasar por casualidad.
-    const editadoPorOtro = partidoCasual({ createdBy: 'Fede', updatedBy: 'Juan' })
+    const editadoPorOtro = partidoCasual({
+      createdBy: 'Fede',
+      updatedBy: 'Juan',
+      createdById: 'fede-id',
+      updatedById: 'juan-id',
+    })
     const html = renderToStaticMarkup(Historial({ nombre: 'Juan', friendPlayerId: 'amigo-1', partidos: [editadoPorOtro] }))
     expect(html).toContain('Cargó Fede')
     expect(html).toContain('editó Juan')
   })
 
   it('cuando cargó y editó la misma persona, lo dice una sola vez', () => {
-    const mismaPersona = partidoCasual({ createdBy: 'Fede', updatedBy: 'Fede' })
+    const mismaPersona = partidoCasual({
+      createdBy: 'Fede',
+      updatedBy: 'Fede',
+      createdById: 'fede-id',
+      updatedById: 'fede-id',
+    })
     const html = renderToStaticMarkup(Historial({ nombre: 'Juan', friendPlayerId: 'amigo-1', partidos: [mismaPersona] }))
     expect(html).toContain('Cargó Fede')
     expect(html).not.toContain('editó')
+  })
+
+  it('dos amigos DISTINTOS con el mismo display_name no colapsan la autoría -- review final, Important 2', () => {
+    // `players.display_name` es texto libre, sin `unique` (0001_schema.sql):
+    // nada impide que "Fede" (quien cargó) y otro "Fede" (quien editó) sean
+    // dos cuentas distintas. Comparar por NOMBRE (`createdBy === updatedBy`)
+    // los confundía con "cargó y editó la misma persona" -- exactamente el
+    // caso que §3.2 existe para avisar. Los ids son distintos acá aunque los
+    // dos nombres sean "Fede": si `autoriaDe` volviera a comparar nombres,
+    // este test es el único que lo nota.
+    const mismoNombreDistintoId = partidoCasual({
+      createdBy: 'Fede',
+      updatedBy: 'Fede',
+      createdById: 'fede-uno',
+      updatedById: 'fede-dos',
+    })
+    const html = renderToStaticMarkup(
+      Historial({ nombre: 'Juan', friendPlayerId: 'amigo-1', partidos: [mismoNombreDistintoId] }),
+    )
+    expect(html).toContain('Cargó Fede')
+    expect(html).toContain('editó Fede')
   })
 
   it('un empate con ganador se dibuja como el hecho, nunca "por penales"', () => {

@@ -8,6 +8,14 @@ import { CasualForm } from './cargar'
 
 interface PageProps {
   params: Promise<{ playerId: string }>
+  /**
+   * `?error=...` de un `removeCasualMatch` (`../actions.ts`) que falló --
+   * Borrar es un `<form>` sin JS, así que el error vuelve por la query, mismo
+   * canal que `/amigos` (`../page.tsx`). Review final de 2b, Minor 4: esta
+   * pantalla declaraba sólo `params`, así que un Borrar fallido redirigía
+   * ACÁ con el error en la URL y nadie lo leía -- fallaba en silencio.
+   */
+  searchParams: Promise<{ error?: string }>
 }
 
 /**
@@ -27,8 +35,9 @@ interface PageProps {
  * del `datalist` de "Cargar partido" son para quien está tipeando, no para el
  * amigo que se está mirando.
  */
-export default async function AmigoPage({ params }: PageProps) {
+export default async function AmigoPage({ params, searchParams }: PageProps) {
   const { playerId } = await params
+  const { error } = await searchParams
   const supabase = await serverClient()
 
   const [nombres, partidos, sports] = await Promise.all([
@@ -42,6 +51,9 @@ export default async function AmigoPage({ params }: PageProps) {
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-lg flex-col gap-4 bg-bg px-5 pb-6 text-text">
+      {error !== undefined && (
+        <p className="rounded-field bg-live-bg px-3 py-2.5 text-[12.5px] font-bold text-live">{error}</p>
+      )}
       <Historial nombre={nombre} friendPlayerId={playerId} partidos={partidos} />
       <CasualForm
         friendPlayerId={playerId}

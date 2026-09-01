@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Client } from './client'
-import { historyWith } from './friends'
+import { historyWith, porFechaDescendente, type CasualMatch, type SharedMatch, type TournamentMatch } from './friends'
 
 /**
  * PostgREST corta CADA select en `PGRST_DB_MAX_ROWS` (1000,
@@ -389,6 +389,13 @@ describe('historyWith — tripwire de truncamiento de PostgREST', () => {
     expect(casual.teams).toEqual({ mine: 'Boca', theirs: 'River' })
     expect(casual.createdBy).toBe('El amigo')
     expect(casual.updatedBy).toBe('Yo')
+    // Review final de 2b, Important 2: `historyWith` ya tenía los dos ids en
+    // mano acá (`row.created_by`/`row.updated_by`) para armar `nombrePorId`
+    // -- sólo hacía falta llevarlos también al `CasualMatch` de salida, para
+    // que `autoriaDe` (`app/amigos/historial.tsx`) compare por id y no por
+    // nombre.
+    expect(casual.createdById).toBe(AMIGO)
+    expect(casual.updatedById).toBe(ME)
   })
 
   it('un torneo sin jugar (playedOn null) queda al final, mezclado con un casual que sí tiene fecha', async () => {
@@ -472,5 +479,70 @@ describe('historyWith — tripwire de truncamiento de PostgREST', () => {
     // (`m1`, `m2`, el de la consulta de participantes) -- lo opuesto de lo
     // que se assertea abajo.
     expect(historia.map((m) => m.matchId)).toEqual(['m2', 'm1'])
+  })
+})
+
+// Fixtures mínimas de `SharedMatch` para probar el comparador DIRECTO, sin
+// pasar por `historyWith` -- a propósito: `historyWith` concatena
+// `[...torneo, ...casuales]` antes de ordenar, así que un casual nunca puede
+// terminar posicionado ENTRE dos partidos de torneo en el array de entrada.
+// El repro de acá abajo necesita exactamente esa posición (torneo, casual,
+// torneo) para mostrar la intransitividad -- inalcanzable por el camino
+// público, así que el comparador se prueba solo.
+function torneoFixture(overrides: Partial<TournamentMatch>): SharedMatch {
+  return {
+    kind: 'tournament',
+    matchId: 'default',
+    matchdayId: 'f1',
+    together: false,
+    playedOn: '2026-01-01',
+    matchdayNumber: 1,
+    matchdayKind: 'REGULAR',
+    seasonName: 'Liga de test',
+    outcome: null,
+    score: null,
+    ...overrides,
+  }
+}
+
+function casualFixture(overrides: Partial<CasualMatch>): SharedMatch {
+  return {
+    kind: 'casual',
+    matchId: 'default',
+    playedOn: '2026-01-01',
+    sport: 'FIFA',
+    outcome: 'drew',
+    score: null,
+    teams: { mine: null, theirs: null },
+    createdBy: 'Yo',
+    updatedBy: 'Yo',
+    createdById: ME,
+    updatedById: ME,
+    ...overrides,
+  }
+}
+
+describe('porFechaDescendente', () => {
+  // Review final de 2b, Minor 3: con la misma fecha para los tres, el
+  // desempate SÓLO corría entre dos de torneo -- cualquier par cruzado
+  // (torneo vs casual) volvía `0`. Eso es una relación intransitiva
+  // (T1==C, C==T2, pero T1 != T2 comparados directo), y con eso el resultado
+  // de `Array.prototype.sort` depende de qué pares llega a comparar el
+  // algoritmo -- que depende del ORDEN DE ENTRADA, no de los datos. Repro
+  // exacto de la review: mismo trío, dos órdenes de entrada.
+  it('el mismo trío en dos órdenes de entrada da el mismo resultado -- antes dependía del orden', () => {
+    const t1 = torneoFixture({ matchId: 't1', matchdayNumber: 1 })
+    const t2 = torneoFixture({ matchId: 't2', matchdayNumber: 5 })
+    const c = casualFixture({ matchId: 'c1' })
+
+    const ordenA = [t1, c, t2].sort(porFechaDescendente).map((m) => m.matchId)
+    const ordenB = [t1, t2, c].sort(porFechaDescendente).map((m) => m.matchId)
+
+    // La propiedad que de verdad importa: el resultado no puede depender de
+    // en qué orden llegaron los mismos tres elementos.
+    expect(ordenA).toEqual(ordenB)
+    // Y el orden en sí: torneo antes que casual en un empate de fecha: entre
+    // los dos de torneo, el `matchdayNumber` más alto primero (t2, n=5).
+    expect(ordenA).toEqual(['t2', 't1', 'c1'])
   })
 })

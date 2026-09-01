@@ -37,10 +37,30 @@ export interface CasualFormInitial {
  * `useActionState`, no el patrón `<form action={fn}>` sin estado de
  * `app/amigos/actions.ts`: ese patrón le sirve a pedir/aceptar amistad (un
  * campo, nada que rechazar en el borde) pero acá hay siete campos y una
- * validación real (`parseCasualInput`, `db/friends.ts`) que puede fallar --
- * perder lo ya tipeado en un redirect de ida y vuelta sería peor que
- * `registro-form.tsx`, que ya resuelve exactamente este problema con el
- * mismo hook.
+ * validación real (`parseCasualInput`, `db/friends.ts`) que puede fallar.
+ *
+ * Los siete campos son CONTROLADOS -- cada uno con su propio `useState`,
+ * seedeado desde `initial` --, y NO por lo que arma el hook de arriba.
+ * Review final de 2b, Important 1: el JSDoc de esta misma función afirmaba
+ * antes que `useActionState` alcanzaba para no perder lo tipeado, citando
+ * `registro-form.tsx` como si ya resolviera "exactamente este problema con
+ * el mismo hook" -- falso: ese archivo también usa `useActionState`, pero lo
+ * que de verdad conserva sus tres campos es que son controlados
+ * (`value=`/`onChange=`), no el hook.
+ *
+ * El mecanismo, verificado en el código de React 19
+ * (`react-dom/cjs/react-dom-client.development.js`, `startHostTransition` →
+ * `requestFormReset$1` → `fiber.stateNode.reset()`): toda action de un
+ * `<form>` -- también una que TERMINA en error -- dispara un
+ * `HTMLFormElement.reset()` nativo sobre el DOM como parte de la misma
+ * transición. Un input sin controlar (`defaultValue`) vuelve a su valor
+ * original con ese reset -- cada uno de "Elegí una fecha real.", "Cargá los
+ * dos números del marcador" o "tienen que ser amigos aceptados" volvía con
+ * el formulario en blanco, y en el de editar, con la fila revertida a lo que
+ * ya estaba guardado, pisando lo que la persona acababa de cambiar. Un input
+ * controlado no lo pierde: su valor sale de un estado de React que ese reset
+ * del DOM no toca, y el próximo render (el mismo que muestra el error) lo
+ * vuelve a escribir en la pantalla.
  *
  * El "quién ganó" es SIEMPRE un radio obligatorio con las tres opciones
  * (ruling del orquestador, task-4-brief.md): ni pregunta condicional que
@@ -84,6 +104,20 @@ export function CasualForm({
   // cuál datalist apunta cada input.
   const sportsListId = useId()
 
+  // Los siete campos, controlados -- ver el JSDoc de arriba (Important 1,
+  // review final) para el porqué. Seedeados una sola vez desde `initial`: esta
+  // instancia de `CasualForm` no sobrevive un cambio de fila (`CasualMatchRow`
+  // desmonta y remonta un componente nuevo cada vez que `editing` cambia), así
+  // que no hace falta un `useEffect` que vuelva a sincronizar si `initial`
+  // cambiara debajo -- nunca cambia bajo la misma instancia.
+  const [sport, setSport] = useState(initial?.sport ?? '')
+  const [playedOn, setPlayedOn] = useState(initial?.playedOn ?? '')
+  const [outcome, setOutcome] = useState<'' | CasualFormInitial['outcome']>(initial?.outcome ?? '')
+  const [scoreMine, setScoreMine] = useState(initial?.scoreMine ?? '')
+  const [scoreTheirs, setScoreTheirs] = useState(initial?.scoreTheirs ?? '')
+  const [teamMine, setTeamMine] = useState(initial?.teamMine ?? '')
+  const [teamTheirs, setTeamTheirs] = useState(initial?.teamTheirs ?? '')
+
   return (
     <form action={formAction} className="flex flex-col gap-3 rounded-field border-[1.5px] border-line p-[14px]">
       <input type="hidden" name="friendPlayerId" value={friendPlayerId} />
@@ -97,7 +131,8 @@ export function CasualForm({
           id={`${sportsListId}-sport`}
           name="sport"
           list={sportsListId}
-          defaultValue={initial?.sport ?? ''}
+          value={sport}
+          onChange={(e) => setSport(e.target.value)}
           required
           className={INPUT}
         />
@@ -116,7 +151,8 @@ export function CasualForm({
           id={`${sportsListId}-fecha`}
           name="playedOn"
           type="date"
-          defaultValue={initial?.playedOn ?? ''}
+          value={playedOn}
+          onChange={(e) => setPlayedOn(e.target.value)}
           required
           className={INPUT}
         />
@@ -132,7 +168,8 @@ export function CasualForm({
             name="outcome"
             value="won"
             required
-            defaultChecked={initial?.outcome === 'won'}
+            checked={outcome === 'won'}
+            onChange={() => setOutcome('won')}
             className="h-4 w-4 shrink-0 accent-accent"
           />
           Ganaste vos
@@ -142,7 +179,8 @@ export function CasualForm({
             type="radio"
             name="outcome"
             value="lost"
-            defaultChecked={initial?.outcome === 'lost'}
+            checked={outcome === 'lost'}
+            onChange={() => setOutcome('lost')}
             className="h-4 w-4 shrink-0 accent-accent"
           />
           Ganó {friendName}
@@ -152,7 +190,8 @@ export function CasualForm({
             type="radio"
             name="outcome"
             value="drew"
-            defaultChecked={initial?.outcome === 'drew'}
+            checked={outcome === 'drew'}
+            onChange={() => setOutcome('drew')}
             className="h-4 w-4 shrink-0 accent-accent"
           />
           Empataron
@@ -168,7 +207,8 @@ export function CasualForm({
             id={`${sportsListId}-scoreMine`}
             name="scoreMine"
             type="number"
-            defaultValue={initial?.scoreMine ?? ''}
+            value={scoreMine}
+            onChange={(e) => setScoreMine(e.target.value)}
             className={INPUT}
           />
         </div>
@@ -180,7 +220,8 @@ export function CasualForm({
             id={`${sportsListId}-scoreTheirs`}
             name="scoreTheirs"
             type="number"
-            defaultValue={initial?.scoreTheirs ?? ''}
+            value={scoreTheirs}
+            onChange={(e) => setScoreTheirs(e.target.value)}
             className={INPUT}
           />
         </div>
@@ -194,7 +235,8 @@ export function CasualForm({
           <input
             id={`${sportsListId}-teamMine`}
             name="teamMine"
-            defaultValue={initial?.teamMine ?? ''}
+            value={teamMine}
+            onChange={(e) => setTeamMine(e.target.value)}
             className={INPUT}
           />
         </div>
@@ -205,7 +247,8 @@ export function CasualForm({
           <input
             id={`${sportsListId}-teamTheirs`}
             name="teamTheirs"
-            defaultValue={initial?.teamTheirs ?? ''}
+            value={teamTheirs}
+            onChange={(e) => setTeamTheirs(e.target.value)}
             className={INPUT}
           />
         </div>

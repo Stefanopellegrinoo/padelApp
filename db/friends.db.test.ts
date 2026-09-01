@@ -1582,11 +1582,55 @@ describe('updateCasualMatch', () => {
 
     const { data: fila } = await adminClient()
       .from('casual_matches')
-      .select('updated_by, winner, score_a, score_b')
+      .select('player_a, updated_by, winner, score_a, score_b')
       .eq('id', matchId)
       .single()
     expect(fila?.updated_by).toBe(dos.playerId)
     expect(fila?.winner).toBe(uno.playerId)
+    // Fix round 2 (review final), Minor 6: `score_a`/`score_b` se seleccionaban
+    // y nunca se asertaban -- columnas muertas en la proyección. `dos` editó
+    // con `scoreMine: '1', scoreTheirs: '3'` (1 propio, 3 de `uno`); qué
+    // columna es cuál depende de qué lado del par canónico (0072) le tocó a
+    // cada uno, no determinista entre corridas -- se lee `player_a` para
+    // saberlo, mismo criterio que el test de "marcador a medias" más abajo.
+    const scoreDeDos = fila?.player_a === dos.playerId ? fila?.score_a : fila?.score_b
+    const scoreDeUno = fila?.player_a === uno.playerId ? fila?.score_a : fila?.score_b
+    expect(scoreDeDos).toBe(1)
+    expect(scoreDeUno).toBe(3)
+  })
+
+  // Fix round 2 (review final), Minor 7: `0072` dice en un comentario que la
+  // puerta de amistad aceptada (§4.5) es "de alta, no de por vida" --
+  // `casual_matches_update` no repite el `exists(friendships…)` del insert.
+  // Es cierto por lectura de la política, y es un límite DELIBERADO
+  // (§4.5, último párrafo: "dejar de ser amigos no borra los partidos ya
+  // cargados. Es historia."), pero nada lo pinneaba.
+  it('la amistad es de ALTA, no de por vida -- borrarla no impide seguir editando un partido ya cargado', async () => {
+    const uno = await createTestUser()
+    const dos = await createTestUser()
+    await amistadAceptada(uno.playerId, dos.playerId)
+    const matchId = await createCasualMatch(uno.client, dos.playerId, entradaCasual())
+
+    // Se deshace la amistad -- `friendships_delete` (0070) deja borrar a
+    // cualquiera de los dos, mismo cálculo de par canónico que
+    // `amistadAceptada` usa para sembrarla.
+    const [playerA, playerB] =
+      uno.playerId < dos.playerId ? [uno.playerId, dos.playerId] : [dos.playerId, uno.playerId]
+    const { error: unfriendError } = await uno.client
+      .from('friendships')
+      .delete()
+      .eq('player_a', playerA)
+      .eq('player_b', playerB)
+    if (unfriendError !== null) {
+      throw new Error(`No se pudo deshacer la amistad de test: ${unfriendError.message}`)
+    }
+
+    // `dos` sigue pudiendo editar -- sin la amistad, `casual_matches_read`
+    // (por la que pasa `updateCasualMatch` antes de escribir) sigue
+    // acotando a los dos jugadores de la fila, no a los amigos.
+    await expect(updateCasualMatch(dos.client, matchId, entradaCasual({ outcome: 'drew' }))).resolves.toBe(
+      uno.playerId,
+    )
   })
 
   it('un tercero no puede editar un partido ajeno', async () => {
@@ -1681,7 +1725,19 @@ describe('deleteCasualMatch', () => {
     const matchId = await createCasualMatch(uno.client, dos.playerId, entradaCasual())
 
     const error: unknown = await deleteCasualMatch(ajeno.client, matchId).catch((e: unknown) => e)
+    // Fix round 2 (review final), Minor 5: `toBeInstanceOf(EdgeError)` sólo
+    // prueba que ALGO se rechazó -- TODO camino de rechazo de
+    // `deleteCasualMatch` tira `EdgeError` (uuid mal formado, partido
+    // inexistente, fila filtrada por RLS), así que esto pasaba igual si
+    // `ajeno` fuera rechazado por la razón equivocada. Mismo defecto que ya
+    // se corrigió en `updateCasualMatch` (arriba) por el mismo motivo: este
+    // test nunca llega a `casual_matches_delete` -- el `select` previo
+    // (`db/friends.ts`) ya devuelve `null` para un no miembro, y ESE es el
+    // motivo que hay que pinnear. La aserción de "la fila sigue" de abajo no
+    // es vacua -- carga el peso real de este test -- pero pinnear el mensaje
+    // cierra el mismo hueco que en editar.
     expect(error).toBeInstanceOf(EdgeError)
+    expect((error as EdgeError).message).toContain('no existe o no te corresponde')
 
     const { data: sigue } = await adminClient().from('casual_matches').select('id').eq('id', matchId)
     expect(sigue).toEqual([{ id: matchId }])

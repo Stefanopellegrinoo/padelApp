@@ -12,7 +12,7 @@ type Resultado = NonNullable<SharedMatch['outcome']>
 // el TUYO contra él ("ganaste") -- diseño §4.4, y es lo que separa un
 // partido de dobles de uno 1v1 sin necesitar un campo aparte.
 const VERBOS_JUNTOS: Record<Resultado, string> = { won: 'Ganaron', lost: 'Perdieron', drew: 'Empataron' }
-const VERBOS_CONTRA: Record<Resultado, string> = { won: 'Ganaste', lost: 'Perdiste', drew: 'Empataron' }
+const VERBOS_CONTRA: Record<Resultado, string> = { won: 'Ganaste', lost: 'Perdiste', drew: 'Empataste' }
 
 /**
  * Orden cronológico descendente. `playedOn` es nullable (una fecha sin jugar

@@ -76,6 +76,20 @@ describe('Historial', () => {
     expect(html).toContain('Perdiste 3-6')
   })
 
+  it('un empate de compañeros dice "empataron" -- el resultado de la pareja', () => {
+    const empateJuntos = partido({ together: true, outcome: 'drew', score: { mine: 2, theirs: 2 } })
+    const html = renderToStaticMarkup(Historial({ nombre: 'Juan', partidos: [empateJuntos] }))
+    expect(html).toContain('Juntos: Empataron 2-2')
+  })
+
+  it('un empate enfrentados dice "empataste" -- en primera persona, no el verbo de la pareja', () => {
+    // Migración 0034 (`match_sets_no_draw` condicionado por `allows_draw`):
+    // un empate es un resultado real y guardable, no un caso hipotético.
+    const empateContra = partido({ together: false, outcome: 'drew', score: { mine: 2, theirs: 2 } })
+    const html = renderToStaticMarkup(Historial({ nombre: 'Juan', partidos: [empateContra] }))
+    expect(html).toContain('En contra: Empataste 2-2')
+  })
+
   it('un partido sin resultado no inventa uno', () => {
     const sinJugar = partido({ outcome: null, score: null })
     const html = renderToStaticMarkup(Historial({ nombre: 'Juan', partidos: [sinJugar] }))

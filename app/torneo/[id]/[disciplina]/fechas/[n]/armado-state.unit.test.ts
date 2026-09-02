@@ -137,6 +137,23 @@ describe('matchdayShape', () => {
       expect(matchdayShape({ confirmed: 2, looseGuests: 0, guestPairs: 0, sideSize: 2, formato: ROUND_ROBIN }).tooFew).toBe(true)
       expect(matchdayShape({ confirmed: 4, looseGuests: 0, guestPairs: 0, sideSize: 2, formato: ROUND_ROBIN }).tooFew).toBe(false)
     })
+
+    // Fix round 2 (Task 3): `tooManyToPair` no tenía ningún test propio fuera
+    // de `armado-state.ts` y `armado.tsx` — ni la banda de aviso (:637-641)
+    // ni el gate de `canDraw` (:363) tenían nada que se pusiera rojo si el
+    // umbral se rompía o si `!tooManyToPair &&` se borraba de `canDraw`.
+    // `confirmed` y `eventualSize` no son el mismo número: 12 confirmados
+    // con un suelto YA sentado (no pide uno nuevo, `needsLooseGuest` da
+    // `false`) da `eventualSize` 13 sin arrastrar la paridad.
+    it('avisa que no se puede sortear pasado MAX_PAIRING_POOL, y no antes', () => {
+      const limite = matchdayShape({ confirmed: 12, looseGuests: 0, guestPairs: 0, sideSize: 2, formato: ROUND_ROBIN })
+      expect(limite.eventualSize).toBe(12)
+      expect(limite.tooManyToPair).toBe(false)
+
+      const pasado = matchdayShape({ confirmed: 12, looseGuests: 1, guestPairs: 0, sideSize: 2, formato: ROUND_ROBIN })
+      expect(pasado.eventualSize).toBe(13)
+      expect(pasado.tooManyToPair).toBe(true)
+    })
   })
 
   describe('de a uno (pair_size=1)', () => {

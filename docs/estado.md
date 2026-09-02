@@ -565,6 +565,22 @@ posibles del Masters, trazar la rotación del round robin para 4 parejas, comput
 `floor((f-1)/k)` en los bordes. Un test y un código pueden estar equivocados de
 acuerdo, y eso ninguna suite lo detecta.
 
+**`jsdom` está para UN caso, y el resto sigue sin DOM.** `app/amigos/[playerId]/cargar.unit.test.ts`
+es el único archivo del repo que corre en `jsdom`, con un pragma
+`@vitest-environment` por archivo — `vitest.config.ts` no tiene override global
+y no hay que ponerle uno. Entró en 2b porque el formulario del partido casual se
+borraba entero en cada error de validación (React 19 llama
+`HTMLFormElement.reset()` nativo cuando una action termina) y **medimos que no
+había forma barata de pinearlo**: `value` y `defaultValue` serializan HTML
+idéntico, así que `renderToStaticMarkup` no distingue un input controlado de uno
+que no lo está.
+
+La regla, entonces: **`jsdom` se usa sólo para un componente con estado que no se
+puede invocar como función pura.** Todo lo demás —que es toda la UI de este
+repo— se sigue testeando con `renderToStaticMarkup` y sin DOM, y por eso la suite
+unitaria corre en cuatro segundos. Si te encontrás agregando el pragma a un
+segundo archivo, pará y preguntate si el componente necesita estado de verdad.
+
 **Tres lecciones sobre tests, que costaron rondas:**
 
 - `toContain` responde *"¿está?"*, nunca *"¿dónde?"*. Cuando el contrato es el

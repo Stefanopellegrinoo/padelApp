@@ -27,11 +27,12 @@ import {
 
 /**
  * El plantel es UNO SOLO y compartido por todas las disciplinas de la
- * temporada (docs/tipos-de-torneo.md §3.3). Cada una elige su propio
- * `pairSize`, así que el piso de la pantalla del plantel tiene que ser el
- * MÁXIMO entre las elegidas: el mínimo dejaría armar un torneo cuyo pádel no
- * puede jugar ni una fecha (piso real 4, `minSquadFor(2)`) con la excusa de
- * que el FIFA de al lado se conforma con 2.
+ * temporada (docs/tipos-de-torneo.md §0, "Comparten el plantel, el nombre y
+ * el link de invitación"). Cada una elige su propio `pairSize`, así que el
+ * piso de la pantalla del plantel tiene que ser el MÁXIMO entre las
+ * elegidas: el mínimo dejaría armar un torneo cuyo pádel no puede jugar ni
+ * una fecha (piso real 4, `minSquadFor(2)`, §3.3) con la excusa de que el
+ * FIFA de al lado se conforma con 2.
  */
 describe('effectiveFloor', () => {
   it('con pádel y FIFA juntos, manda el piso más alto', () => {
@@ -48,7 +49,7 @@ describe('effectiveFloor', () => {
 })
 
 describe('squadWarning', () => {
-  const floorPadel = effectiveFloor([2]) // 4: el piso de una sola pareja.
+  const floorPadel = effectiveFloor([2]) // 4: el piso de dos parejas, un partido.
 
   it('asks for the missing name when the squad is short', () => {
     const names = [...Array(3).fill('Jugador'), '']

@@ -127,6 +127,16 @@ describe('matchdayShape', () => {
       expect(shape.size).toBe(9)
       expect(shape.complete).toBe(false)
     })
+
+    // Sin esto, `tooFew` de a dos podía quedar hardcodeado a `minSquadFor(1)`
+    // (o a un `2` suelto) y el archivo entero seguía en verde: las únicas
+    // otras aserciones de `tooFew` con `sideSize: 2` (arriba, eventualSize 8)
+    // pasan bajo cualquier piso <= 8. 2 y 4 confirmados, pares y sin
+    // invitado de por medio, para no arrastrar la paridad a la cuenta.
+    it('respeta minSquadFor(2) = 4, no el piso de a uno ni un 2 suelto', () => {
+      expect(matchdayShape({ confirmed: 2, looseGuests: 0, guestPairs: 0, sideSize: 2, formato: ROUND_ROBIN }).tooFew).toBe(true)
+      expect(matchdayShape({ confirmed: 4, looseGuests: 0, guestPairs: 0, sideSize: 2, formato: ROUND_ROBIN }).tooFew).toBe(false)
+    })
   })
 
   describe('de a uno (pair_size=1)', () => {

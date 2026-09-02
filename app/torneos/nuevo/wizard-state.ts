@@ -186,11 +186,18 @@ export function filledCount(names: readonly string[]): number {
  * El piso real del plantel COMPARTIDO: el MÁXIMO entre los pisos de cada
  * disciplina elegida, nunca el mínimo ni el de la primera.
  *
- * El plantel es uno solo para toda la temporada (docs/tipos-de-torneo.md
- * §3.3): un torneo con pádel (parejas, piso 4) y FIFA (de a uno, piso 2)
- * necesita 4. Elegir el MÍNIMO dejaría armar un torneo cuyo pádel no puede
- * jugar ni una sola fecha — el máximo es lo que garantiza que la disciplina
- * más exigente también entre.
+ * El plantel es uno solo para toda la temporada (docs/tipos-de-torneo.md §0,
+ * "Comparten el plantel, el nombre y el link de invitación"): un torneo con
+ * pádel (parejas, piso 4) y FIFA (de a uno, piso 2) necesita 4. Elegir el
+ * MÍNIMO dejaría armar un torneo cuyo pádel no puede jugar ni una sola
+ * fecha — el máximo es lo que garantiza que la disciplina más exigente
+ * también entre.
+ *
+ * `sideSizes` vacío da `Math.max()` sin argumentos, `-Infinity` — no
+ * previsto acá porque no puede llegar: `blocked` en `wizard.tsx` no deja
+ * salir del paso 0 mientras `disciplineWarning !== null` (cero disciplinas
+ * marcadas), así que ningún caller del wizard llama a esto con el array
+ * vacío.
  */
 export function effectiveFloor(sideSizes: readonly SideSize[]): number {
   return Math.max(...sideSizes.map(minSquadFor))

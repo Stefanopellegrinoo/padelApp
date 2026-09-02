@@ -171,7 +171,10 @@ export function matchError(
  * su propio docblock (`core/constants.ts`) dice que es hoy su único trabajo
  * vigente—, no PARTIDOS: ese otro trabajo viejo, que sí cambiaba con
  * `sideSize` (W32), ya lo dejó y hoy lo mide `config.maxMatches`/
- * `defaultMaxMatches`, no esta función.
+ * `defaultMaxMatches`, no esta función. El SUJETO acá es distinto del que
+ * describe ese docblock: `present` es plantel MÁS invitados de la fecha
+ * (`db/matchday.ts`), no el plantel solo, así que el techo puede saltar
+ * incluso con un plantel completo por debajo de 12.
  */
 export function assertMatchdaySize(present: readonly string[], sideSize: SideSize): void {
   const floor = minSquadFor(sideSize)

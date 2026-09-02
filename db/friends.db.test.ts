@@ -590,6 +590,10 @@ describe('historyWith', () => {
     const lado = await ladoDe(enContra, admin.playerId)
     expect(partido.seasonName).toBe(seasonName)
     expect(partido.matchdayNumber).toBe(1)
+    // "deporte-en-la-fila" (cierre de 2b): `dosFechasConYContra` arma sus dos
+    // fechas con `pairSize: 2` (`unaFechaJugada`), que crea la disciplina
+    // como PADEL -- contra la base real, no el fake de `friends.unit.test.ts`.
+    expect(partido.sport).toBe('PADEL')
     // `unaFechaJugada` crea la fecha con '2026-08-10' (ver su doc) -- es lo
     // único que hoy fija `playedOn`, del que dependen tanto el orden de la
     // lista (`porFechaDescendente`, `db/friends.ts` -- el único lugar que lo

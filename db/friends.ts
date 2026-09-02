@@ -32,12 +32,13 @@ function requireName(nombrePorId: Map<string, string>, playerId: string): string
 }
 
 /**
- * El guard de truncado de `historyWith`, UNA vez para sus seis consultas
- * en vez de doce bloques casi idénticos (uno por error y uno por corte, por
- * consulta). `consulta` nombra CUÁL de las seis fue -- sin eso, un corte
+ * El guard de truncado de `historyWith`, UNA vez para sus siete consultas
+ * en vez de catorce bloques casi idénticos (uno por error y uno por corte, por
+ * consulta). `consulta` nombra CUÁL de las siete fue -- sin eso, un corte
  * real en `seasons` o `match_sets` decía sólo "el historial", indistinguible
- * de un corte en `matchdays`, en `match_participants`, o en las dos nuevas de
- * la parte casual (`casuales`, `autores`).
+ * de un corte en `matchdays`, en `match_participants`, en `disciplines` (el
+ * deporte de la fila de torneo), o en las dos de la parte casual (`casuales`,
+ * `autores`).
  *
  * `count: 'exact'` y este guard son el mismo tripwire que `mySeasons`
  * (`db/read.ts:341-374`): PostgREST corta cada select en `PGRST_DB_MAX_ROWS`
@@ -69,8 +70,19 @@ export interface TournamentMatch {
   playedOn: string | null
   /** El número de fecha, para ordenar cuando `playedOn` es null. */
   matchdayNumber: number
-  /** `'REGULAR'` o `'MASTERS'`. */
-  matchdayKind: string
+  /**
+   * `'PADEL'` o `'FIFA'` -- `disciplines.kind` (0015_disciplines.sql:15,
+   * CHECK), la disciplina de `matchdays.discipline_id`. Reemplaza a
+   * `matchdayKind` ('REGULAR'/'MASTERS', un campo que nada fuera de los
+   * tests leía -- `rg matchdayKind` lo confirmó antes de sacarlo):
+   * "deporte-en-la-fila" (cierre de 2b) es lo que la fila de torneo
+   * necesitaba para dejar de ser la única del historial que calla qué se
+   * jugó (§4.4). NO nullable: `discipline_id` es `not null` en `matchdays`
+   * desde `0016_matchday_scope.sql:12` (0015 lo agregó nullable para el
+   * backfill, pero ese estado no sobrevivió a la migración siguiente) --
+   * mismo patrón que `CasualMatch.playedOn` más abajo.
+   */
+  sport: string
   /** El nombre del torneo, para que la fila diga de dónde salió. */
   seasonName: string
   /**
@@ -178,22 +190,27 @@ export function porFechaDescendente(a: SharedMatch, b: SharedMatch): number {
  * agregarlos en dos contadores. El resultado sale ya mezclado y ordenado por
  * fecha descendente entre las dos fuentes (`porFechaDescendente`, arriba).
  *
- * SEIS consultas, no una por partido: participantes → fechas → temporadas →
- * sets (torneo), casuales → autores (casual). `pairsAndMatchesOf`
+ * SIETE consultas, no una por partido: participantes → fechas → temporadas →
+ * disciplinas → sets (torneo), casuales → autores (casual). `pairsAndMatchesOf`
  * (db/read.ts:985) se llama hoy adentro de un loop por fecha; acá eso sería un
  * N+1 que crece con cada temporada que jugaron juntos.
  *
- * Las cuatro de torneo NO son de tamaño acotado por una constante: cada una
+ * Las CINCO de torneo NO son de tamaño acotado por una constante: cada una
  * trae de una sola vez TODO el historial compartido del par, así que su techo
  * real es cuánto jugaron juntos, no un número fijo. Ese techo también llega
  * antes que el de `assertComplete` (1000 filas) -- ver el `ponytail:` en la
- * consulta de sets, más abajo, con la medición. Las dos de casual comparten el
- * mismo argumento, pero a otra escala: `casuales` no tiene ningún `.in()` (es
- * un `.eq()` sobre el par exacto), y `autores` crece a lo sumo dos ids por
- * partido casual -- mucho más lento que `matchIds`/`matchdayIds`, que crecen
- * con toda una temporada de torneo por vez.
+ * consulta de sets, más abajo, con la medición. `disciplinas` comparte el
+ * mismo argumento que `temporadas`, a la misma escala -- crece con cuántas
+ * disciplinas jugaron juntos, como mucho una o dos por temporada compartida
+ * (este branch ya admite más de una disciplina por temporada, `0018` bajó el
+ * tripwire `disciplines_one_per_season`) -- mucho más lento que
+ * `matchIds`/`matchdayIds`. Las dos de casual comparten el mismo argumento,
+ * pero a otra escala: `casuales` no tiene ningún `.in()` (es un `.eq()` sobre
+ * el par exacto), y `autores` crece a lo sumo dos ids por partido casual --
+ * mucho más lento que `matchIds`/`matchdayIds`, que crecen con toda una
+ * temporada de torneo por vez.
  *
- * Fechas, temporadas y autores van por IN + Map, no por un embed
+ * Fechas, temporadas, disciplinas y autores van por IN + Map, no por un embed
  * (`.select('..., seasons(name)')`): ningún `db/*.ts` de este repo arma un
  * embed con hint de FK, por el mismo motivo que ya explica `friendsOf` más
  * abajo -- es más aparato que una IN y un Map para el mismo resultado.
@@ -201,15 +218,17 @@ export function porFechaDescendente(a: SharedMatch, b: SharedMatch): number {
  * No hace falta chequear que sean amigos ni que el caller sea quien dice para
  * el lado de torneo: la vista es `security_invoker`, así que la RLS de
  * `matches` ya limita esto a las temporadas en las que el caller participa
- * (0071); `matchdays`, `seasons` y `match_sets` tienen su propia RLS acotada
- * al participante (`matchdays_read`, `seasons_read`, `match_sets_read`,
- * 0002_rls.sql), así que esas tres consultas heredan el mismo límite sin
- * pedirlo. Del lado casual, `casual_matches_read` (0072) acota igual a
- * `my_player_id() in (player_a, player_b)` -- tampoco hace falta repetir el
- * chequeo acá.
+ * (0071); `matchdays`, `seasons`, `disciplines` y `match_sets` tienen su
+ * propia RLS acotada al participante (`matchdays_read`, `seasons_read`,
+ * `disciplines_read`, `match_sets_read` -- las cuatro sobre
+ * `is_participant(season_id)` o equivalente, 0002_rls.sql y
+ * 0015_disciplines.sql), así que esas cuatro consultas heredan el mismo
+ * límite sin pedirlo. Del lado casual, `casual_matches_read` (0072) acota
+ * igual a `my_player_id() in (player_a, player_b)` -- tampoco hace falta
+ * repetir el chequeo acá.
  *
- * Las seis pasan por `assertComplete` (arriba, con el porqué del guard). La
- * de participantes es la más delicada de las cuatro de torneo: sin `.order()`
+ * Las siete pasan por `assertComplete` (arriba, con el porqué del guard). La
+ * de participantes es la más delicada de las cinco de torneo: sin `.order()`
  * no había ningún criterio para decidir qué filas sobreviven un corte -- era
  * arbitrario, corrida a corrida -- y el filtro de abajo
  * (`v.mio !== undefined && v.suyo !== undefined`) exige LAS DOS filas de un
@@ -290,7 +309,7 @@ export async function historyWith(
     const matchdayIds = [...new Set(compartidos.map((c) => c.matchdayId))]
     const matchdaysResult = await supabase
       .from('matchdays')
-      .select('id, number, kind, played_on, season_id', { count: 'exact' })
+      .select('id, number, kind, played_on, season_id, discipline_id', { count: 'exact' })
       .in('id', matchdayIds)
       .order('id', { ascending: true })
     const matchdayRows = assertComplete(matchdaysResult, 'fechas')
@@ -307,7 +326,23 @@ export async function historyWith(
     const seasonRows = assertComplete(seasonsResult, 'temporadas')
     const seasonNameById = new Map(seasonRows.map((row) => [row.id, row.name]))
 
-    // Consulta 4: los sets de los partidos compartidos. Sin sets, el partido
+    // Consulta 4: el deporte de esas fechas -- "deporte-en-la-fila" (cierre de
+    // 2b). `discipline_id` es NOT NULL en `matchdays` (0016_matchday_scope.sql:12),
+    // así que no hace falta filtrar nulls antes del `.in()` -- a diferencia de
+    // `match_participants` (una VISTA que erosiona el `not null` de sus
+    // columnas base, ver `requireColumn` arriba), `matchdays` es una tabla y
+    // Postgres SÍ conserva su `not null` en el tipo generado
+    // (`db/database.types.ts`: `discipline_id: string`, sin `| null`).
+    const disciplineIds = [...new Set(matchdayRows.map((row) => row.discipline_id))]
+    const disciplinesResult = await supabase
+      .from('disciplines')
+      .select('id, kind', { count: 'exact' })
+      .in('id', disciplineIds)
+      .order('id', { ascending: true })
+    const disciplineRows = assertComplete(disciplinesResult, 'disciplinas')
+    const disciplineKindById = new Map(disciplineRows.map((row) => [row.id, row.kind]))
+
+    // Consulta 5: los sets de los partidos compartidos. Sin sets, el partido
     // es una fecha abierta todavía sin resultado -- `outcome`/`score` quedan
     // en null, no en un 0-0 inventado.
     //
@@ -342,12 +377,13 @@ export async function historyWith(
       // detecta que PostgREST cortó la respuesta, y una fila que RLS esconde
       // reduce `count` y `filas.length` EN LA MISMA MEDIDA, así que pasa el
       // guard igual de limpia. Lo que de verdad lo hace inalcanzable es que
-      // `matchdays_read`/`seasons_read`/`match_sets_read` filtran con el MISMO
-      // `is_participant(season)` que las tablas base de `match_participants`
-      // (`supabase/migrations/0002_rls.sql:146,169,219`): una fecha que salió
-      // de la vista ya pasó ese filtro, así que `matchdays_read` no puede
-      // esconderla acá. Que no aparezca sería la vista y las tablas en
-      // desacuerdo entre sí, no un dato ausente -- mismo criterio que
+      // `matchdays_read`/`seasons_read`/`disciplines_read`/`match_sets_read`
+      // filtran con el MISMO `is_participant(season)` (o equivalente) que las
+      // tablas base de `match_participants` (`supabase/migrations/
+      // 0002_rls.sql:146,169,219`, `0015_disciplines.sql:56-57`): una fecha
+      // que salió de la vista ya pasó ese filtro, así que ninguna de las
+      // cuatro puede esconderla acá. Que no aparezca sería la vista y las
+      // tablas en desacuerdo entre sí, no un dato ausente -- mismo criterio que
       // `requireColumn` arriba en este archivo.
       if (matchday === undefined) {
         throw new EdgeError(`No se pudo leer la fecha del partido ${matchId}.`)
@@ -355,6 +391,10 @@ export async function historyWith(
       const seasonName = seasonNameById.get(matchday.season_id)
       if (seasonName === undefined) {
         throw new EdgeError(`No se pudo leer el torneo de la fecha ${matchdayId}.`)
+      }
+      const sport = disciplineKindById.get(matchday.discipline_id)
+      if (sport === undefined) {
+        throw new EdgeError(`No se pudo leer la disciplina de la fecha ${matchdayId}.`)
       }
 
       const sets = setsByMatch.get(matchId) ?? []
@@ -379,7 +419,7 @@ export async function historyWith(
         together,
         playedOn: matchday.played_on,
         matchdayNumber: matchday.number,
-        matchdayKind: matchday.kind,
+        sport,
         seasonName,
         outcome,
         score,
@@ -387,7 +427,7 @@ export async function historyWith(
     })
   }
 
-  // Consulta 5: los partidos casuales entre el caller y el amigo -- TODOS los
+  // Consulta 6: los partidos casuales entre el caller y el amigo -- TODOS los
   // que jugaron, no uno solo: `0072` no tiene ningún unique (ni índice ni
   // constraint) sobre `(player_a, player_b)`, sólo el CHECK `casual_ordered`
   // -- es un historial, muchas filas por par son el caso normal, no una
@@ -413,7 +453,7 @@ export async function historyWith(
   const casualRows = assertComplete(casualesResult, 'casuales')
   const meEsA = me === ladoA
 
-  // Consulta 6: los nombres de quien cargó y quien tocó último cada partido
+  // Consulta 7: los nombres de quien cargó y quien tocó último cada partido
   // casual -- MISMO camino que ya usa `friendsOf` más abajo para
   // `display_name` (una consulta a `players` + Map), no un segundo camino ni
   // un embed. Este `.in()` sí puede crecer, pero mucho más lento que

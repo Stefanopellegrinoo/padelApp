@@ -11,6 +11,9 @@ import { Historial } from './historial'
 // sólo arma partidos de torneo, y `Partial<union>` no angosta `kind`: lo
 // ensancha a `'tournament' | 'casual'` en el objeto final, rompiendo la
 // asignación a `SharedMatch`.
+// `sport: 'PADEL'` por default -- el ejemplo de diseño §4.4 es justo este
+// partido ("14/8 · Pádel · torneo Los Jueves · ganaron 6-3"), así que el
+// fixture de siempre ya es el caso que la fila tiene que dibujar.
 function partido(overrides: Partial<TournamentMatch> = {}): SharedMatch {
   return {
     kind: 'tournament',
@@ -19,7 +22,7 @@ function partido(overrides: Partial<TournamentMatch> = {}): SharedMatch {
     together: false,
     playedOn: '2026-08-14',
     matchdayNumber: 1,
-    matchdayKind: 'REGULAR',
+    sport: 'PADEL',
     seasonName: 'Los Jueves',
     outcome: 'won',
     score: { mine: 6, theirs: 3 },
@@ -50,12 +53,17 @@ function partidoCasual(overrides: Partial<CasualMatch> = {}): SharedMatch {
 }
 
 describe('Historial', () => {
-  // -- Torneo: sin cambios (Task 3, criterio 6: "la fila de torneo no cambió"). --
+  // -- Torneo: "deporte-en-la-fila" (cierre de 2b) le agrega el deporte a la
+  // fila -- antes de esto, la torneo era la única fila del historial que no
+  // decía qué se jugó (§4.4: la casual sí lo decía desde Task 3). --
 
-  it('lista cada partido con su fecha, su torneo y su marcador', () => {
+  it('lista cada partido con su fecha, su deporte, su torneo y su marcador', () => {
     const html = renderToStaticMarkup(Historial({ nombre: 'Juan', friendPlayerId: 'amigo-1', partidos: [partido()] }))
     expect(html).toContain(matchdayDay('2026-08-14'))
-    expect(html).toContain('Los Jueves')
+    // Forma exacta del ejemplo de diseño (§4.4): fecha, deporte (label, no el
+    // kind crudo) y torneo en la misma línea -- una fila de cada clase deja
+    // de ser la única que se distingue por CALLAR el deporte.
+    expect(html).toContain('· Pádel · torneo Los Jueves')
     // El marcador COMO LO LEE una persona -- "6-3", no un dígito suelto que
     // matchea cualquier cosa (hasta un `text-[13.5px]` tiene un "3").
     expect(html).toContain('6-3')
@@ -165,7 +173,9 @@ describe('Historial', () => {
     const html = renderToStaticMarkup(
       Historial({ nombre: 'Juan', friendPlayerId: 'amigo-1', partidos: [partido(), partidoCasual()] }),
     )
-    // Lo del torneo.
+    // Lo del torneo -- "Pádel" también, desde "deporte-en-la-fila": las dos
+    // filas dicen su deporte ahora, no sólo la casual.
+    expect(html).toContain('Pádel')
     expect(html).toContain('Los Jueves')
     expect(html).toContain('6-3')
     // Lo del casual -- deporte, marcador, equipo y autoría: ninguno lo tiene

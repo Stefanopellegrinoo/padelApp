@@ -14,7 +14,8 @@ import { historyWith, porFechaDescendente, type CasualMatch, type SharedMatch, t
  * a CUATRO (participantes, fechas, temporadas, sets): el fake creció con
  * ella, una tabla configurable por vez, para poder probar el guard de cada
  * una por separado sin tocar las otras tres. Task 2 de 2b sumó dos más
- * (casuales, autores) -- mismo criterio.
+ * (casuales, autores) -- mismo criterio. "deporte-en-la-fila" (cierre de 2b)
+ * sumó una séptima (`disciplines`, para el deporte de la fila de torneo).
  */
 interface FakeTable<T> {
   rows: T[]
@@ -22,8 +23,16 @@ interface FakeTable<T> {
 }
 
 type ParticipantRow = { match_id: string; matchday_id: string; side: string; player_id: string }
-type MatchdayRow = { id: string; number: number; kind: string; played_on: string | null; season_id: string }
+type MatchdayRow = {
+  id: string
+  number: number
+  kind: string
+  played_on: string | null
+  season_id: string
+  discipline_id: string
+}
 type SeasonRow = { id: string; name: string }
+type DisciplineRow = { id: string; kind: string }
 type MatchSetRow = { match_id: string; games_a: number; games_b: number }
 type CasualMatchRow = {
   id: string
@@ -44,6 +53,7 @@ function fakeClient(options: {
   participants: FakeTable<ParticipantRow>
   matchdays?: FakeTable<MatchdayRow>
   seasons?: FakeTable<SeasonRow>
+  disciplines?: FakeTable<DisciplineRow>
   matchSets?: FakeTable<MatchSetRow>
   casualMatches?: FakeTable<CasualMatchRow>
   players?: FakeTable<PlayerRow>
@@ -72,6 +82,7 @@ function fakeClient(options: {
     if (table === 'match_participants') return builderFor(options.participants, table)
     if (table === 'matchdays') return builderFor(options.matchdays, table)
     if (table === 'seasons') return builderFor(options.seasons, table)
+    if (table === 'disciplines') return builderFor(options.disciplines, table)
     if (table === 'match_sets') return builderFor(options.matchSets, table)
     if (table === 'casual_matches') return builderFor(options.casualMatches, table)
     if (table === 'players') return builderFor(options.players, table)
@@ -103,11 +114,19 @@ function unPartidoCompleto(mySide: 'A' | 'B' = 'A') {
       count: 2,
     },
     matchdays: {
-      rows: [{ id: 'f1', number: 3, kind: 'REGULAR', played_on: '2026-01-15', season_id: 's1' }] satisfies MatchdayRow[],
+      rows: [
+        { id: 'f1', number: 3, kind: 'REGULAR', played_on: '2026-01-15', season_id: 's1', discipline_id: 'd1' },
+      ] satisfies MatchdayRow[],
       count: 1,
     },
     seasons: {
       rows: [{ id: 's1', name: 'Liga de test' }] satisfies SeasonRow[],
+      count: 1,
+    },
+    // `d1` es PADEL por default -- el ejemplo de diseño §4.4 ("Pádel") y el
+    // que ya usa `torneoFixture` más abajo.
+    disciplines: {
+      rows: [{ id: 'd1', kind: 'PADEL' }] satisfies DisciplineRow[],
       count: 1,
     },
     matchSets: {
@@ -170,6 +189,21 @@ describe('historyWith — tripwire de truncamiento de PostgREST', () => {
     await expect(historyWith(client, AMIGO)).rejects.toThrow(/completo de temporadas/)
   })
 
+  it('disciplinas: falla ruidoso si el select de disciplines viene truncado', async () => {
+    const completo = unPartidoCompleto()
+    const client = fakeClient({
+      me: ME,
+      participants: completo.participants,
+      matchdays: completo.matchdays,
+      seasons: completo.seasons,
+      // Debería traer 'd1' (la disciplina de la fecha 'f1'); llega vacío --
+      // mismo bug que arriba, ahora en la cuarta consulta.
+      disciplines: { rows: [], count: 1 },
+    })
+
+    await expect(historyWith(client, AMIGO)).rejects.toThrow(/completo de disciplinas/)
+  })
+
   it('sets: falla ruidoso si el select de match_sets viene truncado', async () => {
     const completo = unPartidoCompleto()
     const client = fakeClient({
@@ -177,13 +211,14 @@ describe('historyWith — tripwire de truncamiento de PostgREST', () => {
       participants: completo.participants,
       matchdays: completo.matchdays,
       seasons: completo.seasons,
+      disciplines: completo.disciplines,
       matchSets: { rows: [], count: 1 },
     })
 
     await expect(historyWith(client, AMIGO)).rejects.toThrow(/completo de sets/)
   })
 
-  it('con las seis consultas completas, arma el historial normal con su detalle', async () => {
+  it('con las siete consultas completas, arma el historial normal con su detalle', async () => {
     const client = fakeClient({ me: ME, ...unPartidoCompleto() })
 
     await expect(historyWith(client, AMIGO)).resolves.toEqual([
@@ -194,7 +229,10 @@ describe('historyWith — tripwire de truncamiento de PostgREST', () => {
         together: false,
         playedOn: '2026-01-15',
         matchdayNumber: 3,
-        matchdayKind: 'REGULAR',
+        // 'd1' es PADEL en el fixture (`unPartidoCompleto`) -- el deporte
+        // sale de la disciplina de la fecha, no de `matchdays.kind` (eso es
+        // REGULAR/MASTERS, un campo distinto que ya no lee la pantalla).
+        sport: 'PADEL',
         seasonName: 'Liga de test',
         // 4-1 con mi lado 'A': gano el único set, y el marcador se lee con
         // mis games primero.
@@ -230,6 +268,7 @@ describe('historyWith — tripwire de truncamiento de PostgREST', () => {
       participants: completo.participants,
       matchdays: completo.matchdays,
       seasons: completo.seasons,
+      disciplines: completo.disciplines,
       // Cero sets es una respuesta COMPLETA -- una fecha abierta no tiene
       // ninguno todavía --, no un corte: `count` coincide con `rows.length`.
       matchSets: { rows: [], count: 0 },
@@ -244,7 +283,7 @@ describe('historyWith — tripwire de truncamiento de PostgREST', () => {
         together: false,
         playedOn: '2026-01-15',
         matchdayNumber: 3,
-        matchdayKind: 'REGULAR',
+        sport: 'PADEL',
         seasonName: 'Liga de test',
         outcome: null,
         score: null,
@@ -259,9 +298,10 @@ describe('historyWith — tripwire de truncamiento de PostgREST', () => {
       participants: completo.participants,
       matchdays: completo.matchdays,
       seasons: completo.seasons,
+      disciplines: completo.disciplines,
       matchSets: completo.matchSets,
-      // Debería traer un casual; llega vacío -- mismo bug que las cuatro de
-      // torneo, ahora en la quinta consulta.
+      // Debería traer un casual; llega vacío -- mismo bug que las cinco de
+      // torneo, ahora en la sexta consulta.
       casualMatches: { rows: [], count: 1 },
     })
 
@@ -275,6 +315,7 @@ describe('historyWith — tripwire de truncamiento de PostgREST', () => {
       participants: completo.participants,
       matchdays: completo.matchdays,
       seasons: completo.seasons,
+      disciplines: completo.disciplines,
       matchSets: completo.matchSets,
       casualMatches: {
         rows: [
@@ -294,7 +335,7 @@ describe('historyWith — tripwire de truncamiento de PostgREST', () => {
         count: 1,
       },
       // Debería traer al menos el nombre de `ME`; llega vacío -- mismo bug,
-      // ahora en la sexta consulta. Sólo corre porque el casual de arriba
+      // ahora en la séptima consulta. Sólo corre porque el casual de arriba
       // tiene autores que nombrar.
       players: { rows: [], count: 1 },
     })
@@ -317,6 +358,7 @@ describe('historyWith — tripwire de truncamiento de PostgREST', () => {
       participants: completo.participants,
       matchdays: completo.matchdays,
       seasons: completo.seasons,
+      disciplines: completo.disciplines,
       matchSets: completo.matchSets,
       // Dos casuales a propósito, uno de cada lado del torneo (15/1): 'c1'
       // DESPUÉS (1/2) y 'c2' ANTES (1/1). Sólo con los dos, en ese orden, la
@@ -407,10 +449,11 @@ describe('historyWith — tripwire de truncamiento de PostgREST', () => {
       me: ME,
       participants: completo.participants,
       matchdays: {
-        rows: [{ id: 'f1', number: 3, kind: 'REGULAR', played_on: null, season_id: 's1' }],
+        rows: [{ id: 'f1', number: 3, kind: 'REGULAR', played_on: null, season_id: 's1', discipline_id: 'd1' }],
         count: 1,
       },
       seasons: completo.seasons,
+      disciplines: completo.disciplines,
       matchSets: completo.matchSets,
       casualMatches: {
         rows: [
@@ -461,12 +504,13 @@ describe('historyWith — tripwire de truncamiento de PostgREST', () => {
       },
       matchdays: {
         rows: [
-          { id: 'f1', number: 1, kind: 'REGULAR', played_on: null, season_id: 's1' },
-          { id: 'f2', number: 5, kind: 'REGULAR', played_on: null, season_id: 's1' },
+          { id: 'f1', number: 1, kind: 'REGULAR', played_on: null, season_id: 's1', discipline_id: 'd1' },
+          { id: 'f2', number: 5, kind: 'REGULAR', played_on: null, season_id: 's1', discipline_id: 'd1' },
         ],
         count: 2,
       },
       seasons: { rows: [{ id: 's1', name: 'Liga de test' }], count: 1 },
+      disciplines: { rows: [{ id: 'd1', kind: 'PADEL' }], count: 1 },
       matchSets: { rows: [], count: 0 },
       casualMatches: { rows: [], count: 0 },
     })
@@ -497,7 +541,7 @@ function torneoFixture(overrides: Partial<TournamentMatch>): SharedMatch {
     together: false,
     playedOn: '2026-01-01',
     matchdayNumber: 1,
-    matchdayKind: 'REGULAR',
+    sport: 'PADEL',
     seasonName: 'Liga de test',
     outcome: null,
     score: null,

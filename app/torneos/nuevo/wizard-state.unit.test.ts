@@ -53,28 +53,28 @@ describe('squadWarning', () => {
 
   it('asks for the missing name when the squad is short', () => {
     const names = [...Array(3).fill('Jugador'), '']
-    expect(squadWarning(names, floorPadel)).toBe('Falta 1 nombre. El plantel arranca en 4.')
+    expect(squadWarning(names, floorPadel, true)).toBe('Falta 1 nombre. El plantel arranca en 4.')
   })
 
   it('counts how many are missing when it is more than one', () => {
     const names = [...Array(2).fill('Jugador'), '', '']
-    expect(squadWarning(names, floorPadel)).toBe('Faltan 2 nombres. El plantel arranca en 4.')
+    expect(squadWarning(names, floorPadel, true)).toBe('Faltan 2 nombres. El plantel arranca en 4.')
   })
 
   it('refuses an odd squad, because pairs need an even number', () => {
-    expect(squadWarning(Array(9).fill('Jugador'), floorPadel)).toBe(
+    expect(squadWarning(Array(9).fill('Jugador'), floorPadel, true)).toBe(
       'Son 9. El plantel tiene que ser par para poder armar parejas.',
     )
   })
 
   it('says nothing for a squad that can go on', () => {
-    expect(squadWarning(Array(4).fill('Jugador'), floorPadel)).toBeNull()
-    expect(squadWarning(Array(10).fill('Jugador'), floorPadel)).toBeNull()
-    expect(squadWarning(Array(12).fill('Jugador'), floorPadel)).toBeNull()
+    expect(squadWarning(Array(4).fill('Jugador'), floorPadel, true)).toBeNull()
+    expect(squadWarning(Array(10).fill('Jugador'), floorPadel, true)).toBeNull()
+    expect(squadWarning(Array(12).fill('Jugador'), floorPadel, true)).toBeNull()
     // 14 — el primer valor que el viejo techo de 12 rechazaba (13 ya está
     // afuera por la paridad de pareja) — docs/plan-piso-y-techo-del-
     // plantel.md Task 3 lo borró: si alguien lo revive acá, esto se pone rojo.
-    expect(squadWarning(Array(14).fill('Jugador'), floorPadel)).toBeNull()
+    expect(squadWarning(Array(14).fill('Jugador'), floorPadel, true)).toBeNull()
   })
 
   it('ignores whitespace when counting', () => {
@@ -84,15 +84,38 @@ describe('squadWarning', () => {
   // El piso real de un torneo de sólo FIFA es 2 (`minSquadFor(1)`), no un
   // plano de 8: dos amigos ya pueden jugar.
   it('a squad of only FIFA can stop at 2, the derived floor', () => {
-    expect(squadWarning(Array(2).fill('Jugador'), effectiveFloor([1]))).toBeNull()
-    expect(squadWarning(['Solo'], effectiveFloor([1]))).toBe('Falta 1 nombre. El plantel arranca en 2.')
+    expect(squadWarning(Array(2).fill('Jugador'), effectiveFloor([1]), false)).toBeNull()
+    expect(squadWarning(['Solo'], effectiveFloor([1]), false)).toBe('Falta 1 nombre. El plantel arranca en 2.')
   })
 
   // Con pádel Y FIFA marcados, el plantel compartido pide el piso más alto
   // (4), no el de FIFA solo -- el pádel de esa misma temporada lo necesita.
   it('con pádel y FIFA juntos, pide el piso más alto', () => {
-    expect(squadWarning(Array(3).fill('Jugador'), effectiveFloor([1, 2]))).toBe(
+    expect(squadWarning(Array(3).fill('Jugador'), effectiveFloor([1, 2]), true)).toBe(
       'Falta 1 nombre. El plantel arranca en 4.',
+    )
+  })
+
+  // Important 1 del fix wave (piso-y-techo): la paridad es una regla de
+  // PAREJAS, no del plantel en general. Un torneo de sólo FIFA no arma
+  // parejas y no tiene por qué rechazar 3 o 13 -- exactamente lo que el plan
+  // vino a destrabar ("que nadie tenga que pedir permiso para ser trece").
+  // Sin el tercer parámetro, `squadWarning` exigía par SIEMPRE y esto daba
+  // rojo con el mensaje de "armar parejas" en un torneo que no las arma.
+  it('un plantel de sólo FIFA no exige paridad: ni 3 ni 13', () => {
+    expect(squadWarning(Array(3).fill('Jugador'), effectiveFloor([1]), false)).toBeNull()
+    expect(squadWarning(Array(13).fill('Jugador'), effectiveFloor([1]), false)).toBeNull()
+  })
+
+  // Y la contraparte: con pádel de por medio (solo o mezclado con FIFA) la
+  // paridad se sigue exigiendo -- `needsPairs` no apaga la regla para nadie
+  // que sí arme parejas.
+  it('con pádel de por medio, solo o mezclado, la paridad se sigue exigiendo', () => {
+    expect(squadWarning(Array(9).fill('Jugador'), effectiveFloor([2]), true)).toBe(
+      'Son 9. El plantel tiene que ser par para poder armar parejas.',
+    )
+    expect(squadWarning(Array(9).fill('Jugador'), effectiveFloor([1, 2]), true)).toBe(
+      'Son 9. El plantel tiene que ser par para poder armar parejas.',
     )
   })
 })

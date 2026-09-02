@@ -63,6 +63,13 @@ const escena = vi.hoisted(() => ({
     },
     pairSize: 1,
   } as unknown as PairingContext,
+  // Cuántos SQUAD entra el plantel de prueba, y qué invitados sueltos ya
+  // tiene la fecha (Important 4 del fix wave piso-y-techo, tooManyToPair/
+  // canDraw): por default 8 y ninguno, igual que el fixture de siempre --
+  // sólo el test que arma un plantel de 12 con un invitado ya sentado los
+  // toca.
+  squadCount: 8,
+  guestEntries: [] as { id: string; displayName: string; seedPosition: number }[],
 }))
 
 vi.mock('@/db/matchday', async (importOriginal) => {
@@ -118,14 +125,28 @@ vi.mock('@/db/read', async (importOriginal) => {
       allowsDraw: true,
     }
   }
-  const entries = Array.from({ length: 8 }, (_, index) => ({
-    id: `e${index + 1}`,
-    displayName: `Jugador ${index + 1}`,
-    kind: 'SQUAD' as const,
-    seedPosition: index,
-    playerId: null,
-    matchdayId: null,
-  }))
+  // Función, no un `const`, por lo mismo que `discipline()`/`config()`:
+  // `escena.squadCount`/`guestEntries` se tocan por test (Important 4, fix
+  // wave piso-y-techo) para armar un plantel de 12 con un invitado suelto ya
+  // sentado, y tienen que leerse cuando `entriesOf` corre, no al importar.
+  const entries = () => [
+    ...Array.from({ length: escena.squadCount }, (_, index) => ({
+      id: `e${index + 1}`,
+      displayName: `Jugador ${index + 1}`,
+      kind: 'SQUAD' as const,
+      seedPosition: index,
+      playerId: null,
+      matchdayId: null,
+    })),
+    // `matchdayId: 'm1'` fijo: es el único id que `matchdaySummary()` da acá
+    // abajo, así que un invitado de OTRA fecha nunca hace falta en este mock.
+    ...escena.guestEntries.map((guest) => ({
+      ...guest,
+      kind: 'GUEST' as const,
+      playerId: null,
+      matchdayId: 'm1',
+    })),
+  ]
 
   function matchdaySummary(): MatchdaySummary {
     return {
@@ -152,7 +173,7 @@ vi.mock('@/db/read', async (importOriginal) => {
       disciplines: [discipline()],
     }),
     seasonMatchdaysOf: async () => [matchdaySummary()],
-    entriesOf: async () => entries,
+    entriesOf: async () => entries(),
     attendancesOf: async () => new Map(),
     pairLocksOf: async () => [],
     matchdayDetail: async () => ({
@@ -920,5 +941,50 @@ describe('el armado en DRAFT — el número de asiento no se recorta desde el 10
     const decimo = /<span class="[^"]*">10<\/span>/.exec(orden)?.[0] ?? ''
     expect(decimo).toContain('w-5')
     expect(decimo).not.toContain('w-4')
+  })
+})
+
+describe('el armado en DRAFT — tooManyToPair apaga el botón de sortear (Important 4, fix wave piso-y-techo)', () => {
+  /**
+   * `armado.unit.test.ts` sólo renderiza `SelectorDeFormato`: `Armado`
+   * entero importa `./actions` ('use server') y no se puede montar ahí sin
+   * arrastrar `next/headers`. Esta suite sí renderiza `Armado` de verdad,
+   * adentro de `FechaDetailPage` — el mismo techo que ya usan los tests de
+   * arriba para "10 lados" y el reparto en grupos — así que es acá, y no en
+   * `armado.unit.test.ts`, donde el gate de `canDraw` (`armado.tsx:363`)
+   * tiene un test que se pone rojo si `!tooManyToPair &&` se borra.
+   *
+   * 14 confirmados, PARES y sin invitado: `needsLooseGuest` da `false` (ya
+   * es par) y `eventualSize` es 14, pasado `MAX_PAIRING_POOL` (12) — el
+   * mismo umbral que `armado-state.unit.test.ts` pinea a nivel de
+   * `matchdayShape`. Par a propósito y no impar (13, como el ejemplo del
+   * finding): con `eventualSize` impar el gate de paridad
+   * (`eventualSize % 2 === 0`) YA apaga el botón por su cuenta, y el mutante
+   * que borra `!tooManyToPair &&` queda tapado por esa otra razón — el
+   * primer intento de este test medía exactamente eso (13, gate de paridad
+   * puesto, mutante sobrevivía igual). Con 14 la paridad no interviene:
+   * lo único que puede apagar el botón acá es `tooManyToPair`.
+   *
+   * Lo que `armado-state.unit.test.ts` no puede ver es si el botón real
+   * queda deshabilitado: `canDraw` se arma en `Armado` con más señales que
+   * sólo `tooManyToPair` (`guestsOutnumberSquad`, `someGuestPartnerAbsent`,
+   * `pending`), así que un test que sólo mire `matchdayShape` no prueba que
+   * el flag realmente apague el botón.
+   */
+  it('con 14 confirmados (par, sin invitados), el botón de "Generar parejas" queda disabled', async () => {
+    escena.status = 'DRAFT'
+    escena.isAdmin = true
+    escena.pairSize = 2
+    escena.formato = { kind: 'ROUND_ROBIN' }
+    escena.sides = []
+    escena.matches = []
+    escena.squadCount = 14
+    escena.guestEntries = []
+
+    const html = await render()
+
+    const boton = /<button[^>]*>Generar parejas<\/button>/.exec(html)?.[0] ?? ''
+    expect(boton).not.toBe('')
+    expect(boton).toContain('disabled')
   })
 })

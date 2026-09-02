@@ -402,7 +402,8 @@ export function Wizard({ myName }: { myName: string }) {
   // `names.length > floor`, los dos más abajo): a dos amigos de FIFA les
   // alcanza con llenar 2 de las filas que ya están, sin que el plantel
   // arranque más chico por sí solo.
-  const floor = effectiveFloor(disciplines.map((kind) => pairSizes[kind]))
+  const sideSizes = disciplines.map((kind) => pairSizes[kind])
+  const floor = effectiveFloor(sideSizes)
   // El que arma el torneo arranca ADENTRO del plantel, con su nombre ya puesto
   // en el primer asiento. Es el caso de casi todos —el que organiza los jueves
   // juega los jueves— y así no hay nada que descubrir para participar: mirás la
@@ -424,7 +425,10 @@ export function Wizard({ myName }: { myName: string }) {
 
   const { names, mySeat } = squad
   const filled = filledCount(names)
-  const warning = squadWarning(names, floor)
+  // La paridad sólo corre si alguna disciplina marcada arma parejas
+  // (`pairSize === 2`) — un torneo de sólo FIFA no tiene "armar parejas" que
+  // pedir (`squadWarning`, wizard-state.ts).
+  const warning = squadWarning(names, floor, sideSizes.includes(2))
   const errors = formatErrors(config, configSideSize(disciplines, pairSizes))
   const disciplineWarning = disciplinesWarning(disciplines)
 
@@ -461,7 +465,7 @@ export function Wizard({ myName }: { myName: string }) {
   const help =
     step === 1
       ? mySeat !== null
-        ? `Ya estás anotado en el plantel: agregá al resto del grupo. Después compartís un link y cada uno elige el suyo.`
+        ? 'Ya estás anotado en el plantel: agregá al resto del grupo. Después compartís un link y cada uno elige el suyo.'
         : `Tipeá los nombres del grupo, al menos ${floor}. Después compartís un link y cada uno elige el suyo. No hace falta que vayan todos a todas las fechas.`
       : (HELP[step] ?? '')
 

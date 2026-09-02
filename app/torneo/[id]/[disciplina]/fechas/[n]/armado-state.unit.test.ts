@@ -139,9 +139,14 @@ describe('matchdayShape', () => {
     })
 
     // Fix round 2 (Task 3): `tooManyToPair` no tenía ningún test propio fuera
-    // de `armado-state.ts` y `armado.tsx` — ni la banda de aviso (:637-641)
-    // ni el gate de `canDraw` (:363) tenían nada que se pusiera rojo si el
-    // umbral se rompía o si `!tooManyToPair &&` se borraba de `canDraw`.
+    // de `armado-state.ts` y `armado.tsx`. Este test cubre el UMBRAL mismo
+    // (12 no corta, 13 sí). Lo que no cubre (medido con mutación, Important
+    // 4 del fix wave piso-y-techo): el guard `sideSize === 2 &&` -- lo cubre
+    // "de a uno nunca corta por MAX_PAIRING_POOL" más abajo -- y el gate de
+    // `canDraw` (`armado.tsx:363`) -- lo cubre
+    // `page.unit.test.ts` ("tooManyToPair apaga el botón de sortear"),
+    // porque `Armado` entero no se puede renderizar en este archivo (importa
+    // `./actions`, `'use server'`).
     // `confirmed` y `eventualSize` no son el mismo número: 12 confirmados
     // con un suelto YA sentado (no pide uno nuevo, `needsLooseGuest` da
     // `false`) da `eventualSize` 13 sin arrastrar la paridad.
@@ -171,6 +176,17 @@ describe('matchdayShape', () => {
         expect(shape.needsLooseGuest).toBe(false)
         expect(shape.complete).toBe(true)
       }
+    })
+
+    // Fix round 3 (Important 4 del fix wave piso-y-techo): `tooManyToPair`
+    // es el techo de CPU del SORTEO POR PAREJAS (`allMatchings`,
+    // `core/matchings.ts`) — de a uno no hay parejas que sortear por fuerza
+    // bruta, así que el guard `sideSize === 2 &&` tiene que seguir apagado
+    // acá por más presentes que haya. Sin este test, borrar ese guard de
+    // `matchdayShape` dejaba 884/884 verdes: un FIFA de 20 quedaba bloqueado
+    // en silencio -- exactamente lo que este cambio existe para destrabar.
+    it('de a uno nunca corta por MAX_PAIRING_POOL, por más presentes que haya', () => {
+      expect(matchdayShape({ confirmed: 20, looseGuests: 0, guestPairs: 0, sideSize: 1, formato: ROUND_ROBIN }).tooManyToPair).toBe(false)
     })
 
     it('cuenta los partidos que la fecha va a tener de verdad', () => {

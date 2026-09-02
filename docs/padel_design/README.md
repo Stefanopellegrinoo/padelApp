@@ -274,7 +274,7 @@ Header: kicker según estado ("Armando · sólo vos la ves" / "En juego · jueve
   docs/plan-piso-y-techo-del-plantel.md**, que borró el techo de plantel plano: el piso ahora
   sale del deporte (`minSquadFor`) y "Más de 12" ya no existe como bloqueo de plantel (sí sigue
   existiendo, sólo para parejas, el techo de CPU del sorteo — ver ese plan):
-  - **Menos de 7 confirmados** → bloque en `live-bg`: "Con {n} no alcanza para armar una fecha. Hacen falta 8." y "Generar parejas" deshabilitado.
+  - **Menos de 4 confirmados** → bloque en `live-bg`: "Con {n} no alcanza para armar una fecha. Hacen falta 4." y "Generar parejas" deshabilitado.
   - ~~**Más de 12** → bloque en `live-bg`: "Son {n} y entran hasta 12. Con más, la fecha no termina nunca."~~
   - **Invitado sin nombre** → se pueden generar las parejas, pero "Confirmar fecha" queda deshabilitado: "Ponele nombre al invitado antes de confirmar."
 

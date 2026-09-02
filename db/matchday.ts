@@ -1195,11 +1195,11 @@ export async function createMasters(
 }
 
 export async function openMatchday(supabase: Client, matchdayId: string): Promise<void> {
-  // El Masters no tiene asistencias: son 4 clasificados, no de 8 a 12
-  // confirmados. `pairingContextFor` correría `assertMatchdaySize` sobre un
-  // `present` vacío y tiraría "Con 0 no hay fecha" en una jornada perfectamente
-  // armada. Lo único que hay que verificar acá ya lo verifica `open_matchday`:
-  // que existan parejas.
+  // El Masters no tiene asistencias: son 4 clasificados, no la cuenta de
+  // presentes de una fecha regular. `pairingContextFor` correría
+  // `assertMatchdaySize` sobre un `present` vacío y tiraría "Con 0 no hay
+  // fecha" en una jornada perfectamente armada. Lo único que hay que
+  // verificar acá ya lo verifica `open_matchday`: que existan parejas.
   const masters = await requireMatchday(supabase, matchdayId)
   if (masters.kind === 'MASTERS') {
     const { error } = await supabase.rpc('open_matchday', { p_matchday: matchdayId })

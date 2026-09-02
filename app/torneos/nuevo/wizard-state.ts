@@ -192,14 +192,18 @@ export function filledCount(names: readonly string[]): number {
  * fecha — el máximo es lo que garantiza que la disciplina más exigente
  * también entre.
  *
- * `sideSizes` vacío da `Math.max()` sin argumentos, `-Infinity` — no
- * previsto acá porque no puede llegar: `blocked` en `wizard.tsx` no deja
- * salir del paso 0 mientras `disciplineWarning !== null` (cero disciplinas
- * marcadas), así que ningún caller del wizard llama a esto con el array
- * vacío.
+ * `minSquadFor(1)` es la base del `Math.max`, no `sideSizes.map(minSquadFor)`
+ * solo: con `sideSizes` vacío, `Math.max()` sin argumentos da `-Infinity`.
+ * Hoy ningún caller del wizard llega acá con el array vacío en la pantalla
+ * donde el valor se MUESTRA (`blocked` no deja salir del paso 0 sin marcar
+ * ninguna disciplina) — pero `wizard.tsx:405` llama a esta función en CADA
+ * render, no sólo al cambiar de paso, así que destildar las dos disciplinas
+ * en el paso 0 sí la ejecuta con `[]`. Con la base puesta, esa llamada da 2
+ * en vez de `-Infinity` y la función queda total en vez de depender de que
+ * nadie mueva el JSX que hoy la protege.
  */
 export function effectiveFloor(sideSizes: readonly SideSize[]): number {
-  return Math.max(...sideSizes.map(minSquadFor))
+  return Math.max(minSquadFor(1), ...sideSizes.map(minSquadFor))
 }
 
 /**
@@ -210,10 +214,22 @@ export function effectiveFloor(sideSizes: readonly SideSize[]): number {
  * en 4. Esta función no elige el piso, sólo lo aplica — quien arma el estado
  * del wizard es quien sabe qué disciplinas están marcadas.
  *
- * El plantel se carga **par**: la app agrega un invitado cuando una FECHA da
- * impar, que es otra cosa.
+ * `needsPairs` — `true` cuando ALGUNA disciplina marcada tiene `pairSize ===
+ * 2` — es lo que decide si la banda de paridad de abajo corre. La paridad es
+ * una regla de PAREJAS ("para poder armar parejas"), no del plantel en
+ * general: `validateConfig` (`core/config.ts`) ya la gatea sólo para
+ * `sideSize === 2`, y un torneo de FIFA a secas (`assertMatchdaySize`, tests)
+ * acepta un plantel impar sin quejarse. Sin este parámetro, esta función
+ * exigía par SIEMPRE, así que un torneo de FIFA de 3 o de 13 quedaba
+ * bloqueado en el wizard por un cartel que habla de "armar parejas" en un
+ * torneo que no arma ninguna — el mismo defecto que
+ * docs/plan-piso-y-techo-del-plantel.md borró de `db/season.ts:266`, un piso
+ * más arriba.
+ *
+ * El plantel se carga **par** sólo cuando hace falta: la app agrega un
+ * invitado cuando una FECHA da impar, que es otra cosa y no depende de esto.
  */
-export function squadWarning(names: readonly string[], floor: number): string | null {
+export function squadWarning(names: readonly string[], floor: number, needsPairs: boolean): string | null {
   const filled = filledCount(names)
   if (filled < floor) {
     const missing = floor - filled
@@ -221,7 +237,7 @@ export function squadWarning(names: readonly string[], floor: number): string | 
       ? `Falta 1 nombre. El plantel arranca en ${floor}.`
       : `Faltan ${missing} nombres. El plantel arranca en ${floor}.`
   }
-  if (filled % 2 !== 0) {
+  if (needsPairs && filled % 2 !== 0) {
     return `Son ${filled}. El plantel tiene que ser par para poder armar parejas.`
   }
   return null

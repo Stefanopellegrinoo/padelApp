@@ -362,5 +362,13 @@ describe('createSeason con el plantel al piso real de una disciplina de a uno', 
       .eq('season_id', seasonId)
       .single()
     expect(data).toEqual({ kind: 'FIFA', pair_size: 1 })
+
+    // Lo que este test dice pinear -- que el plantel de 2 fue ACEPTADO, no
+    // rebotado por el piso de parejas hardcodeado que borró Task 2 -- antes
+    // sólo lo sostenía que `createSeason` no hubiera tirado. `expect(data)`
+    // de arriba prueba que la disciplina se creó bien, no el tamaño real del
+    // plantel: acá se cuenta de verdad.
+    const { data: entries } = await db.from('entries').select('id').eq('season_id', seasonId).eq('kind', 'SQUAD')
+    expect(entries).toHaveLength(2)
   })
 })

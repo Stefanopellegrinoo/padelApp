@@ -39,8 +39,14 @@ function onlyTopSix(sides: number): number[] {
  * claves 2-6 y 8-12 tienen una curva puesta a mano; `sideCount = 7` y
  * cualquiera arriba de 12 caen fuera de esta tabla, y `defaultConfig` los
  * resuelve con `onlyTopSix(sideCount)` — la MISMA fórmula mecánica que ya
- * usan 8-12, no un plantel sin curva. `defaultConfig` nunca devuelve
- * `points: []`: fuera de la tabla, calcula.
+ * usan 8-12, no un plantel sin curva. Eso vale para `sideCount >= 1`: por
+ * debajo (`squadSize` 0, o 1 con `sideSize` 2), `onlyTopSix` SÍ devuelve
+ * `points: []` (`Array.from` trunca un `length` fraccionario o negativo a
+ * 0) — verificado corriendo `defaultConfig(0, 2)` y `defaultConfig(1, 2)`.
+ * Alcanzable: `resizeConfig` (`app/torneos/nuevo/wizard-state.ts`) llama a
+ * esto en cada tecla que se borra del plantel, con `filledCount` en 0 o 1
+ * mientras se está cargando. Inocuo ahí porque nada lee esos `points` antes
+ * de que el piso (`squadWarning`/`validateConfig`) bloquee el paso.
  */
 const DEFAULT_POINTS: Record<number, number[]> = {
   // Cabeza de la curva de 4 puesta a dedo, no una regla: `minSquadFor`

@@ -636,7 +636,13 @@ export function Armado({
           crudo en vez de un mensaje pensado para que alguien lo lea. */}
       {sizeSettled && tooManyToPair && (
         <p role="alert" className="rounded-field bg-live-bg px-3 py-2.5 text-[12.5px] font-bold text-live">
-          Con {confirmed} no se puede sortear: el máximo para armar parejas es {MAX_PAIRING_POOL}.
+          {/* `eventualSize`, no `confirmed`: el flag `tooManyToPair` se calcula
+              sobre `eventualSize` (el suelto que ya está sentado incluido), y
+              con 12 confirmados más un suelto eso da 13 -- mostrar `confirmed`
+              (12) dibujaba "Con 12 ... el máximo es 12", falso y otra vez
+              contradictorio consigo mismo, la MISMA forma de mentira que el
+              comentario de arriba en este archivo dice haber matado. */}
+          Con {eventualSize} no se puede sortear: el máximo para armar parejas es {MAX_PAIRING_POOL}.
         </p>
       )}
       {/* No es "hay dos invitados al sorteo" —eso es válido y el sorteo los

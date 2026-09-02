@@ -269,6 +269,63 @@ export function removeSeatAt({ names, mySeat }: Squad, index: number): Squad {
 }
 
 /**
+ * El plantel después de tipear `value` en la fila `index`, con una fila más
+ * en blanco al final si esa fila era la ÚLTIMA y quedó con algo cargado.
+ *
+ * Decisión del dueño (docs/plan-piso-y-techo-del-plantel.md): no "montar 8
+ * filas de nuevo", ni un "tamaño típico" por disciplina — mover el piso a
+ * `minSquadFor(sideSize)` ya borró dos números mágicos cuyo único pecado era
+ * adivinar cuánta gente sos, y montar un plano fijo de filas es el MISMO
+ * error con otra ropa. Que la fila aparezca sola mientras tipeás hace
+ * desaparecer la pregunta en vez de elegir un bando, y funciona igual para
+ * dos personas que para veinticuatro.
+ *
+ * Sólo CRECE, nunca se achica: tipear en una fila que NO es la última no
+ * dispara nada (agregar ahí sería sumar una fila que nadie pidió, lejos de
+ * donde se está escribiendo), y vaciar la última fila tampoco saca la que
+ * ya se agregó — esta función no tiene ningún camino que elimine un
+ * elemento, así que la lista no se puede achicar sola mientras se edita.
+ *
+ * Autolimitado a UNA fila en blanco por vez: apenas se agrega, ESA pasa a
+ * ser la nueva última, así que la PRÓXIMA letra tipeada ahí dispara la MISMA
+ * regla y agrega la que sigue. No hace falta un tope aparte ni contar cuántas
+ * ya hay.
+ *
+ * `value.trim()` y no `value` a secas: mismo criterio que `filledCount` — un
+ * espacio no es un nombre cargado, y si contara como "no vacío" la fila
+ * crecería con un espacio suelto que ni `filledCount` ni `squadWarning` ven
+ * como jugador.
+ */
+export function namesAfterEdit(names: readonly string[], index: number, value: string): string[] {
+  const next = [...names]
+  next[index] = value
+  const isLastRow = index === names.length - 1
+  return isLastRow && value.trim().length > 0 ? [...next, ''] : next
+}
+
+/**
+ * Los nombres sin las filas en blanco del FINAL — la que `namesAfterEdit`
+ * deja creciendo sola mientras se tipea la última.
+ *
+ * El paso 3 (orden) reordena jugadores, no casilleros: sin esto, terminar de
+ * cargar el plantel tipeando de corrido (el caso que esta función existe
+ * para arreglar) deja SIEMPRE una fila en blanco colgando al final, y ese
+ * paso la dibujaba igual que cualquier otra, con flechas de subir/bajar
+ * sobre un nombre que no existe.
+ *
+ * Corta sólo desde la COLA, no filtra el array entero: una fila en blanco en
+ * el medio (la deja "+ Agregar jugador" sin llenar, o vaciarla a mano) sigue
+ * ahí — filtrar todo correría el ÍNDICE de las filas que sobreviven, y el
+ * paso 3 usa ese índice tal cual para `moveSeat`. Cortando sólo la cola, el
+ * índice de cada fila visible es EXACTAMENTE el mismo que en `names`.
+ */
+export function withoutTrailingBlanks(names: readonly string[]): string[] {
+  let end = names.length
+  while (end > 0 && names[end - 1]!.trim().length === 0) end -= 1
+  return names.slice(0, end)
+}
+
+/**
  * Vuelve a meter al organizador en el plantel, al final, exactamente como
  * "+ Agregar jugador".
  *

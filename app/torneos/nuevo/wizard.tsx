@@ -20,6 +20,7 @@ import {
   filledCount,
   formatErrors,
   moveSeat,
+  namesAfterEdit,
   newTournamentPayload,
   removeSeatAt,
   resizeConfig,
@@ -27,6 +28,7 @@ import {
   steppersFor,
   summaryOf,
   toggleDiscipline,
+  withoutTrailingBlanks,
 } from './wizard-state'
 
 const SIDE_SIZES: { value: SideSize; label: string }[] = [
@@ -425,6 +427,10 @@ export function Wizard({ myName }: { myName: string }) {
 
   const { names, mySeat } = squad
   const filled = filledCount(names)
+  // Sin la fila en blanco que `namesAfterEdit` deja creciendo sola al final:
+  // el paso 3 ordena jugadores, no casilleros (`withoutTrailingBlanks`,
+  // wizard-state.ts).
+  const orderedNames = withoutTrailingBlanks(names)
   // La paridad sólo corre si alguna disciplina marcada arma parejas
   // (`pairSize === 2`) — un torneo de sólo FIFA no tiene "armar parejas" que
   // pedir (`squadWarning`, wizard-state.ts).
@@ -553,16 +559,19 @@ export function Wizard({ myName }: { myName: string }) {
               </p>
               <p className="text-[11.5px] font-extrabold text-muted">{filled} jugadores</p>
             </div>
+            {/* La fila mostrada se arma con `floor - 1` en blanco (Wizard,
+                más arriba) y crece sola: tipear en la ÚLTIMA agrega la que
+                sigue (`namesAfterEdit`, wizard-state.ts). No hay "tamaño
+                típico" que montar por disciplina — la lista se estira con lo
+                que hace falta, para dos personas o para veinticuatro. */}
             {names.map((seat, index) => (
               <div key={index} className="flex items-center gap-2">
                 <span className="w-5 shrink-0 text-[13px] font-extrabold text-muted">{index + 1}</span>
                 <input
                   value={seat}
-                  onChange={(event) => {
-                    const next = [...names]
-                    next[index] = event.target.value
-                    setSquad({ ...squad, names: next })
-                  }}
+                  onChange={(event) =>
+                    setSquad({ ...squad, names: namesAfterEdit(names, index, event.target.value) })
+                  }
                   placeholder="Nombre"
                   className={`min-w-0 flex-1 rounded-field border-[1.5px] bg-surface p-[15px] text-[16px] font-[700] outline-none placeholder:font-medium placeholder:text-muted ${
                     seat.trim().length === 0 ? 'border-accent' : 'border-line'
@@ -571,7 +580,15 @@ export function Wizard({ myName }: { myName: string }) {
                 {index === mySeat && <Vos />}
                 {/* La cruz propia está SIEMPRE, aunque el plantel esté en el
                     mínimo: sacarse no es achicar el plantel, es dejar el lugar
-                    para otro. El aviso pide el que falta y eso está bien. */}
+                    para otro. El aviso pide el que falta y eso está bien.
+                    Con la fila que crece sola, esta cruz —para el resto de las
+                    filas— puede aparecer un tipeo antes que con el piso fijo
+                    de antes: `names.length > floor` se cumple apenas se agrega
+                    la fila en blanco de la cola, no recién al clickear
+                    "+ Agregar jugador". Es aceptado a propósito: la lista ya
+                    creció, y la cruz existe para sacar una fila que la lista
+                    tiene de más — negarla ahí sería fingir que esa fila extra
+                    no está. */}
                 {(index === mySeat || names.length > floor) && (
                   <button
                     type="button"
@@ -581,6 +598,19 @@ export function Wizard({ myName }: { myName: string }) {
                     onClick={() =>
                       index === mySeat ? setLeaving(true) : setSquad(removeSeatAt(squad, index))
                     }
+                    // Medido con un tab real (Playwright, sin mouse): apenas la
+                    // fila que crece sola cruza el piso, ESTE botón se intercala
+                    // entre un input y el siguiente en el orden de tabulación —
+                    // tipear de corrido manda la letra siguiente al botón, no al
+                    // próximo nombre, y se pierde en silencio (no es un input,
+                    // no la guarda). La cruz de "Sacarme" no tiene este problema
+                    // en el uso real: nace ya cargada con el propio nombre, así
+                    // que nadie necesita tabular DESDE ahí para escribir — el
+                    // flujo de tipear arranca en la fila 2. Por eso el `tabIndex`
+                    // sólo se saca para las cruces de "sacar a otro": afuera del
+                    // tabulado siguen andando con mouse o touch (para eso están),
+                    // pero no se cruzan en el camino de quien tipea de corrido.
+                    tabIndex={index === mySeat ? undefined : -1}
                     // El botón mide 44 para el dedo; el círculo sigue midiendo
                     // 28 a la vista. Agrandar el dibujo no hacía falta — lo que
                     // faltaba era área para no errarle.
@@ -619,7 +649,15 @@ export function Wizard({ myName }: { myName: string }) {
 
         {step === 2 && (
           <div className="overflow-hidden rounded-[14px] border border-line">
-            {names.map((seat, index) => (
+            {/* `orderedNames`, no `names`: sin esto, terminar de cargar el
+                plantel tipeando de corrido (el caso que `namesAfterEdit`
+                existe para arreglar) siempre deja una fila en blanco colgando
+                al final, y este paso la dibujaría con flechas de subir/bajar
+                sobre un nombre que no existe. `withoutTrailingBlanks` sólo
+                corta la COLA, así que el índice de cada fila que se ve acá es
+                el mismo que en `names` — `moveSeat(squad, index, ...)` sigue
+                apuntando a la fila correcta. */}
+            {orderedNames.map((seat, index) => (
               <div
                 key={index}
                 className={`flex items-center gap-2 px-3 py-2 ${index > 0 ? 'border-t border-line' : ''}`}
@@ -640,7 +678,7 @@ export function Wizard({ myName }: { myName: string }) {
                 <button
                   type="button"
                   aria-label={`Bajar a ${seat}`}
-                  disabled={index === names.length - 1}
+                  disabled={index === orderedNames.length - 1}
                   onClick={() => setSquad(moveSeat(squad, index, index + 1))}
                   className="h-[44px] w-[44px] shrink-0 rounded-[9px] bg-chip font-extrabold disabled:opacity-40"
                 >

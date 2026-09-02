@@ -14,6 +14,7 @@ import {
   filledCount,
   formatErrors,
   moveSeat,
+  namesAfterEdit,
   newDisciplineSpec,
   newTournamentPayload,
   removeSeatAt,
@@ -23,6 +24,7 @@ import {
   submitSeats,
   summaryOf,
   toggleDiscipline,
+  withoutTrailingBlanks,
 } from './wizard-state'
 
 /**
@@ -403,6 +405,80 @@ describe('moveSeat', () => {
     const squad = { names: ['Colo', 'Nacho'], mySeat: 0 }
     expect(moveSeat(squad, 0, -1)).toEqual(squad)
     expect(moveSeat(squad, 1, 2)).toEqual(squad)
+  })
+})
+
+/**
+ * La fila que crece sola (docs/plan-piso-y-techo-del-plantel.md): el piso
+ * dejó de ser un plano de 8 para depender de la disciplina, y montar un
+ * número fijo de filas es el MISMO error con otra ropa. Tipear en la ÚLTIMA
+ * fila agrega la que sigue -- no hay "tamaño típico" que adivinar, la lista
+ * crece con lo que hace falta.
+ */
+describe('namesAfterEdit', () => {
+  it('agrega una fila en blanco al tipear en la última', () => {
+    expect(namesAfterEdit(['Colo', ''], 1, 'Nacho')).toEqual(['Colo', 'Nacho', ''])
+  })
+
+  // La fila del medio no es la última: tipear ahí no agrega nada.
+  it('no agrega nada si la fila tocada no es la última', () => {
+    expect(namesAfterEdit(['Colo', '', 'Fede'], 1, 'Nacho')).toEqual(['Colo', 'Nacho', 'Fede'])
+  })
+
+  // Vaciar la última fila no la borra ni agrega otra: sólo CRECE, nunca se achica sola.
+  it('vaciar la última fila no agrega ni saca nada', () => {
+    expect(namesAfterEdit(['Colo', ''], 1, '')).toEqual(['Colo', ''])
+  })
+
+  // Un espacio en blanco no cuenta como cargado -- mismo criterio que
+  // `filledCount`, que también usa `.trim()`.
+  it('un espacio en blanco no dispara el agregado', () => {
+    expect(namesAfterEdit(['Colo', ''], 1, '   ')).toEqual(['Colo', '   '])
+  })
+
+  // Autolimitado: apenas se agrega, ESA pasa a ser la última -- tipear ahí
+  // agrega la que sigue, sin que haga falta un tope aparte.
+  it('encadena: llenar la fila recién agregada agrega otra más', () => {
+    const first = namesAfterEdit(['Colo', ''], 1, 'Nacho')
+    expect(first).toEqual(['Colo', 'Nacho', ''])
+    const second = namesAfterEdit(first, 2, 'Fede')
+    expect(second).toEqual(['Colo', 'Nacho', 'Fede', ''])
+  })
+
+  // Rearmar `namesAfterEdit(['Colo', ''], 1, 'x')` seguido de vaciar esa MISMA
+  // fila dos veces no deja dos filas en blanco: la segunda llamada opera
+  // sobre la fila que ya no es la última (la de índice 1 dejó de serlo apenas
+  // se agregó la de índice 2), así que no vuelve a tocar la cola.
+  it('tipear y borrar en la misma fila dos veces no acumula filas de más', () => {
+    const grown = namesAfterEdit(['Colo', ''], 1, 'x') // ['Colo', 'x', '']
+    const cleared = namesAfterEdit(grown, 1, '') // la fila 1 ya no es la última
+    expect(cleared).toEqual(['Colo', '', ''])
+  })
+})
+
+/**
+ * El paso 3 (orden) no dibuja casilleros vacíos: la fila que
+ * `namesAfterEdit` deja creciendo sola al final no es un jugador a ordenar.
+ * Corta sólo del FINAL -- una fila vacía en el medio (la deja "+ Agregar
+ * jugador" o vaciarla a mano) no es el caso que resuelve esta función.
+ */
+describe('withoutTrailingBlanks', () => {
+  it('saca la fila en blanco del final', () => {
+    expect(withoutTrailingBlanks(['Colo', 'Nacho', ''])).toEqual(['Colo', 'Nacho'])
+  })
+
+  it('no toca nada si no hay nada en blanco al final', () => {
+    expect(withoutTrailingBlanks(['Colo', 'Nacho'])).toEqual(['Colo', 'Nacho'])
+  })
+
+  it('saca más de una fila en blanco si hay más de una al final', () => {
+    expect(withoutTrailingBlanks(['Colo', 'Nacho', '', ''])).toEqual(['Colo', 'Nacho'])
+  })
+
+  // Una fila en blanco en el MEDIO no es la que esta función resuelve: sólo
+  // corta desde la cola, para no correr el índice de las filas que sobreviven.
+  it('una fila en blanco en el medio no se toca', () => {
+    expect(withoutTrailingBlanks(['Colo', '', 'Fede'])).toEqual(['Colo', '', 'Fede'])
   })
 })
 

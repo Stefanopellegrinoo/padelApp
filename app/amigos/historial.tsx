@@ -133,9 +133,12 @@ export function Historial({ nombre, friendPlayerId, partidos }: HistorialProps) 
                   <p className="text-[13.5px] font-[550] text-muted">
                     {/* Mismo mapa que ya usa el wizard de creación de torneos para
                         'PADEL' -> 'Pádel' (`DISCIPLINE_LABELS`, `app/torneos/nuevo/wizard-state.ts:102`)
-                        -- no es una regla escrita en el diseño de esta pantalla, es la
-                        práctica ya establecida en el resto de la app (`PublicFormat`/
-                        `DisciplineHeader`, `db/read.ts`, traducen con el mismo mapa).
+                        -- mismo split que ya sigue `PublicFormat`/`DisciplineHeader`
+                        (`db/read.ts:156-166`): la capa de datos tipa el literal, la
+                        PANTALLA lo traduce a etiqueta con este mapa (acá; y en
+                        `app/torneo/[id]/page.tsx:114`, `ajustes/page.tsx:94,197,221`,
+                        `reglas/page.tsx:65,92`, `ajustes/disciplinas.tsx:75,198`).
+                        `db/read.ts` no traduce nada -- no importa `DISCIPLINE_LABELS`.
                         Sin cast: `partido.sport` ya es literal `'PADEL' | 'FIFA'`
                         (`db/friends.ts`), lo mismo que tipa `DisciplineKind`. */}
                     {fechaDe(partido)} · {DISCIPLINE_LABELS[partido.sport]} · torneo {partido.seasonName}

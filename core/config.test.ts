@@ -25,12 +25,11 @@ describe('validateConfig', () => {
   // plantel. Con sideSize=1 cada presente es su propio lado — no hay nada
   // que emparejar, así que un plantel impar es perfectamente jugable.
   //
-  // El GIVEN del spec usa "7 presentes" como ejemplo, pero MIN_PLAYERS=8 es
-  // todavía un piso COMPARTIDO entre disciplinas (PUNTO 3 del design, sin
-  // hacer en esta tanda: separar minPlayers/maxPlayers por disciplina). Un
-  // 7 acá tropezaría con ese piso —gap real, ya señalado, deliberadamente
-  // afuera de W24— y taparía la señal de esta prueba. Se usa 9: impar,
-  // dentro del piso/techo de hoy, aislando sólo la paridad.
+  // El GIVEN del spec usa "7 presentes" como ejemplo, pero acá se usa 9. Ya
+  // no es por el piso: `minSquadFor(1) = 2` (piso-y-techo-del-plantel, tarea
+  // 1), así que un 7 con sideSize=1 no tropieza con nada. 9 se mantiene sólo
+  // por quedar cómodo entre el piso y el techo de hoy, impar, aislando nada
+  // más que la paridad.
   it('accepts an odd squad size when the side is a single (REQ-D2-2)', () => {
     const errors = validateConfig({ ...valid, squadSize: 9, points: [10, 7, 5, 3] }, 1)
     expect(errors).not.toContain('El plantel tiene que ser un número par.')

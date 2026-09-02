@@ -130,10 +130,11 @@ export function disciplineProfile(
  * sólo es un problema cuando un lado necesita DOS. Con `sideSize=1` cada
  * presente es su propio lado — la regla no se relaja, es INAPLICABLE.
  *
- * El TECHO (`MAX_PLAYERS`) sigue sin condicionar por `sideSize` — mide
- * partidos, no jugadores (W32): su unidad cambia con `sideSize` (12 jugadores
- * son 15 partidos en parejas y 66 de a uno), así que dejarlo sin condicionar
- * es DEUDA, no una corrección; no es esta tarea la que lo toca
+ * El TECHO (`MAX_PLAYERS`) hoy gatea sólo cabeza de plantel — el trabajo de
+ * techo de PARTIDOS ya se lo llevó `config.maxMatches`/`maxMatchesOf` (W32,
+ * `core/constants.ts:6-20`), así que no queda ninguna unidad de partidos sin
+ * condicionar por `sideSize` esperando acá. Lo que hace la próxima tarea de
+ * este plan no es condicionarlo: es BORRARLO entero
  * (docs/plan-piso-y-techo-del-plantel.md, Task 3).
  *
  * El PISO, en cambio, YA condiciona por `sideSize` (docs/tipos-de-torneo.md

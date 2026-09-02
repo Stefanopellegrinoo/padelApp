@@ -598,19 +598,21 @@ export function Wizard({ myName }: { myName: string }) {
                     onClick={() =>
                       index === mySeat ? setLeaving(true) : setSquad(removeSeatAt(squad, index))
                     }
-                    // Medido con un tab real (Playwright, sin mouse): apenas la
-                    // fila que crece sola cruza el piso, ESTE botón se intercala
-                    // entre un input y el siguiente en el orden de tabulación —
-                    // tipear de corrido manda la letra siguiente al botón, no al
-                    // próximo nombre, y se pierde en silencio (no es un input,
-                    // no la guarda). La cruz de "Sacarme" no tiene este problema
-                    // en el uso real: nace ya cargada con el propio nombre, así
-                    // que nadie necesita tabular DESDE ahí para escribir — el
-                    // flujo de tipear arranca en la fila 2. Por eso el `tabIndex`
-                    // sólo se saca para las cruces de "sacar a otro": afuera del
-                    // tabulado siguen andando con mouse o touch (para eso están),
-                    // pero no se cruzan en el camino de quien tipea de corrido.
-                    tabIndex={index === mySeat ? undefined : -1}
+                    // Sí, esta cruz se intercala entre un input y el siguiente
+                    // al tabular, y tipear de corrido manda la letra al botón en
+                    // vez de al próximo nombre. Se probó sacarla del tabulado con
+                    // `tabIndex={-1}` y se revirtió: dejaba el único camino de
+                    // teclado a "sacar a otro" sin alternativa (WCAG 2.1.1), y la
+                    // salida que suele proponerse -- `tabIndex` positivos en los
+                    // inputs -- es peor, porque un `tabIndex` positivo salta
+                    // adelante de TODA la página, no de este paso. Decisión de
+                    // Stefano (02/09/2026): se queda el orden estándar. Es lo que
+                    // hace cualquier formulario con un botón de borrar por fila,
+                    // la letra perdida se ve al instante, y la fila que crece
+                    // sola ya resolvió la parte grande del problema. Si el doble
+                    // Tab molesta al usarlo, el arreglo honesto es reordenar el
+                    // DOM (botones después de todos los inputs, ubicados por
+                    // CSS), no un truco de tabIndex.
                     // El botón mide 44 para el dedo; el círculo sigue midiendo
                     // 28 a la vista. Agrandar el dibujo no hacía falta — lo que
                     // faltaba era área para no errarle.

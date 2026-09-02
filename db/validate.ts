@@ -1,5 +1,4 @@
 import {
-  MAX_PLAYERS,
   minSquadFor,
   validateConfig,
   type MatchFormat,
@@ -166,26 +165,18 @@ export function matchError(
  * docs/tipos-de-torneo.md §3.3): la gente que hace falta para que exista UN
  * partido de ESTA disciplina — 2 de a uno, 4 en pareja.
  *
- * El TECHO (`MAX_PLAYERS`) sigue plano, y a propósito: no se toca en esta
- * rebanada (Task 3 lo borra entero). Mide un HEADCOUNT —la misma unidad que
- * su propio docblock (`core/constants.ts`) dice que es hoy su único trabajo
- * vigente—, no PARTIDOS: ese otro trabajo viejo, que sí cambiaba con
- * `sideSize` (W32), ya lo dejó y hoy lo mide `config.maxMatches`/
- * `defaultMaxMatches`, no esta función. El SUJETO acá es distinto del que
- * describe ese docblock: `present` es plantel MÁS invitados de la fecha
- * (`db/matchday.ts`), no el plantel solo, así que el techo puede saltar
- * incluso con un plantel completo por debajo de 12.
+ * Ya no hay TECHO acá (docs/plan-piso-y-techo-del-plantel.md Task 3): el
+ * plano que medía este headcount se borró porque no cuidaba nada que otra
+ * cosa no cuidara mejor — la duración de la fecha es trabajo de
+ * `config.maxMatches`/`defaultMaxMatches` (partidos, no cabezas, y por
+ * disciplina desde el 24/08) y la CPU de `allMatchings` la corta
+ * `MAX_PAIRING_POOL` (`core/matchings.ts`), que sólo existe con lados de dos.
  */
 export function assertMatchdaySize(present: readonly string[], sideSize: SideSize): void {
   const floor = minSquadFor(sideSize)
   if (present.length < floor) {
     throw new EdgeError(
       `Con ${present.length} no hay fecha: hacen falta ${floor - present.length} más.`,
-    )
-  }
-  if (present.length > MAX_PLAYERS) {
-    throw new EdgeError(
-      `Con ${present.length} no entra en una tarde: sobran ${present.length - MAX_PLAYERS}.`,
     )
   }
   if (sideSize === 2 && present.length % 2 !== 0) {

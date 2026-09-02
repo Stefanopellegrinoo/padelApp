@@ -43,10 +43,10 @@ describe('assertValidConfig', () => {
   })
 
   // REQ-D2-2: un plantel impar es válido con sideSize=1 — la paridad
-  // es una regla de la pareja, no del plantel. 9, no 7 como en el GIVEN del
-  // spec: MIN_PLAYERS=8 sigue siendo un piso compartido (PUNTO 3 del
-  // design, afuera de esta tanda), y 7 tropezaría con él sin decir nada
-  // sobre la paridad.
+  // es una regla de la pareja, no del plantel. 9 es un impar cualquiera por
+  // encima del piso derivado (`minSquadFor(1) = 2`, docs/tipos-de-torneo.md
+  // §3.3): no hay ningún número de cabeza planera que lo filtre antes de
+  // llegar a la paridad.
   //
   //`points` tiene 9 valores, no 4: con
   // sideSize=1 `expectedPoints` es `squadSize / sideSize`, no siempre
@@ -186,18 +186,18 @@ describe('setError / matchError con allowsDraw', () => {
 })
 
 describe('assertMatchdaySize', () => {
-  it.each([4, 8, 10, 12])('accepts %i on a side of two', (size) => {
+  // 14 y 20 están acá a propósito, no sólo 4-12: el techo plano que rechazaba
+  // 14 se borró (docs/plan-piso-y-techo-del-plantel.md Task 3), y 20 prueba
+  // que no quedó ningún número tapando por detrás — si alguien reintroduce un
+  // techo, esto se pone rojo.
+  it.each([4, 8, 10, 12, 14, 20])('accepts %i on a side of two', (size) => {
     expect(() => assertMatchdaySize(players(size), 2)).not.toThrow()
   })
 
   // El piso de a dos ahora es `minSquadFor(2) = 4` (docs/tipos-de-torneo.md
-  // §3.3), no el MIN_PLAYERS=8 plano: 6 alcanza para una fecha (3 parejas).
+  // §3.3), no un plano de 8: 6 alcanza para una fecha (3 parejas).
   it('rejects below the derived floor on a side of two and says how many are missing', () => {
     expect(() => assertMatchdaySize(players(2), 2)).toThrow(/hacen falta 2/)
-  })
-
-  it('rejects 14 and says how many are extra', () => {
-    expect(() => assertMatchdaySize(players(14), 2)).toThrow(/sobran 2/)
   })
 
   it('rejects an odd number on a side of two', () => {
@@ -211,14 +211,17 @@ describe('assertMatchdaySize', () => {
   })
 
   // El piso de a uno es `minSquadFor(1) = 2`: dos amigos ya son un partido de
-  // FIFA, no el MIN_PLAYERS=8 plano heredado del 2v2.
+  // FIFA, no un plano de 8 heredado del 2v2.
   it('lets a matchday of 2 pass on a side of one, and still rejects 1', () => {
     expect(() => assertMatchdaySize(players(2), 1)).not.toThrow()
     expect(() => assertMatchdaySize(players(1), 1)).toThrow(/hacen falta 1/)
   })
 
-  it('still enforces the flat ceiling on a side of one', () => {
-    expect(() => assertMatchdaySize(players(14), 1)).toThrow(/sobran 2/)
+  // El techo plano tampoco existía para lados de uno (docs/plan-piso-y-techo-
+  // del-plantel.md Task 3): 20 presentes, todos su propio lado, no tienen
+  // ningún número de cabeza que los rechace.
+  it('no longer enforces any ceiling on a side of one', () => {
+    expect(() => assertMatchdaySize(players(20), 1)).not.toThrow()
   })
 })
 
@@ -481,8 +484,8 @@ describe('assertPointsCoverMatchday', () => {
    * valores de puntos + una pareja invitada rebotaba con "La fecha deja 9
    * competidores... sólo 8 posiciones". Son 8 competidores, no 9. Y como
    * `addGuestPair` es HOY el único camino para sumar un invitado a una fecha
-   * de a uno, ese camino quedaba muerto con el plantel completo — que en el
-   * piso de MIN_PLAYERS=8 es el caso normal.
+   * de a uno, ese camino quedaba muerto con el plantel completo — un plantel
+   * de 8, el tamaño de siempre en esta suite, es exactamente ese caso.
    */
   const soloConfig = { ...config, points: [8, 7, 6, 5, 4, 3, 2, 1] } // 8 valores
 

@@ -48,7 +48,7 @@ describe('narrateRules — pin de byte-identidad (3a.1)', () => {
     )
 
     expect(sections.find((s) => s.title === 'La fecha')?.body).toBe(
-      'Cada fecha la juegan los que confirman, entre 8 y 12. Se arman parejas con todos y juegan ' +
+      'Cada fecha la juegan los que confirman, como mínimo 4. Se arman parejas con todos y juegan ' +
         'todos contra todos. Cada partido se define a un set de 4 games con tie-break. Si el número ' +
         'de confirmados da impar, se suma un invitado para poder armar las parejas: el invitado no ' +
         'suma puntos, pero su compañero sí.',
@@ -245,7 +245,7 @@ describe('narrateRules — DisciplineShape', () => {
   it('con hasMasters:true y pairSize:2 reproduce el pin de 3a.1 tal cual (regresión R1/R2/R3) [3a.4]', () => {
     const sections = narrateRules(defaultConfig(8), TODAY_SHAPE)
     expect(sections.find((s) => s.title === 'La fecha')?.body).toBe(
-      'Cada fecha la juegan los que confirman, entre 8 y 12. Se arman parejas con todos y juegan ' +
+      'Cada fecha la juegan los que confirman, como mínimo 4. Se arman parejas con todos y juegan ' +
         'todos contra todos. Cada partido se define a un set de 4 games con tie-break. Si el número ' +
         'de confirmados da impar, se suma un invitado para poder armar las parejas: el invitado no ' +
         'suma puntos, pero su compañero sí.',

@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState, useTransition } from 'react'
-import { MAX_PLAYERS, type SeasonConfig, type SideSize } from '@/core'
+import type { SeasonConfig, SideSize } from '@/core'
 import { createTournament } from './actions'
 import {
   DISCIPLINE_KINDS,
@@ -392,8 +392,8 @@ export function Wizard({ myName }: { myName: string }) {
   // ni la pantalla puede mostrar un radio que el submit ignora en silencio.
   const [pairSizes, setPairSizes] = useState<Record<DisciplineKind, SideSize>>({ PADEL: 2, FIFA: 2 })
   // El piso EFECTIVO del plantel COMPARTIDO (`effectiveFloor`, wizard-state.ts):
-  // el máximo entre los pisos de las disciplinas marcadas, no un MIN_PLAYERS=8
-  // plano. Declarado ANTES del plantel y de `config` (mismo criterio que
+  // el máximo entre los pisos de las disciplinas marcadas, no un plano de 8.
+  // Declarado ANTES del plantel y de `config` (mismo criterio que
   // `configSideSize` más abajo, corrección #4030/lección #3994): los dos lo
   // usan sólo al MONTAR (`useState` no vuelve a correr si el admin cambia de
   // disciplina después), así que nacen viendo el piso de la selección
@@ -411,7 +411,7 @@ export function Wizard({ myName }: { myName: string }) {
     names: [myName, ...Array<string>(floor - 1).fill('')],
     mySeat: myName.trim().length === 0 ? null : 0,
   }))
-  // `floor`, no `MIN_PLAYERS` (corrección #4030, lección #3994): el `config`
+  // `floor`, no un plano fijo (corrección #4030, lección #3994): el `config`
   // inicial tiene que describir el MISMO plantel que arranca arriba, o su
   // curva de puntos nace con un largo que no corresponde a `squad.names`.
   const [config, setConfig] = useState<SeasonConfig>(() =>
@@ -454,14 +454,15 @@ export function Wizard({ myName }: { myName: string }) {
     (step === 1 && warning !== null) ||
     (step === 3 && errors.length > 0)
 
-  // El rango ya no es "8 a 12" fijo: `floor` es el piso efectivo de las
-  // disciplinas marcadas (2 con sólo FIFA, 4 si hay pádel de por medio) y
-  // `MAX_PLAYERS` sigue siendo el único techo (no se toca en esta rebanada).
+  // Ya no hay techo que anunciar (docs/plan-piso-y-techo-del-plantel.md
+  // Task 3 lo borró entero): `floor` sigue siendo el piso efectivo de las
+  // disciplinas marcadas (2 con sólo FIFA, 4 si hay pádel de por medio), pero
+  // el plantel ya no tiene un "hasta cuánto".
   const help =
     step === 1
       ? mySeat !== null
-        ? `Ya estás anotado en el plantel: agregá al resto del grupo, hasta ${MAX_PLAYERS} en total. Después compartís un link y cada uno elige el suyo.`
-        : `Tipeá los nombres del grupo, de ${floor} a ${MAX_PLAYERS}. Después compartís un link y cada uno elige el suyo. No hace falta que vayan todos a todas las fechas.`
+        ? `Ya estás anotado en el plantel: agregá al resto del grupo. Después compartís un link y cada uno elige el suyo.`
+        : `Tipeá los nombres del grupo, al menos ${floor}. Después compartís un link y cada uno elige el suyo. No hace falta que vayan todos a todas las fechas.`
       : (HELP[step] ?? '')
 
   const inviteUrl =
@@ -588,15 +589,15 @@ export function Wizard({ myName }: { myName: string }) {
                 )}
               </div>
             ))}
-            {names.length < MAX_PLAYERS && (
-              <button
-                type="button"
-                onClick={() => setSquad({ ...squad, names: [...names, ''] })}
-                className="rounded-field border-[1.5px] border-line p-[13px] text-[14px] font-[750] text-muted"
-              >
-                + Agregar jugador
-              </button>
-            )}
+            {/* Sin techo que la apague (docs/plan-piso-y-techo-del-plantel.md
+                Task 3): la fila para sumar un jugador más siempre está. */}
+            <button
+              type="button"
+              onClick={() => setSquad({ ...squad, names: [...names, ''] })}
+              className="rounded-field border-[1.5px] border-line p-[13px] text-[14px] font-[750] text-muted"
+            >
+              + Agregar jugador
+            </button>
             {/* Sólo existe estando afuera: el camino de vuelta tiene que estar a
                 la vista, y mientras jugás no es más que ruido. */}
             {mySeat === null && myName.trim().length > 0 && (

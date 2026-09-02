@@ -41,7 +41,8 @@ export interface MatchFormat {
 
 export interface SeasonConfig {
   /**
-   * Squad size, not matchday size. Between MIN_PLAYERS and MAX_PLAYERS.
+   * Squad size, not matchday size. At least `minSquadFor(sideSize)`
+   * (docs/tipos-de-torneo.md §3.3) — no fixed ceiling.
    * Even only when the discipline's side size is 2 (N21,
    * ronda 9) — with sideSize=1 an odd squad is perfectly playable.
    */
@@ -55,9 +56,9 @@ export interface SeasonConfig {
   /**
    * Cuántos partidos como mucho puede tener una fecha de esta disciplina.
    * OPCIONAL: sin la clave rige `defaultMaxMatches(sideSize)` — 15 de a dos,
-   * 36 de a uno. Es el techo que `MAX_PLAYERS` intentaba ser y no podía, por
-   * medir jugadores en vez de partidos: 12 jugadores son 15 partidos de a dos
-   * y 66 de a uno.
+   * 36 de a uno. Es el techo que el viejo plano de plantel intentaba ser y no
+   * podía, por medir jugadores en vez de partidos: 12 jugadores son 15
+   * partidos de a dos y 66 de a uno.
    */
   maxMatches?: number
 }

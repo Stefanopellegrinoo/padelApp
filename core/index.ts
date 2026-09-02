@@ -13,18 +13,16 @@
  */
 
 // ── The format's fixed limits ────────────────────────────────────────────────
-// Not configuration. A matchday below MIN_PLAYERS is lopsided, above
-// MAX_PLAYERS does not fit an afternoon, and the Masters' three rotating
-// matches exist because there are exactly four players.
-export { MIN_PLAYERS, MAX_PLAYERS, MAX_PAIRING_POOL, defaultMaxMatches, maxMatchesOf, MASTERS_SIZE, MASTERS_MATCHES } from './constants'
+// Not configuration. There is no flat headcount limit any more (Task 3 of
+// docs/plan-piso-y-techo-del-plantel.md borró el techo entero): sólo quedan
+// el techo de PARTIDOS por disciplina, el techo de CPU del emparejador, y el
+// tamaño fijo del Masters, cuyas tres rondas existen porque son cuatro
+// jugadores.
+export { MAX_PAIRING_POOL, defaultMaxMatches, maxMatchesOf, MASTERS_SIZE, MASTERS_MATCHES } from './constants'
 
 //── El piso real: la gente que hace falta para que exista UN partido ────────
 // Deriva del `sideSize` de la disciplina (docs/tipos-de-torneo.md §3.3) en vez
-// de un `MIN_PLAYERS` plano — ver el docblock de `minSquadFor`. `MIN_PLAYERS`
-// sigue exportado sin tocar: todavía lo lee `core/narrate.ts`, y sus
-// consumidores de `db/`/`app/` pasan a `minSquadFor` recién en la próxima
-// rebanada de este plan — moverlos ahora rompería la compilación antes de
-// tiempo.
+// de un plano — ver el docblock de `minSquadFor`.
 export { minSquadFor } from './constants'
 
 //── El slug de una disciplina en la URL (PR 10, REQ-NR-5) ────────────────────
@@ -231,8 +229,9 @@ export { tallyPlayers, partnerRecords, bestPair } from './playerstats'
  *
  *   allMatchings   (matchings.ts)   enumerates every way to split a pool into
  *                                   pairs. Only buildPairs needs it, and it
- *                                   throws above MAX_PLAYERS because (n-1)!!
- *                                   reaches 654 million at twenty players.
+ *                                   throws above MAX_PAIRING_POOL because
+ *                                   (n-1)!! reaches 654 million at twenty
+ *                                   players.
  *   orderByPoints  (order.ts)       sorts by points with the snapshot as
  *                                   tiebreak. Callers want computeRanking,
  *                                   which returns rows already in order.

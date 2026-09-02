@@ -947,6 +947,51 @@ describe('promoteGuest — disciplina de a uno: se promueve, sin copiar nada', (
   })
 })
 
+// ── docs/plan-piso-y-techo-del-plantel.md Task 3: el techo de 12 se va ──────
+//
+// `promote_guest` tenía, sólo en la rama `pair_size = 1`, un segundo guard
+// duplicado del viejo techo de plantel de TypeScript (`if v_squad + 1 > 12`).
+// Con `config.maxMatches` cuidando la duración de la fecha desde el 24/08, ese
+// techo no protegía nada — y en producción es código muerto porque `main`
+// (previo a `0015`) no tiene ninguna disciplina de a uno. `0073` lo saca.
+describe('promoteGuest — el techo de 12 se fue de promote_guest', () => {
+  it('con el plantel en 12, promover un invitado número 13 funciona (antes explotaba con "máximo de 12")', async () => {
+    const admin = await createTestUser()
+    const squad = await fillerPlayers(12)
+    // `maxMatches` sube a mano: con 13 lados de a uno un todos-contra-todos
+    // son 78 partidos, por encima del default (36). Ese techo es de OTRA
+    // cosa —duración de la fecha, `maxMatchesOf`— y no es lo que este test
+    // ejercita; subirlo despeja el sorteo para llegar al guard de verdad.
+    const { seasonId, entryIds } = await createSeason({
+      admin,
+      squad,
+      disciplines: [{ kind: 'FIFA', pairSize: 1, config: { ...defaultConfig(12, 1), maxMatches: 100 } }],
+    })
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-20')
+    await markAllPlaying(admin, matchdayId, entryIds)
+    const guestId = await addGuest(admin.client, matchdayId, { displayName: 'Invitado trece' })
+
+    await generatePairs(admin.client, matchdayId)
+    await openMatchday(admin.client, matchdayId)
+    await playAllMatches(admin, matchdayId)
+    await closeMatchday(admin.client, matchdayId)
+
+    // Por cliente autenticado, nunca `adminClient()`: lo que se prueba es que
+    // el PERMISO de sumar un invitado alcanza más allá de 12, no que la fila
+    // exista. Antes de `0073` esto rechazaba con el mensaje del guard viejo.
+    await promoteGuest(admin.client, guestId)
+
+    const disciplineId = await defaultDisciplineId(adminClient(), seasonId)
+    if (disciplineId === null) throw new Error('La temporada no tiene disciplina.')
+    const { config } = await disciplineConfig(admin.client, disciplineId)
+    // El plantel de verdad subió a 13 (no sólo "no tiró"): sin esto, el test
+    // pasaría igual si `promote_guest` hubiera fallado en silencio antes de
+    // tocar la config.
+    expect(config.squadSize).toBe(13)
+    expect((await entryRow(guestId)).kind).toBe('SQUAD')
+  })
+})
+
 // ── REQ-D10-3 (spec #3800, design #3801 PUNTO 8 "promote_guest (PR 24)") ────
 //
 // `promote_guest` ya copiaba el TOTAL congelado del compañero (`awards`,

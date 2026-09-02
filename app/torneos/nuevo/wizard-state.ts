@@ -6,7 +6,6 @@
  * algo: el resto es dibujar.
  */
 import {
-  MAX_PLAYERS,
   defaultConfig,
   disciplineProfile,
   formatsLabel,
@@ -221,9 +220,6 @@ export function squadWarning(names: readonly string[], floor: number): string | 
     return missing === 1
       ? `Falta 1 nombre. El plantel arranca en ${floor}.`
       : `Faltan ${missing} nombres. El plantel arranca en ${floor}.`
-  }
-  if (filled > MAX_PLAYERS) {
-    return `Son ${filled} y el plantel llega hasta ${MAX_PLAYERS}.`
   }
   if (filled % 2 !== 0) {
     return `Son ${filled}. El plantel tiene que ser par para poder armar parejas.`

@@ -1,4 +1,4 @@
-import { MASTERS_MATCHES, MASTERS_SIZE, MAX_PLAYERS, MIN_PLAYERS, maxMatchesOf } from './constants'
+import { MASTERS_MATCHES, MASTERS_SIZE, maxMatchesOf, minSquadFor } from './constants'
 import { thirdPlaceByGroupTable } from './knockout'
 import { usesSetsDiff } from './standings'
 import type { DisciplineShape, MatchFormat, MatchResult, SeasonConfig, SideSize } from './types'
@@ -70,14 +70,17 @@ export function narrateRules(config: SeasonConfig, shape: DisciplineShape): Rule
   const { points, matchFormat, regularMatchdays, countBestOf, tiebreakSnapshotEvery } = config
   const { hasMasters, pairSize, allowsDraw } = shape
 
-  // El "8 y 12" es el piso/techo de PLANTEL (`squadSize`), que rige igual sin
-  // importar `pairSize` (core/types.ts: "Even only when sideSize=2"). Lo que
-  // SÍ varía por disciplina es el TOPE DE PARTIDOS de la fecha
+  // El piso de la fecha ya no es un "8" plano: es `minSquadFor(pairSize)`
+  // (docs/tipos-de-torneo.md §3.3) — 2 con `pairSize=1`, 4 en pareja. Y ya no
+  // hay techo de PLANTEL que nombrar: docs/plan-piso-y-techo-del-plantel.md
+  // Task 3 lo borró entero porque no cuidaba nada que otra cosa no cuidara
+  // mejor. Lo que SÍ varía por disciplina es el TOPE DE PARTIDOS de la fecha
   // (`maxMatchesOf`, W32): 15 de a dos, 36 de a uno por default. Se omite el
   // tramo cuando coincide con el default de pádel de HOY (pairSize=2, sin
   // `maxMatches` propio) para que esa única forma que existe en producción
   // siga leyendo carácter a carácter como siempre — con `maxMatches`
   // explícito o `pairSize=1` el tope pasa a nombrarse.
+  const floor = minSquadFor(pairSize)
   const cap = maxMatchesOf(config, pairSize)
   const isTodaysPadelDefault = pairSize === 2 && config.maxMatches === undefined
   const capClause = isTodaysPadelDefault ? '' : `, con un tope de ${cap} partidos por fecha`
@@ -117,7 +120,7 @@ export function narrateRules(config: SeasonConfig, shape: DisciplineShape): Rule
     {
       title: 'La fecha',
       body:
-        `Cada fecha la juegan los que confirman, entre ${MIN_PLAYERS} y ${MAX_PLAYERS}${capClause}. ` +
+        `Cada fecha la juegan los que confirman, como mínimo ${floor}${capClause}. ` +
         sides +
         describeFormat(matchFormat, allowsDraw) +
         guestClause,

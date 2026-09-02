@@ -270,10 +270,11 @@ describe('el sorteo de una disciplina con equipos fijos', () => {
   })
 
   // El equipo entero que no viene no es un problema: simplemente no juega.
-  // Con 10 y no con 8: sacar un equipo de 8 deja 6, y `MIN_PLAYERS = 8` lo
-  // prohíbe. Ese mínimo es una regla de 2v2 inconsistente consigo misma
-  // (prohíbe 6, donde descansa uno, y permite 10, donde también) y queda
-  // FUERA de este cambio a propósito — docs/tipos-de-torneo.md §3.3.
+  // Antes esquivaba el piso plano de 8 —sacar un equipo de un plantel de 8
+  // dejaba 6, que ese plano prohibía— con un plantel de 10. Con el piso
+  // derivado (`minSquadFor(2) = 4`, docs/tipos-de-torneo.md §3.3) ya no hace
+  // falta esquivar nada: 6 sobra de sobra. Se deja en 10 porque no hay ninguna
+  // razón para tocar un fixture que ya funciona.
   it('un equipo entero ausente sale del sorteo sin romper nada', async () => {
     const { seasonId, disciplineId, entryIds } = await fixedTeamsSeason(10)
     const db = adminClient()

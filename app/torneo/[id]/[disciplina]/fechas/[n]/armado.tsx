@@ -1,7 +1,7 @@
 'use client'
 
 import { useOptimistic, useState, useTransition } from 'react'
-import { MAX_PLAYERS, minSquadFor, offerableFormats, type MatchdayFormat, type Duo, type SideSize } from '@/core'
+import { minSquadFor, offerableFormats, type MatchdayFormat, type Duo, type SideSize } from '@/core'
 import { initials } from '@/app/format'
 import {
   addGuestPair,
@@ -310,7 +310,7 @@ export function Armado({
     // partidos del formato que ya está en la base, no asumir round robin.
     formato,
   })
-  const { size, sides, matches, complete, needsLooseGuest, eventualSize, tooFew, tooMany, suggestedFormat } = shape
+  const { size, sides, matches, complete, needsLooseGuest, eventualSize, tooFew, suggestedFormat } = shape
   const label = words(sideSize, formato, formatDrifted)
   const guestUnnamed = [
     ...looseGuests.map((guest) => guest.name),
@@ -358,7 +358,6 @@ export function Armado({
   // banda ya muestra arriba.
   const canDraw =
     !tooFew &&
-    !tooMany &&
     eventualSize % 2 === 0 &&
     !guestsOutnumberSquad &&
     !someGuestPartnerAbsent &&
@@ -610,10 +609,10 @@ export function Armado({
         </section>
       )}
 
-      {/* Los dos salen de `eventualSize`, que mezcla el `confirmed` optimista
-          con el `guestCount` que todavía no cambió — ver `sizeSettled`. Sin esta
-          guarda, tildar al 12° con un invitado sin nombre prendía "Son 12 y
-          entran hasta 12" en rojo durante toda la espera. */}
+      {/* Sale de `eventualSize`, que mezcla el `confirmed` optimista con el
+          `guestCount` que todavía no cambió — ver `sizeSettled`. Sin esta
+          guarda, tildar al confirmado número 4 con un invitado sin nombre
+          prendía "Hacen falta 4" en rojo durante toda la espera. */}
       {/* `role="alert"` en los cuatro: son los que apagan un botón, y aparecen
           por algo que el admin acaba de hacer. Sin anunciarlos, el botón se
           grisa y el lector de pantalla no dice por qué. La banda de paridad de
@@ -622,11 +621,6 @@ export function Armado({
       {sizeSettled && tooFew && (
         <p role="alert" className="rounded-field bg-live-bg px-3 py-2.5 text-[12.5px] font-bold text-live">
           Con {confirmed} no alcanza para armar una fecha. Hacen falta {minSquadFor(sideSize)}.
-        </p>
-      )}
-      {sizeSettled && tooMany && (
-        <p role="alert" className="rounded-field bg-live-bg px-3 py-2.5 text-[12.5px] font-bold text-live">
-          Son {confirmed} y entran hasta {MAX_PLAYERS}. Con más, la fecha no termina nunca.
         </p>
       )}
       {/* No es "hay dos invitados al sorteo" —eso es válido y el sorteo los

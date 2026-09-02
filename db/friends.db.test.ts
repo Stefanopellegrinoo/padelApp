@@ -39,8 +39,9 @@ async function fillerPlayers(count: number): Promise<string[]> {
 }
 
 /**
- * Arma una temporada de 8 presentes (MIN_PLAYERS, `core/constants.ts`: menos
- * y `generatePairs` rechaza la fecha), abre una fecha y genera parejas y
+ * Arma una temporada de 8 presentes (por encima del piso derivado de
+ * cualquiera de los dos deportes, `minSquadFor`, docs/tipos-de-torneo.md
+ * §3.3 — no un número al límite), abre una fecha y genera parejas y
  * partidos por el camino real (`generatePairs`, no un insert a mano) — mismo
  * flujo que `db/entries.db.test.ts:56-77` y `db/close.db.test.ts:535-551`.
  * Devuelve el primer partido armado, para ejercitar `match_participants`

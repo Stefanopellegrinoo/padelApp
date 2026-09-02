@@ -17,7 +17,7 @@ import {
   groupPhaseMatches,
   KNOCKOUT_GROUP_COUNTS,
 } from './knockout'
-import { defaultMaxMatches, MAX_PLAYERS, MIN_PLAYERS } from './constants'
+import { defaultMaxMatches, minSquadFor } from './constants'
 import { pair, single } from './side'
 import type { MatchdayFormat, MatchResult, Phase, Side, SideStanding } from './types'
 
@@ -641,9 +641,15 @@ describe('el techo de una fecha se mide en PARTIDOS y es de CADA disciplina', ()
 
   // La red de este cambio: filtrar puede dejar a alguien SIN ninguna opción, y
   // un menú vacío es una fecha que no se puede armar y nadie sabe por qué.
+  //
+  // El rango ahora lo pone el DEPORTE, no un techo: arranca en
+  // `minSquadFor(sideSize)` (docs/tipos-de-torneo.md §3.3) y llega a 24 —el
+  // doble del viejo límite de 12— para seguir barriendo un rango amplio sin
+  // depender de un número que docs/plan-piso-y-techo-del-plantel.md Task 3
+  // borró.
   it('con los defaults, el menú nunca queda vacío en todo el rango legal', () => {
     for (const sideSize of [1, 2] as const) {
-      for (let jugadores = MIN_PLAYERS; jugadores <= MAX_PLAYERS; jugadores++) {
+      for (let jugadores = minSquadFor(sideSize); jugadores <= 24; jugadores++) {
         const sides = Math.floor(jugadores / sideSize)
         const menu = offerableFormats(sides, defaultMaxMatches(sideSize))
         expect(menu.length, `${sideSize}v${sideSize} con ${jugadores}`).toBeGreaterThan(0)

@@ -1,13 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { MIN_PLAYERS, MAX_PLAYERS, MAX_PAIRING_POOL, MASTERS_SIZE, minSquadFor } from './constants'
+import { MAX_PAIRING_POOL, MASTERS_SIZE, minSquadFor } from './constants'
 import { allMatchings } from './matchings'
 
 describe('constants', () => {
-  it('defines the matchday size limits from the format', () => {
-    expect(MIN_PLAYERS).toBe(8)
-    expect(MAX_PLAYERS).toBe(12)
-  })
-
   it('defines the masters size as four', () => {
     expect(MASTERS_SIZE).toBe(4)
   })
@@ -35,16 +30,18 @@ describe('minSquadFor — el piso es "la gente que hace falta para que exista un
   })
 })
 
-describe('MAX_PAIRING_POOL — el techo de CPU, separado del de producto', () => {
-  it('hoy vale lo mismo que MAX_PLAYERS, y ésa es la coincidencia que documenta', () => {
-    expect(MAX_PAIRING_POOL).toBe(MAX_PLAYERS)
+describe('MAX_PAIRING_POOL — el techo de CPU, con su propio literal', () => {
+  // docs/plan-piso-y-techo-del-plantel.md Task 3: ya no hay techo de plantel
+  // con el que coincidir "de casualidad" — se borró entero. Esto fija el
+  // literal de CPU por lo que es, un límite propio, no un espejo de otro
+  // número que ya no existe.
+  it('vale 12 por su propia cuenta', () => {
+    expect(MAX_PAIRING_POOL).toBe(12)
   })
 
-  it('allMatchings rechaza por el techo de CPU, no por el del plantel', () => {
-    // 14 es par y está por encima de los dos, así que rechaza igual — lo que
-    // este test fija es CUÁL de los dos números lo rechaza: el mensaje tiene
-    // que nombrar el pool, no el plantel. Si mañana `MAX_PLAYERS` sube a 14
-    // porque el producto lo decide, esto sigue rojo y ahí está el punto:
+  it('allMatchings rechaza por el techo de CPU, no por ningún techo de plantel', () => {
+    // 14 está por encima del pool, así que rechaza — y el mensaje tiene que
+    // nombrarlo a ÉL, no a un número de plantel que ya no existe:
     // (14-1)!! = 135135 emparejamientos, 13 veces los de 12.
     expect(() => allMatchings(Array.from({ length: 14 }, (_, i) => `e${i}`))).toThrow(
       new RegExp(String(MAX_PAIRING_POOL)),

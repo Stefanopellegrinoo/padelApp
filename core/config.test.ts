@@ -28,19 +28,19 @@ describe('validateConfig', () => {
   // El GIVEN del spec usa "7 presentes" como ejemplo, pero acá se usa 9. Ya
   // no es por el piso: `minSquadFor(1) = 2` (piso-y-techo-del-plantel, tarea
   // 1), así que un 7 con sideSize=1 no tropieza con nada. 9 se mantiene sólo
-  // por quedar cómodo entre el piso y el techo de hoy, impar, aislando nada
-  // más que la paridad.
+  // por ser un impar cualquiera por encima del piso, aislando nada más que la
+  // paridad.
   it('accepts an odd squad size when the side is a single (REQ-D2-2)', () => {
     const errors = validateConfig({ ...valid, squadSize: 9, points: [10, 7, 5, 3] }, 1)
     expect(errors).not.toContain('El plantel tiene que ser un número par.')
   })
 
-  // El piso dejó de ser el plano MIN_PLAYERS=8 y pasó a ser `minSquadFor(2) =
-  // 4` (docs/tipos-de-torneo.md §3.3): 6 rechazaba antes porque MIN_PLAYERS
-  // era una regla de 2v2 aplicada a todo, y esa misma regla prohibía 6
-  // permitiendo 10 -incoherente consigo misma. Con el piso derivado, 6 pasa;
-  // el rechazo ahora lo prueba 2, que sigue por debajo de las 4 personas que
-  // hacen falta para que exista un partido de parejas.
+  // El piso dejó de ser el plano de 8 y pasó a ser `minSquadFor(2) = 4`
+  // (docs/tipos-de-torneo.md §3.3): el plano de 8 era una regla de 2v2
+  // aplicada a todo, y esa misma regla prohibía 6 permitiendo 10 -incoherente
+  // consigo misma. Con el piso derivado, 6 pasa; el rechazo ahora lo prueba
+  // 2, que sigue por debajo de las 4 personas que hacen falta para que exista
+  // un partido de parejas.
   it('rejects a squad below the derived floor', () => {
     const errors = validateConfig({ ...valid, squadSize: 2, points: [10, 6] }, 2)
     expect(errors).toContain('El plantel tiene que ser de 4 jugadores o más.')
@@ -51,9 +51,13 @@ describe('validateConfig', () => {
     expect(errors).not.toContain('El plantel tiene que ser de 8 jugadores o más.')
   })
 
-  it('rejects a squad above the maximum', () => {
-    const errors = validateConfig({ ...valid, squadSize: 14, points: [10, 7, 5, 3, 2, 1, 1] }, 2)
-    expect(errors).toContain('El plantel no puede pasar de 12 jugadores.')
+  // docs/plan-piso-y-techo-del-plantel.md Task 3: el techo plano de 12 se
+  // borró porque no cuidaba nada que otra cosa no cuidara mejor. 14 —el
+  // primer valor que el techo viejo rechazaba— ahora pasa; si alguien lo
+  // revive, esto se pone rojo.
+  it('accepts a squad above the old flat ceiling', () => {
+    const errors = validateConfig({ ...valid, squadSize: 14, points: [10, 7, 5, 3, 2, 1, 0] }, 2)
+    expect(errors).toEqual([])
   })
 
   it('rejects a points list that does not match the pair count', () => {
@@ -317,7 +321,7 @@ describe('DEFAULT_POINTS con lados de uno', () => {
 
 // ── El piso derivado hace alcanzables 2 y 3 lados, y ahí faltaba semilla ────
 //
-// Antes del piso derivado, `sideCount` nunca bajaba de 4 (MIN_PLAYERS=8 con
+// Antes del piso derivado, `sideCount` nunca bajaba de 4 (el plano de 8 con
 // parejas), así que `DEFAULT_POINTS` no tenía las claves 2 y 3 y
 // `defaultConfig` devolvía `points: []` (core/config.ts:75) — eso hacía
 // fallar `pointsCountError` apenas alguien armaba el plantel más chico que el

@@ -50,7 +50,7 @@ describe('allMatchings', () => {
     expect(() => allMatchings(['a', 'b', 'c'])).toThrow(/par/)
   })
 
-  it('throws on a pool larger than MAX_PLAYERS instead of hanging', () => {
+  it('throws on a pool larger than MAX_PAIRING_POOL instead of hanging', () => {
     const pool = Array.from({ length: 14 }, (_, i) => `p${i}`)
     expect(() => allMatchings(pool)).toThrow()
   })

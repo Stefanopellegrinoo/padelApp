@@ -551,7 +551,7 @@ describe('addDiscipline (PR 13, REQ-D1-2)', () => {
     const admin = await createTestUser()
     const { seasonId, disciplineId: padelId, entryIds } = await createSeason({
       admin,
-      squad: [admin.playerId, ...(await fillerPlayers(7))], // MIN_PLAYERS = 8
+      squad: [admin.playerId, ...(await fillerPlayers(7))], // 8 presentes, por encima del piso
     })
     const [a, b] = entryIds
     if (a === undefined || b === undefined) throw new Error('Faltan asientos.')

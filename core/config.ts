@@ -1,4 +1,4 @@
-import { MAX_PLAYERS, minSquadFor } from './constants'
+import { minSquadFor } from './constants'
 import type { SeasonConfig, SideSize } from './types'
 
 /**
@@ -30,9 +30,11 @@ function onlyTopSix(sides: number): number[] {
  * Points for a full squad, longest first. A matchday with fewer pairs uses
  * the leading values, so winning always pays ten.
  *
- * Indexada por CANTIDAD DE LADOS, no de jugadores: con parejas y
- * `MAX_PLAYERS = 12` nunca pasa de 6, y las claves 8-12 son alcanzables sólo
- * con `sideSize = 1`. Por eso agregarlas no puede mover al pádel.
+ * Indexada por CANTIDAD DE LADOS, no de jugadores: la misma clave sirve para
+ * seis parejas (12 jugadores) o doce lados de a uno (12 jugadores también).
+ * Sin techo de plantel, un lado 7 (14 de a uno, o 14 parejas) cae fuera de la
+ * tabla y arriba de 12 lados también — `defaultConfig` devuelve `[]` y el
+ * creador la carga a mano, el mismo camino que ya tenía para editarla.
  */
 const DEFAULT_POINTS: Record<number, number[]> = {
   // Cabeza de la curva de 4 puesta a dedo, no una regla: `minSquadFor`
@@ -47,9 +49,12 @@ const DEFAULT_POINTS: Record<number, number[]> = {
   4: [10, 6, 3, 1],
   5: [10, 7, 5, 3, 1],
   6: PAYING_SIDES,
-  // Lados de a uno: `MIN_PLAYERS` = 8 y `MAX_PLAYERS` = 12, y un plantel impar
-  // es válido cuando cada presente es su propio lado (REQ-D5-2). 7 no aparece:
-  // con parejas serían 14 jugadores, arriba del techo.
+  // Lados de a uno: un plantel impar es válido cuando cada presente es su
+  // propio lado (REQ-D5-2). 7 no tiene semilla — quedó afuera cuando el
+  // plantel de FIFA iba de 8 a 12 (los dos números que
+  // docs/plan-piso-y-techo-del-plantel.md Task 3 borró) y nunca se completó;
+  // sigue sin ella, mismo camino que cualquier otro sideCount fuera de esta
+  // tabla: el creador la carga a mano.
   8: onlyTopSix(8),
   9: onlyTopSix(9),
   10: onlyTopSix(10),
@@ -126,23 +131,6 @@ export function disciplineProfile(
 }
 
 /**
- * `sideSize` condiciona la paridad (W24, REQ-D2-2/REQ-D5-2): un plantel impar
- * sólo es un problema cuando un lado necesita DOS. Con `sideSize=1` cada
- * presente es su propio lado — la regla no se relaja, es INAPLICABLE.
- *
- * El TECHO (`MAX_PLAYERS`) hoy gatea sólo cabeza de plantel — el trabajo de
- * techo de PARTIDOS ya se lo llevó `config.maxMatches`/`maxMatchesOf` (W32,
- * `core/constants.ts:6-20`), así que no queda ninguna unidad de partidos sin
- * condicionar por `sideSize` esperando acá. Lo que hace la próxima tarea de
- * este plan no es condicionarlo: es BORRARLO entero
- * (docs/plan-piso-y-techo-del-plantel.md, Task 3).
- *
- * El PISO, en cambio, YA condiciona por `sideSize` (docs/tipos-de-torneo.md
- * §3.3, `minSquadFor`): 8 era un plano heredado del 2v2, no una necesidad del
- * formato — la gente que hace falta para que exista UN partido es 2 con
- * lados de a uno y 4 en pareja, la mitad y un cuarto de lo que exigía antes.
- */
-/**
  * "¿Esta lista de puntos tiene la cantidad que corresponde?", o `null`.
  *
  * Un lado por cada `sideSize` jugadores, así que un plantel de 10 son 5 lados
@@ -171,16 +159,16 @@ export function validateConfig(config: SeasonConfig, sideSize: SideSize): string
   if (sideSize === 2 && squadSize % 2 !== 0) {
     errors.push('El plantel tiene que ser un número par.')
   }
-  // El piso ya no es el MIN_PLAYERS=8 plano: es `minSquadFor(sideSize)`, la
-  // gente que hace falta para que exista UN partido de esta disciplina — 2
-  // con lados de a uno, 4 en pareja (docs/tipos-de-torneo.md §3.3).
+  // El piso ya no es un plano de 8: es `minSquadFor(sideSize)`, la gente que
+  // hace falta para que exista UN partido de esta disciplina — 2 con lados de
+  // a uno, 4 en pareja (docs/tipos-de-torneo.md §3.3).
   const minSquad = minSquadFor(sideSize)
   if (squadSize < minSquad) {
     errors.push(`El plantel tiene que ser de ${minSquad} jugadores o más.`)
   }
-  if (squadSize > MAX_PLAYERS) {
-    errors.push(`El plantel no puede pasar de ${MAX_PLAYERS} jugadores.`)
-  }
+  // Sin techo acá a propósito (docs/plan-piso-y-techo-del-plantel.md Task 3):
+  // el plano de 12 no cuidaba nada que otra cosa no cuide mejor — la duración
+  // de la fecha es partidos, no cabezas, y la resuelve `maxMatchesOf` abajo.
 
   // El techo de partidos entra por un formulario, así que se valida acá como
   // cualquier otro número del config. La clave es OPCIONAL —sin ella rige

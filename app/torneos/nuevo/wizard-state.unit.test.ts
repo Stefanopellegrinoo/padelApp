@@ -71,14 +71,17 @@ describe('squadWarning', () => {
     expect(squadWarning(Array(4).fill('Jugador'), floorPadel)).toBeNull()
     expect(squadWarning(Array(10).fill('Jugador'), floorPadel)).toBeNull()
     expect(squadWarning(Array(12).fill('Jugador'), floorPadel)).toBeNull()
+    // 14, uno más que el viejo techo de 12 (docs/plan-piso-y-techo-del-
+    // plantel.md Task 3 lo borró): si alguien lo revive acá, esto se pone rojo.
+    expect(squadWarning(Array(14).fill('Jugador'), floorPadel)).toBeNull()
   })
 
   it('ignores whitespace when counting', () => {
     expect(filledCount(['Marce', '   ', 'Nico'])).toBe(2)
   })
 
-  // El piso real de un torneo de sólo FIFA es 2 (`minSquadFor(1)`), no el
-  // MIN_PLAYERS=8 plano: dos amigos ya pueden jugar.
+  // El piso real de un torneo de sólo FIFA es 2 (`minSquadFor(1)`), no un
+  // plano de 8: dos amigos ya pueden jugar.
   it('a squad of only FIFA can stop at 2, the derived floor', () => {
     expect(squadWarning(Array(2).fill('Jugador'), effectiveFloor([1]))).toBeNull()
     expect(squadWarning(['Solo'], effectiveFloor([1]))).toBe('Falta 1 nombre. El plantel arranca en 2.')

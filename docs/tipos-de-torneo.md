@@ -287,6 +287,11 @@ esa prosa dice ahora es `maxMatchesOf(config, sideSize)`
 mismos siguen sin tocarse, y `squadSize` en `validateConfig` sigue gateado por
 ellos exactamente igual que antes.
 
+**Ya no está postergado.** `docs/plan-piso-y-techo-del-plantel.md` es "su
+propio cambio": el piso pasó a derivarse del deporte (`minSquadFor`) y el
+techo se borró entero, `MAX_PLAYERS` incluido, junto con su copia en
+`promote_guest`.
+
 ---
 
 ## 4 · Lo que este spec NO hace
@@ -295,7 +300,8 @@ ellos exactamente igual que antes.
 - No crea una entidad "equipo" con identidad ni nombre. Ver 1.1.
 - No crea una tabla de posiciones por equipo. Ver 1.1.
 - No modela reemplazos, suplentes ni asistencia parcial de un equipo. Ver 1.1.
-- No toca `MIN_PLAYERS` / `MAX_PLAYERS`. Ver 3.3.
+- No toca `MIN_PLAYERS` / `MAX_PLAYERS` — eso quedó para
+  `docs/plan-piso-y-techo-del-plantel.md`, ya hecho. Ver 3.3.
 - No abre `disciplines.kind` más allá de `PADEL` / `FIFA`.
 
 ---

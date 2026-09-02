@@ -190,21 +190,20 @@ describe('matchdayShape', () => {
       // Y el servidor tiene que estar de acuerdo: con W41 arreglado,
       // `assertPointsCoverMatchday` cuenta 8 competidores del torneo para esta
       // misma fecha —los 2 invitados son dos lados que no cobran—, así que la
-      // pantalla y la base dicen lo mismo. Antes de W41 el botón estaba
-      // habilitado y el sorteo rebotaba.
-      expect(shape.tooMany).toBe(false)
+      // pantalla y la base dicen lo mismo.
     })
 
-    it('respeta el piso derivado del deporte, y el mismo techo que la base enforcea hoy', () => {
-      // El PISO ahora se deriva de `sideSize` (`minSquadFor`, docs/tipos-de-
-      // torneo.md §3.3) igual que `assertMatchdaySize` (db/validate.ts): de a
-      // uno el piso real es 2, no el MIN_PLAYERS=8 plano heredado del 2v2. El
-      // TECHO sigue plano (MAX_PLAYERS) — W32 sigue abierto, reasignado a
-      // PR21/grupos, y esta rebanada no lo toca.
+    // El PISO se deriva de `sideSize` (`minSquadFor`, docs/tipos-de-torneo.md
+    // §3.3) igual que `assertMatchdaySize` (db/validate.ts): de a uno el piso
+    // real es 2, no un plano heredado del 2v2. Ya no hay techo que probar acá
+    // (docs/plan-piso-y-techo-del-plantel.md Task 3 borró `tooMany` con él):
+    // 13 confirmados, uno más que el viejo límite de 12, sigue sin disparar
+    // ningún piso — si alguien revive un techo acá, esto se pone rojo.
+    it('respeta el piso derivado del deporte, y ya no tiene ningún techo que respetar', () => {
       expect(matchdayShape({ confirmed: 1, looseGuests: 0, guestPairs: 0, sideSize: 1, formato: ROUND_ROBIN }).tooFew).toBe(true)
       expect(matchdayShape({ confirmed: 2, looseGuests: 0, guestPairs: 0, sideSize: 1, formato: ROUND_ROBIN }).tooFew).toBe(false)
-      expect(matchdayShape({ confirmed: 13, looseGuests: 0, guestPairs: 0, sideSize: 1, formato: ROUND_ROBIN }).tooMany).toBe(true)
-      expect(matchdayShape({ confirmed: 12, looseGuests: 0, guestPairs: 0, sideSize: 1, formato: ROUND_ROBIN }).tooMany).toBe(false)
+      expect(matchdayShape({ confirmed: 13, looseGuests: 0, guestPairs: 0, sideSize: 1, formato: ROUND_ROBIN }).tooFew).toBe(false)
+      expect(matchdayShape({ confirmed: 13, looseGuests: 0, guestPairs: 0, sideSize: 1, formato: ROUND_ROBIN })).not.toHaveProperty('tooMany')
     })
   })
 

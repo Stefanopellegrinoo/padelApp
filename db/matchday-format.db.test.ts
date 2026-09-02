@@ -345,7 +345,7 @@ describe('generatePairs — el groups elegido tiene que seguir siendo OFRECIBLE 
   it('no-regresión: ROUND_ROBIN arma igual sin importar cuánto baje la asistencia', async () => {
     const { admin, matchdayId, entryIds } = await draftMatchdayWithSides(12, 2) // 6 lados
 
-    // Bajan 2 (MIN_PLAYERS=8 sigue satisfecho: quedan 10 presentes, 5 lados).
+    // Bajan 2 (el piso sigue satisfecho de sobra: quedan 10 presentes, 5 lados).
     // El guard nuevo sólo mira GROUPS_KNOCKOUT — ROUND_ROBIN no lo dispara.
     for (const entryId of entryIds.slice(0, 2)) {
       await setAttendance(admin.client, matchdayId, entryId, 'ABSENT')
@@ -382,8 +382,9 @@ describe('el techo de la fecha se mide en PARTIDOS, y ROUND_ROBIN también lo re
    * `formato.kind === 'GROUPS_KNOCKOUT'` antes de mirar nada — o sea el
    * formato que MÁS partidos produce era el único que entraba sin chequeo.
    * Con `pairSize=1` y 12 presentes son 12 lados: **66 partidos** de round
-   * robin, contra los 15 del peor caso de pádel. `MAX_PLAYERS` los dejaba
-   * pasar porque cuenta JUGADORES, y 12 <= 12.
+   * robin, contra los 15 del peor caso de pádel. El viejo techo plano de
+   * plantel los dejaba pasar porque contaba JUGADORES, y 12 no superaba ese
+   * número.
    *
    * Son dos guards en serie (#3989) y por eso van dos tests: el de
    * `setMatchdayFormat` es de momento de escritura, el de `generatePairs` es

@@ -6,7 +6,6 @@
 
 import {
   defaultMaxMatches,
-  MAX_PLAYERS,
   matchCountForFormat,
   minSquadFor,
   suggestFormat,
@@ -73,7 +72,6 @@ export interface MatchdayShape {
   /** El tamaño que la fecha VA a tener, contando el suelto que todavía no está. */
   eventualSize: number
   tooFew: boolean
-  tooMany: boolean
   /**
    * El formato que `suggestFormat` propone para el tamaño que la fecha VA a
    * tener (REQ-D8-1) — editable antes de armar, es el selector de
@@ -101,13 +99,12 @@ export interface MatchdayShape {
  *
  * El PISO condiciona por `sideSize` (`minSquadFor`, docs/tipos-de-torneo.md
  * §3.3) igual que `assertMatchdaySize` (`db/validate.ts`): la gente que hace
- * falta para que exista UN partido de esta disciplina. El TECHO sigue plano
- * (`MAX_PLAYERS`) a propósito, mismo criterio que en `assertMatchdaySize` —
- * una pantalla que prometa un límite distinto del que el servidor va a
- * aplicar es peor que una que no lo muestre. W32 sigue abierto y la decisión
- * de producto es que se cierra con el formato de grupos (REQ-D8-1, PR21), no
- * con una constante nueva — por eso `matches` existe: de a uno, 12 jugadores
- * son 66 partidos, y ése es el número que hace pedir ese formato.
+ * falta para que exista UN partido de esta disciplina. Ya no hay TECHO que
+ * condicionar (docs/plan-piso-y-techo-del-plantel.md Task 3 lo borró
+ * entero): el problema que el techo plano decía cuidar —una fecha que no
+ * termina nunca— lo cierra el formato de grupos (REQ-D8-1, PR21), no una
+ * constante — por eso `matches` existe: de a uno, 12 jugadores son 66
+ * partidos, y ése es el número que hace pedir ese formato.
  *
  * `formato` es OBLIGATORIO y sin default, mismo criterio que `allowsDraw` en
  * `computeStandings` (design #3801): sin él, `matches` seguía prometiendo el
@@ -150,7 +147,6 @@ export function matchdayShape({
     needsLooseGuest,
     eventualSize,
     tooFew: eventualSize < minSquadFor(sideSize),
-    tooMany: eventualSize > MAX_PLAYERS,
     suggestedFormat: suggestFormat(eventualSize, sideSize, maxMatches),
     // Viaja en el shape para que el selector ofrezca el menú de ESTA disciplina
     // y no el de un techo global — es todo el punto de que el techo sea suyo.

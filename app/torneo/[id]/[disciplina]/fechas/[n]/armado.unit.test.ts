@@ -23,8 +23,9 @@ import { SelectorDeFormato } from './armado'
  * rebanada).
  */
 // El techo por default de una disciplina de a uno (36). Los tamaños que estos
-// tests usan —8, 10, 12 lados— sólo se dan de a uno: de a dos serían 16, 20 y
-// 24 jugadores, muy por encima de `MAX_PLAYERS`.
+// tests usan —8, 10, 12 lados— se leen como de a uno (esa cantidad de
+// jugadores) por simplicidad: el componente sólo recibe `sides` y no le
+// importa si salieron de un plantel de a uno o del doble en parejas.
 const TECHO_DE_A_UNO = defaultMaxMatches(1)
 
 function html(
@@ -69,10 +70,9 @@ describe('SelectorDeFormato', () => {
   })
 
   // Antes este test pedía 2 Y 4 grupos con 12 lados. Con el techo de partidos
-  // (`MAX_MATCHES`) ya no conviven: 12 lados en 2 grupos son 34 partidos y en 4
-  // son 20. Y 12 lados sólo se dan de a uno (de a dos serían 24 jugadores, muy
-  // por encima de `MAX_PLAYERS`), que es exactamente el caso que el techo vino
-  // a acotar. Los dos escalones que SÍ conviven hoy son 6 lados.
+  // (`maxMatches`) ya no conviven: 12 lados en 2 grupos son 34 partidos y en 4
+  // son 20, y el techo de a uno (36) sólo entra uno de los dos. Los dos
+  // escalones que SÍ conviven hoy son 6 lados.
   it('6 lados: ofrece "Todos contra todos" (15) Y "2 grupos + llave" (10)', () => {
     const markup = html(ROUND_ROBIN, 6)
     expect(markup).toContain('Todos contra todos')

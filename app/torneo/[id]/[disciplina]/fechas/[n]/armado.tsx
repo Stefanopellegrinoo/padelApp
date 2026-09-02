@@ -1,7 +1,7 @@
 'use client'
 
 import { useOptimistic, useState, useTransition } from 'react'
-import { MAX_PLAYERS, MIN_PLAYERS, offerableFormats, type MatchdayFormat, type Duo, type SideSize } from '@/core'
+import { MAX_PLAYERS, minSquadFor, offerableFormats, type MatchdayFormat, type Duo, type SideSize } from '@/core'
 import { initials } from '@/app/format'
 import {
   addGuestPair,
@@ -621,7 +621,7 @@ export function Armado({
           sería ruido encima del ruido. */}
       {sizeSettled && tooFew && (
         <p role="alert" className="rounded-field bg-live-bg px-3 py-2.5 text-[12.5px] font-bold text-live">
-          Con {confirmed} no alcanza para armar una fecha. Hacen falta {MIN_PLAYERS}.
+          Con {confirmed} no alcanza para armar una fecha. Hacen falta {minSquadFor(sideSize)}.
         </p>
       )}
       {sizeSettled && tooMany && (

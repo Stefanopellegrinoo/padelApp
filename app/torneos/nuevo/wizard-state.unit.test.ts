@@ -10,6 +10,7 @@ import {
   configForPairSizeChange,
   configSideSize,
   disciplinesWarning,
+  effectiveFloor,
   filledCount,
   formatErrors,
   moveSeat,
@@ -24,31 +25,70 @@ import {
   toggleDiscipline,
 } from './wizard-state'
 
+/**
+ * El plantel es UNO SOLO y compartido por todas las disciplinas de la
+ * temporada (docs/tipos-de-torneo.md §3.3). Cada una elige su propio
+ * `pairSize`, así que el piso de la pantalla del plantel tiene que ser el
+ * MÁXIMO entre las elegidas: el mínimo dejaría armar un torneo cuyo pádel no
+ * puede jugar ni una fecha (piso real 4, `minSquadFor(2)`) con la excusa de
+ * que el FIFA de al lado se conforma con 2.
+ */
+describe('effectiveFloor', () => {
+  it('con pádel y FIFA juntos, manda el piso más alto', () => {
+    // El plantel es compartido: si FIFA se conforma con 2 y el pádel necesita 4,
+    // el plantel necesita 4. Elegir el mínimo dejaría armar un torneo cuyo pádel
+    // no puede jugar una sola fecha.
+    expect(effectiveFloor([1, 2])).toBe(4)
+    expect(effectiveFloor([1])).toBe(2)
+  })
+
+  it('con sólo pádel, el piso también baja de 8 a 4: dos parejas ya son una fecha', () => {
+    expect(effectiveFloor([2])).toBe(4)
+  })
+})
+
 describe('squadWarning', () => {
+  const floorPadel = effectiveFloor([2]) // 4: el piso de una sola pareja.
+
   it('asks for the missing name when the squad is short', () => {
-    const names = [...Array(7).fill('Jugador'), '']
-    expect(squadWarning(names)).toBe('Falta 1 nombre. El plantel arranca en 8.')
+    const names = [...Array(3).fill('Jugador'), '']
+    expect(squadWarning(names, floorPadel)).toBe('Falta 1 nombre. El plantel arranca en 4.')
   })
 
   it('counts how many are missing when it is more than one', () => {
-    const names = [...Array(6).fill('Jugador'), '', '']
-    expect(squadWarning(names)).toBe('Faltan 2 nombres. El plantel arranca en 8.')
+    const names = [...Array(2).fill('Jugador'), '', '']
+    expect(squadWarning(names, floorPadel)).toBe('Faltan 2 nombres. El plantel arranca en 4.')
   })
 
   it('refuses an odd squad, because pairs need an even number', () => {
-    expect(squadWarning(Array(9).fill('Jugador'))).toBe(
+    expect(squadWarning(Array(9).fill('Jugador'), floorPadel)).toBe(
       'Son 9. El plantel tiene que ser par para poder armar parejas.',
     )
   })
 
   it('says nothing for a squad that can go on', () => {
-    expect(squadWarning(Array(8).fill('Jugador'))).toBeNull()
-    expect(squadWarning(Array(10).fill('Jugador'))).toBeNull()
-    expect(squadWarning(Array(12).fill('Jugador'))).toBeNull()
+    expect(squadWarning(Array(4).fill('Jugador'), floorPadel)).toBeNull()
+    expect(squadWarning(Array(10).fill('Jugador'), floorPadel)).toBeNull()
+    expect(squadWarning(Array(12).fill('Jugador'), floorPadel)).toBeNull()
   })
 
   it('ignores whitespace when counting', () => {
     expect(filledCount(['Marce', '   ', 'Nico'])).toBe(2)
+  })
+
+  // El piso real de un torneo de sólo FIFA es 2 (`minSquadFor(1)`), no el
+  // MIN_PLAYERS=8 plano: dos amigos ya pueden jugar.
+  it('a squad of only FIFA can stop at 2, the derived floor', () => {
+    expect(squadWarning(Array(2).fill('Jugador'), effectiveFloor([1]))).toBeNull()
+    expect(squadWarning(['Solo'], effectiveFloor([1]))).toBe('Falta 1 nombre. El plantel arranca en 2.')
+  })
+
+  // Con pádel Y FIFA marcados, el plantel compartido pide el piso más alto
+  // (4), no el de FIFA solo -- el pádel de esa misma temporada lo necesita.
+  it('con pádel y FIFA juntos, pide el piso más alto', () => {
+    expect(squadWarning(Array(3).fill('Jugador'), effectiveFloor([1, 2]))).toBe(
+      'Falta 1 nombre. El plantel arranca en 4.',
+    )
   })
 })
 

@@ -185,11 +185,14 @@ describe('matchdayShape', () => {
       expect(shape.tooMany).toBe(false)
     })
 
-    it('respeta el mismo piso y el mismo techo que la base enforcea hoy', () => {
-      //`assertMatchdaySize` no condiciona MIN/MAX por `sideSize` (W32 sigue
-      // abierto, reasignado a PR21/grupos): la pantalla no puede prometer un
-      // límite distinto del que el servidor va a aplicar.
-      expect(matchdayShape({ confirmed: 7, looseGuests: 0, guestPairs: 0, sideSize: 1, formato: ROUND_ROBIN }).tooFew).toBe(true)
+    it('respeta el piso derivado del deporte, y el mismo techo que la base enforcea hoy', () => {
+      // El PISO ahora se deriva de `sideSize` (`minSquadFor`, docs/tipos-de-
+      // torneo.md §3.3) igual que `assertMatchdaySize` (db/validate.ts): de a
+      // uno el piso real es 2, no el MIN_PLAYERS=8 plano heredado del 2v2. El
+      // TECHO sigue plano (MAX_PLAYERS) — W32 sigue abierto, reasignado a
+      // PR21/grupos, y esta rebanada no lo toca.
+      expect(matchdayShape({ confirmed: 1, looseGuests: 0, guestPairs: 0, sideSize: 1, formato: ROUND_ROBIN }).tooFew).toBe(true)
+      expect(matchdayShape({ confirmed: 2, looseGuests: 0, guestPairs: 0, sideSize: 1, formato: ROUND_ROBIN }).tooFew).toBe(false)
       expect(matchdayShape({ confirmed: 13, looseGuests: 0, guestPairs: 0, sideSize: 1, formato: ROUND_ROBIN }).tooMany).toBe(true)
       expect(matchdayShape({ confirmed: 12, looseGuests: 0, guestPairs: 0, sideSize: 1, formato: ROUND_ROBIN }).tooMany).toBe(false)
     })

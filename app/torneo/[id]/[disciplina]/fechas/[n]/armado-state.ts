@@ -8,7 +8,7 @@ import {
   defaultMaxMatches,
   MAX_PLAYERS,
   matchCountForFormat,
-  MIN_PLAYERS,
+  minSquadFor,
   suggestFormat,
   type MatchdayFormat,
   type Duo,
@@ -99,13 +99,15 @@ export interface MatchdayShape {
  * son todas la misma regla —que la gente entre en lados de dos— y sin esa
  * regla no queda nada que chequear. Cada persona es su propio lado.
  *
- * El PISO y el TECHO se quedan sin condicionar a propósito: `assertMatchdaySize`
- * (`db/validate.ts`) todavía aplica `MIN_PLAYERS`/`MAX_PLAYERS` planos para las
- * dos formas, y una pantalla que prometa un límite distinto del que el servidor
- * va a aplicar es peor que una que no lo muestre. W32 sigue abierto y la
- * decisión de producto es que se cierra con el formato de grupos (REQ-D8-1,
- * PR21), no con una constante nueva — por eso `matches` existe: de a uno, 12
- * jugadores son 66 partidos, y ése es el número que hace pedir ese formato.
+ * El PISO condiciona por `sideSize` (`minSquadFor`, docs/tipos-de-torneo.md
+ * §3.3) igual que `assertMatchdaySize` (`db/validate.ts`): la gente que hace
+ * falta para que exista UN partido de esta disciplina. El TECHO sigue plano
+ * (`MAX_PLAYERS`) a propósito, mismo criterio que en `assertMatchdaySize` —
+ * una pantalla que prometa un límite distinto del que el servidor va a
+ * aplicar es peor que una que no lo muestre. W32 sigue abierto y la decisión
+ * de producto es que se cierra con el formato de grupos (REQ-D8-1, PR21), no
+ * con una constante nueva — por eso `matches` existe: de a uno, 12 jugadores
+ * son 66 partidos, y ése es el número que hace pedir ese formato.
  *
  * `formato` es OBLIGATORIO y sin default, mismo criterio que `allowsDraw` en
  * `computeStandings` (design #3801): sin él, `matches` seguía prometiendo el
@@ -147,7 +149,7 @@ export function matchdayShape({
     complete: size % sideSize === 0,
     needsLooseGuest,
     eventualSize,
-    tooFew: eventualSize < MIN_PLAYERS,
+    tooFew: eventualSize < minSquadFor(sideSize),
     tooMany: eventualSize > MAX_PLAYERS,
     suggestedFormat: suggestFormat(eventualSize, sideSize, maxMatches),
     // Viaja en el shape para que el selector ofrezca el menú de ESTA disciplina

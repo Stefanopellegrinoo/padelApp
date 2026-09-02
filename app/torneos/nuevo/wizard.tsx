@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState, useTransition } from 'react'
-import { MAX_PLAYERS, MIN_PLAYERS, type SeasonConfig, type SideSize } from '@/core'
+import { MAX_PLAYERS, type SeasonConfig, type SideSize } from '@/core'
 import { createTournament } from './actions'
 import {
   DISCIPLINE_KINDS,
@@ -16,6 +16,7 @@ import {
   configForPairSizeChange,
   configSideSize,
   disciplinesWarning,
+  effectiveFloor,
   filledCount,
   formatErrors,
   moveSeat,
@@ -163,7 +164,10 @@ export function PasoDisciplinas({
 const TITLES = ['Nombre y disciplinas', 'El plantel', 'Orden inicial', 'Formato', 'Listo']
 const HELP = [
   'Como lo llaman en el grupo. Se puede cambiar después.',
-  'Tipeá los nombres del grupo, de 8 a 12. Después compartís un link y cada uno elige el suyo. No hace falta que vayan todos a todas las fechas.',
+  // El plantel (índice 1, `step === 1` en `Wizard`) ya NO tiene una frase
+  // fija acá: "de 8 a 12" mentía apenas el piso derivado bajaba de 8 (FIFA
+  // sola arranca en 2). La arma `Wizard`, con el piso EN VIVO (`floor`).
+  '',
   'Ordenalos del mejor al peor. Es el criterio que corta los empates hasta que haya fechas jugadas, y de ahí salen las primeras parejas.',
   'Todos tienen un valor que ya funciona. Si no te importa, seguí de largo.',
   '',
@@ -377,14 +381,6 @@ export function Wizard({ myName }: { myName: string }) {
 
   const [step, setStep] = useState(0)
   const [name, setName] = useState('')
-  // El que arma el torneo arranca ADENTRO del plantel, con su nombre ya puesto
-  // en el primer asiento. Es el caso de casi todos —el que organiza los jueves
-  // juega los jueves— y así no hay nada que descubrir para participar: mirás la
-  // lista y ya estás. El que sólo organiza se saca, que es el caso raro.
-  const [squad, setSquadState] = useState<Squad>(() => ({
-    names: [myName, ...Array<string>(MIN_PLAYERS - 1).fill('')],
-    mySeat: myName.trim().length === 0 ? null : 0,
-  }))
   // Pádel marcado de entrada: sin tocar nada, el torneo nace igual que
   // siempre (una sola PADEL) — el checkbox no es una regresión, es el mismo
   // default de antes de PR11 hecho explícito.
@@ -395,14 +391,31 @@ export function Wizard({ myName }: { myName: string }) {
   // para todas — "Individual" en FIFA ya no puede pisarle el dato a Pádel
   // ni la pantalla puede mostrar un radio que el submit ignora en silencio.
   const [pairSizes, setPairSizes] = useState<Record<DisciplineKind, SideSize>>({ PADEL: 2, FIFA: 2 })
-  // Declarado DESPUÉS de `disciplines`/`pairSizes` (corrección #4030, lección
-  // #3994): `configSideSize` necesita leerlos para decidir el `sideSize`
-  // inicial -- antes este `useState` llamaba `configFor(MIN_PLAYERS)` sin
-  // tercer argumento, que caía en silencio a la curva de parejas. Con el
-  // wizard recién montado eso es lo mismo que da hoy (PADEL sola, pairSize
-  // 2), pero quedaba sin decidirlo a propósito.
+  // El piso EFECTIVO del plantel COMPARTIDO (`effectiveFloor`, wizard-state.ts):
+  // el máximo entre los pisos de las disciplinas marcadas, no un MIN_PLAYERS=8
+  // plano. Declarado ANTES del plantel y de `config` (mismo criterio que
+  // `configSideSize` más abajo, corrección #4030/lección #3994): los dos lo
+  // usan sólo al MONTAR (`useState` no vuelve a correr si el admin cambia de
+  // disciplina después), así que nacen viendo el piso de la selección
+  // inicial — pádel, 4, no el 8 plano de antes. Quien SÍ sigue el piso EN VIVO
+  // es el aviso del paso 2 y el botón de sacar fila (`squadWarning` y
+  // `names.length > floor`, los dos más abajo): a dos amigos de FIFA les
+  // alcanza con llenar 2 de las filas que ya están, sin que el plantel
+  // arranque más chico por sí solo.
+  const floor = effectiveFloor(disciplines.map((kind) => pairSizes[kind]))
+  // El que arma el torneo arranca ADENTRO del plantel, con su nombre ya puesto
+  // en el primer asiento. Es el caso de casi todos —el que organiza los jueves
+  // juega los jueves— y así no hay nada que descubrir para participar: mirás la
+  // lista y ya estás. El que sólo organiza se saca, que es el caso raro.
+  const [squad, setSquadState] = useState<Squad>(() => ({
+    names: [myName, ...Array<string>(floor - 1).fill('')],
+    mySeat: myName.trim().length === 0 ? null : 0,
+  }))
+  // `floor`, no `MIN_PLAYERS` (corrección #4030, lección #3994): el `config`
+  // inicial tiene que describir el MISMO plantel que arranca arriba, o su
+  // curva de puntos nace con un largo que no corresponde a `squad.names`.
   const [config, setConfig] = useState<SeasonConfig>(() =>
-    configFor(MIN_PLAYERS, configSideSize(disciplines, pairSizes)),
+    configFor(floor, configSideSize(disciplines, pairSizes)),
   )
   const [error, setError] = useState<string | null>(null)
   const [leaving, setLeaving] = useState(false)
@@ -411,7 +424,7 @@ export function Wizard({ myName }: { myName: string }) {
 
   const { names, mySeat } = squad
   const filled = filledCount(names)
-  const warning = squadWarning(names)
+  const warning = squadWarning(names, floor)
   const errors = formatErrors(config, configSideSize(disciplines, pairSizes))
   const disciplineWarning = disciplinesWarning(disciplines)
 
@@ -441,9 +454,14 @@ export function Wizard({ myName }: { myName: string }) {
     (step === 1 && warning !== null) ||
     (step === 3 && errors.length > 0)
 
+  // El rango ya no es "8 a 12" fijo: `floor` es el piso efectivo de las
+  // disciplinas marcadas (2 con sólo FIFA, 4 si hay pádel de por medio) y
+  // `MAX_PLAYERS` sigue siendo el único techo (no se toca en esta rebanada).
   const help =
-    step === 1 && mySeat !== null
-      ? 'Ya estás anotado en el plantel: agregá al resto del grupo, hasta 12 en total. Después compartís un link y cada uno elige el suyo.'
+    step === 1
+      ? mySeat !== null
+        ? `Ya estás anotado en el plantel: agregá al resto del grupo, hasta ${MAX_PLAYERS} en total. Después compartís un link y cada uno elige el suyo.`
+        : `Tipeá los nombres del grupo, de ${floor} a ${MAX_PLAYERS}. Después compartís un link y cada uno elige el suyo. No hace falta que vayan todos a todas las fechas.`
       : (HELP[step] ?? '')
 
   const inviteUrl =
@@ -549,7 +567,7 @@ export function Wizard({ myName }: { myName: string }) {
                 {/* La cruz propia está SIEMPRE, aunque el plantel esté en el
                     mínimo: sacarse no es achicar el plantel, es dejar el lugar
                     para otro. El aviso pide el que falta y eso está bien. */}
-                {(index === mySeat || names.length > MIN_PLAYERS) && (
+                {(index === mySeat || names.length > floor) && (
                   <button
                     type="button"
                     aria-label={

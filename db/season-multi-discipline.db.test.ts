@@ -334,3 +334,33 @@ describe('createSeason vía el wizard real, disciplina de a uno (C29)', () => {
     ])
   })
 })
+
+/**
+ * plan-piso-y-techo-del-plantel, Task 2: `createSeason` corría
+ * `assertValidConfig(config, 2)` sobre `config` -- el legado que
+ * `newTournamentPayload` arma con el `squadSize` REAL del plantel cargado,
+ * `db/season.ts` alrededor de la línea 266 (antes de esta tarea) -- con el
+ * `sideSize` de PAREJAS hardcodeado en 2, sin importar qué disciplina eligió
+ * el admin. Con dos amigos de FIFA (`pairSize=1`, piso real 2) el plantel
+ * real de 2 pasa la validación de LA DISCIPLINA (`minSquadFor(1) = 2`) pero
+ * rebotaba contra el piso de parejas (`minSquadFor(2) = 4`) de esa llamada
+ * legado -- rechazando un torneo que en todo lo demás era válido.
+ */
+describe('createSeason con el plantel al piso real de una disciplina de a uno', () => {
+  it('dos amigos arman un torneo de FIFA con un plantel de 2, no de 4', async () => {
+    const admin = await createTestUser()
+    const config = defaultConfig(2, 1)
+    const squad: Squad = { names: squadNames(2), mySeat: null }
+
+    const payload = newTournamentPayload('Dos amigos', squad, config, ['FIFA'], { PADEL: 2, FIFA: 1 })
+    const { seasonId } = await createSeason(admin.client, payload)
+
+    const db = adminClient()
+    const { data } = await db
+      .from('disciplines')
+      .select('kind, pair_size')
+      .eq('season_id', seasonId)
+      .single()
+    expect(data).toEqual({ kind: 'FIFA', pair_size: 1 })
+  })
+})

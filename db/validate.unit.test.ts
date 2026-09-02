@@ -186,12 +186,14 @@ describe('setError / matchError con allowsDraw', () => {
 })
 
 describe('assertMatchdaySize', () => {
-  it.each([8, 10, 12])('accepts %i on a side of two', (size) => {
+  it.each([4, 8, 10, 12])('accepts %i on a side of two', (size) => {
     expect(() => assertMatchdaySize(players(size), 2)).not.toThrow()
   })
 
-  it('rejects 6 and says how many are missing', () => {
-    expect(() => assertMatchdaySize(players(6), 2)).toThrow(/hacen falta 2/)
+  // El piso de a dos ahora es `minSquadFor(2) = 4` (docs/tipos-de-torneo.md
+  // §3.3), no el MIN_PLAYERS=8 plano: 6 alcanza para una fecha (3 parejas).
+  it('rejects below the derived floor on a side of two and says how many are missing', () => {
+    expect(() => assertMatchdaySize(players(2), 2)).toThrow(/hacen falta 2/)
   })
 
   it('rejects 14 and says how many are extra', () => {
@@ -208,8 +210,14 @@ describe('assertMatchdaySize', () => {
     expect(() => assertMatchdaySize(players(9), 1)).not.toThrow()
   })
 
-  it('still enforces the floor/ceiling on a side of one', () => {
-    expect(() => assertMatchdaySize(players(6), 1)).toThrow(/hacen falta 2/)
+  // El piso de a uno es `minSquadFor(1) = 2`: dos amigos ya son un partido de
+  // FIFA, no el MIN_PLAYERS=8 plano heredado del 2v2.
+  it('lets a matchday of 2 pass on a side of one, and still rejects 1', () => {
+    expect(() => assertMatchdaySize(players(2), 1)).not.toThrow()
+    expect(() => assertMatchdaySize(players(1), 1)).toThrow(/hacen falta 1/)
+  })
+
+  it('still enforces the flat ceiling on a side of one', () => {
     expect(() => assertMatchdaySize(players(14), 1)).toThrow(/sobran 2/)
   })
 })

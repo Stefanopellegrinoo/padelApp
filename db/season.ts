@@ -263,7 +263,15 @@ export async function createSeason(
   // #4034): esa columna no tiene lectores desde PR 5 y el `drop column` es del
   // CONTRACT. Acá sólo sobrevive como default de la disciplina implícita
   // cuando el caller no manda `disciplines` — siempre pádel, sideSize=2 fijo.
-  assertValidConfig(config, 2)
+  // Por eso NO se valida acá aparte (plan-piso-y-techo-del-plantel, tarea 2):
+  // sin `disciplines`, `disciplineSpecs` es `[{ kind: 'PADEL', config }]` y el
+  // loop de abajo corre `assertValidConfig(config, 2)` igual — validarlo acá
+  // TAMBIÉN era puro redundante. Con `disciplines` explícito era directamente
+  // incorrecto: validaba el `squadSize` REAL del plantel (`newTournamentPayload`
+  // lo arma así) contra el piso de PAREJAS sin importar qué disciplina se
+  // haya elegido, y rechazaba un torneo de dos amigos al FIFA (piso real 2)
+  // por no llegar al piso de a dos (4) — aunque la validación de LA
+  // disciplina, la del loop, lo aceptara.
   for (const spec of disciplineSpecs) {
     assertValidConfig(spec.config, spec.pairSize ?? 2)
     if (squadNames.length !== spec.config.squadSize) {

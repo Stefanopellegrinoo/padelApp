@@ -1,6 +1,6 @@
 import {
   MAX_PLAYERS,
-  MIN_PLAYERS,
+  minSquadFor,
   validateConfig,
   type MatchFormat,
   type Duo,
@@ -162,16 +162,22 @@ export function matchError(
 /**
  * `sideSize` condiciona la paridad (W24, REQ-D5-2): con `sideSize=1` cada
  * presente es su propio lado, así que un headcount impar no le falta nada a
- * nadie. El piso/techo sigue sin condicionar: es cantidad, no paridad, y
- * REQ-D2-2 no lo toca directamente. Pero el TECHO (`MAX_PLAYERS`) mide
- * partidos, no jugadores (W32), y esa unidad SÍ
- * cambia con `sideSize` — dejarlo sin condicionar es deuda documentada, no
- * una decisión cerrada (ver el comentario de `MAX_PLAYERS`).
+ * nadie. El PISO también condiciona por `sideSize` (`minSquadFor`,
+ * docs/tipos-de-torneo.md §3.3): la gente que hace falta para que exista UN
+ * partido de ESTA disciplina — 2 de a uno, 4 en pareja.
+ *
+ * El TECHO (`MAX_PLAYERS`) sigue plano, y a propósito: no se toca en esta
+ * rebanada (Task 3 lo borra entero). Mide un HEADCOUNT —la misma unidad que
+ * su propio docblock (`core/constants.ts`) dice que es hoy su único trabajo
+ * vigente—, no PARTIDOS: ese otro trabajo viejo, que sí cambiaba con
+ * `sideSize` (W32), ya lo dejó y hoy lo mide `config.maxMatches`/
+ * `defaultMaxMatches`, no esta función.
  */
 export function assertMatchdaySize(present: readonly string[], sideSize: SideSize): void {
-  if (present.length < MIN_PLAYERS) {
+  const floor = minSquadFor(sideSize)
+  if (present.length < floor) {
     throw new EdgeError(
-      `Con ${present.length} no hay fecha: hacen falta ${MIN_PLAYERS - present.length} más.`,
+      `Con ${present.length} no hay fecha: hacen falta ${floor - present.length} más.`,
     )
   }
   if (present.length > MAX_PLAYERS) {

@@ -7,10 +7,10 @@
  */
 import {
   MAX_PLAYERS,
-  MIN_PLAYERS,
   defaultConfig,
   disciplineProfile,
   formatsLabel,
+  minSquadFor,
   pointsCountError,
   pointsErrors,
   type MatchFormat,
@@ -183,18 +183,37 @@ export function filledCount(names: readonly string[]): number {
 }
 
 /**
+ * El piso real del plantel COMPARTIDO: el MÁXIMO entre los pisos de cada
+ * disciplina elegida, nunca el mínimo ni el de la primera.
+ *
+ * El plantel es uno solo para toda la temporada (docs/tipos-de-torneo.md
+ * §3.3): un torneo con pádel (parejas, piso 4) y FIFA (de a uno, piso 2)
+ * necesita 4. Elegir el MÍNIMO dejaría armar un torneo cuyo pádel no puede
+ * jugar ni una sola fecha — el máximo es lo que garantiza que la disciplina
+ * más exigente también entre.
+ */
+export function effectiveFloor(sideSizes: readonly SideSize[]): number {
+  return Math.max(...sideSizes.map(minSquadFor))
+}
+
+/**
  * El aviso del paso 2, o `null` si se puede continuar.
+ *
+ * `floor` es el piso EFECTIVO del plantel compartido (`effectiveFloor`), no
+ * un número fijo: con sólo FIFA arranca en 2, con pádel (solo o junto a FIFA)
+ * en 4. Esta función no elige el piso, sólo lo aplica — quien arma el estado
+ * del wizard es quien sabe qué disciplinas están marcadas.
  *
  * El plantel se carga **par**: la app agrega un invitado cuando una FECHA da
  * impar, que es otra cosa.
  */
-export function squadWarning(names: readonly string[]): string | null {
+export function squadWarning(names: readonly string[], floor: number): string | null {
   const filled = filledCount(names)
-  if (filled < MIN_PLAYERS) {
-    const missing = MIN_PLAYERS - filled
+  if (filled < floor) {
+    const missing = floor - filled
     return missing === 1
-      ? `Falta 1 nombre. El plantel arranca en ${MIN_PLAYERS}.`
-      : `Faltan ${missing} nombres. El plantel arranca en ${MIN_PLAYERS}.`
+      ? `Falta 1 nombre. El plantel arranca en ${floor}.`
+      : `Faltan ${missing} nombres. El plantel arranca en ${floor}.`
   }
   if (filled > MAX_PLAYERS) {
     return `Son ${filled} y el plantel llega hasta ${MAX_PLAYERS}.`

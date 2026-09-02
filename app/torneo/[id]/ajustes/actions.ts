@@ -2,9 +2,15 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import type { DisciplineId, SeasonConfig, SideSize } from '@/core'
+import type { DisciplineId, MatchdayFormat, SeasonConfig, SideSize } from '@/core'
 import { type DisciplineKind, newDisciplineSpec } from '@/app/torneos/nuevo/wizard-state'
-import { addDiscipline, updateDisciplineConfig, updateDisciplineHasMasters, updateDisciplineRules } from '@/db/discipline'
+import {
+  addDiscipline,
+  updateDisciplineConfig,
+  updateDisciplineFormatoDefault,
+  updateDisciplineHasMasters,
+  updateDisciplineRules,
+} from '@/db/discipline'
 import { addSquadSeat, claimOwnSeat, removeSeat, renameSeat, unlinkSeat } from '@/db/entries'
 import { EdgeError } from '@/db/errors'
 import { deleteSeason, renameSeason } from '@/db/season'
@@ -152,6 +158,33 @@ export async function saveHasMasters(
 ): Promise<WriteResult> {
   return onSeason(seasonId, async (supabase) => {
     await updateDisciplineHasMasters(supabase, disciplineId, hasMasters)
+  })
+}
+
+/**
+ * El formato con el que nace cada fecha nueva de esta disciplina (§2.5).
+ * `updateDisciplineFormatoDefault` no filtra por ofrecible -- ese guard
+ * sigue viviendo en `setMatchdayFormat`, al armar la fecha.
+ *
+ * ponytail: sin guard de FORMA acá antes de escribir (a diferencia de
+ * `saveConfig`, que corre `assertValidConfig`). Las tres `OPCIONES` que
+ * ofrece `FormatoDefault` (`ajustes/formato-default.tsx`) nunca arman un
+ * valor fuera del CHECK `disciplines_formato_default_kind` (0074), y sólo
+ * un season admin llega hasta acá (RLS) -- por eso no hace falta hoy. Pero
+ * un valor armado a mano por fuera de esas tres opciones SÍ llega hasta
+ * acá, y lo que vuelve en el cartel rojo es el mensaje crudo de Postgres
+ * (violación del CHECK o de la NOT NULL, en inglés, con el nombre de la
+ * tabla) -- no uno pensado para la pantalla. Upgrade si hace falta: un
+ * guard de forma en `updateDisciplineFormatoDefault` (`db/discipline.ts`)
+ * que tire un `EdgeError` en español antes del `update`.
+ */
+export async function saveFormatoDefault(
+  seasonId: string,
+  disciplineId: DisciplineId,
+  formato: MatchdayFormat,
+): Promise<WriteResult> {
+  return onSeason(seasonId, async (supabase) => {
+    await updateDisciplineFormatoDefault(supabase, disciplineId, formato)
   })
 }
 

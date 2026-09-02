@@ -212,6 +212,40 @@ export async function updateDisciplineHasMasters(
 }
 
 /**
+ * El único escritor de `disciplines.formato_default` (0074,
+ * docs/tipos-de-torneo.md §2.5) -- mismo patrón `count: 'exact'` que
+ * `updateDisciplineConfig`/`updateDisciplineHasMasters` de arriba, sin
+ * chequeo de admin propio: se apoya en RLS (`disciplines_write`,
+ * `is_season_admin`).
+ *
+ * Sin chequeo de OFRECIBILIDAD acá, a propósito: `formatoOfrecible`/
+ * `offerableFormats` (`core/knockout.ts`) necesitan `sides` -- cuántos lados
+ * confirmaron asistencia -- y ese dato no existe a nivel disciplina, sólo a
+ * nivel fecha. Ese filtro sigue viviendo donde ya vivía, en
+ * `setMatchdayFormat` (`db/matchday.ts:337`), que sí tiene una fecha con
+ * asistencia real para medir contra. El CHECK `disciplines_formato_default_kind`
+ * (0074) es la única validación de FORMA que corre acá, y es la que un PATCH
+ * directo tampoco puede saltear -- mismo argumento que ya hace la migración
+ * para el resto de sus guards.
+ */
+export async function updateDisciplineFormatoDefault(
+  supabase: Client,
+  disciplineId: DisciplineId,
+  formato: MatchdayFormat,
+): Promise<void> {
+  const { error, count } = await supabase
+    .from('disciplines')
+    .update({ formato_default: formato as unknown as Json }, { count: 'exact' })
+    .eq('id', disciplineId)
+  if (error !== null) {
+    throw new EdgeError(`No se pudo guardar el formato de las fechas: ${error.message}`)
+  }
+  if (count === 0) {
+    throw new EdgeError('No se pudo guardar el formato: sólo puede hacerlo quien organiza.')
+  }
+}
+
+/**
  * El único escritor de `disciplines.rules_text` (0069) -- reemplaza a
  * `updateSeasonRules` (`db/season.ts`, borrada en esta misma rebanada).
  * Mismo patrón que `updateDisciplineConfig`/`updateDisciplineHasMasters` de

@@ -123,6 +123,10 @@ vi.mock('@/db/read', async (importOriginal) => {
       pairSize: escena.pairSize,
       hasMasters: false,
       allowsDraw: true,
+      // §2.5: esta pantalla (Fechas) lee `matchdays.formato`, no
+      // `disciplines.formato_default` -- el default de columna alcanza
+      // para que el fixture tipe.
+      formatoDefault: { kind: 'ROUND_ROBIN' },
     }
   }
   // Función, no un `const`, por lo mismo que `discipline()`/`config()`:

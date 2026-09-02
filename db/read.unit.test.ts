@@ -21,6 +21,7 @@ describe('toDisciplineHeader', () => {
       pair_size: 2,
       has_masters: true,
       allows_draw: false,
+      formato_default: { kind: 'ROUND_ROBIN' },
       status: 'ACTIVE',
     })
     expect(header.weight).toBe(1)
@@ -39,6 +40,7 @@ describe('toDisciplineHeader', () => {
       pair_size: 1,
       has_masters: false,
       allows_draw: true,
+      formato_default: { kind: 'ROUND_ROBIN' },
       status: 'ACTIVE',
     })
     expect(header.allowsDraw).toBe(true)

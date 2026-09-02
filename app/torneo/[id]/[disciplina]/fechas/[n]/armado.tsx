@@ -2,7 +2,7 @@
 
 import { useOptimistic, useState, useTransition } from 'react'
 import { MAX_PAIRING_POOL, minSquadFor, offerableFormats, type MatchdayFormat, type Duo, type SideSize } from '@/core'
-import { initials } from '@/app/format'
+import { initials, matchdayFormatLabel } from '@/app/format'
 import {
   addGuestPair,
   addLooseGuest,
@@ -720,9 +720,12 @@ export function Armado({
  *   otras, justo lo que S81/W77 ya cuidaron con `aria-checked` en vez de
  *   apoyarse sólo en la clase.
  * - **Acortar el texto** ("Todos vs. todos"): sí baja la fila a dos líneas
- *   (medido: 71px → 56px), pero `formatoLabel` es el MISMO texto para el
- *   botón y para la leyenda "Sugerido:" (línea de abajo), así que cambiarlo
- *   tocaría 7+ asserts en dos archivos de test y la copia que el resto del
+ *   (medido: 71px → 56px), pero `matchdayFormatLabel` (`app/format.ts`) es
+ *   el MISMO texto para este botón, la leyenda "Sugerido:" (línea de arriba)
+ *   Y el radio de `FormatoDefault` en Ajustes (`ajustes/formato-default.tsx`,
+ *   §2.5) — cambiarlo tocaría asserts en tres archivos de test
+ *   (`armado.unit.test.ts`, `page.unit.test.ts`,
+ *   `ajustes/formato-default.unit.test.ts`) y la copia que el resto del
  *   código escribe siempre entera ("todos contra todos", en comentarios y en
  *   `core/knockout.ts`) — por 15px de fila, a cambio de una abreviatura que
  *   no está en ningún otro lado de la app.
@@ -733,11 +736,6 @@ export function Armado({
 const FORMATO_BOTON = 'flex-1 rounded-field border-[1.5px] p-3 text-[13.5px] font-extrabold'
 const FORMATO_ELEGIDO = 'border-accent bg-accent text-accent-text'
 const FORMATO_LIBRE = 'border-line'
-
-/** "Todos contra todos" o "N grupos + llave" — el mismo texto para el botón y para la leyenda de "Sugerido". */
-function formatoLabel(formato: MatchdayFormat): string {
-  return formato.kind === 'ROUND_ROBIN' ? 'Todos contra todos' : `${formato.groups} grupos + llave`
-}
 
 /**
  * El selector de formato de la fecha (REQ-D8-1): "todos contra todos"
@@ -834,7 +832,7 @@ export function SelectorDeFormato({
     <section className="flex flex-col gap-2">
       <h2 className={`${STEP_TITLE} border-b border-line pb-2`}>Formato de la fecha</h2>
       {suggestedIsShown && (
-        <p className="text-[11.5px] font-[600] text-muted">Sugerido: {formatoLabel(suggested)}</p>
+        <p className="text-[11.5px] font-[600] text-muted">Sugerido: {matchdayFormatLabel(suggested)}</p>
       )}
       <div className="flex gap-2" role="radiogroup" aria-label="Formato de la fecha">
         {ofreceRoundRobin && (
@@ -846,7 +844,7 @@ export function SelectorDeFormato({
             onClick={() => onChange({ kind: 'ROUND_ROBIN' })}
             className={`${FORMATO_BOTON} ${formato.kind === 'ROUND_ROBIN' ? FORMATO_ELEGIDO : FORMATO_LIBRE}`}
           >
-            Todos contra todos
+            {matchdayFormatLabel({ kind: 'ROUND_ROBIN' })}
           </button>
         )}
         {grupos.map((candidato) => (
@@ -861,7 +859,7 @@ export function SelectorDeFormato({
               formato.kind === 'GROUPS_KNOCKOUT' && formato.groups === candidato.groups ? FORMATO_ELEGIDO : FORMATO_LIBRE
             }`}
           >
-            {candidato.groups} grupos + llave
+            {matchdayFormatLabel(candidato)}
           </button>
         ))}
       </div>

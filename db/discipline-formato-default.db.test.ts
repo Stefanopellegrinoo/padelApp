@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { updateDisciplineFormatoDefault } from './discipline'
 import { createMatchday } from './matchday'
 import { adminClient } from './test/admin'
 import { createSeason } from './test/factories'
@@ -46,6 +47,58 @@ describe('disciplines.formato_default — column-grant contra authenticated (§2
 
     const db = adminClient()
     const { data, error } = await db.from('disciplines').select('formato_default').eq('id', disciplineId).single()
+    if (error || data === null) throw new Error(error?.message)
+    expect(data.formato_default).toEqual({ kind: 'ROUND_ROBIN' })
+  })
+})
+
+/**
+ * `updateDisciplineFormatoDefault` -- la pantalla de Ajustes que edita este
+ * default (§2.5). El camino feliz con `admin.client` sigue el mismo
+ * `count: 'exact'` que `updateDisciplineHasMasters`/`updateDisciplineRules`
+ * (`db/discipline.db.test.ts`). El caso de un participante que NO organiza
+ * copia el de `updateDisciplineRules` (894-901) -- `updateDisciplineHasMasters`
+ * (761-816) no tiene ese caso: sus tres tests corren los tres con
+ * `admin.client`. Nunca `service_role` para esto.
+ */
+describe('updateDisciplineFormatoDefault (§2.5)', () => {
+  it('un admin guarda el formato por default de su disciplina', async () => {
+    const admin = await createTestUser()
+    const { disciplineId } = await createSeason({ admin })
+
+    await updateDisciplineFormatoDefault(admin.client, disciplineId, {
+      kind: 'GROUPS_KNOCKOUT',
+      groups: 4,
+      qualifiersPerGroup: 2,
+    })
+
+    const { data, error } = await adminClient()
+      .from('disciplines')
+      .select('formato_default')
+      .eq('id', disciplineId)
+      .single()
+    if (error || data === null) throw new Error(error?.message)
+    expect(data.formato_default).toEqual({ kind: 'GROUPS_KNOCKOUT', groups: 4, qualifiersPerGroup: 2 })
+  })
+
+  it('a un participante que no organiza le avisa que no guardó, y no escribe nada (RLS disciplines_write)', async () => {
+    const admin = await createTestUser()
+    const member = await createTestUser()
+    const { disciplineId } = await createSeason({ admin, squad: [member.playerId] })
+
+    await expect(
+      updateDisciplineFormatoDefault(member.client, disciplineId, {
+        kind: 'GROUPS_KNOCKOUT',
+        groups: 2,
+        qualifiersPerGroup: 2,
+      }),
+    ).rejects.toThrow(/sólo puede hacerlo quien organiza/)
+
+    const { data, error } = await adminClient()
+      .from('disciplines')
+      .select('formato_default')
+      .eq('id', disciplineId)
+      .single()
     if (error || data === null) throw new Error(error?.message)
     expect(data.formato_default).toEqual({ kind: 'ROUND_ROBIN' })
   })

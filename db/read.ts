@@ -60,6 +60,14 @@ export interface DisciplineHeader {
    * al crear la disciplina (`0015:66-68`) y esta rama sólo la LEE.
    */
   allowsDraw: boolean
+  /**
+   * `disciplines.formato_default` real (0074, docs/tipos-de-torneo.md §2.5)
+   * -- mismo select que `pairSize`/`hasMasters`/`allowsDraw`, una columna
+   * más. Es el default del que hereda cada fecha nueva (`createMatchday`,
+   * `db/matchday.ts`); Ajustes lo necesita para dibujar el radio que lo
+   * edita (`FormatoDefault`, `app/torneo/[id]/ajustes/formato-default.tsx`).
+   */
+  formatoDefault: MatchdayFormat
 }
 
 export interface SeasonHeader {
@@ -237,6 +245,7 @@ interface DisciplineHeaderRow {
   pair_size: number
   has_masters: boolean
   allows_draw: boolean
+  formato_default: unknown
   /**
    * `disciplines.status` — NO forma parte de `DisciplineHeader` (el tipo
    * público): ningún consumidor de pantalla lo necesita hoy, sólo
@@ -281,6 +290,10 @@ export function toDisciplineHeader(row: DisciplineHeaderRow): DisciplineHeader {
     pairSize: row.pair_size as SideSize,
     hasMasters: row.has_masters,
     allowsDraw: row.allows_draw,
+    // Mismo doble cast que `disciplineConfig` (`db/discipline.ts`) ya usa
+    // para esta misma columna: lo honesto es `disciplines_formato_default_kind`
+    // (0074), no la confianza.
+    formatoDefault: row.formato_default as unknown as MatchdayFormat,
   }
 }
 
@@ -326,7 +339,7 @@ function toMatchdaySummary(row: MatchdayRow): MatchdaySummary {
 // MISMA fila que `DISCIPLINE_HEADER_COLUMNS` ya trae — sin una consulta más.
 const SEASON_HEADER_COLUMNS = 'id, name, created_by, invite_token'
 const DISCIPLINE_HEADER_COLUMNS =
-  'id, season_id, kind, config, weight, pair_size, has_masters, allows_draw, status'
+  'id, season_id, kind, config, weight, pair_size, has_masters, allows_draw, formato_default, status'
 
 /** Every season where the caller has a seat — admin or squad. RLS does the filtering; this only shapes the rows. */
 export async function mySeasons(supabase: Client): Promise<SeasonHeader[]> {

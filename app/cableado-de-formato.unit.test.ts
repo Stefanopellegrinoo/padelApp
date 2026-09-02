@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
-import { defaultConfig, type DisciplineId, type SeasonConfig } from '@/core'
+import { defaultConfig, type DisciplineId, type MatchdayFormat, type SeasonConfig } from '@/core'
 import type { DisciplineHeader } from '@/db/read'
 
 /**
@@ -129,7 +129,17 @@ vi.mock('@/db/read', async (importOriginal) => {
 const PADEL = defaultConfig(8)
 const FIFA: SeasonConfig = { ...PADEL, matchFormat: { ...PADEL.matchFormat, openScore: true } }
 
-function disciplina(id: string, kind: 'PADEL' | 'FIFA', config: SeasonConfig): DisciplineHeader {
+function disciplina(
+  id: string,
+  kind: 'PADEL' | 'FIFA',
+  config: SeasonConfig,
+  // §2.5, fix round 1 (HIGH 2): el default es ROUND_ROBIN para todo caller
+  // que no necesita variarlo, pero NO es un adorno -- `AjustesPage` (vía
+  // `FormatoDefault`) SÍ lee este campo, ver el describe "el panel de
+  // FormatoDefault" más abajo. `ReglasPage` no lo toca. Es un literal
+  // armado a mano: ninguna columna ni default de base participa acá.
+  formatoDefault: MatchdayFormat = { kind: 'ROUND_ROBIN' },
+): DisciplineHeader {
   const pairSize = kind === 'PADEL' ? 2 : 1
   // Mismo criterio que `disciplineProfile` (core/config.ts): FIFA es la
   // única disciplina de marcador abierto y la única con empate legal hoy.
@@ -141,6 +151,7 @@ function disciplina(id: string, kind: 'PADEL' | 'FIFA', config: SeasonConfig): D
     pairSize,
     hasMasters: pairSize === 2,
     allowsDraw: kind === 'FIFA',
+    formatoDefault,
   }
 }
 
@@ -262,6 +273,20 @@ function panelDeFormato(html: string): string {
   return panelesDeFormato(html)[0] ?? ''
 }
 
+/**
+ * Mismo criterio que `panelesDeFormato`, para los paneles de `FormatoDefault`
+ * (§2.5, fix round 1 HIGH 3): `data-formato-default="[disciplineId]"` en vez
+ * de `data-formato`, mismo patrón (`ajustes/formato-default.tsx`).
+ */
+function panelesDeFormatoDefault(html: string): string[] {
+  return [...html.matchAll(/<section data-formato-default="[^"]*"[\s\S]*?<\/section>/g)].map((match) => match[0])
+}
+
+/** Los tres `<input type="radio">` de UN panel de `FormatoDefault`, en el orden en que `OPCIONES` los dibuja. */
+function radiosDe(panel: string): string[] {
+  return [...panel.matchAll(/<input[^>]*type="radio"[^>]*\/>/g)].map((match) => match[0])
+}
+
 describe('Ajustes — el panel de Formato dice de qué disciplina habla', () => {
   /**
    * La fila de arriba anuncia el formato de LAS DOS disciplinas y su
@@ -323,6 +348,48 @@ describe('Ajustes — el panel de Formato dice de qué disciplina habla', () => 
     // Y el de FIFA es el de a UNO: su check de Masters sale deshabilitado
     // (decisión #4029 parte 3), que es justo lo que no se podía ver antes.
     expect(paneles[1]).toContain('Una disciplina de a uno no juega Masters')
+  })
+
+  /**
+   * Fix round 1, HIGH 3: `FormatoDefault` (§2.5) es la MISMA clase de bug
+   * que C36 de arriba, y hasta este fix no tenía el pin que lo cubre. El
+   * reviewer reconectó `disciplineId`/`formatoDefault` de CADA panel a
+   * `header.disciplines[0]` en `page.tsx` y la suite completa (908 tests)
+   * seguía en verde -- `panelesDeFormato` corta por `data-formato`, no por
+   * `data-formato-default`, así que el join point nuevo era invisible para
+   * todo lo que ya existía acá.
+   *
+   * Con dos disciplinas de `formatoDefault` DISTINTO, si `page.tsx` le
+   * pasara a los dos paneles el de la primera, el radio marcado del panel
+   * de FIFA sería el de Pádel (ROUND_ROBIN) en vez del suyo (4 grupos), y
+   * tocar cualquier radio ahí guardaría en la disciplina equivocada --
+   * silenciosamente, porque `saveFormatoDefault` recibiría el
+   * `disciplineId` mal cableado también.
+   */
+  it('dibuja un panel de FormatoDefault por disciplina, cada uno con SU PROPIO formatoDefault (C36)', async () => {
+    const paneles = panelesDeFormatoDefault(
+      await ajustes([
+        disciplina('d1', 'PADEL', PADEL),
+        disciplina('d2', 'FIFA', FIFA, { kind: 'GROUPS_KNOCKOUT', groups: 4, qualifiersPerGroup: 2 }),
+      ]),
+    )
+    expect(paneles).toHaveLength(2)
+    expect(paneles[0]).toContain('Formato de las fechas · Pádel')
+    expect(paneles[1]).toContain('Formato de las fechas · FIFA')
+
+    // Pádel quedó en el default (ROUND_ROBIN): sólo el primer radio marcado.
+    const [todosPadel, dosPadel, cuatroPadel] = radiosDe(paneles[0] ?? '')
+    expect(todosPadel).toContain('checked')
+    expect(dosPadel).not.toContain('checked')
+    expect(cuatroPadel).not.toContain('checked')
+
+    // FIFA se armó con "4 grupos + llave": sólo el tercer radio marcado. Si
+    // page.tsx le pasara el formatoDefault de Pádel, acá marcaría el
+    // primero en vez del tercero, y este bloque se rompe.
+    const [todosFifa, dosFifa, cuatroFifa] = radiosDe(paneles[1] ?? '')
+    expect(todosFifa).not.toContain('checked')
+    expect(dosFifa).not.toContain('checked')
+    expect(cuatroFifa).toContain('checked')
   })
 })
 

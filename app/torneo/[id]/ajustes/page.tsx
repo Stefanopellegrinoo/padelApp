@@ -16,6 +16,7 @@ import { CopiarLink } from './copiar'
 import { Disciplinas } from './disciplinas'
 import { EliminarTorneo } from './eliminar'
 import { Formato } from './formato'
+import { FormatoDefault } from './formato-default'
 import { Plantel, type SeatVM } from './plantel'
 import { Reglas } from './reglas'
 import { Volver } from '../volver'
@@ -194,6 +195,21 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
             config={candidate.config}
             pairSize={candidate.pairSize}
             hasMasters={candidate.hasMasters}
+            disciplineLabel={header.disciplines.length > 1 ? DISCIPLINE_LABELS[candidate.kind] : null}
+          />
+        ))}
+      </div>
+      {/* UN panel POR DISCIPLINA (§2.5), mismo criterio que `Formato` arriba
+          (y que `Reglas` más abajo): con una sola disciplina el título no
+          lleva sufijo. A diferencia de esos dos, este panel es nuevo en
+          esta rebanada -- no hay un "de siempre" al que volver. */}
+      <div className="flex flex-col gap-5">
+        {header.disciplines.map((candidate) => (
+          <FormatoDefault
+            key={candidate.id}
+            seasonId={seasonId}
+            disciplineId={candidate.id}
+            formatoDefault={candidate.formatoDefault}
             disciplineLabel={header.disciplines.length > 1 ? DISCIPLINE_LABELS[candidate.kind] : null}
           />
         ))}

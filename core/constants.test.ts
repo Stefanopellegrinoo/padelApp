@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { MIN_PLAYERS, MAX_PLAYERS, MAX_PAIRING_POOL, MASTERS_SIZE } from './constants'
+import { MIN_PLAYERS, MAX_PLAYERS, MAX_PAIRING_POOL, MASTERS_SIZE, minSquadFor } from './constants'
 import { allMatchings } from './matchings'
 
 describe('constants', () => {
@@ -10,6 +10,28 @@ describe('constants', () => {
 
   it('defines the masters size as four', () => {
     expect(MASTERS_SIZE).toBe(4)
+  })
+})
+
+describe('minSquadFor — el piso es "la gente que hace falta para que exista un partido"', () => {
+  it('con lados de a uno, dos alcanzan: uno de cada lado', () => {
+    expect(minSquadFor(1)).toBe(2)
+  })
+
+  it('con parejas, hacen falta cuatro: dos por lado', () => {
+    expect(minSquadFor(2)).toBe(4)
+  })
+
+  // El piso de parejas es el único de los dos que puede pisar al Masters:
+  // `ranking.length === squad.length` (`core/ranking.ts:27-38`, una fila por
+  // MIEMBRO del plantel) y `mastersQualifiers` corta con `ranking.length <
+  // MASTERS_SIZE` (`core/masters.ts:9-11`) — MASTERS_SIZE cuenta JUGADORES, no
+  // lados. Con lados de a uno el Masters ya es inalcanzable por su cuenta:
+  // `0053_disciplines_has_masters_needs_pair.sql:29-30` prohíbe
+  // `has_masters and pair_size = 1`. Esta aserción es la que rompería en voz
+  // alta el día que alguien cambie la fórmula del piso sin mirar el Masters.
+  it('el piso de parejas no puede quedar por debajo del Masters', () => {
+    expect(minSquadFor(2)).toBeGreaterThanOrEqual(MASTERS_SIZE)
   })
 })
 

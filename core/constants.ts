@@ -1,3 +1,5 @@
+import type { SideSize } from './types'
+
 /** Fewer than this and the matchday is lopsided: 3 pairs with one idle every round. */
 export const MIN_PLAYERS = 8
 
@@ -17,6 +19,23 @@ export const MIN_PLAYERS = 8
  * decisión de producto y no arrastra a los otros dos.
  */
 export const MAX_PLAYERS = 12
+
+/**
+ * El piso real, derivado del deporte: la gente que hace falta para que
+ * exista UN partido — dos lados, y listo (docs/tipos-de-torneo.md §3.3).
+ *
+ * `MIN_PLAYERS = 8` es una regla de 2v2 (`sideSize = 2`) aplicada a
+ * cualquier disciplina, y por eso es incoherente consigo misma: prohíbe 6
+ * -donde descansa uno- y permite 10, donde también descansa uno. Con lados
+ * de a uno el piso real es 2, no 8: dos amigos ya pueden jugar un partido de
+ * FIFA.
+ *
+ * No generalizada a "N lados" a propósito: hoy sólo existen lados de uno y
+ * de dos (`SideSize`), y no hay ningún caso de uso para otra cosa.
+ */
+export function minSquadFor(sideSize: SideSize): number {
+  return 2 * sideSize
+}
 
 /**
  * El techo de una fecha, en la unidad que de verdad importa: PARTIDOS.

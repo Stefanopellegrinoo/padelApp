@@ -1,4 +1,4 @@
-import { MAX_PLAYERS, MIN_PLAYERS } from './constants'
+import { MAX_PLAYERS, minSquadFor } from './constants'
 import type { SeasonConfig, SideSize } from './types'
 
 /**
@@ -35,6 +35,15 @@ function onlyTopSix(sides: number): number[] {
  * con `sideSize = 1`. Por eso agregarlas no puede mover al pádel.
  */
 const DEFAULT_POINTS: Record<number, number[]> = {
+  // Cabeza de la curva de 4 puesta a dedo, no una regla: `minSquadFor`
+  // (docs/tipos-de-torneo.md §3.3) hace alcanzables 2 y 3 lados por primera
+  // vez, y sin semilla acá `defaultConfig` devolvía `points: []` y
+  // `pointsCountError` lo rechazaba. El creador la edita puesto por puesto en
+  // el wizard (app/torneos/nuevo/wizard.tsx:311-325) y después en ajustes
+  // (app/torneo/[id]/ajustes/formato.tsx:103-113) — lo único que tiene que
+  // respetar la semilla es `pointsErrors`, más abajo.
+  2: [10, 6],
+  3: [10, 6, 3],
   4: [10, 6, 3, 1],
   5: [10, 7, 5, 3, 1],
   6: PAYING_SIDES,
@@ -121,14 +130,16 @@ export function disciplineProfile(
  * sólo es un problema cuando un lado necesita DOS. Con `sideSize=1` cada
  * presente es su propio lado — la regla no se relaja, es INAPLICABLE.
  *
- * El piso/techo (`MIN_PLAYERS`/`MAX_PLAYERS`) sigue sin condicionar por
- * `sideSize` — es cantidad, no paridad, y REQ-D2-2 no lo toca directamente.
- * Pero el TECHO mide partidos, no jugadores (W32): su
- * unidad cambia con `sideSize` (12 jugadores son 15 partidos en parejas y 66
- * de a uno), así que dejarlo sin condicionar es DEUDA, no una corrección —
- * PUNTO 3 del design (`DisciplineConfig.maxPlayers`) todavía no tiene
- * decisión de producto ni migración. El PISO sí sobrevive sin ajuste: 8
- * personas son 8 competidores válidos también en sideSize=1.
+ * El TECHO (`MAX_PLAYERS`) sigue sin condicionar por `sideSize` — mide
+ * partidos, no jugadores (W32): su unidad cambia con `sideSize` (12 jugadores
+ * son 15 partidos en parejas y 66 de a uno), así que dejarlo sin condicionar
+ * es DEUDA, no una corrección; no es esta tarea la que lo toca
+ * (docs/plan-piso-y-techo-del-plantel.md, Task 3).
+ *
+ * El PISO, en cambio, YA condiciona por `sideSize` (docs/tipos-de-torneo.md
+ * §3.3, `minSquadFor`): 8 era un plano heredado del 2v2, no una necesidad del
+ * formato — la gente que hace falta para que exista UN partido es 2 con
+ * lados de a uno y 4 en pareja, la mitad y un cuarto de lo que exigía antes.
  */
 /**
  * "¿Esta lista de puntos tiene la cantidad que corresponde?", o `null`.
@@ -159,8 +170,12 @@ export function validateConfig(config: SeasonConfig, sideSize: SideSize): string
   if (sideSize === 2 && squadSize % 2 !== 0) {
     errors.push('El plantel tiene que ser un número par.')
   }
-  if (squadSize < MIN_PLAYERS) {
-    errors.push(`El plantel tiene que ser de ${MIN_PLAYERS} jugadores o más.`)
+  // El piso ya no es el MIN_PLAYERS=8 plano: es `minSquadFor(sideSize)`, la
+  // gente que hace falta para que exista UN partido de esta disciplina — 2
+  // con lados de a uno, 4 en pareja (docs/tipos-de-torneo.md §3.3).
+  const minSquad = minSquadFor(sideSize)
+  if (squadSize < minSquad) {
+    errors.push(`El plantel tiene que ser de ${minSquad} jugadores o más.`)
   }
   if (squadSize > MAX_PLAYERS) {
     errors.push(`El plantel no puede pasar de ${MAX_PLAYERS} jugadores.`)

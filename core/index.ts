@@ -18,6 +18,15 @@
 // matches exist because there are exactly four players.
 export { MIN_PLAYERS, MAX_PLAYERS, MAX_PAIRING_POOL, defaultMaxMatches, maxMatchesOf, MASTERS_SIZE, MASTERS_MATCHES } from './constants'
 
+//── El piso real: la gente que hace falta para que exista UN partido ────────
+// Deriva del `sideSize` de la disciplina (docs/tipos-de-torneo.md §3.3) en vez
+// de un `MIN_PLAYERS` plano — ver el docblock de `minSquadFor`. `MIN_PLAYERS`
+// sigue exportado sin tocar: todavía lo lee `core/narrate.ts`, y sus
+// consumidores de `db/`/`app/` pasan a `minSquadFor` recién en la próxima
+// rebanada de este plan — moverlos ahora rompería la compilación antes de
+// tiempo.
+export { minSquadFor } from './constants'
+
 //── El slug de una disciplina en la URL (PR 10, REQ-NR-5) ────────────────────
 // Derivado, no persistido: no hay columna `slug`.
 export type { SluggableDiscipline } from './discipline-slug'

@@ -36,9 +36,20 @@ describe('validateConfig', () => {
     expect(errors).not.toContain('El plantel tiene que ser un número par.')
   })
 
-  it('rejects a squad below the minimum', () => {
-    const errors = validateConfig({ ...valid, squadSize: 6, points: [10, 7, 5] }, 2)
-    expect(errors).toContain('El plantel tiene que ser de 8 jugadores o más.')
+  // El piso dejó de ser el plano MIN_PLAYERS=8 y pasó a ser `minSquadFor(2) =
+  // 4` (docs/tipos-de-torneo.md §3.3): 6 rechazaba antes porque MIN_PLAYERS
+  // era una regla de 2v2 aplicada a todo, y esa misma regla prohibía 6
+  // permitiendo 10 -incoherente consigo misma. Con el piso derivado, 6 pasa;
+  // el rechazo ahora lo prueba 2, que sigue por debajo de las 4 personas que
+  // hacen falta para que exista un partido de parejas.
+  it('rejects a squad below the derived floor', () => {
+    const errors = validateConfig({ ...valid, squadSize: 2, points: [10, 6] }, 2)
+    expect(errors).toContain('El plantel tiene que ser de 4 jugadores o más.')
+  })
+
+  it('accepts a squad that the old flat floor would have rejected', () => {
+    const errors = validateConfig({ ...valid, squadSize: 6, points: [10, 6, 3] }, 2)
+    expect(errors).not.toContain('El plantel tiene que ser de 8 jugadores o más.')
   })
 
   it('rejects a squad above the maximum', () => {
@@ -302,6 +313,34 @@ describe('DEFAULT_POINTS con lados de uno', () => {
     expect(defaultConfig(8, 2).points).toEqual([10, 6, 3, 1])
     expect(defaultConfig(10, 2).points).toEqual([10, 7, 5, 3, 1])
     expect(defaultConfig(12, 2).points).toEqual([10, 7, 5, 3, 2, 1])
+  })
+})
+
+// ── El piso derivado hace alcanzables 2 y 3 lados, y ahí faltaba semilla ────
+//
+// Antes del piso derivado, `sideCount` nunca bajaba de 4 (MIN_PLAYERS=8 con
+// parejas), así que `DEFAULT_POINTS` no tenía las claves 2 y 3 y
+// `defaultConfig` devolvía `points: []` (core/config.ts:75) — eso hacía
+// fallar `pointsCountError` apenas alguien armaba el plantel más chico que el
+// piso nuevo permite. Son la cabeza de la curva de 4 puesta a dedo ([10, 6,
+// 3, 1]): una semilla, no una regla — el creador la edita puesto por puesto
+// en el wizard (wizard.tsx:311-325) y en ajustes (formato.tsx:103-113), y lo
+// único que tiene que respetar es `pointsErrors`.
+describe('DEFAULT_POINTS cubre el piso nuevo (2 y 3 lados)', () => {
+  it('dos lados, de a uno o en pareja, ya no devuelven la curva vacía', () => {
+    expect(defaultConfig(2, 1).points).toEqual([10, 6])
+    expect(defaultConfig(4, 2).points).toEqual([10, 6])
+  })
+
+  it('tres lados, de a uno o en pareja, tampoco', () => {
+    expect(defaultConfig(3, 1).points).toEqual([10, 6, 3])
+    expect(defaultConfig(6, 2).points).toEqual([10, 6, 3])
+  })
+
+  // El caso que motiva todo el plan: dos amigos arman un torneo de FIFA sin
+  // inventar seis jugadores de relleno.
+  it('un dúo de FIFA (2 jugadores, lados de a uno) produce una config válida', () => {
+    expect(validateConfig(defaultConfig(2, 1), 1)).toEqual([])
   })
 })
 

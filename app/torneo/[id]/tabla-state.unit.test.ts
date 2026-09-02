@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { defendersOf, type ClosedMatchdayAwards } from './tabla-state'
+import type { DisciplineId } from '@/core'
+import { defendersOf, singleDisciplineRedirect, volverDestination, type ClosedMatchdayAwards } from './tabla-state'
 
 const nameOf = new Map([
   ['a1', 'Ana'],
@@ -64,5 +65,30 @@ describe('defendersOf', () => {
 
   it('de a uno tampoco los hay con una sola fecha cerrada', () => {
     expect(defendersOf([closed(1, ['a1'])], nameOf, 1)).toBeNull()
+  })
+})
+
+describe('volverDestination', () => {
+  it('con 2+ disciplinas sube a la tabla global de la temporada', () => {
+    expect(volverDestination('s1', 2)).toEqual({ href: '/torneo/s1', label: 'Tabla general' })
+  })
+
+  it('con exactamente 1 disciplina no vuelve a la raíz (esa raíz redirige acá y rebota) — manda a Mis torneos', () => {
+    expect(volverDestination('s1', 1)).toEqual({ href: '/torneos', label: 'Mis torneos' })
+  })
+})
+
+describe('singleDisciplineRedirect', () => {
+  it('con exactamente 1 disciplina redirige a su Tabla', () => {
+    const target = singleDisciplineRedirect('s1', [{ id: 'd1' as DisciplineId, kind: 'PADEL' }])
+    expect(target).toBe('/torneo/s1/padel')
+  })
+
+  it('con 2+ disciplinas no redirige: la raíz se queda mostrando la global', () => {
+    const target = singleDisciplineRedirect('s1', [
+      { id: 'd1' as DisciplineId, kind: 'PADEL' },
+      { id: 'd2' as DisciplineId, kind: 'FIFA' },
+    ])
+    expect(target).toBeNull()
   })
 })

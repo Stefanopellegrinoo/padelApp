@@ -3,7 +3,7 @@ import { MASTERS_SIZE, rankingWithMovement, snapshotForMatchday, type Award, typ
 import type { DisciplineHeader, EntryRow, MatchdaySummary, SeasonHeader } from '@/db/read'
 import { initials, matchdayDay } from '@/app/format'
 import { Desempate, type StandingsRow, type TiebreakEntry } from './desempate'
-import { defendersOf } from './tabla-state'
+import { defendersOf, volverDestination } from './tabla-state'
 import { Volver } from './volver'
 
 interface TablaViewProps {
@@ -90,14 +90,13 @@ export function TablaView({ header, discipline, entries, matchdays, awardsByMatc
     discipline.pairSize,
   )
 
+  // La derivación vive en `tabla-state.ts` (mismo patrón que `defenders`
+  // arriba), con test propio.
+  const volver = volverDestination(header.id, header.disciplines.length)
+
   return (
     <div className="flex flex-col gap-3 pt-4">
-      {/* Esta Tabla es por-disciplina, no la
-          raíz — "volver" tiene que subir a la tabla global del torneo
-          (`/torneo/{id}`), la única otra pantalla donde enciende la misma
-          pestaña "Tabla" (`nav.tsx`). Antes apuntaba a "Mis torneos",
-          heredado de cuando ESTA vista era la raíz. */}
-      <Volver href={`/torneo/${header.id}`} label="Tabla general" />
+      <Volver href={volver.href} label={volver.label} />
       <header className="flex items-start justify-between">
         <div>
           {estado !== null && (

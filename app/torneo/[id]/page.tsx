@@ -1,10 +1,12 @@
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { computeGlobalRanking, computeRanking, disciplineSlugs, type DisciplineRanking } from '@/core'
 import { seasonAwardsOf, seasonHeader, seasonMatchdaysOf, seasonSquadMembersOf } from '@/db/read'
 import { serverClient } from '@/db/server'
 import { DISCIPLINE_LABELS } from '@/app/torneos/nuevo/wizard-state'
 import { initials } from '@/app/format'
 import { Desempate, type StandingsRow } from './desempate'
+import { singleDisciplineRedirect } from './tabla-state'
 import { Volver } from './volver'
 
 interface PageProps {
@@ -50,13 +52,33 @@ interface PageProps {
  * PR por presupuesto. Ningún jugador puntual queda mal representado — no
  * hay `tiedWithEntryId` acá, así que ninguna fila abre el sheet; sólo el
  * botón superior, y quien lo toque ve una lista vacía en vez de nada.
+ *
+ * Con una sola disciplina, el spec (`docs/tipos-de-torneo.md` §2.4, segundo
+ * arreglo, línea 225: "Con una sola disciplina, mostrar **una** tabla")
+ * manda mostrar una única Tabla — así que esta pantalla redirige derecho a
+ * la de esa disciplina en vez de sumar una global aparte al lado. La
+ * decisión de redirigir o no vive en `singleDisciplineRedirect`
+ * (`tabla-state.ts`), con test propio.
+ *
+ * `seasonHeader` se espera SOLA, no en el `Promise.all` de abajo: hace falta
+ * `header.disciplines.length` para decidir el redirect antes de arrancar
+ * cualquier otra query, y arrancar las tres en paralelo dejaría
+ * `matchdays`/`squad` como promesas sueltas sin `await` en el camino que
+ * redirige — una que rechace ahí es una unhandled rejection. El costo es
+ * real y cae en el camino de 2+ disciplinas (el único que sigue dibujando
+ * esta pantalla, sin cambios): una ida y vuelta más, porque `seasonHeader`
+ * (`db/read.ts:394-405`) ya es 3 queries en paralelo por sí sola.
  */
 export default async function TablaGlobalPage({ params }: PageProps) {
   const { id: seasonId } = await params
   const supabase = await serverClient()
 
-  const [header, matchdays, squad] = await Promise.all([
-    seasonHeader(supabase, seasonId),
+  const header = await seasonHeader(supabase, seasonId)
+
+  const redirectTarget = singleDisciplineRedirect(seasonId, header.disciplines)
+  if (redirectTarget !== null) redirect(redirectTarget)
+
+  const [matchdays, squad] = await Promise.all([
     seasonMatchdaysOf(supabase, seasonId),
     seasonSquadMembersOf(supabase, seasonId),
   ])

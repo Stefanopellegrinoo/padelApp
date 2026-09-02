@@ -71,10 +71,16 @@ export interface TournamentMatch {
   /** El número de fecha, para ordenar cuando `playedOn` es null. */
   matchdayNumber: number
   /**
-   * `'PADEL'` o `'FIFA'` -- `disciplines.kind` (0015_disciplines.sql:15,
-   * CHECK), la disciplina de `matchdays.discipline_id`. Reemplaza a
-   * `matchdayKind` ('REGULAR'/'MASTERS', un campo que nada fuera de los
-   * tests leía -- `rg matchdayKind` lo confirmó antes de sacarlo):
+   * `disciplines.kind` (0015_disciplines.sql:15, CHECK) de
+   * `matchdays.discipline_id`. Literal, no `DisciplineKind` de
+   * `wizard-state.ts` -- mismo motivo que `PublicFormat.kind`/
+   * `DisciplineHeader.kind` (`db/read.ts:157-159`): `db/` no importa de
+   * `app/`. El cast vive en `historyWith` (abajo), respaldado por el CHECK;
+   * la pantalla traduce con `DISCIPLINE_LABELS` sin castear de nuevo, porque
+   * el literal ya coincide con `DisciplineKind`.
+   *
+   * Reemplaza a `matchdayKind` ('REGULAR'/'MASTERS', nada fuera de los tests
+   * lo leía -- `rg matchdayKind` lo confirmó antes de sacarlo):
    * "deporte-en-la-fila" (cierre de 2b) es lo que la fila de torneo
    * necesitaba para dejar de ser la única del historial que calla qué se
    * jugó (§4.4). NO nullable: `discipline_id` es `not null` en `matchdays`
@@ -82,7 +88,7 @@ export interface TournamentMatch {
    * backfill, pero ese estado no sobrevivió a la migración siguiente) --
    * mismo patrón que `CasualMatch.playedOn` más abajo.
    */
-  sport: string
+  sport: 'PADEL' | 'FIFA'
   /** El nombre del torneo, para que la fila diga de dónde salió. */
   seasonName: string
   /**
@@ -309,7 +315,7 @@ export async function historyWith(
     const matchdayIds = [...new Set(compartidos.map((c) => c.matchdayId))]
     const matchdaysResult = await supabase
       .from('matchdays')
-      .select('id, number, kind, played_on, season_id, discipline_id', { count: 'exact' })
+      .select('id, number, played_on, season_id, discipline_id', { count: 'exact' })
       .in('id', matchdayIds)
       .order('id', { ascending: true })
     const matchdayRows = assertComplete(matchdaysResult, 'fechas')
@@ -340,7 +346,12 @@ export async function historyWith(
       .in('id', disciplineIds)
       .order('id', { ascending: true })
     const disciplineRows = assertComplete(disciplinesResult, 'disciplinas')
-    const disciplineKindById = new Map(disciplineRows.map((row) => [row.id, row.kind]))
+    // El cast está respaldado por el CHECK de `disciplines.kind`
+    // (0015_disciplines.sql:15): mismo criterio que `toDisciplineHeader`
+    // (`db/read.ts:270-285`), que castea en el mismo punto por el mismo motivo.
+    const disciplineKindById = new Map(
+      disciplineRows.map((row) => [row.id, row.kind as 'PADEL' | 'FIFA']),
+    )
 
     // Consulta 5: los sets de los partidos compartidos. Sin sets, el partido
     // es una fecha abierta todavía sin resultado -- `outcome`/`score` quedan

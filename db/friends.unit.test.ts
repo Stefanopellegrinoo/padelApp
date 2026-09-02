@@ -26,7 +26,6 @@ type ParticipantRow = { match_id: string; matchday_id: string; side: string; pla
 type MatchdayRow = {
   id: string
   number: number
-  kind: string
   played_on: string | null
   season_id: string
   discipline_id: string
@@ -115,7 +114,7 @@ function unPartidoCompleto(mySide: 'A' | 'B' = 'A') {
     },
     matchdays: {
       rows: [
-        { id: 'f1', number: 3, kind: 'REGULAR', played_on: '2026-01-15', season_id: 's1', discipline_id: 'd1' },
+        { id: 'f1', number: 3, played_on: '2026-01-15', season_id: 's1', discipline_id: 'd1' },
       ] satisfies MatchdayRow[],
       count: 1,
     },
@@ -449,7 +448,7 @@ describe('historyWith — tripwire de truncamiento de PostgREST', () => {
       me: ME,
       participants: completo.participants,
       matchdays: {
-        rows: [{ id: 'f1', number: 3, kind: 'REGULAR', played_on: null, season_id: 's1', discipline_id: 'd1' }],
+        rows: [{ id: 'f1', number: 3, played_on: null, season_id: 's1', discipline_id: 'd1' }],
         count: 1,
       },
       seasons: completo.seasons,
@@ -504,8 +503,8 @@ describe('historyWith — tripwire de truncamiento de PostgREST', () => {
       },
       matchdays: {
         rows: [
-          { id: 'f1', number: 1, kind: 'REGULAR', played_on: null, season_id: 's1', discipline_id: 'd1' },
-          { id: 'f2', number: 5, kind: 'REGULAR', played_on: null, season_id: 's1', discipline_id: 'd1' },
+          { id: 'f1', number: 1, played_on: null, season_id: 's1', discipline_id: 'd1' },
+          { id: 'f2', number: 5, played_on: null, season_id: 's1', discipline_id: 'd1' },
         ],
         count: 2,
       },

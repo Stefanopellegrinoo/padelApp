@@ -1,6 +1,6 @@
 import type { CasualMatch, SharedMatch, TournamentMatch } from '@/db/friends'
 import { matchdayDay } from '@/app/format'
-import { DISCIPLINE_LABELS, type DisciplineKind } from '@/app/torneos/nuevo/wizard-state'
+import { DISCIPLINE_LABELS } from '@/app/torneos/nuevo/wizard-state'
 import { CasualMatchRow } from './[playerId]/cargar'
 
 export interface HistorialProps {
@@ -43,18 +43,6 @@ const VERBOS_CASUAL = VERBOS_CONTRA
 // el historial invente un cuarto formato de fecha en la app.
 function fechaDe(partido: TournamentMatch): string {
   return partido.playedOn !== null ? matchdayDay(partido.playedOn) : `Fecha ${partido.matchdayNumber}`
-}
-
-// Mismo mapa que ya usa el paso 1 del wizard de creación de torneos
-// (`DISCIPLINE_LABELS`, `app/torneos/nuevo/wizard-state.ts:102`) para
-// 'PADEL' -> 'Pádel' -- un segundo mapa acá sería la clase de duplicado que
-// este repo evita a propósito (regla de "una sola definición" del código
-// medido en docs/historial-entre-amigos.md). El cast es sobre un hecho de
-// schema, no sobre un dato sin validar: `disciplines.kind` tiene un CHECK
-// que sólo deja pasar 'PADEL' o 'FIFA' (0015_disciplines.sql:15), los
-// mismos dos valores que `DisciplineKind` tipa.
-function disciplineLabel(kind: TournamentMatch['sport']): string {
-  return DISCIPLINE_LABELS[kind as DisciplineKind]
 }
 
 // El copy dice el hecho ("Juntos: Ganaron 6-3"), nunca la forma cruda del
@@ -143,7 +131,14 @@ export function Historial({ nombre, friendPlayerId, partidos }: HistorialProps) 
                   className="flex flex-col gap-1 rounded-field border-[1.5px] border-line p-[14px]"
                 >
                   <p className="text-[13.5px] font-[550] text-muted">
-                    {fechaDe(partido)} · {disciplineLabel(partido.sport)} · torneo {partido.seasonName}
+                    {/* Mismo mapa que ya usa el wizard de creación de torneos para
+                        'PADEL' -> 'Pádel' (`DISCIPLINE_LABELS`, `app/torneos/nuevo/wizard-state.ts:102`)
+                        -- no es una regla escrita en el diseño de esta pantalla, es la
+                        práctica ya establecida en el resto de la app (`PublicFormat`/
+                        `DisciplineHeader`, `db/read.ts`, traducen con el mismo mapa).
+                        Sin cast: `partido.sport` ya es literal `'PADEL' | 'FIFA'`
+                        (`db/friends.ts`), lo mismo que tipa `DisciplineKind`. */}
+                    {fechaDe(partido)} · {DISCIPLINE_LABELS[partido.sport]} · torneo {partido.seasonName}
                   </p>
                   <p className="text-[15px] font-extrabold tracking-[-.02em]">{resultadoDe(partido)}</p>
                 </div>

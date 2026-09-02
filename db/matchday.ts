@@ -407,8 +407,17 @@ export async function createMatchday(
   //`matchdays_discipline_draw` (0034, REQ-D6-1)
   // es la MISMA trampa con `allows_draw`, y `0034` la reintrodujo seis líneas
   // más abajo, en este mismo `.insert()`, con el párrafo de arriba ya escrito.
-  // Las dos columnas salen de la misma fila y del mismo select.
-  const { pairSize, allowsDraw } = await disciplineConfig(
+  // Las tres columnas salen de la misma fila y del mismo select.
+  //
+  // `formatoDefault` (0074, docs/tipos-de-torneo.md §2.5) es el arreglo de
+  // ese spec: hasta acá `formato` no se mandaba en este `.insert()` y toda
+  // fecha nueva caía en el default de columna de `matchdays.formato`
+  // (`ROUND_ROBIN`, 0040) — para FIFA eso obligaba a pisarlo a mano en CADA
+  // fecha con `setMatchdayFormat`. Se manda explícito acá para que una
+  // disciplina con `formato_default` distinto de `ROUND_ROBIN` lo herede
+  // desde la primera fecha; la fecha lo sigue pudiendo pisar después,
+  // `setMatchdayFormat` no cambia.
+  const { pairSize, allowsDraw, formatoDefault } = await disciplineConfig(
     supabase,
     resolvedDisciplineId as DisciplineId,
   )
@@ -432,6 +441,7 @@ export async function createMatchday(
       played_on: playedOn,
       pair_size: pairSize,
       allows_draw: allowsDraw,
+      formato: formatoDefault as unknown as Json,
     })
     .select('id')
     .single()

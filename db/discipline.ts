@@ -1,4 +1,4 @@
-import type { DisciplineId, SeasonConfig, SideSize } from '@/core'
+import type { DisciplineId, MatchdayFormat, SeasonConfig, SideSize } from '@/core'
 import type { Client } from './client'
 import type { Json } from './database.types'
 import { EdgeError } from './errors'
@@ -21,6 +21,14 @@ export interface DisciplineConfigRow {
    * fecha ROTA parejas o si los equipos ya vienen dados.
    */
   fixedTeams: boolean
+  /**
+   * El `formato_default` real de la disciplina (0074, docs/tipos-de-torneo.md
+   * §2.5), del mismo select y por el mismo motivo que `allowsDraw`/
+   * `fixedTeams`. `createMatchday` (`db/matchday.ts`) lo usa como `formato`
+   * de la fecha nueva; la fecha lo sigue pudiendo pisar después con
+   * `setMatchdayFormat`.
+   */
+  formatoDefault: MatchdayFormat
 }
 
 /**
@@ -44,7 +52,7 @@ export async function disciplineConfig(
 ): Promise<DisciplineConfigRow> {
   const { data, error } = await supabase
     .from('disciplines')
-    .select('config, pair_size, allows_draw, fixed_teams')
+    .select('config, pair_size, allows_draw, fixed_teams, formato_default')
     .eq('id', disciplineId)
     .maybeSingle()
   if (error) {
@@ -56,6 +64,7 @@ export async function disciplineConfig(
     pairSize: data.pair_size as SideSize,
     allowsDraw: data.allows_draw,
     fixedTeams: data.fixed_teams,
+    formatoDefault: data.formato_default as unknown as MatchdayFormat,
   }
 }
 

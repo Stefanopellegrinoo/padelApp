@@ -378,6 +378,7 @@ export type Database = {
           config: Json
           created_at: string
           fixed_teams: boolean
+          formato_default: Json
           has_masters: boolean
           id: string
           kind: string
@@ -393,6 +394,7 @@ export type Database = {
           config: Json
           created_at?: string
           fixed_teams?: boolean
+          formato_default?: Json
           has_masters?: boolean
           id?: string
           kind: string
@@ -408,6 +410,7 @@ export type Database = {
           config?: Json
           created_at?: string
           fixed_teams?: boolean
+          formato_default?: Json
           has_masters?: boolean
           id?: string
           kind?: string

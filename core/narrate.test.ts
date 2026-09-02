@@ -48,7 +48,7 @@ describe('narrateRules — pin de byte-identidad (3a.1)', () => {
     )
 
     expect(sections.find((s) => s.title === 'La fecha')?.body).toBe(
-      'Cada fecha la juegan los que confirman, como mínimo 4. Se arman parejas con todos y juegan ' +
+      'Cada fecha la juegan los que confirman, como mínimo 4 y hasta 12. Se arman parejas con todos y juegan ' +
         'todos contra todos. Cada partido se define a un set de 4 games con tie-break. Si el número ' +
         'de confirmados da impar, se suma un invitado para poder armar las parejas: el invitado no ' +
         'suma puntos, pero su compañero sí.',
@@ -245,14 +245,14 @@ describe('narrateRules — DisciplineShape', () => {
   it('con hasMasters:true y pairSize:2 reproduce el pin de 3a.1 tal cual (regresión R1/R2/R3) [3a.4]', () => {
     const sections = narrateRules(defaultConfig(8), TODAY_SHAPE)
     expect(sections.find((s) => s.title === 'La fecha')?.body).toBe(
-      'Cada fecha la juegan los que confirman, como mínimo 4. Se arman parejas con todos y juegan ' +
+      'Cada fecha la juegan los que confirman, como mínimo 4 y hasta 12. Se arman parejas con todos y juegan ' +
         'todos contra todos. Cada partido se define a un set de 4 games con tie-break. Si el número ' +
         'de confirmados da impar, se suma un invitado para poder armar las parejas: el invitado no ' +
         'suma puntos, pero su compañero sí.',
     )
   })
 
-  it('FIFA 1v1 default: el tope de "La fecha" refleja maxMatchesOf, no el 8-12 de pádel a secas [R4]', () => {
+  it('FIFA 1v1 default: el tope de "La fecha" refleja maxMatchesOf, no el default de partidos de pádel [R4]', () => {
     const laFecha = bodyOf(CONFIG, 'La fecha', { hasMasters: false, pairSize: 1, allowsDraw: true })
     // maxMatchesOf(CONFIG, 1) === defaultMaxMatches(1) === 36, porque CONFIG no trae `maxMatches`.
     expect(laFecha).toContain('36 partidos por fecha')

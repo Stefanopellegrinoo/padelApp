@@ -13,11 +13,11 @@
  */
 
 // ── The format's fixed limits ────────────────────────────────────────────────
-// Not configuration. There is no flat headcount limit any more (Task 3 of
-// docs/plan-piso-y-techo-del-plantel.md borró el techo entero): sólo quedan
-// el techo de PARTIDOS por disciplina, el techo de CPU del emparejador, y el
-// tamaño fijo del Masters, cuyas tres rondas existen porque son cuatro
-// jugadores.
+// Not configuration. There is no flat headcount limit any more
+// (docs/plan-piso-y-techo-del-plantel.md Task 3 deleted it entirely): what
+// is left is the match-count cap per discipline, the pairing engine's CPU
+// ceiling, and the Masters' fixed size, whose three rotating matches exist
+// because there are exactly four players.
 export { MAX_PAIRING_POOL, defaultMaxMatches, maxMatchesOf, MASTERS_SIZE, MASTERS_MATCHES } from './constants'
 
 //── El piso real: la gente que hace falta para que exista UN partido ────────

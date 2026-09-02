@@ -347,6 +347,39 @@ describe('DEFAULT_POINTS cubre el piso nuevo (2 y 3 lados)', () => {
   })
 })
 
+// ── Fix round 1 (Task 3): el techo de plantel tapaba un segundo agujero ────
+//
+// `DEFAULT_POINTS` no tiene entrada para `sideCount = 7` ni para ninguno por
+// encima de 12 — nunca la tuvo, porque antes de este plan un plantel que
+// diera esos `sideCount` era irrepresentable (el techo de 12 lo prohibía).
+// Sin ese techo, 14 jugadores en pareja (7 lados) y 13 o 14 de a uno (13 o 14
+// lados) SÍ son configs legales, y `defaultConfig` devolvía `points: []` para
+// las tres — inservible, porque los dos editores de puntos de la pantalla
+// (`wizard.tsx`, `ajustes/formato.tsx`) sólo tienen un stepper por valor YA
+// existente, ninguno para agregar uno. `defaultConfig` ahora cae a
+// `onlyTopSix(sideCount)` para cualquier `sideCount` sin semilla —la MISMA
+// fórmula que ya usan las claves 8-12— así que nunca vuelve a devolver `[]`.
+describe('DEFAULT_POINTS sin semilla ya no da una curva vacía (fix round 1, Task 3)', () => {
+  it('14 jugadores en pareja (7 lados, sin semilla) traen una curva de 7 valores, config válida', () => {
+    const config = defaultConfig(14, 2)
+    expect(config.points).toHaveLength(7)
+    expect(config.points).toEqual([10, 7, 5, 3, 2, 1, 0])
+    expect(validateConfig(config, 2)).toEqual([])
+  })
+
+  it('13 jugadores de a uno (13 lados, arriba de la última semilla) también', () => {
+    const config = defaultConfig(13, 1)
+    expect(config.points).toHaveLength(13)
+    expect(validateConfig(config, 1)).toEqual([])
+  })
+
+  it('14 de a uno (14 lados) también', () => {
+    const config = defaultConfig(14, 1)
+    expect(config.points).toHaveLength(14)
+    expect(validateConfig(config, 1)).toEqual([])
+  })
+})
+
 describe('maxMatches — el techo de partidos de la disciplina', () => {
   it('sin la clave la config es válida: rige el default de su sideSize', () => {
     expect(validateConfig(defaultConfig(8), 2)).toEqual([])

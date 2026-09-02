@@ -1,4 +1,5 @@
 import {
+  MAX_PAIRING_POOL,
   minSquadFor,
   validateConfig,
   type MatchFormat,
@@ -165,18 +166,34 @@ export function matchError(
  * docs/tipos-de-torneo.md §3.3): la gente que hace falta para que exista UN
  * partido de ESTA disciplina — 2 de a uno, 4 en pareja.
  *
- * Ya no hay TECHO acá (docs/plan-piso-y-techo-del-plantel.md Task 3): el
- * plano que medía este headcount se borró porque no cuidaba nada que otra
- * cosa no cuidara mejor — la duración de la fecha es trabajo de
+ * Ya no hay techo de PLANTEL acá (docs/plan-piso-y-techo-del-plantel.md
+ * Task 3 lo borró): la duración de la fecha es trabajo de
  * `config.maxMatches`/`defaultMaxMatches` (partidos, no cabezas, y por
- * disciplina desde el 24/08) y la CPU de `allMatchings` la corta
- * `MAX_PAIRING_POOL` (`core/matchings.ts`), que sólo existe con lados de dos.
+ * disciplina desde el 24/08).
+ *
+ * Lo que SÍ queda, sólo para `sideSize === 2`, es el techo de CPU del
+ * sorteo: `allMatchings` (`core/matchings.ts`) arma TODAS las formas de
+ * emparejar por fuerza bruta, y arriba de `MAX_PAIRING_POOL` tira un `Error`
+ * crudo, sin envolver. Antes ese `Error` era inalcanzable en la práctica
+ * porque el viejo techo de plantel coincidía con `MAX_PAIRING_POOL` (12) y
+ * nunca dejaba llegar tantos presentes; sin ese techo, sí llega (fix round 1
+ * de esta tarea, medido en vivo: 16 presentes de pareja reventaban
+ * `generatePairs` con el `Error` crudo en vez de un `EdgeError`). Se
+ * intercepta ACÁ, antes de que `generatePairs` corra `buildSides` y se caiga
+ * adentro de `core/` — una pantalla que promete un límite distinto del que
+ * el servidor aplica es peor que una que no lo muestre, y un 500 crudo es
+ * peor que las dos.
  */
 export function assertMatchdaySize(present: readonly string[], sideSize: SideSize): void {
   const floor = minSquadFor(sideSize)
   if (present.length < floor) {
     throw new EdgeError(
       `Con ${present.length} no hay fecha: hacen falta ${floor - present.length} más.`,
+    )
+  }
+  if (sideSize === 2 && present.length > MAX_PAIRING_POOL) {
+    throw new EdgeError(
+      `Con ${present.length} no se puede sortear: el máximo para armar parejas es ${MAX_PAIRING_POOL}.`,
     )
   }
   if (sideSize === 2 && present.length % 2 !== 0) {

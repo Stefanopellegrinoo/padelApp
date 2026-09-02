@@ -30,11 +30,17 @@ function onlyTopSix(sides: number): number[] {
  * Points for a full squad, longest first. A matchday with fewer pairs uses
  * the leading values, so winning always pays ten.
  *
- * Indexada por CANTIDAD DE LADOS, no de jugadores: la misma clave sirve para
- * seis parejas (12 jugadores) o doce lados de a uno (12 jugadores también).
- * Sin techo de plantel, un lado 7 (14 de a uno, o 14 parejas) cae fuera de la
- * tabla y arriba de 12 lados también — `defaultConfig` devuelve `[]` y el
- * creador la carga a mano, el mismo camino que ya tenía para editarla.
+ * Indexada por CANTIDAD DE LADOS, no de jugadores: `sideCount = 6` son 6
+ * jugadores de a uno o 12 en pareja, `sideCount = 12` son 12 de a uno o 24 en
+ * pareja — la clave es el número de LADOS, así que dos plantillas bien
+ * distintas de jugadores pueden compartir la misma curva.
+ *
+ * Sin techo de plantel, `sideCount` ya pasa de 12 (antes, imposible). Las
+ * claves 2-6 y 8-12 tienen una curva puesta a mano; `sideCount = 7` y
+ * cualquiera arriba de 12 caen fuera de esta tabla, y `defaultConfig` los
+ * resuelve con `onlyTopSix(sideCount)` — la MISMA fórmula mecánica que ya
+ * usan 8-12, no un plantel sin curva. `defaultConfig` nunca devuelve
+ * `points: []`: fuera de la tabla, calcula.
  */
 const DEFAULT_POINTS: Record<number, number[]> = {
   // Cabeza de la curva de 4 puesta a dedo, no una regla: `minSquadFor`
@@ -50,11 +56,11 @@ const DEFAULT_POINTS: Record<number, number[]> = {
   5: [10, 7, 5, 3, 1],
   6: PAYING_SIDES,
   // Lados de a uno: un plantel impar es válido cuando cada presente es su
-  // propio lado (REQ-D5-2). 7 no tiene semilla — quedó afuera cuando el
+  // propio lado (REQ-D5-2). 7 no tiene entrada acá — quedó afuera cuando el
   // plantel de FIFA iba de 8 a 12 (los dos números que
-  // docs/plan-piso-y-techo-del-plantel.md Task 3 borró) y nunca se completó;
-  // sigue sin ella, mismo camino que cualquier otro sideCount fuera de esta
-  // tabla: el creador la carga a mano.
+  // docs/plan-piso-y-techo-del-plantel.md Task 3 borró) y nunca se completó.
+  // Ya no importa: `defaultConfig` calcula `onlyTopSix(7)` al vuelo con el
+  // mismo resultado que si estuviera acá a mano (fix round 1, Task 3).
   8: onlyTopSix(8),
   9: onlyTopSix(9),
   10: onlyTopSix(10),
@@ -86,7 +92,7 @@ export function defaultConfig(squadSize: number, sideSize: SideSize = 2): Season
   return {
     squadSize,
     matchFormat: { setsToWin: 1, gamesPerSet: 4, tieBreak: true, openScore: false },
-    points: DEFAULT_POINTS[sideCount] ?? [],
+    points: DEFAULT_POINTS[sideCount] ?? onlyTopSix(sideCount),
     regularMatchdays: 10,
     countBestOf: 8,
     tiebreakSnapshotEvery: 3,

@@ -415,7 +415,8 @@ Es la única pantalla de administración pura: junta lo que no tiene dónde colg
 - **Invitación** — el link para compartir, con botón de copiar
 - **Participantes** — el plantel con su nombre y quién lo reclamó (o "sin dueño"). Por
   asiento: editar el nombre, desvincular el reclamo. Se puede **agregar y sacar gente**
-  (hasta 12), y si el plantel cambia de tamaño la app avisa que hay que revisar los puntos.
+  (sin techo, docs/plan-piso-y-techo-del-plantel.md), y si el plantel cambia de tamaño la
+  app avisa que hay que revisar los puntos.
   Los invitados de fechas pasadas no aparecen acá: no son del plantel
 - **Formato** — los mismos campos del paso 4 del wizard
 - **Texto de reglas** — editor de markdown con vista previa

@@ -1,4 +1,4 @@
-import { MASTERS_MATCHES, MASTERS_SIZE, maxMatchesOf, minSquadFor } from './constants'
+import { MASTERS_MATCHES, MASTERS_SIZE, MAX_PAIRING_POOL, maxMatchesOf, minSquadFor } from './constants'
 import { thirdPlaceByGroupTable } from './knockout'
 import { usesSetsDiff } from './standings'
 import type { DisciplineShape, MatchFormat, MatchResult, SeasonConfig, SideSize } from './types'
@@ -85,6 +85,18 @@ export function narrateRules(config: SeasonConfig, shape: DisciplineShape): Rule
   const isTodaysPadelDefault = pairSize === 2 && config.maxMatches === undefined
   const capClause = isTodaysPadelDefault ? '' : `, con un tope de ${cap} partidos por fecha`
 
+  // Fix round 1 (Task 3): éste NO es el techo de partidos de arriba, y por
+  // eso no lo tapa `isTodaysPadelDefault` — es un techo DISTINTO, de CABEZAS,
+  // que sigue existiendo sólo en pareja: `allMatchings` (`core/matchings.ts`)
+  // arma el sorteo por fuerza bruta y no pasa de `MAX_PAIRING_POOL`. Antes de
+  // este fix round la prosa de pareja no nombraba ningún techo —el de
+  // plantel se había borrado y nadie puso éste en su lugar—, así que un
+  // grupo de pareja leía "como mínimo 4" sin enterarse de que 13 ya no
+  // sortea. Con `pairSize === 1` no hay ninguno: `buildSides` no llama a
+  // `allMatchings` con lados de a uno (docs/plan-piso-y-techo-del-plantel.md,
+  // "Lo medido").
+  const ceilingClause = pairSize === 2 ? ` y hasta ${MAX_PAIRING_POOL}` : ''
+
   // Con `pairSize === 1` no hay pareja que armar (core/pairing.ts:135-147:
   // "no defenders, no fixed pairs, no no-repeat rule") ni impar que resolver
   // con un invitado (core/types.ts: "with sideSize=1 an odd squad is
@@ -120,7 +132,7 @@ export function narrateRules(config: SeasonConfig, shape: DisciplineShape): Rule
     {
       title: 'La fecha',
       body:
-        `Cada fecha la juegan los que confirman, como mínimo ${floor}${capClause}. ` +
+        `Cada fecha la juegan los que confirman, como mínimo ${floor}${ceilingClause}${capClause}. ` +
         sides +
         describeFormat(matchFormat, allowsDraw) +
         guestClause,

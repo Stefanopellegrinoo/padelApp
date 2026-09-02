@@ -6,6 +6,7 @@
 
 import {
   defaultMaxMatches,
+  MAX_PAIRING_POOL,
   matchCountForFormat,
   minSquadFor,
   suggestFormat,
@@ -73,6 +74,15 @@ export interface MatchdayShape {
   eventualSize: number
   tooFew: boolean
   /**
+   * Fix round 1 (Task 3): sólo `sideSize === 2`. `allMatchings`
+   * (`core/matchings.ts`) arma parejas por fuerza bruta y tira arriba de
+   * `MAX_PAIRING_POOL` — antes inalcanzable porque el techo de PLANTEL que
+   * este plan borró coincidía con ese número (12) y nunca dejaba llegar
+   * tantos presentes. Sin él, sí llega, y sin esta bandera el botón quedaba
+   * habilitado hasta que el sorteo se caía adentro de `core/`.
+   */
+  tooManyToPair: boolean
+  /**
    * El formato que `suggestFormat` propone para el tamaño que la fecha VA a
    * tener (REQ-D8-1) — editable antes de armar, es el selector de
    * `armado.tsx` el que lo hace editable, esto sólo expone la sugerencia
@@ -99,12 +109,22 @@ export interface MatchdayShape {
  *
  * El PISO condiciona por `sideSize` (`minSquadFor`, docs/tipos-de-torneo.md
  * §3.3) igual que `assertMatchdaySize` (`db/validate.ts`): la gente que hace
- * falta para que exista UN partido de esta disciplina. Ya no hay TECHO que
- * condicionar (docs/plan-piso-y-techo-del-plantel.md Task 3 lo borró
- * entero): el problema que el techo plano decía cuidar —una fecha que no
+ * falta para que exista UN partido de esta disciplina. Ya no hay techo de
+ * PLANTEL que condicionar (docs/plan-piso-y-techo-del-plantel.md Task 3 lo
+ * borró entero): el problema que ese techo decía cuidar —una fecha que no
  * termina nunca— lo cierra el formato de grupos (REQ-D8-1, PR21), no una
  * constante — por eso `matches` existe: de a uno, 12 jugadores son 66
  * partidos, y ése es el número que hace pedir ese formato.
+ *
+ * `tooManyToPair` sí condiciona por `sideSize`, y sigue en pie: es el techo
+ * de CPU del sorteo por fuerza bruta que `allMatchings` (`core/matchings.ts`)
+ * hace cumplir contra `MAX_PAIRING_POOL` (`core/constants.ts`), ajeno al de
+ * plantel que se borró — coincidían en el mismo número (12) "de casualidad"
+ * y por eso parecía el mismo límite. Espeja `assertMatchdaySize`
+ * (`db/validate.ts`) con la MISMA cuenta (`eventualSize`, no `confirmed`):
+ * el mismo criterio que documenta `armado-state.ts:tooFew` — una pantalla
+ * que no avisa antes de un botón que el servidor va a rebotar es peor que
+ * una que sí avisa.
  *
  * `formato` es OBLIGATORIO y sin default, mismo criterio que `allowsDraw` en
  * `computeStandings` (design #3801): sin él, `matches` seguía prometiendo el
@@ -147,6 +167,7 @@ export function matchdayShape({
     needsLooseGuest,
     eventualSize,
     tooFew: eventualSize < minSquadFor(sideSize),
+    tooManyToPair: sideSize === 2 && eventualSize > MAX_PAIRING_POOL,
     suggestedFormat: suggestFormat(eventualSize, sideSize, maxMatches),
     // Viaja en el shape para que el selector ofrezca el menú de ESTA disciplina
     // y no el de un techo global — es todo el punto de que el techo sea suyo.

@@ -270,9 +270,12 @@ Header: kicker según estado ("Armando · sólo vos la ves" / "En juego · jueve
   - Nota 11.5px/600 `muted`: "No suma puntos para el campeonato, pero su compañero sí."
   - Handle ⠿ + flechas ↑↓ para moverlo en el orden: **entra último por defecto**, así le toca con el primero de la tabla. Hint: "Va último porque nadie sabe cómo juega. Movelo si lo conocés."
 
-- **Bloqueos** (patrón único: fondo `chip`, texto `muted`, sin navegación):
+- **Bloqueos** (patrón único: fondo `chip`, texto `muted`, sin navegación) — **corregido por
+  docs/plan-piso-y-techo-del-plantel.md**, que borró el techo de plantel plano: el piso ahora
+  sale del deporte (`minSquadFor`) y "Más de 12" ya no existe como bloqueo de plantel (sí sigue
+  existiendo, sólo para parejas, el techo de CPU del sorteo — ver ese plan):
   - **Menos de 7 confirmados** → bloque en `live-bg`: "Con {n} no alcanza para armar una fecha. Hacen falta 8." y "Generar parejas" deshabilitado.
-  - **Más de 12** → bloque en `live-bg`: "Son {n} y entran hasta 12. Con más, la fecha no termina nunca."
+  - ~~**Más de 12** → bloque en `live-bg`: "Son {n} y entran hasta 12. Con más, la fecha no termina nunca."~~
   - **Invitado sin nombre** → se pueden generar las parejas, pero "Confirmar fecha" queda deshabilitado: "Ponele nombre al invitado antes de confirmar."
 
 - **Paso 3 · Parejas** (tras generar): 4, 5 o 6 filas numeradas con los nombres 14.5px/750. La pareja defensora lleva borde `up` y chip "Defensora" (`ok-bg`/`up`). El invitado lleva chip "Invitado" (`chip`/`muted`) al lado de su nombre.
@@ -362,7 +365,7 @@ Con 4 parejas quedan 3 rondas y todas entran abiertas — el acordeón no molest
 **Layout**: secciones con label 10.5px/800/uppercase `muted` y una lista agrupada (borde 1px `line`, radio 14px, fondo `surface`, filas separadas por 1px `line`).
 
 **Components**:
-- **Torneo**: Nombre · Plantel ({n} ›, permite agregar y sacar gente entre 8 y 12; si cambia el tamaño, avisa que hay que revisar los puntos) · Formato (1 set a 4 ›) · Link de invitación (Copiar ›). Cada fila con label 14px/700 + hint 11.5px/600 `muted` y valor 13px/750 `muted` a la derecha. Nota al pie: "Cambiar el formato con fechas ya jugadas no recalcula la tabla vieja."
+- **Torneo**: Nombre · Plantel ({n} ›, permite agregar y sacar gente sin techo, docs/plan-piso-y-techo-del-plantel.md; si cambia el tamaño, avisa que hay que revisar los puntos) · Formato (1 set a 4 ›) · Link de invitación (Copiar ›). Cada fila con label 14px/700 + hint 11.5px/600 `muted` y valor 13px/750 `muted` a la derecha. Nota al pie: "Cambiar el formato con fechas ya jugadas no recalcula la tabla vieja."
 - **Notificaciones**: 3 toggles (Aviso de próxima fecha · Resultados cargados · Cambios en la tabla), cada uno con hint. Switch 46×27px, radio 99px, knob 21px; encendido = pista `accent` + knob `accent-text` + knob a la derecha; apagado = pista `chip` + knob `muted`.
 - **Apariencia**: 3 botones iguales (Claro / Oscuro / Automático), padding 13px, radio 12px. Seleccionado con fondo `accent` y borde `accent`; los demás con borde 1.5px `line`.
 - **Cuenta**: Mail (valor a la derecha) · Cambiar contraseña (›) · Cerrar sesión (14px/750 color `live`) → vuelve a Landing. Debajo, "Salir del torneo" como link 12.5px/700 `muted`.
@@ -423,7 +426,7 @@ Estado del prototipo (el que representa datos reales va marcado; el resto es and
 **Datos que necesita el backend**: torneo (nombre, config, jugadores, orden de desempate y su fecha de refresco), fechas (estado, asistencias, parejas, partidos con resultado), tabla general derivada (puntos, movimiento vs. fecha anterior, descarte de las peores N), y stats derivadas.
 
 **Reglas de negocio a implementar del lado del servidor**
-1. **Tamaño de la fecha**: sale de quiénes confirman, entre 8 y 12. Si el número da impar se agrega un asiento de invitado. Menos de 7 confirmados, no hay fecha.
+1. **Tamaño de la fecha**: sale de quiénes confirman, mínimo 4 en pareja (docs/plan-piso-y-techo-del-plantel.md borró el techo de 12). Si el número da impar se agrega un asiento de invitado. Menos de 4 confirmados, no hay fecha.
 2. **Generación de parejas**: la pareja campeona defensora se mantiene —una sola vez, después se separa gane o pierda—; el resto se cruza por la tabla de puntos, 1° con último. Ninguna pareja repite respecto de la fecha anterior. El invitado entra último en el orden.
 3. **Puntos**: se asignan al cerrar la fecha según la tabla de esa noche; los dos de la pareja reciben lo mismo. Una fecha con menos parejas usa los primeros valores de la lista, así ganar siempre paga igual. **El invitado no recibe puntos; su compañero sí.**
 4. **Tabla general**: suma de las mejores N fechas (default 9 de 12).

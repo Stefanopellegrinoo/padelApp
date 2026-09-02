@@ -1,7 +1,7 @@
 'use client'
 
 import { useOptimistic, useState, useTransition } from 'react'
-import { minSquadFor, offerableFormats, type MatchdayFormat, type Duo, type SideSize } from '@/core'
+import { MAX_PAIRING_POOL, minSquadFor, offerableFormats, type MatchdayFormat, type Duo, type SideSize } from '@/core'
 import { initials } from '@/app/format'
 import {
   addGuestPair,
@@ -286,15 +286,16 @@ export function Armado({
   const confirmed = optimisticSeats.filter((seat) => seat.playing).length
   // Mientras el tilde vuela, `confirmed` ya es el nuevo y la cuenta de
   // invitados sigue siendo la vieja: el asiento del invitado lo decide
-  // `syncGuestSeat` en el servidor y no se adivina. TODO lo que mezcla esos
-  // dos —`size`, `eventualSize`, la banda de paridad, y los avisos de "no
-  // alcanza" / "entran hasta N"— puede leer un número que no existe en ningún
-  // momento.
+  // `syncGuestSeat` en el servidor y no se adivina. Todo lo que mezcla esos
+  // dos —`size`, `eventualSize`, la banda de paridad, y los avisos que salen
+  // de `eventualSize` (`tooFew`, `tooManyToPair`)— puede leer un número que
+  // no existe en ningún momento.
   //
   // Con 11 confirmados y un invitado sin nombre, tildar al 12° daba
-  // `eventualSize` 13 y encendía "Son 12 y entran hasta 12" — falso y además
-  // contradictorio consigo mismo. Nada derivado del tamaño se muestra hasta que
-  // el servidor confirme.
+  // `eventualSize` 13 y encendía "Son 12 y entran hasta 12" — el aviso plano
+  // que existía antes de que docs/plan-piso-y-techo-del-plantel.md Task 3 lo
+  // borrara. Era falso y además contradictorio consigo mismo. Nada derivado
+  // del tamaño se muestra hasta que el servidor confirme.
   const sizeSettled = !seatPending
   // Toda la aritmética vive en `armado-state.ts`, condicionada por `sideSize`
   // acá estaba suelta con el 2 hardcodeado en las dos puntas, y por eso
@@ -310,7 +311,8 @@ export function Armado({
     // partidos del formato que ya está en la base, no asumir round robin.
     formato,
   })
-  const { size, sides, matches, complete, needsLooseGuest, eventualSize, tooFew, suggestedFormat } = shape
+  const { size, sides, matches, complete, needsLooseGuest, eventualSize, tooFew, tooManyToPair, suggestedFormat } =
+    shape
   const label = words(sideSize, formato, formatDrifted)
   const guestUnnamed = [
     ...looseGuests.map((guest) => guest.name),
@@ -358,6 +360,7 @@ export function Armado({
   // banda ya muestra arriba.
   const canDraw =
     !tooFew &&
+    !tooManyToPair &&
     eventualSize % 2 === 0 &&
     !guestsOutnumberSquad &&
     !someGuestPartnerAbsent &&
@@ -609,11 +612,13 @@ export function Armado({
         </section>
       )}
 
-      {/* Sale de `eventualSize`, que mezcla el `confirmed` optimista con el
-          `guestCount` que todavía no cambió — ver `sizeSettled`. Sin esta
-          guarda, tildar al confirmado número 4 con un invitado sin nombre
-          prendía "Hacen falta 4" en rojo durante toda la espera. */}
-      {/* `role="alert"` en los cuatro: son los que apagan un botón, y aparecen
+      {/* Los dos salen de `eventualSize`, que mezcla el `confirmed` optimista
+          con el `guestCount` que todavía no cambió — ver `sizeSettled` y el
+          caso medido en la definición de `confirmed`, arriba en este mismo
+          archivo: la misma staleness que hacía leer de más también puede
+          hacer leer de menos, así que ninguno de los dos se muestra hasta
+          que el servidor confirme. */}
+      {/* `role="alert"` en los cinco: son los que apagan un botón, y aparecen
           por algo que el admin acaba de hacer. Sin anunciarlos, el botón se
           grisa y el lector de pantalla no dice por qué. La banda de paridad de
           arriba queda afuera a propósito: cambia con cada tilde y anunciarla
@@ -621,6 +626,17 @@ export function Armado({
       {sizeSettled && tooFew && (
         <p role="alert" className="rounded-field bg-live-bg px-3 py-2.5 text-[12.5px] font-bold text-live">
           Con {confirmed} no alcanza para armar una fecha. Hacen falta {minSquadFor(sideSize)}.
+        </p>
+      )}
+      {/* Fix round 1 (Task 3): el techo de CPU del sorteo por fuerza bruta
+          (`core/matchings.ts`, contra `MAX_PAIRING_POOL` de
+          `core/constants.ts`) sigue en pie — sólo el de plantel se borró, y
+          coincidían en 12 "de casualidad". Sin este aviso el botón quedaba
+          habilitado y el sorteo se caía adentro de `core/` con un `Error`
+          crudo en vez de un mensaje pensado para que alguien lo lea. */}
+      {sizeSettled && tooManyToPair && (
+        <p role="alert" className="rounded-field bg-live-bg px-3 py-2.5 text-[12.5px] font-bold text-live">
+          Con {confirmed} no se puede sortear: el máximo para armar parejas es {MAX_PAIRING_POOL}.
         </p>
       )}
       {/* No es "hay dos invitados al sorteo" —eso es válido y el sorteo los

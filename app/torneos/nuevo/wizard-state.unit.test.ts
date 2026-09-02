@@ -71,8 +71,9 @@ describe('squadWarning', () => {
     expect(squadWarning(Array(4).fill('Jugador'), floorPadel)).toBeNull()
     expect(squadWarning(Array(10).fill('Jugador'), floorPadel)).toBeNull()
     expect(squadWarning(Array(12).fill('Jugador'), floorPadel)).toBeNull()
-    // 14, uno más que el viejo techo de 12 (docs/plan-piso-y-techo-del-
-    // plantel.md Task 3 lo borró): si alguien lo revive acá, esto se pone rojo.
+    // 14 — el primer valor que el viejo techo de 12 rechazaba (13 ya está
+    // afuera por la paridad de pareja) — docs/plan-piso-y-techo-del-
+    // plantel.md Task 3 lo borró: si alguien lo revive acá, esto se pone rojo.
     expect(squadWarning(Array(14).fill('Jugador'), floorPadel)).toBeNull()
   })
 

@@ -186,12 +186,21 @@ describe('setError / matchError con allowsDraw', () => {
 })
 
 describe('assertMatchdaySize', () => {
-  // 14 y 20 están acá a propósito, no sólo 4-12: el techo plano que rechazaba
-  // 14 se borró (docs/plan-piso-y-techo-del-plantel.md Task 3), y 20 prueba
-  // que no quedó ningún número tapando por detrás — si alguien reintroduce un
-  // techo, esto se pone rojo.
-  it.each([4, 8, 10, 12, 14, 20])('accepts %i on a side of two', (size) => {
+  // Hasta 12 acepta libre — el techo de PLANTEL plano se borró
+  // (docs/plan-piso-y-techo-del-plantel.md Task 3).
+  it.each([4, 8, 10, 12])('accepts %i on a side of two', (size) => {
     expect(() => assertMatchdaySize(players(size), 2)).not.toThrow()
+  })
+
+  // Fix round 1 (Task 3): borrar el techo de PLANTEL destapó un techo
+  // DISTINTO que estaba tapado por coincidencia — `MAX_PAIRING_POOL`, el
+  // límite de CPU del sorteo por fuerza bruta (`core/matchings.ts`). Antes
+  // era inalcanzable porque el viejo techo de plantel (12) coincidía con
+  // `MAX_PAIRING_POOL` (12) y nunca dejaba pasar tantos presentes. 13, 14 y
+  // 20 tienen que seguir rechazando, con un mensaje que un humano entienda —
+  // no el `Error` crudo de `core/matchings.ts`.
+  it.each([13, 14, 20])('rejects %i on a side of two — the pairing CPU ceiling (MAX_PAIRING_POOL)', (size) => {
+    expect(() => assertMatchdaySize(players(size), 2)).toThrow(/no se puede sortear/)
   })
 
   // El piso de a dos ahora es `minSquadFor(2) = 4` (docs/tipos-de-torneo.md

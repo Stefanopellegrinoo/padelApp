@@ -60,7 +60,8 @@ Con pádel y FIFA en el mismo torneo, las dos muestran pádel y ninguna lo dice.
 
 ### 2.2 `defaultDisciplineId` es "la primera", y decide en catorce lugares
 
-`db/season.ts` la define como `.order('position').limit(1)`. No es una
+`db/season.ts:57-64` la define como `.order('position')` más
+`.order('created_at')` y `.limit(1)`. No es una
 preferencia del usuario ni una elección informada: es el orden de inserción.
 Catorce consumidores dependen de ella, entre ellos las dos pantallas de §2.1, el
 orden del plantel de la temporada (`db/read.ts`, `seasonSeedOrder`), el conteo

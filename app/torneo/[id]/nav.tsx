@@ -63,7 +63,16 @@ export function TorneoNav({ seasonId, defaultDisciplineSlug }: TorneoNavProps) {
       // llama "fechas").
       isActive: (path) => path.startsWith(base) && path.slice(base.length).includes('/fechas'),
     },
-    { label: 'Stats', href: `${base}/stats`, isActive: (path) => path.startsWith(`${base}/stats`) },
+    {
+      label: 'Stats',
+      href: `${base}/stats`,
+      // El `href` sigue siendo el stub sin disciplina (Task 3 lo scopea) pero
+      // la URL donde se ATERRIZA ya lleva la disciplina en el medio
+      // (`${base}/{disciplina}/stats`, Task 1) — mismo problema que "Fechas"
+      // arriba, mismo arreglo: `includes` sobre lo que sigue de `base` en vez
+      // de `startsWith` sobre el href viejo.
+      isActive: (path) => path.startsWith(base) && path.slice(base.length).includes('/stats'),
+    },
     {
       label: 'Reglas',
       href: `${base}/reglas`,

@@ -928,14 +928,24 @@ export async function matchdayDetail(supabase: Client, matchdayId: string): Prom
   return { matchday: toMatchdaySummary(matchdayRow), sides, matches, guestIds }
 }
 
-/** Every CLOSED regular matchday of the season's own discipline, in number order. The Masters is excluded: it is not part of the championship's played history. */
-export async function closedHistoryAll(supabase: Client, seasonId: string): Promise<PlayedMatchday[]> {
-  const disciplineId = await defaultDisciplineId(supabase, seasonId)
-  if (disciplineId === null) return []
+/**
+ * Every CLOSED regular matchday of one discipline, in number order. The
+ * Masters is excluded: it is not part of the championship's played history.
+ *
+ * `disciplineId` (optional) picks which one — same criterion as `entriesOf`:
+ * without it, falls back to `defaultDisciplineId`.
+ */
+export async function closedHistoryAll(
+  supabase: Client,
+  seasonId: string,
+  disciplineId?: DisciplineId,
+): Promise<PlayedMatchday[]> {
+  const effectiveDisciplineId = disciplineId ?? (await defaultDisciplineId(supabase, seasonId))
+  if (effectiveDisciplineId === null) return []
   const { data, error } = await supabase
     .from('matchdays')
     .select('id, number')
-    .eq('discipline_id', disciplineId)
+    .eq('discipline_id', effectiveDisciplineId)
     .eq('status', 'CLOSED')
     .eq('kind', 'REGULAR')
     .order('number', { ascending: true })
@@ -949,14 +959,23 @@ export async function closedHistoryAll(supabase: Client, seasonId: string): Prom
   return history
 }
 
-/** Every award of the season's own discipline, keyed by the matchday number that paid it. */
-export async function awardsOf(supabase: Client, seasonId: string): Promise<Map<number, Award[]>> {
-  const disciplineId = await defaultDisciplineId(supabase, seasonId)
-  if (disciplineId === null) return new Map()
+/**
+ * Every award of one discipline, keyed by the matchday number that paid it.
+ *
+ * `disciplineId` (optional) picks which one — same criterion as `entriesOf`:
+ * without it, falls back to `defaultDisciplineId`.
+ */
+export async function awardsOf(
+  supabase: Client,
+  seasonId: string,
+  disciplineId?: DisciplineId,
+): Promise<Map<number, Award[]>> {
+  const effectiveDisciplineId = disciplineId ?? (await defaultDisciplineId(supabase, seasonId))
+  if (effectiveDisciplineId === null) return new Map()
   const { data: closed, error: closedError } = await supabase
     .from('matchdays')
     .select('id, number')
-    .eq('discipline_id', disciplineId)
+    .eq('discipline_id', effectiveDisciplineId)
     .eq('status', 'CLOSED')
   if (closedError) {
     throw new EdgeError(`No se pudieron leer las fechas cerradas: ${closedError.message}`)

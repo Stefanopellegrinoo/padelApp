@@ -422,7 +422,15 @@ async function main() {
   for (const [name, url] of tabs) {
     await measureInteraction(page, `${navIdx}-nav-${name.toLowerCase()}`, async () => {
       await page.getByRole('link', { name }).first().click()
-      await page.waitForURL((u) => u.toString() === url || u.toString() === `${url}/`, { timeout: 10000 })
+      await page.waitForURL(
+        // "Stats" (Task 1) aterriza en `${closeBase}/{slug}/stats` -- el
+        // `href` de la nav todavía manda al stub sin disciplina (Task 3 lo
+        // scopea), así que a diferencia de "Fechas" arriba no hay un href ya
+        // correcto para leer del DOM. Igualdad exacta contra `url` nunca
+        // matchea acá; alcanza con el sufijo.
+        name === 'Stats' ? (u) => u.pathname.endsWith('/stats') : (u) => u.toString() === url || u.toString() === `${url}/`,
+        { timeout: 10000 },
+      )
       await ariaBusyGone(page)
     })
     navIdx++

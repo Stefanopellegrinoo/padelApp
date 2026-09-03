@@ -37,6 +37,7 @@ export default async function DisciplinaTablaPage({ params }: PageProps) {
     <TablaView
       header={header}
       discipline={discipline}
+      disciplina={disciplina}
       entries={entries}
       matchdays={seasonMatchdays.filter((matchday) => matchday.disciplineId === discipline.id)}
       awardsByMatchday={awardsByDiscipline.get(discipline.id) ?? new Map()}

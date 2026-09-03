@@ -140,7 +140,16 @@ export default async function TablaGlobalPage({ params }: PageProps) {
       </div>
 
       <Desempate
-        seasonId={seasonId}
+        // Sin disciplina: `rows` acá suma puntos de TODAS, no hay una sola a
+        // la que apuntar. La fila (`<div onClick>`, no un botón) cae en el
+        // redirect de compatibilidad de Task 2 a la disciplina `[0]` -- el
+        // MISMO destino que resolvía antes de esa Task (`seasonHeader`
+        // ordena `position, created_at`, igual que `defaultDisciplineId`).
+        // Lo que SÍ cambia con Task 2: esa pantalla ahora nombra la
+        // disciplina en el encabezado con 2+ (`Ana · Pádel`), porque
+        // renderiza como cualquier otro perfil -- no es una regresión, pero
+        // tampoco es "nada cambió".
+        base={`/torneo/${seasonId}`}
         rows={rows}
         // Fuera de rango a propósito: el corte de Masters es por-disciplina.
         mastersCutoff={rows.length + 1}

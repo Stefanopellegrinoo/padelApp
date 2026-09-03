@@ -217,14 +217,6 @@ export default async function StatsPage({ params, searchParams }: PageProps) {
   const { id: seasonId, disciplina } = await params
   const { tab } = await searchParams
   const activeTab: 'torneo' | 'mias' = tab === 'mias' ? 'mias' : 'torneo'
-  // Del CONTENEDOR, no de esta disciplina -- alimenta los 8 links a
-  // `/jugador/{entryId}` de más abajo, y esa ruta todavía vive sin
-  // disciplina en la URL (Task 2 la muda a `{disc}/jugador/{entryId}`).
-  // Cuando eso pase, estos 8 links tienen que llevar `discipline.id`
-  // (resuelto acá abajo), no seguir en `base` -- si no, reintroducen el
-  // mismo bug que este archivo arregla: un jugador visto desde acá caería
-  // en la disciplina `[0]`, no en la de esta pantalla.
-  const base = `/torneo/${seasonId}`
 
   const supabase = await serverClient()
   const header = await seasonHeader(supabase, seasonId)
@@ -232,7 +224,15 @@ export default async function StatsPage({ params, searchParams }: PageProps) {
   const discipline = resolveDisciplineBySlug(header.disciplines, disciplina)
   if (discipline === undefined) notFound()
 
-  const statsBase = `${base}/${disciplina}/stats`
+  // Scopeado a ESTA disciplina, no al contenedor -- alimenta los links a
+  // `jugador/{entryId}` de más abajo (Task 2,
+  // `docs/plan-arquitectura-de-paginas.md`: el perfil también vive bajo
+  // `{disc}/jugador/{entryId}`). Si `base` fuera `/torneo/{seasonId}` a
+  // secas, un jugador visto desde `/fifa/stats` caería en la disciplina
+  // `[0]` vía el redirect de compatibilidad -- el mismo bug que esta
+  // pantalla ya arregló para sí misma.
+  const base = `/torneo/${seasonId}/${disciplina}`
+  const statsBase = `${base}/stats`
   // Sólo se nombra la disciplina cuando hay más de una — mismo criterio que
   // Ajustes (`ajustes/page.tsx:198`, `header.disciplines.length > 1 ? ... :
   // null`): con una sola, decirlo es ruido que nadie pidió.

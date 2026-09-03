@@ -21,7 +21,15 @@ export interface TiebreakEntry {
 }
 
 interface DesempateProps {
-  seasonId: string
+  /**
+   * A qué URL navega cada fila (el `<div onClick>` de más abajo, no un
+   * `<a>`) al tocarla — `/torneo/{seasonId}/{disciplina}` cuando `rows` es
+   * de UNA disciplina (`tabla-view.tsx`), `/torneo/{seasonId}` a secas en
+   * la tabla global (`page.tsx`), que suma puntos de TODAS las disciplinas
+   * por fila y no tiene una sola a la que apuntar (cae en el redirect de
+   * compatibilidad de Task 2, `jugador/[entryId]/page.tsx`, a la `[0]`).
+   */
+  base: string
   rows: StandingsRow[]
   mastersCutoff: number
   tiebreakOrder: TiebreakEntry[]
@@ -44,7 +52,7 @@ function movementColor(movement: number | null): string {
 
 /** Sección "Tabla general" + el sheet de desempate. Un solo componente porque ambos disparadores —el botón fijo y cada chip ⓘ— comparten el mismo estado de qué hay abierto. */
 export function Desempate({
-  seasonId,
+  base,
   rows,
   mastersCutoff,
   tiebreakOrder,
@@ -101,7 +109,7 @@ export function Desempate({
         {rows.map((row, index) => (
           <div key={row.entryId}>
             <div
-              onClick={() => router.push(`/torneo/${seasonId}/jugador/${row.entryId}`)}
+              onClick={() => router.push(`${base}/jugador/${row.entryId}`)}
               className={`flex cursor-pointer items-center gap-3 rounded-field p-3 ${
                 row.position === 1 ? 'bg-chip' : ''
               }`}

@@ -9,6 +9,8 @@ import { Volver } from './volver'
 interface TablaViewProps {
   header: SeasonHeader
   discipline: DisciplineHeader
+  /** El slug de `discipline` tal como llegó en la URL (ya validado por `resolveDisciplineBySlug` en el caller) — arma los links a `jugador/{entryId}` de `Desempate` sin recalcularlo. */
+  disciplina: string
   entries: EntryRow[]
   matchdays: MatchdaySummary[]
   awardsByMatchday: Map<number, Award[]>
@@ -29,7 +31,7 @@ interface TablaViewProps {
  * equivocado. `discipline.config.regularMatchdays` es la fuente correcta
  * para cualquiera de las dos.
  */
-export function TablaView({ header, discipline, entries, matchdays, awardsByMatchday }: TablaViewProps) {
+export function TablaView({ header, discipline, disciplina, entries, matchdays, awardsByMatchday }: TablaViewProps) {
   const config = discipline.config
 
   const squadEntries = entries
@@ -144,7 +146,7 @@ export function TablaView({ header, discipline, entries, matchdays, awardsByMatc
       )}
 
       <Desempate
-        seasonId={header.id}
+        base={`/torneo/${header.id}/${disciplina}`}
         rows={rows}
         mastersCutoff={MASTERS_SIZE}
         tiebreakOrder={tiebreakOrder}

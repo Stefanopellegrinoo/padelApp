@@ -31,7 +31,7 @@ function row(position: number): StandingsRow {
 function html(rows: StandingsRow[]): string {
   return renderToStaticMarkup(
     createElement(Desempate, {
-      seasonId: 's1',
+      base: '/torneo/s1',
       rows,
       mastersCutoff: 4,
       tiebreakOrder: [],

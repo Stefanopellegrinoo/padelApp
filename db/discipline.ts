@@ -325,6 +325,10 @@ export interface NewDiscipline {
   pairSize?: SideSize
   /** Mismo contrato que `NewSeasonDiscipline`. Sin especificar, false. */
   allowsDraw?: boolean
+  /** Mismo contrato que `NewSeasonDiscipline`. Sin especificar, el automático de decisión #4029 (`false` con `pairSize: 1`, `true` si no). */
+  hasMasters?: boolean
+  /** Mismo contrato que `NewSeasonDiscipline`. Sin especificar, el default de columna (`ROUND_ROBIN`, 0074). */
+  formatoDefault?: MatchdayFormat
 }
 
 /**
@@ -379,12 +383,20 @@ export async function addDiscipline(
       position: (maxRow?.position ?? -1) + 1,
       pair_size: spec.pairSize ?? 2,
       allows_draw: spec.allowsDraw ?? false,
-      // Decisión #4029, parte 1: de a uno nace SIN Masters --
-      // `generateMastersPairs` (`db/matchday.ts`) rechaza siempre una fecha MASTERS con
-      // `pair_size=1`, así que ofrecer el check encendido ahí sería ofrecer
-      // algo que la app ya rechaza. De a dos sigue naciendo en `true`, el
-      // default de siempre (`0015_disciplines.sql:21`).
-      has_masters: (spec.pairSize ?? 2) !== 1,
+      // Decisión #4029, parte 1, cuando `spec.hasMasters` no llega: de a uno
+      // nace SIN Masters -- `generateMastersPairs` (`db/matchday.ts`) rechaza
+      // siempre una fecha MASTERS con `pair_size=1`, así que ofrecer el check
+      // encendido ahí sería ofrecer algo que la app ya rechaza. De a dos
+      // sigue naciendo en `true`, el default de siempre
+      // (`0015_disciplines.sql:21`). `spec.hasMasters` manda cuando el
+      // caller lo especifica.
+      has_masters: spec.hasMasters ?? (spec.pairSize ?? 2) !== 1,
+      // `formato_default` sólo se manda si el spec lo trae -- mismo criterio
+      // que `createSeason` (`db/season.ts`): sin esto, la fila nace con el
+      // default de columna (`ROUND_ROBIN`, 0074).
+      ...(spec.formatoDefault === undefined
+        ? {}
+        : { formato_default: spec.formatoDefault as unknown as Json }),
     })
     .select('id')
     .single()

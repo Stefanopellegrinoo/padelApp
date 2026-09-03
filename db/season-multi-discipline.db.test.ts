@@ -206,6 +206,68 @@ describe('createSeason con múltiples disciplinas (REQ-D1-1, contrato S13)', () 
     ])
   })
 
+  // Slice 1 del wizard multi-disciplina (docs/tipos-de-torneo.md §0, §2.5,
+  // §2.6): hasta acá `has_masters` sólo salía del automático de #4029 y
+  // `formato_default` sólo del default de columna (0074) -- ninguno de los
+  // dos era elegible por spec. La prueba de que la independencia entre
+  // disciplinas (§0: "cada torneo es independiente") es real acá: dos
+  // disciplinas de la MISMA temporada, con config, has_masters Y
+  // formato_default genuinamente distintos entre sí -- no sólo distintos del
+  // default, distintos EL UNO DEL OTRO.
+  it('config, has_masters y formato_default nacen genuinamente distintos entre dos disciplinas de la misma temporada', async () => {
+    const admin = await createTestUser()
+    const config = defaultConfig(8)
+    // Misma forma de PAREJAS (pairSize 2 para las dos, sin especificar) para
+    // poder atribuir la diferencia de has_masters/formato_default a lo que
+    // cada spec pidió, no a un efecto lateral de `pairSize`.
+    const fifaConfig = {
+      ...config,
+      matchFormat: { ...config.matchFormat, openScore: true },
+      // 12, no 5: `countBestOf` (8, default de `defaultConfig`) no puede
+      // superar `regularMatchdays` (`assertValidConfig`, core/config.ts:246)
+      // -- distinto del `regularMatchdays: 10` de `config`, pero legal.
+      regularMatchdays: 12,
+    }
+    const { seasonId } = await createSeason(admin.client, {
+      name: 'Disciplinas independientes',
+      squadNames: squadNames(8),
+      config,
+      disciplines: [
+        { kind: 'PADEL', config, hasMasters: false },
+        {
+          kind: 'FIFA',
+          config: fifaConfig,
+          allowsDraw: true,
+          formatoDefault: { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 },
+        },
+      ],
+    })
+
+    const db = adminClient()
+    const { data } = await db
+      .from('disciplines')
+      .select('kind, config, has_masters, formato_default')
+      .eq('season_id', seasonId)
+      .order('position', { ascending: true })
+    const padel = data?.[0]
+    const fifa = data?.[1]
+
+    // Cada valor es el que se pidió (o el automático que le tocaba), no
+    // cualquier par distinto:
+    expect(padel).toMatchObject({ kind: 'PADEL', has_masters: false, formato_default: { kind: 'ROUND_ROBIN' } })
+    expect(fifa).toMatchObject({
+      kind: 'FIFA',
+      has_masters: true, // automático de #4029: sin `hasMasters` explícito y pairSize 2 (default)
+      formato_default: { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 },
+    })
+    // Y por lo tanto genuinamente distintos entre sí, no sólo del default.
+    expect(padel?.has_masters).not.toBe(fifa?.has_masters)
+    expect(padel?.formato_default).not.toEqual(fifa?.formato_default)
+    expect((padel?.config as { regularMatchdays: number }).regularMatchdays).not.toBe(
+      (fifa?.config as { regularMatchdays: number }).regularMatchdays,
+    )
+  })
+
   // Compat: el único caller de producción (`app/torneos/nuevo/actions.ts`)
   // todavía no pasa `disciplines` — el wizard multi-disciplina es PR11a,
   // fuera de este slice. Tiene que seguir viendo exactamente el mismo

@@ -1,5 +1,5 @@
 import { sideOfRow } from '@/core'
-import type { Award, DisciplineId, EntryId, MatchdayHistory, SeasonConfig, SideSize } from '@/core'
+import type { Award, DisciplineId, EntryId, MatchdayFormat, MatchdayHistory, SeasonConfig, SideSize } from '@/core'
 import type { Database, Json } from './database.types'
 import { EdgeError } from './errors'
 import { assertValidConfig } from './validate'
@@ -208,6 +208,20 @@ export interface NewSeasonDiscipline {
   pairSize?: SideSize
   /** Si esta disciplina admite empates (decisión #7). Sin especificar, false: el pádel de siempre. Misma inmutabilidad que `pairSize`. */
   allowsDraw?: boolean
+  /**
+   * Si esta disciplina arma Masters de fin de año (decisión #4029). Sin
+   * especificar, el mismo automático de siempre: `false` con `pairSize: 1`
+   * (`disciplines_has_masters_needs_pair`, 0053, rechaza `true` ahí), `true`
+   * si no. Elegido al crear, cada disciplina independiente (docs/tipos-de-torneo.md §0)
+   * — no hay razón para que todas las de un torneo mixto compartan el mismo valor.
+   */
+  hasMasters?: boolean
+  /**
+   * El formato por default de cada fecha nueva de esta disciplina (0074,
+   * docs/tipos-de-torneo.md §2.5). Sin especificar, el default de columna
+   * (`ROUND_ROBIN`) — mismo comportamiento de siempre.
+   */
+  formatoDefault?: MatchdayFormat
 }
 
 export interface NewSeason {
@@ -329,9 +343,17 @@ export async function createSeason(
         pair_size: spec.pairSize ?? 2,
         allows_draw: spec.allowsDraw ?? false,
         // Decisión #4029, parte 1 -- mismo automático que `addDiscipline`
-        // (`db/discipline.ts`): de a uno nace sin Masters, de a dos sigue en
-        // `true`.
-        has_masters: (spec.pairSize ?? 2) !== 1,
+        // (`db/discipline.ts`) cuando `spec.hasMasters` no llega: de a uno
+        // nace sin Masters, de a dos sigue en `true`. `spec.hasMasters`
+        // manda cuando el caller lo especifica -- cada disciplina lo elige
+        // por su cuenta (docs/tipos-de-torneo.md §0).
+        has_masters: spec.hasMasters ?? (spec.pairSize ?? 2) !== 1,
+        // `formato_default` sólo se manda si el spec lo trae: sin esto, la
+        // fila nace con el default de columna (`ROUND_ROBIN`, 0074) -- mismo
+        // comportamiento de siempre para todo caller que no lo especifique.
+        ...(spec.formatoDefault === undefined
+          ? {}
+          : { formato_default: spec.formatoDefault as unknown as Json }),
       })
       .select('id')
       .single()

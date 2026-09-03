@@ -755,6 +755,33 @@ describe('addDiscipline (PR 13, REQ-D1-2)', () => {
     const { data } = await adminClient().from('disciplines').select('has_masters').eq('id', padelId).single()
     expect(data?.has_masters).toBe(true)
   })
+
+  // Slice 1 del wizard multi-disciplina (docs/tipos-de-torneo.md §2.5, §2.6):
+  // mismo contrato que `createSeason` (db/season.ts) -- `hasMasters` explícito
+  // pisa el automático de #4029, y `formatoDefault` explícito llega a la fila
+  // en vez del default de columna (0074).
+  it('acepta hasMasters y formatoDefault explícitos al agregar una disciplina', async () => {
+    const admin = await createTestUser()
+    const { seasonId } = await createSeason({
+      admin,
+      squad: [admin.playerId, ...(await fillerPlayers(7))],
+    })
+
+    const fifaId = await addDiscipline(admin.client, seasonId, {
+      kind: 'FIFA',
+      config: defaultConfig(8),
+      hasMasters: false, // pairSize 2 (default) automáticamente daría true
+      formatoDefault: { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 },
+    })
+
+    const { data } = await adminClient()
+      .from('disciplines')
+      .select('has_masters, formato_default')
+      .eq('id', fifaId)
+      .single()
+    expect(data?.has_masters).toBe(false)
+    expect(data?.formato_default).toEqual({ kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 })
+  })
 })
 
 //── Decisión #4029, partes 2 y 3 — editable en Ajustes, con guard ──────────

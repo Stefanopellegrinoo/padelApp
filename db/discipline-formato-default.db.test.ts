@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { defaultConfig } from '@/core'
+import type { Json } from './database.types'
 import { updateDisciplineFormatoDefault } from './discipline'
 import { createMatchday } from './matchday'
 import { adminClient } from './test/admin'
@@ -49,6 +51,38 @@ describe('disciplines.formato_default — column-grant contra authenticated (§2
     const { data, error } = await db.from('disciplines').select('formato_default').eq('id', disciplineId).single()
     if (error || data === null) throw new Error(error?.message)
     expect(data.formato_default).toEqual({ kind: 'ROUND_ROBIN' })
+  })
+})
+
+/**
+ * `0075_disciplines_formato_default_insert_grant.sql` — slice 1 del wizard
+ * multi-disciplina (docs/tipos-de-torneo.md §2.5, §2.6): `createSeason`/
+ * `addDiscipline` (`db/season.ts`/`db/discipline.ts`) ganan un
+ * `formatoDefault` opcional por spec, así que ahora sí puede llegar un INSERT
+ * de `authenticated` que nombre `formato_default`. Mismo criterio que el
+ * resto de esta suite y que `db/matchday-format.db.test.ts`: se ejercita con
+ * `admin.client` (rol `authenticated`), nunca con `adminClient()`
+ * (`service_role`).
+ */
+describe('disciplines.formato_default — grant de INSERT contra authenticated (§2.5)', () => {
+  it('authenticated inserta una disciplina mandando formato_default explícito, sin "permission denied"', async () => {
+    const admin = await createTestUser()
+    const { seasonId } = await createSeason({ admin })
+
+    const { data, error } = await admin.client
+      .from('disciplines')
+      .insert({
+        season_id: seasonId,
+        kind: 'FIFA',
+        config: defaultConfig(8) as unknown as Json,
+        position: 1,
+        formato_default: { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 },
+      })
+      .select('id')
+      .single()
+
+    expect(error).toBeNull()
+    expect(data).not.toBeNull()
   })
 })
 

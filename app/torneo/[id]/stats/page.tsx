@@ -16,11 +16,11 @@ interface PageProps {
  * disciplina, cayendo en `defaultDisciplineId`, y el título nunca decía de
  * qué disciplina eran los números (§2.1 de `docs/arquitectura-de-paginas.md`).
  *
- * NO es sólo compatibilidad para un link viejo guardado: `nav.tsx:66` todavía
- * apunta el `href` de la pestaña Stats acá (Task 3 es quien lo va a scopear a
- * la disciplina actual). Hasta que eso pase, TODO toque de esa pestaña pasa
- * por este redirect — borrarlo por "compat muerta" rompe la pestaña, no un
- * bookmark.
+ * Con la Task 3 hecha, el nav ya NO pasa por acá: `nav-state.ts` arma el
+ * `href` de la pestaña Stats directo a `${base}/{disciplina}/stats`, a la
+ * disciplina actual o a la `[0]` de la temporada. Esta ruta queda como
+ * compatibilidad para links y bookmarks viejos a `/torneo/{id}/stats` — no
+ * para la pestaña.
  *
  * Se deja un redirect, no un 404 — mismo criterio y misma forma que
  * `app/torneo/[id]/fechas/page.tsx:29-36`, que ya resolvió este problema para

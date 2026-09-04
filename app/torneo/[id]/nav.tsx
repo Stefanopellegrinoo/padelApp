@@ -2,108 +2,39 @@
 
 import Link, { useLinkStatus } from 'next/link'
 import { usePathname } from 'next/navigation'
-
-interface NavItem {
-  label: string
-  href: string
-  isActive: (pathname: string) => boolean
-}
-
-/**
- * Segmentos de primer nivel de esta sección que NO son un slug de
- * disciplina. `kind` sólo puede ser `'padel'`/`'fifa'` (con sufijo `-N`,
- * `core/discipline-slug.ts`), así que nunca colisiona con ninguno de estos —
- * alcanza con excluirlos para reconocer la ruta por-disciplina de la Tabla
- * (PR12b slice 1) sin traer la lista real de disciplinas hasta acá.
- */
-const NON_DISCIPLINE_SEGMENTS = new Set(['fechas', 'stats', 'reglas', 'ajustes', 'jugador'])
+import { navTabs } from './nav-state'
 
 interface TorneoNavProps {
   seasonId: string
-  /** Disciplina [0] de la temporada — a dónde va "Fechas" cuando la URL actual no trae ninguna (PR13c slice B). */
+  /** Disciplina [0] de la temporada — a dónde apuntan Tabla, Fechas y Stats cuando la URL actual no trae ninguna (contenedor, Ajustes, Reglas). */
   defaultDisciplineSlug: string
 }
 
 export function TorneoNav({ seasonId, defaultDisciplineSlug }: TorneoNavProps) {
   const pathname = usePathname()
-  const base = `/torneo/${seasonId}`
-
-  // La disciplina bajo la URL actual, si la hay — mismo criterio que "Tabla"
-  // (abajo) pero sin anclar el final: cubre `${base}/{slug}` Y
-  // `${base}/{slug}/fechas/{n}`. `null` en Tabla global, Ajustes, Stats y
-  // Reglas, donde "Fechas" cae a `defaultDisciplineSlug`.
-  const pathSegment = /^\/([^/]+)/.exec(pathname.slice(base.length))?.[1]
-  const currentDisciplineSlug =
-    pathSegment !== undefined && !NON_DISCIPLINE_SEGMENTS.has(pathSegment) ? pathSegment : null
-
-  const items: NavItem[] = [
-    {
-      label: 'Tabla',
-      href: base,
-      // La ruta por-disciplina (`${base}/{slug}`) también es la Tabla — ver
-      // NON_DISCIPLINE_SEGMENTS arriba. La raíz (`base`) sigue siendo Tabla
-      // hasta slice 2.
-      isActive: (path) => {
-        if (path === base) return true
-        const match = /^\/([^/]+)$/.exec(path.slice(base.length))
-        const segment = match?.[1]
-        return segment !== undefined && !NON_DISCIPLINE_SEGMENTS.has(segment)
-      },
-    },
-    {
-      label: 'Fechas',
-      // PR13c slice B: la lista vive bajo `${base}/{disciplina}/fechas`
-      // desde ahora — a la disciplina de la pantalla actual si hay una, si no
-      // a la [0] de la temporada.
-      href: `${base}/${currentDisciplineSlug ?? defaultDisciplineSlug}/fechas`,
-      // La ruta de una fecha lleva la disciplina
-      // en el medio (`${base}/{disciplina}/fechas/{n}`, PR 10) — `startsWith`
-      // ya no la agarra. `includes` sobre lo que sigue de `base` la vuelve a
-      // encender sin abrir la pestaña de otra sección (ninguna `kind` se
-      // llama "fechas").
-      isActive: (path) => path.startsWith(base) && path.slice(base.length).includes('/fechas'),
-    },
-    {
-      label: 'Stats',
-      href: `${base}/stats`,
-      // El `href` sigue siendo el stub sin disciplina (Task 3 lo scopea) pero
-      // la URL donde se ATERRIZA ya lleva la disciplina en el medio
-      // (`${base}/{disciplina}/stats`, Task 1) — mismo problema que "Fechas"
-      // arriba, mismo arreglo: `includes` sobre lo que sigue de `base` en vez
-      // de `startsWith` sobre el href viejo.
-      isActive: (path) => path.startsWith(base) && path.slice(base.length).includes('/stats'),
-    },
-    {
-      label: 'Reglas',
-      href: `${base}/reglas`,
-      isActive: (path) => path.startsWith(`${base}/reglas`),
-    },
-  ]
+  const tabs = navTabs(seasonId, defaultDisciplineSlug, pathname)
 
   return (
     <nav className="sticky bottom-0 flex border-t border-line bg-bg px-[22px] pt-2 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
-      {items.map((item) => {
-        const active = item.isActive(pathname)
-        return (
-          // `min-h-[44px]` y no un alto fijo: 44 es el mínimo de la guía de
-          // Apple y esto medía 37. Es lo que más se toca de la app, y errarle a
-          // una pestaña te manda a otra pantalla.
-          // `prefetch`: con un `loading.tsx` presente, Next precarga por defecto
-          // sólo el esqueleto de una ruta dinámica y deja los datos para el
-          // toque. Estas cuatro están siempre a la vista y son las que más se
-          // tocan, así que conviene traerlas antes. Medido: la pantalla lista
-          // pasó de 375ms a menos de la mitad, y el esqueleto sigue apareciendo
-          // al instante para las veces que la precarga no llegó a tiempo.
-          <Link
-            key={item.label}
-            href={item.href}
-            prefetch
-            className="flex min-h-[44px] flex-1 items-center justify-center"
-          >
-            <Pestana label={item.label} active={active} />
-          </Link>
-        )
-      })}
+      {tabs.map((tab) => (
+        // `min-h-[44px]` y no un alto fijo: 44 es el mínimo de la guía de
+        // Apple y esto medía 37. Es lo que más se toca de la app, y errarle a
+        // una pestaña te manda a otra pantalla.
+        // `prefetch`: con un `loading.tsx` presente, Next precarga por defecto
+        // sólo el esqueleto de una ruta dinámica y deja los datos para el
+        // toque. Estas cuatro están siempre a la vista y son las que más se
+        // tocan, así que conviene traerlas antes. Medido: la pantalla lista
+        // pasó de 375ms a menos de la mitad, y el esqueleto sigue apareciendo
+        // al instante para las veces que la precarga no llegó a tiempo.
+        <Link
+          key={tab.label}
+          href={tab.href}
+          prefetch
+          className="flex min-h-[44px] flex-1 items-center justify-center"
+        >
+          <Pestana label={tab.label} active={tab.isActive} />
+        </Link>
+      ))}
     </nav>
   )
 }

@@ -47,12 +47,15 @@ export default async function TorneoLayout({ children, params }: TorneoLayoutPro
   }
 
   const header = await seasonHeader(supabase, id)
-  // PR13c slice B: la pestaña "Fechas" necesita un destino con disciplina
-  //(C12, `[disciplina]/fechas`). Ésta es la disciplina [0] — el mismo
-  // fallback que ya usa `defaultDisciplineId`/`primaryDiscipline` — para
-  // cuando la pantalla actual no trae ninguna en su URL (Tabla global,
-  // Ajustes, Stats, Reglas). El `throw` es el mismo supuesto sin efecto
-  // práctico que `disciplineOf`/`primaryDiscipline`: garantizado por REQ-NR-4.
+  // Tabla, Fechas y Stats necesitan un destino con disciplina
+  // (`nav-state.ts`; las tres comparten el mismo fallback, Reglas no).
+  // Ésta es la disciplina [0] — el mismo fallback que ya usa
+  // `defaultDisciplineId`/`primaryDiscipline` — para cuando la pantalla
+  // actual no trae ninguna en su URL: el contenedor, Ajustes y Reglas son
+  // los únicos que no la tienen (Stats se mudó bajo `[disciplina]` en la
+  // Task 1 del plan de arquitectura de páginas). El `throw` es el mismo
+  // supuesto sin efecto práctico que `disciplineOf`/`primaryDiscipline`:
+  // garantizado por REQ-NR-4.
   const defaultDisciplineSlug = disciplineSlugs(header.disciplines).get(primaryDiscipline(header).id)
   if (defaultDisciplineSlug === undefined) throw new EdgeError('La disciplina de la temporada no existe.')
 

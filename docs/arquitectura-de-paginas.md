@@ -158,6 +158,28 @@ Esto además arregla §2.3 por consecuencia: si Stats vive bajo `{disc}`, la URL
 nunca se queda sin disciplina, y el `?? defaultDisciplineSlug` de `nav.tsx:58`
 deja de tener casos donde disparar.
 
+### 4.1 En el contenedor no se enciende ninguna pestaña — decidido
+
+**Decisión del dueño, 03/09/2026.** Ninguna pestaña es el contenedor: desde la
+Task 3, el `href` de Tabla es siempre `${base}/{disciplina}`, nunca `${base}`.
+Encender Tabla ahí sería mentir, porque tocarla **navega** a la tabla de la
+primera disciplina, que es otra pantalla.
+
+Importa más de lo que parece, y por eso se decidió explícitamente: *"Mis
+torneos"* linkea al torneo pelado (`app/torneos/page.tsx:173`, `:219`), así que
+**con 2+ disciplinas cada entrada al torneo aterriza en el contenedor.** Hoy no
+se ve porque con una sola disciplina esa ruta redirige antes de pintar.
+
+El contenedor se distingue por lo que ya tiene —el nombre del torneo como
+título y la lista de disciplinas debajo, que no se parece a ninguna tabla—, no
+por la barra de abajo. Mismo criterio que Ajustes, que tampoco es destino de
+ninguna pestaña y también está apagado.
+
+**Esto NO es lo mismo que el defecto que arregló la Task 1**, donde la pestaña
+de Stats no se encendía en su propio destino. Una pestaña que no reconoce la
+URL a la que ella misma te llevó es un bug; una pantalla que no es destino de
+ninguna pestaña es otra cosa.
+
 ---
 
 ## 5 · El caso de una sola disciplina manda

@@ -753,14 +753,16 @@ export async function matchdaysOf(supabase: Client, seasonId: string): Promise<M
  * afuera en silencio — exactamente el síntoma de C8/C9 (ronda 4) en
  * `entriesOf`, acá en `matchdaysOf`.
  *
- * `matchdaysOf` NO se toca: sus otros 4 llamadores (season overview, Mis
- * torneos, Ajustes, la lista de fechas) siguen viendo sólo la disciplina por
- * defecto hasta que ELLOS mismos se vuelvan multi-disciplina (mismo criterio
- * que `entriesOf`: no cambiar el default de quien no lo pidió). Esta función
- * es para quien necesita encontrar una fecha SIN saber de antemano a qué
- * disciplina pertenece: la ruta `[disciplina]/fechas/[n]` (la conoce por la
- * URL y filtra después) y el redirect de la URL vieja (la busca para
- * AVERIGUARLA).
+ * `matchdaysOf` NO se toca, aunque ya no le quede un solo caller de UI:
+ * season overview, Mis torneos y la lista de fechas ya llaman a ESTA función
+ * (`seasonMatchdaysOf`), y Ajustes se suma en Task 4
+ * (`docs/plan-arquitectura-de-paginas.md`) para que el conteo del modal de
+ * borrar cubra la temporada entera y no sólo la disciplina por defecto. Los
+ * tests de `db/` siguen llamando a `matchdaysOf` directo -- por eso sigue
+ * existiendo. Esta función es para quien necesita encontrar una fecha SIN
+ * saber de antemano a qué disciplina pertenece: la ruta `[disciplina]/fechas/[n]`
+ * (la conoce por la URL y filtra después) y el redirect de la URL vieja (la
+ * busca para AVERIGUARLA).
  */
 export async function seasonMatchdaysOf(supabase: Client, seasonId: string): Promise<MatchdaySummary[]> {
   const { data, error } = await supabase

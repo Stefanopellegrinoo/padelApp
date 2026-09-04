@@ -120,7 +120,10 @@ vi.mock('@/db/read', async (importOriginal) => {
     publicFormats: async () => escena.publicFormats,
     seasonAdminName: async () => 'Marce',
     myEntryId: async () => null,
-    matchdaysOf: async () => [],
+    // Task 4: `AjustesPage` pasó de `matchdaysOf` (disciplina por defecto) a
+    // `seasonMatchdaysOf` (temporada entera) para que `playedCount` del
+    // modal de borrar cubra TODAS las disciplinas, no sólo la primera.
+    seasonMatchdaysOf: async () => [],
     seasonSquadMembersOf: async () => [],
     playerNames: async () => new Map<string, string>(),
   }
@@ -243,153 +246,96 @@ describe('Reglas con sesión — la página entera, no el componente suelto', ()
   })
 })
 
-describe('Ajustes — la página entera', () => {
-  it('la fila Formato nombra el de cada disciplina', async () => {
-    expect(await ajustes(PADEL_Y_FIFA)).toContain(
-      'Pádel: 1 set a 4 games · FIFA: Marcador de goles',
-    )
-  })
+/**
+ * El panel que edita el formato, tal cual sale al HTML. Antes de Task 4
+ * (docs/plan-arquitectura-de-paginas.md) el contenedor dibujaba uno POR
+ * DISCIPLINA acá mismo (C36); ahora sólo lo hace con UNA disciplina --
+ * con 2+, este panel se mudó a `[disciplina]/ajustes`
+ * (`[disciplina]/ajustes/page.unit.test.ts` prueba ese caso). El `id="formato"`
+ * (el ancla de la fila de arriba) sigue en el contenedor, no en cada
+ * `<section>`.
+ */
+function panelDeFormato(html: string): string {
+  return /<section data-formato="[^"]*"[\s\S]*?<\/section>/.exec(html)?.[0] ?? ''
+}
 
+describe('Ajustes — la página entera', () => {
   /** PIN de no-regresión: con una sola disciplina la fila dice lo de siempre. */
   it('con una sola disciplina la fila dice exactamente lo de siempre', async () => {
     const html = await ajustes(SOLO_PADEL)
     expect(html).toContain('1 set a 4 games ›')
     expect(html).not.toContain('Pádel: 1 set a 4 games')
   })
-})
 
-/**
- * Los paneles que editan el formato, tal cual salen al HTML — uno POR
- * DISCIPLINA desde C36. El `id="formato"` (el ancla de la fila de arriba) se
- * mudó al contenedor: con más de una disciplina, dejarlo en cada `<section>`
- * repetía el `id` y era HTML inválido.
- */
-function panelesDeFormato(html: string): string[] {
-  return [...html.matchAll(/<section data-formato="[^"]*"[\s\S]*?<\/section>/g)].map((match) => match[0])
-}
-
-/** El primero, que es el de la disciplina primaria. */
-function panelDeFormato(html: string): string {
-  return panelesDeFormato(html)[0] ?? ''
-}
-
-/**
- * Mismo criterio que `panelesDeFormato`, para los paneles de `FormatoDefault`
- * (§2.5, fix round 1 HIGH 3): `data-formato-default="[disciplineId]"` en vez
- * de `data-formato`, mismo patrón (`ajustes/formato-default.tsx`).
- */
-function panelesDeFormatoDefault(html: string): string[] {
-  return [...html.matchAll(/<section data-formato-default="[^"]*"[\s\S]*?<\/section>/g)].map((match) => match[0])
-}
-
-/** Los tres `<input type="radio">` de UN panel de `FormatoDefault`, en el orden en que `OPCIONES` los dibuja. */
-function radiosDe(panel: string): string[] {
-  return [...panel.matchAll(/<input[^>]*type="radio"[^>]*\/>/g)].map((match) => match[0])
-}
-
-describe('Ajustes — el panel de Formato dice de qué disciplina habla', () => {
   /**
-   * La fila de arriba anuncia el formato de LAS DOS disciplinas y su
-   * `href="#formato"` ancla a un `<Formato>` alimentado con
-   * `primaryDiscipline(header)`, que edita y guarda la disciplina [0] y nada
-   * más. Antes de la ronda 21 la fila y el panel decían lo mismo; nombrar los
-   * dos formatos arregló la fila y dejó el CONTROL narrando otro alcance. Es
-   * W64 corrido una capa para abajo.
+   * PIN de no-regresión: un torneo de UNA sola disciplina —o sea todos los
+   * que existen hoy— sigue mostrando el panel de Formato inline, sin sufijo.
+   * Es la propiedad que Task 4 exige para el caso simple (§5 del diseño).
    *
-   * El arreglo es que el panel diga de cuál habla, no que la fila diga menos:
-   * achicar la fila revierte W64 en Ajustes, que la ronda 22 verificó cerrado
-   * en pantalla.
-   *
-   * C36: esa tanda cerró diciendo "y no se abre camino a la segunda
-   * disciplina: eso sería superficie nueva". Ahora SÍ lo hay —hay un panel
-   * por disciplina, ver el test del final del describe— y este par sigue
-   * probando lo suyo: que el nombre SIGUE a la disciplina que cada panel
-   * edita, mirando el primero.
+   * Este `it` sólo fija el título y que el panel exista, no el documento
+   * entero -- no es el chequeo byte-a-byte. Ese diff (versión de antes de
+   * la Task contra la de después) se hizo a mano una vez, sin harness en el
+   * repo para volver a correrlo.
    */
-  it('con pádel primero nombra Pádel, y son sus cinco steppers los que dibuja', async () => {
-    const panel = panelDeFormato(await ajustes(PADEL_Y_FIFA))
-    expect(panel).toContain('>Formato · Pádel</h2>')
-    expect(panel).toContain('Sets por partido')
-  })
-
-  /**
-   * La mitad que prueba que el nombre SIGUE a la disciplina que el panel
-   * edita, en vez de ser un 'Pádel' escrito a mano: con FIFA en la posición
-   * [0] el panel edita FIFA, y no dibuja los steppers de sets.
-   */
-  it('con FIFA primero nombra FIFA, y no dibuja los steppers de sets', async () => {
-    const panel = panelDeFormato(
-      await ajustes([disciplina('d1', 'FIFA', FIFA), disciplina('d2', 'PADEL', PADEL)]),
-    )
-    expect(panel).toContain('>Formato · FIFA</h2>')
-    expect(panel).not.toContain('Sets por partido')
-  })
-
-  /**
-   * PIN de no-regresión: un torneo de UNA sola disciplina —o sea todos los que
-   * existen hoy— no gana un sufijo. No hay de qué desambiguar.
-   */
-  it('con una sola disciplina el panel dice exactamente lo de siempre', async () => {
+  it('con una sola disciplina el panel de Formato sigue inline, sin sufijo', async () => {
     expect(panelDeFormato(await ajustes(SOLO_PADEL))).toContain('>Formato</h2>')
   })
 
   /**
-   * C36: hay UN panel por disciplina. Editar sólo la [0] dejaba
-   * `disciplines.has_masters` de la segunda sin ninguna pantalla que lo
-   * cambiara —la decisión #4029 parte 2 dice "editable en Ajustes"— y, desde
-   * que cada disciplina juega su propio Masters (decisión #4035), además
-   * contradecía a la pantalla de Fechas, que ya dibuja el bloque en cada una.
+   * Task 4: con 2+ disciplinas, la fila "Formato" y el panel que edita ya no
+   * viven en el contenedor -- se mudaron a `[disciplina]/ajustes`. Antes de
+   * esta Task la fila combinaba los dos formatos
+   * ("Pádel: 1 set a 4 games · FIFA: Marcador de goles"); ahora directamente
+   * no se dibuja, en vez de quedar apuntando a un `#formato` que ya no
+   * existe acá (el defecto medido: el ancla siempre caía en la [0]).
    */
-  it('dibuja un panel por disciplina, cada uno con su nombre (C36)', async () => {
-    const paneles = panelesDeFormato(await ajustes(PADEL_Y_FIFA))
-    expect(paneles).toHaveLength(2)
-    expect(paneles[0]).toContain('>Formato · Pádel</h2>')
-    expect(paneles[1]).toContain('>Formato · FIFA</h2>')
-    // Y el de FIFA es el de a UNO: su check de Masters sale deshabilitado
-    // (decisión #4029 parte 3), que es justo lo que no se podía ver antes.
-    expect(paneles[1]).toContain('Una disciplina de a uno no juega Masters')
+  it('con 2+ disciplinas la fila y el panel de Formato desaparecen del contenedor', async () => {
+    const html = await ajustes(PADEL_Y_FIFA)
+    expect(html).not.toContain('Formato')
+    expect(panelDeFormato(html)).toBe('')
   })
 
   /**
-   * Fix round 1, HIGH 3: `FormatoDefault` (§2.5) es la MISMA clase de bug
-   * que C36 de arriba, y hasta este fix no tenía el pin que lo cubre. El
-   * reviewer reconectó `disciplineId`/`formatoDefault` de CADA panel a
-   * `header.disciplines[0]` en `page.tsx` y la suite completa (908 tests)
-   * seguía en verde -- `panelesDeFormato` corta por `data-formato`, no por
-   * `data-formato-default`, así que el join point nuevo era invisible para
-   * todo lo que ya existía acá.
-   *
-   * Con dos disciplinas de `formatoDefault` DISTINTO, si `page.tsx` le
-   * pasara a los dos paneles el de la primera, el radio marcado del panel
-   * de FIFA sería el de Pádel (ROUND_ROBIN) en vez del suyo (4 grupos), y
-   * tocar cualquier radio ahí guardaría en la disciplina equivocada --
-   * silenciosamente, porque `saveFormatoDefault` recibiría el
-   * `disciplineId` mal cableado también.
+   * Task 4 (docs/plan-arquitectura-de-paginas.md): con 2+ disciplinas la
+   * lista de `Disciplinas` es la única forma de llegar a los ajustes de una
+   * en particular, así que cada fila entra ahí, no a la tabla.
    */
-  it('dibuja un panel de FormatoDefault por disciplina, cada uno con SU PROPIO formatoDefault (C36)', async () => {
-    const paneles = panelesDeFormatoDefault(
-      await ajustes([
-        disciplina('d1', 'PADEL', PADEL),
-        disciplina('d2', 'FIFA', FIFA, { kind: 'GROUPS_KNOCKOUT', groups: 4, qualifiersPerGroup: 2 }),
-      ]),
-    )
-    expect(paneles).toHaveLength(2)
-    expect(paneles[0]).toContain('Formato de las fechas · Pádel')
-    expect(paneles[1]).toContain('Formato de las fechas · FIFA')
+  it('con 2+ disciplinas la lista de Disciplinas linkea a los ajustes de cada una', async () => {
+    const html = await ajustes(PADEL_Y_FIFA)
+    expect(html).toContain('href="/torneo/s1/padel/ajustes"')
+    expect(html).toContain('href="/torneo/s1/fifa/ajustes"')
+  })
 
-    // Pádel quedó en el default (ROUND_ROBIN): sólo el primer radio marcado.
-    const [todosPadel, dosPadel, cuatroPadel] = radiosDe(paneles[0] ?? '')
-    expect(todosPadel).toContain('checked')
-    expect(dosPadel).not.toContain('checked')
-    expect(cuatroPadel).not.toContain('checked')
+  /** Con una sola, el link de siempre a la tabla -- no hay una segunda pantalla de ajustes a la que apuntar. */
+  it('con una sola disciplina la lista de Disciplinas linkea a la tabla, sin cambio', async () => {
+    const html = await ajustes(SOLO_PADEL)
+    expect(html).toContain('href="/torneo/s1/padel"')
+    expect(html).not.toContain('href="/torneo/s1/padel/ajustes"')
+  })
+})
 
-    // FIFA se armó con "4 grupos + llave": sólo el tercer radio marcado. Si
-    // page.tsx le pasara el formatoDefault de Pádel, acá marcaría el
-    // primero en vez del tercero, y este bloque se rompe.
-    const [todosFifa, dosFifa, cuatroFifa] = radiosDe(paneles[1] ?? '')
-    expect(todosFifa).not.toContain('checked')
-    expect(dosFifa).not.toContain('checked')
-    expect(cuatroFifa).toContain('checked')
+describe('Ajustes — el conteo del modal de borrar cubre la temporada entera', () => {
+  /**
+   * Task 4: `playedCount` alimentaba a `EliminarTorneo` con `matchdaysOf`
+   * (la disciplina por defecto), y con 2+ disciplinas subestimaba lo que en
+   * realidad se pierde -- borrar el torneo se lleva las fechas de TODAS.
+   *
+   * El pin es de FUENTE, no de render: el texto que muestra `playedCount`
+   * vive detrás de `{open && ...}` en `eliminar.tsx` (`useState` interno,
+   * arranca cerrado), así que un render estático -- sin clicks, este repo no
+   * tiene runner E2E -- no lo alcanza. Mismo techo que el paso 4 del wizard,
+   * de acá abajo: `seasonMatchdaysOf` y `matchdaysOf` son identificadores
+   * DISTINTOS (mayúscula/minúscula en la M), así que el mis-wire que este
+   * test tiene que agarrar no cambia ningún texto visible -- cambia CUÁL
+   * lectura corre, y eso sólo se ve en el call site.
+   */
+  const fuente = sinComentarios(
+    readFileSync(join(process.cwd(), 'app/torneo/[id]/ajustes/page.tsx'), 'utf8'),
+  )
+
+  it('playedCount sale de seasonMatchdaysOf (temporada entera), no de matchdaysOf (disciplina por defecto)', () => {
+    expect(fuente).toMatch(/\bseasonMatchdaysOf\(supabase, seasonId\)/)
+    expect(fuente).not.toMatch(/\bmatchdaysOf\(supabase, seasonId\)/)
   })
 })
 

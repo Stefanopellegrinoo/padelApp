@@ -136,8 +136,9 @@ export function Historial({ nombre, friendPlayerId, partidos }: HistorialProps) 
                         -- mismo split que ya sigue `PublicFormat`/`DisciplineHeader`
                         (`db/read.ts:156-166`): la capa de datos tipa el literal, la
                         PANTALLA lo traduce a etiqueta con este mapa (acá; y en
-                        `app/torneo/[id]/page.tsx:114`, `ajustes/page.tsx:94,197,221`,
-                        `reglas/page.tsx:65,92`, `ajustes/disciplinas.tsx:75,198`).
+                        `app/torneo/[id]/page.tsx:136`, `ajustes/page.tsx:132`,
+                        `[disciplina]/ajustes/page.tsx:61`, `reglas/page.tsx:65,92`,
+                        `ajustes/disciplinas.tsx:75,208`).
                         `db/read.ts` no traduce nada -- no importa `DISCIPLINE_LABELS`.
                         Sin cast: `partido.sport` ya es literal `'PADEL' | 'FIFA'`
                         (`db/friends.ts`), lo mismo que tipa `DisciplineKind`. */}

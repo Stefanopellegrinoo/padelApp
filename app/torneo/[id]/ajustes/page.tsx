@@ -3,11 +3,10 @@ import { DISCIPLINE_LABELS } from '@/app/torneos/nuevo/wizard-state'
 import { disciplineSlugs, formatsLabel, validateConfig } from '@/core'
 import {
   disciplineRulesOf,
-  matchdaysOf,
   myEntryId,
   playerNames,
-  primaryDiscipline,
   seasonHeader,
+  seasonMatchdaysOf,
   seasonSquadMembersOf,
 } from '@/db/read'
 import { serverClient } from '@/db/server'
@@ -31,11 +30,28 @@ const LABEL = 'text-[14px] font-bold'
 const VALUE = 'shrink-0 text-[13px] font-[750] text-muted'
 
 /**
- * Ajustes — la única pantalla de administración pura de la app.
+ * Ajustes — el CONTENEDOR (Task 4, docs/plan-arquitectura-de-paginas.md;
+ * docs/arquitectura-de-paginas.md §2.5/§3.2/§5). Nombre, plantel, link de
+ * invitación, borrar el torneo, y la lista de disciplinas: lo que
+ * `docs/arquitectura-de-paginas.md` §3.2 pone del lado de `seasons`, no del
+ * de `disciplines`.
  *
- * La guarda de la pantalla es `isAdmin`, pero la guarda de verdad es RLS: todas
- * las escrituras de acá pasan por políticas que piden `is_season_admin`. Ésta
- * es cortesía, para no dibujarle a un jugador botones que le van a rebotar.
+ * Con una sola disciplina —el 100% de los torneos que existen hoy— esta
+ * misma pantalla sigue mostrando SUS paneles (Formato, Formato de las
+ * fechas, Reglas) inline, como hacía antes de esta Task: partir Ajustes en
+ * dos para el caso simple sería cobrarle a ese 100% un peaje por el 0% que
+ * hoy tiene 2+. Con 2+, esos paneles se mudan a `[disciplina]/ajustes` y
+ * acá sólo queda el link de cada una (`<Disciplinas>` más abajo).
+ *
+ * La guarda de la pantalla es `isAdmin`, y la guarda de verdad es RLS para
+ * casi todo: la mayoría de las escrituras de acá —y las de
+ * `[disciplina]/ajustes`— pasan por políticas que piden `is_season_admin`
+ * (`disciplines_write`, y el `count: 'exact'` de `db/entries.ts` para el
+ * plantel). La excepción es `takeSeat`/`claimOwnSeat` (`db/entries.ts:108`):
+ * usa el mismo `claim_seat` que Unirse, que sólo pide el invite token, no
+ * `is_season_admin` — a quien llega hasta acá lo único que lo frena es
+ * `isAdmin` de esta pantalla. Ésta es cortesía para el resto, para no
+ * dibujarle a un jugador botones que le van a rebotar.
  *
  * Lo que NO está, y es a propósito (decisión registrada 6): Notificaciones,
  * Apariencia, "Cambiar contraseña" y "Salir del torneo" — las dos primeras no
@@ -50,8 +66,16 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
     seasonHeader(supabase, seasonId),
     disciplineRulesOf(supabase, seasonId),
     myEntryId(supabase, seasonId),
-    matchdaysOf(supabase, seasonId),
-    // Temporada ENTERA, no la disciplina por defecto (C14, 
+    // Temporada ENTERA (`seasonMatchdaysOf`), no `matchdaysOf`: `deleteSeason`
+    // (`db/season.ts`) borra las fechas de TODAS las disciplinas, así que
+    // `playedCount` (`:150-152` acá abajo, filtra CLOSED) tiene que contarlas
+    // todas. `matchdaysOf` resuelve `defaultDisciplineId` (`db/read.ts`) y
+    // sólo trae las de esa disciplina -- con 2+, el modal quedaba mudo sobre
+    // las fechas cerradas de las demás, aunque `deleteSeason` se las lleve
+    // igual. Sin medición propia: no hay hoy una temporada de prueba con
+    // fechas cerradas en 2+ disciplinas contra la que correrlo.
+    seasonMatchdaysOf(supabase, seasonId),
+    // Temporada ENTERA, no la disciplina por defecto (C14,
     // ronda 8): "Plantel" administra el asiento de la TEMPORADA (renombrar,
     // reclamar, sacar), no el de una disciplina — usar `entriesOf(seasonId)`
     // sin disciplina caía en la disciplina por defecto y perdía a cualquier
@@ -60,7 +84,11 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
     seasonSquadMembersOf(supabase, seasonId),
   ])
   if (!header.isAdmin) redirect(`/torneo/${seasonId}`)
-  const discipline = primaryDiscipline(header)
+
+  // Task 4: con una sola disciplina esta pantalla sigue mostrando sus
+  // paneles inline (ver el docblock de arriba); con 2+, se muestran en
+  // `[disciplina]/ajustes`.
+  const single = header.disciplines.length === 1
   const slugs = disciplineSlugs(header.disciplines)
 
   const owners = await playerNames(
@@ -77,25 +105,48 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
   // con `validateConfig`, no con un copy nuevo: agregar o sacar un asiento no
   // toca `squadSize` ni `points` (decisión registrada 3), así que las dos cosas
   // pueden quedar en desacuerdo y hay que decirlo con la voz que ya existe.
-  const mismatch =
-    seats.length === discipline.config.squadSize
-      ? []
-      : // `discipline.pairSize` real desde W30:
-        // `DisciplineHeader` ya trae `pair_size` del mismo select que `config`.
-        validateConfig({ ...discipline.config, squadSize: seats.length }, discipline.pairSize)
+  //
+  // Sobre TODAS las disciplinas (`flatMap`), no sólo una: el plantel se
+  // EDITA acá, en el contenedor (§3.2 del diseño) — sacar un asiento en
+  // `Plantel` de más abajo puede desalinear a una disciplina sin tocar la
+  // otra, así que el aviso tiene que vivir donde de verdad se puede actuar.
+  // Con 2+, cada mensaje lleva el nombre de SU disciplina (mismo prefijo que
+  // `formatsLabel`, "Pádel: ..."); con una sola, `header.disciplines` tiene
+  // un elemento y el resultado sale idéntico al de antes de esta Task.
+  // `[disciplina]/ajustes` repite el mismo aviso sin prefijo, para quien
+  // entra directo a esa pantalla sin pasar por acá.
+  const mismatchMessages = header.disciplines.flatMap((candidate) => {
+    if (seats.length === candidate.config.squadSize) return []
+    const label = single ? null : DISCIPLINE_LABELS[candidate.kind]
+    // `candidate.pairSize` real desde W30: `DisciplineHeader` ya trae
+    // `pair_size` del mismo select que `config`.
+    return validateConfig({ ...candidate.config, squadSize: seats.length }, candidate.pairSize).map(
+      (message, index) => ({
+        key: `${candidate.id}-${index}`,
+        text: label === null ? message : `${label}: ${message}`,
+      }),
+    )
+  })
 
-  // `formatsLabel` sobre TODAS las disciplinas y no `formatLabel` sobre la
-  // [0]: esta fila decía "1 set a 4 games" en un torneo que tiene una mitad
-  // que se juega a goles. Con una sola
-  // disciplina dice exactamente lo que decía. Es la misma etiqueta que
-  // muestran Reglas y el resumen del wizard — antes eran tres copias, y ésa es
-  // la razón por la que las tres mentían igual.
-  const formatoLabel = formatsLabel(
-    header.disciplines.map((candidate) => ({
-      label: DISCIPLINE_LABELS[candidate.kind],
-      matchFormat: candidate.config.matchFormat,
-    })),
-  )
+  // Sólo se computa con una sola disciplina (`single`): con 2+ esta fila no
+  // se dibuja, así que no hace falta resumir el formato de TODAS acá — cada
+  // una lo dice en su propia pantalla (`[disciplina]/ajustes`).
+  //
+  // `formatsLabel` y no `formatLabel` (que ni siquiera sale del barrel,
+  // `core/narrate.ts:191`): el segundo pide un `MatchFormat` suelto, y
+  // `header.disciplines` ya es la lista que arma el resto de esta función.
+  // Con `single`, esa lista SIEMPRE tiene un elemento, así que el resultado
+  // es la etiqueta de esa única disciplina -- nunca la combinación
+  // "Pádel: … · FIFA: …" que esta misma función produce en Reglas y en el
+  // resumen del wizard, donde sí corre sobre 2+.
+  const formatoLabel = single
+    ? formatsLabel(
+        header.disciplines.map((candidate) => ({
+          label: DISCIPLINE_LABELS[candidate.kind],
+          matchFormat: candidate.config.matchFormat,
+        })),
+      )
+    : null
   // CLOSED y no todas: lo que el modal tiene que poner en juego es lo que ya se
   // jugó, no una fecha en DRAFT que no cuesta nada volver a abrir.
   const playedCount = matchdays.filter((matchday) => matchday.status === 'CLOSED').length
@@ -140,10 +191,17 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
             <span className={VALUE}>{seats.length} ›</span>
           </a>
 
-          <a href="#formato" className={`${ROW} border-t border-line`}>
-            <span className={LABEL}>Formato</span>
-            <span className={VALUE}>{formatoLabel} ›</span>
-          </a>
+          {/* Sólo con una disciplina (Task 4): con 2+ el panel al que este
+              ancla apunta ya no vive en esta pantalla -- se mudó a
+              `[disciplina]/ajustes`, y esta fila desaparece en vez de
+              quedar apuntando a un `#formato` que ya no existe acá (el
+              defecto medido: el ancla siempre caía en la disciplina [0]). */}
+          {single && (
+            <a href="#formato" className={`${ROW} border-t border-line`}>
+              <span className={LABEL}>Formato</span>
+              <span className={VALUE}>{formatoLabel} ›</span>
+            </a>
+          )}
 
           <a href="#disciplinas" className={`${ROW} border-t border-line`}>
             <span className={LABEL}>Disciplinas</span>
@@ -162,58 +220,70 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
           </p>
         )}
 
-        <p className="text-[11.5px] font-[600] text-muted">
-          Cambiar el formato con fechas ya jugadas no recalcula la tabla vieja.
-        </p>
+        {single && (
+          <p className="text-[11.5px] font-[600] text-muted">
+            Cambiar el formato con fechas ya jugadas no recalcula la tabla vieja.
+          </p>
+        )}
       </section>
 
-      {mismatch.map((message) => (
-        <p key={message} className="rounded-field bg-live-bg px-3 py-2.5 text-[12.5px] font-bold text-live">
-          {message}
+      {mismatchMessages.map(({ key, text }) => (
+        <p key={key} className="rounded-field bg-live-bg px-3 py-2.5 text-[12.5px] font-bold text-live">
+          {text}
         </p>
       ))}
 
       <Plantel seasonId={seasonId} seats={seats} canTakeSeat={myEntry === null} />
-      {/* UN panel POR DISCIPLINA (C36). Editaba sólo la [0], y con eso
-          `has_masters` de la segunda no se podía cambiar desde ninguna
-          pantalla — la decisión #4029 parte 2 dice "editable en Ajustes", y
-          sólo lo era para la primaria. Desde que cada disciplina juega su
-          propio Masters (decisión #4035), que Ajustes editara una sola
-          quedaba además inconsistente con la pantalla de Fechas.
+      {/* Task 4: este bloque sólo se dibuja con una sola disciplina —con
+          2+, `header.disciplines.map` haría un panel POR disciplina acá
+          mismo, que es justo la mezcla de alturas que esta Task saca del
+          contenedor (§2.5 del diseño). Con una, el `.map` de abajo produce
+          exactamente UN panel: mismo componente y mismos props que antes de
+          esta Task, salvo `disciplineLabel` (ver abajo). No hay un harness
+          en el repo para re-verificar el HTML byte a byte -- el único
+          chequeo automatizado de esta rama es
+          `app/cableado-de-formato.unit.test.ts` ("con una sola disciplina
+          el panel de Formato sigue inline, sin sufijo"), que fija el
+          título y que el panel exista, no el documento entero.
 
-          `disciplineLabel` ya venía preparado para esto desde W65: con una
-          sola disciplina el título sale como el mismo nodo de texto de
-          siempre. El `id="formato"` va acá y no en cada `<section>`: con más
-          de una habría un `id` repetido, y el ancla de la fila de arriba
-          salta igual al primero, que es la primaria. */}
-      <div id="formato" className="flex flex-col gap-5 scroll-mt-4">
-        {header.disciplines.map((candidate) => (
-          <Formato
-            key={candidate.id}
-            seasonId={seasonId}
-            disciplineId={candidate.id}
-            config={candidate.config}
-            pairSize={candidate.pairSize}
-            hasMasters={candidate.hasMasters}
-            disciplineLabel={header.disciplines.length > 1 ? DISCIPLINE_LABELS[candidate.kind] : null}
-          />
-        ))}
-      </div>
-      {/* UN panel POR DISCIPLINA (§2.5), mismo criterio que `Formato` arriba
-          (y que `Reglas` más abajo): con una sola disciplina el título no
-          lleva sufijo. A diferencia de esos dos, este panel es nuevo en
-          esta rebanada -- no hay un "de siempre" al que volver. */}
-      <div className="flex flex-col gap-5">
-        {header.disciplines.map((candidate) => (
-          <FormatoDefault
-            key={candidate.id}
-            seasonId={seasonId}
-            disciplineId={candidate.id}
-            formatoDefault={candidate.formatoDefault}
-            disciplineLabel={header.disciplines.length > 1 ? DISCIPLINE_LABELS[candidate.kind] : null}
-          />
-        ))}
-      </div>
+          `disciplineLabel` es `null` a mano y no la ternaria de antes: con
+          `single` ya sabemos que hay una sola disciplina, así que
+          `header.disciplines.length > 1` siempre daba `null` acá — literal
+          es lo mismo, sin la comparación de más.
+
+          El `id="formato"` va en este `<div>` y no en cada `<section>` de
+          `Formato`: con más de una habría un `id` repetido, y este bloque
+          sólo existe cuando hay una. */}
+      {single && (
+        <div id="formato" className="flex flex-col gap-5 scroll-mt-4">
+          {header.disciplines.map((candidate) => (
+            <Formato
+              key={candidate.id}
+              seasonId={seasonId}
+              disciplineId={candidate.id}
+              config={candidate.config}
+              pairSize={candidate.pairSize}
+              hasMasters={candidate.hasMasters}
+              disciplineLabel={null}
+            />
+          ))}
+        </div>
+      )}
+      {/* Mismo criterio que el bloque de `Formato` de arriba: con 2+ este
+          panel se muestra en `[disciplina]/ajustes`, no acá. */}
+      {single && (
+        <div className="flex flex-col gap-5">
+          {header.disciplines.map((candidate) => (
+            <FormatoDefault
+              key={candidate.id}
+              seasonId={seasonId}
+              disciplineId={candidate.id}
+              formatoDefault={candidate.formatoDefault}
+              disciplineLabel={null}
+            />
+          ))}
+        </div>
+      )}
       <Disciplinas
         seasonId={seasonId}
         disciplines={header.disciplines.map((candidate) => ({
@@ -223,21 +293,21 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
         }))}
         squad={squadMembers.map((member) => ({ entryId: member.id, name: member.displayName }))}
       />
-      {/* UN editor POR DISCIPLINA (rebanada 2 de "reglas por disciplina"),
-          mismo criterio de suplantar el título que ya usa `Formato` arriba:
-          con una sola disciplina el título sale como el mismo nodo de texto
-          de siempre. */}
-      <div className="flex flex-col gap-5">
-        {header.disciplines.map((candidate) => (
-          <Reglas
-            key={candidate.id}
-            seasonId={seasonId}
-            disciplineId={candidate.id}
-            text={rulesByDiscipline.get(candidate.id) ?? ''}
-            disciplineLabel={header.disciplines.length > 1 ? DISCIPLINE_LABELS[candidate.kind] : null}
-          />
-        ))}
-      </div>
+      {/* Mismo criterio que los dos bloques de arriba: con 2+ el editor de
+          reglas de cada disciplina vive en `[disciplina]/ajustes`, no acá. */}
+      {single && (
+        <div className="flex flex-col gap-5">
+          {header.disciplines.map((candidate) => (
+            <Reglas
+              key={candidate.id}
+              seasonId={seasonId}
+              disciplineId={candidate.id}
+              text={rulesByDiscipline.get(candidate.id) ?? ''}
+              disciplineLabel={null}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Acá estaba "Cerrar sesión", que no es de esta pantalla: es de la
           cuenta, no del torneo, y encima esta pantalla redirige a quien no es

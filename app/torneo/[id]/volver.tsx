@@ -6,7 +6,9 @@ import Link from 'next/link'
  * Vivía en el layout, o sea en las cuatro pestañas. Estaba de más: Tabla,
  * Fechas, Stats y Reglas son hermanas y se mueven entre sí con la nav de
  * abajo, así que sólo hace falta donde de verdad se sube — de la Tabla a Mis
- * torneos, y de Ajustes a la Tabla, que es de donde se entra.
+ * torneos, de Ajustes a la Tabla (que es de donde se entra), y desde Task 4
+ * de `[disciplina]/ajustes` al Ajustes contenedor, que es de donde se entra
+ * a ESA pantalla.
  *
  * El chip se dibuja chico y el área de toque igual mide 44: el `<Link>` es la
  * caja de 44 y el `<span>` es lo que se ve. Es el mismo patrón que las cruces

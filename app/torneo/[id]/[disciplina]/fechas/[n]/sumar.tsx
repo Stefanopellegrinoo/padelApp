@@ -128,7 +128,7 @@ function PromoteGuestCard({
   //   deshacer (removeSeat): rebota, "ya jugó alguna fecha"
   // El desajuste asiento/config es la decisión registrada 3 —agregar un
   // asiento no toca `squadSize` ni `points`— y todas las demás pantallas que
-  // agregan asientos lo dicen (`ajustes/page.tsx:60-67`, con `validateConfig`).
+  // agregan asientos lo dicen (`ajustes/page.tsx:104-129`, con `validateConfig`).
   // Ésta era la única que no, y encima es la única cuya acción no se puede
   // deshacer desde ninguna pantalla.
   // Con un lado de uno no hay puntos que prometer y la frase tiene que

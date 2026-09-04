@@ -27,8 +27,10 @@ interface TorneoLayoutProps {
  * La vuelta a Mis torneos NO vive acá. Estuvo, en las cuatro pestañas, y era de
  * más: Tabla, Fechas, Stats y Reglas son hermanas y la nav de abajo ya las
  * conecta, así que repetir la salida en las cuatro es ruido. Va sólo donde de
- * verdad se sube un nivel — `page.tsx` (Tabla) y `ajustes/page.tsx` — con el
- * componente `Volver`.
+ * verdad se sube un nivel, con el componente `Volver`: la Tabla (`page.tsx`,
+ * la global; `tabla-view.tsx`, la de cada disciplina) y Ajustes
+ * (`ajustes/page.tsx`, el contenedor; y desde Task 4,
+ * `[disciplina]/ajustes/page.tsx`, de vuelta al contenedor).
  */
 export default async function TorneoLayout({ children, params }: TorneoLayoutProps) {
   const { id } = await params

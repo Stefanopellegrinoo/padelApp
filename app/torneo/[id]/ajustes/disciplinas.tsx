@@ -192,7 +192,17 @@ export function Disciplinas({
         {disciplines.map((discipline, index) => (
           <Link
             key={discipline.id}
-            href={`/torneo/${seasonId}/${discipline.slug}`}
+            // Con 2+, cada fila entra a SUS ajustes (Task 4,
+            // docs/plan-arquitectura-de-paginas.md): Formato/FormatoDefault/
+            // Reglas se mudan a `[disciplina]/ajustes`, y esta lista pasa a
+            // ser la única forma de llegar ahí. Con una sola, el link se
+            // queda apuntando a la tabla, sin cambio: sus ajustes ya están
+            // en esta misma pantalla, más arriba.
+            href={
+              disciplines.length > 1
+                ? `/torneo/${seasonId}/${discipline.slug}/ajustes`
+                : `/torneo/${seasonId}/${discipline.slug}`
+            }
             className={`flex items-center justify-between gap-3 px-3 py-3 ${index > 0 ? 'border-t border-line' : ''}`}
           >
             <span className="text-[14px] font-bold">{DISCIPLINE_LABELS[discipline.kind]}</span>

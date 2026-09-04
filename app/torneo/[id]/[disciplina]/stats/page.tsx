@@ -234,8 +234,8 @@ export default async function StatsPage({ params, searchParams }: PageProps) {
   const base = `/torneo/${seasonId}/${disciplina}`
   const statsBase = `${base}/stats`
   // Sólo se nombra la disciplina cuando hay más de una — mismo criterio que
-  // Ajustes (`ajustes/page.tsx:198`, `header.disciplines.length > 1 ? ... :
-  // null`): con una sola, decirlo es ruido que nadie pidió.
+  // Ajustes (`[disciplina]/ajustes/page.tsx:61`, `header.disciplines.length
+  // > 1 ? ... : null`): con una sola, decirlo es ruido que nadie pidió.
   const disciplineLabel = header.disciplines.length > 1 ? DISCIPLINE_LABELS[discipline.kind] : null
 
   const [entries, history, awardsByMatchday, viewerEntryId] = await Promise.all([

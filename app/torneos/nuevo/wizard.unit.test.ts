@@ -1,9 +1,14 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import type { SideSize } from '@/core'
+import type { MatchdayFormat, SideSize } from '@/core'
 import { PasoDisciplinas, PasoFormato, SelectorDeLados } from './wizard'
-import { configFor, type DisciplineKind } from './wizard-state'
+import { freshDisciplineConfig, type DisciplineKind } from './wizard-state'
+
+const ROUND_ROBIN_ALL: Record<DisciplineKind, MatchdayFormat> = {
+  PADEL: { kind: 'ROUND_ROBIN' },
+  FIFA: { kind: 'ROUND_ROBIN' },
+}
 
 /**
  * El paso 4 del wizard, RENDERIZADO — no la lógica que lo alimenta.
@@ -17,14 +22,24 @@ import { configFor, type DisciplineKind } from './wizard-state'
  * Por eso esto renderiza el JSX de verdad con `renderToStaticMarkup` y mira el
  * HTML. Es el mismo motor que corre en el servidor de Next; lo que no cubre es
  * la interacción (no hay clicks acá).
+ *
+ * `freshDisciplineConfig` para las dos disciplinas por default (Task 5,
+ * docs/plan-arquitectura-de-paginas.md): la config de CADA una ya sale con
+ * la forma de marcador de su `kind` aplicada, igual que en la app real -- no
+ * hay un `buildDisciplines` que la corrija en el camino, como antes.
  */
 function html(picked: DisciplineKind[]): string {
   return renderToStaticMarkup(
     createElement(PasoFormato, {
-      config: configFor(8, 2),
+      configs: { PADEL: freshDisciplineConfig('PADEL', 8, 2), FIFA: freshDisciplineConfig('FIFA', 8, 2) },
       picked,
-      errors: [],
-      onChange: () => {},
+      pairSizes: { PADEL: 2, FIFA: 2 },
+      hasMasters: { PADEL: true, FIFA: true },
+      formatoDefault: ROUND_ROBIN_ALL,
+      errors: { PADEL: [], FIFA: [] },
+      onChangeConfig: () => {},
+      onChangeHasMasters: () => {},
+      onChangeFormatoDefault: () => {},
     }),
   )
 }
@@ -32,7 +47,10 @@ function html(picked: DisciplineKind[]): string {
 describe('paso 4 del wizard — los steppers que se dibujan', () => {
   /**
    * PIN de no-regresión: un torneo de pádel dibuja los cinco steppers, igual
-   * que siempre. Es la mitad que no se puede mover.
+   * que siempre. Es la mitad que no se puede mover. Verificado además
+   * byte a byte contra la versión commiteada antes de la Task 5 (ver el
+   * reporte de esta rebanada) — este PIN es la versión automatizada de esa
+   * misma prueba.
    */
   it('un torneo de pádel dibuja los cinco steppers', () => {
     const paso = html(['PADEL'])
@@ -61,12 +79,14 @@ describe('paso 4 del wizard — los steppers que se dibujan', () => {
   })
 
   /**
-   * Y acá está por qué el filtro de Ajustes NO se podía copiar tal cual: en el
-   * wizard la config es de la TEMPORADA y la comparten todas las disciplinas
-   * marcadas. Con Pádel marcado, esos dos steppers gobiernan la mitad pádel del
-   * torneo y sacarlos sería sacarle al admin una decisión que sí es suya.
+   * Desde la Task 5 cada disciplina dibuja SU PROPIA tarjeta, con SU PROPIA
+   * config -- ya no hay una lista de formatos compartida que preguntarle
+   * "¿alguna usa sets?" (eso hacía el wizard antes; el criterio de Ajustes
+   * era ya el correcto). Con Pádel Y FIFA marcados, la tarjeta de Pádel
+   * sigue mostrando sus dos steppers de sets -- por su cuenta, no porque el
+   * conjunto entero los fuerce.
    */
-  it('con pádel Y FIFA los sigue ofreciendo: gobiernan la mitad de pádel', () => {
+  it('con pádel Y FIFA marcados, la tarjeta de pádel sigue con sus dos steppers de sets', () => {
     const paso = html(['PADEL', 'FIFA'])
     expect(paso).toContain('Sets por partido')
     expect(paso).toContain('Games por set')
@@ -80,6 +100,99 @@ describe('paso 4 del wizard — los steppers que se dibujan', () => {
   it('ya no dibuja el radio "Lados": bajó al paso 1, uno por disciplina', () => {
     const paso = html(['PADEL', 'FIFA'])
     expect(paso).not.toContain('Lados')
+  })
+})
+
+/**
+ * Task 5 (docs/plan-arquitectura-de-paginas.md §2.4, §6, §5): el paso
+ * "Formato" pasa a ser uno por disciplina elegida. Estos tests son la
+ * prueba automatizada de la mitad que el byte-diff manual no cubre: qué
+ * aparece (o no) según cuántas disciplinas hay marcadas.
+ */
+describe('paso 4 del wizard — Masters y Formato de las fechas, por disciplina (Task 5)', () => {
+  /**
+   * §5 del diseño: "con una sola disciplina, el contenedor no se ve" — acá
+   * es la misma idea aplicada al paso 4. Ningún control nuevo aparece, y
+   * ningún nombre de disciplina se dibuja: nadie debería enterarse de que
+   * el paso ahora es "por disciplina" hasta que marque la segunda.
+   */
+  it('con una sola disciplina, no dibuja Masters ni Formato de las fechas ni el nombre de la disciplina', () => {
+    const paso = html(['PADEL'])
+    // Ojo: "Masters" YA aparece en el hint de "Fechas del año" ("Sin contar
+    // el Masters, que va al final."), así que un `toContain('Masters')` a
+    // secas no serviría -- lo que no tiene que estar es el CONTROL: ni el
+    // título "Masters" del checkbox, ni el checkbox en sí.
+    expect(paso).not.toContain('type="checkbox"')
+    expect(paso).not.toMatch(/<p class="text-\[14px\] font-bold">Masters<\/p>/)
+    expect(paso).not.toContain('Formato de las fechas')
+    expect(paso).not.toContain('Pádel')
+  })
+
+  it('con 2+ disciplinas, cada tarjeta lleva su nombre, Masters y Formato de las fechas', () => {
+    const paso = html(['PADEL', 'FIFA'])
+    expect(paso).toContain('Pádel')
+    expect(paso).toContain('FIFA')
+    // Dos de cada uno: uno por tarjeta. El título exacto del control, no la
+    // palabra suelta -- "Masters" también aparece en el hint de "Fechas del
+    // año" (una vez por tarjeta, así que contar la palabra suelta daría 4).
+    expect(paso.match(/<p class="text-\[14px\] font-bold">Masters<\/p>/g)).toHaveLength(2)
+    expect(paso.match(/Formato de las fechas/g)).toHaveLength(2)
+    // Las mismas palabras que Ajustes (`matchdayFormatLabel`, `app/format.ts`
+    // -- importada, no copiada), no un copy nuevo.
+    expect(paso.match(/Todos contra todos/g)).toHaveLength(2)
+    expect(paso).toContain('2 grupos + llave')
+    expect(paso).toContain('4 grupos + llave')
+  })
+
+  /**
+   * Decisión #4029 + `disciplines_has_masters_needs_pair` (0053): una
+   * disciplina de a uno no puede tener Masters -- el checkbox tiene que
+   * salir deshabilitado y sin marcar, sea cual sea el valor que traiga el
+   * estado.
+   */
+  it('Masters sale deshabilitado y sin marcar para una disciplina de a uno', () => {
+    const paso = renderToStaticMarkup(
+      createElement(PasoFormato, {
+        configs: { PADEL: freshDisciplineConfig('PADEL', 8, 2), FIFA: freshDisciplineConfig('FIFA', 8, 1) },
+        picked: ['PADEL', 'FIFA'],
+        pairSizes: { PADEL: 2, FIFA: 1 },
+        hasMasters: { PADEL: true, FIFA: true }, // FIFA en true a mano -- inválido para pairSize 1
+        formatoDefault: ROUND_ROBIN_ALL,
+        errors: { PADEL: [], FIFA: [] },
+        onChangeConfig: () => {},
+        onChangeHasMasters: () => {},
+        onChangeFormatoDefault: () => {},
+      }),
+    )
+    const checkboxes = paso.match(/<input type="checkbox"[^>]*\/>/g) ?? []
+    expect(checkboxes).toHaveLength(2)
+    // El `class` de los dos SIEMPRE contiene la subcadena "disabled" --
+    // `disabled:opacity-40` es un nombre de clase de Tailwind, no el
+    // atributo -- así que el chequeo mira el ATRIBUTO `disabled=""`, no la
+    // palabra suelta.
+    expect(checkboxes[0]).toContain('checked') // Pádel, pairSize 2
+    expect(checkboxes[0]).not.toMatch(/\bdisabled=""/)
+    expect(checkboxes[1]).not.toContain('checked') // FIFA, pairSize 1: forzado sin marcar
+    expect(checkboxes[1]).toMatch(/\bdisabled=""/)
+  })
+
+  // Errores con 2+ disciplinas: cada uno lleva el nombre de SU disciplina,
+  // mismo criterio que el aviso de plantel desajustado de Ajustes.
+  it('los errores de una disciplina llevan su nombre cuando hay 2+ marcadas', () => {
+    const paso = renderToStaticMarkup(
+      createElement(PasoFormato, {
+        configs: { PADEL: freshDisciplineConfig('PADEL', 8, 2), FIFA: freshDisciplineConfig('FIFA', 8, 2) },
+        picked: ['PADEL', 'FIFA'],
+        pairSizes: { PADEL: 2, FIFA: 2 },
+        hasMasters: { PADEL: true, FIFA: true },
+        formatoDefault: ROUND_ROBIN_ALL,
+        errors: { PADEL: ['No pueden contar más fechas de las que se juegan.'], FIFA: [] },
+        onChangeConfig: () => {},
+        onChangeHasMasters: () => {},
+        onChangeFormatoDefault: () => {},
+      }),
+    )
+    expect(paso).toContain('Pádel: No pueden contar más fechas de las que se juegan.')
   })
 })
 

@@ -361,11 +361,26 @@ describe('el paso 4 del wizard — el cableado que ningún render alcanza', () =
    * paso 4 vuelve a ofrecer sets y games en una liga de solo FIFA, y los
    * cuatro tests de `steppersFor` y los tres de `PasoFormato` siguen verdes
    * porque el módulo está bien y lo que está mal es lo que le entra.
+   *
+   * Task 5 (docs/plan-arquitectura-de-paginas.md): `PasoFormato` dejó de
+   * recibir un `config`/`onChange` únicos -- ahora es `configs`/`pairSizes`/
+   * `hasMasters`/`formatoDefault`/`errors`, todos `Record` por disciplina, y
+   * tres setters con NOMBRE (`changeConfig`/`changeHasMasters`/
+   * `changeFormatoDefault`, declarados junto a `changePairSize`) en vez de
+   * arrows inline -- una arrow ahí adentro corta en seco a la regexp de
+   * `llamada` (`[^>]*` no puede cruzar el `>` de un `=>`, y el propio
+   * comentario de esa constante lo advierte).
    */
-  it('le pasa las disciplinas MARCADAS, la config viva y el setter', () => {
+  it('le pasa las disciplinas MARCADAS, la config viva y los tres setters', () => {
     expect(llamada).toMatch(/\bpicked=\{disciplines\}/)
-    expect(llamada).toMatch(/\bconfig=\{config\}/)
-    expect(llamada).toMatch(/\bonChange=\{setConfig\}/)
+    expect(llamada).toMatch(/\bconfigs=\{configs\}/)
+    expect(llamada).toMatch(/\bpairSizes=\{pairSizes\}/)
+    expect(llamada).toMatch(/\bhasMasters=\{hasMasters\}/)
+    expect(llamada).toMatch(/\bformatoDefault=\{formatoDefault\}/)
+    expect(llamada).toMatch(/\berrors=\{errorsByKind\}/)
+    expect(llamada).toMatch(/\bonChangeConfig=\{changeConfig\}/)
+    expect(llamada).toMatch(/\bonChangeHasMasters=\{changeHasMasters\}/)
+    expect(llamada).toMatch(/\bonChangeFormatoDefault=\{changeFormatoDefault\}/)
   })
 
   /**
@@ -374,7 +389,7 @@ describe('el paso 4 del wizard — el cableado que ningún render alcanza', () =
    * cualquier versión de este chequeo que sólo mire `<PasoFormato`.
    */
   it('un mis-wire con el mismo nombre no lo satisface', () => {
-    const misWire = `<PasoFormato config={config} picked={['PADEL']} errors={errors} onChange={setConfig} />`
+    const misWire = `<PasoFormato configs={configs} picked={['PADEL']} pairSizes={pairSizes} hasMasters={hasMasters} formatoDefault={formatoDefault} errors={errorsByKind} onChangeConfig={changeConfig} onChangeHasMasters={changeHasMasters} onChangeFormatoDefault={changeFormatoDefault} />`
     expect(misWire).toMatch(/<PasoFormato\b/)
     expect(/<PasoFormato\b[^>]*\/>/.exec(misWire)?.[0] ?? '').not.toMatch(
       /\bpicked=\{disciplines\}/,

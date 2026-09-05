@@ -12,6 +12,7 @@ import {
   minSquadFor,
   pointsCountError,
   pointsErrors,
+  type MatchdayFormat,
   type MatchFormat,
   type SeasonConfig,
   type SideSize,
@@ -74,13 +75,19 @@ export const STEPPERS: Stepper[] = [
  * misma clase de mentira que el copy que decía "1 set a 4 games" en una liga de
  * goles (W47, W51, W56, W63).
  *
- * Toma una lista de formatos y no un `openScore` suelto porque las dos
- * pantallas que dibujan estos steppers preguntan cosas distintas: Ajustes edita
- * la config de UNA disciplina, y el paso 4 del wizard edita la de la TEMPORADA,
- * compartida por todas las marcadas. Con Pádel y FIFA marcados esos dos
- * steppers siguen gobernando la mitad de pádel, así que se van sólo cuando
- * NINGUNA de las disciplinas usa sets. Una función y no dos filtros: W63 nació
- * exactamente de que Ajustes filtrara y el wizard no.
+ * Toma una lista de formatos y no un `openScore` suelto porque Ajustes
+ * (`formato.tsx`) llama con un array de UNO -- la config es de UNA disciplina
+ * ahí. Desde la Task 5 (docs/plan-arquitectura-de-paginas.md) el paso 4 del
+ * wizard hace exactamente lo mismo: cada disciplina marcada tiene su PROPIA
+ * config, así que también llama con un array de uno, por disciplina — nunca
+ * con las de todas juntas. Antes de esa Task el wizard mandaba las de TODAS
+ * las marcadas a la vez (una config compartida por la temporada entera), y
+ * por eso el chequeo "alcanza con que UNA use sets" existe: hoy es
+ * defensivo, sin un caller vivo que pase más de un elemento, pero la firma
+ * se queda en array porque Ajustes ya llama así y esta Task no la toca.
+ *
+ * Una función y no dos filtros: W63 nació exactamente de que Ajustes
+ * filtrara y el wizard no.
  *
  * Sin disciplinas se dibujan los cinco: "nadie usa sets" no es cierto cuando no
  * hay nadie, y el paso 1 no deja continuar sin marcar al menos una.
@@ -123,14 +130,26 @@ export function disciplinesWarning(picked: readonly DisciplineKind[]): string | 
  * Una fila por disciplina marcada, en el orden en que se marcaron: el mismo
  * `disciplines: NewSeasonDiscipline[]` que espera `createSeason` (PR11b).
  *
- * Comparten los PUNTOS, las fechas y el plantel —que es lo que el paso 4
- * pregunta—, y cada una nace con la forma de marcador de su disciplina
- * (`disciplineProfile`, PR20 rebanada D2). Hasta acá compartían la config
- * entera y una liga de FIFA nacía siendo pádel con otro nombre: sin marcador
- * abierto y sin empates, o sea sin poder cargar ni un `3-1` ni un `0-0`. No es
- * una preferencia que el wizard pueda preguntar más adelante: `allows_draw` no
- * está en el grant de UPDATE de `disciplines` (`0015_disciplines.sql:70`), así
- * que la disciplina que nace sin empates no los tiene nunca más.
+ * `config` es la de ESE `kind` solo, nunca una compartida por las demás
+ * filas: cada una nace con la forma de marcador de su disciplina
+ * (`disciplineProfile`, PR20 rebanada D2) aplicada sobre la config que le
+ * pasaron. Hasta PR20 compartían la config entera y una liga de FIFA nacía
+ * siendo pádel con otro nombre: sin marcador abierto y sin empates, o sea sin
+ * poder cargar ni un `3-1` ni un `0-0`. No es una preferencia que el wizard
+ * pueda preguntar más adelante: `allows_draw` no está en el grant de UPDATE
+ * de `disciplines` (`0015_disciplines.sql:70`), así que la disciplina que
+ * nace sin empates no los tiene nunca más.
+ *
+ * `buildDisciplines` en sí es agnóstica de si el CALLER usa la MISMA config
+ * para más de un `kind` en `picked` o una distinta por cada uno — sólo
+ * transforma lo que le dan. Antes de la Task 5
+ * (docs/plan-arquitectura-de-paginas.md §2.4, §6) su único caller de
+ * producción (`newTournamentPayload`, wizard) SÍ llamaba con la config
+ * COMPARTIDA de la temporada entera para todo `picked` a la vez — el
+ * aplanado vivía ahí, no acá. Desde esa Task, `newTournamentPayload` llama
+ * una vez por disciplina, cada vez con SU PROPIA config: los puntos, las
+ * fechas del año, cuántas cuentan y el refresco del desempate ya no se
+ * comparten entre disciplinas — sólo el plantel (§3.2 del diseño).
  *
  * `pairSize` —FIFA es 1v1 Y 2v2, decisión de producto #5— es OPCIONAL y sin
  * default acá a propósito: quien no lo pasa arma parejas, como siempre
@@ -140,8 +159,9 @@ export function disciplinesWarning(picked: readonly DisciplineKind[]): string | 
  * Rebanada F (decisión `decisions/alcance-desbloqueo-1v1-pr21`) es quien por
  * fin lo pasa, desde el radio "Lados".
  *
- * Quien quiera cambiar los puntos o las fechas de una disciplina lo hace
- * después en Ajustes → Formato (`updateDisciplineConfig`, PR6).
+ * Quien quiera cambiar los puntos o las fechas de una disciplina después de
+ * creado el torneo lo hace en Ajustes → Formato (`updateDisciplineConfig`,
+ * PR6) — esta función sólo arma el estado INICIAL, al crear.
  */
 export function buildDisciplines(
   picked: readonly DisciplineKind[],
@@ -383,95 +403,99 @@ export function submitSeats({ names, mySeat }: Squad): {
  * existen, sacar la lógica del `.tsx` para poder probarla sin DOM y sin base.
  *
  * `squadSize` sale del plantel REALMENTE cargado (`submitSeats(squad)`), no
- * del que traía `config`: la config del paso 4 puede quedar desactualizada
- * si el admin agrega o saca nombres después de tocarla, y `buildDisciplines`
- * tiene que ver el tamaño real para que la curva de puntos sea la correcta.
+ * del que traía cada `configs[kind]`: el paso 4 puede quedar desactualizado
+ * si el admin agrega o saca nombres después de tocarlo, y `resizeConfig`
+ * (por disciplina, acá abajo) es quien lo pone al día antes de construir la
+ * fila — mismo criterio que ya usaba `setSquad` (`wizard.tsx`) mientras se
+ * edita, esto es la red de seguridad para el instante del submit.
  *
  * `pairSize` es el punto de unión de la Rebanada F: viaja tal cual hasta
  * `buildDisciplines`, así que elegir "Individual" llega hasta ACÁ, en el
  * payload real que cruza al server action (#3957 — se pinchan los
  * argumentos, no que la función interna acepte el parámetro).
  *
- * OBLIGATORIO acá y no opcional como en `buildDisciplines`/`newDisciplineSpec`:
- * este único caller (`Wizard`) SIEMPRE tiene un `pairSize` (nace en 2, el
- * `useState` no es `undefined` nunca), así que dejarlo opcional sólo abriría
- * la puerta a olvidarlo en el sitio del submit sin que nada lo marque. Con el
- * parámetro obligatorio, olvidarlo es un error de `tsc`, no un test que haya
- * que escribir y mantener — más fuerte que cualquier test (verificado con
- * mutación: sacar el argumento en `wizard.tsx` rompe `npm run typecheck`).
+ * OBLIGATORIOS acá y no opcionales como en `buildDisciplines`/`newDisciplineSpec`:
+ * este único caller (`Wizard`) SIEMPRE tiene un valor por disciplina para
+ * `pairSizes`, `hasMasters` y `formatoDefault` (nacen en un `Record` con las
+ * dos claves puestas, el `useState` no es `undefined` nunca), así que
+ * dejarlos opcionales sólo abriría la puerta a olvidarlos en el sitio del
+ * submit sin que nada lo marque. Con los parámetros obligatorios, olvidarlos
+ * es un error de `tsc`, no un test que haya que escribir y mantener — mismo
+ * criterio que ya fijó `pairSizes` (verificado con mutación: sacar un
+ * argumento en `wizard.tsx` rompe `npm run typecheck`).
  *
- * C29 (verify-report-pr21, #4004): acá adentro `config` viaja hacia DOS
- * lugares con reglas DISTINTAS, y antes de este fix era el MISMO objeto para
- * los dos. `seasons.config` es el legado (`db/season.ts: createSeason`,
- * comentario "siempre pádel, sideSize=2 fijo, nunca disciplina-specific") y
- * `createSeason` lo valida con `sideSize` HARDCODEADO en 2. Con
- * `pairSize=1`, `builtConfig.points` trae la curva de la decisión #3963 (8-12
- * lados) — pasa la validación de la disciplina y rompe la del legado, que
- * exige la MITAD de esos valores. No existe un `config` que pase las dos: el
- * legado necesita su PROPIA curva, siempre de a dos, sin importar qué eligió
- * "Lados". El plantel llega siempre par acá (`squadWarning`, paso 2), así que
- * esa curva de a dos siempre existe.
+ * Task 5 (docs/plan-arquitectura-de-paginas.md §2.4, §6) cierra la cadena
+ * C29 → W69 → W76 → W83 → W88 → W90: todas esas correcciones existían
+ * porque el paso 4 editaba UNA config compartida por TODAS las disciplinas
+ * marcadas, y cada una era una nueva forma de que la pantalla prometiera una
+ * curva que la disciplina real no iba a tener. Con `configs` genuinamente
+ * por disciplina —una entrada por `DisciplineKind`, cada una con SU PROPIO
+ * `squadSize`/`points`/`regularMatchdays`/`countBestOf`/`tiebreakSnapshotEvery`
+ * mantenida al día por `wizard.tsx` (`resizeConfigs` en cada edición del
+ * plantel, `freshDisciplineConfig` en cada cambio de "Lados")— no queda
+ * ninguna ambigüedad que resolver acá: cada fila usa `configs[kind]`, la
+ * suya, nunca una prestada. El campo `config` de arriba (el legado de
+ * `NewSeason`/`createTournament`, `db/season.ts`) sigue existiendo porque el
+ * tipo lo pide, pero `createSeason` lo ignora en cuanto `disciplines` llega
+ * —y el wizard SIEMPRE lo manda—: no hay curva "correcta" que elegir ahí
+ * porque nadie la lee.
  *
- * W69 (tanda de cierre, #4006) + W76/decisión #4017 (verify-report-pr21-cierre,
- * #4016): "Lados" ERA un solo control para las disciplinas marcadas del paso
- * 4 — sólo era inequívoco con UNA marcada, así que con dos o más se ignoraba
- * y todas nacían en 2. Eso evitaba la herencia cruzada (REQ-D2-1) pero abría
- * otra: la pantalla podía mostrar "Individual" tildado sin que el dato lo
- * reflejara. El wizard ahora trae un selector POR disciplina (`pairSizes`,
- * uno por cada `DisciplineKind`), así que acá cada disciplina arma SU PROPIA
- * config con SU PROPIA curva — `picked.length` ya no importa: dos
- * disciplinas nunca comparten `pairSize` a menos que el admin haya elegido
- * lo mismo para las dos a propósito. `config` (el que entra y el que se
- * devuelve como legado) sigue siendo SIEMPRE la curva de a dos (C29): el
- * paso 4 ya no tiene un control que la cambie, ahora que "Lados" bajó al
- * paso 1.
+ * `hasMasters`/`formatoDefault` sólo se agregan a la fila cuando hay 2+
+ * disciplinas marcadas (`picked.length > 1`): con una sola, el paso 4 no
+ * dibuja esos controles (§5 del diseño, "nadie debería enterarse de que
+ * ahora es por disciplina hasta que marque la segunda") y el payload tiene
+ * que verse EXACTAMENTE como antes de esta Task — sin esas dos claves,
+ * `createSeason` cae al automático de siempre (decisión #4029) y al default
+ * de columna (ROUND_ROBIN, 0074). Mandarlas siempre, aunque con el mismo
+ * valor que el automático, arriesgaría filtrar a esa fila una edición vieja
+ * que el admin hizo mientras SÍ había una segunda disciplina marcada y
+ * después destildó — un control que ya no se ve no puede seguir mandando.
  *
- * W83 (verify-report-pre-contract, #4026): con UNA sola disciplina marcada,
- * `pairSize !== 2` pisaba `points` SIEMPRE con el default de la decisión
- * #3963, sin mirar si `config` ya traía la curva editada a mano —
- * `changePairSize` (`wizard.tsx`) dejó de rehacer `config` cuando se cerró
- * W76, así que no había ninguna forma de configurar la tabla de puntos de un
- * 1v1 en el wizard. `soleCurveMatches` es lo que confía en la edición: sólo
- * cuando queda UNA disciplina Y el LARGO de lo que trae `builtConfig.points`
- * ya es el que le corresponde a esa disciplina (`configForPairSizeChange`,
- * en `wizard.tsx`, es quien deja a `config` en esa forma apenas cambia
- * "Lados"). El chequeo de largo, y no `picked.length === 1` a secas, es el
- * que evita reabrir la MISMA familia por otra puerta: si el admin marcó dos
- * disciplinas y después destildó una sin volver a tocar "Lados", `config`
- * puede quedar con la forma legado (de a dos) mientras la única disciplina
- * que sobrevive es de a uno — sin el chequeo de largo eso guardaría un
- * `points` de largo inválido en vez del default seguro.
+ * `effectiveHasMasters` es la única puerta de salida para `hasMasters`: una
+ * disciplina de a uno no puede tener Masters
+ * (`disciplines_has_masters_needs_pair`, 0053) pase lo que pase haya elegido
+ * el checkbox — el guard vive ACÁ, no confiando en que el control quede
+ * siempre deshabilitado a tiempo.
  */
 export function newTournamentPayload(
   name: string,
   squad: Squad,
-  config: SeasonConfig,
+  configs: Record<DisciplineKind, SeasonConfig>,
   picked: readonly DisciplineKind[],
   pairSizes: Record<DisciplineKind, SideSize>,
+  hasMasters: Record<DisciplineKind, boolean>,
+  formatoDefault: Record<DisciplineKind, MatchdayFormat>,
 ): {
   name: string
   squadNames: string[]
   mySeatIndex: number | null
   config: SeasonConfig
-  disciplines: ReturnType<typeof buildDisciplines>
+  disciplines: Array<
+    ReturnType<typeof buildDisciplines>[number] & { hasMasters?: boolean; formatoDefault?: MatchdayFormat }
+  >
 } {
   const seats = submitSeats(squad)
   const squadSize = seats.squadNames.length
-  const builtConfig = { ...config, squadSize }
+  const first = picked[0]!
 
   return {
     name,
     ...seats,
-    config: builtConfig,
+    // Legado de `NewSeason`/`createTournament` (`db/season.ts`): ignorado en
+    // cuanto `disciplines` llega, y el wizard SIEMPRE lo manda -- ver el
+    // docblock de arriba.
+    config: resizeConfig(configs[first], squadSize, pairSizes[first]),
     disciplines: picked.flatMap((kind) => {
       const pairSize = pairSizes[kind]
-      const soleCurveMatches =
-        picked.length === 1 && builtConfig.points.length === configFor(squadSize, pairSize).points.length
-      const disciplineConfig: SeasonConfig =
-        pairSize === 2 || soleCurveMatches
-          ? builtConfig
-          : { ...builtConfig, points: configFor(squadSize, pairSize).points }
-      return buildDisciplines([kind], disciplineConfig, pairSize)
+      const resized = resizeConfig(configs[kind], squadSize, pairSize)
+      const extra =
+        picked.length > 1
+          ? {
+              hasMasters: effectiveHasMasters(pairSize, hasMasters[kind]),
+              formatoDefault: formatoDefault[kind],
+            }
+          : {}
+      return buildDisciplines([kind], resized, pairSize).map((row) => ({ ...row, ...extra }))
     }),
   }
 }
@@ -490,8 +514,7 @@ export function newTournamentPayload(
  * W83): era opcional y caía en silencio a la curva de parejas — el mismo
  * default que "el caso feliz" (pádel) necesita, así que ningún call site
  * que se olvidara de pasarlo se veía roto en ese caso, y sólo se notaba con
- * una disciplina de a uno (S75, y de nuevo en `wizard.tsx` tres veces:
- * `configSideSize`, acá abajo). Con el parámetro obligatorio, olvidarlo es
+ * una disciplina de a uno (S75). Con el parámetro obligatorio, olvidarlo es
  * un error de `tsc` en cada call site — el compilador los señala a todos,
  * no sólo al que un verify-report mida esta vez.
  */
@@ -513,64 +536,132 @@ export function resizeConfig(config: SeasonConfig, squadSize: number, sideSize: 
 }
 
 /**
- * El `sideSize` que le corresponde a `config` — la curva compartida del
- * paso 4, C29 — en el estado ACTUAL del wizard (disciplinas marcadas +
- * lados elegidos), sin que haya cambiado nada todavía.
- *
- * Nace de la corrección #4030 sobre W83: al volver `sideSize` obligatorio en
- * `configFor`/`resizeConfig` (#3994), el compilador marcó TRES call sites en
- * `wizard.tsx` que hasta entonces dejaban que `sideSize` cayera a `undefined`
- * (parejas) en silencio — el estado inicial de `config`, `setSquad`
- * (agrandar/achicar el plantel) y "Usar los defaults". Los tres necesitan
- * la MISMA pregunta ("¿qué representa `config` ahora mismo?"), así que viven
- * de esta única función y no de tres respuestas escritas a mano.
- *
- * Misma regla que `configForPairSizeChange`, que resuelve la pregunta
- * hermana ("¿qué pasa a representar `config` cuando ESO cambia"): sin
- * ambigüedad (UNA sola disciplina marcada) es SU `pairSize`; con 2+ sigue
- * siendo la curva legado de a dos (C29) — nadie más la mueve.
+ * `resizeConfig` aplicado a las DOS disciplinas del wizard a la vez, cada
+ * una con SU PROPIO `pairSize` (Task 5, docs/plan-arquitectura-de-paginas.md
+ * §2.4, §6). Reemplaza a lo que antes hacía `configSideSize` + una sola
+ * llamada a `resizeConfig`: hasta la Task 5 el paso 4 editaba UNA config
+ * compartida por todas las disciplinas marcadas, así que agrandar o achicar
+ * el plantel sólo tenía UNA curva que poner al día. Ahora cada disciplina
+ * tiene la suya —incluso la que no está marcada, mismo criterio que
+ * `pairSizes` en `wizard.tsx`, que también sigue las dos aunque el torneo
+ * sólo use una—, así que `setSquad` (`wizard.tsx`) tiene que ponerlas al día
+ * A LAS DOS, cada una contra su propio `pairSize`.
  */
-export function configSideSize(
-  picked: readonly DisciplineKind[],
-  pairSizes: Record<DisciplineKind, SideSize>,
-): SideSize {
-  return picked.length === 1 ? pairSizes[picked[0]!] : 2
-}
-
-/**
- * El `config` que corresponde cuando el admin toca "Lados" para `kind`, o el
- * mismo `config` sin tocar si tocar ese radio no cambia nada de lo que se
- * edita en pantalla.
- *
- * Cierra W83 (verify-report-pre-contract, #4026), la TERCERA vez de la
- * familia W69 → W76 → W83: las tres son la pantalla prometiendo una curva
- * que la base no guarda, y las dos últimas las abrió el arreglo de la
- * anterior. Antes de `fe44255` (el fix de W76/#4017), con `picked.length ===
- * 1` cambiar "Lados" SÍ rehacía `config` (`setConfig(configFor(filled,
- * next))` vivía en `wizard.tsx`), así que el paso 4 mostraba la curva de la
- * ÚNICA disciplina marcada y lo que el admin editaba ahí era, literal, lo
- * que esa disciplina iba a guardar. El fix de W76 sacó esa rehecha ENTERA
- * —correcto para 2+ disciplinas, donde `config` tiene que quedarse siendo la
- * curva legado de a dos (C29) sin que ningún radio la mueva— pero se llevó
- * puesto el caso de UNA sola disciplina, que no tenía la ambigüedad que W76
- * vino a resolver.
- *
- * La condición es la misma que la causa: `config` sólo puede representar SIN
- * AMBIGÜEDAD la curva de una disciplina puntual cuando hay UNA sola marcada.
- * Con 2+, sigue siendo la curva legado — tocar "Lados" ahí no la mueve, que
- * es lo que #4017 arregló y no hay que volver a romper.
- */
-export function configForPairSizeChange(
-  config: SeasonConfig,
+export function resizeConfigs(
+  configs: Record<DisciplineKind, SeasonConfig>,
   squadSize: number,
-  picked: readonly DisciplineKind[],
-  next: SideSize,
-): SeasonConfig {
-  return picked.length === 1 ? configFor(squadSize, next) : config
+  pairSizes: Record<DisciplineKind, SideSize>,
+): Record<DisciplineKind, SeasonConfig> {
+  const next = { ...configs }
+  for (const kind of DISCIPLINE_KINDS) next[kind] = resizeConfig(configs[kind], squadSize, pairSizes[kind])
+  return next
 }
 
 /**
- * Los errores del paso 4.
+ * La config con la que arranca (o se rehace) UNA disciplina: `configFor`
+ * para su plantel y su `pairSize`, con la forma de marcador de SU `kind` ya
+ * aplicada (`disciplineProfile`) — nunca la de otra.
+ *
+ * Reemplaza a `configForPairSizeChange` (Task 5): aquella función existía
+ * por la ambigüedad de C29/W76/W83 — UNA config compartida por 2+
+ * disciplinas no podía rehacerse sin arriesgar la curva de la otra, así que
+ * sólo lo hacía con `picked.length === 1`. Con una config GENUINAMENTE por
+ * disciplina esa ambigüedad no existe más: tocar "Lados" para `kind` rehace
+ * SU config siempre, marcada sola o junto a otra — nunca toca la de la
+ * disciplina vecina, porque cada una vive en su propia entrada del
+ * `Record`.
+ *
+ * Aplica `disciplineProfile` acá adentro (y no al leer `matchFormat` más
+ * tarde, como hacía `buildDisciplines` con la config compartida): con una
+ * config por disciplina no hace falta esperar al submit para saber si es
+ * FIFA — se sabe en el momento en que esta función arma la fila, y
+ * `steppersFor`/el resumen del paso 5 pueden leer `matchFormat.openScore`
+ * directo, sin envolver de nuevo.
+ */
+export function freshDisciplineConfig(
+  kind: DisciplineKind,
+  squadSize: number,
+  pairSize: SideSize,
+): SeasonConfig {
+  return disciplineProfile(kind, configFor(squadSize, pairSize)).config
+}
+
+/**
+ * El Masters con el que arranca el control de una disciplina (decisión
+ * #4029): `false` con `pairSize` 1 —`disciplines_has_masters_needs_pair`
+ * (0053) lo rechaza siempre ahí—, `true` si no. El mismo automático que
+ * `createSeason`/`addDiscipline` (`db/season.ts`/`db/discipline.ts`) aplican
+ * cuando el spec no manda `hasMasters` — acá es el valor INICIAL del
+ * checkbox, no una escritura.
+ */
+export function automaticHasMasters(pairSize: SideSize): boolean {
+  return pairSize !== 1
+}
+
+/**
+ * El Masters que de verdad se manda para una disciplina, sea lo que sea que
+ * el checkbox tenga guardado: `false` siempre que `pairSize` sea 1.
+ *
+ * `disciplines_has_masters_needs_pair` (0053) rechaza `has_masters = true`
+ * con `pair_size = 1` sin excepción. El checkbox del paso 4 se deshabilita
+ * en pantalla para una disciplina de a uno (mismo criterio que `Formato`,
+ * Ajustes), pero deshabilitado no es lo mismo que ausente: el estado que
+ * queda atrás (de cuando esa disciplina tenía `pairSize` 2, antes de que el
+ * admin tocara "Lados" en el paso 1) puede seguir en `true`. Este guard es
+ * la puerta de salida real — vive en `newTournamentPayload`, no confía en
+ * que el control quede siempre deshabilitado a tiempo.
+ */
+export function effectiveHasMasters(pairSize: SideSize, hasMasters: boolean): boolean {
+  return pairSize === 1 ? false : hasMasters
+}
+
+/**
+ * Las tres opciones legales de "Formato de las fechas" (decisión ya tomada,
+ * docs/tipos-de-torneo.md §2.5): `ROUND_ROBIN`, y `GROUPS_KNOCKOUT` con 2 o
+ * con 4 grupos, siempre `qualifiersPerGroup: 2`. `groups: 1` no es una
+ * opción acá aunque `matchdays_formato_kind` (0040) lo acepte:
+ * `disciplines_formato_default_kind` (0074) lo rechaza a propósito porque
+ * `offerableFormats` (`core/knockout.ts:531`) nunca lo ofrece para ningún
+ * `sides` — "1 grupo + llave" no ahorra nada sobre un round robin liso.
+ *
+ * Es un CRITERIO, no un layout: cuáles opciones son legalmente ofrecibles
+ * para una disciplina, respaldado por ese CHECK de la base. Fix round 1
+ * (revisión de la Task 5): esta lista nació duplicada acá y en
+ * `ajustes/formato-default.tsx` (`OPCIONES`, módulo-privada), con un test de
+ * cada lado comparando contra un literal escrito a mano en vez de contra la
+ * OTRA lista — nada en el repo fallaba si las dos divergían. Es la MISMA
+ * clase de error que ya tiene nombre en este código: el docblock de
+ * `steppersFor`/`Formato` (`ajustes/formato.tsx`) dice "copiar el criterio
+ * en vez de compartirlo es lo que produjo W63". Vive acá — junto a
+ * `steppersFor`, que ya comparte el mismo tipo de criterio con Ajustes — y
+ * `formato-default.tsx` la IMPORTA en vez de declarar la suya.
+ */
+export const FORMATO_DEFAULT_OPTIONS: MatchdayFormat[] = [
+  { kind: 'ROUND_ROBIN' },
+  { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 },
+  { kind: 'GROUPS_KNOCKOUT', groups: 4, qualifiersPerGroup: 2 },
+]
+
+/**
+ * `key` estable para `FORMATO_DEFAULT_OPTIONS`, no atada a la copia:
+ * `matchdayFormatLabel(candidato)` (`app/format.ts`) es texto para HUMANOS y
+ * puede cambiar — mismo motivo por el que `SelectorDeFormato`
+ * (`fechas/[n]/armado.tsx`) usa `candidato.groups` como `key` y no el
+ * label. `FORMATO_DEFAULT_OPTIONS` es una lista fija de tres, así que basta
+ * con la identidad estructural del `kind`/`groups`.
+ */
+export function formatoDefaultKey(formato: MatchdayFormat): string {
+  return formato.kind === 'ROUND_ROBIN' ? 'ROUND_ROBIN' : `GROUPS_${formato.groups}`
+}
+
+/** ¿Es la misma opción de `FORMATO_DEFAULT_OPTIONS`? Compara por `kind` + `groups`, no por identidad de objeto. */
+export function isSameFormatoDefault(a: MatchdayFormat, b: MatchdayFormat): boolean {
+  if (a.kind !== b.kind) return false
+  return a.kind === 'ROUND_ROBIN' || (b.kind === 'GROUPS_KNOCKOUT' && a.groups === b.groups)
+}
+
+/**
+ * Los errores del paso 4, para UNA disciplina.
  *
  * Los de puntos NO se escriben acá: salen de `pointsErrors` y de
  * `pointsCountError`, las mismas funciones que corre `validateConfig` antes de
@@ -579,20 +670,20 @@ export function configForPairSizeChange(
  * sobre un valor que el stepper te dejaba elegir. Con una sola
  * implementación eso no puede volver a pasar.
  *
- * `sideSize` es el EFECTIVO de la curva compartida —`configSideSize(picked,
- * pairSizes)`— y no un `2` literal (W88/W90, #4034). Es obligatorio por lo
- * mismo que en `configFor`/`resizeConfig` (#3994): con un default, los call
- * sites que dejen de pasarlo validan contra parejas en silencio, que es el
- * bug de esta familia entera.
+ * `sideSize` es obligatorio por lo mismo que en `configFor`/`resizeConfig`
+ * (#3994): con un default, los call sites que dejen de pasarlo validan
+ * contra parejas en silencio, que es el bug de esta familia entera. Desde
+ * la Task 5 esta función corre UNA VEZ POR DISCIPLINA (`wizard.tsx`), con
+ * el `pairSize` propio de esa disciplina — ya no hay un "efectivo" de una
+ * curva compartida que calcular (`configSideSize`, borrada en esta Task).
  *
- * `pointsErrors` mira los VALORES y `pointsCountError` la CANTIDAD. Faltaba
- * la segunda, y es la única que cambia cuando el admin marca o desmarca
- * disciplinas: `onToggle` no rehace `config` a propósito (con 2+ marcadas no
- * debe, C29/W76), así que la curva editada podía dejar de corresponder sin
- * que nada lo dijera. Medido en #4034: la pantalla mostraba `[20,12,6,2]` y
- * la base guardaba `[10,7,5,3,2,1,0,0]`. La salida ya existía —"Usar los
- * defaults", `wizard.tsx:698`, que rehace la curva con `configSideSize`—;
- * lo que faltaba era decirle al admin que la necesitaba.
+ * `pointsErrors` mira los VALORES y `pointsCountError` la CANTIDAD.
+ * `changePairSize` (`wizard.tsx`) rehace la config entera al tocar "Lados"
+ * (`freshDisciplineConfig`), así que la cantidad de puntos SIEMPRE
+ * corresponde apenas cambia — a diferencia de antes de esta Task, ya no
+ * hace falta un aviso para el caso en que dejó de corresponder en silencio
+ * (W88/W90): no hay forma de llegar a ese estado con una config genuinamente
+ * propia por disciplina.
  *
  * La de `countBestOf` sí es propia, y a propósito: es la frase corta del
  * handoff, que en el wizard entra al lado del stepper que la causó.
@@ -619,30 +710,41 @@ export function formatErrors(config: SeasonConfig, sideSize: SideSize): string[]
  * Con una sola disciplina el resumen dice exactamente lo mismo que siempre —el
  * prefijo aparece recién cuando hay dos cosas distintas que nombrar.
  *
- * Esa regla la escribe `formatsLabel` (`core/narrate.ts`) y no este archivo:
- * Reglas y Ajustes tenían el mismo problema con los mismos datos (W64)
- * y tres copias de la misma frase es como nació W64.
+ * Esa regla la escribe `formatsLabel` (`core/narrate.ts`) para "Formato", y
+ * desde la Task 5 la aplica ACÁ TAMBIÉN `perDisciplineValue` para "Puntos",
+ * "Fechas" y "Desempate": con `configs` genuinamente por disciplina esos
+ * tres números pueden ser distintos entre Pádel y FIFA, y mostrar sólo uno
+ * de los dos sería exactamente la misma mentira que Reglas y Ajustes ya
+ * tuvieron con "Formato" (W64) — tres copias del mismo problema es como
+ * nació esa ronda, y ésta es la cuarta fila que podía repetirlo si no se
+ * corregía acá.
+ *
+ * Ya no hace falta pasar cada `config` por `disciplineProfile` acá: desde
+ * que `configs[kind]` sale de `freshDisciplineConfig` (Task 5), su
+ * `matchFormat.openScore` ya viene con la forma de SU `kind` aplicada.
  */
 export function summaryOf(
   name: string,
   names: readonly string[],
-  config: SeasonConfig,
+  configs: Record<DisciplineKind, SeasonConfig>,
   picked: readonly DisciplineKind[],
 ): Array<{ key: string; value: string }> {
+  const perDisciplineValue = (value: (config: SeasonConfig) => string): string =>
+    picked.length <= 1
+      ? value(configs[picked[0]!])
+      : picked.map((kind) => `${DISCIPLINE_LABELS[kind]}: ${value(configs[kind])}`).join(' · ')
+
   return [
     { key: 'Nombre', value: name },
     { key: 'Jugadores', value: String(filledCount(names)) },
     {
       key: 'Formato',
       value: formatsLabel(
-        picked.map((kind) => ({
-          label: DISCIPLINE_LABELS[kind],
-          matchFormat: disciplineProfile(kind, config).config.matchFormat,
-        })),
+        picked.map((kind) => ({ label: DISCIPLINE_LABELS[kind], matchFormat: configs[kind].matchFormat })),
       ),
     },
-    { key: 'Puntos', value: config.points.join(' · ') },
-    { key: 'Fechas', value: String(config.regularMatchdays) },
-    { key: 'Desempate', value: `cada ${config.tiebreakSnapshotEvery} fechas` },
+    { key: 'Puntos', value: perDisciplineValue((config) => config.points.join(' · ')) },
+    { key: 'Fechas', value: perDisciplineValue((config) => String(config.regularMatchdays)) },
+    { key: 'Desempate', value: perDisciplineValue((config) => `cada ${config.tiebreakSnapshotEvery} fechas`) },
   ]
 }

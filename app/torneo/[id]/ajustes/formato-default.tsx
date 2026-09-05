@@ -3,39 +3,21 @@
 import { useOptimistic, useState, useTransition } from 'react'
 import type { DisciplineId, MatchdayFormat } from '@/core'
 import { matchdayFormatLabel } from '@/app/format'
+import {
+  FORMATO_DEFAULT_OPTIONS as OPCIONES,
+  formatoDefaultKey as formatoKey,
+  isSameFormatoDefault as esElMismo,
+} from '@/app/torneos/nuevo/wizard-state'
 import { saveFormatoDefault } from './actions'
 
-/**
- * Las tres opciones (decisión ya tomada, docs/tipos-de-torneo.md §2.5):
- * `ROUND_ROBIN`, y `GROUPS_KNOCKOUT` con 2 o con 4 grupos.
- * `qualifiersPerGroup` es siempre 2 — mismo valor que exige el CHECK
- * `disciplines_formato_default_kind` (`0074`). `groups: 1` no es una opción
- * acá aunque `matchdays_formato_kind` (0040) lo siga aceptando: ese CHECK
- * lo rechaza a propósito (0074, comentario de la migración) porque
- * `offerableFormats` (`core/knockout.ts:531`) nunca lo ofrece para ningún
- * `sides` — "1 grupo + llave" no ahorra nada sobre un round robin liso.
- */
-const OPCIONES: MatchdayFormat[] = [
-  { kind: 'ROUND_ROBIN' },
-  { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 },
-  { kind: 'GROUPS_KNOCKOUT', groups: 4, qualifiersPerGroup: 2 },
-]
-
-function esElMismo(a: MatchdayFormat, b: MatchdayFormat): boolean {
-  if (a.kind !== b.kind) return false
-  return a.kind === 'ROUND_ROBIN' || (b.kind === 'GROUPS_KNOCKOUT' && a.groups === b.groups)
-}
-
-/**
- * `key` estable, no atada a la copia: `matchdayFormatLabel(candidato)` es
- * texto para HUMANOS y puede cambiar (mismo motivo por el que
- * `SelectorDeFormato`, `fechas/[n]/armado.tsx`, usa `candidato.groups` como
- * `key` y no el label). `OPCIONES` es una lista fija de tres, así que basta
- * con la identidad estructural del `kind`/`groups`.
- */
-function formatoKey(formato: MatchdayFormat): string {
-  return formato.kind === 'ROUND_ROBIN' ? 'ROUND_ROBIN' : `GROUPS_${formato.groups}`
-}
+// Las tres opciones, la comparación por kind+groups y el key estable viven
+// en `wizard-state.ts` (Fix round 1 de la Task 5, docs/plan-arquitectura-de-
+// paginas.md): esta pantalla y el paso 4 del wizard tienen que ofrecer
+// EXACTAMENTE las mismas -- es un CRITERIO (cuáles opciones son legales,
+// respaldado por `disciplines_formato_default_kind`, 0074), no un layout, y
+// copiar el criterio en vez de compartirlo es lo que ya produjo W63 una vez
+// (`steppersFor`, `formato.tsx`). Los alias (`OPCIONES`/`formatoKey`/
+// `esElMismo`) son sólo para no tocar el resto de este archivo.
 
 /**
  * El formato con el que nace cada fecha nueva de esta disciplina (§2.5): un

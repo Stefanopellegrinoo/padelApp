@@ -308,13 +308,21 @@ describe('createSeason con múltiples disciplinas (REQ-D1-1, contrato S13)', () 
 describe('createSeason vía el wizard real, disciplina de a uno (C29)', () => {
   it('el wizard con "Individual" crea el torneo: FIFA pair_size=1 con la curva de #3963', async () => {
     const admin = await createTestUser()
-    // El `config` de entrada es siempre la curva de a dos (C29, W76/#4017):
-    // la curva de a uno la arma `newTournamentPayload` sola, a partir de
-    // `pairSizes.FIFA`, no de lo que traiga este argumento.
-    const config = defaultConfig(8)
+    // Desde la Task 5 (docs/plan-arquitectura-de-paginas.md) `configs` es POR
+    // disciplina: la de FIFA ya trae la curva de a uno (#3963) armada, no una
+    // compartida que `newTournamentPayload` reinterprete según `pairSizes`.
+    const configs = { PADEL: defaultConfig(8), FIFA: defaultConfig(8, 1) }
     const squad: Squad = { names: squadNames(8), mySeat: null }
 
-    const payload = newTournamentPayload('Liga FIFA', squad, config, ['FIFA'], { PADEL: 2, FIFA: 1 })
+    const payload = newTournamentPayload(
+      'Liga FIFA',
+      squad,
+      configs,
+      ['FIFA'],
+      { PADEL: 2, FIFA: 1 },
+      { PADEL: true, FIFA: false },
+      { PADEL: { kind: 'ROUND_ROBIN' }, FIFA: { kind: 'ROUND_ROBIN' } },
+    )
     const { seasonId } = await createSeason(admin.client, payload)
 
     const db = adminClient()
@@ -346,10 +354,18 @@ describe('createSeason vía el wizard real, disciplina de a uno (C29)', () => {
    */
   it('con Pádel + FIFA marcados, cada uno nace con SU pairSize -- sin herencia cruzada en ningún sentido (W69/W76, REQ-D2-1)', async () => {
     const admin = await createTestUser()
-    const config = defaultConfig(8)
+    const configs = { PADEL: defaultConfig(8), FIFA: defaultConfig(8, 1) }
     const squad: Squad = { names: squadNames(8), mySeat: null }
 
-    const payload = newTournamentPayload('Mixto', squad, config, ['PADEL', 'FIFA'], { PADEL: 2, FIFA: 1 })
+    const payload = newTournamentPayload(
+      'Mixto',
+      squad,
+      configs,
+      ['PADEL', 'FIFA'],
+      { PADEL: 2, FIFA: 1 },
+      { PADEL: true, FIFA: false },
+      { PADEL: { kind: 'ROUND_ROBIN' }, FIFA: { kind: 'ROUND_ROBIN' } },
+    )
     const { seasonId } = await createSeason(admin.client, payload)
 
     const db = adminClient()
@@ -373,15 +389,29 @@ describe('createSeason vía el wizard real, disciplina de a uno (C29)', () => {
   // Decisión #4029, parte 1, por el camino REAL del wizard: crear un torneo
   // con "Individual" elegido para FIFA tiene que dejarla sin Masters desde
   // el arranque, sin que el admin tenga que pisar Ajustes después.
+  //
+  // Desde la Task 5 (docs/plan-arquitectura-de-paginas.md §2.4) el paso 4
+  // del wizard ofrece Masters POR disciplina cuando hay 2+ marcadas, y el
+  // control de CADA una arranca en el automático de #4029 (`true` con
+  // `pairSize` 2, `false` con 1) -- acá el admin no tocó ninguno de los dos
+  // checkboxes, así que `hasMasters` llega con esos mismos valores. El de
+  // FIFA además pasa por `effectiveHasMasters` adentro de
+  // `newTournamentPayload`: aunque llegara en `true`, `pairSize=1` lo fuerza
+  // a `false` (`disciplines_has_masters_needs_pair`, 0053).
   it('el wizard con "Individual" crea la disciplina sin Masters (decisión #4029)', async () => {
     const admin = await createTestUser()
-    const config = defaultConfig(8)
+    const configs = { PADEL: defaultConfig(8), FIFA: defaultConfig(8, 1) }
     const squad: Squad = { names: squadNames(8), mySeat: null }
 
-    const payload = newTournamentPayload('Mixto Masters', squad, config, ['PADEL', 'FIFA'], {
-      PADEL: 2,
-      FIFA: 1,
-    })
+    const payload = newTournamentPayload(
+      'Mixto Masters',
+      squad,
+      configs,
+      ['PADEL', 'FIFA'],
+      { PADEL: 2, FIFA: 1 },
+      { PADEL: true, FIFA: false },
+      { PADEL: { kind: 'ROUND_ROBIN' }, FIFA: { kind: 'ROUND_ROBIN' } },
+    )
     const { seasonId } = await createSeason(admin.client, payload)
 
     const db = adminClient()
@@ -411,10 +441,21 @@ describe('createSeason vía el wizard real, disciplina de a uno (C29)', () => {
 describe('createSeason con el plantel al piso real de una disciplina de a uno', () => {
   it('dos amigos arman un torneo de FIFA con un plantel de 2, no de 4', async () => {
     const admin = await createTestUser()
-    const config = defaultConfig(2, 1)
+    // El `PADEL` de este `Record` nunca se lee -- `picked` es sólo `['FIFA']`
+    // -- pero `configs` sigue siendo obligatorio para las dos claves, mismo
+    // criterio que ya usa `pairSizes` en el wizard real.
+    const configs = { PADEL: defaultConfig(2, 1), FIFA: defaultConfig(2, 1) }
     const squad: Squad = { names: squadNames(2), mySeat: null }
 
-    const payload = newTournamentPayload('Dos amigos', squad, config, ['FIFA'], { PADEL: 2, FIFA: 1 })
+    const payload = newTournamentPayload(
+      'Dos amigos',
+      squad,
+      configs,
+      ['FIFA'],
+      { PADEL: 2, FIFA: 1 },
+      { PADEL: true, FIFA: false },
+      { PADEL: { kind: 'ROUND_ROBIN' }, FIFA: { kind: 'ROUND_ROBIN' } },
+    )
     const { seasonId } = await createSeason(admin.client, payload)
 
     const db = adminClient()

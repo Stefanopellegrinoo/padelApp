@@ -3,27 +3,29 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState, useTransition } from 'react'
-import type { SeasonConfig, SideSize } from '@/core'
+import type { MatchdayFormat, SeasonConfig, SideSize } from '@/core'
+import { matchdayFormatLabel } from '@/app/format'
 import { createTournament } from './actions'
 import {
   DISCIPLINE_KINDS,
   DISCIPLINE_LABELS,
+  FORMATO_DEFAULT_OPTIONS,
   type DisciplineKind,
   type Squad,
   addMySeat,
-  buildDisciplines,
-  configFor,
-  configForPairSizeChange,
-  configSideSize,
+  automaticHasMasters,
   disciplinesWarning,
   effectiveFloor,
   filledCount,
   formatErrors,
+  formatoDefaultKey,
+  freshDisciplineConfig,
+  isSameFormatoDefault,
   moveSeat,
   namesAfterEdit,
   newTournamentPayload,
   removeSeatAt,
-  resizeConfig,
+  resizeConfigs,
   squadWarning,
   steppersFor,
   summaryOf,
@@ -39,8 +41,9 @@ const SIDE_SIZES: { value: SideSize; label: string }[] = [
 /**
  * "Parejas" o "Individual" — `pairSize`, elegido al crear la disciplina y
  * nunca editable después (`0015_disciplines.sql` revoca su UPDATE a
- * propósito). Comparten este selector el paso 4 del wizard y "+ Agregar
- * disciplina" de Ajustes (`disciplinas.tsx`): los mismos dos caminos que ya
+ * propósito). Comparten este selector el paso 1 del wizard (W76/decisión
+ * #4017 lo bajó ahí, ver el docblock de `PasoDisciplinas` más abajo) y "+
+ * Agregar disciplina" de Ajustes (`disciplinas.tsx`): los mismos dos caminos que ya
  * comparten `disciplineProfile`/`DISCIPLINE_LABELS`, y por la misma razón
  * (`buildDisciplines`/`newDisciplineSpec`, Rebanada E) — los dos tienen que
  * ofrecer lo mismo o el torneo depende de por dónde entraste.
@@ -269,44 +272,55 @@ function Stepper({
 }
 
 /**
- * El paso 4: los puntos por posición y los steppers del formato.
+ * El formato de UNA disciplina: los puntos por posición y los steppers que le
+ * corresponden (`steppersFor`, la MISMA función que usa Ajustes) — y, con
+ * `label` puesto, Masters y el formato por defecto de las fechas.
  *
- * Vive afuera de `Wizard` —y exportado— para poder RENDERIZARLO en la suite
- * unitaria: `step` es estado interno del wizard y sin clicks no se llega hasta
- * acá. W63 fue una mentira de este paso que ningún
- * test podía ver, en un proyecto que ya se comió cinco problemas de pantalla.
+ * `label === null` — UNA sola disciplina elegida, el 100% de los torneos que
+ * existen hoy (§5 del diseño) — es EXACTAMENTE el JSX de antes de la Task 5
+ * (docs/plan-arquitectura-de-paginas.md): nada envuelve el bloque, ningún
+ * título, y Masters/"Formato de las fechas" NO se dibujan — esa disciplina
+ * sigue naciendo con el automático de siempre (decisión #4029) y el default
+ * de columna (ROUND_ROBIN, 0074), como hoy. `label` puesto — 2+ marcadas,
+ * que es la queja original ("estás poniendo las mismas reglas para el
+ * FIFA")— envuelve el bloque en su propia tarjeta con el nombre de la
+ * disciplina y agrega esos dos controles: ahí es donde el aplanado dejaba de
+ * tener sentido (§2.4).
  *
- * Cuáles steppers dibuja lo decide `steppersFor`, la MISMA función que usa
- * Ajustes. Lo que cambia es qué se le pregunta: acá la config es de la
- * TEMPORADA y la comparten todas las disciplinas marcadas, así que se le pasan
- * los formatos de todas — con Pádel y FIFA marcados, "Sets por partido" y
- * "Games por set" siguen gobernando la mitad de pádel y tienen que estar.
- *
- * Ya NO dibuja el radio "Lados" (W76/decisión #4017): bajó al paso 1, uno
- * por disciplina (`PasoDisciplinas`, arriba) — con dos disciplinas pudiendo
- * traer un `pairSize` DISTINTO cada una, un solo radio acá ya no tiene un
- * valor único que mostrar. `config.points`, que este paso sigue editando,
- * es siempre la curva de a dos (C29): la disciplina que elija "Individual"
- * arma la suya aparte, sin pasar por acá — no editable a mano en el wizard,
- * mismo límite que ya tenía cualquier disciplina fuera de la marcada `pairSize`
- * en la versión anterior de este mismo mecanismo.
+ * `steppersFor([config.matchFormat])` — un array de UNO, no el de todas las
+ * marcadas — es la diferencia de fondo con la versión pre-Task 5: cada
+ * disciplina ya tiene su PROPIA config (`configs` en `Wizard`), así que ya
+ * no hace falta preguntar "¿alguna de las marcadas usa sets?" — alcanza con
+ * preguntarle a ÉSTA. Es el mismo criterio que ya usaba Ajustes
+ * (`formato.tsx`), no uno nuevo.
  */
-export function PasoFormato({
+function FormatoDeUnaDisciplina({
+  kind,
   config,
-  picked,
+  pairSize,
+  hasMasters,
+  formatoDefault,
   errors,
-  onChange,
+  label,
+  onChangeConfig,
+  onChangeHasMasters,
+  onChangeFormatoDefault,
 }: {
+  kind: DisciplineKind
   config: SeasonConfig
-  picked: readonly DisciplineKind[]
+  pairSize: SideSize
+  hasMasters: boolean
+  formatoDefault: MatchdayFormat
   errors: string[]
-  onChange: (next: SeasonConfig) => void
+  /** `null` con una sola disciplina elegida — mismo contrato que `Formato.disciplineLabel` en Ajustes. */
+  label: string | null
+  onChangeConfig: (next: SeasonConfig) => void
+  onChangeHasMasters: (next: boolean) => void
+  onChangeFormatoDefault: (next: MatchdayFormat) => void
 }) {
-  const steppers = steppersFor(
-    buildDisciplines(picked, config).map((row) => row.config.matchFormat),
-  )
+  const steppers = steppersFor([config.matchFormat])
 
-  return (
+  const cuerpo = (
     <>
       <p className="text-[13.5px] font-[550] leading-[1.5] text-muted">
         Son los puntos de cada posición de la fecha. Si una fecha la juegan menos parejas, se usan
@@ -328,7 +342,7 @@ export function PasoFormato({
               onChange={(next) => {
                 const points = [...config.points]
                 points[index] = next
-                onChange({ ...config, points })
+                onChangeConfig({ ...config, points })
               }}
             />
           </div>
@@ -354,7 +368,7 @@ export function PasoFormato({
               min={stepper.min}
               max={stepper.max}
               onChange={(next) =>
-                onChange(
+                onChangeConfig(
                   stepper.key === 'setsToWin' || stepper.key === 'gamesPerSet'
                     ? { ...config, matchFormat: { ...config.matchFormat, [stepper.key]: next } }
                     : { ...config, [stepper.key]: next },
@@ -366,7 +380,132 @@ export function PasoFormato({
       </div>
 
       {errors.map((message) => (
-        <Aviso key={message}>{message}</Aviso>
+        <Aviso key={message}>{label === null ? message : `${label}: ${message}`}</Aviso>
+      ))}
+    </>
+  )
+
+  if (label === null) return cuerpo
+
+  return (
+    <div className="flex flex-col gap-3 rounded-field border-[1.5px] border-line bg-surface p-3.5">
+      <h3 className="text-[11.5px] font-extrabold uppercase tracking-[.14em] text-muted">{label}</h3>
+      {cuerpo}
+
+      {/* Masters y "Formato de las fechas" sólo existen en este bloque —o
+          sea, sólo con 2+ disciplinas marcadas. Con una sola no se dibujan
+          (`label === null` arriba retorna antes de llegar acá): esa
+          disciplina sigue con el automático de siempre y el default de
+          columna, exactamente como antes de la Task 5. Las PALABRAS son las
+          mismas que ya usa Ajustes (`formato.tsx`/`formato-default.tsx`) —
+          no se inventa copy nuevo, aunque el control en sí sea nuevo acá. */}
+      <div className="overflow-hidden rounded-[14px] border border-line">
+        <div className="flex min-h-[56px] items-center justify-between gap-2 px-3 py-2">
+          <div className="min-w-0">
+            <p className="text-[14px] font-bold">Masters</p>
+            <p className="text-pretty text-[11.5px] font-semibold text-muted">
+              {pairSize === 1
+                ? 'Una disciplina de a uno no juega Masters: termina con su última fecha regular.'
+                : 'La fecha extra que corona la temporada, al final del año.'}
+            </p>
+          </div>
+          <input
+            type="checkbox"
+            checked={pairSize === 1 ? false : hasMasters}
+            disabled={pairSize === 1}
+            onChange={(event) => onChangeHasMasters(event.target.checked)}
+            className="h-6 w-6 shrink-0 accent-accent disabled:opacity-40"
+          />
+        </div>
+      </div>
+
+      <div className="overflow-hidden rounded-[14px] border border-line">
+        <h4
+          id={`formato-default-legend-${kind}`}
+          className="px-3 pt-2.5 text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted"
+        >
+          Formato de las fechas
+        </h4>
+        <fieldset aria-labelledby={`formato-default-legend-${kind}`} className="flex flex-col gap-2 p-3 pt-2">
+          {FORMATO_DEFAULT_OPTIONS.map((option) => (
+            <label
+              key={formatoDefaultKey(option)}
+              className="flex min-h-[44px] items-center gap-2.5 rounded-field border border-line p-2.5 text-[13.5px] font-[700]"
+            >
+              <input
+                type="radio"
+                name={`formato-default-${kind}`}
+                checked={isSameFormatoDefault(formatoDefault, option)}
+                onChange={() => onChangeFormatoDefault(option)}
+                className="h-5 w-5 shrink-0 accent-accent"
+              />
+              {matchdayFormatLabel(option)}
+            </label>
+          ))}
+        </fieldset>
+        <p className="px-3 pb-2.5 text-[11.5px] font-[600] text-muted">
+          Cada fecha nueva nace con este formato. Si el día no da la cantidad de lados que hace
+          falta, se puede elegir otro al armar esa fecha.
+        </p>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * El paso 4: un bloque de formato por disciplina MARCADA — Task 5
+ * (docs/plan-arquitectura-de-paginas.md §2.4, §6), la queja que originó todo
+ * el plan: *"cuando creo el torneo tengo que configurar cada disciplina, no
+ * después [...] estás poniendo las mismas reglas para el FIFA"*.
+ *
+ * Vive afuera de `Wizard` —y exportado— para poder RENDERIZARLO en la suite
+ * unitaria: `step` es estado interno del wizard y sin clicks no se llega hasta
+ * acá. W63 fue una mentira de este paso que ningún test podía ver, en un
+ * proyecto que ya se comió cinco problemas de pantalla.
+ *
+ * Con UNA disciplina esto es un solo `<FormatoDeUnaDisciplina>` con
+ * `label={null}` — el mismo JSX de siempre, byte a byte (verificado
+ * renderizando la versión commiteada de `PasoFormato` contra ésta con los
+ * mismos datos). Con 2+, una tarjeta por cada una, en el orden en que se
+ * marcaron.
+ */
+export function PasoFormato({
+  configs,
+  picked,
+  pairSizes,
+  hasMasters,
+  formatoDefault,
+  errors,
+  onChangeConfig,
+  onChangeHasMasters,
+  onChangeFormatoDefault,
+}: {
+  configs: Record<DisciplineKind, SeasonConfig>
+  picked: readonly DisciplineKind[]
+  pairSizes: Record<DisciplineKind, SideSize>
+  hasMasters: Record<DisciplineKind, boolean>
+  formatoDefault: Record<DisciplineKind, MatchdayFormat>
+  errors: Record<DisciplineKind, string[]>
+  onChangeConfig: (kind: DisciplineKind, next: SeasonConfig) => void
+  onChangeHasMasters: (kind: DisciplineKind, next: boolean) => void
+  onChangeFormatoDefault: (kind: DisciplineKind, next: MatchdayFormat) => void
+}) {
+  return (
+    <>
+      {picked.map((kind) => (
+        <FormatoDeUnaDisciplina
+          key={kind}
+          kind={kind}
+          config={configs[kind]}
+          pairSize={pairSizes[kind]}
+          hasMasters={hasMasters[kind]}
+          formatoDefault={formatoDefault[kind]}
+          errors={errors[kind] ?? []}
+          label={picked.length > 1 ? DISCIPLINE_LABELS[kind] : null}
+          onChangeConfig={(next) => onChangeConfig(kind, next)}
+          onChangeHasMasters={(next) => onChangeHasMasters(kind, next)}
+          onChangeFormatoDefault={(next) => onChangeFormatoDefault(kind, next)}
+        />
       ))}
     </>
   )
@@ -395,12 +534,12 @@ export function Wizard({ myName }: { myName: string }) {
   const [pairSizes, setPairSizes] = useState<Record<DisciplineKind, SideSize>>({ PADEL: 2, FIFA: 2 })
   // El piso EFECTIVO del plantel COMPARTIDO (`effectiveFloor`, wizard-state.ts):
   // el máximo entre los pisos de las disciplinas marcadas, no un plano de 8.
-  // Declarado ANTES del plantel y de `config` (mismo criterio que
-  // `configSideSize` más abajo, corrección #4030/lección #3994): los dos lo
-  // usan sólo al MONTAR (`useState` no vuelve a correr si el admin cambia de
-  // disciplina después), así que nacen viendo el piso de la selección
-  // inicial — pádel, 4, no el 8 plano de antes. Quien SÍ sigue el piso EN VIVO
-  // es el aviso del paso 2 y el botón de sacar fila (`squadWarning` y
+  // Declarado ANTES del plantel y de `configs` (mismo criterio que la
+  // corrección #4030/lección #3994 ya fijó): los dos lo usan sólo al MONTAR
+  // (`useState` no vuelve a correr si el admin cambia de disciplina
+  // después), así que nacen viendo el piso de la selección inicial — pádel,
+  // 4, no el 8 plano de antes. Quien SÍ sigue el piso EN VIVO es el aviso
+  // del paso 2 y el botón de sacar fila (`squadWarning` y
   // `names.length > floor`, los dos más abajo): a dos amigos de FIFA les
   // alcanza con llenar 2 de las filas que ya están, sin que el plantel
   // arranque más chico por sí solo.
@@ -414,12 +553,31 @@ export function Wizard({ myName }: { myName: string }) {
     names: [myName, ...Array<string>(floor - 1).fill('')],
     mySeat: myName.trim().length === 0 ? null : 0,
   }))
-  // `floor`, no un plano fijo (corrección #4030, lección #3994): el `config`
-  // inicial tiene que describir el MISMO plantel que arranca arriba, o su
-  // curva de puntos nace con un largo que no corresponde a `squad.names`.
-  const [config, setConfig] = useState<SeasonConfig>(() =>
-    configFor(floor, configSideSize(disciplines, pairSizes)),
-  )
+  // `configs` reemplaza al `config` único de antes de la Task 5: una entrada
+  // POR DISCIPLINA (las dos, aunque el torneo sólo marque una — mismo
+  // criterio que `pairSizes`), cada una con SU PROPIA curva de puntos y SUS
+  // PROPIOS steppers. `floor`, no un plano fijo (corrección #4030, lección
+  // #3994): la config inicial de cada disciplina tiene que describir el
+  // MISMO plantel que arranca arriba, o su curva de puntos nace con un largo
+  // que no corresponde a `squad.names`.
+  const [configs, setConfigsState] = useState<Record<DisciplineKind, SeasonConfig>>(() => ({
+    PADEL: freshDisciplineConfig('PADEL', floor, pairSizes.PADEL),
+    FIFA: freshDisciplineConfig('FIFA', floor, pairSizes.FIFA),
+  }))
+  // Masters y el formato por defecto de las fechas, uno por disciplina —
+  // Task 5, §2.4/§2.5 del diseño. Arrancan en el automático de decisión
+  // #4029 y en ROUND_ROBIN (el default de columna, 0074): sin tocar ningún
+  // control, un torneo de una sola disciplina se crea EXACTAMENTE igual que
+  // antes de esta Task (`newTournamentPayload` sólo manda estas dos claves
+  // con 2+ marcadas).
+  const [hasMasters, setHasMastersState] = useState<Record<DisciplineKind, boolean>>({
+    PADEL: automaticHasMasters(pairSizes.PADEL),
+    FIFA: automaticHasMasters(pairSizes.FIFA),
+  })
+  const [formatoDefault, setFormatoDefaultState] = useState<Record<DisciplineKind, MatchdayFormat>>({
+    PADEL: { kind: 'ROUND_ROBIN' },
+    FIFA: { kind: 'ROUND_ROBIN' },
+  })
   const [error, setError] = useState<string | null>(null)
   const [leaving, setLeaving] = useState(false)
   const [created, setCreated] = useState<{ seasonId: string; inviteToken: string } | null>(null)
@@ -435,34 +593,50 @@ export function Wizard({ myName }: { myName: string }) {
   // (`pairSize === 2`) — un torneo de sólo FIFA no tiene "armar parejas" que
   // pedir (`squadWarning`, wizard-state.ts).
   const warning = squadWarning(names, floor, sideSizes.includes(2))
-  const errors = formatErrors(config, configSideSize(disciplines, pairSizes))
+  // Un `formatErrors` POR disciplina marcada, no uno solo sobre una curva
+  // compartida (C29/W88/W90, ya cerrado por la Task 5): cada disciplina
+  // valida SU PROPIA config contra SU PROPIO `pairSize`.
+  const errorsByKind = Object.fromEntries(
+    DISCIPLINE_KINDS.map((kind) => [kind, formatErrors(configs[kind], pairSizes[kind])]),
+  ) as Record<DisciplineKind, string[]>
+  const anyErrors = disciplines.some((kind) => errorsByKind[kind].length > 0)
   const disciplineWarning = disciplinesWarning(disciplines)
 
   const setSquad = (next: Squad) => {
     setSquadState(next)
-    // `configSideSize` y no un `sideSize` suelto (corrección #4030, lección
-    // #3994): agrandar el plantel con la única disciplina en "Individual"
-    // dejaba caer la curva de vuelta a parejas en silencio, mismo bug que
-    // W83, disparador distinto.
-    setConfig((current) => resizeConfig(current, filledCount(next.names), configSideSize(disciplines, pairSizes)))
+    // `resizeConfigs`, no un `resizeConfig` suelto (Task 5): agrandar o
+    // achicar el plantel tiene que poner al día la curva de CADA
+    // disciplina, cada una contra su propio `pairSize` — ya no hay una sola
+    // curva compartida que corregir.
+    setConfigsState((current) => resizeConfigs(current, filledCount(next.names), pairSizes))
   }
 
-  // Cada radio "Lados" manda sólo sobre SU disciplina. Con 2+ marcadas, tocar
-  // acá no rehace `config`: el paso 4 sigue siendo la curva de a dos siempre
-  // (C29), y la disciplina que elija "Individual" arma la suya aparte en
-  // `newTournamentPayload`. Pero con UNA sola marcada no hay ambigüedad que
-  // cuidar (`configForPairSizeChange`, `wizard-state.ts`) — ahí SÍ rehace
-  // `config` para que el paso 4 muestre y deje editar la curva de ESA
-  // disciplina, exactamente como antes de `fe44255` (W83, #4026).
+  // Cada radio "Lados" manda sólo sobre SU disciplina, y ahora SIEMPRE rehace
+  // la config de esa disciplina sola (Task 5): con una config genuinamente
+  // por disciplina no hay ambigüedad de 2+ marcadas que cuidar (la que
+  // resolvía `configForPairSizeChange`, borrada en esta Task) — tocar
+  // "Lados" de FIFA nunca puede mover la curva de Pádel, porque cada una
+  // vive en su propia entrada de `configs`.
   const changePairSize = (kind: DisciplineKind, next: SideSize) => {
     setPairSizes((current) => ({ ...current, [kind]: next }))
-    setConfig((current) => configForPairSizeChange(current, filled, disciplines, next))
+    setConfigsState((current) => ({ ...current, [kind]: freshDisciplineConfig(kind, filled, next) }))
   }
+
+  // Los tres setters de `PasoFormato`, declarados por nombre (mismo criterio
+  // que `changePairSize`, arriba) y no como arrow inline en el JSX: una
+  // arrow ahí adentro corta en seco a `app/cableado-de-formato.unit.test.ts`,
+  // que pincha el call site con una regexp que no puede cruzar un `=>`.
+  const changeConfig = (kind: DisciplineKind, next: SeasonConfig) =>
+    setConfigsState((current) => ({ ...current, [kind]: next }))
+  const changeHasMasters = (kind: DisciplineKind, next: boolean) =>
+    setHasMastersState((current) => ({ ...current, [kind]: next }))
+  const changeFormatoDefault = (kind: DisciplineKind, next: MatchdayFormat) =>
+    setFormatoDefaultState((current) => ({ ...current, [kind]: next }))
 
   const blocked =
     (step === 0 && (name.trim().length === 0 || disciplineWarning !== null)) ||
     (step === 1 && warning !== null) ||
-    (step === 3 && errors.length > 0)
+    (step === 3 && anyErrors)
 
   // Ya no hay techo que anunciar (docs/plan-piso-y-techo-del-plantel.md
   // Task 3 lo borró entero): `floor` sigue siendo el piso efectivo de las
@@ -484,7 +658,7 @@ export function Wizard({ myName }: { myName: string }) {
     setError(null)
     startTransition(async () => {
       const result = await createTournament(
-        newTournamentPayload(name, squad, config, disciplines, pairSizes),
+        newTournamentPayload(name, squad, configs, disciplines, pairSizes, hasMasters, formatoDefault),
       )
       if (!result.ok) {
         setError(result.error)
@@ -692,7 +866,17 @@ export function Wizard({ myName }: { myName: string }) {
         )}
 
         {step === 3 && (
-          <PasoFormato config={config} picked={disciplines} errors={errors} onChange={setConfig} />
+          <PasoFormato
+            configs={configs}
+            picked={disciplines}
+            pairSizes={pairSizes}
+            hasMasters={hasMasters}
+            formatoDefault={formatoDefault}
+            errors={errorsByKind}
+            onChangeConfig={changeConfig}
+            onChangeHasMasters={changeHasMasters}
+            onChangeFormatoDefault={changeFormatoDefault}
+          />
         )}
 
         {step === 4 && created !== null && (
@@ -718,7 +902,7 @@ export function Wizard({ myName }: { myName: string }) {
             </div>
 
             <div className="overflow-hidden rounded-[14px] border border-line">
-              {summaryOf(name, names, config, disciplines).map((row, index) => (
+              {summaryOf(name, names, configs, disciplines).map((row, index) => (
                 <div
                   key={row.key}
                   className={`flex items-center justify-between gap-3 px-3 py-2.5 ${index > 0 ? 'border-t border-line' : ''}`}
@@ -754,11 +938,17 @@ export function Wizard({ myName }: { myName: string }) {
         {step === 3 && (
           <button
             type="button"
-            // `configSideSize` (corrección #4030, lección #3994): sin esto,
-            // "Usar los defaults" con la única disciplina en "Individual"
-            // volvía la curva a parejas en silencio -- mismo bug que W83,
-            // en este botón en vez de en "Lados".
-            onClick={() => setConfig(configFor(filled, configSideSize(disciplines, pairSizes)))}
+            // Rehace la config de CADA disciplina MARCADA a su default fresco
+            // (Task 5): ya no hay una sola curva compartida que rehacer
+            // (`configSideSize`, borrada en esta Task) -- cada una vuelve a
+            // la suya, con su propio `pairSize`.
+            onClick={() =>
+              setConfigsState((current) => {
+                const next = { ...current }
+                for (const kind of disciplines) next[kind] = freshDisciplineConfig(kind, filled, pairSizes[kind])
+                return next
+              })
+            }
             className="rounded-field border-[1.5px] border-line px-4 py-4 text-[14px] font-extrabold"
           >
             Usar los defaults

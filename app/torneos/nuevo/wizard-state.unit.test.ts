@@ -1,24 +1,29 @@
 import { describe, expect, it } from 'vitest'
-import { defaultConfig, validateConfig, type SideSize } from '@/core'
+import { defaultConfig, disciplineProfile, validateConfig, type MatchdayFormat, type SideSize } from '@/core'
 import type { DisciplineKind } from './wizard-state'
 import {
+  FORMATO_DEFAULT_OPTIONS,
   STEPPERS,
   type Squad,
   addMySeat,
+  automaticHasMasters,
   buildDisciplines,
   configFor,
-  configForPairSizeChange,
-  configSideSize,
   disciplinesWarning,
   effectiveFloor,
+  effectiveHasMasters,
   filledCount,
   formatErrors,
+  formatoDefaultKey,
+  freshDisciplineConfig,
+  isSameFormatoDefault,
   moveSeat,
   namesAfterEdit,
   newDisciplineSpec,
   newTournamentPayload,
   removeSeatAt,
   resizeConfig,
+  resizeConfigs,
   squadWarning,
   steppersFor,
   submitSeats,
@@ -26,6 +31,12 @@ import {
   toggleDiscipline,
   withoutTrailingBlanks,
 } from './wizard-state'
+
+/** El default de columna (ROUND_ROBIN, 0074) para las dos disciplinas -- lo que usa cualquier test que no ejercite Masters/Formato de las fechas en sí. */
+const ROUND_ROBIN_ALL: Record<DisciplineKind, MatchdayFormat> = {
+  PADEL: { kind: 'ROUND_ROBIN' },
+  FIFA: { kind: 'ROUND_ROBIN' },
+}
 
 /**
  * El plantel es UNO SOLO y compartido por todas las disciplinas de la
@@ -172,85 +183,119 @@ describe('the config the wizard builds', () => {
 })
 
 /**
- * W83 (verify-report-pre-contract, #4026), tercera vez de la familia
- * W69 → W76 → W83: con UNA sola disciplina marcada, tocar "Lados" tiene que
- * rehacer `config` a la curva de la disciplina que queda — exactamente lo
- * que `wizard.tsx` hacía antes de `fe44255` y dejó de hacer al cerrar W76.
- * Con dos o más marcadas, `config` se queda con la curva legado de a dos
- * (C29) sin que "Lados" la mueva, que es lo que #4017 arregló.
+ * Task 5 (docs/plan-arquitectura-de-paginas.md §2.4, §6): reemplaza a
+ * `configForPairSizeChange` (W83, #4026, borrada en esta Task). Aquella
+ * función distinguía "una sola disciplina marcada" (rehace) de "dos o más"
+ * (no toca, C29) porque una config COMPARTIDA no podía rehacerse sin
+ * arriesgar la curva de la disciplina vecina. Con una config por disciplina
+ * esa distinción no existe: tocar "Lados" para `kind` siempre rehace SU
+ * config, sola o junto a otra.
  */
-describe('configForPairSizeChange (W83, #4026)', () => {
-  it('con una sola disciplina, rehace la curva a la del sideSize elegido', () => {
-    const config = configFor(8, 2) // curva de a dos, 4 valores
-    const next = configForPairSizeChange(config, 8, ['FIFA'], 1)
+describe('freshDisciplineConfig (Task 5, reemplaza a configForPairSizeChange)', () => {
+  it('rehace la curva de ESA disciplina a la del sideSize elegido', () => {
+    const next = freshDisciplineConfig('FIFA', 8, 1)
     expect(next.points).toEqual([10, 7, 5, 3, 2, 1, 0, 0])
   })
 
-  it('con dos o más disciplinas marcadas, deja `config` sin tocar -- #4017 sigue dueño de esa curva', () => {
-    const config = configFor(8, 2)
-    const next = configForPairSizeChange(config, 8, ['PADEL', 'FIFA'], 1)
-    expect(next).toBe(config)
+  it('aplica la forma de marcador de SU kind -- FIFA nace con openScore, Pádel no', () => {
+    expect(freshDisciplineConfig('FIFA', 8, 2).matchFormat.openScore).toBe(true)
+    expect(freshDisciplineConfig('PADEL', 8, 2).matchFormat.openScore).toBe(false)
+  })
+
+  // Marcar la MISMA disciplina junto con otra no cambia nada: cada una vive
+  // en su propia entrada, nunca hay una "compartida" que cuidar.
+  it('da la misma config esté sola o junto a otra disciplina marcada', () => {
+    expect(freshDisciplineConfig('FIFA', 8, 1)).toEqual(freshDisciplineConfig('FIFA', 8, 1))
   })
 })
 
 /**
- * Corrección #4030 sobre W83: `sideSize` era OPCIONAL en `configFor` y
- * `resizeConfig` (lección #3994 -- un parámetro opcional es invisible para
- * el compilador Y para los tests, porque el default suele coincidir con el
- * caso feliz). `wizard.tsx` tenía TRES call sites que lo olvidaban -- el
- * estado inicial de `config`, `setSquad` (agrandar/achicar el plantel) y
- * "Usar los defaults" -- y sólo UNO de los tres (`changePairSize`, W83) se
- * había medido. `configSideSize` es la respuesta única a la pregunta que
- * los tres necesitan.
+ * Task 5: reemplaza a `configSideSize` (corrección #4030/lección #3994,
+ * borrada en esta Task). `resizeConfigs` pone al día las DOS disciplinas del
+ * wizard a la vez, cada una contra SU PROPIO `pairSize` -- ya no hace falta
+ * calcular un "sideSize efectivo" de una curva compartida.
  */
-describe('configSideSize (corrección #4030, lección #3994)', () => {
-  it('con una sola disciplina, es SU pairSize', () => {
-    expect(configSideSize(['FIFA'], { PADEL: 2, FIFA: 1 })).toBe(1)
+describe('resizeConfigs (Task 5, reemplaza a configSideSize)', () => {
+  it('agrandar el plantel pone al día la curva de CADA disciplina, cada una con su propio sideSize', () => {
+    const configs = { PADEL: configFor(8, 2), FIFA: configFor(8, 1) }
+    const next = resizeConfigs(configs, 10, { PADEL: 2, FIFA: 1 })
+    expect(next.PADEL.points).toEqual(defaultConfig(10, 2).points)
+    expect(next.FIFA.points).toEqual(defaultConfig(10, 1).points)
+    expect(next.PADEL.points).not.toEqual(next.FIFA.points)
   })
 
-  it('con dos o más disciplinas, es la curva legado de a dos (C29)', () => {
-    expect(configSideSize(['PADEL', 'FIFA'], { PADEL: 2, FIFA: 1 })).toBe(2)
-  })
-
-  it('sin ninguna marcada (arranque del wizard), es 2 -- el default de siempre', () => {
-    expect(configSideSize([], { PADEL: 2, FIFA: 2 })).toBe(2)
+  it('no toca nada si el tamaño no cambió, para ninguna de las dos', () => {
+    const configs = { PADEL: configFor(8, 2), FIFA: configFor(8, 1) }
+    const next = resizeConfigs(configs, 8, { PADEL: 2, FIFA: 1 })
+    expect(next.PADEL).toBe(configs.PADEL)
+    expect(next.FIFA).toBe(configs.FIFA)
   })
 })
 
 /**
- * Los call sites de `wizard.tsx:411` (`setSquad`) y `:681` ("Usar los
- * defaults") armados acá tal cual los arma la pantalla, con
- * `configSideSize` de por medio. El test tiene que DISTINGUIR: con la única
- * disciplina en "Individual", disparar ese camino tiene que dar la curva de
- * la decisión #3963 -- NO la de parejas, que es lo que daban antes de esta
- * corrección (`resizeConfig`/`configFor` sin tercer argumento caían en
- * `sideSize=2` en silencio).
+ * El automático de la decisión #4029, con el que arranca el checkbox de
+ * Masters de CADA disciplina en el paso 4 (Task 5): `true` de a dos,
+ * `false` de a uno -- `disciplines_has_masters_needs_pair` (0053) rechaza
+ * `true` con `pairSize` 1 siempre.
  */
-describe('los call sites de wizard.tsx que #4030 corrigió', () => {
-  it('agrandar el plantel con la única disciplina en Individual sigue en la curva de #3963, no la de parejas (:411)', () => {
-    // Estado de pantalla: FIFA marcado solo, "Individual" elegido -- config
-    // ya en la forma de #3963 para 8 (lo que dejó `changePairSize`, W83).
-    const config = configFor(8, 1)
-    const picked = ['FIFA'] as const
-    const pairSizes = { PADEL: 2, FIFA: 1 } as const
+describe('automaticHasMasters (decisión #4029)', () => {
+  it('true con pairSize 2, false con pairSize 1', () => {
+    expect(automaticHasMasters(2)).toBe(true)
+    expect(automaticHasMasters(1)).toBe(false)
+  })
+})
 
-    // El admin agrega jugadores: el plantel pasa a 10. Exactamente lo que
-    // `setSquad` hace en `wizard.tsx:411`.
-    const next = resizeConfig(config, 10, configSideSize(picked, pairSizes))
-
-    expect(next.points).toEqual(defaultConfig(10, 1).points)
-    expect(next.points).not.toEqual(defaultConfig(10, 2).points)
+/**
+ * La puerta de salida real de Masters (Task 5): pase lo que pase tenga
+ * guardado el checkbox, una disciplina de a uno nunca manda `true` --
+ * `disciplines_has_masters_needs_pair` (0053) la rechazaría en la base.
+ */
+describe('effectiveHasMasters', () => {
+  it('fuerza false con pairSize 1, aunque el checkbox diga true', () => {
+    expect(effectiveHasMasters(1, true)).toBe(false)
   })
 
-  it('"Usar los defaults" con la única disciplina en Individual da la curva de #3963, no la de parejas (:681)', () => {
-    const picked = ['FIFA'] as const
-    const pairSizes = { PADEL: 2, FIFA: 1 } as const
+  it('respeta lo que diga el checkbox con pairSize 2', () => {
+    expect(effectiveHasMasters(2, true)).toBe(true)
+    expect(effectiveHasMasters(2, false)).toBe(false)
+  })
+})
 
-    // Exactamente lo que el botón hace en `wizard.tsx:681`.
-    const next = configFor(8, configSideSize(picked, pairSizes))
+/**
+ * Las mismas tres opciones que Ajustes (`formato-default.tsx`, §2.5):
+ * ROUND_ROBIN, 2 grupos o 4 grupos, siempre `qualifiersPerGroup: 2`.
+ */
+describe('FORMATO_DEFAULT_OPTIONS / formatoDefaultKey / isSameFormatoDefault', () => {
+  it('son las tres opciones de Ajustes, ni una más', () => {
+    expect(FORMATO_DEFAULT_OPTIONS).toEqual([
+      { kind: 'ROUND_ROBIN' },
+      { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 },
+      { kind: 'GROUPS_KNOCKOUT', groups: 4, qualifiersPerGroup: 2 },
+    ])
+  })
 
-    expect(next.points).toEqual(defaultConfig(8, 1).points)
-    expect(next.points).not.toEqual(defaultConfig(8, 2).points)
+  it('formatoDefaultKey distingue las tres entre sí', () => {
+    const keys = FORMATO_DEFAULT_OPTIONS.map(formatoDefaultKey)
+    expect(new Set(keys).size).toBe(3)
+  })
+
+  it('isSameFormatoDefault compara por kind + groups, no por identidad de objeto', () => {
+    expect(isSameFormatoDefault({ kind: 'ROUND_ROBIN' }, { kind: 'ROUND_ROBIN' })).toBe(true)
+    expect(
+      isSameFormatoDefault(
+        { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 },
+        { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 },
+      ),
+    ).toBe(true)
+    expect(
+      isSameFormatoDefault(
+        { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 },
+        { kind: 'GROUPS_KNOCKOUT', groups: 4, qualifiersPerGroup: 2 },
+      ),
+    ).toBe(false)
+    expect(isSameFormatoDefault({ kind: 'ROUND_ROBIN' }, { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 })).toBe(
+      false,
+    )
   })
 })
 
@@ -312,7 +357,8 @@ describe('formatErrors', () => {
 
 describe('summaryOf', () => {
   it('lists the six rows of the handoff, in order', () => {
-    const rows = summaryOf('Los Jueves 2026', Array(8).fill('Jugador'), configFor(8, 2), ['PADEL'])
+    const configs = { PADEL: configFor(8, 2), FIFA: configFor(8, 2) }
+    const rows = summaryOf('Los Jueves 2026', Array(8).fill('Jugador'), configs, ['PADEL'])
     expect(rows.map((row) => row.key)).toEqual([
       'Nombre',
       'Jugadores',
@@ -324,22 +370,39 @@ describe('summaryOf', () => {
     expect(rows[1]?.value).toBe('8')
     // Con una sola disciplina el resumen dice lo mismo de siempre, sin prefijo.
     expect(rows[2]?.value).toBe('1 set a 4 games')
+    expect(rows[3]?.value).toBe('10 · 6 · 3 · 1')
+    expect(rows[4]?.value).toBe('10')
   })
 
   // PR20 rebanada D2: con FIFA marcado, "1 set a 4 games" describe la mitad
   // pádel del torneo y MIENTE sobre la otra mitad. Es la misma clase de copy
   // que ya costó W47, W51 y W56.
   it('nombra el formato de cada disciplina cuando hay más de una', () => {
-    const rows = summaryOf('Los Jueves 2026', Array(8).fill('Jugador'), configFor(8, 2), [
-      'PADEL',
-      'FIFA',
-    ])
+    const configs = { PADEL: configFor(8, 2), FIFA: disciplineProfile('FIFA', configFor(8, 2)).config }
+    const rows = summaryOf('Los Jueves 2026', Array(8).fill('Jugador'), configs, ['PADEL', 'FIFA'])
     expect(rows[2]?.value).toBe('Pádel: 1 set a 4 games · FIFA: Marcador de goles')
   })
 
   it('y una liga de sólo FIFA no promete ningún set', () => {
-    const rows = summaryOf('Liga FIFA', Array(8).fill('Jugador'), configFor(8, 2), ['FIFA'])
+    const configs = { PADEL: configFor(8, 2), FIFA: disciplineProfile('FIFA', configFor(8, 2)).config }
+    const rows = summaryOf('Liga FIFA', Array(8).fill('Jugador'), configs, ['FIFA'])
     expect(rows[2]?.value).toBe('Marcador de goles')
+  })
+
+  /**
+   * Task 5: "Puntos", "Fechas" y "Desempate" también nombran la disciplina
+   * cuando hay 2+, igual que "Formato" desde W64 -- con `configs`
+   * genuinamente por disciplina estos tres números pueden ser distintos
+   * entre Pádel y FIFA, y mostrar sólo uno de los dos sería la misma mentira
+   * que esa ronda ya cerró para "Formato".
+   */
+  it('Puntos, Fechas y Desempate también nombran la disciplina con 2+ marcadas', () => {
+    const configs = {
+      PADEL: { ...configFor(8, 2), regularMatchdays: 10 },
+      FIFA: { ...disciplineProfile('FIFA', configFor(8, 2)).config, regularMatchdays: 12 },
+    }
+    const rows = summaryOf('Mixto', Array(8).fill('Jugador'), configs, ['PADEL', 'FIFA'])
+    expect(rows[4]?.value).toBe('Pádel: 10 · FIFA: 12')
   })
 })
 
@@ -598,33 +661,54 @@ describe('newTournamentPayload', () => {
   // `armado-state.ts`, `carga-state.ts`, `sumar-state.ts`: sacar la lógica
   // del `.tsx` para poder testearla sin DOM y sin base).
   //
-  // `pairSizes` es OBLIGATORIO acá (a diferencia de `buildDisciplines`): el
-  // único caller (`Wizard`) siempre tiene uno por disciplina, `useState`
-  // nace en `{ PADEL: 2, FIFA: 2 }`. Por eso el pádel de este test también lo
-  // pasa explícito — la fila que sale lleva `pairSize: 2` en vez de omitir
-  // la clave, y es exactamente lo mismo que escribe la base
+  // `configs`/`pairSizes`/`hasMasters`/`formatoDefault` son OBLIGATORIOS acá
+  // (a diferencia de `buildDisciplines`): el único caller (`Wizard`) siempre
+  // tiene un valor por disciplina para los cuatro. Por eso el pádel de este
+  // test también los pasa explícitos — la fila que sale lleva `pairSize: 2`
+  // en vez de omitir la clave, y es exactamente lo mismo que escribe la base
   // (`addDiscipline`: `spec.pairSize ?? 2`).
   it('arma exactamente el payload que createTournament espera, para pádel', () => {
     const squad: Squad = { names: Array(8).fill('Jugador'), mySeat: 0 }
-    const config = configFor(8, 2)
-    expect(newTournamentPayload('Los Jueves', squad, config, ['PADEL'], { PADEL: 2, FIFA: 2 })).toEqual({
+    const configs = { PADEL: configFor(8, 2), FIFA: configFor(8, 2) }
+    const payload = newTournamentPayload(
+      'Los Jueves',
+      squad,
+      configs,
+      ['PADEL'],
+      { PADEL: 2, FIFA: 2 },
+      { PADEL: true, FIFA: true },
+      ROUND_ROBIN_ALL,
+    )
+    expect(payload).toEqual({
       name: 'Los Jueves',
       squadNames: squad.names,
       mySeatIndex: 0,
-      config,
-      disciplines: buildDisciplines(['PADEL'], config, 2),
+      config: configs.PADEL,
+      disciplines: buildDisciplines(['PADEL'], configs.PADEL, 2),
     })
   })
 
   // El squadSize del payload sale del plantel REALMENTE cargado al momento
   // de mandar, no del que traía la config (que puede estar desactualizada si
-  // el admin agregó/sacó nombres después de tocar el paso 4).
+  // el admin agregó/sacó nombres después de tocar el paso 4). Task 5:
+  // `resizeConfig` corre por disciplina en el submit mismo, así que también
+  // reacomoda `points` al tamaño real -- no sólo pisa el número, como hacía
+  // la versión anterior a esta Task.
   it('el squadSize del payload sale del plantel cargado, no el que traía la config', () => {
     const squad: Squad = { names: [...Array(8).fill('Jugador'), '', ''], mySeat: null }
-    const staleConfig = configFor(12, 2)
-    const payload = newTournamentPayload('X', squad, staleConfig, ['PADEL'], { PADEL: 2, FIFA: 2 })
+    const configs = { PADEL: configFor(12, 2), FIFA: configFor(12, 2) }
+    const payload = newTournamentPayload(
+      'X',
+      squad,
+      configs,
+      ['PADEL'],
+      { PADEL: 2, FIFA: 2 },
+      { PADEL: true, FIFA: true },
+      ROUND_ROBIN_ALL,
+    )
     expect(payload.squadNames).toHaveLength(8)
     expect(payload.config.squadSize).toBe(8)
+    expect(payload.config.points).toEqual(defaultConfig(8, 2).points)
   })
 
   // El punto de unión de la Rebanada F, en el payload REAL que cruza al
@@ -632,92 +716,184 @@ describe('newTournamentPayload', () => {
   // pinchan los argumentos, no que la función interna acepte el parámetro).
   it('con pairSize=1, las disciplines del payload salen con la curva de la decisión #3963', () => {
     const squad: Squad = { names: Array(8).fill('Jugador'), mySeat: null }
-    const config = configFor(8, 1)
-    const payload = newTournamentPayload('Liga FIFA', squad, config, ['FIFA'], { PADEL: 2, FIFA: 1 })
+    const configs = { PADEL: configFor(8, 2), FIFA: configFor(8, 1) }
+    const payload = newTournamentPayload(
+      'Liga FIFA',
+      squad,
+      configs,
+      ['FIFA'],
+      { PADEL: 2, FIFA: 1 },
+      { PADEL: true, FIFA: false },
+      ROUND_ROBIN_ALL,
+    )
     expect(payload.disciplines).toEqual([
       {
         kind: 'FIFA',
-        config: { ...config, matchFormat: { ...config.matchFormat, openScore: true } },
+        config: { ...configs.FIFA, matchFormat: { ...configs.FIFA.matchFormat, openScore: true } },
         allowsDraw: true,
         pairSize: 1,
       },
     ])
   })
 
-  /**
-   * W76 (verify-report-pr21-cierre, #4016) + decisión #4017: "Lados" ya NO
-   * es un solo control para todas las disciplinas marcadas — cada una trae
-   * el suyo. Con Pádel Y FIFA marcados y SÓLO FIFA en "Individual", el
-   * payload tiene que traer las DOS filas con su `pairSize` PROPIO — ni
-   * las dos en 2 (el bug de W69/W76: "Individual" se ignoraba en silencio)
-   * ni las dos en 1 (herencia cruzada, exactamente lo que W69 cerró y que
-   * REQ-D2-1 prohíbe).
-   *
-   * Un test que sólo mirara UNA fila no probaría la ausencia de herencia
-   * cruzada en ningún sentido — hace falta ver las DOS a la vez.
-   */
-  it('con Pádel Y FIFA marcados, cada uno trae SU pairSize -- sin herencia cruzada en ningún sentido (W76, #4017)', () => {
+  // Con UNA sola disciplina marcada, el paso 4 no dibuja Masters ni "Formato
+  // de las fechas" (§5 del diseño), así que el payload tampoco las manda --
+  // el torneo se crea EXACTAMENTE como antes de la Task 5, aunque el estado
+  // interno del wizard tenga valores puestos (sobrante de haber tenido una
+  // segunda disciplina marcada en algún momento y haberla destildado).
+  it('con una sola disciplina, hasMasters y formatoDefault NO viajan en el payload', () => {
     const squad: Squad = { names: Array(8).fill('Jugador'), mySeat: null }
-    const config = configFor(8, 2)
-    const payload = newTournamentPayload('Mixto', squad, config, ['PADEL', 'FIFA'], { PADEL: 2, FIFA: 1 })
+    const configs = { PADEL: configFor(8, 2), FIFA: configFor(8, 2) }
+    const payload = newTournamentPayload(
+      'Los Jueves',
+      squad,
+      configs,
+      ['PADEL'],
+      { PADEL: 2, FIFA: 2 },
+      { PADEL: false, FIFA: false },
+      { PADEL: { kind: 'GROUPS_KNOCKOUT', groups: 4, qualifiersPerGroup: 2 }, FIFA: { kind: 'ROUND_ROBIN' } },
+    )
+    expect(payload.disciplines[0]).not.toHaveProperty('hasMasters')
+    expect(payload.disciplines[0]).not.toHaveProperty('formatoDefault')
+  })
+
+  /**
+   * La prueba central de la Task 5 -- y el chequeo que tiene que quedar rojo
+   * si alguien vuelve a aplanar (docs/plan-arquitectura-de-paginas.md §2.4,
+   * §6): con Pádel Y FIFA marcados, cada fila trae SU PROPIA config,
+   * genuinamente distinta de la otra en más que el `pairSize` -- puntos Y
+   * fechas del año, no sólo la curva que ya forzaba `pairSize` (W76/#4017).
+   * Y Masters/formato por defecto, cada uno el suyo.
+   *
+   * Un test que sólo mirara UNA fila no probaría la independencia entre
+   * disciplinas (docs/tipos-de-torneo.md §0, "cada torneo es independiente")
+   * -- hace falta ver las DOS a la vez, y que sean DISTINTAS entre sí, no
+   * sólo distintas del default.
+   */
+  it('con Pádel Y FIFA marcados, cada uno trae SU config -- genuinamente distinta, no sólo el pairSize', () => {
+    const squad: Squad = { names: Array(8).fill('Jugador'), mySeat: null }
+    const configs = {
+      PADEL: { ...configFor(8, 2), regularMatchdays: 10 },
+      FIFA: { ...configFor(8, 1), regularMatchdays: 12 },
+    }
+    const payload = newTournamentPayload(
+      'Mixto',
+      squad,
+      configs,
+      ['PADEL', 'FIFA'],
+      { PADEL: 2, FIFA: 1 },
+      { PADEL: true, FIFA: false },
+      { PADEL: { kind: 'ROUND_ROBIN' }, FIFA: { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 } },
+    )
 
     expect(payload.disciplines).toHaveLength(2)
     const padel = payload.disciplines.find((row) => row.kind === 'PADEL')
     const fifa = payload.disciplines.find((row) => row.kind === 'FIFA')
     expect(padel?.pairSize).toBe(2)
     expect(fifa?.pairSize).toBe(1)
-    // Cada uno con SU curva (#3963: 8 lados de a uno puntúan los primeros
-    // seis; 8 jugadores en parejas son 4 lados, la curva de 4).
+    // Puntos: cada uno con SU curva (#3963: 8 lados de a uno puntúan los
+    // primeros seis; 8 jugadores en parejas son 4 lados, la curva de 4).
     expect(padel?.config.points).toEqual([10, 6, 3, 1])
     expect(fifa?.config.points).toEqual([10, 7, 5, 3, 2, 1, 0, 0])
+    // Fechas: genuinamente distintas ENTRE SÍ, no sólo distintas del default.
+    expect(padel?.config.regularMatchdays).toBe(10)
+    expect(fifa?.config.regularMatchdays).toBe(12)
+    expect(padel?.config.regularMatchdays).not.toBe(fifa?.config.regularMatchdays)
+    // Masters y formato por defecto: cada fila trae el suyo.
+    expect(padel?.hasMasters).toBe(true)
+    expect(fifa?.hasMasters).toBe(false)
+    expect(padel?.formatoDefault).toEqual({ kind: 'ROUND_ROBIN' })
+    expect(fifa?.formatoDefault).toEqual({ kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 })
   })
 
   /**
-   * W83 (verify-report-pre-contract, #4026): el test de arriba ("con
-   * pairSize=1, las disciplines... salen con la curva de #3963") entra con
-   * `config = configFor(8, 1)` -- la curva de a uno YA armada -- así que no
-   * puede distinguir "respetó lo que le pasaron" de "lo tiró y usó el
-   * default": las dos dan el mismo resultado. Éste SÍ distingue: la curva
-   * que llega acá está EDITADA a mano (valores que #3963 nunca produce), y
-   * tiene que ser la que se guarda -- no el default.
+   * Fix round 1: la prueba de arriba pone a FIFA en `pairSize: 1`, así que
+   * `effectiveHasMasters` CLAMPEA su `hasMasters` a `false` sin importar qué
+   * valor se lea -- leer `hasMasters[picked[0]!]` ("PADEL", `true`) en vez
+   * de `hasMasters[kind]` da el MISMO `false` para la fila FIFA, porque el
+   * clamp lo pisa igual. La prueba no discriminaba la lectura de la clave;
+   * discriminaba el clamp.
+   *
+   * Acá las DOS quedan en `pairSize: 2` -- nada clampea ninguna de las dos
+   * filas -- y con `hasMasters` DISTINTO entre sí, lo único que puede dar
+   * el resultado esperado es leer `hasMasters[kind]`, la clave correcta.
    */
-  it('con una sola disciplina, la curva EDITADA a mano es la que se guarda -- no el default de #3963 (W83)', () => {
+  it('con las DOS en pairSize 2 (sin clamp), cada fila lee SU PROPIO hasMasters', () => {
+    const squad: Squad = { names: Array(8).fill('Jugador'), mySeat: null }
+    const configs = { PADEL: configFor(8, 2), FIFA: configFor(8, 2) }
+    const payload = newTournamentPayload(
+      'Mixto',
+      squad,
+      configs,
+      ['PADEL', 'FIFA'],
+      { PADEL: 2, FIFA: 2 },
+      { PADEL: true, FIFA: false },
+      ROUND_ROBIN_ALL,
+    )
+    const padel = payload.disciplines.find((row) => row.kind === 'PADEL')
+    const fifa = payload.disciplines.find((row) => row.kind === 'FIFA')
+    expect(padel?.hasMasters).toBe(true)
+    expect(fifa?.hasMasters).toBe(false)
+  })
+
+  // El guard vive en `newTournamentPayload`, no confía en que el checkbox
+  // haya quedado deshabilitado a tiempo: `disciplines_has_masters_needs_pair`
+  // (0053) rechaza `true` con `pairSize` 1 sin excepción.
+  it('effectiveHasMasters se aplica en el payload real: pairSize 1 fuerza false aunque el checkbox diga true', () => {
+    const squad: Squad = { names: Array(8).fill('Jugador'), mySeat: null }
+    const configs = { PADEL: configFor(8, 2), FIFA: configFor(8, 1) }
+    const payload = newTournamentPayload(
+      'Mixto',
+      squad,
+      configs,
+      ['PADEL', 'FIFA'],
+      { PADEL: 2, FIFA: 1 },
+      { PADEL: true, FIFA: true }, // FIFA en true a mano -- inválido para pairSize 1
+      ROUND_ROBIN_ALL,
+    )
+    const fifa = payload.disciplines.find((row) => row.kind === 'FIFA')
+    expect(fifa?.hasMasters).toBe(false)
+  })
+
+  // Con una config genuinamente por disciplina ya no hay una curva "legado"
+  // que una edición pueda perder o heredar (C29/W83, cerrado por esta
+  // Task): lo que el admin editó en `configs.FIFA` es, literal, lo que se
+  // guarda -- sin `soleCurveMatches` ni ningún otro guard de forma.
+  it('la curva editada a mano en UNA disciplina se guarda tal cual', () => {
     const squad: Squad = { names: Array(8).fill('Jugador'), mySeat: null }
     const edited = { ...configFor(8, 1), points: [20, 12, 6, 2, 0, 0, 0, 0] }
-    const payload = newTournamentPayload('Liga FIFA', squad, edited, ['FIFA'], { PADEL: 2, FIFA: 1 })
+    const configs = { PADEL: configFor(8, 2), FIFA: edited }
+    const payload = newTournamentPayload(
+      'Liga FIFA',
+      squad,
+      configs,
+      ['FIFA'],
+      { PADEL: 2, FIFA: 1 },
+      { PADEL: true, FIFA: false },
+      ROUND_ROBIN_ALL,
+    )
     expect(payload.disciplines[0]?.config.points).toEqual([20, 12, 6, 2, 0, 0, 0, 0])
   })
 
-  /**
-   * El mismo distingo, con DOS disciplinas: la curva editada en pantalla es
-   * SIEMPRE la legado de a dos (C29, W76/#4017) -- acá tiene que quedar en
-   * PADEL (pairSize=2), tal cual se editó, y FIFA (pairSize=1) se queda con
-   * el default de #3963, sin heredar la edición de PADEL ni perder la suya.
-   */
-  it('con dos disciplinas, la curva editada es SOLO para la de a dos -- FIFA de a uno sigue con el default de #3963', () => {
+  it('con dos disciplinas, la curva editada de una no se filtra a la otra', () => {
     const squad: Squad = { names: Array(8).fill('Jugador'), mySeat: null }
-    const edited = { ...configFor(8, 2), points: [20, 12, 6, 2] }
-    const payload = newTournamentPayload('Mixto', squad, edited, ['PADEL', 'FIFA'], { PADEL: 2, FIFA: 1 })
+    const configs = {
+      PADEL: { ...configFor(8, 2), points: [20, 12, 6, 2] },
+      FIFA: configFor(8, 1),
+    }
+    const payload = newTournamentPayload(
+      'Mixto',
+      squad,
+      configs,
+      ['PADEL', 'FIFA'],
+      { PADEL: 2, FIFA: 1 },
+      { PADEL: true, FIFA: false },
+      ROUND_ROBIN_ALL,
+    )
     const padel = payload.disciplines.find((row) => row.kind === 'PADEL')
     const fifa = payload.disciplines.find((row) => row.kind === 'FIFA')
     expect(padel?.config.points).toEqual([20, 12, 6, 2])
     expect(fifa?.config.points).toEqual([10, 7, 5, 3, 2, 1, 0, 0])
-  })
-
-  /**
-   * El guard de forma (`soleCurveMatches`): si `config` quedó con la curva
-   * legado de a dos (4 valores, por ejemplo porque el admin destildó una
-   * segunda disciplina sin volver a tocar "Lados") y la única disciplina que
-   * sobrevive es de a uno, el LARGO no coincide con lo que esa disciplina
-   * necesita (8) -- confiar en `builtConfig` ahí guardaría un `points`
-   * inválido. Tiene que caer al default seguro, igual que si nunca se
-   * hubiera editado nada.
-   */
-  it('con una sola disciplina pero una curva de forma vieja (largo de a dos), usa el default -- no arriesga un largo inválido', () => {
-    const squad: Squad = { names: Array(8).fill('Jugador'), mySeat: null }
-    const stale = configFor(8, 2) // 4 valores, la forma de a dos
-    const payload = newTournamentPayload('Liga FIFA', squad, stale, ['FIFA'], { PADEL: 2, FIFA: 1 })
-    expect(payload.disciplines[0]?.config.points).toEqual([10, 7, 5, 3, 2, 1, 0, 0])
   })
 })
 
@@ -751,9 +927,13 @@ describe('submitSeats', () => {
  * "A 4 games el resultado se carga en dos toques" — justo la máquina que una
  * disciplina de marcador abierto no monta.
  *
- * El criterio NO es el de Ajustes. Allá la config es de UNA disciplina y
- * alcanza con `openScore`; acá es de la TEMPORADA y la comparten todas las
- * marcadas, así que los steppers se van sólo cuando NINGUNA usa sets.
+ * Antes de la Task 5 el criterio del wizard difería del de Ajustes: acá la
+ * config era de la TEMPORADA y la compartían todas las marcadas, así que se
+ * le pasaban los formatos de TODAS a la vez (de ahí el test "alcanza con
+ * que UNA use sets", abajo). Desde la Task 5 el wizard también llama con un
+ * array de UNO, por disciplina — igual que Ajustes — así que ese caso ya no
+ * tiene un caller vivo, pero la función lo sigue soportando (la firma
+ * genérica de `steppersFor` no cambió, y Ajustes ya llama con un array).
  */
 describe('steppersFor', () => {
   const PADEL = configFor(8, 2).matchFormat
@@ -780,78 +960,39 @@ describe('steppersFor', () => {
   })
 })
 
-// ── W88 y W90: la CUARTA y la QUINTA puerta de la familia W69 → W76 → W83 ───
-//
-// Las dos son el mismo defecto de raíz, medido por `verify-report-go-no-go`
-// (#4034): `config` es UNA curva compartida por el paso 4 (C29), y su
-// `sideSize` efectivo lo contesta `configSideSize(picked, pairSizes)` — pero
-// `formatErrors` nunca miró ese número. Validaba los VALORES de `points`
-// (`pointsErrors`) y no su CANTIDAD, que es lo único que cambia cuando el
-// admin toca las disciplinas marcadas.
-//
-// `onToggle` (`wizard.tsx:519`) no rehace `config` a propósito: con 2+
-// disciplinas no debe (C29/W76). Lo que faltaba no era rehacerla, era AVISAR
-// cuando dejó de corresponder — y "Usar los defaults" (`wizard.tsx:698`) ya
-// era la salida, sólo que nada le decía al admin que la necesitaba.
-describe('formatErrors mira el sideSize efectivo (W88, W90)', () => {
-  // W88, textual del informe: la pantalla mostraba [20,12,6,2] y la base
-  // guardaba [10,7,5,3,2,1,0,0]. Las ediciones del admin se descartaban SIN
-  // UN AVISO, que es exactamente la pregunta con la que se decidió #4017.
-  it('W88 · destildar hasta UNA sola disciplina de a uno deja de pasar en silencio', () => {
-    // Paso 1: Pádel + FIFA, FIFA en "Individual" -> config es la curva legado
-    // de a dos, 4 filas (C29: con 2+ marcadas nadie la mueve).
-    const pairSizes = { PADEL: 2 as SideSize, FIFA: 1 as SideSize }
-    const editada = { ...configFor(8, 2), points: [20, 12, 6, 2] }
-
-    // Paso 3: destilda Pádel. Queda sólo FIFA, de a uno: 8 lados, 8 valores.
-    const picked: DisciplineKind[] = ['FIFA']
-    const sideSize = configSideSize(picked, pairSizes)
-    expect(sideSize).toBe(1)
-
-    // El paso 4 tiene que decir que esa curva ya no corresponde, con el MISMO
-    // mensaje que `validateConfig` — no uno propio que pueda divergir.
-    expect(formatErrors(editada, sideSize)).toEqual(
-      validateConfig(editada, sideSize).filter((error) => error.includes('valores de puntos')),
-    )
-    expect(formatErrors(editada, sideSize)).toContain(
-      'Con un plantel de 8 hacen falta 8 valores de puntos, no 4.',
-    )
-  })
-
-  // W90, textual del informe: dejar SÓLO FIFA en "Individual" (config pasa a 8
-  // filas) y volver a tildar Pádel. `configForPairSizeChange` es no-op con 2+
-  // marcadas (C29), así que tocar "Lados" de nuevo NO lo saca — y el submit
-  // moría en el último paso con un mensaje que no nombra la disciplina.
-  it('W90 · volver a tildar la segunda disciplina se avisa en el paso 4, no en el submit', () => {
-    const pairSizes = { PADEL: 2 as SideSize, FIFA: 1 as SideSize }
-    // Sólo FIFA de a uno: `configForPairSizeChange` SÍ rehace -> 8 filas.
-    const config = configForPairSizeChange(configFor(8, 2), 8, ['FIFA'], 1)
-    expect(config.points).toHaveLength(8)
-
-    // Se vuelve a tildar Pádel: dos marcadas, la curva compartida vuelve a
-    // ser la de a dos (4 filas) y las 8 que quedaron ya no corresponden.
-    const picked: DisciplineKind[] = ['FIFA', 'PADEL']
-    expect(configForPairSizeChange(config, 8, picked, 1)).toEqual(config) // sigue siendo no-op (C29)
-    const sideSize = configSideSize(picked, pairSizes)
-    expect(sideSize).toBe(2)
-
-    expect(formatErrors(config, sideSize)).toContain(
-      'Con un plantel de 8 hacen falta 4 valores de puntos, no 8.',
-    )
-
-    // Y es el MISMO error con el que moría el submit: `createSeason` corre
-    // `assertValidConfig(config, 2)` sobre esa curva.
-    expect(validateConfig(config, 2)).toContain(
-      'Con un plantel de 8 hacen falta 4 valores de puntos, no 8.',
-    )
-  })
-
+/**
+ * W88 y W90 (`verify-report-go-no-go`, #4034) eran la cuarta y la quinta
+ * puerta de la familia C29 → W69 → W76 → W83: `config` era UNA curva
+ * compartida por el paso 4, y destildar o volver a tildar una disciplina
+ * podía dejarla con una CANTIDAD de valores que ya no correspondía, sin que
+ * nada lo avisara. La Task 5 (docs/plan-arquitectura-de-paginas.md) cierra
+ * la familia entera: con `configs` genuinamente por disciplina no existe
+ * una curva compartida que un toggle pueda desactualizar — cada disciplina
+ * mantiene la suya, y `changePairSize`/`freshDisciplineConfig`
+ * (`wizard.tsx`/`wizard-state.ts`) la rehacen siempre que cambia SU
+ * `pairSize`. Los dos escenarios textuales de esos informes ya no son
+ * alcanzables, así que sus tests (que llamaban a `configSideSize`/
+ * `configForPairSizeChange`, las dos borradas en esta Task) se van con
+ * ellos. Lo que queda, y sigue siendo válido, es el PIN de no-regresión de
+ * abajo.
+ */
+describe('formatErrors', () => {
   // PIN de no-regresión: el caso de siempre —una curva que SÍ corresponde—
   // sigue sin errores. Es el 100% de los torneos que existen hoy.
   it('no inventa un error cuando la curva corresponde', () => {
     expect(formatErrors(configFor(8, 2), 2)).toEqual([])
     expect(formatErrors(configFor(8, 1), 1)).toEqual([])
     expect(formatErrors(configFor(12, 2), 2)).toEqual([])
+  })
+
+  // Task 5: con una config por disciplina, cambiar cuántas marcadas hay NO
+  // puede dejar a la que sobrevive con una cantidad de puntos que no le
+  // corresponde -- `freshDisciplineConfig` la rehace siempre que cambia SU
+  // `pairSize`, así que el escenario que medían W88/W90 (una curva
+  // compartida desactualizada) ya no es alcanzable.
+  it('freshDisciplineConfig nunca deja una cantidad de puntos que no corresponda', () => {
+    const config = freshDisciplineConfig('FIFA', 8, 1)
+    expect(formatErrors(config, 1)).toEqual([])
   })
 })
 

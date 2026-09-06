@@ -24,12 +24,12 @@ interface DesempateProps {
   /**
    * A qué URL navega cada fila (el `<div onClick>` de más abajo, no un
    * `<a>`) al tocarla — `/torneo/{seasonId}/{disciplina}` cuando `rows` es
-   * de UNA disciplina (`tabla-view.tsx`), `/torneo/{seasonId}` a secas en
-   * la tabla global (`page.tsx`), que suma puntos de TODAS las disciplinas
-   * por fila y no tiene una sola a la que apuntar (cae en el redirect de
-   * compatibilidad de Task 2, `jugador/[entryId]/page.tsx`, a la `[0]`).
+   * de UNA disciplina (`tabla-view.tsx`). `null` en la tabla global
+   * (`page.tsx`), que suma puntos de TODAS las disciplinas por fila y no
+   * tiene un perfil al que apuntar: la fila no lleva `onClick` ni se
+   * dibuja clickeable.
    */
-  base: string
+  base: string | null
   rows: StandingsRow[]
   mastersCutoff: number
   tiebreakOrder: TiebreakEntry[]
@@ -109,9 +109,9 @@ export function Desempate({
         {rows.map((row, index) => (
           <div key={row.entryId}>
             <div
-              onClick={() => router.push(`${base}/jugador/${row.entryId}`)}
-              className={`flex cursor-pointer items-center gap-3 rounded-field p-3 ${
-                row.position === 1 ? 'bg-chip' : ''
+              onClick={base === null ? undefined : () => router.push(`${base}/jugador/${row.entryId}`)}
+              className={`flex items-center gap-3 rounded-field p-3${base === null ? '' : ' cursor-pointer'}${
+                row.position === 1 ? ' bg-chip' : ''
               }`}
             >
               {/* S85 (verify-report-pr21-cierre #4016): la tabla general de la

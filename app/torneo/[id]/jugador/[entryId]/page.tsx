@@ -22,15 +22,12 @@ interface PageProps {
  * Estadísticas: a la disciplina `[0]` (`position, created_at`), no a una
  * "adivinada".
  *
- * NO es sólo compatibilidad para un link viejo guardado, y acá es MÁS
- * load-bearing que en `stats/page.tsx`: la Tabla GLOBAL
- * (`app/torneo/[id]/page.tsx:143`, sólo se dibuja con 2+ disciplinas, donde
- * el punto de arriba importa) le pasa a `Desempate` un `base` sin
- * disciplina a propósito -- sus filas suman puntos de TODAS y no hay una
- * sola a la que apuntar (ver el comentario ahí). Cada click de fila de esa
- * tabla cae en `/torneo/{seasonId}/jugador/{entryId}` y pasa por ESTE
- * archivo antes de llegar a algún perfil. Borrarlo por "compat muerta" no
- * rompe un bookmark: rompe la única interacción de la Tabla global.
+ * La Tabla GLOBAL (`app/torneo/[id]/page.tsx`) YA NO pasa por acá: sus
+ * filas no son clickeables (`base: null` en `Desempate`, decisión del
+ * dueño — no hay un perfil de UNA disciplina al que apuntar). Este redirect
+ * queda como compatibilidad para bookmarks y links viejos a esta ruta,
+ * compartidos antes de la migración de rutas de Task 2. No es un camino
+ * muerto: sigue siendo el único destino de esos links.
  */
 export default async function JugadorRedirectPage({ params }: PageProps) {
   const { id: seasonId, entryId } = await params

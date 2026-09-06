@@ -38,6 +38,15 @@ interface PageProps {
  * zero points") — y acá se le pasa SIEMPRE el plantel de la temporada
  * entera, no el de una disciplina, así que nadie queda afuera del global.
  *
+ * Lo que este listado completo NO da: navegación. Un squad member que no
+ * está en las entries de NINGUNA disciplina aparece acá con 0 puntos pero no
+ * tiene ningún camino a su propio perfil en toda la UI — la fila de esta
+ * tabla no es clickeable (ver `Desempate` abajo), y las únicas otras que
+ * enlazan a `jugador/{entryId}` (`tabla-view.tsx`, `[disciplina]/stats/page.tsx`)
+ * salen de `entriesOf`, que lo deja afuera por la misma razón. No es un
+ * defecto — el dueño pidió la fila no clickeable acá — pero listarlo sin
+ * darle destino es la otra cara de esa decisión.
+ *
  * "Próxima fecha" y "Campeones defensores" no aparecen acá: son conceptos
  * por-disciplina (cada una se juega el día que quiera, decisión #3796) sin
  * versión agregable entre calendarios independientes — viven en la Tabla de
@@ -140,16 +149,11 @@ export default async function TablaGlobalPage({ params }: PageProps) {
       </div>
 
       <Desempate
-        // Sin disciplina: `rows` acá suma puntos de TODAS, no hay una sola a
-        // la que apuntar. La fila (`<div onClick>`, no un botón) cae en el
-        // redirect de compatibilidad de Task 2 a la disciplina `[0]` -- el
-        // MISMO destino que resolvía antes de esa Task (`seasonHeader`
-        // ordena `position, created_at`, igual que `defaultDisciplineId`).
-        // Lo que SÍ cambia con Task 2: esa pantalla ahora nombra la
-        // disciplina en el encabezado con 2+ (`Ana · Pádel`), porque
-        // renderiza como cualquier otro perfil -- no es una regresión, pero
-        // tampoco es "nada cambió".
-        base={`/torneo/${seasonId}`}
+        // Sin disciplina: `rows` acá suma puntos de TODAS, no hay un perfil
+        // de UNA disciplina al que apuntar. Decisión del dueño: la fila NO
+        // es clickeable en la tabla global (`base: null` se lo dice a
+        // `Desempate`, que no le pone `onClick` ni `cursor-pointer`).
+        base={null}
         rows={rows}
         // Fuera de rango a propósito: el corte de Masters es por-disciplina.
         mastersCutoff={rows.length + 1}

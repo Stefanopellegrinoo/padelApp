@@ -191,9 +191,12 @@ function markMatchdays(
  * del dueño del producto: el perfil es por disciplina.
  *
  * La IDENTIDAD sigue sin tocarse: `seasonSquadMembersOf` es del CONTENEDOR
- * (el plantel es compartido, §3.2 de `docs/arquitectura-de-paginas.md`), así
- * que quien sólo juega otra disciplina (o ninguna) sigue siendo clickeable
- * desde la Tabla global.
+ * (el plantel es compartido, §3.2 de `docs/arquitectura-de-paginas.md`) —
+ * necesario porque el redirect de compatibilidad (`jugador/[entryId]/page.tsx`)
+ * manda acá cualquier `entryId` del plantel hacia la disciplina primaria SIN
+ * comprobar si esa disciplina lo tiene entre sus entries: quien sólo juega
+ * otra disciplina (o ninguna) igual encuentra su nombre acá, con "Todavía no
+ * jugó {disciplina}" en vez de un 404.
  */
 export default async function JugadorPage({ params }: PageProps) {
   const { id: seasonId, disciplina, entryId } = await params
@@ -208,11 +211,15 @@ export default async function JugadorPage({ params }: PageProps) {
   // Deliberadamente SIN discipliner: `volverDestination` (`tabla-state.ts`)
   // ya decide esto para la Tabla -- `/torneos` con una sola disciplina,
   // `/torneo/{seasonId}` (el contenedor) con 2+ -- y reusarlo acá rompería
-  // el byte-a-byte con una sola disciplina. Hardcodear `{disciplina}` en su
-  // lugar tampoco sirve: quien llega desde la Tabla GLOBAL (`page.tsx`, 2+
-  // disciplinas, sin una sola a la que apuntar) volvería a pádel en vez de
-  // a la tabla de la que vino. Sin superficie propia para decidirlo bien,
-  // se deja como estaba -- Task 3 es quien scopea el resto del nav.
+  // el byte-a-byte con una sola disciplina: hoy, `/torneo/{seasonId}`
+  // redirige (`singleDisciplineRedirect`, `tabla-state.ts`) a la MISMA tabla
+  // a la que iría `/torneo/{seasonId}/{disciplina}` directo; `volverDestination`
+  // en cambio manda a "Mis torneos", afuera de la temporada. Con 2+
+  // disciplinas se vuelve al contenedor (Tabla general), no a la tabla
+  // puntual de la que vino -- la razón por la que se eligió así (la Tabla
+  // GLOBAL enlazaba acá sin una disciplina a la que apuntar) ya no aplica,
+  // esa fila dejó de ser clickeable, pero el valor no se revisó de nuevo en
+  // esta tarea: Task 3 es quien scopea el resto del nav.
   const volverHref = `/torneo/${seasonId}`
 
   const [squad, entries, history, awardsByMatchday] = await Promise.all([
@@ -225,9 +232,11 @@ export default async function JugadorPage({ params }: PageProps) {
   // La identidad se resuelve con el plantel de LA TEMPORADA (C11, verify
   // ronda 6): `entriesOf` sin disciplina explícita filtra por la disciplina
   // POR DEFECTO, y quien sólo juega otra disciplina (o ninguna) no aparecía
-  // ahí — pero sí es clickeable desde la tabla global, que lista al plantel
-  // entero. `entriesOf` se sigue usando abajo, sólo para las ESTADÍSTICAS de
-  // la disciplina de la URL (C9 no se toca).
+  // ahí — y sigue sin aparecer: es exactamente el caso que golpea el
+  // redirect de compatibilidad (`jugador/[entryId]/page.tsx`), que manda acá
+  // a la disciplina primaria sin comprobar si el `entryId` juega esa
+  // disciplina. `entriesOf` se sigue usando abajo, sólo para las
+  // ESTADÍSTICAS de la disciplina de la URL (C9 no se toca).
   const member = squad.find((candidate) => candidate.id === entryId)
   if (member === undefined) notFound()
 

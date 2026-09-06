@@ -28,10 +28,10 @@ function row(position: number): StandingsRow {
   }
 }
 
-function html(rows: StandingsRow[]): string {
+function html(rows: StandingsRow[], base: string | null = '/torneo/s1'): string {
   return renderToStaticMarkup(
     createElement(Desempate, {
-      base: '/torneo/s1',
+      base,
       rows,
       mastersCutoff: 4,
       tiebreakOrder: [],
@@ -51,5 +51,21 @@ describe('Desempate — el número de puesto no se recorta desde el 10 (S85, ver
     const decimo = /<span class="[^"]*">10<\/span>/.exec(markup)?.[0] ?? ''
     expect(decimo).toContain('w-5')
     expect(decimo).not.toContain('w-4')
+  })
+})
+
+describe('Desempate — tabla global (base null) no tiene filas clickeables', () => {
+  it('con base null, la fila no lleva cursor-pointer', () => {
+    const markup = html([row(1)], null)
+
+    const fila = /<div class="[^"]*rounded-field p-3[^"]*"/.exec(markup)?.[0] ?? ''
+    expect(fila).not.toContain('cursor-pointer')
+  })
+
+  it('con base string, la fila lleva cursor-pointer', () => {
+    const markup = html([row(1)], '/torneo/s1')
+
+    const fila = /<div class="[^"]*rounded-field p-3[^"]*"/.exec(markup)?.[0] ?? ''
+    expect(fila).toContain('cursor-pointer')
   })
 })

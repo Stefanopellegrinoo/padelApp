@@ -9,6 +9,7 @@ import {
   losingMatchup,
   knockoutPositions,
   suggestFormat,
+  formatoOfrecible,
   isUnplayedThirdPlace,
   thirdPlaceByGroupTable,
   drawIsLegal,
@@ -164,6 +165,11 @@ describe('nextRoundMatchups', () => {
       [A1, D2],
       [B1, C2],
     ])
+  })
+
+  it('tira con un set empatado en vez de elegir un ganador arbitrario', () => {
+    const tied: MatchResult = { round: 1, fase: 'CUARTOS', grupo: 1, sideA: A, sideB: B, sets: [{ gamesA: 3, gamesB: 3 }] }
+    expect(() => nextRoundMatchups([tied, tied])).toThrow('Un partido de llave sin definir no tiene ganador.')
   })
 
   it('tira con una cantidad de partidos que no arma parejas completas', () => {
@@ -483,6 +489,19 @@ describe('suggestFormat', () => {
   })
 })
 
+/**
+ * Vive acá y no en cada guard porque comparar una unión discriminada es
+ * precisamente donde una de dos copias se equivoca (ver JSDoc de
+ * `formatoOfrecible` en `core/knockout.ts`).
+ */
+describe('formatoOfrecible', () => {
+  it('4 grupos no está ofrecible para 8 lados: el menú real es 2 grupos, no 4', () => {
+    expect(
+      formatoOfrecible({ kind: 'GROUPS_KNOCKOUT', groups: 4, qualifiersPerGroup: 2 }, 8, defaultMaxMatches(1)),
+    ).toBe(false)
+  })
+})
+
 describe('matchCountForFormat', () => {
   /**
    * El número real de partidos, no la fórmula de round robin hardcodeada
@@ -566,6 +585,10 @@ describe('offerableFormats', () => {
 
   it('12 lados: 2 y 4 grupos (de 3, el mínimo que decide algo)', () => {
     expect(gruposDe(12)).toEqual([2, 4])
+  })
+
+  it('9 lados NUNCA ofrece 4 grupos: el grupo más chico da 2, eliminación cero', () => {
+    expect(gruposDe(9)).toEqual([2])
   })
 
   it('nunca ofrece "1 grupo + llave": siempre es el round robin de siempre más un partido', () => {

@@ -127,6 +127,26 @@ describe('bestPair', () => {
 })
 
 /**
+ * `matchOutcome` (playerstats.ts:51-64) es la única cuenta de partidos ganados
+ * de este módulo, y con `allows_draw = true` (FIFA) un resultado con los
+ * mismos games de los dos lados es un resultado real, no un caso raro. Los 11
+ * tests de arriba usan sólo marcadores con `gamesA !== gamesB`, así que un
+ * empate nunca pasa por acá.
+ */
+describe('tallyPlayers con empate (FIFA, allows_draw)', () => {
+  it('un partido 2-2 no cuenta como ganado para ningún lado', () => {
+    const s1 = single('s1')
+    const s2 = single('s2')
+    const history: PlayedMatchday[] = [
+      { number: 1, sides: [s1, s2], matches: [match(s1, s2, 2, 2)] },
+    ]
+    const tallies = tallyPlayers(history, ['s1', 's2'])
+    expect(tallies.find((t) => t.entryId === 's1')?.matchesWon).toBe(0)
+    expect(tallies.find((t) => t.entryId === 's2')?.matchesWon).toBe(0)
+  })
+})
+
+/**
  * PR18b: una disciplina de a uno pasa por acá igual que una de a dos, y las
  * dos mitades del módulo responden distinto A PROPÓSITO. Los tallies por
  * PERSONA (partidos, games, fechas) valen igual — jugar solo sigue siendo

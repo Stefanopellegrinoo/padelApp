@@ -132,12 +132,29 @@ describe('buildPairs — no repeating last matchday', () => {
     expect(keys(pairs)).not.toContain('p1-p8')
     expect(pairs).toHaveLength(4)
     // Several legal matchings tie on imbalance once the ideal one (p1-p8,
-    // p2-p7, p3-p6, p4-p5) is excluded. Pinned to whichever one allMatchings
-    // enumerates first among the tied candidates, so a refactor of that
-    // recursion — or loosening the `<` in buildPairs to `<=` — cannot
-    // silently change who plays with whom while every other assertion here
-    // still passes.
+    // p2-p7, p3-p6, p4-p5) is excluded, so this pins whichever one
+    // allMatchings enumerates first among them — it only catches a
+    // regression in that recursion's order. It does NOT cover loosening the
+    // `<` in buildPairs to `<=`: measured against this exact fixture, that
+    // mutation leaves the result unchanged, because the winning score here
+    // is never re-tied by a later candidate. See the `<=` test below, which
+    // uses a fixture where the minimum genuinely repeats.
     expect(keys(pairs)).toEqual(['p1-p7', 'p2-p8', 'p3-p6', 'p4-p5'])
+  })
+
+  it('breaks a genuine tie in imbalance by keeping the first candidate found, not the last', () => {
+    const previousPairs: Duo[] = [
+      pair('p1', 'p2'),
+      pair('p3', 'p6'),
+      pair('p4', 'p7'),
+      pair('p5', 'p8'),
+    ]
+    const pairs = buildPairs(input({ previousPairs }))
+    // Two legal matchings tie for the lowest imbalance once these four are
+    // excluded. Loosening `score < bestScore` to `score <= bestScore`
+    // (core/pairing.ts:120) lets the later tied candidate overwrite the
+    // first, silently changing who plays with whom to p1-p8,p2-p7,p3-p5,p4-p6.
+    expect(keys(pairs)).toEqual(['p1-p8', 'p2-p6', 'p3-p7', 'p4-p5'])
   })
 
   it('still finds a legal set when the table is identical to last matchday', () => {
@@ -300,6 +317,24 @@ describe('buildPairs — fixed pairs', () => {
     expect(keys(pairs)).toContain('g1-p1')
     expect(keys(pairs)).toContain('g2-p2')
     expect(pairs).toHaveLength(4)
+  })
+})
+
+describe('buildPairs — output order is a contract', () => {
+  it('returns settled pairs before the drawn pool, in that order', () => {
+    // `groupSides` (core/knockout.ts) snake-seeds a bracket assuming index 0
+    // is the best side, and db/matchday.ts hands it this array raw — nothing
+    // sorts it first. Unlike `keys()` used everywhere else in this file
+    // (which sorts before comparing and so cannot see an order regression),
+    // this compares the raw array straight from buildPairs.
+    const pairs = buildPairs(
+      input({
+        present: ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'g1', 'g2'],
+        defenders: pair('p1', 'p2'),
+        fixedPairs: [pair('g1', 'g2')],
+      }),
+    )
+    expect(pairs).toEqual([pair('p1', 'p2'), pair('g1', 'g2'), pair('p3', 'p6'), pair('p4', 'p5')])
   })
 })
 

@@ -303,6 +303,17 @@ describe('narrateRules — DisciplineShape', () => {
     expect(body).toContain('si dos parejas ganan la misma cantidad de partidos')
     expect(body).toContain('el partido entre ellas lo decide')
   })
+
+  // Decisión #3963: la curva de puntos ya no para en 6 lados. `ordinal` sólo
+  // tiene nombre a mano para el 1º-6º; del 7º para arriba cae en el fallback
+  // `el ${position}º`. Todos los demás fixtures del archivo usan configs de
+  // ≤6 valores, así que nunca ejercitan ese fallback. 14 jugadores en pareja
+  // son 7 lados: la primera curva real con un 7º puesto.
+  it('nombra bien el 7º puesto cuando la curva de puntos tiene más de seis valores', () => {
+    const body = bodyOf(defaultConfig(14, 2), 'Los puntos', { hasMasters: false, pairSize: 2, allowsDraw: true })
+    expect(body).toContain('el 7º, 0')
+    expect(body).not.toContain('el 8º')
+  })
 })
 
 // ── PR20 rebanada D2 — la página de Reglas dejó de describir un set de pádel ──

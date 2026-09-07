@@ -127,6 +127,37 @@ describe('mastersChampion', () => {
     expect(mastersChampion(FOUR, matches)).toBe('p1')
   })
 
+  it('crowns whoever actually won every match, even the worst-ranked player', () => {
+    const fixture = mastersFixture(FOUR)
+    const [m1, m2, m3] = fixture
+    if (m1 === undefined || m2 === undefined || m3 === undefined) throw new Error('bad test fixture')
+    // p4 partners p1 in match 1, p2 in match 2, and p3 in match 3 (see
+    // mastersFixture). Winning the side that has p4 every time gives p4 three
+    // wins and everyone else exactly one. Unlike every other test in this
+    // file, the winner here is NOT also the best-ranked player, so this is
+    // the one case where a ranking-order fallback cannot fake the right answer.
+    const matches = [
+      played(m1.sideA, m1.sideB, true), // p1+p4 win
+      played(m2.sideA, m2.sideB, false), // p2+p4 win
+      played(m3.sideA, m3.sideB, false), // p3+p4 win
+    ]
+    expect(mastersChampion(FOUR, matches)).toBe('p4')
+  })
+
+  it('a level set score is a win for neither side', () => {
+    const tied: MatchResult = {
+      round: 1,
+      fase: 'GRUPO',
+      grupo: 1,
+      sideA: pair('p2', 'p3'),
+      sideB: pair('p1', 'p4'),
+      sets: [{ gamesA: 3, gamesB: 3 }],
+    }
+    // Nobody wins the only set played, so nobody wins the match — the
+    // champion falls back to the ranking, same as with nothing played at all.
+    expect(mastersChampion(FOUR, [tied])).toBe('p1')
+  })
+
   it('only ever produces a clean sweep or a three-way tie', () => {
     const fixture = mastersFixture(FOUR)
     for (let mask = 0; mask < 8; mask++) {

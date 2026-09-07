@@ -74,6 +74,17 @@ describe('computeRanking', () => {
     expect(rows[1]?.entryId).toBe('p3')
   })
 
+  // SQUAD y SNAPSHOT tienen que ser el MISMO plantel en orden DISTINTO: si
+  // coinciden (como en el resto del archivo) da igual cuál de los dos
+  // desempata, y un swap entre ambos pasaría inadvertido.
+  it('breaks a tie using the snapshot order and not the squad order', () => {
+    const squad = ['p1', 'p2']
+    const snapshotOrder = ['p2', 'p1']
+    const awards = new Map([[1, [award('p1', 10), award('p2', 10)]]])
+    const rows = computeRanking(awards, squad, CONFIG, snapshotOrder)
+    expect(rows.map((row) => row.entryId)).toEqual(['p2', 'p1'])
+  })
+
   it('sums two awards from the same matchday, which should not happen but must not silently drop one', () => {
     const awards = new Map([[1, [award('p1', 10), award('p1', 6)]]])
     const row = computeRanking(awards, SQUAD, CONFIG, SNAPSHOT).find((r) => r.entryId === 'p1')

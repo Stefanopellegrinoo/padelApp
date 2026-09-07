@@ -161,6 +161,23 @@ describe('validateConfig', () => {
     expect(errors).toContain('El orden de desempate se tiene que refrescar cada 1 fecha o más.')
   })
 
+  // Los cinco pisos de "al menos 1" (maxMatches, gamesPerSet, regularMatchdays,
+  // countBestOf, tiebreakSnapshotEvery) sólo se probaban en 0 (inválido) y en
+  // un valor mayor (válido) — nunca en el propio 1, el valor límite.
+  it('accepts each "at least 1" floor at its boundary value of exactly 1', () => {
+    expect(validateConfig({ ...valid, maxMatches: 1 }, 2)).toEqual([])
+    expect(validateConfig({ ...valid, matchFormat: { ...valid.matchFormat, gamesPerSet: 1 } }, 2)).toEqual([])
+    expect(validateConfig({ ...valid, countBestOf: 1 }, 2)).toEqual([])
+    expect(validateConfig({ ...valid, regularMatchdays: 1, countBestOf: 1 }, 2)).toEqual([])
+    expect(validateConfig({ ...valid, tiebreakSnapshotEvery: 1 }, 2)).toEqual([])
+  })
+
+  // Un torneo donde cuentan TODAS las fechas es una config legítima: el piso
+  // es que no puede pedirse más fechas de las que hay, no que sobre alguna.
+  it('accepts countBestOf equal to regularMatchdays', () => {
+    expect(validateConfig({ ...valid, regularMatchdays: 10, countBestOf: 10 }, 2)).toEqual([])
+  })
+
   it('reports every problem at once, not just the first', () => {
     const errors = validateConfig({ ...valid, squadSize: 7, countBestOf: 99 }, 2)
     expect(errors).toContain('El plantel tiene que ser un número par.')

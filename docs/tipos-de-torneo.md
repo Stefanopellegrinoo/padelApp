@@ -77,9 +77,9 @@ achican el diseño en vez de agrandarlo:
 
 | pieza | qué es |
 |---|---|
-| `disciplines.fixed_teams boolean not null default false` | la perilla, al lado de `pair_size` / `allows_draw` / `has_masters`. Sólo tiene sentido con `pair_size = 2` |
+| `disciplines.fixed_teams boolean not null default false` | la perilla, al lado de `pair_size` / `allows_draw` / `has_masters`. Sólo tiene sentido con `pair_size = 2` (`disciplines_fixed_teams_needs_pair`, 0077). Desde la rebanada de la puerta de creación, el wizard también tiene su checkbox (`app/torneos/nuevo/wizard.tsx`, `FormatoDeUnaDisciplina`) — pero, a diferencia de Masters/Formato de las fechas, se dibuja SIEMPRE, con una disciplina marcada o con dos: junto al de Masters cuando hay 2+, solo cuando hay una (ahí Masters no se dibuja) |
 | `discipline_teams(id, discipline_id, entry_a, entry_b, season_id)` | `pair_locks` pero **por disciplina** en vez de por fecha. Mismos `unique` a cada lado (nadie en dos equipos), mismas FK compuestas contra `(entries.id, season_id)`. **Sin columna de nombre** — decisión explícita: *"por ahora Pedro y Juan"* |
-| inyección en `pairingContextFor` (`db/matchday.ts:197`) | los equipos presentes entran como `fixedPairs` **sin pasar por `pair_locks`** |
+| inyección en `pairingContextFor` (`db/matchday.ts:238-239`) | los equipos presentes entran como `fixedPairs` **sin pasar por `pair_locks`** |
 | presentismo por equipo | una sola marca escribe las **dos** filas de `attendances`. Un equipo a medias es estado inválido que rechaza el borde |
 | la regla de defensores se apaga con `fixed_teams` | ver 1.4 — si no, crashea |
 
@@ -108,17 +108,28 @@ se las lleva, el pool queda vacío, `allMatchings([])` devuelve un armado vacío
 **legal**, y `buildPairs` retorna `settled` tal cual. La regla de no repetir
 tampoco molesta: filtra el sorteo, y las parejas fijas nunca entran al sorteo.
 
-**El choque, y es un crash real:**
+**El choque que sería un crash real, si nadie lo apagara:**
 
-`resolveSettled` (`core/pairing.ts:206`) toma **primero** la pareja defensora y
-**después** las fijas. Con equipos fijos son las mismas dos entries, así que
-`take` tira `"ya está en la pareja defensora"` — **la fecha siguiente a cualquier
-campeonato revienta.**
+`resolveSettled` (`core/pairing.ts:169-207`) toma **primero** la pareja
+defensora (`:198-203`) y **después** las fijas (`:204`). Con equipos fijos son
+las mismas dos entries, así que `take` (`:182-196`) tiraría
+`` `${entryId} ya está en la pareja defensora.` `` (`:189`) al segundo `take` —
+la fecha siguiente a cualquier campeonato reventaría.
 
-Con `fixed_teams` la regla de defensores es redundante (el equipo sigue junto
-igual, sin necesitar una regla que lo permita), así que se apaga. Esto necesita
-un test que lo fije: *fecha con campeón previo + equipos fijos → arma sin
-error*.
+**Ya está apagado — implementado desde el mismo commit que introdujo el
+modelo, no pendiente:** `pairingContextFor` (`db/matchday.ts:172-178`) fuerza
+`defenders: null` cuando `pairSize === 1 || fixedTeams`, así que con equipos
+fijos la pareja defensora nunca llega a `resolveSettled` — sólo llegan las
+fijas, y `take` no choca contra nadie. Con `fixed_teams` la regla de
+defensores es redundante de todos modos (el equipo sigue junto igual, sin
+necesitar una regla que lo permita), así que apagarla no pierde nada.
+
+**El test que lo fija:** `db/fixed-teams.db.test.ts`, describe *"la fecha
+siguiente a un campeonato, con equipos fijos"* — temporada con
+`fixed_teams=true`, fecha 1 CERRADA con un ganador, fecha 2 en DRAFT con el
+mismo plantel presente → arma sin tirar. Verificado con mutación: sacar
+`|| fixedTeams` de la condición de `db/matchday.ts:172-178` pone el test en
+rojo con el mensaje exacto de arriba, no con otro error.
 
 ### 1.5 Dos cosas que salen gratis
 
@@ -133,6 +144,27 @@ error*.
 
 `awards`, `standings`, `computeGlobalRanking` y la tabla de la disciplina quedan
 **intactos**. Ése es el punto de todo el diseño.
+
+### 1.7 `disciplines.weight` — decisión del dueño: no recibe UI
+
+No es una columna muerta: `computeGlobalRanking`
+(`core/global-ranking.ts:47,59`) multiplica los puntos de CADA disciplina por
+su `weight` antes de sumarlos a la tabla global — la que cruza TODOS los
+torneos de un jugador, no la de un torneo puntual (§3.2). Hoy multiplica
+siempre por `1` porque ningún escritor de producción la toca: `weight` nació
+con default `1` en `0015_disciplines.sql:18`, y ni `createSeason`
+(`db/season.ts`) ni `addDiscipline` (`db/discipline.ts`) la mandan.
+
+Los grants de INSERT y UPDATE ya existen y son de columna, desde antes de este
+documento — `0020_disciplines_grants.sql:44` (`grant insert (..., weight,
+...)`) y `0015_disciplines.sql:70` (`grant update (config, weight, ...)`). Lo
+único que falta para que alguien pese una disciplina distinto de otra es un
+escritor, y **el dueño decidió no construirlo**: es un multiplicador interno
+de la tabla global, sin superficie en ninguna pantalla, a propósito. Si
+alguien lo escribiera por fuera de la app (un `PATCH` directo a `disciplines`,
+por ejemplo) el único efecto es que esa disciplina pesa distinto en la tabla
+global de todos los torneos que la usan — ninguna otra tabla, ranking ni
+regla de armado lo lee.
 
 ---
 
@@ -310,7 +342,7 @@ techo se borró entero, `MAX_PLAYERS` incluido, junto con su copia en
 
 | riesgo | dónde | mitigación |
 |---|---|---|
-| **Crash en la fecha post-campeonato** | `core/pairing.ts:206` | test RED antes del arreglo: campeón previo + `fixed_teams` → arma sin error |
+| **Crash en la fecha post-campeonato** | `core/pairing.ts:169-207` | **Cerrado**: `db/matchday.ts:172-178` apaga los defensores con `fixed_teams`; test de regresión en `db/fixed-teams.db.test.ts` ("la fecha siguiente a un campeonato, con equipos fijos"), verificado con mutación |
 | **Pérdida del reglamento de producción** | migración de `rules_text` a `disciplines` | backfill explícito + verificación contra la fila real de PnP-1000 antes del contract |
 | **Equipo a medias en el sorteo** | presentismo | guarda en el borde: con `fixed_teams`, si un miembro está PLAYING el otro también. Falla fuerte, no en silencio |
 | Un equipo con alguien que no juega esa disciplina | `discipline_teams` | FK compuesta contra `discipline_entries`, igual que `attendances` |

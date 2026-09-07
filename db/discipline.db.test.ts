@@ -782,6 +782,30 @@ describe('addDiscipline (PR 13, REQ-D1-2)', () => {
     expect(data?.has_masters).toBe(false)
     expect(data?.formato_default).toEqual({ kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 })
   })
+
+  // Equipos fijos (docs/tipos-de-torneo.md §1), puerta de creación: mismo
+  // contrato que `hasMasters`/`formatoDefault` arriba -- `fixedTeams`
+  // explícito llega a la fila. Con `admin.client` (authenticated, NUNCA
+  // `adminClient()`/service_role): sin `grant insert (fixed_teams) on
+  // public.disciplines to authenticated` (0076) este insert falla con
+  // "permission denied for table disciplines" (42501) apenas la columna
+  // viaja -- éste es el test que ejercita ese grant contra la base real.
+  it('acepta fixedTeams explícito al agregar una disciplina (0076)', async () => {
+    const admin = await createTestUser()
+    const { seasonId } = await createSeason({
+      admin,
+      squad: [admin.playerId, ...(await fillerPlayers(7))],
+    })
+
+    const padelId = await addDiscipline(admin.client, seasonId, {
+      kind: 'PADEL',
+      config: defaultConfig(8),
+      fixedTeams: true,
+    })
+
+    const { data } = await adminClient().from('disciplines').select('fixed_teams').eq('id', padelId).single()
+    expect(data?.fixed_teams).toBe(true)
+  })
 })
 
 //── Decisión #4029, partes 2 y 3 — editable en Ajustes, con guard ──────────
@@ -892,6 +916,66 @@ describe('disciplines_has_masters_needs_pair (decisión #4029, parte 3, guard de
     const soloOff = await admin.client
       .from('disciplines')
       .insert({ season_id: seasonId, kind: 'FIFA', config: {}, position: 3, pair_size: 1, has_masters: false } as never)
+
+    expect(pairsOn.error).toBeNull()
+    expect(pairsOff.error).toBeNull()
+    expect(soloOff.error).toBeNull()
+  })
+})
+
+/**
+ * `disciplines_fixed_teams_needs_pair` (0077, docs/tipos-de-torneo.md §1.2):
+ * mismo motivo que el guard de arriba, y más load-bearing todavía -- ni
+ * `createSeason` (`db/season.ts:366`) ni `addDiscipline` (`db/discipline.ts:402`)
+ * clampean `fixedTeams` contra `pairSize`, mandan `spec.fixedTeams ?? false`
+ * crudo. El CHECK es la ÚNICA capa que un POST directo a `disciplines` no
+ * puede saltear -- por eso entra por la tabla, con `admin.client`
+ * (`authenticated`) y NUNCA `service_role`, igual que el describe de arriba.
+ *
+ * Sin test de UPDATE directo (a diferencia de `has_masters`): `fixed_teams`
+ * no tiene `grant update` -- es inmutable después de creada la disciplina
+ * (0068) -- así que un UPDATE de `authenticated` ya falla con `42501` antes
+ * de llegar al CHECK. No hay nada nuevo que ese camino mida acá.
+ */
+describe('disciplines_fixed_teams_needs_pair (docs/tipos-de-torneo.md §1.2, 0077, guard de base)', () => {
+  it('un INSERT directo con pair_size=1 y fixed_teams=true lo rechaza la base, no TypeScript', async () => {
+    const admin = await createTestUser()
+    const { seasonId } = await createSeason({ admin })
+
+    const { error } = await admin.client.from('disciplines').insert({
+      season_id: seasonId,
+      kind: 'FIFA',
+      config: {},
+      position: 1,
+      pair_size: 1,
+      // false explícito: aísla el CHECK bajo prueba del de
+      // `disciplines_has_masters_needs_pair` (0053), que también choca con
+      // `pair_size=1` si `has_masters` queda en su default (`true`).
+      has_masters: false,
+      fixed_teams: true,
+    } as never)
+    expect(error?.code).toBe('23514') // check_violation, no un rechazo de aplicación
+  })
+
+  it('las tres combinaciones legales (2/true, 2/false, 1/false) siguen pasando -- no-regresión', async () => {
+    const admin = await createTestUser()
+    const { seasonId } = await createSeason({ admin })
+
+    const pairsOn = await admin.client
+      .from('disciplines')
+      .insert({ season_id: seasonId, kind: 'PADEL', config: {}, position: 1, pair_size: 2, fixed_teams: true } as never)
+    const pairsOff = await admin.client
+      .from('disciplines')
+      .insert({ season_id: seasonId, kind: 'PADEL', config: {}, position: 2, pair_size: 2, fixed_teams: false } as never)
+    const soloOff = await admin.client.from('disciplines').insert({
+      season_id: seasonId,
+      kind: 'FIFA',
+      config: {},
+      position: 3,
+      pair_size: 1,
+      has_masters: false, // mismo aislamiento que arriba
+      fixed_teams: false,
+    } as never)
 
     expect(pairsOn.error).toBeNull()
     expect(pairsOff.error).toBeNull()

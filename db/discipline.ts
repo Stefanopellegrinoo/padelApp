@@ -329,6 +329,8 @@ export interface NewDiscipline {
   hasMasters?: boolean
   /** Mismo contrato que `NewSeasonDiscipline`. Sin especificar, el default de columna (`ROUND_ROBIN`, 0074). */
   formatoDefault?: MatchdayFormat
+  /** Mismo contrato que `NewSeasonDiscipline` (db/season.ts): sin especificar, `false`. Sólo tiene sentido con `pairSize: 2`; `disciplines_fixed_teams_needs_pair` (0077) rechaza `true` con `pairSize: 1`. */
+  fixedTeams?: boolean
 }
 
 /**
@@ -397,6 +399,7 @@ export async function addDiscipline(
       ...(spec.formatoDefault === undefined
         ? {}
         : { formato_default: spec.formatoDefault as unknown as Json }),
+      fixed_teams: spec.fixedTeams ?? false,
     })
     .select('id')
     .single()

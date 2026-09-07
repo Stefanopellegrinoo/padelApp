@@ -377,10 +377,16 @@ describe('el paso 4 del wizard — el cableado que ningún render alcanza', () =
     expect(llamada).toMatch(/\bpairSizes=\{pairSizes\}/)
     expect(llamada).toMatch(/\bhasMasters=\{hasMasters\}/)
     expect(llamada).toMatch(/\bformatoDefault=\{formatoDefault\}/)
+    // Equipos fijos (docs/tipos-de-torneo.md §1): mismo riesgo de mis-wire
+    // que los otros cuatro -- el checkbox nuevo del paso 4 depende de que
+    // esta prop y su setter lleguen enganchados al estado real, no a una
+    // copia ni a un literal fijo.
+    expect(llamada).toMatch(/\bfixedTeams=\{fixedTeams\}/)
     expect(llamada).toMatch(/\berrors=\{errorsByKind\}/)
     expect(llamada).toMatch(/\bonChangeConfig=\{changeConfig\}/)
     expect(llamada).toMatch(/\bonChangeHasMasters=\{changeHasMasters\}/)
     expect(llamada).toMatch(/\bonChangeFormatoDefault=\{changeFormatoDefault\}/)
+    expect(llamada).toMatch(/\bonChangeFixedTeams=\{changeFixedTeams\}/)
   })
 
   /**

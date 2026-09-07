@@ -1,0 +1,35 @@
+-- ── disciplines_fixed_teams_needs_pair — equipos fijos exige pareja ─────────
+-- docs/tipos-de-torneo.md §1.2: `fixed_teams` "sólo tiene sentido con
+-- pair_size = 2" — un equipo fijo es DOS entries, y `discipline_teams`
+-- (`0068_fixed_teams.sql:43-72`) ya lo exige vía la FK compuesta contra
+-- `disciplines_size_anchor` (0015), pero esa FK sólo protege LA TABLA DE
+-- EQUIPOS. Nada impedía hasta acá crear una disciplina `pair_size = 1` con
+-- `fixed_teams = true` y CERO equipos posibles: legal para el modelo, sin
+-- sentido para el producto, y silenciosamente inerte.
+--
+-- Simétrico a `disciplines_has_masters_needs_pair`
+-- (`0053_disciplines_has_masters_needs_pair.sql`): mismo motivo — el `grant
+-- insert`/`update` es por COLUMNA (`0015_disciplines.sql:70`,
+-- `0076_disciplines_fixed_teams_insert_grant.sql`), así que un POST/PATCH
+-- directo a `disciplines` saltea cualquier chequeo que sólo viva en
+-- `createSeason`/`addDiscipline`. Un CHECK declarativo es la única capa que
+-- no depende de que el resto de la app se acuerde de preguntar.
+--
+-- Sin backfill, a diferencia de 0053: `has_masters` nacía en `true` por
+-- default y necesitó `update ... set has_masters = false where pair_size = 1`
+-- antes de agregar su CHECK. Acá no hace falta ninguno, por construcción:
+-- `fixed_teams` nace en `false` (`0068_fixed_teams.sql:24`) y, hasta esta
+-- misma rebanada, NINGÚN escritor de producción lo ponía en `true`
+-- (`db/season.ts`/`db/discipline.ts` recién ganan el campo acá) — no hay
+-- fila real que pueda violar `pair_size = 1 and fixed_teams = true` todavía.
+-- (Un conteo contra la base LOCAL de desarrollo antes de escribir este
+-- archivo dio 0 filas violando, sobre lo que hubiera en ese momento — dato
+-- de una base de test, no evidencia sobre producción; el argumento que sí
+-- sostiene el `not valid` sin backfill es el de arriba.)
+--
+-- `not valid` igual: mismo patrón que 0053/0054 (y 0028/0029) — separar el
+-- `add constraint` (barato, sólo valida escrituras NUEVAS) del escaneo
+-- completo (`validate constraint`, migración aparte) aunque acá no haga
+-- falta backfill previo.
+alter table public.disciplines add constraint disciplines_fixed_teams_needs_pair
+  check (not (fixed_teams and pair_size = 1)) not valid;

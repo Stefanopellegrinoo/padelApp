@@ -300,23 +300,27 @@ function FormatoDeUnaDisciplina({
   pairSize,
   hasMasters,
   formatoDefault,
+  fixedTeams,
   errors,
   label,
   onChangeConfig,
   onChangeHasMasters,
   onChangeFormatoDefault,
+  onChangeFixedTeams,
 }: {
   kind: DisciplineKind
   config: SeasonConfig
   pairSize: SideSize
   hasMasters: boolean
   formatoDefault: MatchdayFormat
+  fixedTeams: boolean
   errors: string[]
   /** `null` con una sola disciplina elegida — mismo contrato que `Formato.disciplineLabel` en Ajustes. */
   label: string | null
   onChangeConfig: (next: SeasonConfig) => void
   onChangeHasMasters: (next: boolean) => void
   onChangeFormatoDefault: (next: MatchdayFormat) => void
+  onChangeFixedTeams: (next: boolean) => void
 }) {
   const steppers = steppersFor([config.matchFormat])
 
@@ -377,6 +381,32 @@ function FormatoDeUnaDisciplina({
             />
           </div>
         ))}
+      </div>
+
+      {/* A diferencia de Masters/"Formato de las fechas" (más abajo), este
+          checkbox vive DENTRO de `cuerpo`: se dibuja con una disciplina
+          marcada o con dos (docs/tipos-de-torneo.md §1) — no hay "antes de
+          esta Task" que preservar para `fixed_teams`, es un control nuevo en
+          los dos casos. Con una sola disciplina, el paso 4 queda igual que
+          hoy salvo por este control nuevo. */}
+      <div className="overflow-hidden rounded-[14px] border border-line">
+        <div className="flex min-h-[56px] items-center justify-between gap-2 px-3 py-2">
+          <div className="min-w-0">
+            <p className="text-[14px] font-bold">Equipos fijos</p>
+            <p className="text-pretty text-[11.5px] font-semibold text-muted">
+              {pairSize === 1
+                ? 'Sólo tiene sentido con parejas.'
+                : 'La pareja no rota nunca: siempre juega junta, sin sorteo.'}
+            </p>
+          </div>
+          <input
+            type="checkbox"
+            checked={pairSize === 1 ? false : fixedTeams}
+            disabled={pairSize === 1}
+            onChange={(event) => onChangeFixedTeams(event.target.checked)}
+            className="h-6 w-6 shrink-0 accent-accent disabled:opacity-40"
+          />
+        </div>
       </div>
 
       {errors.map((message) => (
@@ -475,20 +505,24 @@ export function PasoFormato({
   pairSizes,
   hasMasters,
   formatoDefault,
+  fixedTeams,
   errors,
   onChangeConfig,
   onChangeHasMasters,
   onChangeFormatoDefault,
+  onChangeFixedTeams,
 }: {
   configs: Record<DisciplineKind, SeasonConfig>
   picked: readonly DisciplineKind[]
   pairSizes: Record<DisciplineKind, SideSize>
   hasMasters: Record<DisciplineKind, boolean>
   formatoDefault: Record<DisciplineKind, MatchdayFormat>
+  fixedTeams: Record<DisciplineKind, boolean>
   errors: Record<DisciplineKind, string[]>
   onChangeConfig: (kind: DisciplineKind, next: SeasonConfig) => void
   onChangeHasMasters: (kind: DisciplineKind, next: boolean) => void
   onChangeFormatoDefault: (kind: DisciplineKind, next: MatchdayFormat) => void
+  onChangeFixedTeams: (kind: DisciplineKind, next: boolean) => void
 }) {
   return (
     <>
@@ -500,11 +534,13 @@ export function PasoFormato({
           pairSize={pairSizes[kind]}
           hasMasters={hasMasters[kind]}
           formatoDefault={formatoDefault[kind]}
+          fixedTeams={fixedTeams[kind]}
           errors={errors[kind] ?? []}
           label={picked.length > 1 ? DISCIPLINE_LABELS[kind] : null}
           onChangeConfig={(next) => onChangeConfig(kind, next)}
           onChangeHasMasters={(next) => onChangeHasMasters(kind, next)}
           onChangeFormatoDefault={(next) => onChangeFormatoDefault(kind, next)}
+          onChangeFixedTeams={(next) => onChangeFixedTeams(kind, next)}
         />
       ))}
     </>
@@ -578,6 +614,15 @@ export function Wizard({ myName }: { myName: string }) {
     PADEL: { kind: 'ROUND_ROBIN' },
     FIFA: { kind: 'ROUND_ROBIN' },
   })
+  // Equipos fijos, uno por disciplina (docs/tipos-de-torneo.md §1). Arranca
+  // en `false` para las dos -- el pádel rotativo de siempre -- y, a
+  // diferencia de `hasMasters`/`formatoDefault`, su checkbox se dibuja
+  // SIEMPRE en el paso 4 (una disciplina marcada o dos), así que no hace
+  // falta un automático que dependa de `pairSize`.
+  const [fixedTeams, setFixedTeamsState] = useState<Record<DisciplineKind, boolean>>({
+    PADEL: false,
+    FIFA: false,
+  })
   const [error, setError] = useState<string | null>(null)
   const [leaving, setLeaving] = useState(false)
   const [created, setCreated] = useState<{ seasonId: string; inviteToken: string } | null>(null)
@@ -632,6 +677,8 @@ export function Wizard({ myName }: { myName: string }) {
     setHasMastersState((current) => ({ ...current, [kind]: next }))
   const changeFormatoDefault = (kind: DisciplineKind, next: MatchdayFormat) =>
     setFormatoDefaultState((current) => ({ ...current, [kind]: next }))
+  const changeFixedTeams = (kind: DisciplineKind, next: boolean) =>
+    setFixedTeamsState((current) => ({ ...current, [kind]: next }))
 
   const blocked =
     (step === 0 && (name.trim().length === 0 || disciplineWarning !== null)) ||
@@ -658,7 +705,16 @@ export function Wizard({ myName }: { myName: string }) {
     setError(null)
     startTransition(async () => {
       const result = await createTournament(
-        newTournamentPayload(name, squad, configs, disciplines, pairSizes, hasMasters, formatoDefault),
+        newTournamentPayload(
+          name,
+          squad,
+          configs,
+          disciplines,
+          pairSizes,
+          hasMasters,
+          formatoDefault,
+          fixedTeams,
+        ),
       )
       if (!result.ok) {
         setError(result.error)
@@ -872,10 +928,12 @@ export function Wizard({ myName }: { myName: string }) {
             pairSizes={pairSizes}
             hasMasters={hasMasters}
             formatoDefault={formatoDefault}
+            fixedTeams={fixedTeams}
             errors={errorsByKind}
             onChangeConfig={changeConfig}
             onChangeHasMasters={changeHasMasters}
             onChangeFormatoDefault={changeFormatoDefault}
+            onChangeFixedTeams={changeFixedTeams}
           />
         )}
 

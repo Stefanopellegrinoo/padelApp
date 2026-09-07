@@ -296,3 +296,112 @@ describe('el sorteo de una disciplina con equipos fijos', () => {
     expect(await pairKeysOf(matchdayId)).toEqual(want)
   })
 })
+
+//── La fecha siguiente a un campeonato (docs/tipos-de-torneo.md §1.4) ───────
+// El apagado de la regla de defensores YA ESTÁ implementado
+// (`db/matchday.ts:172-178`, la condición `pairSize === 1 || fixedTeams`
+// fuerza `defenders: null`). Sin este test, un refactor futuro de esa
+// condición reintroduce un crash real: `resolveSettled` (`core/pairing.ts`)
+// toma primero la pareja defensora (`:198-203`) y después las fijas
+// (`:204`), y con equipos fijos son las MISMAS dos entries, así que `take`
+// (`:187-192`) tira `"${entryId} ya está en la pareja defensora."` al
+// segundo `take` -- la fecha siguiente a cualquier campeonato revienta.
+
+/**
+ * Fecha 1 ya CERRADA con un campeón: la pareja `(a, b)` en `pairs` y en
+ * `awards` con `position: 1`. Escrita directo con `service_role` -- es
+ * escenario para el test, no el flujo real de cierre (mismo patrón que
+ * `closeMatchday` en `db/pairing-context.db.test.ts`, pero con el
+ * `disciplineId` que ya trae `fixedTeamsSeason` en vez de resolverlo aparte).
+ *
+ * Los dos miembros del equipo con el MISMO puntaje: `core/awards.ts:70` le
+ * paga `points` completo a CADA UNO, nunca la mitad (docs/tipos-de-torneo.md
+ * §1.1) -- no hay forma de que un equipo fijo termine con puntos distintos
+ * entre sus dos mitades.
+ */
+async function closedChampionMatchday(
+  seasonId: string,
+  disciplineId: string,
+  a: string,
+  b: string,
+): Promise<void> {
+  const db = adminClient()
+  const { data: matchday, error } = await db
+    .from('matchdays')
+    .insert({ season_id: seasonId, discipline_id: disciplineId, number: 1, status: 'CLOSED' })
+    .select('id')
+    .single()
+  if (error || matchday === null) throw new Error(error?.message)
+
+  const { error: pairError } = await db
+    .from('pairs')
+    .insert({ matchday_id: matchday.id, season_id: seasonId, entry_a: a, entry_b: b })
+  if (pairError) throw new Error(pairError.message)
+
+  for (const entryId of [a, b]) {
+    const { error: awardError } = await db
+      .from('awards')
+      .insert({ matchday_id: matchday.id, season_id: seasonId, entry_id: entryId, position: 1, points: 10 })
+    if (awardError) throw new Error(awardError.message)
+  }
+}
+
+describe('la fecha siguiente a un campeonato, con equipos fijos', () => {
+  it('arma sin chocar la pareja defensora contra el equipo fijo', async () => {
+    const { seasonId, disciplineId, entryIds } = await fixedTeamsSeason(8)
+    const [a, b] = [at(entryIds, 0), at(entryIds, 1)]
+
+    // Fecha 1: CERRADA, con el equipo (a, b) como campeón.
+    await closedChampionMatchday(seasonId, disciplineId, a, b)
+
+    // Fecha 2: en armado (DRAFT), con el mismo plantel presente.
+    const db = adminClient()
+    const matchdayId = await openDraft(seasonId, disciplineId, entryIds)
+
+    await generatePairs(db, matchdayId)
+
+    const want = [
+      [0, 1],
+      [2, 3],
+      [4, 5],
+      [6, 7],
+    ]
+      .map(([i, j]) => [at(entryIds, i ?? 0), at(entryIds, j ?? 0)].sort().join('·'))
+      .sort()
+    expect(await pairKeysOf(matchdayId)).toEqual(want)
+  })
+
+  // CONTROL (auto-chequeo del fixture, no del apagado): el test de arriba
+  // sólo prueba algo si `closedChampionMatchday` deja un campeón REAL --
+  // reconocido por `previousContext` como pareja defensora. Sin este
+  // control, romper `closedChampionMatchday` (por ejemplo, dejar de insertar
+  // `awards`) deja el test de arriba en VERDE con el bug de producción
+  // TODAVÍA presente, porque sin campeón `defenders` ya sale `null` por las
+  // buenas y nunca llega a `resolveSettled` -- nada choca, pero tampoco
+  // porque el apagado funcionó.
+  //
+  // Corre el MISMO fixture (mismo helper, mismos dos inserts) contra una
+  // disciplina SIN `fixed_teams`: si `closedChampionMatchday` deja un
+  // campeón real, `(a, b)` tiene que salir defendiendo -- junta en la fecha
+  // 2 -- no por sorteo sino PORQUE es la pareja defensora.
+  it('CONTROL: sin equipos fijos, el mismo fixture dejó a (a,b) defendiendo en la fecha 2', async () => {
+    const admin = await createTestUser()
+    const players = await fillerPlayers(8)
+    const { seasonId, entryIds, disciplineId } = await createSeason({
+      admin,
+      config: defaultConfig(8),
+      squad: players,
+    })
+    const [a, b] = [at(entryIds, 0), at(entryIds, 1)]
+
+    await closedChampionMatchday(seasonId, disciplineId, a, b)
+
+    const db = adminClient()
+    const matchdayId = await openDraft(seasonId, disciplineId, entryIds)
+    await generatePairs(db, matchdayId)
+
+    // Sigue junta pese al sorteo de las otras tres parejas: eso sólo pasa
+    // si `previousContext` la reconoció como defensora, no por azar.
+    expect(await pairKeysOf(matchdayId)).toContain([a, b].sort().join('·'))
+  })
+})

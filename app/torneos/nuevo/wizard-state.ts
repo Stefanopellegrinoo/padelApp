@@ -451,10 +451,17 @@ export function submitSeats({ names, mySeat }: Squad): {
  * que el admin hizo mientras SÍ había una segunda disciplina marcada y
  * después destildó — un control que ya no se ve no puede seguir mandando.
  *
- * `effectiveHasMasters` es la única puerta de salida para `hasMasters`: una
- * disciplina de a uno no puede tener Masters
- * (`disciplines_has_masters_needs_pair`, 0053) pase lo que pase haya elegido
- * el checkbox — el guard vive ACÁ, no confiando en que el control quede
+ * `fixedTeams` NO sigue esa misma regla: a diferencia de Masters/formato, el
+ * paso 4 dibuja su checkbox SIEMPRE (docs/tipos-de-torneo.md §1), con una
+ * disciplina marcada o con dos — no hay "antes de esta Task" que preservar
+ * porque el control es nuevo en las dos formas. Por eso viaja siempre en la
+ * fila, nunca detrás de `picked.length > 1`.
+ *
+ * `effectiveHasMasters`/`effectiveFixedTeams` son las puertas de salida
+ * reales para sus checkboxes respectivos: una disciplina de a uno no puede
+ * tener Masters (`disciplines_has_masters_needs_pair`, 0053) ni equipos fijos
+ * (`disciplines_fixed_teams_needs_pair`, 0077) pase lo que pase haya elegido
+ * el control — el guard vive ACÁ, no confiando en que el control quede
  * siempre deshabilitado a tiempo.
  */
 export function newTournamentPayload(
@@ -465,13 +472,18 @@ export function newTournamentPayload(
   pairSizes: Record<DisciplineKind, SideSize>,
   hasMasters: Record<DisciplineKind, boolean>,
   formatoDefault: Record<DisciplineKind, MatchdayFormat>,
+  fixedTeams: Record<DisciplineKind, boolean>,
 ): {
   name: string
   squadNames: string[]
   mySeatIndex: number | null
   config: SeasonConfig
   disciplines: Array<
-    ReturnType<typeof buildDisciplines>[number] & { hasMasters?: boolean; formatoDefault?: MatchdayFormat }
+    ReturnType<typeof buildDisciplines>[number] & {
+      hasMasters?: boolean
+      formatoDefault?: MatchdayFormat
+      fixedTeams?: boolean
+    }
   >
 } {
   const seats = submitSeats(squad)
@@ -495,7 +507,11 @@ export function newTournamentPayload(
               formatoDefault: formatoDefault[kind],
             }
           : {}
-      return buildDisciplines([kind], resized, pairSize).map((row) => ({ ...row, ...extra }))
+      return buildDisciplines([kind], resized, pairSize).map((row) => ({
+        ...row,
+        ...extra,
+        fixedTeams: effectiveFixedTeams(pairSize, fixedTeams[kind]),
+      }))
     }),
   }
 }
@@ -613,6 +629,21 @@ export function automaticHasMasters(pairSize: SideSize): boolean {
  */
 export function effectiveHasMasters(pairSize: SideSize, hasMasters: boolean): boolean {
   return pairSize === 1 ? false : hasMasters
+}
+
+/**
+ * Equipos fijos que de verdad se manda para una disciplina, sea lo que sea
+ * que el checkbox tenga guardado: `false` siempre que `pairSize` sea 1.
+ *
+ * `disciplines_fixed_teams_needs_pair` (0077) rechaza `fixed_teams = true`
+ * con `pair_size = 1` sin excepción. El checkbox del paso 4 se deshabilita en
+ * pantalla para una disciplina de a uno (mismo criterio que Masters), pero
+ * deshabilitado no es lo mismo que ausente: el estado que queda atrás (de
+ * cuando esa disciplina tenía `pairSize` 2) puede seguir en `true`. Mismo
+ * guard que `effectiveHasMasters`, arriba, y por el mismo motivo.
+ */
+export function effectiveFixedTeams(pairSize: SideSize, fixedTeams: boolean): boolean {
+  return pairSize === 1 ? false : fixedTeams
 }
 
 /**

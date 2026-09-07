@@ -173,9 +173,13 @@ export async function hasPlayedDiscipline(
  * Lo que se buscó y se decidió NO cubrir: `discipline_teams` (equipos
  * fijos, `0068_fixed_teams.sql:70-71`) también cuelga de
  * `discipline_entries` con `on delete cascade` — pero ningún camino de
- * producción escribe una fila ahí hoy (`db/matchday.ts` sólo la LEE,
+ * producción escribe una FILA ahí hoy (`db/matchday.ts` sólo la LEE,
  * `teamsOf`); no hay nada real que este delete pueda perder ahí todavía.
- * Si `fixed_teams` suma un escritor, esto necesita revisarse.
+ * `disciplines.fixed_teams` (el flag) ya tiene escritor desde la puerta de
+ * creación (`createSeason`/`addDiscipline`) — sigue sin importar acá porque
+ * una disciplina recién creada con el flag prendido nace con CERO equipos.
+ * Si `discipline_teams` suma un escritor de FILAS (la pantalla para armar
+ * equipos, todavía sin construir), esto necesita revisarse.
  */
 export async function removeFromDiscipline(
   supabase: Client,

@@ -176,6 +176,39 @@ describe('createSeason con múltiples disciplinas (REQ-D1-1, contrato S13)', () 
     ])
   })
 
+  // Equipos fijos (docs/tipos-de-torneo.md §1), por el escritor que el wizard
+  // REALMENTE usa: `createSeason` (`db/season.ts`), no `addDiscipline`
+  // (`db/discipline.ts`) -- el wizard llama `createTournament` ->
+  // `createSeason`, y ningún camino de producción pasa por `addDiscipline`
+  // con `fixedTeams`. Con `admin.client` (authenticated): ejercita el grant
+  // 0076 Y el valor real que `db/season.ts:366` manda, no sólo que la
+  // columna viaje.
+  it('fixedTeams se persiste por disciplina a través de createSeason, sin heredar de kind', async () => {
+    const admin = await createTestUser()
+    const config = defaultConfig(8)
+    const { seasonId } = await createSeason(admin.client, {
+      name: 'Equipos fijos mixtos',
+      squadNames: squadNames(8),
+      config,
+      disciplines: [
+        { kind: 'PADEL', config, fixedTeams: true },
+        { kind: 'FIFA', config, fixedTeams: false },
+      ],
+    })
+
+    const db = adminClient()
+    const { data } = await db
+      .from('disciplines')
+      .select('kind, fixed_teams')
+      .eq('season_id', seasonId)
+      .order('position', { ascending: true })
+
+    expect(data).toEqual([
+      { kind: 'PADEL', fixed_teams: true },
+      { kind: 'FIFA', fixed_teams: false },
+    ])
+  })
+
   // Decisión #4029, parte 1: mismo automático que `addDiscipline`, ahora
   // desde el wizard -- `has_masters` nace de `pair_size`, sin que nadie lo
   // pase explícito.
@@ -322,6 +355,7 @@ describe('createSeason vía el wizard real, disciplina de a uno (C29)', () => {
       { PADEL: 2, FIFA: 1 },
       { PADEL: true, FIFA: false },
       { PADEL: { kind: 'ROUND_ROBIN' }, FIFA: { kind: 'ROUND_ROBIN' } },
+      { PADEL: false, FIFA: false },
     )
     const { seasonId } = await createSeason(admin.client, payload)
 
@@ -365,6 +399,7 @@ describe('createSeason vía el wizard real, disciplina de a uno (C29)', () => {
       { PADEL: 2, FIFA: 1 },
       { PADEL: true, FIFA: false },
       { PADEL: { kind: 'ROUND_ROBIN' }, FIFA: { kind: 'ROUND_ROBIN' } },
+      { PADEL: false, FIFA: false },
     )
     const { seasonId } = await createSeason(admin.client, payload)
 
@@ -411,6 +446,7 @@ describe('createSeason vía el wizard real, disciplina de a uno (C29)', () => {
       { PADEL: 2, FIFA: 1 },
       { PADEL: true, FIFA: false },
       { PADEL: { kind: 'ROUND_ROBIN' }, FIFA: { kind: 'ROUND_ROBIN' } },
+      { PADEL: false, FIFA: false },
     )
     const { seasonId } = await createSeason(admin.client, payload)
 
@@ -455,6 +491,7 @@ describe('createSeason con el plantel al piso real de una disciplina de a uno', 
       { PADEL: 2, FIFA: 1 },
       { PADEL: true, FIFA: false },
       { PADEL: { kind: 'ROUND_ROBIN' }, FIFA: { kind: 'ROUND_ROBIN' } },
+      { PADEL: false, FIFA: false },
     )
     const { seasonId } = await createSeason(admin.client, payload)
 

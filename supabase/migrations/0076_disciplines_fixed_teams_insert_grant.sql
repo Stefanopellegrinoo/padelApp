@@ -1,0 +1,28 @@
+-- ── disciplines.fixed_teams — grant de INSERT (docs/tipos-de-torneo.md §1) ──
+-- `0068_fixed_teams.sql:12-24` agregó la columna sin grant de INSERT alguno:
+-- en ese momento ningún escritor de creación (`createSeason`/`addDiscipline`,
+-- `db/season.ts`/`db/discipline.ts`) mandaba `fixed_teams` al insertar, así
+-- que toda disciplina nueva nacía con el default de columna (`false`). Esta
+-- rebanada (primera de dos, equipos fijos) le da a esos dos escritores un
+-- `fixedTeams` opcional por spec, así que ahora sí puede llegar un INSERT de
+-- `authenticated` que nombre `fixed_teams`. Sin este grant, ese insert falla
+-- con "permission denied for table disciplines" — mismo mensaje sin nombre de
+-- columna que ya documentó `0074_discipline_formato_default.sql:105-107` /
+-- `0075_disciplines_formato_default_insert_grant.sql:9-12` para las columnas
+-- equivalentes.
+--
+-- Aditivo, no revoke + re-listado: mismo argumento que
+-- `0075_disciplines_formato_default_insert_grant.sql` ya hace de una para
+-- esta misma tabla — el INSERT de `authenticated` sobre `disciplines` es por
+-- columna desde `0020_disciplines_grants.sql:43-45`, y Postgres une cada
+-- `grant` nuevo al array de columnas ya otorgadas en vez de reemplazarlo. Sólo
+-- `0020` necesitó el revoke + relistado completo, porque en ese momento el
+-- INSERT todavía era de tabla entera (`0015_disciplines.sql:52`).
+--
+-- NO se toca el `grant update`: `0068_fixed_teams.sql:12-23` decidió que
+-- `fixed_teams` es inmutable después de creada la disciplina, mismo régimen
+-- que `pair_size`/`allows_draw`, y esa decisión sigue en pie.
+--
+-- Test db obligatorio para este grant, con `authenticated`, nunca
+-- `service_role` (mismo criterio que `0075`).
+grant insert (fixed_teams) on public.disciplines to authenticated;

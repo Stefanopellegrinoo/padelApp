@@ -222,6 +222,15 @@ export interface NewSeasonDiscipline {
    * (`ROUND_ROBIN`) — mismo comportamiento de siempre.
    */
   formatoDefault?: MatchdayFormat
+  /**
+   * Si esta disciplina es de equipos fijos: la pareja no rota nunca,
+   * `discipline_teams` la fija en vez de `pair_locks` (0068,
+   * docs/tipos-de-torneo.md §1). Sin especificar, `false` — el pádel
+   * rotativo de siempre. Sólo tiene sentido con `pairSize: 2`;
+   * `disciplines_fixed_teams_needs_pair` (0077) rechaza `true` con
+   * `pairSize: 1` pase lo que pase mande el caller.
+   */
+  fixedTeams?: boolean
 }
 
 export interface NewSeason {
@@ -354,6 +363,7 @@ export async function createSeason(
         ...(spec.formatoDefault === undefined
           ? {}
           : { formato_default: spec.formatoDefault as unknown as Json }),
+        fixed_teams: spec.fixedTeams ?? false,
       })
       .select('id')
       .single()

@@ -36,10 +36,12 @@ function html(picked: DisciplineKind[]): string {
       pairSizes: { PADEL: 2, FIFA: 2 },
       hasMasters: { PADEL: true, FIFA: true },
       formatoDefault: ROUND_ROBIN_ALL,
+      fixedTeams: { PADEL: false, FIFA: false },
       errors: { PADEL: [], FIFA: [] },
       onChangeConfig: () => {},
       onChangeHasMasters: () => {},
       onChangeFormatoDefault: () => {},
+      onChangeFixedTeams: () => {},
     }),
   )
 }
@@ -116,16 +118,22 @@ describe('paso 4 del wizard — Masters y Formato de las fechas, por disciplina 
    * ningún nombre de disciplina se dibuja: nadie debería enterarse de que
    * el paso ahora es "por disciplina" hasta que marque la segunda.
    */
-  it('con una sola disciplina, no dibuja Masters ni Formato de las fechas ni el nombre de la disciplina', () => {
+  it('con una sola disciplina, no dibuja Masters ni Formato de las fechas ni el nombre de la disciplina, pero sí el checkbox nuevo de equipos fijos', () => {
     const paso = html(['PADEL'])
     // Ojo: "Masters" YA aparece en el hint de "Fechas del año" ("Sin contar
     // el Masters, que va al final."), así que un `toContain('Masters')` a
     // secas no serviría -- lo que no tiene que estar es el CONTROL: ni el
-    // título "Masters" del checkbox, ni el checkbox en sí.
-    expect(paso).not.toContain('type="checkbox"')
+    // título "Masters" del checkbox, ni su checkbox.
     expect(paso).not.toMatch(/<p class="text-\[14px\] font-bold">Masters<\/p>/)
     expect(paso).not.toContain('Formato de las fechas')
     expect(paso).not.toContain('Pádel')
+    // El checkbox de equipos fijos, al revés que Masters/Formato, SÍ se
+    // dibuja con una sola disciplina marcada (docs/tipos-de-torneo.md §1.2):
+    // copiar el gating de Masters (sólo con 2+ marcadas) dejaría la feature
+    // inalcanzable para el 100% de los torneos que existen hoy, que tienen
+    // una sola disciplina. Es el ÚNICO checkbox de la pantalla en este caso.
+    expect(paso).toContain('Equipos fijos')
+    expect(paso.match(/<input type="checkbox"[^>]*\/>/g)).toHaveLength(1)
   })
 
   it('con 2+ disciplinas, cada tarjeta lleva su nombre, Masters y Formato de las fechas', () => {
@@ -158,22 +166,65 @@ describe('paso 4 del wizard — Masters y Formato de las fechas, por disciplina 
         pairSizes: { PADEL: 2, FIFA: 1 },
         hasMasters: { PADEL: true, FIFA: true }, // FIFA en true a mano -- inválido para pairSize 1
         formatoDefault: ROUND_ROBIN_ALL,
+        fixedTeams: { PADEL: true, FIFA: true }, // FIFA en true a mano -- inválido para pairSize 1
         errors: { PADEL: [], FIFA: [] },
         onChangeConfig: () => {},
         onChangeHasMasters: () => {},
         onChangeFormatoDefault: () => {},
+        onChangeFixedTeams: () => {},
       }),
     )
     const checkboxes = paso.match(/<input type="checkbox"[^>]*\/>/g) ?? []
-    expect(checkboxes).toHaveLength(2)
-    // El `class` de los dos SIEMPRE contiene la subcadena "disabled" --
-    // `disabled:opacity-40` es un nombre de clase de Tailwind, no el
-    // atributo -- así que el chequeo mira el ATRIBUTO `disabled=""`, no la
-    // palabra suelta.
-    expect(checkboxes[0]).toContain('checked') // Pádel, pairSize 2
+    // Cuatro, no dos: cada tarjeta ahora lleva DOS checkboxes -- Equipos
+    // fijos (adentro de `cuerpo`, se dibuja primero) y Masters (después,
+    // sólo con 2+ marcadas) -- ver `FormatoDeUnaDisciplina`, wizard.tsx.
+    expect(checkboxes).toHaveLength(4)
+    // El `class` de los deshabilitados SIEMPRE contiene la subcadena
+    // "disabled" -- `disabled:opacity-40` es un nombre de clase de
+    // Tailwind, no el atributo -- así que el chequeo mira el ATRIBUTO
+    // `disabled=""`, no la palabra suelta.
+    //
+    // [0]/[2]: Equipos fijos (Pádel/FIFA). [1]/[3]: Masters (Pádel/FIFA).
+    expect(checkboxes[0]).toContain('checked') // Equipos fijos Pádel, pairSize 2
     expect(checkboxes[0]).not.toMatch(/\bdisabled=""/)
-    expect(checkboxes[1]).not.toContain('checked') // FIFA, pairSize 1: forzado sin marcar
-    expect(checkboxes[1]).toMatch(/\bdisabled=""/)
+    expect(checkboxes[2]).not.toContain('checked') // Equipos fijos FIFA, pairSize 1: forzado sin marcar
+    expect(checkboxes[2]).toMatch(/\bdisabled=""/)
+    expect(checkboxes[1]).toContain('checked') // Masters Pádel, pairSize 2
+    expect(checkboxes[1]).not.toMatch(/\bdisabled=""/)
+    expect(checkboxes[3]).not.toContain('checked') // Masters FIFA, pairSize 1: forzado sin marcar
+    expect(checkboxes[3]).toMatch(/\bdisabled=""/)
+  })
+
+  // Las DOS en `pairSize: 2` (sin que ningún clamp entre en juego) y con
+  // `fixedTeams` DISTINTO entre sí -- el único caso capaz de cazar un
+  // `fixedTeams={fixedTeams[kind]}` mal enganchado (p.ej. siempre
+  // `fixedTeams.PADEL`) en el call site de `PasoFormato` -> `FormatoDeUnaDisciplina`
+  // (wizard.tsx). Con una disciplina en `pairSize: 1` de por medio (como el
+  // test de arriba) el guard `pairSize === 1 ? false : fixedTeams` fuerza el
+  // mismo `false` sin marcar sin importar QUÉ valor de `fixedTeams` haya
+  // leído -- enmascararía exactamente ese mis-wire.
+  it('cada tarjeta lee su PROPIO fixedTeams, no el de la otra disciplina', () => {
+    const paso = renderToStaticMarkup(
+      createElement(PasoFormato, {
+        configs: { PADEL: freshDisciplineConfig('PADEL', 8, 2), FIFA: freshDisciplineConfig('FIFA', 8, 2) },
+        picked: ['PADEL', 'FIFA'],
+        pairSizes: { PADEL: 2, FIFA: 2 },
+        hasMasters: { PADEL: true, FIFA: true },
+        formatoDefault: ROUND_ROBIN_ALL,
+        fixedTeams: { PADEL: true, FIFA: false },
+        errors: { PADEL: [], FIFA: [] },
+        onChangeConfig: () => {},
+        onChangeHasMasters: () => {},
+        onChangeFormatoDefault: () => {},
+        onChangeFixedTeams: () => {},
+      }),
+    )
+    const checkboxes = paso.match(/<input type="checkbox"[^>]*\/>/g) ?? []
+    // [0]: Equipos fijos Pádel (true). [2]: Equipos fijos FIFA (false).
+    // [1]/[3] son los de Masters, no los de esta prueba.
+    expect(checkboxes).toHaveLength(4)
+    expect(checkboxes[0]).toContain('checked')
+    expect(checkboxes[2]).not.toContain('checked')
   })
 
   // Errores con 2+ disciplinas: cada uno lleva el nombre de SU disciplina,
@@ -186,10 +237,12 @@ describe('paso 4 del wizard — Masters y Formato de las fechas, por disciplina 
         pairSizes: { PADEL: 2, FIFA: 2 },
         hasMasters: { PADEL: true, FIFA: true },
         formatoDefault: ROUND_ROBIN_ALL,
+        fixedTeams: { PADEL: false, FIFA: false },
         errors: { PADEL: ['No pueden contar más fechas de las que se juegan.'], FIFA: [] },
         onChangeConfig: () => {},
         onChangeHasMasters: () => {},
         onChangeFormatoDefault: () => {},
+        onChangeFixedTeams: () => {},
       }),
     )
     expect(paso).toContain('Pádel: No pueden contar más fechas de las que se juegan.')

@@ -10,6 +10,7 @@ import {
   buildDisciplines,
   configFor,
   disciplinesWarning,
+  effectiveFixedTeams,
   effectiveFloor,
   effectiveHasMasters,
   filledCount,
@@ -37,6 +38,9 @@ const ROUND_ROBIN_ALL: Record<DisciplineKind, MatchdayFormat> = {
   PADEL: { kind: 'ROUND_ROBIN' },
   FIFA: { kind: 'ROUND_ROBIN' },
 }
+
+/** El default del checkbox de equipos fijos (sin tocarlo) para las dos disciplinas. */
+const NO_FIXED_TEAMS: Record<DisciplineKind, boolean> = { PADEL: false, FIFA: false }
 
 /**
  * El plantel es UNO SOLO y compartido por todas las disciplinas de la
@@ -678,13 +682,21 @@ describe('newTournamentPayload', () => {
       { PADEL: 2, FIFA: 2 },
       { PADEL: true, FIFA: true },
       ROUND_ROBIN_ALL,
+      NO_FIXED_TEAMS,
     )
     expect(payload).toEqual({
       name: 'Los Jueves',
       squadNames: squad.names,
       mySeatIndex: 0,
       config: configs.PADEL,
-      disciplines: buildDisciplines(['PADEL'], configs.PADEL, 2),
+      // `fixedTeams` SÍ viaja incluso con una sola disciplina marcada (a
+      // diferencia de `hasMasters`/`formatoDefault`): el checkbox del paso 4
+      // se dibuja siempre (docs/tipos-de-torneo.md §1), así que
+      // `buildDisciplines` solo ya no alcanza para describir la fila.
+      disciplines: buildDisciplines(['PADEL'], configs.PADEL, 2).map((row) => ({
+        ...row,
+        fixedTeams: false,
+      })),
     })
   })
 
@@ -705,6 +717,7 @@ describe('newTournamentPayload', () => {
       { PADEL: 2, FIFA: 2 },
       { PADEL: true, FIFA: true },
       ROUND_ROBIN_ALL,
+      NO_FIXED_TEAMS,
     )
     expect(payload.squadNames).toHaveLength(8)
     expect(payload.config.squadSize).toBe(8)
@@ -725,6 +738,7 @@ describe('newTournamentPayload', () => {
       { PADEL: 2, FIFA: 1 },
       { PADEL: true, FIFA: false },
       ROUND_ROBIN_ALL,
+      NO_FIXED_TEAMS,
     )
     expect(payload.disciplines).toEqual([
       {
@@ -732,6 +746,7 @@ describe('newTournamentPayload', () => {
         config: { ...configs.FIFA, matchFormat: { ...configs.FIFA.matchFormat, openScore: true } },
         allowsDraw: true,
         pairSize: 1,
+        fixedTeams: false,
       },
     ])
   })
@@ -752,9 +767,14 @@ describe('newTournamentPayload', () => {
       { PADEL: 2, FIFA: 2 },
       { PADEL: false, FIFA: false },
       { PADEL: { kind: 'GROUPS_KNOCKOUT', groups: 4, qualifiersPerGroup: 2 }, FIFA: { kind: 'ROUND_ROBIN' } },
+      { PADEL: true, FIFA: false },
     )
     expect(payload.disciplines[0]).not.toHaveProperty('hasMasters')
     expect(payload.disciplines[0]).not.toHaveProperty('formatoDefault')
+    // `fixedTeams`, al revés que las otras dos: viaja SIEMPRE, aunque haya
+    // una sola disciplina marcada -- el checkbox del paso 4 se dibuja en los
+    // dos casos (docs/tipos-de-torneo.md §1), a diferencia de Masters/Formato.
+    expect(payload.disciplines[0]).toHaveProperty('fixedTeams', true)
   })
 
   /**
@@ -784,6 +804,7 @@ describe('newTournamentPayload', () => {
       { PADEL: 2, FIFA: 1 },
       { PADEL: true, FIFA: false },
       { PADEL: { kind: 'ROUND_ROBIN' }, FIFA: { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 } },
+      { PADEL: true, FIFA: false },
     )
 
     expect(payload.disciplines).toHaveLength(2)
@@ -804,6 +825,10 @@ describe('newTournamentPayload', () => {
     expect(fifa?.hasMasters).toBe(false)
     expect(padel?.formatoDefault).toEqual({ kind: 'ROUND_ROBIN' })
     expect(fifa?.formatoDefault).toEqual({ kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 })
+    // Equipos fijos: cada fila trae el suyo (PADEL marcado, FIFA no) -- FIFA
+    // está en pairSize 1 así que además queda clampeado, ver el test de abajo.
+    expect(padel?.fixedTeams).toBe(true)
+    expect(fifa?.fixedTeams).toBe(false)
   })
 
   /**
@@ -829,11 +854,37 @@ describe('newTournamentPayload', () => {
       { PADEL: 2, FIFA: 2 },
       { PADEL: true, FIFA: false },
       ROUND_ROBIN_ALL,
+      NO_FIXED_TEAMS,
     )
     const padel = payload.disciplines.find((row) => row.kind === 'PADEL')
     const fifa = payload.disciplines.find((row) => row.kind === 'FIFA')
     expect(padel?.hasMasters).toBe(true)
     expect(fifa?.hasMasters).toBe(false)
+  })
+
+  // Mismo caso que el de arriba, para `fixedTeams`: las DOS en `pairSize: 2`
+  // (sin que `effectiveFixedTeams` clampee ninguna) y con valores DISTINTOS
+  // entre sí -- el único caso capaz de cazar un `fixedTeams[kind]` leído mal
+  // (p.ej. `fixedTeams.PADEL` fijo, sin importar `kind`): con una disciplina
+  // en `pairSize: 1` de por medio, `effectiveFixedTeams(1, cualquiera)` da
+  // siempre `false` y enmascara ese mismo mis-wire.
+  it('con las DOS en pairSize 2 (sin clamp), cada fila lee SU PROPIO fixedTeams', () => {
+    const squad: Squad = { names: Array(8).fill('Jugador'), mySeat: null }
+    const configs = { PADEL: configFor(8, 2), FIFA: configFor(8, 2) }
+    const payload = newTournamentPayload(
+      'Mixto',
+      squad,
+      configs,
+      ['PADEL', 'FIFA'],
+      { PADEL: 2, FIFA: 2 },
+      { PADEL: true, FIFA: false },
+      ROUND_ROBIN_ALL,
+      { PADEL: true, FIFA: false },
+    )
+    const padel = payload.disciplines.find((row) => row.kind === 'PADEL')
+    const fifa = payload.disciplines.find((row) => row.kind === 'FIFA')
+    expect(padel?.fixedTeams).toBe(true)
+    expect(fifa?.fixedTeams).toBe(false)
   })
 
   // El guard vive en `newTournamentPayload`, no confía en que el checkbox
@@ -850,9 +901,36 @@ describe('newTournamentPayload', () => {
       { PADEL: 2, FIFA: 1 },
       { PADEL: true, FIFA: true }, // FIFA en true a mano -- inválido para pairSize 1
       ROUND_ROBIN_ALL,
+      NO_FIXED_TEAMS,
     )
     const fifa = payload.disciplines.find((row) => row.kind === 'FIFA')
     expect(fifa?.hasMasters).toBe(false)
+  })
+
+  // Mismo guard, para equipos fijos: `disciplines_fixed_teams_needs_pair`
+  // (0077) rechaza `true` con `pairSize` 1 sin excepción, y `effectiveFixedTeams`
+  // (wizard-state.ts) es la puerta de salida que lo aplica ANTES de llegar a
+  // la base -- mismo criterio, verificado directo sobre la función pura.
+  it('effectiveFixedTeams fuerza false con pairSize 1', () => {
+    expect(effectiveFixedTeams(1, true)).toBe(false)
+    expect(effectiveFixedTeams(2, true)).toBe(true)
+  })
+
+  it('effectiveFixedTeams se aplica en el payload real: pairSize 1 fuerza false aunque el checkbox diga true', () => {
+    const squad: Squad = { names: Array(8).fill('Jugador'), mySeat: null }
+    const configs = { PADEL: configFor(8, 2), FIFA: configFor(8, 1) }
+    const payload = newTournamentPayload(
+      'Mixto',
+      squad,
+      configs,
+      ['PADEL', 'FIFA'],
+      { PADEL: 2, FIFA: 1 },
+      { PADEL: true, FIFA: true },
+      ROUND_ROBIN_ALL,
+      { PADEL: true, FIFA: true }, // FIFA en true a mano -- inválido para pairSize 1
+    )
+    const fifa = payload.disciplines.find((row) => row.kind === 'FIFA')
+    expect(fifa?.fixedTeams).toBe(false)
   })
 
   // Con una config genuinamente por disciplina ya no hay una curva "legado"
@@ -871,6 +949,7 @@ describe('newTournamentPayload', () => {
       { PADEL: 2, FIFA: 1 },
       { PADEL: true, FIFA: false },
       ROUND_ROBIN_ALL,
+      NO_FIXED_TEAMS,
     )
     expect(payload.disciplines[0]?.config.points).toEqual([20, 12, 6, 2, 0, 0, 0, 0])
   })
@@ -889,6 +968,7 @@ describe('newTournamentPayload', () => {
       { PADEL: 2, FIFA: 1 },
       { PADEL: true, FIFA: false },
       ROUND_ROBIN_ALL,
+      NO_FIXED_TEAMS,
     )
     const padel = payload.disciplines.find((row) => row.kind === 'PADEL')
     const fifa = payload.disciplines.find((row) => row.kind === 'FIFA')

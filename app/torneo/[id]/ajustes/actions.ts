@@ -12,6 +12,7 @@ import {
   updateDisciplineRules,
 } from '@/db/discipline'
 import { addToDiscipline, removeFromDiscipline } from '@/db/discipline-entries'
+import { createTeam, deleteTeam } from '@/db/discipline-teams'
 import { addSquadSeat, claimOwnSeat, removeSeat, renameSeat, unlinkSeat } from '@/db/entries'
 import { EdgeError } from '@/db/errors'
 import { deleteSeason, renameSeason } from '@/db/season'
@@ -274,6 +275,31 @@ export async function dropDisciplineMember(
       if (error instanceof EdgeError) throw new EdgeError(`${disciplineLabel}: ${error.message}`)
       throw error
     }
+  })
+}
+
+/**
+ * Arma un equipo fijo (docs/tipos-de-torneo.md §1, sección Equipos de
+ * Ajustes). Las guardas (misma persona, no juega la disciplina, disciplina
+ * sin `fixed_teams`, alguien que ya tiene equipo) viven en `createTeam`
+ * (`db/discipline-teams.ts`) y se muestran tal cual, mismo criterio que
+ * `dropSeat` con `removeSeat`.
+ */
+export async function addTeam(
+  seasonId: string,
+  disciplineId: DisciplineId,
+  entryA: string,
+  entryB: string,
+): Promise<WriteResult> {
+  return onSeason(seasonId, async (supabase) => {
+    await createTeam(supabase, disciplineId, seasonId, entryA, entryB)
+  })
+}
+
+/** Deshace un equipo — no toca `discipline_entries` ni lo ya jugado, ver `deleteTeam`. */
+export async function removeTeam(seasonId: string, teamId: string): Promise<WriteResult> {
+  return onSeason(seasonId, async (supabase) => {
+    await deleteTeam(supabase, teamId)
   })
 }
 

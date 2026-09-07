@@ -5,9 +5,12 @@ import { Formato } from '@/app/torneo/[id]/ajustes/formato'
 import { FormatoDefault } from '@/app/torneo/[id]/ajustes/formato-default'
 import { Reglas } from '@/app/torneo/[id]/ajustes/reglas'
 import { Volver } from '@/app/torneo/[id]/volver'
+import { disciplineConfig } from '@/db/discipline'
+import { teamsOf } from '@/db/discipline-teams'
 import { disciplineRulesOf, seasonHeader, seasonSquadMembersOf } from '@/db/read'
 import { squadSeedOrder } from '@/db/season'
 import { serverClient } from '@/db/server'
+import { Equipos, type EquipoMemberVM, type EquipoVM } from './equipos'
 import { QuienJuega, type QuienJuegaMemberVM } from './quien-juega'
 
 interface PageProps {
@@ -18,16 +21,24 @@ interface PageProps {
  * Ajustes de UNA disciplina (Task 4, docs/plan-arquitectura-de-paginas.md;
  * docs/arquitectura-de-paginas.md §2.5/§3.2). Su config (puntos y steppers),
  * Masters, formato por defecto de las fechas, reglas, y "Quién juega" — las
- * cinco cosas que §3.2 pone del lado de `disciplines`, no de `seasons`.
+ * cinco cosas que §3.2 pone del lado de `disciplines`, no de `seasons`. Y
+ * Equipos, que §3.2 no enumera por columna (esa tabla es anterior a
+ * `discipline_teams`) pero es igual de "del lado de `disciplines`": el
+ * diseño de esa sección vive en `docs/tipos-de-torneo.md` §1, no en §3.2.
  *
- * "Quién juega" (§2.6 del diseño) es la última en sumarse: `discipline_entries`
- * se llenaba al crear el torneo y en "+ Agregar disciplina"
- * (`db/discipline.ts`) y de ahí en más no había pantalla para tocarla —
- * `entriesOf` (`db/read.ts:515`) descartaba en silencio a quien no jugaba.
- * Sólo se muestra con 2+ disciplinas (`multiDiscipline` acá abajo, mismo
- * criterio que el resto de esta página): con una sola, "el plantel juega
- * esta disciplina" es la única disciplina que hay, y la sección no tiene
- * nada que decir que `Plantel` (el contenedor) no diga ya.
+ * "Quién juega" (§2.6 del diseño) se sumó ANTES que Equipos:
+ * `discipline_entries` se llenaba al crear el torneo y en "+ Agregar
+ * disciplina" (`db/discipline.ts`) y de ahí en más no había pantalla para
+ * tocarla — `entriesOf` (`db/read.ts:515`) descartaba en silencio a quien no
+ * jugaba. Sólo se muestra con 2+ disciplinas (`multiDiscipline` acá abajo,
+ * mismo criterio que el resto de esta página): con una sola, "el plantel
+ * juega esta disciplina" es la única disciplina que hay, y la sección no
+ * tiene nada que decir que `Plantel` (el contenedor) no diga ya.
+ *
+ * Equipos (docs/tipos-de-torneo.md §1) NO copia ese gate: aparece con
+ * `discipline.fixed_teams`, sin importar cuántas disciplinas tenga el
+ * torneo — un torneo de UNA sola disciplina de equipos fijos es el caso más
+ * común, y necesita esta pantalla igual que uno de 2+.
  *
  * Nace para el caso de 2+ disciplinas, donde el contenedor
  * (`../../ajustes/page.tsx`) deja de mostrar estos paneles inline y en su
@@ -50,7 +61,10 @@ interface PageProps {
  * un no-admin que se saltee esta redirección igual se queda sin poder
  * guardar nada. Las dos de "Quién juega" (`addDisciplineMember`,
  * `dropDisciplineMember`) pasan por `discipline_entries_write`
- * (`is_season_admin`, `0023:60-62`), la misma guarda real.
+ * (`is_season_admin`, `0023:60-62`), la misma guarda real. Las dos de
+ * "Equipos" (`addTeam`, `removeTeam`) pasan por `discipline_teams_write`
+ * (`is_season_admin`, `0068_fixed_teams.sql:85-87`), otra vez la misma
+ * guarda real.
  */
 export default async function DisciplinaAjustesPage({ params }: PageProps) {
   const { id: seasonId, disciplina } = await params
@@ -92,6 +106,38 @@ export default async function DisciplinaAjustesPage({ params }: PageProps) {
     name: member.displayName,
     playsDiscipline: playingIds.has(member.id),
   }))
+
+  // Equipos fijos (§1 del diseño): a diferencia de "Quién juega", la
+  // condición NO es `multiDiscipline` -- un torneo de UNA sola disciplina de
+  // equipos fijos es el caso más común, y tiene que verse igual. La condición
+  // real es `disciplines.fixed_teams`, que no viaja en `DisciplineHeader`
+  // (nadie más lo necesitaba todavía) -- se pide con `disciplineConfig`
+  // (`db/discipline.ts`), la misma función que ya usan los escritores de
+  // Formato para leer esta columna.
+  const { fixedTeams } = await disciplineConfig(supabase, discipline.id)
+
+  // La membresía REAL de esta disciplina, para el form de armar equipo: con
+  // 2+ disciplinas es `disciplinePlayers` (ya pedido arriba, para "Quién
+  // juega"); con una sola, el plantel del contenedor YA ES esa membresía
+  // (mismo invariante que sostiene `squadSizeHere`, más abajo) -- pedirlo de
+  // nuevo con `squadSeedOrder` sería una consulta más para el mismo dato.
+  const disciplineMemberIds = multiDiscipline ? disciplinePlayers : squad.map((member) => member.id)
+
+  const squadNameById = new Map(squad.map((member) => [member.id, member.displayName]))
+  // Sólo se pide con `fixedTeams` (mismo criterio que `disciplinePlayers` de
+  // arriba): sin equipos fijos esta consulta no tendría nada que devolver.
+  const teams = fixedTeams ? await teamsOf(supabase, discipline.id) : []
+  const teamedIds = new Set(teams.flatMap((team) => [team.entryA, team.entryB]))
+  const equipoTeams: EquipoVM[] = teams.map((team) => ({
+    id: team.id,
+    aName: squadNameById.get(team.entryA) ?? team.entryA,
+    bName: squadNameById.get(team.entryB) ?? team.entryB,
+  }))
+  // Equipos PARCIALES están permitidos (decisión del dueño): esta lista sólo
+  // saca a quien YA tiene equipo, nunca exige que no sobre nadie.
+  const equipoFreeMembers: EquipoMemberVM[] = disciplineMemberIds
+    .filter((entryId) => !teamedIds.has(entryId))
+    .map((entryId) => ({ entryId, name: squadNameById.get(entryId) ?? entryId }))
 
   // El aviso de plantel es de ESTA disciplina, no de `primaryDiscipline`
   // (`db/read.ts`): ahí es donde vivía el defecto medido en Task 4 — con
@@ -177,6 +223,16 @@ export default async function DisciplinaAjustesPage({ params }: PageProps) {
           disciplineId={discipline.id}
           disciplineLabel={DISCIPLINE_LABELS[discipline.kind]}
           members={quienJuega}
+        />
+      )}
+
+      {/* `fixedTeams`, no `multiDiscipline`: ver el comentario de arriba. */}
+      {fixedTeams && (
+        <Equipos
+          seasonId={seasonId}
+          disciplineId={discipline.id}
+          teams={equipoTeams}
+          freeMembers={equipoFreeMembers}
         />
       )}
     </div>

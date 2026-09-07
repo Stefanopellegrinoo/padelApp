@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from 'react-dom/server'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { defaultConfig, type DisciplineId, type MatchdayFormat, type SeasonConfig } from '@/core'
 import type { DisciplineHeader, SquadMember } from '@/db/read'
 
@@ -58,6 +58,12 @@ const escena = vi.hoisted(() => ({
   // trae de verdad. 8 calza con `PADEL_CONFIG.squadSize` (`defaultConfig(8)`),
   // así que por default no hay mismatch que mostrar.
   squadSize: 8,
+  // Equipos (§1 tipos-de-torneo): por disciplina, no un booleano suelto --
+  // así el describe de "no copia el gate de multiDiscipline" puede prender
+  // `fixed_teams` en UNA sola de las dos disciplinas del fixture y probar que
+  // la OTRA no dibuja la sección.
+  fixedTeamsByDiscipline: new Map<string, boolean>(),
+  teamsByDiscipline: new Map<string, { id: string; entry_a: string; entry_b: string }[]>(),
 }))
 
 vi.mock('next/navigation', async (importOriginal) => {
@@ -108,6 +114,25 @@ vi.mock('@/db/read', async (importOriginal) => {
 // esto con `mockResolvedValueOnce` para el caso de solape parcial.
 vi.mock('@/db/season', () => ({
   squadSeedOrder: vi.fn(async () => Array.from({ length: escena.squadSize }, (_, index) => `e${index}`)),
+}))
+
+// `disciplineConfig` es de dónde sale `fixedTeams` -- el resto de la fila
+// (`config`/`pairSize`/`allowsDraw`/`formatoDefault`) no lo usa esta pantalla
+// por este camino, así que el mock sólo devuelve lo que se lee.
+vi.mock('@/db/discipline', () => ({
+  disciplineConfig: vi.fn(async (_supabase: unknown, disciplineId: string) => ({
+    fixedTeams: escena.fixedTeamsByDiscipline.get(disciplineId) ?? false,
+  })),
+}))
+
+vi.mock('@/db/discipline-teams', () => ({
+  teamsOf: vi.fn(async (_supabase: unknown, disciplineId: string) =>
+    (escena.teamsByDiscipline.get(disciplineId) ?? []).map((row) => ({
+      id: row.id,
+      entryA: row.entry_a,
+      entryB: row.entry_b,
+    })),
+  ),
 }))
 
 async function render(disciplina: string): Promise<string> {
@@ -299,6 +324,184 @@ describe('Ajustes de una disciplina — "Quién juega" (§2.6 del diseño)', () 
     expect(html).toContain('Quién juega')
     expect([...html.matchAll(/>Sacar</g)]).toHaveLength(2)
     expect([...html.matchAll(/>Agregar</g)]).toHaveLength(1)
+
+    escena.squadSize = 8
+  })
+})
+
+/**
+ * Equipos (docs/tipos-de-torneo.md §1). A diferencia de "Quién juega", el
+ * gate NO es `multiDiscipline` -- es `discipline.fixed_teams`, así que un
+ * torneo de UNA sola disciplina tiene que dibujarla igual que uno de 2+.
+ *
+ * Mutaciones probadas a mano contra esta suite (revertidas después,
+ * confirmando rojo → verde -- ver el reporte de la tanda para la lista
+ * completa corrida contra `db/discipline-teams.ts` y `db/discipline-entries.ts`):
+ * - Copiar el gate de "Quién juega" (`multiDiscipline &&`) para `<Equipos>`
+ *   en `page.tsx` → el segundo test de acá abajo (una sola disciplina, con
+ *   `fixed_teams`) da ROJO.
+ */
+describe('Ajustes de una disciplina — "Equipos" (§1 tipos-de-torneo)', () => {
+  afterEach(() => {
+    escena.fixedTeamsByDiscipline = new Map()
+    escena.teamsByDiscipline = new Map()
+  })
+
+  it('con fixed_teams apagado, la sección no se dibuja', async () => {
+    escena.disciplines = SOLO_PADEL
+    const html = await render('padel')
+    expect(html).not.toContain('>Equipos</h2>')
+  })
+
+  it('con fixed_teams prendido y UNA sola disciplina, la sección SÍ se dibuja', async () => {
+    escena.disciplines = SOLO_PADEL
+    escena.fixedTeamsByDiscipline = new Map([['d-padel', true]])
+    const html = await render('padel')
+    expect(html).toContain('>Equipos</h2>')
+  })
+
+  // `fixedTeamsByDiscipline` con las DOS en `true`: si `page.tsx` le pasara
+  // `header.disciplines[0].id` a `<Equipos disciplineId=...>` en vez de
+  // `discipline.id`, el `data-equipos` sería igual en las dos URLs y esto no
+  // lo notaría -- por eso el segundo test de este describe usa valores
+  // DISTINTOS por disciplina, que es lo que de verdad pinea `disciplineConfig`.
+  it('data-equipos lleva el id de la disciplina de la URL, no la [0]', async () => {
+    escena.disciplines = PADEL_Y_FIFA
+    escena.fixedTeamsByDiscipline = new Map([
+      ['d-padel', true],
+      ['d-fifa', true],
+    ])
+
+    const fifa = await render('fifa')
+    expect(fifa).toContain('data-equipos="d-fifa"')
+    expect(fifa).not.toContain('data-equipos="d-padel"')
+
+    const padel = await render('padel')
+    expect(padel).toContain('data-equipos="d-padel"')
+    expect(padel).not.toContain('data-equipos="d-fifa"')
+  })
+
+  // Ronda de fix — M-1: `seasonId` es el OTRO id que viaja a `<Equipos>`, y
+  // no tenía pin -- mutación probada a mano (revertida después, confirmando
+  // rojo → verde): cambiar `seasonId={seasonId}` por `seasonId={discipline.id}`
+  // en `page.tsx` deja pasar TODOS los tests de arriba en VERDE (ninguno
+  // mira `data-equipos-season`) pero da ROJO acá.
+  it('data-equipos-season lleva el seasonId real, no el id de la disciplina', async () => {
+    escena.disciplines = SOLO_PADEL
+    escena.fixedTeamsByDiscipline = new Map([['d-padel', true]])
+
+    const html = await render('padel')
+
+    expect(html).toContain('data-equipos-season="s1"')
+    expect(html).not.toContain('data-equipos-season="d-padel"')
+  })
+
+  // Complementa el test de arriba: acá `fixedTeams` DIFIERE entre las dos
+  // disciplinas, así que si `page.tsx` le pidiera `disciplineConfig` a
+  // `header.disciplines[0].id` en vez de `discipline.id`, esta sección
+  // saldría PRENDIDA o APAGADA al revés en una de las dos URLs -- mutación
+  // probada a mano (revertida después, confirmando rojo → verde): cambiar
+  // `disciplineConfig(supabase, discipline.id)` por
+  // `disciplineConfig(supabase, header.disciplines[0]!.id)` en `page.tsx`
+  // deja el test de arriba en VERDE (las dos disciplinas comparten el mismo
+  // `fixedTeams: true`) pero ÉSTE da ROJO.
+  it('cada URL lee el fixed_teams de SU PROPIA disciplina, no el de la [0]', async () => {
+    escena.disciplines = PADEL_Y_FIFA
+    escena.fixedTeamsByDiscipline = new Map([
+      ['d-padel', false],
+      ['d-fifa', true],
+    ])
+
+    const fifa = await render('fifa')
+    expect(fifa).toContain('>Equipos</h2>')
+
+    const padel = await render('padel')
+    expect(padel).not.toContain('>Equipos</h2>')
+  })
+
+  // Mismo motivo que el test de arriba, para `teamsOf`: mutación probada a
+  // mano (revertida después, confirmando rojo → verde): cambiar
+  // `teamsOf(supabase, discipline.id)` por
+  // `teamsOf(supabase, header.disciplines[0]!.id)` en `page.tsx` deja pasar
+  // esto en VERDE con equipos IGUALES en las dos disciplinas (el test de
+  // "muestra los equipos ya armados", con SOLO_PADEL, no tiene una segunda
+  // disciplina contra la que comparar) pero da ROJO acá, con equipos
+  // DISTINTOS por disciplina.
+  it('cada URL lee los equipos de SU PROPIA disciplina, no los de la [0]', async () => {
+    escena.disciplines = PADEL_Y_FIFA
+    escena.squadSize = 4
+    escena.fixedTeamsByDiscipline = new Map([
+      ['d-padel', true],
+      ['d-fifa', true],
+    ])
+    escena.teamsByDiscipline = new Map([
+      ['d-padel', [{ id: 'tp', entry_a: 'e0', entry_b: 'e1' }]],
+      ['d-fifa', [{ id: 'tf', entry_a: 'e2', entry_b: 'e3' }]],
+    ])
+
+    const fifa = await render('fifa')
+    expect(fifa).toContain('Jugador 2 y Jugador 3')
+    expect(fifa).not.toContain('Jugador 0 y Jugador 1')
+
+    const padel = await render('padel')
+    expect(padel).toContain('Jugador 0 y Jugador 1')
+    expect(padel).not.toContain('Jugador 2 y Jugador 3')
+
+    escena.squadSize = 8
+  })
+
+  it('muestra los equipos ya armados por nombre, y no ofrece a quien ya tiene equipo para armar uno nuevo', async () => {
+    escena.disciplines = SOLO_PADEL
+    escena.squadSize = 4
+    escena.fixedTeamsByDiscipline = new Map([['d-padel', true]])
+    escena.teamsByDiscipline = new Map([['d-padel', [{ id: 't1', entry_a: 'e0', entry_b: 'e1' }]]])
+
+    const html = await render('padel')
+
+    expect(html).toContain('Jugador 0 y Jugador 1')
+    expect(html).toContain('Deshacer')
+    // e0/e1 ya tienen equipo: no aparecen como `<option>` de ninguno de los
+    // dos `<select>` de armar uno nuevo.
+    expect(html).not.toContain('value="e0"')
+    expect(html).not.toContain('value="e1"')
+    // e2/e3 siguen libres: aparecen en LOS DOS `<select>`.
+    expect([...html.matchAll(/value="e2"/g)]).toHaveLength(2)
+    expect([...html.matchAll(/value="e3"/g)]).toHaveLength(2)
+
+    escena.squadSize = 8
+  })
+
+  // Ronda de fix — M-2: en TODOS los tests de arriba, el mock de
+  // `squadSeedOrder` devuelve EXACTAMENTE los mismos ids que
+  // `seasonSquadMembersOf` -- "quién juega esta disciplina" y "el plantel
+  // del contenedor" son el mismo valor siempre, así que `disciplineMemberIds`
+  // (`page.tsx`) mutado a `squad.map(...)` siempre (ignorando la membresía
+  // real) queda indistinguible. Acá se pisa `squadSeedOrder` con un
+  // SUBCONJUNTO (mismo mecanismo que el describe de "Quién juega" ya usa)
+  // para que la disciplina de la URL tenga MENOS gente que el plantel
+  // entero.
+  //
+  // Mutación probada a mano (revertida después, confirmando rojo → verde):
+  // en `page.tsx`, cambiar `const disciplineMemberIds = multiDiscipline ?
+  // disciplinePlayers : squad.map((member) => member.id)` por
+  // `squad.map((member) => member.id)` siempre → todos los tests de arriba
+  // siguen en VERDE (fixture homogénea) pero éste da ROJO: ofrece a
+  // "Jugador 2" para armar equipo en FIFA aunque no la juegue.
+  it('con 2+ disciplinas, el form de armar equipo sólo ofrece a quien juega ESTA disciplina, no todo el plantel del contenedor', async () => {
+    escena.disciplines = PADEL_Y_FIFA
+    escena.squadSize = 3
+    escena.fixedTeamsByDiscipline = new Map([['d-fifa', true]])
+    const { squadSeedOrder } = await import('@/db/season')
+    // Del plantel de 3 (e0, e1, e2), sólo e0 y e1 juegan FIFA -- e2 quedó
+    // afuera a propósito (mismo patrón que el describe de "Quién juega").
+    vi.mocked(squadSeedOrder).mockResolvedValueOnce(['e0', 'e1'])
+
+    const html = await render('fifa')
+
+    expect(html).toContain('>Equipos</h2>')
+    expect(html).toContain('value="e0"')
+    expect(html).toContain('value="e1"')
+    expect(html).not.toContain('value="e2"')
 
     escena.squadSize = 8
   })

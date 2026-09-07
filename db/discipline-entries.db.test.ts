@@ -202,10 +202,12 @@ async function addSeats(
 // (`discipline_entries` tiene TRES constraints apuntándole hoy, desde DOS
 // tablas: `attendances_entry_discipline` 0024:24, y `discipline_teams`
 // 0068:70 (`entry_a`) más 0068:71 (`entry_b`) — ninguna de las tres frena un
-// `delete`: las de `attendances` y `discipline_teams` CASCADEAN en
-// silencio, y la de `discipline_teams` además no tiene escritor de
-// producción que la llene todavía) — así que si alguna guarda se borra,
-// este archivo es lo único que lo nota.
+// `delete`, las tres CASCADEAN en silencio) — así que si alguna guarda se
+// borra, este archivo es lo único que lo nota. La de `discipline_teams` es
+// la más nueva de las cuatro: desde que existe la pantalla de Equipos
+// (`createTeam`, `db/discipline-teams.ts`) sí hay un escritor de producción
+// que llena esa tabla, así que el guard de acá abajo (mismo patrón que el
+// de `pair_locks`) deja de ser opcional.
 
 describe('discipline_entries — agregar a una disciplina (§2.6)', () => {
   it('suma la fila con el próximo seed_position libre, sin tocar las demás disciplinas', async () => {
@@ -529,6 +531,53 @@ describe('discipline_entries — pareja fija sin resolver bloquea sacar (ronda d
     await expect(removeFromDiscipline(admin.client, padelId, seasonId, target)).rejects.toThrow(/pareja fija/)
 
     expect((await seatsOf(padelId)).some((seat) => seat.entry_id === target)).toBe(true)
+  })
+})
+
+// Precedente más cercano: la guarda de `pair_locks` de acá arriba, pero de
+// la DISCIPLINA entera en vez de una fecha puntual -- el escritor de filas
+// que faltaba (`createTeam`, `db/discipline-teams.ts`) es lo que esta misma
+// tanda agrega, y es lo que vuelve a este cuarto guard NECESARIO (ver el
+// comentario actualizado arriba del describe de "§2.6").
+describe('discipline_entries — equipo fijo armado bloquea sacar (equipos fijos, docs/tipos-de-torneo.md §1)', () => {
+  // Mutación probada a mano (revertida después, confirmando rojo → verde):
+  // sacar el bloque entero de `discipline_teams` en `removeFromDiscipline`
+  // (`db/discipline-entries.ts`) → este test da ROJO (resuelve en vez de
+  // rechazar, y `partner` queda en un equipo roto: su fila de
+  // `discipline_teams` cascadeó con la de `target`, pero `partner` sigue
+  // jugando la disciplina sin compañero y sin que nadie se entere).
+  it('con un equipo armado en esta disciplina, sacar a CUALQUIERA de los dos rebota y no borra nada', async () => {
+    const admin = await createTestUser()
+    const players = await fillerPlayers(8)
+    const { seasonId, entryIds, disciplineIds } = await createSeason({
+      admin,
+      squad: players,
+      disciplines: [{ kind: 'PADEL' }, { kind: 'FIFA' }],
+    })
+    const [padelId, fifaId] = disciplineIds
+    if (padelId === undefined || fifaId === undefined) throw new Error('Faltan disciplinas.')
+    const [target, partner] = entryIds
+    if (target === undefined || partner === undefined) throw new Error('Falta el plantel.')
+
+    const db = adminClient()
+    const { error: flagError } = await db.from('disciplines').update({ fixed_teams: true }).eq('id', padelId)
+    if (flagError) throw new Error(flagError.message)
+    const { error: teamError } = await db
+      .from('discipline_teams')
+      .insert({ discipline_id: padelId, entry_a: target, entry_b: partner, season_id: seasonId })
+    if (teamError) throw new Error(teamError.message)
+
+    expect(await hasPlayedDiscipline(admin.client, padelId, target)).toBe(false)
+    await expect(removeFromDiscipline(admin.client, padelId, seasonId, target)).rejects.toThrow(/equipo armado/)
+    await expect(removeFromDiscipline(admin.client, padelId, seasonId, partner)).rejects.toThrow(/equipo armado/)
+
+    expect((await seatsOf(padelId)).some((seat) => seat.entry_id === target)).toBe(true)
+    expect((await seatsOf(padelId)).some((seat) => seat.entry_id === partner)).toBe(true)
+
+    // FIFA no tiene ningún equipo: sacar a `target` de ahí sigue andando --
+    // la guarda es POR DISCIPLINA, mismo criterio que las otras tres.
+    await removeFromDiscipline(admin.client, fifaId, seasonId, target)
+    expect((await seatsOf(fifaId)).some((seat) => seat.entry_id === target)).toBe(false)
   })
 })
 

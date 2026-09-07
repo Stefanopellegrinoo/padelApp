@@ -931,6 +931,15 @@ export type Database = {
         Args: { p_discipline: string; p_played_on: string }
         Returns: string
       }
+      create_discipline_team: {
+        Args: {
+          p_discipline: string
+          p_entry_a: string
+          p_entry_b: string
+          p_season: string
+        }
+        Returns: string
+      }
       create_masters: {
         Args: { p_played_on: string; p_season: string }
         Returns: string

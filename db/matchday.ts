@@ -41,6 +41,7 @@ import {
 } from '@/core'
 import type { Database, Json } from './database.types'
 import { disciplineConfig } from './discipline'
+import { teamsOf as fixedTeamsOf } from './discipline-teams'
 import { EdgeError } from './errors'
 import {
   awardsBefore,
@@ -191,7 +192,13 @@ export async function pairingContextFor(
   // quién vino y quién es de quién. La alternativa —dejarlo pasar— es que el
   // que vino se caiga al sorteo suelto y termine de pareja con un rival, en
   // silencio y con el equipo roto.
-  const teams = fixedTeams ? await teamsOf(supabase, matchday.discipline_id) : []
+  // `fixedTeamsOf` (`db/discipline-teams.ts`, ronda de fix — M-3): un solo
+  // lector de `discipline_teams` para toda la app. Acá no hace falta el
+  // `id` de la fila (nadie deshace un equipo desde el sorteo), así que se
+  // mapea al mismo `{a, b}` que ya esperaba este archivo.
+  const teams = fixedTeams
+    ? (await fixedTeamsOf(supabase, matchday.discipline_id)).map((team) => ({ a: team.entryA, b: team.entryB }))
+    : []
   const playing = new Set(present)
   const halved = teams.filter((team) => playing.has(team.a) !== playing.has(team.b))
   if (halved.length > 0) {
@@ -1470,24 +1477,6 @@ async function guestsOf(supabase: Client, matchdayId: string): Promise<GuestSeat
     .order('seed_position', { ascending: true })
   if (error) throw new EdgeError(`No se pudieron leer los invitados: ${error.message}`)
   return (data ?? []).map((row) => ({ entryId: row.id, displayName: row.display_name }))
-}
-
-/**
- * Los equipos fijos de la disciplina — `discipline_teams` (0068,
- * docs/tipos-de-torneo.md §1).
- *
- * Mismo lugar y misma forma que `locksOf`, y la diferencia es de QUÉ dependen:
- * un lock es de una FECHA y muere con ella; un equipo es de la DISCIPLINA y
- * sobrevive a todas. Por eso la clave es `discipline_id` y no `matchday_id`.
- */
-async function teamsOf(supabase: Client, disciplineId: string): Promise<PairLock[]> {
-  const { data, error } = await supabase
-    .from('discipline_teams')
-    .select('entry_a, entry_b')
-    .eq('discipline_id', disciplineId)
-    .order('id', { ascending: true })
-  if (error) throw new EdgeError(`No se pudieron leer los equipos fijos: ${error.message}`)
-  return (data ?? []).map((row) => ({ a: row.entry_a, b: row.entry_b }))
 }
 
 async function locksOf(supabase: Client, matchdayId: string): Promise<PairLock[]> {

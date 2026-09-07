@@ -78,9 +78,9 @@ achican el diseño en vez de agrandarlo:
 | pieza | qué es |
 |---|---|
 | `disciplines.fixed_teams boolean not null default false` | la perilla, al lado de `pair_size` / `allows_draw` / `has_masters`. Sólo tiene sentido con `pair_size = 2` (`disciplines_fixed_teams_needs_pair`, 0077). Desde la rebanada de la puerta de creación, el wizard también tiene su checkbox (`app/torneos/nuevo/wizard.tsx`, `FormatoDeUnaDisciplina`) — pero, a diferencia de Masters/Formato de las fechas, se dibuja SIEMPRE, con una disciplina marcada o con dos: junto al de Masters cuando hay 2+, solo cuando hay una (ahí Masters no se dibuja) |
-| `discipline_teams(id, discipline_id, entry_a, entry_b, season_id)` | `pair_locks` pero **por disciplina** en vez de por fecha. Mismos `unique` a cada lado (nadie en dos equipos), mismas FK compuestas contra `(entries.id, season_id)`. **Sin columna de nombre** — decisión explícita: *"por ahora Pedro y Juan"* |
+| `discipline_teams(id, discipline_id, entry_a, entry_b, season_id)` | `pair_locks` pero **por disciplina** en vez de por fecha. Un `unique` a cada lado — cubre la MITAD de "nadie en dos equipos" (repetir el mismo lado); la otra mitad (pasar de `entry_b` de un equipo a `entry_a` de otro) ningún `unique` la frena, y la valida el borde: `createTeam` (`db/discipline-teams.ts`, pantalla de Equipos). FK compuestas contra `discipline_entries`. **Sin columna de nombre** — decisión explícita: *"por ahora Pedro y Juan"* |
 | inyección en `pairingContextFor` (`db/matchday.ts:238-239`) | los equipos presentes entran como `fixedPairs` **sin pasar por `pair_locks`** |
-| presentismo por equipo | una sola marca escribe las **dos** filas de `attendances`. Un equipo a medias es estado inválido que rechaza el borde |
+| presentismo por equipo | **pendiente, decisión del dueño** (ronda de fix): "una sola marca escribe las dos filas de `attendances`" NO está construido — el presentismo sigue siendo por persona, cada mitad se marca aparte. Lo que SÍ está: un equipo a medias es estado inválido que rechaza el borde (`pairingContextFor`, `db/matchday.ts:203-210`), así que el desastre de sortear con un solo integrante ya está cubierto sin la marca conjunta |
 | la regla de defensores se apaga con `fixed_teams` | ver 1.4 — si no, crashea |
 
 ### 1.3 Por qué inyectar en vez de escribir `pair_locks`

@@ -169,17 +169,30 @@ export async function hasPlayedDiscipline(
  *   Acotado a fechas en DRAFT y `status = 'PLAYING'`: un ABSENT o una fecha
  *   ya abierta/cerrada no se pierde nada real (si esa fecha llegó a jugarse,
  *   `hasPlayedDiscipline` ya bloqueó más arriba).
+ * - `discipline_teams` (equipos fijos, `0068_fixed_teams.sql:70-71`, `on
+ *   delete cascade`): a partir de la pantalla de Equipos (`createTeam`,
+ *   `db/discipline-teams.ts`) SÍ hay un camino de producción que escribe una
+ *   FILA ahí — este chequeo es ese cuarto guard, y es lo que esta misma
+ *   tanda agrega. Sin él, sacar a UNA mitad del equipo cascadea su fila y la
+ *   OTRA mitad queda en un equipo roto: sigue en `discipline_entries`, pero
+ *   `teamsOf` (`db/matchday.ts`) ya no la encuentra pareja, y nadie tiene
+ *   forma de enterarse ni de arreglarlo — mismo defecto que el de
+ *   `pair_locks` de arriba, pero sin la salida de "destrabala": acá la salida
+ *   real es deshacer el equipo primero (`deleteTeam`), y el mensaje la
+ *   nombra.
  *
- * Lo que se buscó y se decidió NO cubrir: `discipline_teams` (equipos
- * fijos, `0068_fixed_teams.sql:70-71`) también cuelga de
- * `discipline_entries` con `on delete cascade` — pero ningún camino de
- * producción escribe una FILA ahí hoy (`db/matchday.ts` sólo la LEE,
- * `teamsOf`); no hay nada real que este delete pueda perder ahí todavía.
- * `disciplines.fixed_teams` (el flag) ya tiene escritor desde la puerta de
- * creación (`createSeason`/`addDiscipline`) — sigue sin importar acá porque
- * una disciplina recién creada con el flag prendido nace con CERO equipos.
- * Si `discipline_teams` suma un escritor de FILAS (la pantalla para armar
- * equipos, todavía sin construir), esto necesita revisarse.
+ *   No filtra por `fixed_teams = true` (ronda de fix, LOW-1) — decisión, no
+ *   descuido: `create_discipline_team` (`0079`) exige el flag prendido, así
+ *   que ninguna fila de producción debería existir en una disciplina con el
+ *   flag apagado, pero la tabla sigue con `grant insert` a `authenticated`
+ *   (`0068_fixed_teams.sql:80`) — un POST directo la saltea igual. SI eso
+ *   dejara una fila así, filtrar por `fixed_teams` acá la haría invisible a
+ *   este guard y `removeFromDiscipline` la cascadearía en silencio — el
+ *   mismo daño que este guard existe para evitar. Bloquear iguales, sin
+ *   mirar el flag, no deja un callejón sin salida: `deleteTeam` TAMPOCO mira
+ *   `fixed_teams` (borra por `id`, sin condición), así que "deshacé el
+ *   equipo primero" sigue siendo una salida real sin importar el estado del
+ *   flag — la pantalla que lo ofrece está escondida, pero la función no.
  */
 export async function removeFromDiscipline(
   supabase: Client,
@@ -211,6 +224,24 @@ export async function removeFromDiscipline(
         'Este jugador tiene una pareja fija armada en una fecha de esta disciplina: destrabala o cambiale el compañero al invitado antes de sacarlo.',
       )
     }
+  }
+
+  // Equipos fijos (`discipline_teams`, 0068): mismo patrón que el chequeo de
+  // `pair_locks` de arriba — "tiene una pareja armada", pero de la
+  // DISCIPLINA entera y no de una fecha puntual. Sin esto, sacar a esta
+  // persona cascadea su fila (`0068_fixed_teams.sql:70-71`, `on delete
+  // cascade`) y el compañero queda en un equipo roto: sigue jugando la
+  // disciplina, pero ya no tiene con quién.
+  const { count: teamCount, error: teamError } = await supabase
+    .from('discipline_teams')
+    .select('id', { count: 'exact', head: true })
+    .eq('discipline_id', disciplineId)
+    .or(`entry_a.eq.${entryId},entry_b.eq.${entryId}`)
+  if (teamError) throw new EdgeError(`No se pudo comprobar los equipos: ${teamError.message}`)
+  if ((teamCount ?? 0) > 0) {
+    throw new EdgeError(
+      'Este jugador tiene un equipo armado en esta disciplina: deshacé el equipo antes de sacarlo.',
+    )
   }
 
   // Sólo fechas en DRAFT: una vez armada (pairs generados), `hasPlayedDiscipline`

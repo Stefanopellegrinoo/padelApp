@@ -565,8 +565,8 @@ posibles del Masters, trazar la rotación del round robin para 4 parejas, comput
 `floor((f-1)/k)` en los bordes. Un test y un código pueden estar equivocados de
 acuerdo, y eso ninguna suite lo detecta.
 
-**`jsdom` está para UN caso, y el resto sigue sin DOM.** `app/amigos/[playerId]/cargar.unit.test.ts`
-es el único archivo del repo que corre en `jsdom`, con un pragma
+**`jsdom` es la EXCEPCIÓN, y el resto sigue sin DOM.** `app/amigos/[playerId]/cargar.unit.test.ts`
+fue el primer archivo del repo en correr en `jsdom`, con un pragma
 `@vitest-environment` por archivo — `vitest.config.ts` no tiene override global
 y no hay que ponerle uno. Entró en 2b porque el formulario del partido casual se
 borraba entero en cada error de validación (React 19 llama
@@ -575,11 +575,20 @@ había forma barata de pinearlo**: `value` y `defaultValue` serializan HTML
 idéntico, así que `renderToStaticMarkup` no distingue un input controlado de uno
 que no lo está.
 
-La regla, entonces: **`jsdom` se usa sólo para un componente con estado que no se
-puede invocar como función pura.** Todo lo demás —que es toda la UI de este
-repo— se sigue testeando con `renderToStaticMarkup` y sin DOM, y por eso la suite
-unitaria corre en cuatro segundos. Si te encontrás agregando el pragma a un
-segundo archivo, pará y preguntate si el componente necesita estado de verdad.
+`app/torneo/[id]/[disciplina]/ajustes/quien-juega.unit.test.ts` es el segundo
+(ronda de fix de §2.6, "Quién juega"): mismo techo, otro síntoma —
+`renderToStaticMarkup` DESCARTA los props de evento, así que invertir a mano
+los dos `onClick` de `quien-juega.tsx` (Sacar llamando a `addDisciplineMember`,
+Agregar a `dropDisciplineMember`) daba el mismo HTML y la suite en verde. Sin
+un click de verdad no hay forma de pinear a qué función apunta cada botón.
+
+La regla, entonces: **`jsdom` se usa sólo para un componente con estado, o con un
+handler de evento, que no se puede invocar como función pura.** Todo lo demás
+—la enorme mayoría de la UI de este repo— se sigue testeando con
+`renderToStaticMarkup` y sin DOM. Si te encontrás agregando el pragma a un
+TERCER archivo, pará y preguntate si el componente de verdad lo necesita, o si
+alcanza con un pin más barato (`data-*` con el prop en juego, como
+`data-formato`/`data-quien-juega`) sobre `renderToStaticMarkup`.
 
 **Tres lecciones sobre tests, que costaron rondas:**
 

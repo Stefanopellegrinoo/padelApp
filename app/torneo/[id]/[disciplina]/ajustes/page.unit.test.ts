@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
-import { defaultConfig, type DisciplineId, type EntryId, type MatchdayFormat, type SeasonConfig } from '@/core'
-import type { DisciplineHeader } from '@/db/read'
+import { defaultConfig, type DisciplineId, type MatchdayFormat, type SeasonConfig } from '@/core'
+import type { DisciplineHeader, SquadMember } from '@/db/read'
 
 /**
  * Task 4 (docs/plan-arquitectura-de-paginas.md; docs/arquitectura-de-paginas.md
@@ -13,8 +13,13 @@ import type { DisciplineHeader } from '@/db/read'
  * `isAdmin` que el contenedor ya tenía.
  *
  * Mismo techo que esas dos suites: server component `async`, llamado directo
- * y `renderToStaticMarkup`, sin DOM (`docs/estado.md`, "jsdom está para UN
- * caso").
+ * y `renderToStaticMarkup`, sin DOM (`docs/estado.md`, "jsdom es la
+ * excepción"). El wiring de "Quién juega" (onClick -> acción correcta) NO se
+ * prueba acá -- `renderToStaticMarkup` descarta los props de evento -- sino
+ * en `quien-juega.unit.test.ts` (jsdom, click de verdad). Lo que ACÁ se pinea
+ * es que la página le pasa el `disciplineId` CORRECTO a `QuienJuega`, con el
+ * mismo truco que ya usan `Formato`/`FormatoDefault` (`data-formato`,
+ * `data-formato-default`): un atributo `data-quien-juega` con el id real.
  */
 
 const D_PADEL = 'd-padel' as DisciplineId
@@ -49,9 +54,9 @@ const escena = vi.hoisted(() => ({
   disciplines: [] as DisciplineHeader[],
   isAdmin: true,
   rulesByDiscipline: new Map<string, string>(),
-  // El tamaño del plantel de la TEMPORADA -- lo que `seasonSquadOf` trae de
-  // verdad. 8 calza con `PADEL_CONFIG.squadSize` (`defaultConfig(8)`), así
-  // que por default no hay mismatch que mostrar.
+  // El tamaño del plantel de la TEMPORADA -- lo que `seasonSquadMembersOf`
+  // trae de verdad. 8 calza con `PADEL_CONFIG.squadSize` (`defaultConfig(8)`),
+  // así que por default no hay mismatch que mostrar.
   squadSize: 8,
 }))
 
@@ -86,10 +91,24 @@ vi.mock('@/db/read', async (importOriginal) => {
       disciplines: escena.disciplines,
     }),
     disciplineRulesOf: async () => escena.rulesByDiscipline as Map<DisciplineId, string>,
-    seasonSquadOf: async (): Promise<EntryId[]> =>
-      Array.from({ length: escena.squadSize }, (_, index) => `e${index}`),
+    seasonSquadMembersOf: async (): Promise<SquadMember[]> =>
+      Array.from({ length: escena.squadSize }, (_, index) => ({
+        id: `e${index}`,
+        displayName: `Jugador ${index}`,
+        playerId: null,
+      })),
   }
 })
+
+// `squadSeedOrder` es "Quién juega" DE ESTA disciplina (`discipline_entries`,
+// db/season.ts:23) -- la página sólo la pide con 2+ disciplinas. Por default
+// todo el plantel juega TODAS (mismo resultado que antes de sumar la
+// sección, para no romper los tests de Formato/FormatoDefault/Reglas de acá
+// abajo, que no le interesa la membresía); el describe de "Quién juega" pisa
+// esto con `mockResolvedValueOnce` para el caso de solape parcial.
+vi.mock('@/db/season', () => ({
+  squadSeedOrder: vi.fn(async () => Array.from({ length: escena.squadSize }, (_, index) => `e${index}`)),
+}))
 
 async function render(disciplina: string): Promise<string> {
   const { default: DisciplinaAjustesPage } = await import('./page')
@@ -119,6 +138,22 @@ describe('Ajustes de una disciplina trae los datos de la disciplina de la URL, n
     expect(html).not.toContain('data-formato="d-padel"')
     expect(html).toContain('data-formato-default="d-fifa"')
     expect(html).not.toContain('data-formato-default="d-padel"')
+
+    // Mismo pin, para `QuienJuega` (ronda de fix, BLOQUEA 1 parte 2): sin
+    // esto, `page.tsx` pasando `header.disciplines[last].id` en vez de
+    // `discipline.id` se seguiría viendo y renderizando IGUAL (misma cantidad
+    // de filas, mismos nombres) pero "Agregar"/"Sacar" escribirían sobre
+    // Pádel estando en la URL de FIFA.
+    expect(html).toContain('data-quien-juega="d-fifa"')
+    expect(html).not.toContain('data-quien-juega="d-padel"')
+
+    // Mismo pin, para `disciplineLabel` (ronda de fix 2, BLOQUEA 3): sin
+    // esto, `page.tsx` pasando `DISCIPLINE_LABELS[header.disciplines[0]!.kind]`
+    // en vez de `DISCIPLINE_LABELS[discipline.kind]` seguiría viéndose y
+    // renderizando IGUAL, pero cada rebote de "Sacar" en la URL de FIFA
+    // diría "Pádel: ..." en vez de "FIFA: ...".
+    expect(html).toContain('data-quien-juega-label="FIFA"')
+    expect(html).not.toContain('data-quien-juega-label="Pádel"')
   })
 
   it('con el slug de la PRIMERA disciplina (padel), edita Pádel: dibuja sus cinco steppers', async () => {
@@ -135,6 +170,14 @@ describe('Ajustes de una disciplina trae los datos de la disciplina de la URL, n
     expect(html).not.toContain('data-formato="d-fifa"')
     expect(html).toContain('data-formato-default="d-padel"')
     expect(html).not.toContain('data-formato-default="d-fifa"')
+
+    // Mismo pin que arriba, del otro lado, para `QuienJuega`.
+    expect(html).toContain('data-quien-juega="d-padel"')
+    expect(html).not.toContain('data-quien-juega="d-fifa"')
+
+    // Mismo pin que arriba, del otro lado, para `disciplineLabel`.
+    expect(html).toContain('data-quien-juega-label="Pádel"')
+    expect(html).not.toContain('data-quien-juega-label="FIFA"')
   })
 
   it('un slug de disciplina desconocido da notFound(), no la [0] por defecto', async () => {
@@ -220,5 +263,43 @@ describe('Ajustes de una disciplina — la guarda de admin', () => {
     expect(redirect).toHaveBeenCalledWith('/torneo/s1/fifa')
 
     escena.isAdmin = true
+  })
+})
+
+/**
+ * "Quién juega" (§2.6 del diseño, decisión del dueño 2): la sección se
+ * agrega SÓLO con 2+ disciplinas -- con una sola, el plantel del contenedor
+ * y "quién juega" son la misma lista y la sección no diría nada nuevo.
+ *
+ * Mutaciones probadas a mano contra esta suite (revertidas después):
+ * - Sacar el `multiDiscipline &&` que envuelve a `<QuienJuega>` en
+ *   `page.tsx` → el primer test (una sola disciplina) da ROJO.
+ * - Invertir `member.playsDiscipline` en el `.map` de `page.tsx` (juega
+ *   pasa a "no juega" y viceversa) → el segundo test (Agregar/Sacar por
+ *   fila) da ROJO: cuenta 1 "Sacar" y 2 "Agregar" en vez de al revés.
+ */
+describe('Ajustes de una disciplina — "Quién juega" (§2.6 del diseño)', () => {
+  it('con una sola disciplina, la sección no se dibuja', async () => {
+    escena.disciplines = SOLO_PADEL
+    const html = await render('padel')
+    expect(html).not.toContain('Quién juega')
+  })
+
+  it('con 2+, marca por fila quién juega esta disciplina (Sacar) y quién no (Agregar)', async () => {
+    escena.disciplines = PADEL_Y_FIFA
+    escena.squadSize = 3
+    const { squadSeedOrder } = await import('@/db/season')
+    // Del plantel de 3 (e0, e1, e2), sólo e0 y e1 juegan Pádel: e2 quedó
+    // afuera a propósito (REQ-D1-4, solape parcial) para probar las dos
+    // ramas en el mismo render.
+    vi.mocked(squadSeedOrder).mockResolvedValueOnce(['e0', 'e1'])
+
+    const html = await render('padel')
+
+    expect(html).toContain('Quién juega')
+    expect([...html.matchAll(/>Sacar</g)]).toHaveLength(2)
+    expect([...html.matchAll(/>Agregar</g)]).toHaveLength(1)
+
+    escena.squadSize = 8
   })
 })

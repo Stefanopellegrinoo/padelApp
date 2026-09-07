@@ -5,8 +5,10 @@ import { Formato } from '@/app/torneo/[id]/ajustes/formato'
 import { FormatoDefault } from '@/app/torneo/[id]/ajustes/formato-default'
 import { Reglas } from '@/app/torneo/[id]/ajustes/reglas'
 import { Volver } from '@/app/torneo/[id]/volver'
-import { disciplineRulesOf, seasonHeader, seasonSquadOf } from '@/db/read'
+import { disciplineRulesOf, seasonHeader, seasonSquadMembersOf } from '@/db/read'
+import { squadSeedOrder } from '@/db/season'
 import { serverClient } from '@/db/server'
+import { QuienJuega, type QuienJuegaMemberVM } from './quien-juega'
 
 interface PageProps {
   params: Promise<{ id: string; disciplina: string }>
@@ -15,11 +17,17 @@ interface PageProps {
 /**
  * Ajustes de UNA disciplina (Task 4, docs/plan-arquitectura-de-paginas.md;
  * docs/arquitectura-de-paginas.md §2.5/§3.2). Su config (puntos y steppers),
- * Masters, formato por defecto de las fechas, y reglas — lo que §3.2 pone
- * del lado de `disciplines`, no de `seasons`. Falta la quinta cosa que §3.2
- * también pone acá, "quién del plantel juega esta disciplina": es §2.6 del
- * diseño, superficie nueva y no una mudanza, y el plan la deja afuera a
- * propósito para esta Task.
+ * Masters, formato por defecto de las fechas, reglas, y "Quién juega" — las
+ * cinco cosas que §3.2 pone del lado de `disciplines`, no de `seasons`.
+ *
+ * "Quién juega" (§2.6 del diseño) es la última en sumarse: `discipline_entries`
+ * se llenaba al crear el torneo y en "+ Agregar disciplina"
+ * (`db/discipline.ts`) y de ahí en más no había pantalla para tocarla —
+ * `entriesOf` (`db/read.ts:515`) descartaba en silencio a quien no jugaba.
+ * Sólo se muestra con 2+ disciplinas (`multiDiscipline` acá abajo, mismo
+ * criterio que el resto de esta página): con una sola, "el plantel juega
+ * esta disciplina" es la única disciplina que hay, y la sección no tiene
+ * nada que decir que `Plantel` (el contenedor) no diga ya.
  *
  * Nace para el caso de 2+ disciplinas, donde el contenedor
  * (`../../ajustes/page.tsx`) deja de mostrar estos paneles inline y en su
@@ -40,16 +48,22 @@ interface PageProps {
  * `saveFormatoDefault`, `saveRules`, en `../../ajustes/actions.ts`) pasan
  * por `disciplines_write` (`is_season_admin`, RLS) con `count: 'exact'` —
  * un no-admin que se saltee esta redirección igual se queda sin poder
- * guardar nada.
+ * guardar nada. Las dos de "Quién juega" (`addDisciplineMember`,
+ * `dropDisciplineMember`) pasan por `discipline_entries_write`
+ * (`is_season_admin`, `0023:60-62`), la misma guarda real.
  */
 export default async function DisciplinaAjustesPage({ params }: PageProps) {
   const { id: seasonId, disciplina } = await params
   const supabase = await serverClient()
 
+  // `seasonSquadMembersOf`, no `seasonSquadOf`: "Quién juega" necesita el
+  // NOMBRE de cada asiento del plantel del CONTENEDOR, no sólo el id — el
+  // mismo motivo por el que el contenedor (`../../ajustes/page.tsx`) ya usa
+  // ésta y no `entriesOf(seasonId)` sin disciplina (C14).
   const [header, rulesByDiscipline, squad] = await Promise.all([
     seasonHeader(supabase, seasonId),
     disciplineRulesOf(supabase, seasonId),
-    seasonSquadOf(supabase, seasonId),
+    seasonSquadMembersOf(supabase, seasonId),
   ])
 
   const discipline = resolveDisciplineBySlug(header.disciplines, disciplina)
@@ -58,15 +72,57 @@ export default async function DisciplinaAjustesPage({ params }: PageProps) {
 
   // Sólo se nombra la disciplina con 2+ — mismo criterio que Stats
   // (`[disciplina]/stats/page.tsx`) y que el propio contenedor.
-  const disciplineLabel = header.disciplines.length > 1 ? DISCIPLINE_LABELS[discipline.kind] : null
+  const multiDiscipline = header.disciplines.length > 1
+  const disciplineLabel = multiDiscipline ? DISCIPLINE_LABELS[discipline.kind] : null
+
+  // Sólo se pide con 2+ (`multiDiscipline`): con una sola la sección no se
+  // dibuja (§5 del diseño) y no hay motivo para pagar esta consulta — y con
+  // una sola, `assertMultiDiscipline` (`db/discipline-entries.ts`) le
+  // impide a "Quién juega" romper "el plantel del contenedor == la
+  // membresía de la disciplina", así que ese caso no lo necesita.
+  // `squadSeedOrder` (`db/season.ts:23`) ya lee `discipline_entries.entry_id`
+  // de ESTA disciplina — es la misma función que usan `addDiscipline`
+  // (`db/discipline.ts:456`, para heredar el orden de la primaria) y el
+  // armado de parejas (`db/matchday.ts`), reusada acá en vez de una query
+  // nueva contra la misma tabla.
+  const disciplinePlayers = multiDiscipline ? await squadSeedOrder(supabase, discipline.id) : []
+  const playingIds = new Set<string>(disciplinePlayers)
+  const quienJuega: QuienJuegaMemberVM[] = squad.map((member) => ({
+    entryId: member.id,
+    name: member.displayName,
+    playsDiscipline: playingIds.has(member.id),
+  }))
 
   // El aviso de plantel es de ESTA disciplina, no de `primaryDiscipline`
   // (`db/read.ts`): ahí es donde vivía el defecto medido en Task 4 — con
   // 2+ disciplinas, el aviso de la [0] no dice nada sobre las demás.
+  //
+  // Ronda de fix: la cuenta es la de QUIEN JUEGA esta disciplina
+  // (`disciplinePlayers.length`), no la del plantel del torneo entero
+  // (`squad.length`) — desde que existe "Quién juega", el plantel del
+  // contenedor puede tener más gente que la disciplina (alguien sacado de
+  // ÉSTA mientras sigue en OTRA), y esta pantalla es la primera que rompe
+  // esa invariante.
+  //
+  // Con una sola disciplina las dos cuentas COINCIDEN siempre, pero NO
+  // porque `assertMultiDiscipline` (`db/discipline-entries.ts`) lo
+  // garantice -- esa guarda sólo le impide a las funciones NUEVAS de
+  // "Quién juega" romper la igualdad. Lo que la sostiene de verdad son dos
+  // caminos que ya existían: `add_squad_seat` con `p_disciplines` en
+  // `default null` sube a TODAS las disciplinas de la temporada
+  // (`0061:20,56`), y `addSquadSeat` (`db/entries.ts:44-51`) ni siquiera
+  // expone ese parámetro -- así que un alta de producción nunca entra a un
+  // subconjunto; y sacar del plantel entero (`removeSeat`) cascadea la fila
+  // de `discipline_entries` con la de `entries` (`0023:25`, `on delete
+  // cascade`). Con una sola disciplina no hay forma de tocar SÓLO esa
+  // disciplina fuera de esos dos caminos, así que `squad.length` sigue
+  // siendo la cuenta correcta ahí -- la misma que ya usa el contenedor
+  // (`../../ajustes/page.tsx:119`), sin tocar.
+  const squadSizeHere = multiDiscipline ? disciplinePlayers.length : squad.length
   const mismatch =
-    squad.length === discipline.config.squadSize
+    squadSizeHere === discipline.config.squadSize
       ? []
-      : validateConfig({ ...discipline.config, squadSize: squad.length }, discipline.pairSize)
+      : validateConfig({ ...discipline.config, squadSize: squadSizeHere }, discipline.pairSize)
 
   return (
     <div className="flex flex-col gap-4 pt-3">
@@ -110,6 +166,19 @@ export default async function DisciplinaAjustesPage({ params }: PageProps) {
         text={rulesByDiscipline.get(discipline.id) ?? ''}
         disciplineLabel={null}
       />
+
+      {/* Sólo con 2+ disciplinas (§5 del diseño): con una sola, el plantel del
+          contenedor y "quién juega" son la misma lista, y ya se ve en
+          `Plantel` (el contenedor) — esta sección no tendría nada nuevo que
+          decir. */}
+      {multiDiscipline && (
+        <QuienJuega
+          seasonId={seasonId}
+          disciplineId={discipline.id}
+          disciplineLabel={DISCIPLINE_LABELS[discipline.kind]}
+          members={quienJuega}
+        />
+      )}
     </div>
   )
 }

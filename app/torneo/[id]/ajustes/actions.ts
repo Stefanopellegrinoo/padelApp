@@ -11,6 +11,7 @@ import {
   updateDisciplineHasMasters,
   updateDisciplineRules,
 } from '@/db/discipline'
+import { addToDiscipline, removeFromDiscipline } from '@/db/discipline-entries'
 import { addSquadSeat, claimOwnSeat, removeSeat, renameSeat, unlinkSeat } from '@/db/entries'
 import { EdgeError } from '@/db/errors'
 import { deleteSeason, renameSeason } from '@/db/season'
@@ -224,6 +225,55 @@ export async function addDisciplineToSeason(
 ): Promise<WriteResult> {
   return onSeason(seasonId, async (supabase) => {
     await addDiscipline(supabase, seasonId, newDisciplineSpec(kind, entryIds.length, pairSize), entryIds)
+  })
+}
+
+/**
+ * Suma un asiento del plantel a esta disciplina (§2.6 del diseño, "Quién
+ * juega"). `addToDiscipline` no valida a mano que `entryId` sea del plantel
+ * de `seasonId`: la FK compuesta `(entry_id, season_id) references entries
+ * (id, season_id)` de `discipline_entries` (0023:25) ya rechaza un `entryId`
+ * de otro torneo con un error de Postgres, y `is_season_admin(season_id)`
+ * (0023:60-62) exige además que quien llama organice ESTA temporada. El
+ * único caller de producción (`QuienJuega`) ni siquiera arma ese caso: sólo
+ * ofrece este botón para asientos que salen de `seasonSquadMembersOf(seasonId)`.
+ */
+export async function addDisciplineMember(
+  seasonId: string,
+  disciplineId: DisciplineId,
+  entryId: string,
+): Promise<WriteResult> {
+  return onSeason(seasonId, async (supabase) => {
+    await addToDiscipline(supabase, disciplineId, seasonId, entryId)
+  })
+}
+
+/**
+ * Saca un asiento de esta disciplina — no del plantel entero, ver
+ * `dropSeat` más arriba para eso. Las guardas ("ya jugó", pareja fija sin
+ * resolver, presentismo en una fecha sin armar) viven en
+ * `removeFromDiscipline` (`db/discipline-entries.ts`) y no nombran la
+ * disciplina — a propósito, mismo criterio que `PublicFormat.kind`
+ * (`db/read.ts:167`): `db/` no importa de `app/`, que es donde vive
+ * `DISCIPLINE_LABELS`. Acá SÍ hay `disciplineLabel` a mano (lo manda
+ * `QuienJuega`, que lo recibe de la página), así que la traducción es
+ * simplemente anteponerla — mismo formato que `mismatchMessages`
+ * (`../page.tsx:126`, `${label}: ${message}`) — y no reinterpretar el string
+ * de adentro.
+ */
+export async function dropDisciplineMember(
+  seasonId: string,
+  disciplineId: DisciplineId,
+  entryId: string,
+  disciplineLabel: string,
+): Promise<WriteResult> {
+  return onSeason(seasonId, async (supabase) => {
+    try {
+      await removeFromDiscipline(supabase, disciplineId, seasonId, entryId)
+    } catch (error) {
+      if (error instanceof EdgeError) throw new EdgeError(`${disciplineLabel}: ${error.message}`)
+      throw error
+    }
   })
 }
 

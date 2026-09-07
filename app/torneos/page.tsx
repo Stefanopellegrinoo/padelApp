@@ -51,9 +51,13 @@ interface SeasonCard {
  * `awardsOf` (una disciplina puntual): la global necesita el plantel y los
  * premios de CADA disciplina para sumarlos ponderados.
  *
- * ponytail: sin criterio de desempate propio — `computeRanking` corre con
- * snapshot vacío, sólo importa `.points`, nunca el orden. Alcanza mientras
- * nadie necesite ver POR QUÉ empatan dos personas en la global.
+ * ponytail: sin criterio de desempate propio para el ORDEN de las filas —
+ * `computeRanking` corre con snapshot vacío, y ese orden nunca se lee acá.
+ * Lo que sí se lee es `position` de `computeGlobalRanking`
+ * (docs/tipos-de-torneo.md §2.4): numeración de competencia, compartida
+ * entre empatados. Alcanza mientras nadie necesite ver POR QUÉ empatan dos
+ * personas en la global — sólo hace falta decir QUE empatan, y el número
+ * compartido ya lo dice.
  *
  * Consultas por temporada, REMEDIDAS con `pg_stat_statements` (misma técnica
  * que S10) contra un escenario con una fecha cerrada
@@ -82,7 +86,7 @@ async function cardFor(supabase: Client, header: SeasonHeader): Promise<SeasonCa
   const anyClosed = matchdays.some(
     (matchday) => matchday.kind === 'REGULAR' && matchday.status === 'CLOSED',
   )
-  const index = ranking.findIndex((row) => row.entryId === viewerEntryId)
+  const myRow = ranking.find((row) => row.entryId === viewerEntryId) ?? null
 
   // "Próxima fecha" queda igual que antes (de la disciplina primaria): con
   // más de una disciplina puede haber más de una fecha viva a la vez
@@ -99,7 +103,13 @@ async function cardFor(supabase: Client, header: SeasonHeader): Promise<SeasonCa
     name: header.name,
     status: header.status,
     estado: ESTADO[header.status] ?? '',
-    position: !anyClosed || index < 0 ? null : index + 1,
+    // `row.position` de `computeGlobalRanking`, no un índice de array: con
+    // los mismos puntos hay empate y el puesto se comparte (1, 2, 2, 4) —
+    // docs/tipos-de-torneo.md §2.4. Antes de este cambio esto mostraba
+    // `index + 1`, que le daba a cada empatado un número DISTINTO (mentira:
+    // el orden interno de `computeGlobalRanking` no es un criterio de
+    // desempate, ver su docblock en `core/global-ranking.ts`).
+    position: !anyClosed || myRow === null ? null : myRow.position,
     squadSize: squad.length,
     nextMatchday: live?.playedOn ?? null,
   }

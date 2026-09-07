@@ -62,8 +62,30 @@ interface PageProps {
  * hay `tiedWithEntryId` acá, así que ninguna fila abre el sheet; sólo el
  * botón superior, y quien lo toque ve una lista vacía en vez de nada.
  *
+ * `tiedWithEntryId` sigue en `null` acá aun después de que `position`
+ * (`computeGlobalRanking`) empezó a compartirse entre empatados (§2.4,
+ * primer arreglo). Sigue así A PROPÓSITO, no por descuido: el chip ⓘ y su
+ * sheet ("X va antes que Y... y corta el orden inicial/de la fecha N")
+ * existen para explicar un criterio de desempate real — el que sí tiene la
+ * Tabla de una disciplina, con su snapshot. La global no tiene ninguno, y la
+ * decisión del dueño fue exactamente NO inventarle uno: dos empatados en el
+ * global no tienen un "antes" que justificar, comparten el número y ya está
+ * dicho. Prender el chip acá abriría un sheet que afirma un motivo de orden
+ * que no existe (`asOfMatchday`/`tiebreakOrder` vacíos harían decir "corta
+ * el orden inicial" y "se actualiza cada 0 fechas" de una tabla sin
+ * cadencia) — peor que no mostrar nada.
+ *
+ * Y no es sólo que el motivo estaría vacío: sería CONTRADICTORIO.
+ * `desempate.tsx` elige quién va primero en el sheet con
+ * `clickedRow.position < tieMate.position` — con `position` COMPARTIDO esa
+ * comparación da `false` para los dos lados (`2 < 2` es `false` mirado desde
+ * cualquiera de los dos), así que `first`/`second` quedarían fijos por el
+ * `else` (`tieMate` siempre "primero"), y el texto "X va antes que Y" nombraría
+ * como ganador a quien NO tocaste el chip — al revés según cuál de los dos
+ * apretás. Un motivo que se da vuelta según el click no es un motivo.
+ *
  * Con una sola disciplina, el spec (`docs/tipos-de-torneo.md` §2.4, segundo
- * arreglo, línea 225: "Con una sola disciplina, mostrar **una** tabla")
+ * arreglo, línea 257: "Con una sola disciplina, mostrar **una** tabla")
  * manda mostrar una única Tabla — así que esta pantalla redirige derecho a
  * la de esa disciplina en vez de sumar una global aparte al lado. La
  * decisión de redirigir o no vive en `singleDisciplineRedirect`
@@ -96,19 +118,30 @@ export default async function TablaGlobalPage({ params }: PageProps) {
   const squadIds = squad.map((member) => member.id)
   const nameOf = new Map(squad.map((member) => [member.id, member.displayName]))
 
+  // Mismo criterio que "mi posición" en `app/torneos/page.tsx` (`anyClosed`,
+  // mismo predicado): antes de que cierre la primera fecha de CUALQUIER
+  // disciplina, todo el plantel está en 0 puntos — y con `position`
+  // compartido (§2.4) eso los empata a TODOS en el puesto 1. Se lo pasa a
+  // `Desempate` como `highlightLeader` para que no resalte a nadie como
+  // líder cuando nadie jugó todavía.
+  const anyClosed = matchdays.some((matchday) => matchday.kind === 'REGULAR' && matchday.status === 'CLOSED')
+
   const perDiscipline: DisciplineRanking[] = header.disciplines.map((discipline) => ({
     weight: discipline.weight,
     ranking: computeRanking(seasonAwards.get(discipline.id) ?? new Map(), squadIds, discipline.config, []),
   }))
   const ranking = computeGlobalRanking(perDiscipline)
 
-  const rows: StandingsRow[] = ranking.map((row, index) => {
+  const rows: StandingsRow[] = ranking.map((row) => {
     const displayName = nameOf.get(row.entryId) ?? ''
     return {
       entryId: row.entryId,
       displayName,
       initials: initials(displayName),
-      position: index + 1,
+      // De `computeGlobalRanking`, no `index + 1`: con los mismos puntos hay
+      // empate y el puesto se comparte (1, 2, 2, 4) — ver el docblock de
+      // `computeGlobalRanking` (`core/global-ranking.ts`).
+      position: row.position,
       points: row.points,
       // Sin "fecha anterior" que comparar en un ranking multi-disciplina sin
       // cadencia común, y sin desempate propio (ver doc de `Desempate` arriba).
@@ -164,6 +197,10 @@ export default async function TablaGlobalPage({ params }: PageProps) {
         tiebreakSnapshotEvery={0}
         asOfMatchday={null}
         nextRefreshMatchday={0}
+        // Sin ninguna fecha cerrada, todo el plantel comparte el puesto 1
+        // (0 a 0) — ver el comentario de `anyClosed` arriba. No hay líder
+        // que resaltar todavía.
+        highlightLeader={anyClosed}
       />
     </div>
   )

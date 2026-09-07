@@ -146,8 +146,11 @@ disciplina.
 ## Lo que este plan deja afuera, a propósito
 
 - **El desempate de la tabla global** — §2.4 de
-  [`tipos-de-torneo.md`](tipos-de-torneo.md), primera mitad. Sigue abierto y
-  necesita una decisión de producto sobre qué regla desempata.
+  [`tipos-de-torneo.md`](tipos-de-torneo.md), primera mitad. Quedó afuera de
+  ESTE plan. La decisión de producto ya se tomó después, en otra tanda: no
+  inventar un criterio de desempate — con los mismos puntos hay empate, y
+  `computeGlobalRanking` numera por competencia (ver `tipos-de-torneo.md`
+  §2.4).
 - **`fixed_teams`, `weight` y `discipline_teams`** — tres cosas construidas sin
   puerta. `fixed_teams` es §1 de ese spec, con todo el lado de lectura cableado
   en `generatePairs`. Merecen su propia tanda.

@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
-import { defaultConfig, type DisciplineId } from '@/core'
-import type { DisciplineHeader, SquadMember } from '@/db/read'
+import { defaultConfig, type Award, type DisciplineId } from '@/core'
+import { seasonAwardsOf, seasonSquadMembersOf, type DisciplineHeader, type SquadMember } from '@/db/read'
 
 /**
  * Fix round 2 (jd-judge): el test de `desempate.unit.test.ts` renderiza
@@ -43,6 +43,25 @@ function header(): DisciplineHeader[] {
 
 function squad(): SquadMember[] {
   return [{ id: 'e1', displayName: 'Jugador Uno', playerId: null }]
+}
+
+function tiedSquad(): SquadMember[] {
+  return [
+    { id: 'e1', displayName: 'Jugador Uno', playerId: null },
+    { id: 'e2', displayName: 'Jugador Dos', playerId: null },
+  ]
+}
+
+function freshSquad(): SquadMember[] {
+  return [
+    { id: 'e1', displayName: 'Jugador Uno', playerId: null },
+    { id: 'e2', displayName: 'Jugador Dos', playerId: null },
+    { id: 'e3', displayName: 'Jugador Tres', playerId: null },
+  ]
+}
+
+function award(entryId: string, points: number): Award {
+  return { entryId, position: 1, points, lines: [] }
 }
 
 // `Desempate` llama `useRouter` en cada render (`router.push` al tocar una
@@ -87,5 +106,52 @@ describe('Tabla global (2+ disciplinas) — la fila no es clickeable', () => {
     expect(html).toContain('Jugador Uno')
     const fila = /<div class="[^"]*rounded-field p-3[^"]*"/.exec(html)?.[0] ?? ''
     expect(fila).not.toContain('cursor-pointer')
+  })
+})
+
+/**
+ * docs/tipos-de-torneo.md §2.4: la global comparte `position` entre
+ * empatados (numeración de competencia) en vez de derivarlo del índice de
+ * la fila. Regresión puntual: `page.tsx` volviendo a `position: index + 1`
+ * hace que este test se ponga en ROJO — verificado corriendo la mutación
+ * (ver reporte de la tarea).
+ */
+describe('Tabla global — dos empatados en puntos comparten el mismo puesto', () => {
+  it('con e1 y e2 en 5 puntos, ambas filas muestran el puesto 1', async () => {
+    vi.mocked(seasonSquadMembersOf).mockResolvedValueOnce(tiedSquad())
+    vi.mocked(seasonAwardsOf).mockResolvedValueOnce(
+      new Map([[D_PADEL, new Map([[1, [award('e1', 5), award('e2', 5)]]])]]),
+    )
+
+    const html = await render()
+
+    const positions = [...html.matchAll(/<span class="w-5 shrink-0[^"]*">(\d+)<\/span>/g)].map((m) => m[1])
+    expect(positions).toEqual(['1', '1'])
+  })
+})
+
+/**
+ * BLOQUEA (review a ciegas): un torneo recién creado con 2+ disciplinas y
+ * ninguna fecha cerrada tiene a TODO el plantel en 0 puntos — con `position`
+ * compartido (§2.4) eso los empata a todos en el puesto 1, y `Desempate`
+ * resalta `row.position === 1` con `bg-accent` (avatar) + `bg-chip` (fila)
+ * como si hubiera un líder. Antes del fix (`highlightLeader`), medido
+ * renderizando de verdad: 3 jugadores sin awards -> las 3 filas resaltadas.
+ * Mismo criterio que ya usa `app/torneos/page.tsx` (`anyClosed`): sin
+ * ninguna fecha cerrada no hay líder que mostrar.
+ */
+describe('Tabla global — sin ninguna fecha cerrada, nadie se resalta como líder', () => {
+  it('con 3 jugadores en 0 puntos, ninguna fila lleva el resaltado de líder', async () => {
+    vi.mocked(seasonSquadMembersOf).mockResolvedValueOnce(freshSquad())
+    // `seasonMatchdaysOf`/`seasonAwardsOf` quedan en su default (`[]` / Map
+    // vacío): ninguna fecha cerrada todavía, en ninguna disciplina.
+
+    const html = await render()
+
+    const positions = [...html.matchAll(/<span class="w-5 shrink-0[^"]*">(\d+)<\/span>/g)].map((m) => m[1])
+    expect(positions).toEqual(['1', '1', '1']) // los tres, tied en 0 puntos
+
+    const leaderAvatars = html.match(/bg-accent text-accent-text/g) ?? []
+    expect(leaderAvatars).toHaveLength(0)
   })
 })

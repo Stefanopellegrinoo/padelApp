@@ -1,12 +1,12 @@
 # Tipos de torneo — diseño
 
-> **Estado, 31/08/2026:** de las seis piezas de este documento, **cuatro están
+> **Estado, 07/09/2026:** de las seis piezas de este documento, **cinco están
 > implementadas y verificadas** en `feature/torneo-multi-disciplina`, sin
 > publicar: **1** (equipos fijos, migración `0068`), **2.1** (torneo de una
-> fecha, `wizard-state.ts` con `min: 1`), **2.2** (Masters/año condicionales) y
+> fecha, `wizard-state.ts` con `min: 1`), **2.2** (Masters/año condicionales),
 > **2.3** (reglas por disciplina — SDD `reglas-por-disciplina`, commits
-> `8f1f04d`..`1bae705`). Quedan **2.4**, **2.5** y **2.6** — orden sugerido en
-> la sección 6.
+> `8f1f04d`..`1bae705`) y **2.4** (desempate global + tabla única — ver §2.4).
+> Quedan **2.5** y **2.6** — orden sugerido en la sección 6.
 >
 > Rama de trabajo: `feature/torneo-multi-disciplina` (tracker). `main` y
 > producción siguen sin tocar — ver [`estado.md`](estado.md).
@@ -148,7 +148,7 @@ rojo con el mensaje exacto de arriba, no con otro error.
 ### 1.7 `disciplines.weight` — decisión del dueño: no recibe UI
 
 No es una columna muerta: `computeGlobalRanking`
-(`core/global-ranking.ts:47,59`) multiplica los puntos de CADA disciplina por
+(`core/global-ranking.ts:63,75`) multiplica los puntos de CADA disciplina por
 su `weight` antes de sumarlos a la tabla global — la que cruza TODOS los
 torneos de un jugador, no la de un torneo puntual (§3.2). Hoy multiplica
 siempre por `1` porque ningún escritor de producción la toca: `weight` nació
@@ -245,7 +245,7 @@ si no nada tiene sentido."*
 ### 2.4 Con una sola disciplina hay dos tablas iguales, y ordenadas distinto
 
 Con una disciplina de peso 1, la tabla global da **los mismos puntos** que la de
-la disciplina. Pero `core/global-ranking.ts:64` ordena con
+la disciplina. Pero `core/global-ranking.ts:80` ordena con
 `orderByPoints(order, points, [])` — **snapshot vacío** —, o sea que desempata
 por orden de llegada de las filas, mientras la tabla de la disciplina usa el
 criterio real. **Mismos puntos, distinto orden en los empates.**
@@ -255,6 +255,35 @@ Van los dos arreglos, y son independientes:
 1. Darle un desempate real a la global. Está mal con una disciplina **y** con
    cinco.
 2. Con una sola disciplina, mostrar **una** tabla.
+
+**Resolución del punto 1 (decisión del dueño):** no se inventa ningún criterio
+de desempate para la global. **Con los mismos puntos están empatados, y la
+tabla lo dice.** `computeGlobalRanking` (`core/global-ranking.ts`) devuelve,
+además de `points`, un `position` con numeración de COMPETENCIA — 1, 2, 2,
+**4**, no 1, 2, 2, 3 — que comparten todas las filas con el mismo puntaje.
+Tanto la tabla global (`app/torneo/[id]/page.tsx`) como "mi posición" en la
+lista de torneos (`app/torneos/page.tsx`, `cardFor`) leen ese `position` en
+vez de derivarlo de su propio índice. Este segundo caso era un bug real y no
+sólo hipotético: `cardFor` mostraba `index + 1`, que le daba a cada
+empatado un número DISTINTO — con dos personas en 15 puntos, una veía "2°" y
+la otra "3°", cuando en realidad estaban empatadas.
+
+El ORDEN de las filas entre empatados —cuál se dibuja arriba de cuál— sigue
+siendo el mismo mecanismo de siempre (`orderByPoints` con snapshot vacío, que
+cae al orden de llegada) y no cambió a propósito: lo único que cambia es el
+NÚMERO que se muestra, no qué fila va primero quien mira la lista completa.
+Antes, ese orden arbitrario decidía el podio — invertir `disciplines.position`
+invertía quién se veía 2º y quién 3º sin que cambiara un punto. Ahora los dos
+muestran el mismo `position`; ese orden sólo decide, entre dos que muestran el
+mismo número, cuál se dibuja un lugar más arriba — cosmético, no un podio.
+
+Sin chip de desempate (ⓘ) en la tabla global: ese chip (`Desempate`,
+compartido con la tabla por disciplina) existe para explicar un criterio de
+desempate real —el que sí tiene la Tabla de una disciplina, con su
+snapshot— y la global no tiene ninguno a propósito. `tiedWithEntryId` sigue
+en `null` para las filas de la global: el número de puesto compartido ya dice
+todo lo que hay para decir, y prender el chip abriría un sheet inventando un
+"quién va antes" que no existe.
 
 ### 2.5 Formato por default en la disciplina
 
@@ -361,10 +390,12 @@ techo se borró entero, `MAX_PLAYERS` incluido, junto con su copia en
    `season_public_formats` (`0038`) todavía no tenía consumidor en producción;
    ver la fila de "ventana de despliegue" en la sección 5, que por eso no se
    materializó.
+5. [Hecho, sin commitear] **2.4** (desempate global + tabla única) — las dos
+   mitades. `computeGlobalRanking` numera por competencia (§2.4 arriba); la
+   tabla única ya estaba resuelta desde antes por `singleDisciplineRedirect`.
 
 Queda por hacer, en el orden que sigue teniendo sentido:
 
-5. **2.4** (desempate global + tabla única).
 6. **2.5** (formato por default en la disciplina).
 7. **2.6** (historial del grupo) — independiente, cuando se quiera.
 

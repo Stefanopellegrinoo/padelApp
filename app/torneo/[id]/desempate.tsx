@@ -37,6 +37,20 @@ interface DesempateProps {
   /** `null` cuando todavía no hubo ningún refresco: rige el orden inicial del wizard. */
   asOfMatchday: number | null
   nextRefreshMatchday: number
+  /**
+   * Si el puesto 1 se resalta (fila `bg-chip` + avatar `bg-accent`). Default
+   * `true` — la Tabla de una disciplina (`tabla-view.tsx`) no lo pasa y sigue
+   * exactamente igual que siempre: ahí `position` nunca se comparte
+   * (`rankingWithMovement` da un `index + 1` único), así que sólo UNA fila
+   * puede ser el 1 y resaltarla siempre tiene sentido, jugado algo o no.
+   *
+   * La tabla global sí lo pasa (`page.tsx`, en `false` sin ninguna fecha
+   * cerrada): ahí `position` SE comparte (docs/tipos-de-torneo.md §2.4), y
+   * con nadie habiendo jugado todavía TODO el plantel empata en 0 puntos y
+   * comparte el puesto 1 — sin este apagador, `Desempate` resaltaría a cada
+   * jugador del torneo como si fuera el líder el mismo día que se crea.
+   */
+  highlightLeader?: boolean
 }
 
 function movementLabel(movement: number | null): string | null {
@@ -59,6 +73,7 @@ export function Desempate({
   tiebreakSnapshotEvery,
   asOfMatchday,
   nextRefreshMatchday,
+  highlightLeader = true,
 }: DesempateProps) {
   const router = useRouter()
   const [openFor, setOpenFor] = useState<string | 'all' | null>(null)
@@ -106,12 +121,14 @@ export function Desempate({
       </div>
 
       <div className="flex flex-col">
-        {rows.map((row, index) => (
+        {rows.map((row, index) => {
+          const isLeader = row.position === 1 && highlightLeader
+          return (
           <div key={row.entryId}>
             <div
               onClick={base === null ? undefined : () => router.push(`${base}/jugador/${row.entryId}`)}
               className={`flex items-center gap-3 rounded-field p-3${base === null ? '' : ' cursor-pointer'}${
-                row.position === 1 ? ' bg-chip' : ''
+                isLeader ? ' bg-chip' : ''
               }`}
             >
               {/* S85 (verify-report-pr21-cierre #4016): la tabla general de la
@@ -121,7 +138,7 @@ export function Desempate({
               <span className="w-5 shrink-0 text-[14px] font-extrabold text-muted">{row.position}</span>
               <span
                 className={`flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full text-[11px] font-extrabold ${
-                  row.position === 1 ? 'bg-accent text-accent-text' : 'bg-chip text-muted'
+                  isLeader ? 'bg-accent text-accent-text' : 'bg-chip text-muted'
                 }`}
               >
                 {row.initials}
@@ -156,7 +173,8 @@ export function Desempate({
               </div>
             )}
           </div>
-        ))}
+          )
+        })}
       </div>
 
       {openFor !== null && (

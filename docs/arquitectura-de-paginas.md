@@ -219,7 +219,10 @@ disciplina elegida**, no uno compartido.
 
 - **No toca el modelo.** Ni una migración de datos: la base ya es por disciplina.
 - **No resuelve el desempate de la tabla global** (§2.4 de
-  [`tipos-de-torneo.md`](tipos-de-torneo.md), primera mitad). Sigue abierto.
+  [`tipos-de-torneo.md`](tipos-de-torneo.md), primera mitad) — quedó afuera de
+  ESTE plan. Se resolvió después, en otra tanda: `computeGlobalRanking` numera
+  por competencia en vez de inventar un criterio propio (ver `tipos-de-torneo.md`
+  §2.4).
 - **No le da superficie a `fixed_teams`, `weight` ni `discipline_teams`.** Son
   tres cosas construidas sin puerta, y merecen su propia tanda. `fixed_teams` en
   particular es §1 de ese spec, con todo el lado de lectura cableado en

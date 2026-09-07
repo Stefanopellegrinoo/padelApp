@@ -16,6 +16,14 @@ export interface DisciplineRanking {
 export interface GlobalRankingRow {
   entryId: EntryId
   points: number
+  /**
+   * Puesto de COMPETENCIA (1, 2, 2, 4 — no 1, 2, 2, 3): comparte número con
+   * cualquier otra fila de los mismos `points`, saltando el o los puestos
+   * que ese empate consume. Decisión del dueño (`docs/tipos-de-torneo.md`
+   * §2.4): la global no inventa un criterio de desempate propio — con los
+   * mismos puntos hay empate, y el número lo dice.
+   */
+  position: number
 }
 
 /**
@@ -25,20 +33,28 @@ export interface GlobalRankingRow {
  * nunca se muta, así que "su tabla propia sigue mostrando sus puntos reales"
  * es gratis: es el mismo array que ya tenía el caller.
  *
- * Desempate (W18, `` ronda 6): la spec no define uno para el
- * global, así que se reusa `orderByPoints` con snapshot vacío — mismo
- * mecanismo que `computeRanking` para el caso sin snapshot, que cae al
- * orden de `order` (primera aparición). Eso NO es "orden de llegada" al
- * azar: cada `ranking` que entra acá ya trae, siempre, a TODO el plantel de
- * la temporada (`page.tsx` le pasa el mismo `squadIds` a cada disciplina),
- * así que el `ranking` de la PRIMERA disciplina de `disciplines` ya
- * contiene a todos y `order` termina siendo, en los hechos, el orden de esa
- * disciplina — puntos de la disciplina [0] desc, y a igualdad de eso,
- * `entries.seed_position` de la temporada. Es determinístico (medido, 21
- * renders idénticos) pero es una cadena que nadie eligió: la disciplina que
- * el caller ponga primero se queda con el voto de calidad del desempate
- * global. Cambiar el orden de `disciplines.position` invierte el podio sin
- * que cambie un solo punto.
+ * Puesto compartido, no desempate inventado (`docs/tipos-de-torneo.md` §2.4):
+ * la spec no define un criterio de desempate para la global, y la resolución
+ * no fue inventarle uno — fue dejar de pretender que hay un ganador entre dos
+ * empatados. `position` (abajo) numera por competencia; el ORDEN de las filas
+ * entre empatados es una cosa DISTINTA y sigue como estaba.
+ *
+ * Ese orden sigue siendo `orderByPoints` con snapshot vacío — mismo mecanismo
+ * que `computeRanking` para el caso sin snapshot, que cae al orden de `order`
+ * (primera aparición). Eso NO es "orden de llegada" al azar: cada `ranking`
+ * que entra acá ya trae, siempre, a TODO el plantel de la temporada
+ * (`page.tsx` le pasa el mismo `squadIds` a cada disciplina), así que el
+ * `ranking` de la PRIMERA disciplina de `disciplines` ya contiene a todos y
+ * `order` termina siendo, en los hechos, el orden de esa disciplina — puntos
+ * de la disciplina [0] desc, y a igualdad de eso, `discipline_entries.seed_position`
+ * de la disciplina PRIMARIA (`seasonSeedOrder`, `db/read.ts:811-820` — NO
+ * `entries.seed_position`, que la decisión #4044/C37 dejó sin valor para el
+ * SQUAD). Es determinístico (medido, 21 renders idénticos), pero desde
+ * que `position` se comparte YA NO decide el podio: antes, la disciplina que
+ * el caller pusiera primero se quedaba con el voto de calidad del desempate
+ * global (cambiar `disciplines.position` invertía quién se veía 2º y quién
+ * 3º). Ahora los dos muestran el mismo `position` — cambiar ese orden sólo
+ * reordena cuál de los dos empatados se dibuja arriba, cosmético.
  */
 export function computeGlobalRanking(disciplines: readonly DisciplineRanking[]): GlobalRankingRow[] {
   const points = new Map<EntryId, number>()
@@ -61,8 +77,22 @@ export function computeGlobalRanking(disciplines: readonly DisciplineRanking[]):
     }
   }
 
-  return orderByPoints(order, points, []).map((entryId) => ({
-    entryId,
-    points: points.get(entryId) as number,
-  }))
+  const ordered = orderByPoints(order, points, [])
+
+  // Numeración de competencia: sólo avanza el puesto cuando los puntos
+  // bajan. Dos en 2º (mismos puntos) hacen que el siguiente sea 4º, no 3º —
+  // el puesto 3 quedó "consumido" por el empate, no vacante.
+  // `entryPoints !== previousPoints` ya cubre la primera vuelta sola:
+  // comparar un `number` contra el `null` inicial de `previousPoints` da
+  // `true` sin necesitar un `previousPoints === null` aparte.
+  let position = 0
+  let previousPoints: number | null = null
+  return ordered.map((entryId, index) => {
+    const entryPoints = points.get(entryId) as number
+    if (entryPoints !== previousPoints) {
+      position = index + 1
+    }
+    previousPoints = entryPoints
+    return { entryId, points: entryPoints, position }
+  })
 }

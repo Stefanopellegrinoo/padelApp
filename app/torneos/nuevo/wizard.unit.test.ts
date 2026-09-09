@@ -2,8 +2,10 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import type { MatchdayFormat, SideSize } from '@/core'
-import { PasoDisciplinas, PasoFormato, SelectorDeLados } from './wizard'
+import { PasoDisciplinas, PasoFormato, PasoOrdenInicial, SelectorDeLados } from './wizard'
 import { freshDisciplineConfig, type DisciplineKind } from './wizard-state'
+
+const NO_OWN_ORDER: Record<DisciplineKind, boolean> = { PADEL: false, FIFA: false }
 
 const ROUND_ROBIN_ALL: Record<DisciplineKind, MatchdayFormat> = {
   PADEL: { kind: 'ROUND_ROBIN' },
@@ -37,11 +39,13 @@ function html(picked: DisciplineKind[]): string {
       hasMasters: { PADEL: true, FIFA: true },
       formatoDefault: ROUND_ROBIN_ALL,
       fixedTeams: { PADEL: false, FIFA: false },
+      ownOrder: NO_OWN_ORDER,
       errors: { PADEL: [], FIFA: [] },
       onChangeConfig: () => {},
       onChangeHasMasters: () => {},
       onChangeFormatoDefault: () => {},
       onChangeFixedTeams: () => {},
+      onChangeOwnOrder: () => {},
     }),
   )
 }
@@ -167,32 +171,43 @@ describe('paso 4 del wizard — Masters y Formato de las fechas, por disciplina 
         hasMasters: { PADEL: true, FIFA: true }, // FIFA en true a mano -- inválido para pairSize 1
         formatoDefault: ROUND_ROBIN_ALL,
         fixedTeams: { PADEL: true, FIFA: true }, // FIFA en true a mano -- inválido para pairSize 1
+        ownOrder: { PADEL: false, FIFA: true },
         errors: { PADEL: [], FIFA: [] },
         onChangeConfig: () => {},
         onChangeHasMasters: () => {},
         onChangeFormatoDefault: () => {},
         onChangeFixedTeams: () => {},
+        onChangeOwnOrder: () => {},
       }),
     )
     const checkboxes = paso.match(/<input type="checkbox"[^>]*\/>/g) ?? []
-    // Cuatro, no dos: cada tarjeta ahora lleva DOS checkboxes -- Equipos
-    // fijos (adentro de `cuerpo`, se dibuja primero) y Masters (después,
-    // sólo con 2+ marcadas) -- ver `FormatoDeUnaDisciplina`, wizard.tsx.
-    expect(checkboxes).toHaveLength(4)
+    // Seis, no cuatro: cada tarjeta ahora lleva TRES checkboxes -- Equipos
+    // fijos (adentro de `cuerpo`, se dibuja primero), Masters y Orden propio
+    // (los dos después, sólo con 2+ marcadas) -- ver
+    // `FormatoDeUnaDisciplina`, wizard.tsx.
+    expect(checkboxes).toHaveLength(6)
     // El `class` de los deshabilitados SIEMPRE contiene la subcadena
     // "disabled" -- `disabled:opacity-40` es un nombre de clase de
     // Tailwind, no el atributo -- así que el chequeo mira el ATRIBUTO
     // `disabled=""`, no la palabra suelta.
     //
-    // [0]/[2]: Equipos fijos (Pádel/FIFA). [1]/[3]: Masters (Pádel/FIFA).
+    // [0]/[3]: Equipos fijos (Pádel/FIFA). [1]/[4]: Masters (Pádel/FIFA).
+    // [2]/[5]: Orden propio (Pádel/FIFA).
     expect(checkboxes[0]).toContain('checked') // Equipos fijos Pádel, pairSize 2
     expect(checkboxes[0]).not.toMatch(/\bdisabled=""/)
-    expect(checkboxes[2]).not.toContain('checked') // Equipos fijos FIFA, pairSize 1: forzado sin marcar
-    expect(checkboxes[2]).toMatch(/\bdisabled=""/)
+    expect(checkboxes[3]).not.toContain('checked') // Equipos fijos FIFA, pairSize 1: forzado sin marcar
+    expect(checkboxes[3]).toMatch(/\bdisabled=""/)
     expect(checkboxes[1]).toContain('checked') // Masters Pádel, pairSize 2
     expect(checkboxes[1]).not.toMatch(/\bdisabled=""/)
-    expect(checkboxes[3]).not.toContain('checked') // Masters FIFA, pairSize 1: forzado sin marcar
-    expect(checkboxes[3]).toMatch(/\bdisabled=""/)
+    expect(checkboxes[4]).not.toContain('checked') // Masters FIFA, pairSize 1: forzado sin marcar
+    expect(checkboxes[4]).toMatch(/\bdisabled=""/)
+    // Orden propio no depende de `pairSize` -- ninguna regla de la base lo
+    // exige de a dos (a diferencia de Masters/Equipos fijos), así que nunca
+    // sale deshabilitado, ni siquiera para la disciplina en pairSize 1.
+    expect(checkboxes[2]).not.toContain('checked') // ownOrder.PADEL: false
+    expect(checkboxes[2]).not.toMatch(/\bdisabled=""/)
+    expect(checkboxes[5]).toContain('checked') // ownOrder.FIFA: true
+    expect(checkboxes[5]).not.toMatch(/\bdisabled=""/)
   })
 
   // Las DOS en `pairSize: 2` (sin que ningún clamp entre en juego) y con
@@ -212,19 +227,51 @@ describe('paso 4 del wizard — Masters y Formato de las fechas, por disciplina 
         hasMasters: { PADEL: true, FIFA: true },
         formatoDefault: ROUND_ROBIN_ALL,
         fixedTeams: { PADEL: true, FIFA: false },
+        ownOrder: NO_OWN_ORDER,
         errors: { PADEL: [], FIFA: [] },
         onChangeConfig: () => {},
         onChangeHasMasters: () => {},
         onChangeFormatoDefault: () => {},
         onChangeFixedTeams: () => {},
+        onChangeOwnOrder: () => {},
       }),
     )
     const checkboxes = paso.match(/<input type="checkbox"[^>]*\/>/g) ?? []
-    // [0]: Equipos fijos Pádel (true). [2]: Equipos fijos FIFA (false).
-    // [1]/[3] son los de Masters, no los de esta prueba.
-    expect(checkboxes).toHaveLength(4)
+    // [0]: Equipos fijos Pádel (true). [3]: Equipos fijos FIFA (false).
+    // [1]/[4] son los de Masters y [2]/[5] los de Orden propio, no los de
+    // esta prueba.
+    expect(checkboxes).toHaveLength(6)
     expect(checkboxes[0]).toContain('checked')
+    expect(checkboxes[3]).not.toContain('checked')
+  })
+
+  // Mismo caso que el de arriba, para `ownOrder`: las DOS disciplinas con
+  // valores DISTINTOS entre sí -- el único caso capaz de cazar un
+  // `ownOrder={ownOrder[kind]}` mal enganchado en el call site de
+  // `PasoFormato` -> `FormatoDeUnaDisciplina` (wizard.tsx).
+  it('cada tarjeta lee su PROPIO ownOrder, no el de la otra disciplina', () => {
+    const paso = renderToStaticMarkup(
+      createElement(PasoFormato, {
+        configs: { PADEL: freshDisciplineConfig('PADEL', 8, 2), FIFA: freshDisciplineConfig('FIFA', 8, 2) },
+        picked: ['PADEL', 'FIFA'],
+        pairSizes: { PADEL: 2, FIFA: 2 },
+        hasMasters: { PADEL: true, FIFA: true },
+        formatoDefault: ROUND_ROBIN_ALL,
+        fixedTeams: NO_OWN_ORDER,
+        ownOrder: { PADEL: false, FIFA: true },
+        errors: { PADEL: [], FIFA: [] },
+        onChangeConfig: () => {},
+        onChangeHasMasters: () => {},
+        onChangeFormatoDefault: () => {},
+        onChangeFixedTeams: () => {},
+        onChangeOwnOrder: () => {},
+      }),
+    )
+    const checkboxes = paso.match(/<input type="checkbox"[^>]*\/>/g) ?? []
+    // [2]: Orden propio Pádel (false). [5]: Orden propio FIFA (true).
+    expect(checkboxes).toHaveLength(6)
     expect(checkboxes[2]).not.toContain('checked')
+    expect(checkboxes[5]).toContain('checked')
   })
 
   // Errores con 2+ disciplinas: cada uno lleva el nombre de SU disciplina,
@@ -238,14 +285,88 @@ describe('paso 4 del wizard — Masters y Formato de las fechas, por disciplina 
         hasMasters: { PADEL: true, FIFA: true },
         formatoDefault: ROUND_ROBIN_ALL,
         fixedTeams: { PADEL: false, FIFA: false },
+        ownOrder: NO_OWN_ORDER,
         errors: { PADEL: ['No pueden contar más fechas de las que se juegan.'], FIFA: [] },
         onChangeConfig: () => {},
         onChangeHasMasters: () => {},
         onChangeFormatoDefault: () => {},
         onChangeFixedTeams: () => {},
+        onChangeOwnOrder: () => {},
       }),
     )
     expect(paso).toContain('Pádel: No pueden contar más fechas de las que se juegan.')
+  })
+})
+
+/**
+ * El checkbox "orden propio" (paso Formato, plan de multi-disciplina):
+ * gatea igual que Masters/Formato de las fechas -- sólo con `label !==
+ * null`, es decir sólo con 2+ disciplinas marcadas. Con una sola, "el orden
+ * global" y "el orden de ESTA disciplina" son el mismo dato -- el control
+ * sería una pregunta sin sentido, la misma razón por la que Masters/Formato
+ * de las fechas tampoco se dibujan con una sola marcada.
+ */
+describe('paso 4 del wizard — el checkbox "orden propio" (orden inicial por disciplina)', () => {
+  it('con una sola disciplina, no dibuja el checkbox de orden propio', () => {
+    const paso = html(['PADEL'])
+    expect(paso).not.toContain('Orden propio')
+  })
+
+  it('con 2+ disciplinas, cada tarjeta lleva su propio checkbox de orden propio', () => {
+    const paso = html(['PADEL', 'FIFA'])
+    expect(paso.match(/Orden propio/g)).toHaveLength(2)
+  })
+})
+
+/**
+ * El paso "Orden inicial" -- ahora en el índice 3 (Task del plan de
+ * multi-disciplina, swap con "Formato"): extraído y exportado por el MISMO
+ * motivo que `PasoDisciplinas`/`PasoFormato` -- `step` es estado interno de
+ * `Wizard` y sin clicks la suite no llega hasta acá.
+ *
+ * La lista global (arriba) es exactamente la de siempre; lo nuevo es la
+ * lista PROPIA de cada disciplina que prendió su toggle en el paso Formato
+ * -- una tarjeta por disciplina, con el nombre de la disciplina, debajo de
+ * la global.
+ */
+describe('PasoOrdenInicial', () => {
+  it('sin ninguna disciplina con orden propio, dibuja sólo la lista global', () => {
+    const paso = renderToStaticMarkup(
+      createElement(PasoOrdenInicial, {
+        orderedNames: ['Colo', 'Nacho', 'Fede'],
+        mySeat: 0,
+        disciplines: ['PADEL', 'FIFA'],
+        ownOrder: NO_OWN_ORDER,
+        orders: {},
+        onMoveGlobal: () => {},
+        onMoveOwn: () => {},
+      }),
+    )
+    expect(paso).toContain('Colo')
+    expect(paso).toContain('Nacho')
+    expect(paso).toContain('Fede')
+    expect(paso).not.toContain('Pádel')
+    expect(paso).not.toContain('FIFA')
+    expect(paso.match(/⠿/g)).toHaveLength(3)
+  })
+
+  it('con el toggle prendido para una disciplina, agrega su propia lista debajo de la global', () => {
+    const paso = renderToStaticMarkup(
+      createElement(PasoOrdenInicial, {
+        orderedNames: ['Colo', 'Nacho', 'Fede'],
+        mySeat: null,
+        disciplines: ['PADEL', 'FIFA'],
+        ownOrder: { PADEL: false, FIFA: true },
+        orders: { FIFA: ['Fede', 'Colo', 'Nacho'] },
+        onMoveGlobal: () => {},
+        onMoveOwn: () => {},
+      }),
+    )
+    expect(paso).toContain('FIFA')
+    // Pádel no prendió su toggle: sin tarjeta propia, sin su nombre en pantalla.
+    expect(paso).not.toContain('Pádel')
+    // Dos listas -- la global (3 filas) y la propia de FIFA (3 filas más).
+    expect(paso.match(/⠿/g)).toHaveLength(6)
   })
 })
 

@@ -21,15 +21,18 @@ import {
   formatoDefaultKey,
   freshDisciplineConfig,
   isSameFormatoDefault,
+  moveInOrder,
   moveSeat,
   namesAfterEdit,
   newTournamentPayload,
+  reconcileOrders,
   removeSeatAt,
   resizeConfigs,
   squadWarning,
   steppersFor,
   summaryOf,
   toggleDiscipline,
+  toggleOwnOrder,
   withoutTrailingBlanks,
 } from './wizard-state'
 
@@ -166,15 +169,19 @@ export function PasoDisciplinas({
   )
 }
 
-const TITLES = ['Nombre y disciplinas', 'El plantel', 'Orden inicial', 'Formato', 'Listo']
+// Swap de "Orden inicial" y "Formato" (esta tarea, plan de multi-disciplina):
+// el checkbox "orden propio" vive en Formato (paso 2) y hace falta ANTES de
+// llegar a Orden inicial (paso 3), que es donde ese checkbox se traduce en
+// una lista editable -- por eso Formato pasó a preguntarse primero.
+const TITLES = ['Nombre y disciplinas', 'El plantel', 'Formato', 'Orden inicial', 'Listo']
 const HELP = [
   'Como lo llaman en el grupo. Se puede cambiar después.',
   // El plantel (índice 1, `step === 1` en `Wizard`) ya NO tiene una frase
   // fija acá: "de 8 a 12" mentía apenas el piso derivado bajaba de 8 (FIFA
   // sola arranca en 2). La arma `Wizard`, con el piso EN VIVO (`floor`).
   '',
-  'Ordenalos del mejor al peor. Es el criterio que corta los empates hasta que haya fechas jugadas, y de ahí salen las primeras parejas.',
   'Todos tienen un valor que ya funciona. Si no te importa, seguí de largo.',
+  'Ordenalos del mejor al peor. Es el criterio que corta los empates hasta que haya fechas jugadas, y de ahí salen las primeras parejas.',
   '',
 ]
 
@@ -301,12 +308,14 @@ function FormatoDeUnaDisciplina({
   hasMasters,
   formatoDefault,
   fixedTeams,
+  ownOrder,
   errors,
   label,
   onChangeConfig,
   onChangeHasMasters,
   onChangeFormatoDefault,
   onChangeFixedTeams,
+  onChangeOwnOrder,
 }: {
   kind: DisciplineKind
   config: SeasonConfig
@@ -314,6 +323,8 @@ function FormatoDeUnaDisciplina({
   hasMasters: boolean
   formatoDefault: MatchdayFormat
   fixedTeams: boolean
+  /** ¿Esta disciplina arranca con SU propio orden inicial, en vez del orden general del plantel? Paso "Orden inicial" (más abajo en `Wizard`). */
+  ownOrder: boolean
   errors: string[]
   /** `null` con una sola disciplina elegida — mismo contrato que `Formato.disciplineLabel` en Ajustes. */
   label: string | null
@@ -321,6 +332,7 @@ function FormatoDeUnaDisciplina({
   onChangeHasMasters: (next: boolean) => void
   onChangeFormatoDefault: (next: MatchdayFormat) => void
   onChangeFixedTeams: (next: boolean) => void
+  onChangeOwnOrder: (next: boolean) => void
 }) {
   const steppers = steppersFor([config.matchFormat])
 
@@ -449,6 +461,35 @@ function FormatoDeUnaDisciplina({
         </div>
       </div>
 
+      {/* "Orden propio" -- gatea IGUAL que Masters/"Formato de las fechas":
+          sólo en este bloque, o sea sólo con 2+ disciplinas marcadas. Con
+          una sola, "el orden global del plantel" y "el orden de ESTA
+          disciplina" son EL MISMO dato -- el control preguntaría algo que ya
+          no tiene dos respuestas posibles, la misma razón por la que
+          Masters/Formato de las fechas tampoco se dibujan ahí (§5 del
+          diseño). A diferencia de Masters, no depende de `pairSize`: no hay
+          ningún CHECK de la base que exija parejas para tener un orden
+          propio -- `seed_position` es una columna por disciplina desde
+          antes de esta tarea (`db/season.ts`, `squadSeedOrder`), ajena a
+          `pair_size`. */}
+      <div className="overflow-hidden rounded-[14px] border border-line">
+        <div className="flex min-h-[56px] items-center justify-between gap-2 px-3 py-2">
+          <div className="min-w-0">
+            <p className="text-[14px] font-bold">Orden propio</p>
+            <p className="text-pretty text-[11.5px] font-semibold text-muted">
+              Esta disciplina arranca con su propio orden inicial, en vez del orden general del
+              plantel (paso "Orden inicial").
+            </p>
+          </div>
+          <input
+            type="checkbox"
+            checked={ownOrder}
+            onChange={(event) => onChangeOwnOrder(event.target.checked)}
+            className="h-6 w-6 shrink-0 accent-accent"
+          />
+        </div>
+      </div>
+
       <div className="overflow-hidden rounded-[14px] border border-line">
         <h4
           id={`formato-default-legend-${kind}`}
@@ -506,11 +547,13 @@ export function PasoFormato({
   hasMasters,
   formatoDefault,
   fixedTeams,
+  ownOrder,
   errors,
   onChangeConfig,
   onChangeHasMasters,
   onChangeFormatoDefault,
   onChangeFixedTeams,
+  onChangeOwnOrder,
 }: {
   configs: Record<DisciplineKind, SeasonConfig>
   picked: readonly DisciplineKind[]
@@ -518,11 +561,14 @@ export function PasoFormato({
   hasMasters: Record<DisciplineKind, boolean>
   formatoDefault: Record<DisciplineKind, MatchdayFormat>
   fixedTeams: Record<DisciplineKind, boolean>
+  /** ¿Cada disciplina arranca con SU propio orden inicial? Paso "Orden inicial" (`PasoOrdenInicial`, más abajo). */
+  ownOrder: Record<DisciplineKind, boolean>
   errors: Record<DisciplineKind, string[]>
   onChangeConfig: (kind: DisciplineKind, next: SeasonConfig) => void
   onChangeHasMasters: (kind: DisciplineKind, next: boolean) => void
   onChangeFormatoDefault: (kind: DisciplineKind, next: MatchdayFormat) => void
   onChangeFixedTeams: (kind: DisciplineKind, next: boolean) => void
+  onChangeOwnOrder: (kind: DisciplineKind, next: boolean) => void
 }) {
   return (
     <>
@@ -535,14 +581,145 @@ export function PasoFormato({
           hasMasters={hasMasters[kind]}
           formatoDefault={formatoDefault[kind]}
           fixedTeams={fixedTeams[kind]}
+          ownOrder={ownOrder[kind]}
           errors={errors[kind] ?? []}
           label={picked.length > 1 ? DISCIPLINE_LABELS[kind] : null}
           onChangeConfig={(next) => onChangeConfig(kind, next)}
           onChangeHasMasters={(next) => onChangeHasMasters(kind, next)}
           onChangeFormatoDefault={(next) => onChangeFormatoDefault(kind, next)}
           onChangeFixedTeams={(next) => onChangeFixedTeams(kind, next)}
+          onChangeOwnOrder={(next) => onChangeOwnOrder(kind, next)}
         />
       ))}
+    </>
+  )
+}
+
+/**
+ * El paso "Orden inicial" -- swap de posición con "Formato" (esta tarea, plan
+ * de multi-disciplina): antes vivía en el índice 2, ahora en el 3, último
+ * paso configurable antes de "Listo". La lista GLOBAL (arriba) es
+ * EXACTAMENTE la de siempre —el criterio de desempate hasta que haya fechas
+ * jugadas, y de ahí las primeras parejas— y sigue siendo la que usa
+ * cualquier disciplina cuyo checkbox "orden propio" (paso Formato,
+ * `FormatoDeUnaDisciplina`) esté apagado.
+ *
+ * Debajo, una tarjeta por disciplina que SÍ prendió ese checkbox
+ * (`ownOrder[kind]`), con su PROPIA lista (`orders[kind]`) y las mismas
+ * flechas subir/bajar -- editable de forma independiente de la global y de
+ * las demás disciplinas. `orders[kind]` ya llega reconciliada contra el
+ * plantel actual (`reconcileOrders`, `wizard-state.ts`, corrida en cada
+ * edición del plantel desde `Wizard`) — este componente sólo dibuja lo que
+ * le pasan, no reconcilia nada por su cuenta.
+ *
+ * Exportado y separado de `Wizard`, mismo motivo que `PasoDisciplinas`/
+ * `PasoFormato`: `step` es estado interno y sin clicks la suite no llega
+ * hasta acá.
+ */
+export function PasoOrdenInicial({
+  orderedNames,
+  mySeat,
+  disciplines,
+  ownOrder,
+  orders,
+  onMoveGlobal,
+  onMoveOwn,
+}: {
+  orderedNames: string[]
+  mySeat: number | null
+  disciplines: readonly DisciplineKind[]
+  ownOrder: Record<DisciplineKind, boolean>
+  orders: Partial<Record<DisciplineKind, string[]>>
+  onMoveGlobal: (from: number, to: number) => void
+  onMoveOwn: (kind: DisciplineKind, from: number, to: number) => void
+}) {
+  return (
+    <>
+      <div className="overflow-hidden rounded-[14px] border border-line">
+        {/* `orderedNames`, no el plantel crudo: sin esto, terminar de cargar
+            el plantel tipeando de corrido deja siempre una fila en blanco
+            colgando al final, y este paso la dibujaría con flechas de
+            subir/bajar sobre un nombre que no existe (ver
+            `withoutTrailingBlanks`, wizard-state.ts). */}
+        {orderedNames.map((seat, index) => (
+          <div
+            key={index}
+            className={`flex items-center gap-2 px-3 py-2 ${index > 0 ? 'border-t border-line' : ''}`}
+          >
+            <span className="text-[13px] text-muted">⠿</span>
+            <span className="w-5 shrink-0 text-[13px] font-extrabold text-muted">{index + 1}</span>
+            <span className="min-w-0 flex-1 truncate text-[15px] font-bold">{seat}</span>
+            {index === mySeat && <Vos />}
+            <button
+              type="button"
+              aria-label={`Subir a ${seat}`}
+              disabled={index === 0}
+              onClick={() => onMoveGlobal(index, index - 1)}
+              className="h-[44px] w-[44px] shrink-0 rounded-[9px] bg-chip font-extrabold disabled:opacity-40"
+            >
+              ↑
+            </button>
+            <button
+              type="button"
+              aria-label={`Bajar a ${seat}`}
+              disabled={index === orderedNames.length - 1}
+              onClick={() => onMoveGlobal(index, index + 1)}
+              className="h-[44px] w-[44px] shrink-0 rounded-[9px] bg-chip font-extrabold disabled:opacity-40"
+            >
+              ↓
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* Una tarjeta por disciplina con orden PROPIO -- las que se quedaron
+          con el checkbox apagado (o nunca lo prendieron) no dibujan nada
+          acá, siguen con la lista global de arriba. Sin la marca "vos": esa
+          marca es del plantel, y acá cada fila es sólo un nombre reordenado
+          -- ninguna disciplina necesita saber cuál asiento es el propio
+          para tener su orden de desempate. */}
+      {disciplines
+        .filter((kind) => ownOrder[kind])
+        .map((kind) => {
+          const order = orders[kind] ?? []
+          return (
+            <div key={kind} className="flex flex-col gap-2">
+              <h3 className="text-[11.5px] font-extrabold uppercase tracking-[.14em] text-muted">
+                {DISCIPLINE_LABELS[kind]}
+              </h3>
+              <div className="overflow-hidden rounded-[14px] border border-line">
+                {order.map((seat, index) => (
+                  <div
+                    key={index}
+                    className={`flex items-center gap-2 px-3 py-2 ${index > 0 ? 'border-t border-line' : ''}`}
+                  >
+                    <span className="text-[13px] text-muted">⠿</span>
+                    <span className="w-5 shrink-0 text-[13px] font-extrabold text-muted">{index + 1}</span>
+                    <span className="min-w-0 flex-1 truncate text-[15px] font-bold">{seat}</span>
+                    <button
+                      type="button"
+                      aria-label={`Subir a ${seat} en ${DISCIPLINE_LABELS[kind]}`}
+                      disabled={index === 0}
+                      onClick={() => onMoveOwn(kind, index, index - 1)}
+                      className="h-[44px] w-[44px] shrink-0 rounded-[9px] bg-chip font-extrabold disabled:opacity-40"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Bajar a ${seat} en ${DISCIPLINE_LABELS[kind]}`}
+                      disabled={index === order.length - 1}
+                      onClick={() => onMoveOwn(kind, index, index + 1)}
+                      className="h-[44px] w-[44px] shrink-0 rounded-[9px] bg-chip font-extrabold disabled:opacity-40"
+                    >
+                      ↓
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+        })}
     </>
   )
 }
@@ -623,6 +800,21 @@ export function Wizard({ myName }: { myName: string }) {
     PADEL: false,
     FIFA: false,
   })
+  // Orden inicial propio, uno por disciplina -- plan de multi-disciplina.
+  // `ownOrder` (el checkbox del paso Formato) modelado EXACTAMENTE como
+  // `fixedTeams`, arriba: arranca en `false` para las dos, el orden GLOBAL
+  // de siempre. `orders` es la data real detrás del checkbox -- `Partial`,
+  // no un `Record` completo como `fixedTeams`: a diferencia de ese
+  // checkbox, "esta disciplina no tiene orden propio" no es un booleano que
+  // viva siempre con un valor, es la AUSENCIA de una lista entera (por eso
+  // el guard de permutación de `db/season.ts` lo trata como "seguí el
+  // global", no como "seedNames: []"). Las dos arrancan vacías/en `false`:
+  // ningún pádel existente cambia si nadie toca este checkbox.
+  const [ownOrder, setOwnOrderState] = useState<Record<DisciplineKind, boolean>>({
+    PADEL: false,
+    FIFA: false,
+  })
+  const [orders, setOrdersState] = useState<Partial<Record<DisciplineKind, string[]>>>({})
   const [error, setError] = useState<string | null>(null)
   const [leaving, setLeaving] = useState(false)
   const [created, setCreated] = useState<{ seasonId: string; inviteToken: string } | null>(null)
@@ -654,6 +846,13 @@ export function Wizard({ myName }: { myName: string }) {
     // disciplina, cada una contra su propio `pairSize` — ya no hay una sola
     // curva compartida que corregir.
     setConfigsState((current) => resizeConfigs(current, filledCount(next.names), pairSizes))
+    // `reconcileOrders`, mismo criterio: la lista de orden PROPIO de cada
+    // disciplina que la tenga también tiene que quedar al día contra el
+    // plantel que resulta de ESTE cambio -- un nombre que se acaba de sacar
+    // no puede sobrevivir en esa lista (el guard de permutación de
+    // `db/season.ts` la rechazaría en el submit), y uno que se acaba de
+    // agregar tiene que aparecer para poder ordenarlo.
+    setOrdersState((current) => reconcileOrders(current, withoutTrailingBlanks(next.names)))
   }
 
   // Cada radio "Lados" manda sólo sobre SU disciplina, y ahora SIEMPRE rehace
@@ -679,11 +878,29 @@ export function Wizard({ myName }: { myName: string }) {
     setFormatoDefaultState((current) => ({ ...current, [kind]: next }))
   const changeFixedTeams = (kind: DisciplineKind, next: boolean) =>
     setFixedTeamsState((current) => ({ ...current, [kind]: next }))
+  // El checkbox "orden propio" (`FormatoDeUnaDisciplina`, paso Formato):
+  // prender copia el orden GLOBAL de ESTE instante (`orderedNames`, no el
+  // plantel crudo -- mismo criterio que arriba), apagar borra la entrada
+  // entera (`toggleOwnOrder`, wizard-state.ts). Los dos casos actualizan
+  // `orders` a la vez que `ownOrder` -- son la misma acción del usuario.
+  const changeOwnOrder = (kind: DisciplineKind, next: boolean) => {
+    setOwnOrderState((current) => ({ ...current, [kind]: next }))
+    setOrdersState((current) => toggleOwnOrder(current, kind, next, orderedNames))
+  }
+  // Sube o baja una fila de la lista PROPIA de una disciplina
+  // (`PasoOrdenInicial`): `moveInOrder` es el `moveSeat` de arriba sin
+  // `mySeat` que arrastrar, porque esta lista es sólo nombres.
+  const changeOrderAt = (kind: DisciplineKind, from: number, to: number) =>
+    setOrdersState((current) => {
+      const order = current[kind]
+      if (order === undefined) return current
+      return { ...current, [kind]: moveInOrder(order, from, to) }
+    })
 
   const blocked =
     (step === 0 && (name.trim().length === 0 || disciplineWarning !== null)) ||
     (step === 1 && warning !== null) ||
-    (step === 3 && anyErrors)
+    (step === 2 && anyErrors)
 
   // Ya no hay techo que anunciar (docs/plan-piso-y-techo-del-plantel.md
   // Task 3 lo borró entero): `floor` sigue siendo el piso efectivo de las
@@ -714,6 +931,7 @@ export function Wizard({ myName }: { myName: string }) {
           hasMasters,
           formatoDefault,
           fixedTeams,
+          orders,
         ),
       )
       if (!result.ok) {
@@ -879,49 +1097,10 @@ export function Wizard({ myName }: { myName: string }) {
           </>
         )}
 
+        {/* Swap con "Orden inicial" (esta tarea): Formato ahora es el paso 2,
+            porque el checkbox "orden propio" que vive acá adentro es lo que
+            decide si una disciplina dibuja su propia lista en el paso 3. */}
         {step === 2 && (
-          <div className="overflow-hidden rounded-[14px] border border-line">
-            {/* `orderedNames`, no `names`: sin esto, terminar de cargar el
-                plantel tipeando de corrido (el caso que `namesAfterEdit`
-                existe para arreglar) siempre deja una fila en blanco colgando
-                al final, y este paso la dibujaría con flechas de subir/bajar
-                sobre un nombre que no existe. `withoutTrailingBlanks` sólo
-                corta la COLA, así que el índice de cada fila que se ve acá es
-                el mismo que en `names` — `moveSeat(squad, index, ...)` sigue
-                apuntando a la fila correcta. */}
-            {orderedNames.map((seat, index) => (
-              <div
-                key={index}
-                className={`flex items-center gap-2 px-3 py-2 ${index > 0 ? 'border-t border-line' : ''}`}
-              >
-                <span className="text-[13px] text-muted">⠿</span>
-                <span className="w-5 shrink-0 text-[13px] font-extrabold text-muted">{index + 1}</span>
-                <span className="min-w-0 flex-1 truncate text-[15px] font-bold">{seat}</span>
-                {index === mySeat && <Vos />}
-                <button
-                  type="button"
-                  aria-label={`Subir a ${seat}`}
-                  disabled={index === 0}
-                  onClick={() => setSquad(moveSeat(squad, index, index - 1))}
-                  className="h-[44px] w-[44px] shrink-0 rounded-[9px] bg-chip font-extrabold disabled:opacity-40"
-                >
-                  ↑
-                </button>
-                <button
-                  type="button"
-                  aria-label={`Bajar a ${seat}`}
-                  disabled={index === orderedNames.length - 1}
-                  onClick={() => setSquad(moveSeat(squad, index, index + 1))}
-                  className="h-[44px] w-[44px] shrink-0 rounded-[9px] bg-chip font-extrabold disabled:opacity-40"
-                >
-                  ↓
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {step === 3 && (
           <PasoFormato
             configs={configs}
             picked={disciplines}
@@ -929,11 +1108,25 @@ export function Wizard({ myName }: { myName: string }) {
             hasMasters={hasMasters}
             formatoDefault={formatoDefault}
             fixedTeams={fixedTeams}
+            ownOrder={ownOrder}
             errors={errorsByKind}
             onChangeConfig={changeConfig}
             onChangeHasMasters={changeHasMasters}
             onChangeFormatoDefault={changeFormatoDefault}
             onChangeFixedTeams={changeFixedTeams}
+            onChangeOwnOrder={changeOwnOrder}
+          />
+        )}
+
+        {step === 3 && (
+          <PasoOrdenInicial
+            orderedNames={orderedNames}
+            mySeat={mySeat}
+            disciplines={disciplines}
+            ownOrder={ownOrder}
+            orders={orders}
+            onMoveGlobal={(from, to) => setSquad(moveSeat(squad, from, to))}
+            onMoveOwn={changeOrderAt}
           />
         )}
 
@@ -993,7 +1186,9 @@ export function Wizard({ myName }: { myName: string }) {
       )}
 
       <div className="flex gap-2">
-        {step === 3 && (
+        {/* Se mueve con Formato (esta tarea): sigue siendo el botón de ESE
+            paso, sólo que ahora es el 2 y no el 3. */}
+        {step === 2 && (
           <button
             type="button"
             // Rehace la config de CADA disciplina MARCADA a su default fresco

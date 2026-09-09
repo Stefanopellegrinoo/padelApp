@@ -18,10 +18,13 @@ import {
   formatoDefaultKey,
   freshDisciplineConfig,
   isSameFormatoDefault,
+  moveInOrder,
   moveSeat,
   namesAfterEdit,
   newDisciplineSpec,
   newTournamentPayload,
+  reconcileOrder,
+  reconcileOrders,
   removeSeatAt,
   resizeConfig,
   resizeConfigs,
@@ -30,6 +33,7 @@ import {
   submitSeats,
   summaryOf,
   toggleDiscipline,
+  toggleOwnOrder,
   withoutTrailingBlanks,
 } from './wizard-state'
 
@@ -472,6 +476,109 @@ describe('moveSeat', () => {
     const squad = { names: ['Colo', 'Nacho'], mySeat: 0 }
     expect(moveSeat(squad, 0, -1)).toEqual(squad)
     expect(moveSeat(squad, 1, 2)).toEqual(squad)
+  })
+})
+
+/**
+ * El toggle "orden propio" del paso Formato (docs/tipos-de-torneo.md §3):
+ * prender copia el orden GLOBAL de ESE instante a la entrada de la
+ * disciplina, apagar la borra entera -- no la deja vacía, que sería un
+ * `seedNames: []` que no calza con NADA de permutación (`db/season.ts`,
+ * `isPermutationOf`).
+ *
+ * Copiar y no referenciar el array global en vivo: una vez prendido, la
+ * lista de la disciplina se edita SOLA (`moveInOrder`, más abajo) -- si el
+ * admin reordena el plantel GLOBAL después, esa edición no tiene por qué
+ * pisar lo que ya se armó para esta disciplina en particular.
+ */
+describe('toggleOwnOrder', () => {
+  it('prender copia el orden global de este instante', () => {
+    expect(toggleOwnOrder({}, 'FIFA', true, ['Colo', 'Nacho', 'Fede'])).toEqual({
+      FIFA: ['Colo', 'Nacho', 'Fede'],
+    })
+  })
+
+  it('apagar borra la entrada entera -- no queda ni vacía', () => {
+    const next = toggleOwnOrder({ FIFA: ['Nacho', 'Colo', 'Fede'] }, 'FIFA', false, ['Colo', 'Nacho', 'Fede'])
+    expect(next).toEqual({})
+    expect('FIFA' in next).toBe(false)
+  })
+
+  it('no toca la entrada de la disciplina vecina', () => {
+    expect(toggleOwnOrder({ PADEL: ['Colo', 'Nacho'] }, 'FIFA', true, ['Colo', 'Nacho'])).toEqual({
+      PADEL: ['Colo', 'Nacho'],
+      FIFA: ['Colo', 'Nacho'],
+    })
+  })
+
+  it('volver a prender pisa lo que hubiera quedado, con el orden global de AHORA', () => {
+    expect(toggleOwnOrder({ FIFA: ['viejo'] }, 'FIFA', true, ['Colo', 'Nacho'])).toEqual({
+      FIFA: ['Colo', 'Nacho'],
+    })
+  })
+})
+
+/**
+ * Mismo criterio que `resizeConfigs`/`namesAfterEdit`/`withoutTrailingBlanks`:
+ * la lista propia de una disciplina nace como una COPIA congelada del orden
+ * global (`toggleOwnOrder`, arriba), y ese instante congelado se desactualiza
+ * apenas el admin agrega, saca o renombra un nombre del plantel DESPUÉS de
+ * prender el toggle. Sin este reconciliador un jugador borrado sobreviviría
+ * en la lista propia -- `createSeason` la rechazaría por no calzar con
+ * `squadNames`, el guard de permutación de `db/season.ts` -- y uno agregado
+ * nunca tendría dónde entrar.
+ */
+describe('reconcileOrder', () => {
+  it('sin cambios en el plantel, no toca nada', () => {
+    expect(reconcileOrder(['Nacho', 'Colo'], ['Colo', 'Nacho'])).toEqual(['Nacho', 'Colo'])
+  })
+
+  it('un nombre que ya no está en el plantel desaparece de la lista propia', () => {
+    expect(reconcileOrder(['Nacho', 'Colo', 'Fede'], ['Colo', 'Fede'])).toEqual(['Colo', 'Fede'])
+  })
+
+  it('un nombre nuevo del plantel se agrega al final, en el orden del plantel', () => {
+    expect(reconcileOrder(['Colo', 'Nacho'], ['Colo', 'Nacho', 'Fede'])).toEqual(['Colo', 'Nacho', 'Fede'])
+  })
+
+  it('mezcla las dos cosas a la vez: uno se va, otro entra', () => {
+    expect(reconcileOrder(['Nacho', 'Colo'], ['Colo', 'Fede'])).toEqual(['Colo', 'Fede'])
+  })
+
+  // Multiset, no `Set` (mismo motivo que `isPermutationOf`, `db/season.ts`):
+  // dos jugadores con el mismo nombre son dos asientos distintos.
+  it('nombres repetidos se resuelven por cantidad, no por presencia', () => {
+    expect(reconcileOrder(['Juan', 'Juan', 'Ana'], ['Ana', 'Juan', 'Juan'])).toEqual(['Juan', 'Juan', 'Ana'])
+  })
+
+  // Espacios sueltos no rompen el match -- mismo criterio que `filledCount`.
+  it('ignora espacios al comparar, aunque conserva el valor real del plantel', () => {
+    expect(reconcileOrder(['  Colo  ', 'Nacho'], ['Colo', 'Nacho'])).toEqual(['Colo', 'Nacho'])
+  })
+})
+
+describe('reconcileOrders', () => {
+  it('reconcilia sólo las disciplinas que tienen su propia lista', () => {
+    expect(reconcileOrders({ PADEL: ['Nacho', 'Colo'] }, ['Colo', 'Fede'])).toEqual({
+      PADEL: ['Colo', 'Fede'],
+    })
+  })
+
+  it('sin ninguna disciplina con orden propio, da un objeto vacío', () => {
+    expect(reconcileOrders({}, ['Colo', 'Nacho'])).toEqual({})
+  })
+})
+
+/** Igual que `moveSeat`, pero sin `mySeat` que arrastrar: la lista propia de una disciplina es sólo nombres. */
+describe('moveInOrder', () => {
+  it('sube o baja una posición', () => {
+    expect(moveInOrder(['Colo', 'Nacho'], 0, 1)).toEqual(['Nacho', 'Colo'])
+    expect(moveInOrder(['Colo', 'Nacho'], 1, 0)).toEqual(['Nacho', 'Colo'])
+  })
+
+  it('se niega a mover más allá de cualquiera de los dos bordes', () => {
+    expect(moveInOrder(['Colo', 'Nacho'], 0, -1)).toEqual(['Colo', 'Nacho'])
+    expect(moveInOrder(['Colo', 'Nacho'], 1, 2)).toEqual(['Colo', 'Nacho'])
   })
 })
 
@@ -974,6 +1081,78 @@ describe('newTournamentPayload', () => {
     const fifa = payload.disciplines.find((row) => row.kind === 'FIFA')
     expect(padel?.config.points).toEqual([20, 12, 6, 2])
     expect(fifa?.config.points).toEqual([10, 7, 5, 3, 2, 1, 0, 0])
+  })
+
+  /**
+   * Paso "Orden inicial" con orden propio (§3, Task de este slice): `orders`
+   * es el noveno parámetro, OPCIONAL a diferencia de los cuatro anteriores
+   * (`pairSizes`/`hasMasters`/`formatoDefault`/`fixedTeams`) -- esos cuatro
+   * son `Record` completos porque `Wizard` SIEMPRE tiene un valor puesto
+   * para las dos disciplinas; `orders` es `Partial`, y "ninguna disciplina
+   * tiene orden propio" es el estado normal del 100% de los torneos de hoy,
+   * no un olvido que `tsc` tenga que cazar. Sin él, cae al `{}` de siempre y
+   * ninguna fila manda `seedNames` -- exactamente el comportamiento de todos
+   * los tests de arriba, que no lo pasan.
+   */
+  it('sin orders, ninguna fila manda seedNames -- comportamiento de siempre', () => {
+    const squad: Squad = { names: Array(8).fill('Jugador'), mySeat: null }
+    const configs = { PADEL: configFor(8, 2), FIFA: configFor(8, 2) }
+    const payload = newTournamentPayload(
+      'Los Jueves',
+      squad,
+      configs,
+      ['PADEL'],
+      { PADEL: 2, FIFA: 2 },
+      { PADEL: true, FIFA: true },
+      ROUND_ROBIN_ALL,
+      NO_FIXED_TEAMS,
+    )
+    expect(payload.disciplines[0]).not.toHaveProperty('seedNames')
+  })
+
+  it('una disciplina con orden propio manda seedNames; la vecina sin toggle no manda nada', () => {
+    const names = ['Colo', 'Nacho', 'Fede', 'Marce']
+    const squad: Squad = { names, mySeat: null }
+    const configs = { PADEL: configFor(4, 1), FIFA: configFor(4, 1) }
+    const payload = newTournamentPayload(
+      'Mixto',
+      squad,
+      configs,
+      ['PADEL', 'FIFA'],
+      { PADEL: 1, FIFA: 1 },
+      { PADEL: false, FIFA: false },
+      ROUND_ROBIN_ALL,
+      NO_FIXED_TEAMS,
+      { FIFA: ['Fede', 'Marce', 'Colo', 'Nacho'] },
+    )
+    const padel = payload.disciplines.find((row) => row.kind === 'PADEL')
+    const fifa = payload.disciplines.find((row) => row.kind === 'FIFA')
+    expect(padel).not.toHaveProperty('seedNames')
+    expect(fifa?.seedNames).toEqual(['Fede', 'Marce', 'Colo', 'Nacho'])
+  })
+
+  // El submit reconcilia `orders[kind]` contra el plantel REAL de ESE
+  // instante (`seats.squadNames`), no contra lo que el toggle copió cuando
+  // se prendió: sin esto, un jugador agregado DESPUÉS de prender el orden
+  // propio (`Marce`, acá) quedaría sin `seed_position` en esa disciplina y
+  // `createSeason` lo rebotaría por el guard de permutación.
+  it('seedNames se reconcilia contra el plantel real del submit, no contra la foto de cuando se prendió el toggle', () => {
+    const names = ['Colo', 'Nacho', 'Fede', 'Marce']
+    const squad: Squad = { names, mySeat: null }
+    const configs = { PADEL: configFor(4, 1), FIFA: configFor(4, 1) }
+    const payload = newTournamentPayload(
+      'Mixto',
+      squad,
+      configs,
+      ['PADEL', 'FIFA'],
+      { PADEL: 1, FIFA: 1 },
+      { PADEL: false, FIFA: false },
+      ROUND_ROBIN_ALL,
+      NO_FIXED_TEAMS,
+      { FIFA: ['Fede', 'Colo', 'Nacho'] }, // "Marce" no estaba cuando se copió
+    )
+    const fifa = payload.disciplines.find((row) => row.kind === 'FIFA')
+    expect(fifa?.seedNames).toEqual(['Fede', 'Colo', 'Nacho', 'Marce'])
   })
 })
 

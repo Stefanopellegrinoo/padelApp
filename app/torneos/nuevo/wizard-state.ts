@@ -371,6 +371,93 @@ export function moveSeat({ names, mySeat }: Squad, from: number, to: number): Sq
 }
 
 /**
+ * Sube o baja una fila del orden PROPIO de una disciplina -- igual que
+ * `moveSeat`, pero sin `mySeat` que arrastrar: esta lista es sólo nombres, y
+ * la marca "vos" que sí dibuja el orden global no la dibuja ésta (vive en el
+ * plantel, no en la copia por disciplina).
+ */
+export function moveInOrder(order: readonly string[], from: number, to: number): string[] {
+  if (to < 0 || to >= order.length) return [...order]
+  const next = [...order]
+  next[from] = order[to]!
+  next[to] = order[from]!
+  return next
+}
+
+/**
+ * El estado de `orders` después de tocar el checkbox "orden propio" de una
+ * disciplina (`FormatoDeUnaDisciplina`, wizard.tsx, sólo con `label !==
+ * null` -- ver su docblock): prender COPIA el orden GLOBAL de este instante,
+ * apagar BORRA la entrada entera -- nunca la deja en `[]`, que es un
+ * `seedNames` que no calza con NADA de permutación (`isPermutationOf`,
+ * `db/season.ts`).
+ *
+ * Copiar y no referenciar el array global en vivo es la decisión: desde que
+ * se prende, la lista de la disciplina se edita SOLA (`moveInOrder`, arriba,
+ * más `reconcileOrder` de abajo cuando cambia el plantel) -- si el admin
+ * reordena el plantel GLOBAL después de prender el toggle, esa edición no
+ * tiene por qué pisar lo que ya se armó para ESTA disciplina en particular.
+ * Son dos preguntas distintas: "¿en qué orden entran las disciplinas SIN
+ * toggle propio?" (el global) vs. "¿en qué orden entra ÉSTA?" (la suya).
+ */
+export function toggleOwnOrder(
+  orders: Partial<Record<DisciplineKind, string[]>>,
+  kind: DisciplineKind,
+  next: boolean,
+  globalOrder: readonly string[],
+): Partial<Record<DisciplineKind, string[]>> {
+  const { [kind]: _current, ...rest } = orders
+  return next ? { ...rest, [kind]: [...globalOrder] } : rest
+}
+
+/**
+ * El orden PROPIO de una disciplina, puesto al día contra el plantel
+ * ACTUAL -- mismo criterio que `resizeConfigs`/`namesAfterEdit`/
+ * `withoutTrailingBlanks`: la lista nace como una copia CONGELADA del orden
+ * global (`toggleOwnOrder`), y ese instante congelado se desactualiza apenas
+ * el admin agrega, saca o renombra un nombre del plantel DESPUÉS. Sin este
+ * reconciliador, un jugador borrado seguiría en la lista propia --
+ * `createSeason` la rechazaría por no calzar con `squadNames`, el guard de
+ * permutación de `db/season.ts` -- y uno agregado nunca tendría dónde
+ * entrar a ordenarse.
+ *
+ * Compara por valor RECORTADO (mismo criterio que `filledCount`: un espacio
+ * de más no cambia la identidad de un nombre) pero devuelve el valor REAL de
+ * `names`, nunca el de `order` -- así la lista propia muestra exactamente el
+ * mismo texto que el plantel, aunque `order` hubiera quedado con un espacio
+ * suelto de una edición vieja.
+ *
+ * Multiset y no `Set`: dos asientos con el mismo nombre son dos jugadores
+ * distintos (el plantel no exige nombres únicos), así que "está o no está"
+ * tiene que contar CUÁNTAS veces, no sólo si el string aparece — se consume
+ * cada nombre de `names` una sola vez a medida que `order` lo reclama.
+ */
+export function reconcileOrder(order: readonly string[], names: readonly string[]): string[] {
+  const remaining = names.map((name, at) => ({ name, at }))
+  const kept: string[] = []
+  for (const entry of order) {
+    const at = remaining.findIndex((seat) => seat.name.trim() === entry.trim())
+    if (at < 0) continue
+    kept.push(remaining[at]!.name)
+    remaining.splice(at, 1)
+  }
+  return [...kept, ...remaining.map((seat) => seat.name)]
+}
+
+/** `reconcileOrder` aplicado a cada disciplina que tiene su propia lista -- las que no, ni se tocan. */
+export function reconcileOrders(
+  orders: Partial<Record<DisciplineKind, string[]>>,
+  names: readonly string[],
+): Partial<Record<DisciplineKind, string[]>> {
+  const next: Partial<Record<DisciplineKind, string[]>> = {}
+  for (const kind of DISCIPLINE_KINDS) {
+    const order = orders[kind]
+    if (order !== undefined) next[kind] = reconcileOrder(order, names)
+  }
+  return next
+}
+
+/**
  * Lo que se manda a crear: los nombres cargados, y en qué posición de ESA lista
  * quedó el asiento propio.
  *
@@ -473,6 +560,21 @@ export function newTournamentPayload(
   hasMasters: Record<DisciplineKind, boolean>,
   formatoDefault: Record<DisciplineKind, MatchdayFormat>,
   fixedTeams: Record<DisciplineKind, boolean>,
+  /**
+   * El orden PROPIO de cada disciplina que prendió el toggle del paso
+   * Formato (`orders`, `Wizard`) -- OPCIONAL y `Partial`, a diferencia de los
+   * cuatro `Record` de arriba. Esos cuatro son obligatorios porque `Wizard`
+   * SIEMPRE tiene un valor puesto para las DOS disciplinas (nace en un
+   * `Record` con las dos claves, nunca `undefined`) — olvidarlos en el sitio
+   * del submit es un error de `tsc`, no un test que haya que mantener. Acá
+   * es al revés: "ninguna disciplina tiene orden propio" es el estado NORMAL
+   * del 100% de los torneos de hoy, no un olvido — un tercer parámetro
+   * obligatorio sólo hubiera forzado a cada test y caller existente (de
+   * antes de esta tarea) a mandar un `{}` que nunca iba a leer nada. Sin
+   * especificar, `{}`: ninguna fila manda `seedNames`, el comportamiento de
+   * siempre (`createSeason` sigue con el índice global).
+   */
+  orders: Partial<Record<DisciplineKind, string[]>> = {},
 ): {
   name: string
   squadNames: string[]
@@ -483,6 +585,7 @@ export function newTournamentPayload(
       hasMasters?: boolean
       formatoDefault?: MatchdayFormat
       fixedTeams?: boolean
+      seedNames?: string[]
     }
   >
 } {
@@ -507,10 +610,21 @@ export function newTournamentPayload(
               formatoDefault: formatoDefault[kind],
             }
           : {}
+      const ownOrder = orders[kind]
+      // `seedNames` sólo se agrega cuando la disciplina de verdad tiene
+      // orden propio -- mismo criterio que `hasMasters`/`formatoDefault` de
+      // arriba: mandarlo siempre (aunque calzara con el global) arriesgaría
+      // filtrar un `seedNames` sobrante de un toggle que el admin ya apagó.
+      // Reconciliado contra `seats.squadNames` -- el plantel REAL de este
+      // submit, no la foto que `toggleOwnOrder` copió al prender el toggle
+      // — así un nombre agregado o sacado DESPUÉS de prenderlo no manda a
+      // `createSeason` un `seedNames` que ya no es una permutación válida.
+      const seedNames = ownOrder === undefined ? {} : { seedNames: reconcileOrder(ownOrder, seats.squadNames) }
       return buildDisciplines([kind], resized, pairSize).map((row) => ({
         ...row,
         ...extra,
         fixedTeams: effectiveFixedTeams(pairSize, fixedTeams[kind]),
+        ...seedNames,
       }))
     }),
   }

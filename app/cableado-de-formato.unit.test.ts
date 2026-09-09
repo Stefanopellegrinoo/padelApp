@@ -382,11 +382,17 @@ describe('el paso 4 del wizard — el cableado que ningún render alcanza', () =
     // esta prop y su setter lleguen enganchados al estado real, no a una
     // copia ni a un literal fijo.
     expect(llamada).toMatch(/\bfixedTeams=\{fixedTeams\}/)
+    // Orden propio (F9, dos jueces ciegos, `37b225b..d33377a`): mismo riesgo
+    // de mis-wire que `fixedTeams` -- el checkbox de "orden propio" del paso
+    // Formato depende de que esta prop y su setter lleguen enganchados al
+    // estado real, no a un literal fijo ni a la copia de otra disciplina.
+    expect(llamada).toMatch(/\bownOrder=\{ownOrder\}/)
     expect(llamada).toMatch(/\berrors=\{errorsByKind\}/)
     expect(llamada).toMatch(/\bonChangeConfig=\{changeConfig\}/)
     expect(llamada).toMatch(/\bonChangeHasMasters=\{changeHasMasters\}/)
     expect(llamada).toMatch(/\bonChangeFormatoDefault=\{changeFormatoDefault\}/)
     expect(llamada).toMatch(/\bonChangeFixedTeams=\{changeFixedTeams\}/)
+    expect(llamada).toMatch(/\bonChangeOwnOrder=\{changeOwnOrder\}/)
   })
 
   /**
@@ -400,6 +406,89 @@ describe('el paso 4 del wizard — el cableado que ningún render alcanza', () =
     expect(/<PasoFormato\b[^>]*\/>/.exec(misWire)?.[0] ?? '').not.toMatch(
       /\bpicked=\{disciplines\}/,
     )
+  })
+})
+
+/**
+ * F9 (dos jueces ciegos, `37b225b..d33377a`): el mismo techo que
+ * `<PasoFormato>` de arriba, ahora para el paso 3 ("Orden inicial") -- sin
+ * clicks la suite no llega hasta acá, así que el ÚNICO lugar donde un
+ * mis-wire de este call site se puede cazar es pinchando el ARGUMENTO por
+ * FUENTE.
+ *
+ * `onMoveGlobal` viajaba como una arrow inline
+ * (`(from, to) => setSquad(moveSeat(squad, from, to))`) -- exactamente el
+ * defecto que el comentario de `llamada` (arriba) ya documenta para
+ * `PasoFormato`: una arrow ahí adentro corta en seco la regexp (`[^>]*` no
+ * puede cruzar el `>` de un `=>`), así que este call site NO se podía
+ * pinchar hasta extraerla a un nombre (`moveGlobalSeat`, `wizard.tsx`),
+ * mismo criterio que `changeConfig`/`changeHasMasters`/`changeFormatoDefault`/
+ * `changeFixedTeams`/`changeOwnOrder`.
+ */
+describe('el paso "Orden inicial" del wizard — el cableado que ningún render alcanza', () => {
+  const fuente = sinComentarios(
+    readFileSync(join(process.cwd(), 'app/torneos/nuevo/wizard.tsx'), 'utf8'),
+  )
+  const llamada = /<PasoOrdenInicial\b[^>]*\/>/.exec(fuente)?.[0] ?? ''
+
+  it('el paso 3 monta PasoOrdenInicial', () => {
+    expect(llamada).not.toBe('')
+  })
+
+  it('le pasa el plantel ordenado, el asiento propio, las disciplinas y el orden propio de cada una -- sin arrows inline', () => {
+    expect(llamada).toMatch(/\borderedNames=\{orderedNames\}/)
+    expect(llamada).toMatch(/\bmySeat=\{mySeat\}/)
+    expect(llamada).toMatch(/\bdisciplines=\{disciplines\}/)
+    expect(llamada).toMatch(/\bownOrder=\{ownOrder\}/)
+    expect(llamada).toMatch(/\borders=\{orders\}/)
+    expect(llamada).toMatch(/\bonMoveGlobal=\{moveGlobalSeat\}/)
+    expect(llamada).toMatch(/\bonMoveOwn=\{changeOrderAt\}/)
+  })
+})
+
+/**
+ * F7 (dos jueces ciegos, `37b225b..d33377a`): el orden de los pasos vive en
+ * CUATRO lugares que nada más obliga a coincidir entre sí -- `TITLES`/`HELP`
+ * (qué título/ayuda muestra cada `step`) y `blocked`/`advance` (qué `step`
+ * frena el "Continuar" y cuál dispara el submit). Medido, las dos mutaciones
+ * de abajo pasan 1028/1028 + `tsc` limpio sin este describe:
+ *
+ * · Revertir `blocked` de `step === 2 && anyErrors` a `step === 3 &&
+ *   anyErrors` deja al wizard TRABADO en "Orden inicial" (paso 3) cada vez
+ *   que quede un error de Formato sin resolver -- ese aviso vive DENTRO de
+ *   `PasoFormato`, que ya no se ve en el paso 3, así que no hay ningún
+ *   cartel que explique por qué "Continuar" sigue gris. Soft-lock.
+ * · Mover el submit de `advance()` de `step === 3` a `step === 2` hace
+ *   "Orden inicial" INALCANZABLE: el botón dispara `submit()` un paso antes
+ *   de tiempo, desde Formato.
+ */
+describe('el wizard — TITLES/HELP/blocked/advance no se desalinean entre sí (F7)', () => {
+  const fuente = sinComentarios(
+    readFileSync(join(process.cwd(), 'app/torneos/nuevo/wizard.tsx'), 'utf8'),
+  )
+
+  it('TITLES tiene los cinco pasos, en el orden Nombre/Plantel/Formato/Orden inicial/Listo', () => {
+    expect(fuente).toContain(
+      "const TITLES = ['Nombre y disciplinas', 'El plantel', 'Formato', 'Orden inicial', 'Listo']",
+    )
+  })
+
+  it('HELP trae el texto de Formato, después el de Orden inicial y por último el vacío de Listo -- en ESE orden', () => {
+    expect(fuente).toMatch(
+      /'Todos tienen un valor que ya funciona\. Si no te importa, seguí de largo\.',\s*'Ordenalos del mejor al peor\. Es el criterio que corta los empates hasta que haya fechas jugadas, y de ahí salen las primeras parejas\.',\s*'',\s*\]/,
+    )
+  })
+
+  it('blocked frena el paso 2 (Formato) cuando hay errores, no el 3 (Orden inicial)', () => {
+    expect(fuente).toContain('(step === 2 && anyErrors)')
+    expect(fuente).not.toContain('(step === 3 && anyErrors)')
+  })
+
+  it('advance() dispara submit() en el paso 3 (Orden inicial), el último paso configurable', () => {
+    const advance = /const advance = \(\) => \{[\s\S]*?\n {2}\}/.exec(fuente)?.[0] ?? ''
+    expect(advance).not.toBe('')
+    expect(advance).toContain('if (step === 3) {')
+    expect(advance).not.toContain('if (step === 2) {')
   })
 })
 

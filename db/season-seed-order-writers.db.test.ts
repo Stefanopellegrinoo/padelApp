@@ -251,3 +251,61 @@ describe('removeSeat — el cascade de la FK alcanza, sin tocar código (0080)',
     expect(await seedOrderPositions(seasonId)).toHaveLength(3)
   })
 })
+
+// ── La guardia completa: los tres escritores, una sola temporada ───────────
+// Esto es lo que este archivo existe para cubrir de verdad (el mirror
+// explícito de `db/entries-seed-writers.db.test.ts` que el docblock de
+// arriba promete): encadena `createSeason` -> `promote_guest` ->
+// `add_squad_seat` sobre la MISMA temporada y verifica el invariante
+// completo después de CADA paso. El riesgo no es un crash -- es que un
+// futuro escritor de plantel se olvide de esta tabla en silencio, y este
+// test es la única cosa que lo agarraría antes que un admin en producción.
+describe('la guardia completa: createSeason -> promote_guest -> add_squad_seat, invariante después de cada paso', () => {
+  it('cada paso deja exactamente una fila por SQUAD, 0..N-1 contiguo', async () => {
+    const squadNames = Array.from({ length: 4 }, (_, index) => `Jugador ${index + 1}`)
+    const config = { ...defaultConfig(4), points: [4, 3, 2, 1] }
+    const admin = await createTestUser()
+    const { seasonId } = await createSeason(admin.client, {
+      name: 'Torneo con la guardia completa',
+      squadNames,
+      config,
+      disciplines: [{ kind: 'FIFA', pairSize: 1, config }],
+    })
+
+    expectContiguous(await seedOrderPositions(seasonId), 4)
+
+    // promote_guest: cierra una fecha de a uno con un invitado solo (evita
+    // el guard "¿cobró el compañero?") y lo promueve.
+    const db = adminClient()
+    const { data: entries, error: entriesError } = await db
+      .from('entries')
+      .select('id')
+      .eq('season_id', seasonId)
+      .eq('kind', 'SQUAD')
+    if (entriesError) throw new Error(entriesError.message)
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
+    for (const entry of entries ?? []) {
+      await setAttendance(admin.client, matchdayId, entry.id, 'PLAYING')
+    }
+    const guestId = await addGuest(admin.client, matchdayId, { displayName: 'Invitado de la guardia' })
+    await generatePairs(admin.client, matchdayId)
+    await openMatchday(admin.client, matchdayId)
+    const { data: matches, error: matchesError } = await db.from('matches').select('id').eq('matchday_id', matchdayId)
+    if (matchesError) throw new Error(matchesError.message)
+    for (const match of matches ?? []) {
+      await saveResult(admin.client, match.id, [{ gamesA: 4, gamesB: 1 }])
+    }
+    await closeMatchday(admin.client, matchdayId)
+    await promoteGuest(admin.client, guestId)
+
+    expectContiguous(await seedOrderPositions(seasonId), 5)
+
+    // add_squad_seat: un alta más, encima de todo lo anterior.
+    const newId = await addSquadSeat(admin.client, seasonId, 'El sexto')
+
+    expectContiguous(await seedOrderPositions(seasonId), 6)
+    const squadIds = await squadEntryIdsOf(seasonId)
+    expect(squadIds).toHaveLength(6)
+    expect(squadIds).toContain(newId)
+  })
+})

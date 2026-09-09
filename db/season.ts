@@ -194,6 +194,41 @@ export async function frozenPointsOf(
   )
 }
 
+/**
+ * ¿`a` y `b` tienen exactamente los mismos elementos, en cualquier orden?
+ * Multiset, no `Set`: dos jugadores con el mismo nombre son dos asientos
+ * distintos (el plantel no exige nombres únicos), así que "está o no está"
+ * tiene que contar CUÁNTAS veces aparece cada nombre, no sólo si aparece.
+ * `sort()` en copias -- nunca los arrays originales -- es la forma barata de
+ * comparar multisets sin armar un `Map` de conteos.
+ */
+function isPermutationOf(a: readonly string[], b: readonly string[]): boolean {
+  if (a.length !== b.length) return false
+  const sortedA = [...a].sort()
+  const sortedB = [...b].sort()
+  return sortedA.every((value, index) => value === sortedB[index])
+}
+
+/**
+ * Para el `seedNames` de UNA disciplina, en qué índice de `squadNames` está
+ * cada seed -- es decir, el `squadNames`/`entryRows` que le corresponde a
+ * cada posición 0..N-1 de ESTA disciplina.
+ *
+ * Consume cada nombre de `squadNames` una sola vez (`used`), en el orden en
+ * que `seedNames` lo pide: con nombres repetidos (multiset, no `Set` --
+ * mismo motivo que `isPermutationOf`) es lo que evita que dos seeds
+ * distintos de `seedNames` apunten al MISMO asiento de `squadNames`.
+ * `isPermutationOf` ya garantizó que hay exactamente uno para cada uno.
+ */
+function seedOrderIndices(squadNames: readonly string[], seedNames: readonly string[]): number[] {
+  const used = new Array(squadNames.length).fill(false)
+  return seedNames.map((name) => {
+    const at = squadNames.findIndex((candidate, index) => !used[index] && candidate === name)
+    used[at] = true
+    return at
+  })
+}
+
 /** Una disciplina a crear junto con la temporada. `config` es obligatoria: cada disciplina puede declarar la suya, no hereda de la temporada. */
 export interface NewSeasonDiscipline {
   kind?: 'PADEL' | 'FIFA'
@@ -231,6 +266,30 @@ export interface NewSeasonDiscipline {
    * `pairSize: 1` pase lo que pase mande el caller.
    */
   fixedTeams?: boolean
+  /**
+   * El orden inicial de ESTA disciplina, si es distinto del orden global del
+   * plantel (`squadNames`). KEY FACT que habilita esto sin migración:
+   * `discipline_entries.seed_position` (ver `squadSeedOrder` más arriba) YA
+   * es una columna POR disciplina desde PR 7 -- hasta esta tarea
+   * `createSeason` sólo escribía el MISMO índice de `squadNames` en la fila
+   * de todas las disciplinas nuevas, sin usar la libertad que la columna ya
+   * daba.
+   *
+   * Nombres, no índices ni ids: es el mismo vocabulario que `squadNames`, y a
+   * esta altura (paso "Orden inicial" del wizard, antes de crear el torneo)
+   * no hay otro identificador para referirse a un asiento.
+   *
+   * Sin especificar, `undefined`: la disciplina sigue el orden GLOBAL de
+   * `squadNames` -- el comportamiento de siempre, el que toma el 100% de los
+   * torneos existentes y el que sigue tomando cualquier disciplina cuyo
+   * checkbox de "orden propio" (paso "Formato" del wizard) esté apagado.
+   *
+   * Tiene que ser una PERMUTACIÓN de `squadNames` -- mismo largo, mismo
+   * multiset -- o `createSeason` la rechaza (ver el guard más abajo): un
+   * `seedNames` que no calce se comería un asiento en silencio o dejaría a
+   * otro con dos.
+   */
+  seedNames?: string[]
 }
 
 export interface NewSeason {
@@ -300,6 +359,15 @@ export async function createSeason(
     if (squadNames.length !== spec.config.squadSize) {
       throw new EdgeError(
         `El plantel tiene ${squadNames.length} nombres y la configuración de ${spec.kind ?? 'PADEL'} dice ${spec.config.squadSize}.`,
+      )
+    }
+    // Guard de permutación (ver el docblock de `seedNames` en
+    // `NewSeasonDiscipline`): mismo largo Y mismo multiset que `squadNames`,
+    // o esta disciplina se queda sin poder calcular un `seed_position` para
+    // cada asiento -- comerse uno o duplicar otro en silencio.
+    if (spec.seedNames !== undefined && !isPermutationOf(spec.seedNames, squadNames)) {
+      throw new EdgeError(
+        `El orden propio de ${spec.kind ?? 'PADEL'} no coincide con el plantel: tiene que ser el mismo plantel, sólo reordenado.`,
       )
     }
   }
@@ -413,14 +481,29 @@ export async function createSeason(
       // `db/entries.db.test.ts` que compara nombre por nombre contra
       // `seedPosition` 0..7 — si PostgREST dejara de conservar ese orden, cae
       // ahí y no en una tabla desordenada en producción.
-      disciplineRows.flatMap((discipline) =>
-        entryRows.map((row, index) => ({
+      //
+      // `spec.seedNames` (PR11c) es la EXCEPCIÓN a ese índice global: cuando
+      // la disciplina trae su propio orden, `seedOrderIndices` traduce ese
+      // orden a índices sobre `squadNames`/`entryRows`, y el `seed_position`
+      // que se escribe es la POSICIÓN dentro de `seedNames` (0..N-1), no el
+      // índice global. Sin `seedNames`, cae al `entryRows.map` de siempre.
+      disciplineRows.flatMap((discipline, disciplineIndex) => {
+        const seedNames = disciplineSpecs[disciplineIndex]!.seedNames
+        if (seedNames === undefined) {
+          return entryRows.map((row, index) => ({
+            discipline_id: discipline.id,
+            entry_id: row.id,
+            season_id: season.id,
+            seed_position: index,
+          }))
+        }
+        return seedOrderIndices(squadNames, seedNames).map((globalIndex, seedPosition) => ({
           discipline_id: discipline.id,
-          entry_id: row.id,
+          entry_id: entryRows[globalIndex]!.id,
           season_id: season.id,
-          seed_position: index,
-        })),
-      ),
+          seed_position: seedPosition,
+        }))
+      }),
     )
     if (seatsError !== null) {
       await supabase.from('seasons').delete().eq('id', season.id)

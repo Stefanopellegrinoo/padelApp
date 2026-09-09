@@ -512,3 +512,129 @@ describe('createSeason con el plantel al piso real de una disciplina de a uno', 
     expect(entries).toHaveLength(2)
   })
 })
+
+/**
+ * PR11c — orden inicial POR disciplina (docs/tipos-de-torneo.md §3, plan
+ * arquitectura de páginas). KEY FACT ya verificado antes de esta tarea:
+ * `discipline_entries.seed_position` (arriba, `squadSeedOrder`) YA es una
+ * columna por disciplina — hasta acá `createSeason` simplemente escribía el
+ * mismo índice de `squadNames` en la fila de TODAS las disciplinas (el orden
+ * global). `NewSeasonDiscipline.seedNames` es el primer caller que aprovecha
+ * que la columna ya soporta esto: nada de esquema cambia, sólo lo que
+ * `createSeason` calcula antes de insertar.
+ *
+ * `seedNames` es un array de NOMBRES, no de índices ni de ids: es el mismo
+ * vocabulario que `squadNames`, porque a esta altura del wizard (paso "Orden
+ * inicial", todavía sin crear el torneo) no existe otro identificador con el
+ * que un caller pueda referirse a un asiento.
+ */
+describe('createSeason con orden propio por disciplina (seedNames)', () => {
+  it('dos disciplinas con seedNames en órdenes distintos escriben seed_position distinto cada una', async () => {
+    const admin = await createTestUser()
+    const config = defaultConfig(4)
+    const names = squadNames(4)
+    const { seasonId } = await createSeason(admin.client, {
+      name: 'Orden propio',
+      squadNames: names,
+      config,
+      disciplines: [
+        // Pádel: orden invertido respecto del plantel.
+        { kind: 'PADEL', config, seedNames: [names[3]!, names[2]!, names[1]!, names[0]!] },
+        // FIFA: mismo conjunto, otro orden -- ninguno de los dos es el global.
+        { kind: 'FIFA', config, seedNames: [names[1]!, names[3]!, names[0]!, names[2]!] },
+      ],
+    })
+
+    const db = adminClient()
+    const { data: entries } = await db.from('entries').select('id, display_name').eq('season_id', seasonId)
+    const idFor = (name: string) => entries!.find((row) => row.display_name === name)!.id
+
+    const { data: disciplines } = await db
+      .from('disciplines')
+      .select('id, kind')
+      .eq('season_id', seasonId)
+      .order('position', { ascending: true })
+    const padelId = disciplines!.find((row) => row.kind === 'PADEL')!.id
+    const fifaId = disciplines!.find((row) => row.kind === 'FIFA')!.id
+
+    const { data: padelSeats } = await db
+      .from('discipline_entries')
+      .select('entry_id, seed_position')
+      .eq('discipline_id', padelId)
+      .order('seed_position', { ascending: true })
+    expect(padelSeats?.map((row) => row.entry_id)).toEqual(
+      [names[3]!, names[2]!, names[1]!, names[0]!].map(idFor),
+    )
+
+    const { data: fifaSeats } = await db
+      .from('discipline_entries')
+      .select('entry_id, seed_position')
+      .eq('discipline_id', fifaId)
+      .order('seed_position', { ascending: true })
+    expect(fifaSeats?.map((row) => row.entry_id)).toEqual(
+      [names[1]!, names[3]!, names[0]!, names[2]!].map(idFor),
+    )
+  })
+
+  it('la disciplina sin seedNames sigue el orden global, aunque la vecina tenga el suyo propio', async () => {
+    const admin = await createTestUser()
+    const config = defaultConfig(4)
+    const names = squadNames(4)
+    const { seasonId } = await createSeason(admin.client, {
+      name: 'Mixto orden',
+      squadNames: names,
+      config,
+      disciplines: [
+        { kind: 'PADEL', config, seedNames: [names[1]!, names[0]!, names[3]!, names[2]!] },
+        { kind: 'FIFA', config }, // sin seedNames: comportamiento de siempre, el índice global.
+      ],
+    })
+
+    const db = adminClient()
+    const { data: entries } = await db.from('entries').select('id, display_name').eq('season_id', seasonId)
+    const idFor = (name: string) => entries!.find((row) => row.display_name === name)!.id
+    const { data: disciplines } = await db.from('disciplines').select('id, kind').eq('season_id', seasonId)
+    const fifaId = disciplines!.find((row) => row.kind === 'FIFA')!.id
+
+    const { data: fifaSeats } = await db
+      .from('discipline_entries')
+      .select('entry_id, seed_position')
+      .eq('discipline_id', fifaId)
+      .order('seed_position', { ascending: true })
+    expect(fifaSeats?.map((row) => row.entry_id)).toEqual(names.map(idFor))
+  })
+
+  // El guard de permutación: `seedNames` tiene que ser el MISMO conjunto que
+  // `squadNames`, sólo reordenado -- ni de menos (falta un nombre) ni de más
+  // (repite uno que no compensa una ausencia). Sin este guard, un `seedNames`
+  // roto se comería en silencio a un jugador (nunca entra a
+  // `discipline_entries` de esa disciplina) o lo dejaría con dos asientos.
+  it('rebota si seedNames no calza en cantidad con el plantel', async () => {
+    const admin = await createTestUser()
+    const config = defaultConfig(4)
+    const names = squadNames(4)
+    await expect(
+      createSeason(admin.client, {
+        name: 'Orden corto',
+        squadNames: names,
+        config,
+        disciplines: [{ kind: 'PADEL', config, seedNames: [names[0]!, names[1]!, names[2]!] }],
+      }),
+    ).rejects.toThrow()
+  })
+
+  it('rebota si seedNames repite un nombre en vez de traer al que falta', async () => {
+    const admin = await createTestUser()
+    const config = defaultConfig(4)
+    const names = squadNames(4)
+    await expect(
+      createSeason(admin.client, {
+        name: 'Orden repetido',
+        squadNames: names,
+        config,
+        // Repite names[0] en vez de traer names[1]: misma longitud, multiset distinto.
+        disciplines: [{ kind: 'PADEL', config, seedNames: [names[0]!, names[0]!, names[2]!, names[3]!] }],
+      }),
+    ).rejects.toThrow()
+  })
+})

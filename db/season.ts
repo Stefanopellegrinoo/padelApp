@@ -511,6 +511,28 @@ export async function createSeason(
     }
   }
 
+  // `season_seed_order` (0080_season_seed_order.sql, torneo-multi-disciplina
+  // tanda 1): el orden a nivel TORNEO ya no se deriva de ninguna disciplina
+  // (decisión #4044 superseded — ver el docblock de `seasonSeedOrder`,
+  // `db/read.ts`). Se persiste ACÁ, en el índice de `squadNames` — el orden
+  // GLOBAL del wizard, nunca el `seedNames` de una disciplina en particular:
+  // si la primaria pidiera el suyo y esta tabla lo copiara, quedaríamos
+  // exactamente donde estábamos antes de esta PR, sólo que en una tabla
+  // nueva.
+  if (entryRows.length > 0) {
+    const { error: seedOrderError } = await supabase.from('season_seed_order').insert(
+      entryRows.map((row, index) => ({
+        season_id: season.id,
+        entry_id: row.id,
+        seed_position: index,
+      })),
+    )
+    if (seedOrderError !== null) {
+      await supabase.from('seasons').delete().eq('id', season.id)
+      throw new EdgeError(`No se pudo guardar el orden del plantel: ${seedOrderError.message}`)
+    }
+  }
+
   return { seasonId: season.id, inviteToken: season.invite_token }
 }
 

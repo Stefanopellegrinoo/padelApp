@@ -146,5 +146,28 @@ export async function createSeason({
     }
   }
 
+  // Gemelo de `db/season.ts: createSeason` (0080_season_seed_order.sql,
+  // torneo-multi-disciplina tanda 1): sin esto, cualquier test que arme su
+  // escena con esta factory y después lea el orden a nivel TEMPORADA
+  // (`seasonSquadMembersOf`, `season_invite`, `addDiscipline`) se apoyaría
+  // en la casualidad de que el fallback `?? MAX_SAFE_INTEGER` de esas
+  // lecturas cae, por empate, al orden de `created_at` — que en esta
+  // factory (inserts uno por uno, no en un solo `insert` como la
+  // producción) SUELE coincidir con `squad`, pero no está garantizado ni es
+  // el contrato real. El orden que se escribe es el de `entryIds` — el
+  // mismo `squad` que ya define el de `discipline_entries` arriba.
+  if (entryIds.length > 0) {
+    const { error: seedOrderError } = await db.from('season_seed_order').insert(
+      entryIds.map((entryId, index) => ({
+        season_id: season.id,
+        entry_id: entryId,
+        seed_position: index,
+      })),
+    )
+    if (seedOrderError) {
+      throw new Error(`No se pudo asignar el orden de temporada de test: ${seedOrderError.message}`)
+    }
+  }
+
   return { seasonId: season.id, entryIds, disciplineIds, disciplineId }
 }

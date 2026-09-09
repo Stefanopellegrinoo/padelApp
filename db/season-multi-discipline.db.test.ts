@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { newTournamentPayload, type Squad } from '@/app/torneos/nuevo/wizard-state'
 import { defaultConfig, disciplineSlugs } from '@/core'
+import { EdgeError } from './errors'
 import { seasonHeader } from './read'
 import { createSeason } from './season'
 import { adminClient } from './test/admin'
@@ -613,32 +614,133 @@ describe('createSeason con orden propio por disciplina (seedNames)', () => {
   // (repite uno que no compensa una ausencia). Sin este guard, un `seedNames`
   // roto se comería en silencio a un jugador (nunca entra a
   // `discipline_entries` de esa disciplina) o lo dejaría con dos asientos.
+  //
+  // F5 (revisión ciega dual, 37b225b..d33377a): un `.rejects.toThrow()` a
+  // secas queda verde aunque el rechazo real sea un `TypeError` sin
+  // mensaje en español (medido: debilitar `isPermutationOf` a
+  // `a.every(v => b.includes(v))` deja pasar un plantel corto y el
+  // `TypeError: Cannot read properties of undefined (reading 'id')` que
+  // sigue explota más abajo, no el `EdgeError` que el usuario tiene que
+  // leer) -- y también queda verde si el guard se corre de lugar y deja
+  // temporadas huérfanas atrás (medido: moverlo a justo antes del insert de
+  // `discipline_entries` no lo hace fallar, sólo cambia CUÁNDO). Estos dos
+  // tests ahora piden las tres cosas: el TIPO del error, el MENSAJE exacto,
+  // y que no quede ninguna fila de `seasons` con ese nombre.
   it('rebota si seedNames no calza en cantidad con el plantel', async () => {
     const admin = await createTestUser()
     const config = defaultConfig(4)
     const names = squadNames(4)
-    await expect(
-      createSeason(admin.client, {
-        name: 'Orden corto',
+    const seasonName = 'Orden corto'
+    let caught: unknown
+    try {
+      await createSeason(admin.client, {
+        name: seasonName,
         squadNames: names,
         config,
         disciplines: [{ kind: 'PADEL', config, seedNames: [names[0]!, names[1]!, names[2]!] }],
-      }),
-    ).rejects.toThrow()
+      })
+    } catch (err) {
+      caught = err
+    }
+    expect(caught).toBeInstanceOf(EdgeError)
+    expect((caught as EdgeError).message).toBe(
+      'El orden propio de PADEL no coincide con el plantel: tiene que ser el mismo plantel, sólo reordenado.',
+    )
+
+    const db = adminClient()
+    const { data } = await db.from('seasons').select('id').eq('name', seasonName)
+    expect(data).toEqual([])
   })
 
   it('rebota si seedNames repite un nombre en vez de traer al que falta', async () => {
     const admin = await createTestUser()
     const config = defaultConfig(4)
     const names = squadNames(4)
-    await expect(
-      createSeason(admin.client, {
-        name: 'Orden repetido',
+    const seasonName = 'Orden repetido'
+    let caught: unknown
+    try {
+      await createSeason(admin.client, {
+        name: seasonName,
         squadNames: names,
         config,
         // Repite names[0] en vez de traer names[1]: misma longitud, multiset distinto.
         disciplines: [{ kind: 'PADEL', config, seedNames: [names[0]!, names[0]!, names[2]!, names[3]!] }],
-      }),
-    ).rejects.toThrow()
+      })
+    } catch (err) {
+      caught = err
+    }
+    expect(caught).toBeInstanceOf(EdgeError)
+    expect((caught as EdgeError).message).toBe(
+      'El orden propio de PADEL no coincide con el plantel: tiene que ser el mismo plantel, sólo reordenado.',
+    )
+
+    const db = adminClient()
+    const { data } = await db.from('seasons').select('id').eq('name', seasonName)
+    expect(data).toEqual([])
+  })
+
+  // F4 (revisión ciega dual, 37b225b..d33377a): la máscara `used` de
+  // `seedOrderIndices` (`db/season.ts`) no tenía NINGÚN test que la
+  // ejercitara con nombres repetidos -- medido, reemplazar su cuerpo entero
+  // por `seedNames.map((name) => squadNames.indexOf(name))` pasa la suite
+  // COMPLETA de la base. Esa mutación es genuinamente incorrecta: sin la
+  // máscara, dos "Juan" en `seedNames` resuelven SIEMPRE al mismo índice
+  // (el primero), y el segundo `discipline_entries` con el mismo
+  // `entry_id` para la misma disciplina viola la PK `(discipline_id,
+  // entry_id)` -- el torneo entero muere. Este test ejercita esa máscara
+  // de verdad: plantel con dos "Juan" y `seedNames` que los intercala.
+  it('con nombres duplicados en el plantel, seedNames interleaved arma un entry_id DISTINTO para cada seed (F4)', async () => {
+    const admin = await createTestUser()
+    const config = defaultConfig(4)
+    const names = ['Juan', 'Juan', 'Ana', 'Luis']
+    const { seasonId } = await createSeason(admin.client, {
+      name: 'Duplicados F4',
+      squadNames: names,
+      config,
+      disciplines: [
+        // Sin seedNames: cae al índice global de siempre -- sirve acá como
+        // referencia para saber CUÁL entry_id es cuál "Juan", algo que el
+        // nombre solo no puede distinguir (son duplicados).
+        { kind: 'PADEL', config },
+        // Interleaved: Juan(0), Ana(2), Luis(3), Juan(1) -- el segundo
+        // "Juan" tiene que resolver al OTRO asiento, no repetir el primero.
+        { kind: 'FIFA', config, seedNames: ['Juan', 'Ana', 'Luis', 'Juan'] },
+      ],
+    })
+
+    const db = adminClient()
+    const { data: disciplines } = await db
+      .from('disciplines')
+      .select('id, kind')
+      .eq('season_id', seasonId)
+      .order('position', { ascending: true })
+    const padelId = disciplines!.find((row) => row.kind === 'PADEL')!.id
+    const fifaId = disciplines!.find((row) => row.kind === 'FIFA')!.id
+
+    // PADEL, sin seedNames, da la referencia: seed_position i == squadNames[i].
+    const { data: padelSeats } = await db
+      .from('discipline_entries')
+      .select('entry_id, seed_position')
+      .eq('discipline_id', padelId)
+      .order('seed_position', { ascending: true })
+    const entryIdByIndex = padelSeats!.map((row) => row.entry_id)
+
+    const { data: fifaSeats } = await db
+      .from('discipline_entries')
+      .select('entry_id, seed_position')
+      .eq('discipline_id', fifaId)
+      .order('seed_position', { ascending: true })
+    const fifaEntryIds = fifaSeats!.map((row) => row.entry_id)
+
+    // seedOrderIndices(['Juan','Juan','Ana','Luis'], ['Juan','Ana','Luis','Juan']) === [0, 2, 3, 1].
+    expect(fifaEntryIds).toEqual([
+      entryIdByIndex[0],
+      entryIdByIndex[2],
+      entryIdByIndex[3],
+      entryIdByIndex[1],
+    ])
+    // Los cuatro entry_id de FIFA son DISTINTOS entre sí -- ninguna PK
+    // (discipline_id, entry_id) duplicada.
+    expect(new Set(fifaEntryIds).size).toBe(4)
   })
 })

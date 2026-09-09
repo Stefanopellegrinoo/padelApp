@@ -474,21 +474,27 @@ export async function createSeason(
   // fuente real del orden; sin este insert, un torneo nuevo nacería con sus
   // disciplinas vacías aunque `entries` tenga todo el plantel.
   if (entryRows.length > 0) {
-    const { error: seatsError } = await supabase.from('discipline_entries').insert(
-      // El índice del array, no una columna de vuelta (C37): `insert ...
-      // returning` devuelve las filas en el orden del `values`, así que
-      // `entryRows[i]` es `squadNames[i]`. Lo fija el test de
-      // `db/entries.db.test.ts` que compara nombre por nombre contra
-      // `seedPosition` 0..7 — si PostgREST dejara de conservar ese orden, cae
-      // ahí y no en una tabla desordenada en producción.
-      //
-      // `spec.seedNames` (PR11c) es la EXCEPCIÓN a ese índice global: cuando
-      // la disciplina trae su propio orden, `seedOrderIndices` traduce ese
-      // orden a índices sobre `squadNames`/`entryRows`, y el `seed_position`
-      // que se escribe es la POSICIÓN dentro de `seedNames` (0..N-1), no el
-      // índice global. Sin `seedNames`, cae al `entryRows.map` de siempre.
-      disciplineRows.flatMap((discipline, disciplineIndex) => {
-        const seedNames = disciplineSpecs[disciplineIndex]!.seedNames
+    // F6 (revisión ciega dual, 37b225b..d33377a): esta lista se arma ACÁ,
+    // en una variable, ANTES del `.insert(...)` -- no adentro de sus
+    // argumentos, como estaba. Adentro del argumento, un `throw` acá (por
+    // ejemplo `entryRows[globalIndex]!.id` con `globalIndex = -1`) queda
+    // FUERA de cualquier try/catch y ANTES del `if (seatsError !== null)`
+    // de abajo, que es quien hace el rollback -- se escaparía de
+    // `createSeason` con la temporada YA insertada y sin compensar, el
+    // estado huérfano que el docblock de esta función dice que el delete
+    // compensatorio existe para evitar. Hoisteado y con el propio `try`
+    // de acá abajo, ese throw SÍ dispara el rollback.
+    let seatRows: { discipline_id: string; entry_id: string; season_id: string; seed_position: number }[]
+    try {
+      seatRows = disciplineRows.flatMap((discipline, disciplineIndex) => {
+        const spec = disciplineSpecs[disciplineIndex]!
+        const seedNames = spec.seedNames
+        // El índice del array, no una columna de vuelta (C37): `insert ...
+        // returning` devuelve las filas en el orden del `values`, así que
+        // `entryRows[i]` es `squadNames[i]`. Lo fija el test de
+        // `db/entries.db.test.ts` que compara nombre por nombre contra
+        // `seedPosition` 0..7 — si PostgREST dejara de conservar ese orden,
+        // cae ahí y no en una tabla desordenada en producción.
         if (seedNames === undefined) {
           return entryRows.map((row, index) => ({
             discipline_id: discipline.id,
@@ -497,14 +503,37 @@ export async function createSeason(
             seed_position: index,
           }))
         }
-        return seedOrderIndices(squadNames, seedNames).map((globalIndex, seedPosition) => ({
-          discipline_id: discipline.id,
-          entry_id: entryRows[globalIndex]!.id,
-          season_id: season.id,
-          seed_position: seedPosition,
-        }))
-      }),
-    )
+        // `spec.seedNames` (PR11c) es la EXCEPCIÓN a ese índice global: cuando
+        // la disciplina trae su propio orden, `seedOrderIndices` traduce ese
+        // orden a índices sobre `squadNames`/`entryRows`, y el `seed_position`
+        // que se escribe es la POSICIÓN dentro de `seedNames` (0..N-1), no el
+        // índice global.
+        return seedOrderIndices(squadNames, seedNames).map((globalIndex, seedPosition) => {
+          // F6: guard explícito, no confiar en que el guard de permutación
+          // 130 líneas más arriba (`isPermutationOf`) sea el único camino
+          // hasta acá para siempre -- si `globalIndex` alguna vez llega en
+          // -1, `entryRows[-1]` es `undefined` y `.id` tira un TypeError
+          // que, sin este guard, sería el throw sin try/catch descripto
+          // arriba.
+          if (globalIndex < 0) {
+            throw new EdgeError(
+              `No se pudo ubicar el orden propio de ${spec.kind ?? 'PADEL'} en el plantel.`,
+            )
+          }
+          return {
+            discipline_id: discipline.id,
+            entry_id: entryRows[globalIndex]!.id,
+            season_id: season.id,
+            seed_position: seedPosition,
+          }
+        })
+      })
+    } catch (err) {
+      await supabase.from('seasons').delete().eq('id', season.id)
+      throw err
+    }
+
+    const { error: seatsError } = await supabase.from('discipline_entries').insert(seatRows)
     if (seatsError !== null) {
       await supabase.from('seasons').delete().eq('id', season.id)
       throw new EdgeError(`No se pudo asignar el plantel a las disciplinas: ${seatsError.message}`)

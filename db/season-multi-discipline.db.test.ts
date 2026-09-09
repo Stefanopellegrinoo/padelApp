@@ -356,6 +356,7 @@ describe('createSeason vía el wizard real, disciplina de a uno (C29)', () => {
       { PADEL: true, FIFA: false },
       { PADEL: { kind: 'ROUND_ROBIN' }, FIFA: { kind: 'ROUND_ROBIN' } },
       { PADEL: false, FIFA: false },
+      {},
     )
     const { seasonId } = await createSeason(admin.client, payload)
 
@@ -400,6 +401,7 @@ describe('createSeason vía el wizard real, disciplina de a uno (C29)', () => {
       { PADEL: true, FIFA: false },
       { PADEL: { kind: 'ROUND_ROBIN' }, FIFA: { kind: 'ROUND_ROBIN' } },
       { PADEL: false, FIFA: false },
+      {},
     )
     const { seasonId } = await createSeason(admin.client, payload)
 
@@ -447,6 +449,7 @@ describe('createSeason vía el wizard real, disciplina de a uno (C29)', () => {
       { PADEL: true, FIFA: false },
       { PADEL: { kind: 'ROUND_ROBIN' }, FIFA: { kind: 'ROUND_ROBIN' } },
       { PADEL: false, FIFA: false },
+      {},
     )
     const { seasonId } = await createSeason(admin.client, payload)
 
@@ -492,6 +495,7 @@ describe('createSeason con el plantel al piso real de una disciplina de a uno', 
       { PADEL: true, FIFA: false },
       { PADEL: { kind: 'ROUND_ROBIN' }, FIFA: { kind: 'ROUND_ROBIN' } },
       { PADEL: false, FIFA: false },
+      {},
     )
     const { seasonId } = await createSeason(admin.client, payload)
 

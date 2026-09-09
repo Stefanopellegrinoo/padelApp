@@ -6,6 +6,8 @@ import {
   STEPPERS,
   type Squad,
   addMySeat,
+  addToOrder,
+  addToOrders,
   automaticHasMasters,
   buildDisciplines,
   configFor,
@@ -14,6 +16,7 @@ import {
   effectiveFloor,
   effectiveHasMasters,
   filledCount,
+  filledSeatIndices,
   formatErrors,
   formatoDefaultKey,
   freshDisciplineConfig,
@@ -23,15 +26,18 @@ import {
   namesAfterEdit,
   newDisciplineSpec,
   newTournamentPayload,
-  reconcileOrder,
-  reconcileOrders,
+  removeFromOrder,
+  removeFromOrders,
   removeSeatAt,
   resizeConfig,
   resizeConfigs,
+  seedNamesFrom,
   squadWarning,
   steppersFor,
   submitSeats,
   summaryOf,
+  swapInOrder,
+  swapInOrders,
   toggleDiscipline,
   toggleOwnOrder,
   withoutTrailingBlanks,
@@ -480,105 +486,234 @@ describe('moveSeat', () => {
 })
 
 /**
+ * F1 (dos jueces ciegos, `37b225b..d33377a`): los índices de `names` que de
+ * verdad tienen alguien -- sin las filas en blanco del MEDIO
+ * (`withoutTrailingBlanks` sólo saca las del final). Es lo que arranca el
+ * orden propio de una disciplina (`toggleOwnOrder`, abajo).
+ */
+describe('filledSeatIndices', () => {
+  it('sin blancos, da todos los índices', () => {
+    expect(filledSeatIndices(['Colo', 'Nacho', 'Fede'])).toEqual([0, 1, 2])
+  })
+
+  // Minor de esta tarea: una fila en blanco en el MEDIO no puede colarse en
+  // el orden propio -- terminaría con flechas que funcionan sobre un nombre
+  // vacío y un `aria-label="Subir a  en FIFA"`.
+  it('salta las filas en blanco del medio, no sólo las del final', () => {
+    expect(filledSeatIndices(['Colo', '', 'Fede'])).toEqual([0, 2])
+  })
+
+  it('un espacio suelto no cuenta como cargado -- mismo criterio que filledCount', () => {
+    expect(filledSeatIndices(['Colo', '   '])).toEqual([0])
+  })
+})
+
+/**
  * El toggle "orden propio" del paso Formato (docs/tipos-de-torneo.md §3):
  * prender copia el orden GLOBAL de ESE instante a la entrada de la
  * disciplina, apagar la borra entera -- no la deja vacía, que sería un
  * `seedNames: []` que no calza con NADA de permutación (`db/season.ts`,
  * `isPermutationOf`).
  *
- * Copiar y no referenciar el array global en vivo: una vez prendido, la
- * lista de la disciplina se edita SOLA (`moveInOrder`, más abajo) -- si el
- * admin reordena el plantel GLOBAL después, esa edición no tiene por qué
- * pisar lo que ya se armó para esta disciplina en particular.
+ * F1: la copia es de ÍNDICES (`filledSeatIndices`), no de nombres --
+ * reconciliar por VALOR era exactamente lo que perdía el asiento de una
+ * renombrada a mitad de tipeo (ver `describe('F1 ...')` más abajo).
+ *
+ * Copiar y no referenciar el array global en vivo sigue siendo la decisión:
+ * una vez prendido, la lista de la disciplina se edita SOLA (`moveInOrder`,
+ * más abajo) -- si el admin reordena el plantel GLOBAL después, esa edición
+ * no tiene por qué pisar lo que ya se armó para esta disciplina en
+ * particular.
  */
 describe('toggleOwnOrder', () => {
-  it('prender copia el orden global de este instante', () => {
+  it('prender copia el orden global de este instante, por índice', () => {
     expect(toggleOwnOrder({}, 'FIFA', true, ['Colo', 'Nacho', 'Fede'])).toEqual({
-      FIFA: ['Colo', 'Nacho', 'Fede'],
+      FIFA: [0, 1, 2],
     })
   })
 
   it('apagar borra la entrada entera -- no queda ni vacía', () => {
-    const next = toggleOwnOrder({ FIFA: ['Nacho', 'Colo', 'Fede'] }, 'FIFA', false, ['Colo', 'Nacho', 'Fede'])
+    const next = toggleOwnOrder({ FIFA: [1, 0, 2] }, 'FIFA', false, ['Colo', 'Nacho', 'Fede'])
     expect(next).toEqual({})
     expect('FIFA' in next).toBe(false)
   })
 
   it('no toca la entrada de la disciplina vecina', () => {
-    expect(toggleOwnOrder({ PADEL: ['Colo', 'Nacho'] }, 'FIFA', true, ['Colo', 'Nacho'])).toEqual({
-      PADEL: ['Colo', 'Nacho'],
-      FIFA: ['Colo', 'Nacho'],
+    expect(toggleOwnOrder({ PADEL: [1, 0] }, 'FIFA', true, ['Colo', 'Nacho'])).toEqual({
+      PADEL: [1, 0],
+      FIFA: [0, 1],
     })
   })
 
   it('volver a prender pisa lo que hubiera quedado, con el orden global de AHORA', () => {
-    expect(toggleOwnOrder({ FIFA: ['viejo'] }, 'FIFA', true, ['Colo', 'Nacho'])).toEqual({
-      FIFA: ['Colo', 'Nacho'],
+    expect(toggleOwnOrder({ FIFA: [7] }, 'FIFA', true, ['Colo', 'Nacho'])).toEqual({
+      FIFA: [0, 1],
     })
+  })
+
+  // Minor: una fila en blanco del medio no entra al copiar.
+  it('no copia el índice de una fila en blanco del medio', () => {
+    expect(toggleOwnOrder({}, 'FIFA', true, ['Colo', '', 'Fede'])).toEqual({ FIFA: [0, 2] })
   })
 })
 
 /**
- * Mismo criterio que `resizeConfigs`/`namesAfterEdit`/`withoutTrailingBlanks`:
- * la lista propia de una disciplina nace como una COPIA congelada del orden
- * global (`toggleOwnOrder`, arriba), y ese instante congelado se desactualiza
- * apenas el admin agrega, saca o renombra un nombre del plantel DESPUÉS de
- * prender el toggle. Sin este reconciliador un jugador borrado sobreviviría
- * en la lista propia -- `createSeason` la rechazaría por no calzar con
- * `squadNames`, el guard de permutación de `db/season.ts` -- y uno agregado
- * nunca tendría dónde entrar.
+ * F1: el orden propio de una disciplina, con un asiento SACADO -- misma
+ * fórmula que `removeSeatAt` ya aplica a `mySeat`, generalizada a una lista
+ * entera.
  */
-describe('reconcileOrder', () => {
-  it('sin cambios en el plantel, no toca nada', () => {
-    expect(reconcileOrder(['Nacho', 'Colo'], ['Colo', 'Nacho'])).toEqual(['Nacho', 'Colo'])
+describe('removeFromOrder / removeFromOrders', () => {
+  it('el índice sacado desaparece, y los de más atrás se corren para adelante', () => {
+    expect(removeFromOrder([2, 0, 3, 1], 1)).toEqual([1, 0, 2])
   })
 
-  it('un nombre que ya no está en el plantel desaparece de la lista propia', () => {
-    expect(reconcileOrder(['Nacho', 'Colo', 'Fede'], ['Colo', 'Fede'])).toEqual(['Colo', 'Fede'])
+  it('no toca los índices de más adelante del que se sacó', () => {
+    expect(removeFromOrder([0, 1], 3)).toEqual([0, 1])
   })
 
-  it('un nombre nuevo del plantel se agrega al final, en el orden del plantel', () => {
-    expect(reconcileOrder(['Colo', 'Nacho'], ['Colo', 'Nacho', 'Fede'])).toEqual(['Colo', 'Nacho', 'Fede'])
-  })
-
-  it('mezcla las dos cosas a la vez: uno se va, otro entra', () => {
-    expect(reconcileOrder(['Nacho', 'Colo'], ['Colo', 'Fede'])).toEqual(['Colo', 'Fede'])
-  })
-
-  // Multiset, no `Set` (mismo motivo que `isPermutationOf`, `db/season.ts`):
-  // dos jugadores con el mismo nombre son dos asientos distintos.
-  it('nombres repetidos se resuelven por cantidad, no por presencia', () => {
-    expect(reconcileOrder(['Juan', 'Juan', 'Ana'], ['Ana', 'Juan', 'Juan'])).toEqual(['Juan', 'Juan', 'Ana'])
-  })
-
-  // Espacios sueltos no rompen el match -- mismo criterio que `filledCount`.
-  it('ignora espacios al comparar, aunque conserva el valor real del plantel', () => {
-    expect(reconcileOrder(['  Colo  ', 'Nacho'], ['Colo', 'Nacho'])).toEqual(['Colo', 'Nacho'])
+  it('removeFromOrders sólo toca las disciplinas que tienen su propia lista', () => {
+    expect(removeFromOrders({ PADEL: [2, 0, 1] }, 0)).toEqual({ PADEL: [1, 0] })
+    expect(removeFromOrders({}, 0)).toEqual({})
   })
 })
 
-describe('reconcileOrders', () => {
-  it('reconcilia sólo las disciplinas que tienen su propia lista', () => {
-    expect(reconcileOrders({ PADEL: ['Nacho', 'Colo'] }, ['Colo', 'Fede'])).toEqual({
-      PADEL: ['Colo', 'Fede'],
-    })
+/**
+ * F1: el orden propio de una disciplina, con un asiento NUEVO agregado al
+ * final -- el lugar donde entra cualquiera que aparece (`addMySeat`, o una
+ * fila que deja de estar en blanco).
+ */
+describe('addToOrder / addToOrders', () => {
+  it('agrega el índice al final si todavía no estaba', () => {
+    expect(addToOrder([1, 0], 2)).toEqual([1, 0, 2])
   })
 
-  it('sin ninguna disciplina con orden propio, da un objeto vacío', () => {
-    expect(reconcileOrders({}, ['Colo', 'Nacho'])).toEqual({})
+  it('no lo duplica si ya estaba -- una renombrada no agrega nada', () => {
+    expect(addToOrder([1, 0, 2], 0)).toEqual([1, 0, 2])
+  })
+
+  it('addToOrders sólo toca las disciplinas que tienen su propia lista', () => {
+    expect(addToOrders({ FIFA: [0, 1] }, 2)).toEqual({ FIFA: [0, 1, 2] })
+    expect(addToOrders({}, 2)).toEqual({})
   })
 })
 
-/** Igual que `moveSeat`, pero sin `mySeat` que arrastrar: la lista propia de una disciplina es sólo nombres. */
+/**
+ * F1: el orden propio de una disciplina, con `from`/`to` swapeados -- misma
+ * fórmula que `moveSeat` usa para `mySeat`. Necesario para que el swap del
+ * orden GLOBAL (`moveSeat`/`onMoveGlobal`, `wizard.tsx`) no le pise la
+ * identidad a un orden propio que ya tuviera anotado alguno de los dos
+ * asientos.
+ */
+describe('swapInOrder / swapInOrders', () => {
+  it('el que apuntaba a from pasa a apuntar a to, y viceversa', () => {
+    expect(swapInOrder([0, 1, 2], 0, 2)).toEqual([2, 1, 0])
+  })
+
+  it('no toca los índices que no son ni from ni to', () => {
+    expect(swapInOrder([0, 1, 2], 0, 2)[1]).toBe(1)
+  })
+
+  it('swapInOrders sólo toca las disciplinas que tienen su propia lista', () => {
+    expect(swapInOrders({ PADEL: [0, 1] }, 0, 1)).toEqual({ PADEL: [1, 0] })
+    expect(swapInOrders({}, 0, 1)).toEqual({})
+  })
+})
+
+/**
+ * `seedNamesFrom` traduce los ÍNDICES de un orden propio a los nombres
+ * reales del submit -- una sola vez, al armar el payload
+ * (`newTournamentPayload`), no mientras se edita el plantel.
+ */
+describe('seedNamesFrom', () => {
+  it('traduce cada índice a su nombre, en el orden pedido', () => {
+    expect(seedNamesFrom([2, 0, 3, 1], ['Colo', 'Nacho', 'Fede', 'Marce'])).toEqual([
+      'Fede',
+      'Colo',
+      'Marce',
+      'Nacho',
+    ])
+  })
+
+  // Un índice que ya no señala a un asiento con nombre (sacado o vaciado a
+  // mano) se descarta -- red de seguridad además de `removeFromOrders`.
+  it('descarta un índice que ya no tiene nombre', () => {
+    expect(seedNamesFrom([0, 1, 2], ['Colo', '', 'Fede'])).toEqual(['Colo', 'Fede'])
+  })
+
+  // Un asiento con nombre que `order` no llegó a anotar se agrega al final,
+  // en el orden del plantel -- el resultado sigue siendo una permutación
+  // COMPLETA, la que exige `isPermutationOf` (`db/season.ts`).
+  it('agrega al final los asientos que el orden no anotó', () => {
+    expect(seedNamesFrom([2], ['Colo', 'Nacho', 'Fede'])).toEqual(['Fede', 'Colo', 'Nacho'])
+  })
+
+  it('recorta espacios sueltos del nombre', () => {
+    expect(seedNamesFrom([0], ['  Colo  '])).toEqual(['Colo'])
+  })
+
+  // F2 (dos jueces ciegos): dos asientos con el MISMO nombre son dos
+  // jugadores distintos -- por índice, nunca se confunden entre sí.
+  it('nombres duplicados: cada índice trae SU propio asiento, sin mezclarse', () => {
+    expect(seedNamesFrom([1, 3, 0, 2], ['Juan', 'Juan', 'Ana', 'Luis'])).toEqual([
+      'Juan',
+      'Luis',
+      'Juan',
+      'Ana',
+    ])
+  })
+})
+
+/** Igual que `moveSeat`, pero sin `mySeat` que arrastrar: la lista propia de una disciplina es de ÍNDICES sueltos (F1). */
 describe('moveInOrder', () => {
   it('sube o baja una posición', () => {
-    expect(moveInOrder(['Colo', 'Nacho'], 0, 1)).toEqual(['Nacho', 'Colo'])
-    expect(moveInOrder(['Colo', 'Nacho'], 1, 0)).toEqual(['Nacho', 'Colo'])
+    expect(moveInOrder([0, 1], 0, 1)).toEqual([1, 0])
+    expect(moveInOrder([0, 1], 1, 0)).toEqual([1, 0])
   })
 
   it('se niega a mover más allá de cualquiera de los dos bordes', () => {
-    expect(moveInOrder(['Colo', 'Nacho'], 0, -1)).toEqual(['Colo', 'Nacho'])
-    expect(moveInOrder(['Colo', 'Nacho'], 1, 2)).toEqual(['Colo', 'Nacho'])
+    expect(moveInOrder([0, 1], 0, -1)).toEqual([0, 1])
+    expect(moveInOrder([0, 1], 1, 2)).toEqual([0, 1])
+  })
+
+  // Minor de esta tarea: antes reimplementaba el swap de `moveSeat` a mano y
+  // sólo guardaba `to` -- un `from` fuera de rango la rompía en silencio.
+  it('también se niega si from cae afuera de rango', () => {
+    expect(moveInOrder([0, 1], -1, 0)).toEqual([0, 1])
+    expect(moveInOrder([0, 1], 2, 0)).toEqual([0, 1])
+  })
+})
+
+/**
+ * F1 -- el bug MEDIDO en la revisión de `37b225b..d33377a`: reconciliar el
+ * orden propio por VALOR de texto (`reconcileOrder`, borrada en esta tarea)
+ * perdía el asiento de una renombrada a mitad de tipeo, porque `setSquad`
+ * corre en CADA tecla y el string intermedio no matcheaba contra el orden
+ * viejo. Por ÍNDICE (`Squad.mySeat` ya vive de esta misma garantía) el
+ * problema no puede existir: la posición de un asiento no se mueve porque
+ * se lo renombre, así que no hace falta reconciliar nada por una
+ * renombrada -- `orders` en `wizard.tsx` no vuelve a tocarse en absoluto
+ * mientras se edita un nombre que YA tenía contenido.
+ */
+describe('F1 -- identidad por índice, no por nombre', () => {
+  it('un asiento con orden propio no se mueve si el plantel se retipea al mismo texto', () => {
+    // FIFA arrancó con [Caro, Dani, Ana, Beto] -- índices [2, 3, 0, 1] sobre
+    // el plantel [Ana, Beto, Caro, Dani].
+    const order = [2, 3, 0, 1]
+    // Retipear CUALQUIER nombre del plantel (índice 2, "Caro") no toca
+    // `order` para nada -- `wizard.tsx` ya no llama a ningún reconciliador
+    // al renombrar, así que el orden por índice sigue siendo el mismo.
+    expect(seedNamesFrom(order, ['Ana', 'Beto', 'Caro', 'Dani'])).toEqual(['Caro', 'Dani', 'Ana', 'Beto'])
+  })
+
+  // F2: mySeat es uno de los duplicados -- ninguna ambigüedad por índice.
+  it('con nombres duplicados, incluso si mySeat es uno de ellos, cada índice mantiene su identidad', () => {
+    const names = ['Juan', 'Juan', 'Ana', 'Luis']
+    const mySeat = 1 // el SEGUNDO Juan
+    const order = [3, 1, 2, 0] // Luis, mi Juan, Ana, el otro Juan
+    expect(seedNamesFrom(order, names)).toEqual(['Luis', 'Juan', 'Ana', 'Juan'])
+    // Y el asiento propio se sigue leyendo del plantel por índice, ajeno a
+    // cuál de los dos "Juan" haya en `order` -- mismo criterio que `Squad.mySeat`.
+    expect(names[mySeat]).toBe('Juan')
   })
 })
 
@@ -790,6 +925,7 @@ describe('newTournamentPayload', () => {
       { PADEL: true, FIFA: true },
       ROUND_ROBIN_ALL,
       NO_FIXED_TEAMS,
+      {},
     )
     expect(payload).toEqual({
       name: 'Los Jueves',
@@ -825,6 +961,7 @@ describe('newTournamentPayload', () => {
       { PADEL: true, FIFA: true },
       ROUND_ROBIN_ALL,
       NO_FIXED_TEAMS,
+      {},
     )
     expect(payload.squadNames).toHaveLength(8)
     expect(payload.config.squadSize).toBe(8)
@@ -846,6 +983,7 @@ describe('newTournamentPayload', () => {
       { PADEL: true, FIFA: false },
       ROUND_ROBIN_ALL,
       NO_FIXED_TEAMS,
+      {},
     )
     expect(payload.disciplines).toEqual([
       {
@@ -875,6 +1013,7 @@ describe('newTournamentPayload', () => {
       { PADEL: false, FIFA: false },
       { PADEL: { kind: 'GROUPS_KNOCKOUT', groups: 4, qualifiersPerGroup: 2 }, FIFA: { kind: 'ROUND_ROBIN' } },
       { PADEL: true, FIFA: false },
+      {},
     )
     expect(payload.disciplines[0]).not.toHaveProperty('hasMasters')
     expect(payload.disciplines[0]).not.toHaveProperty('formatoDefault')
@@ -912,6 +1051,7 @@ describe('newTournamentPayload', () => {
       { PADEL: true, FIFA: false },
       { PADEL: { kind: 'ROUND_ROBIN' }, FIFA: { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 } },
       { PADEL: true, FIFA: false },
+      {},
     )
 
     expect(payload.disciplines).toHaveLength(2)
@@ -962,6 +1102,7 @@ describe('newTournamentPayload', () => {
       { PADEL: true, FIFA: false },
       ROUND_ROBIN_ALL,
       NO_FIXED_TEAMS,
+      {},
     )
     const padel = payload.disciplines.find((row) => row.kind === 'PADEL')
     const fifa = payload.disciplines.find((row) => row.kind === 'FIFA')
@@ -987,6 +1128,7 @@ describe('newTournamentPayload', () => {
       { PADEL: true, FIFA: false },
       ROUND_ROBIN_ALL,
       { PADEL: true, FIFA: false },
+      {},
     )
     const padel = payload.disciplines.find((row) => row.kind === 'PADEL')
     const fifa = payload.disciplines.find((row) => row.kind === 'FIFA')
@@ -1009,6 +1151,7 @@ describe('newTournamentPayload', () => {
       { PADEL: true, FIFA: true }, // FIFA en true a mano -- inválido para pairSize 1
       ROUND_ROBIN_ALL,
       NO_FIXED_TEAMS,
+      {},
     )
     const fifa = payload.disciplines.find((row) => row.kind === 'FIFA')
     expect(fifa?.hasMasters).toBe(false)
@@ -1035,6 +1178,7 @@ describe('newTournamentPayload', () => {
       { PADEL: true, FIFA: true },
       ROUND_ROBIN_ALL,
       { PADEL: true, FIFA: true }, // FIFA en true a mano -- inválido para pairSize 1
+      {},
     )
     const fifa = payload.disciplines.find((row) => row.kind === 'FIFA')
     expect(fifa?.fixedTeams).toBe(false)
@@ -1057,6 +1201,7 @@ describe('newTournamentPayload', () => {
       { PADEL: true, FIFA: false },
       ROUND_ROBIN_ALL,
       NO_FIXED_TEAMS,
+      {},
     )
     expect(payload.disciplines[0]?.config.points).toEqual([20, 12, 6, 2, 0, 0, 0, 0])
   })
@@ -1076,6 +1221,7 @@ describe('newTournamentPayload', () => {
       { PADEL: true, FIFA: false },
       ROUND_ROBIN_ALL,
       NO_FIXED_TEAMS,
+      {},
     )
     const padel = payload.disciplines.find((row) => row.kind === 'PADEL')
     const fifa = payload.disciplines.find((row) => row.kind === 'FIFA')
@@ -1085,16 +1231,14 @@ describe('newTournamentPayload', () => {
 
   /**
    * Paso "Orden inicial" con orden propio (§3, Task de este slice): `orders`
-   * es el noveno parámetro, OPCIONAL a diferencia de los cuatro anteriores
-   * (`pairSizes`/`hasMasters`/`formatoDefault`/`fixedTeams`) -- esos cuatro
-   * son `Record` completos porque `Wizard` SIEMPRE tiene un valor puesto
-   * para las dos disciplinas; `orders` es `Partial`, y "ninguna disciplina
-   * tiene orden propio" es el estado normal del 100% de los torneos de hoy,
-   * no un olvido que `tsc` tenga que cazar. Sin él, cae al `{}` de siempre y
-   * ninguna fila manda `seedNames` -- exactamente el comportamiento de todos
-   * los tests de arriba, que no lo pasan.
+   * es el noveno parámetro -- OBLIGATORIO (F8, dos jueces ciegos,
+   * `37b225b..d33377a`) igual que los cuatro anteriores, pero `Partial` a
+   * diferencia de ellos: "ninguna disciplina tiene orden propio" (entrada
+   * ausente) es el estado normal del 100% de los torneos de hoy, no un
+   * olvido. Con `{}`, ninguna fila manda `seedNames` -- exactamente el
+   * comportamiento de todos los tests de arriba, que lo pasan así.
    */
-  it('sin orders, ninguna fila manda seedNames -- comportamiento de siempre', () => {
+  it('con orders vacío, ninguna fila manda seedNames -- comportamiento de siempre', () => {
     const squad: Squad = { names: Array(8).fill('Jugador'), mySeat: null }
     const configs = { PADEL: configFor(8, 2), FIFA: configFor(8, 2) }
     const payload = newTournamentPayload(
@@ -1106,6 +1250,7 @@ describe('newTournamentPayload', () => {
       { PADEL: true, FIFA: true },
       ROUND_ROBIN_ALL,
       NO_FIXED_TEAMS,
+      {},
     )
     expect(payload.disciplines[0]).not.toHaveProperty('seedNames')
   })
@@ -1123,7 +1268,8 @@ describe('newTournamentPayload', () => {
       { PADEL: false, FIFA: false },
       ROUND_ROBIN_ALL,
       NO_FIXED_TEAMS,
-      { FIFA: ['Fede', 'Marce', 'Colo', 'Nacho'] },
+      // Índices (F1), no nombres: Fede=2, Marce=3, Colo=0, Nacho=1.
+      { FIFA: [2, 3, 0, 1] },
     )
     const padel = payload.disciplines.find((row) => row.kind === 'PADEL')
     const fifa = payload.disciplines.find((row) => row.kind === 'FIFA')
@@ -1131,12 +1277,14 @@ describe('newTournamentPayload', () => {
     expect(fifa?.seedNames).toEqual(['Fede', 'Marce', 'Colo', 'Nacho'])
   })
 
-  // El submit reconcilia `orders[kind]` contra el plantel REAL de ESE
-  // instante (`seats.squadNames`), no contra lo que el toggle copió cuando
-  // se prendió: sin esto, un jugador agregado DESPUÉS de prender el orden
-  // propio (`Marce`, acá) quedaría sin `seed_position` en esa disciplina y
-  // `createSeason` lo rebotaría por el guard de permutación.
-  it('seedNames se reconcilia contra el plantel real del submit, no contra la foto de cuando se prendió el toggle', () => {
+  // `seedNamesFrom` (F1, arriba) agrega al final cualquier asiento que
+  // `order` no llegó a anotar -- sin esto, un jugador agregado DESPUÉS de
+  // prender el orden propio (`Marce`, acá) quedaría sin `seed_position` en
+  // esa disciplina y `createSeason` lo rebotaría por el guard de
+  // permutación. Con la identidad por ÍNDICE (F1), `orders` en `wizard.tsx`
+  // ya llega con `Marce` sumada por `addToOrders` en cuanto aparece -- este
+  // test pinea el CASO LÍMITE en que por lo que sea no llegó a sumarse.
+  it('un asiento que order no anotó se agrega al final, en el orden del plantel', () => {
     const names = ['Colo', 'Nacho', 'Fede', 'Marce']
     const squad: Squad = { names, mySeat: null }
     const configs = { PADEL: configFor(4, 1), FIFA: configFor(4, 1) }
@@ -1149,10 +1297,32 @@ describe('newTournamentPayload', () => {
       { PADEL: false, FIFA: false },
       ROUND_ROBIN_ALL,
       NO_FIXED_TEAMS,
-      { FIFA: ['Fede', 'Colo', 'Nacho'] }, // "Marce" no estaba cuando se copió
+      { FIFA: [2, 0, 1] }, // Fede, Colo, Nacho -- "Marce" (índice 3) no está anotada
     )
     const fifa = payload.disciplines.find((row) => row.kind === 'FIFA')
     expect(fifa?.seedNames).toEqual(['Fede', 'Colo', 'Nacho', 'Marce'])
+  })
+
+  // F3 (dos jueces ciegos): con UNA sola disciplina marcada, `seedNames`
+  // nunca viaja -- ni siquiera si `orders` trae una entrada sobrante (de
+  // cuando había 2+ marcadas y se destildó la otra, o de la propia
+  // disciplina si su checkbox ya no está visible). El gate es
+  // `picked.length > 1`, no `ownOrder !== undefined`.
+  it('con una sola disciplina, seedNames no viaja aunque orders traiga una entrada sobrante', () => {
+    const squad: Squad = { names: Array(8).fill('Jugador'), mySeat: null }
+    const configs = { PADEL: configFor(8, 2), FIFA: configFor(8, 2) }
+    const payload = newTournamentPayload(
+      'Los Jueves',
+      squad,
+      configs,
+      ['PADEL'],
+      { PADEL: 2, FIFA: 2 },
+      { PADEL: true, FIFA: true },
+      ROUND_ROBIN_ALL,
+      NO_FIXED_TEAMS,
+      { PADEL: [3, 2, 1, 0, 4, 5, 6, 7] },
+    )
+    expect(payload.disciplines[0]).not.toHaveProperty('seedNames')
   })
 })
 

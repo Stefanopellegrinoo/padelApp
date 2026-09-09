@@ -361,27 +361,50 @@ export function addMySeat({ names }: Squad, myName: string): Squad {
   return { names: [...names, myName], mySeat: names.length }
 }
 
+/**
+ * Swapea `from`/`to` de `arr`, o lo devuelve intacto si cualquiera de los dos
+ * cae afuera de rango. Pieza compartida entre `moveSeat` (el plantel global,
+ * que además arrastra `mySeat`) y `moveInOrder` (el orden propio de una
+ * disciplina, que no arrastra nada más): antes de esta tarea (F1/minors)
+ * reimplementaban el mismo swap cada una por su lado, y `moveInOrder` sólo
+ * guardaba `to` -- un `from` fuera de rango la rompía en silencio.
+ */
+function swapAt<T>(arr: readonly T[], from: number, to: number): T[] {
+  if (from < 0 || from >= arr.length || to < 0 || to >= arr.length) return [...arr]
+  const next = [...arr]
+  next[from] = arr[to]!
+  next[to] = arr[from]!
+  return next
+}
+
 /** Sube o baja una fila del orden inicial, arrastrando el asiento propio si es una de las dos. */
 export function moveSeat({ names, mySeat }: Squad, from: number, to: number): Squad {
-  if (to < 0 || to >= names.length) return { names, mySeat }
-  const next = [...names]
-  next[from] = names[to]!
-  next[to] = names[from]!
-  return { names: next, mySeat: mySeat === from ? to : mySeat === to ? from : mySeat }
+  if (from < 0 || from >= names.length || to < 0 || to >= names.length) return { names, mySeat }
+  return { names: swapAt(names, from, to), mySeat: mySeat === from ? to : mySeat === to ? from : mySeat }
 }
 
 /**
  * Sube o baja una fila del orden PROPIO de una disciplina -- igual que
- * `moveSeat`, pero sin `mySeat` que arrastrar: esta lista es sólo nombres, y
- * la marca "vos" que sí dibuja el orden global no la dibuja ésta (vive en el
- * plantel, no en la copia por disciplina).
+ * `moveSeat`, pero sin `mySeat` que arrastrar: esta lista es de ÍNDICES de
+ * asiento (F1, ver el docblock de `Squad` más arriba), y la marca "vos" que
+ * sí dibuja el orden global no la dibuja ésta (vive en el plantel, no en la
+ * copia por disciplina).
  */
-export function moveInOrder(order: readonly string[], from: number, to: number): string[] {
-  if (to < 0 || to >= order.length) return [...order]
-  const next = [...order]
-  next[from] = order[to]!
-  next[to] = order[from]!
-  return next
+export function moveInOrder(order: readonly number[], from: number, to: number): number[] {
+  return swapAt(order, from, to)
+}
+
+/**
+ * Los índices de `names` que de verdad tienen alguien -- sin las filas en
+ * blanco del MEDIO. `withoutTrailingBlanks` (arriba) sólo saca las del
+ * FINAL, así que una fila vaciada a mano en el medio del plantel sigue
+ * presente ahí. Es lo que arranca el orden propio de una disciplina
+ * (`toggleOwnOrder`, abajo): copiar TODOS los índices, blancos incluidos,
+ * dejaba una fila sin nombre con flechas que sí funcionan y un
+ * `aria-label="Subir a  en FIFA"` (minor de esta tarea).
+ */
+export function filledSeatIndices(names: readonly string[]): number[] {
+  return names.flatMap((name, index) => (name.trim().length > 0 ? [index] : []))
 }
 
 /**
@@ -392,69 +415,145 @@ export function moveInOrder(order: readonly string[], from: number, to: number):
  * `seedNames` que no calza con NADA de permutación (`isPermutationOf`,
  * `db/season.ts`).
  *
- * Copiar y no referenciar el array global en vivo es la decisión: desde que
- * se prende, la lista de la disciplina se edita SOLA (`moveInOrder`, arriba,
- * más `reconcileOrder` de abajo cuando cambia el plantel) -- si el admin
- * reordena el plantel GLOBAL después de prender el toggle, esa edición no
- * tiene por qué pisar lo que ya se armó para ESTA disciplina en particular.
- * Son dos preguntas distintas: "¿en qué orden entran las disciplinas SIN
- * toggle propio?" (el global) vs. "¿en qué orden entra ÉSTA?" (la suya).
+ * F1 (dos jueces ciegos, `37b225b..d33377a`): la copia es de ÍNDICES de
+ * asiento (`filledSeatIndices(orderedNames)`), no de nombres. La versión
+ * anterior copiaba texto y lo reconciliaba por VALOR (`reconcileOrder`,
+ * borrada en esta tarea) -- reconciliar por valor es exactamente lo que
+ * rompía con una renombrada a mitad de tipeo: un `setSquad` corre en CADA
+ * tecla, y el string intermedio ("Ca" mientras se retipea "Caro") no
+ * matcheaba contra el `order` viejo, así que ese asiento se caía a la cola
+ * y no volvía a subir aunque el nombre final calzara de nuevo -- medido,
+ * `[Caro,Dani,Ana,Beto]` terminaba en `[Dani,Ana,Beto,Caro]` con el plantel
+ * BYTE A BYTE igual al de arranque. Un índice no tiene ese problema: la
+ * posición de un asiento no cambia mientras se lo renombra (`Squad.mySeat`
+ * ya vive de esta misma garantía), así que no hace falta reconciliar NADA
+ * por una renombrada, ocurra en un solo tecleo o en veinte. De paso cierra
+ * F2 (nombres duplicados): dos "Juan" son dos ÍNDICES distintos, nunca el
+ * mismo casillero.
+ *
+ * Copiar y no referenciar el array global en vivo sigue siendo la decisión:
+ * desde que se prende, la lista de la disciplina se edita SOLA (`moveInOrder`,
+ * arriba, más `swapInOrders`/`removeFromOrders`/`addToOrders` de abajo
+ * cuando el plantel cambia) -- si el admin reordena el plantel GLOBAL
+ * después de prender el toggle, esa edición no tiene por qué pisar lo que ya
+ * se armó para ESTA disciplina en particular. Son dos preguntas distintas:
+ * "¿en qué orden entran las disciplinas SIN toggle propio?" (el global) vs.
+ * "¿en qué orden entra ÉSTA?" (la suya).
  */
 export function toggleOwnOrder(
-  orders: Partial<Record<DisciplineKind, string[]>>,
+  orders: Partial<Record<DisciplineKind, number[]>>,
   kind: DisciplineKind,
   next: boolean,
-  globalOrder: readonly string[],
-): Partial<Record<DisciplineKind, string[]>> {
+  orderedNames: readonly string[],
+): Partial<Record<DisciplineKind, number[]>> {
   const { [kind]: _current, ...rest } = orders
-  return next ? { ...rest, [kind]: [...globalOrder] } : rest
+  return next ? { ...rest, [kind]: filledSeatIndices(orderedNames) } : rest
 }
 
 /**
- * El orden PROPIO de una disciplina, puesto al día contra el plantel
- * ACTUAL -- mismo criterio que `resizeConfigs`/`namesAfterEdit`/
- * `withoutTrailingBlanks`: la lista nace como una copia CONGELADA del orden
- * global (`toggleOwnOrder`), y ese instante congelado se desactualiza apenas
- * el admin agrega, saca o renombra un nombre del plantel DESPUÉS. Sin este
- * reconciliador, un jugador borrado seguiría en la lista propia --
- * `createSeason` la rechazaría por no calzar con `squadNames`, el guard de
- * permutación de `db/season.ts` -- y uno agregado nunca tendría dónde
- * entrar a ordenarse.
- *
- * Compara por valor RECORTADO (mismo criterio que `filledCount`: un espacio
- * de más no cambia la identidad de un nombre) pero devuelve el valor REAL de
- * `names`, nunca el de `order` -- así la lista propia muestra exactamente el
- * mismo texto que el plantel, aunque `order` hubiera quedado con un espacio
- * suelto de una edición vieja.
- *
- * Multiset y no `Set`: dos asientos con el mismo nombre son dos jugadores
- * distintos (el plantel no exige nombres únicos), así que "está o no está"
- * tiene que contar CUÁNTAS veces, no sólo si el string aparece — se consume
- * cada nombre de `names` una sola vez a medida que `order` lo reclama.
+ * El orden propio de cada disciplina, con el asiento `removed` sacado --
+ * MISMA fórmula que `removeSeatAt` (arriba) ya aplica a `mySeat`: el que
+ * apuntaba exactamente a `removed` desaparece de la lista, y todo el que
+ * apuntaba a uno de más atrás se corre un lugar para adelante. Generalizada
+ * a una lista entera porque acá no hay un único "asiento propio" que seguir,
+ * sino tantos como la disciplina tenga ordenados.
  */
-export function reconcileOrder(order: readonly string[], names: readonly string[]): string[] {
-  const remaining = names.map((name, at) => ({ name, at }))
-  const kept: string[] = []
-  for (const entry of order) {
-    const at = remaining.findIndex((seat) => seat.name.trim() === entry.trim())
-    if (at < 0) continue
-    kept.push(remaining[at]!.name)
-    remaining.splice(at, 1)
-  }
-  return [...kept, ...remaining.map((seat) => seat.name)]
+export function removeFromOrder(order: readonly number[], removed: number): number[] {
+  return order.flatMap((at) => (at === removed ? [] : at > removed ? [at - 1] : [at]))
 }
 
-/** `reconcileOrder` aplicado a cada disciplina que tiene su propia lista -- las que no, ni se tocan. */
-export function reconcileOrders(
-  orders: Partial<Record<DisciplineKind, string[]>>,
-  names: readonly string[],
-): Partial<Record<DisciplineKind, string[]>> {
-  const next: Partial<Record<DisciplineKind, string[]>> = {}
+/** `removeFromOrder` aplicado a cada disciplina que tiene su propia lista -- las que no, ni se tocan. */
+export function removeFromOrders(
+  orders: Partial<Record<DisciplineKind, number[]>>,
+  removed: number,
+): Partial<Record<DisciplineKind, number[]>> {
+  const next: Partial<Record<DisciplineKind, number[]>> = {}
   for (const kind of DISCIPLINE_KINDS) {
     const order = orders[kind]
-    if (order !== undefined) next[kind] = reconcileOrder(order, names)
+    if (order !== undefined) next[kind] = removeFromOrder(order, removed)
   }
   return next
+}
+
+/**
+ * El orden propio de una disciplina, con el asiento `at` agregado al final
+ * si todavía no estaba -- el lugar donde entra cualquier asiento nuevo
+ * (`addMySeat`, o la fila que `namesAfterEdit` deja de estar en blanco). Si
+ * `at` ya estaba en la lista, no hace nada: una renombrada no agrega ningún
+ * asiento nuevo, el índice sigue señalando al mismo de siempre (F1).
+ */
+export function addToOrder(order: readonly number[], at: number): number[] {
+  return order.includes(at) ? [...order] : [...order, at]
+}
+
+/** `addToOrder` aplicado a cada disciplina que tiene su propia lista -- las que no, ni se tocan. */
+export function addToOrders(
+  orders: Partial<Record<DisciplineKind, number[]>>,
+  at: number,
+): Partial<Record<DisciplineKind, number[]>> {
+  const next: Partial<Record<DisciplineKind, number[]>> = {}
+  for (const kind of DISCIPLINE_KINDS) {
+    const order = orders[kind]
+    if (order !== undefined) next[kind] = addToOrder(order, at)
+  }
+  return next
+}
+
+/**
+ * El orden propio de una disciplina, con `from`/`to` swapeados -- MISMA
+ * fórmula que `moveSeat` (arriba) usa para `mySeat`: cuando el orden GLOBAL
+ * (paso "Orden inicial", lista de arriba) swapea dos asientos, cualquier
+ * lista propia que ya los tuviera anotados tiene que seguir señalando a la
+ * MISMA persona, no a la que quedó parada en ese índice después del swap.
+ */
+export function swapInOrder(order: readonly number[], from: number, to: number): number[] {
+  return order.map((at) => (at === from ? to : at === to ? from : at))
+}
+
+/** `swapInOrder` aplicado a cada disciplina que tiene su propia lista -- las que no, ni se tocan. */
+export function swapInOrders(
+  orders: Partial<Record<DisciplineKind, number[]>>,
+  from: number,
+  to: number,
+): Partial<Record<DisciplineKind, number[]>> {
+  const next: Partial<Record<DisciplineKind, number[]>> = {}
+  for (const kind of DISCIPLINE_KINDS) {
+    const order = orders[kind]
+    if (order !== undefined) next[kind] = swapInOrder(order, from, to)
+  }
+  return next
+}
+
+/**
+ * El `seedNames` final de una disciplina con orden propio: traduce los
+ * ÍNDICES de `order` (F1) a los nombres reales del submit, una sola vez,
+ * ACÁ -- no antes: el índice sobrevive a cualquier renombrada en el camino
+ * (`Squad.mySeat` ya vive de esta misma garantía), así que no hace falta
+ * reconciliar nada mientras se edita el plantel.
+ *
+ * Cualquier índice que ya no señale a un asiento con nombre (uno sacado sin
+ * pasar por `removeFromOrders`, o uno vaciado a mano) se descarta -- mismo
+ * espíritu que la vieja `reconcileOrder` con un nombre que ya no está. Y
+ * cualquier asiento del plantel que `order` no llegó a anotar se agrega al
+ * final, en el orden del plantel -- así el resultado es SIEMPRE una
+ * permutación completa de los nombres cargados, la que exige el guard de
+ * `createSeason` (`isPermutationOf`, `db/season.ts`).
+ */
+export function seedNamesFrom(order: readonly number[], names: readonly string[]): string[] {
+  const bySeat = names
+    .map((name, at) => ({ name: name.trim(), at }))
+    .filter((seat) => seat.name.length > 0)
+  const byAt = new Map(bySeat.map((seat) => [seat.at, seat.name]))
+  const used = new Set<number>()
+  const kept: string[] = []
+  for (const at of order) {
+    const name = byAt.get(at)
+    if (name === undefined || used.has(at)) continue
+    kept.push(name)
+    used.add(at)
+  }
+  const remaining = bySeat.filter((seat) => !used.has(seat.at)).map((seat) => seat.name)
+  return [...kept, ...remaining]
 }
 
 /**
@@ -562,19 +661,23 @@ export function newTournamentPayload(
   fixedTeams: Record<DisciplineKind, boolean>,
   /**
    * El orden PROPIO de cada disciplina que prendió el toggle del paso
-   * Formato (`orders`, `Wizard`) -- OPCIONAL y `Partial`, a diferencia de los
-   * cuatro `Record` de arriba. Esos cuatro son obligatorios porque `Wizard`
-   * SIEMPRE tiene un valor puesto para las DOS disciplinas (nace en un
-   * `Record` con las dos claves, nunca `undefined`) — olvidarlos en el sitio
-   * del submit es un error de `tsc`, no un test que haya que mantener. Acá
-   * es al revés: "ninguna disciplina tiene orden propio" es el estado NORMAL
-   * del 100% de los torneos de hoy, no un olvido — un tercer parámetro
-   * obligatorio sólo hubiera forzado a cada test y caller existente (de
-   * antes de esta tarea) a mandar un `{}` que nunca iba a leer nada. Sin
-   * especificar, `{}`: ninguna fila manda `seedNames`, el comportamiento de
-   * siempre (`createSeason` sigue con el índice global).
+   * Formato (`orders`, `Wizard`), por ÍNDICE de asiento (F1, ver
+   * `toggleOwnOrder`/`seedNamesFrom` más arriba) -- `Partial`, a diferencia
+   * de los cuatro `Record` de arriba: "ninguna disciplina tiene orden
+   * propio" (entrada ausente) es el estado NORMAL del 100% de los torneos de
+   * hoy, no un olvido.
+   *
+   * OBLIGATORIO igual que los cuatro anteriores (F8, dos jueces ciegos,
+   * `37b225b..d33377a`): tenía un default `= {}` que dejaba a `tsc` en
+   * silencio si alguien sacaba el argumento del único call site de
+   * producción (`Wizard`, `wizard.tsx`) -- exactamente el defecto que el
+   * docblock de `fixedTeams`/`hasMasters` de arriba ya argumenta para SUS
+   * cuatro parámetros: "olvidarlos en el sitio del submit es un error de
+   * `tsc`, no un test que haya que escribir y mantener". Un `Partial`
+   * obligatorio sigue sin forzar a nadie a rellenar las dos claves -- sólo a
+   * escribir el argumento, aunque sea `{}` a propósito.
    */
-  orders: Partial<Record<DisciplineKind, string[]>> = {},
+  orders: Partial<Record<DisciplineKind, number[]>>,
 ): {
   name: string
   squadNames: string[]
@@ -611,15 +714,27 @@ export function newTournamentPayload(
             }
           : {}
       const ownOrder = orders[kind]
-      // `seedNames` sólo se agrega cuando la disciplina de verdad tiene
-      // orden propio -- mismo criterio que `hasMasters`/`formatoDefault` de
-      // arriba: mandarlo siempre (aunque calzara con el global) arriesgaría
-      // filtrar un `seedNames` sobrante de un toggle que el admin ya apagó.
-      // Reconciliado contra `seats.squadNames` -- el plantel REAL de este
-      // submit, no la foto que `toggleOwnOrder` copió al prender el toggle
-      // — así un nombre agregado o sacado DESPUÉS de prenderlo no manda a
-      // `createSeason` un `seedNames` que ya no es una permutación válida.
-      const seedNames = ownOrder === undefined ? {} : { seedNames: reconcileOrder(ownOrder, seats.squadNames) }
+      // `seedNames` sólo se agrega con 2+ disciplinas marcadas (F3, dos
+      // jueces ciegos, `37b225b..d33377a`) -- MISMO gate que
+      // `hasMasters`/`formatoDefault` arriba, `picked.length > 1`, y por la
+      // MISMA razón: con una sola disciplina el paso Formato no dibuja el
+      // checkbox de "orden propio" (`FormatoDeUnaDisciplina`, `label ===
+      // null`), así que `orders[kind]` sólo puede ser una foto sobrante de
+      // un momento en que SÍ había 2+ marcadas -- "un control que ya no se
+      // ve no puede seguir mandando" (mismo comentario, dos líneas más
+      // arriba). Gatear sólo en `ownOrder === undefined` (la versión de
+      // antes de esta tarea) dejaba pasar justo ese sobrante: elegir Pádel +
+      // FIFA, prender "orden propio" en Pádel, volver al paso 1 y destildar
+      // FIFA deja un torneo de UNA sola disciplina (Pádel) con `seedNames`
+      // en el payload, tomando el camino nuevo en vez del de siempre.
+      //
+      // `seedNamesFrom` (F1, arriba) traduce los ÍNDICES de `ownOrder` a los
+      // nombres reales de ESTE submit -- `squad.names`, no `seats.squadNames`:
+      // la función ya filtra los blancos por su cuenta, y necesita los
+      // índices ORIGINALES del plantel (los que `ownOrder` usa), no los
+      // reindexados que deja `submitSeats`.
+      const seedNames =
+        picked.length > 1 && ownOrder !== undefined ? { seedNames: seedNamesFrom(ownOrder, squad.names) } : {}
       return buildDisciplines([kind], resized, pairSize).map((row) => ({
         ...row,
         ...extra,

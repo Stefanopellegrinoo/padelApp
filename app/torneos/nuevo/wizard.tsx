@@ -13,6 +13,7 @@ import {
   type DisciplineKind,
   type Squad,
   addMySeat,
+  addToOrders,
   automaticHasMasters,
   disciplinesWarning,
   effectiveFloor,
@@ -25,12 +26,13 @@ import {
   moveSeat,
   namesAfterEdit,
   newTournamentPayload,
-  reconcileOrders,
+  removeFromOrders,
   removeSeatAt,
   resizeConfigs,
   squadWarning,
   steppersFor,
   summaryOf,
+  swapInOrders,
   toggleDiscipline,
   toggleOwnOrder,
   withoutTrailingBlanks,
@@ -607,10 +609,20 @@ export function PasoFormato({
  * Debajo, una tarjeta por disciplina que SÍ prendió ese checkbox
  * (`ownOrder[kind]`), con su PROPIA lista (`orders[kind]`) y las mismas
  * flechas subir/bajar -- editable de forma independiente de la global y de
- * las demás disciplinas. `orders[kind]` ya llega reconciliada contra el
- * plantel actual (`reconcileOrders`, `wizard-state.ts`, corrida en cada
- * edición del plantel desde `Wizard`) — este componente sólo dibuja lo que
- * le pasan, no reconcilia nada por su cuenta.
+ * las demás disciplinas. `orders[kind]` es una lista de ÍNDICES sobre
+ * `orderedNames` (F1, `wizard-state.ts`) que `Wizard` ya mantiene al día en
+ * el sitio exacto de cada operación del plantel (`editSeatName`/
+ * `joinSquad`/`removeSeat`/`moveGlobalSeat`) — este componente sólo
+ * traduce cada índice a su nombre (`orderedNames[at]`) y dibuja lo que le
+ * pasan, no reconcilia nada por su cuenta.
+ *
+ * F3 (dos jueces ciegos, `37b225b..d33377a`): la tarjeta por disciplina sólo
+ * se dibuja con 2+ marcadas (`disciplines.length > 1`), MISMO gate que el
+ * checkbox que la prende (`FormatoDeUnaDisciplina`, `label !== null`). Sin
+ * este gate, destildar una disciplina en el paso 1 dejaba su tarjeta
+ * dibujándose acá con el checkbox que la apagaría ya invisible -- "un
+ * control que ya no se ve no puede seguir mandando" (mismo criterio que
+ * `hasMasters`/`formatoDefault` en `newTournamentPayload`).
  *
  * Exportado y separado de `Wizard`, mismo motivo que `PasoDisciplinas`/
  * `PasoFormato`: `step` es estado interno y sin clicks la suite no llega
@@ -629,7 +641,7 @@ export function PasoOrdenInicial({
   mySeat: number | null
   disciplines: readonly DisciplineKind[]
   ownOrder: Record<DisciplineKind, boolean>
-  orders: Partial<Record<DisciplineKind, string[]>>
+  orders: Partial<Record<DisciplineKind, number[]>>
   onMoveGlobal: (from: number, to: number) => void
   onMoveOwn: (kind: DisciplineKind, from: number, to: number) => void
 }) {
@@ -678,48 +690,52 @@ export function PasoOrdenInicial({
           marca es del plantel, y acá cada fila es sólo un nombre reordenado
           -- ninguna disciplina necesita saber cuál asiento es el propio
           para tener su orden de desempate. */}
-      {disciplines
-        .filter((kind) => ownOrder[kind])
-        .map((kind) => {
-          const order = orders[kind] ?? []
-          return (
-            <div key={kind} className="flex flex-col gap-2">
-              <h3 className="text-[11.5px] font-extrabold uppercase tracking-[.14em] text-muted">
-                {DISCIPLINE_LABELS[kind]}
-              </h3>
-              <div className="overflow-hidden rounded-[14px] border border-line">
-                {order.map((seat, index) => (
-                  <div
-                    key={index}
-                    className={`flex items-center gap-2 px-3 py-2 ${index > 0 ? 'border-t border-line' : ''}`}
-                  >
-                    <span className="text-[13px] text-muted">⠿</span>
-                    <span className="w-5 shrink-0 text-[13px] font-extrabold text-muted">{index + 1}</span>
-                    <span className="min-w-0 flex-1 truncate text-[15px] font-bold">{seat}</span>
-                    <button
-                      type="button"
-                      aria-label={`Subir a ${seat} en ${DISCIPLINE_LABELS[kind]}`}
-                      disabled={index === 0}
-                      onClick={() => onMoveOwn(kind, index, index - 1)}
-                      className="h-[44px] w-[44px] shrink-0 rounded-[9px] bg-chip font-extrabold disabled:opacity-40"
-                    >
-                      ↑
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={`Bajar a ${seat} en ${DISCIPLINE_LABELS[kind]}`}
-                      disabled={index === order.length - 1}
-                      onClick={() => onMoveOwn(kind, index, index + 1)}
-                      className="h-[44px] w-[44px] shrink-0 rounded-[9px] bg-chip font-extrabold disabled:opacity-40"
-                    >
-                      ↓
-                    </button>
-                  </div>
-                ))}
+      {disciplines.length > 1 &&
+        disciplines
+          .filter((kind) => ownOrder[kind])
+          .map((kind) => {
+            const order = orders[kind] ?? []
+            return (
+              <div key={kind} className="flex flex-col gap-2">
+                <h3 className="text-[11.5px] font-extrabold uppercase tracking-[.14em] text-muted">
+                  {DISCIPLINE_LABELS[kind]}
+                </h3>
+                <div className="overflow-hidden rounded-[14px] border border-line">
+                  {order.map((at, index) => {
+                    const seat = orderedNames[at] ?? ''
+                    return (
+                      <div
+                        key={index}
+                        className={`flex items-center gap-2 px-3 py-2 ${index > 0 ? 'border-t border-line' : ''}`}
+                      >
+                        <span className="text-[13px] text-muted">⠿</span>
+                        <span className="w-5 shrink-0 text-[13px] font-extrabold text-muted">{index + 1}</span>
+                        <span className="min-w-0 flex-1 truncate text-[15px] font-bold">{seat}</span>
+                        <button
+                          type="button"
+                          aria-label={`Subir a ${seat} en ${DISCIPLINE_LABELS[kind]}`}
+                          disabled={index === 0}
+                          onClick={() => onMoveOwn(kind, index, index - 1)}
+                          className="h-[44px] w-[44px] shrink-0 rounded-[9px] bg-chip font-extrabold disabled:opacity-40"
+                        >
+                          ↑
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`Bajar a ${seat} en ${DISCIPLINE_LABELS[kind]}`}
+                          disabled={index === order.length - 1}
+                          onClick={() => onMoveOwn(kind, index, index + 1)}
+                          className="h-[44px] w-[44px] shrink-0 rounded-[9px] bg-chip font-extrabold disabled:opacity-40"
+                        >
+                          ↓
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
-            </div>
-          )
-        })}
+            )
+          })}
     </>
   )
 }
@@ -814,7 +830,10 @@ export function Wizard({ myName }: { myName: string }) {
     PADEL: false,
     FIFA: false,
   })
-  const [orders, setOrdersState] = useState<Partial<Record<DisciplineKind, string[]>>>({})
+  // Por ÍNDICE de asiento, no por nombre (F1, wizard-state.ts): un índice
+  // sobrevive a una renombrada, que es justo lo que `setSquad` dispara en
+  // CADA tecla de esta pantalla.
+  const [orders, setOrdersState] = useState<Partial<Record<DisciplineKind, number[]>>>({})
   const [error, setError] = useState<string | null>(null)
   const [leaving, setLeaving] = useState(false)
   const [created, setCreated] = useState<{ seasonId: string; inviteToken: string } | null>(null)
@@ -839,6 +858,14 @@ export function Wizard({ myName }: { myName: string }) {
   const anyErrors = disciplines.some((kind) => errorsByKind[kind].length > 0)
   const disciplineWarning = disciplinesWarning(disciplines)
 
+  // Sólo plantel + configs -- desde F1 (wizard-state.ts) el orden propio de
+  // cada disciplina ya NO se reconcilia acá adentro por un diff de nombres:
+  // se ajusta por ÍNDICE, en el sitio EXACTO de cada operación
+  // (`editSeatName`/`joinSquad`/`removeSeat`/`moveGlobalSeat`, más abajo),
+  // igual que `mySeat` ya se ajusta en `namesAfterEdit`/`addMySeat`/
+  // `removeSeatAt`/`moveSeat` -- una renombrada no reordena nada (el índice
+  // no se mueve), así que esta función ya no tiene ninguna razón para tocar
+  // `orders`.
   const setSquad = (next: Squad) => {
     setSquadState(next)
     // `resizeConfigs`, no un `resizeConfig` suelto (Task 5): agrandar o
@@ -846,13 +873,44 @@ export function Wizard({ myName }: { myName: string }) {
     // disciplina, cada una contra su propio `pairSize` — ya no hay una sola
     // curva compartida que corregir.
     setConfigsState((current) => resizeConfigs(current, filledCount(next.names), pairSizes))
-    // `reconcileOrders`, mismo criterio: la lista de orden PROPIO de cada
-    // disciplina que la tenga también tiene que quedar al día contra el
-    // plantel que resulta de ESTE cambio -- un nombre que se acaba de sacar
-    // no puede sobrevivir en esa lista (el guard de permutación de
-    // `db/season.ts` la rechazaría en el submit), y uno que se acaba de
-    // agregar tiene que aparecer para poder ordenarlo.
-    setOrdersState((current) => reconcileOrders(current, withoutTrailingBlanks(next.names)))
+  }
+
+  // La fila `index` del plantel (paso 1) cambia de valor. Si esa fila estaba
+  // en blanco y pasa a tener contenido, es un asiento NUEVO -- entra al
+  // final de cada orden propio que ya exista (`addToOrders`); si ya tenía
+  // nombre, es una renombrada y no hace falta tocar nada (F1: el índice
+  // sigue señalando al mismo asiento, se llame como se llame).
+  const editSeatName = (index: number, value: string) => {
+    const wasBlank = (names[index] ?? '').trim().length === 0
+    setSquad({ ...squad, names: namesAfterEdit(names, index, value) })
+    if (wasBlank && value.trim().length > 0) setOrdersState((current) => addToOrders(current, index))
+  }
+
+  // "Participar en el torneo": el organizador entra al plantel en un asiento
+  // NUEVO (`addMySeat`, al final) -- mismo criterio que `editSeatName` de
+  // arriba para un asiento que aparece, así que también entra a cada orden
+  // propio que ya exista.
+  const joinSquad = () => {
+    setOrdersState((current) => addToOrders(current, names.length))
+    setSquad(addMySeat(squad, myName))
+  }
+
+  // Saca la fila `index` del plantel (la cruz de paso 1, o "Sacame del
+  // plantel" para la propia): `removeFromOrders` corre la MISMA fórmula que
+  // `removeSeatAt` ya aplica a `mySeat`, generalizada a cada orden propio.
+  const removeSeat = (index: number) => {
+    setSquad(removeSeatAt(squad, index))
+    setOrdersState((current) => removeFromOrders(current, index))
+  }
+
+  // El swap del orden GLOBAL (paso "Orden inicial", lista de arriba):
+  // `swapInOrders` sigue la MISMA fórmula que `moveSeat` ya aplica a
+  // `mySeat` -- si un orden propio ya tenía anotado alguno de los dos
+  // asientos, tiene que seguir señalando a la MISMA persona después del
+  // swap, no a la que quedó parada en ese índice.
+  const moveGlobalSeat = (from: number, to: number) => {
+    setSquad(moveSeat(squad, from, to))
+    setOrdersState((current) => swapInOrders(current, from, to))
   }
 
   // Cada radio "Lados" manda sólo sobre SU disciplina, y ahora SIEMPRE rehace
@@ -889,7 +947,8 @@ export function Wizard({ myName }: { myName: string }) {
   }
   // Sube o baja una fila de la lista PROPIA de una disciplina
   // (`PasoOrdenInicial`): `moveInOrder` es el `moveSeat` de arriba sin
-  // `mySeat` que arrastrar, porque esta lista es sólo nombres.
+  // `mySeat` que arrastrar, porque esta lista es de ÍNDICES sueltos (F1),
+  // sin ningún asiento propio que seguir.
   const changeOrderAt = (kind: DisciplineKind, from: number, to: number) =>
     setOrdersState((current) => {
       const order = current[kind]
@@ -1017,9 +1076,7 @@ export function Wizard({ myName }: { myName: string }) {
                 <span className="w-5 shrink-0 text-[13px] font-extrabold text-muted">{index + 1}</span>
                 <input
                   value={seat}
-                  onChange={(event) =>
-                    setSquad({ ...squad, names: namesAfterEdit(names, index, event.target.value) })
-                  }
+                  onChange={(event) => editSeatName(index, event.target.value)}
                   placeholder="Nombre"
                   className={`min-w-0 flex-1 rounded-field border-[1.5px] bg-surface p-[15px] text-[16px] font-[700] outline-none placeholder:font-medium placeholder:text-muted ${
                     seat.trim().length === 0 ? 'border-accent' : 'border-line'
@@ -1043,9 +1100,7 @@ export function Wizard({ myName }: { myName: string }) {
                     aria-label={
                       index === mySeat ? 'Sacarme del plantel' : `Sacar al jugador ${index + 1}`
                     }
-                    onClick={() =>
-                      index === mySeat ? setLeaving(true) : setSquad(removeSeatAt(squad, index))
-                    }
+                    onClick={() => (index === mySeat ? setLeaving(true) : removeSeat(index))}
                     // Sí, esta cruz se intercala entre un input y el siguiente
                     // al tabular, y tipear de corrido manda la letra al botón en
                     // vez de al próximo nombre. Se probó sacarla del tabulado con
@@ -1087,7 +1142,7 @@ export function Wizard({ myName }: { myName: string }) {
             {mySeat === null && myName.trim().length > 0 && (
               <button
                 type="button"
-                onClick={() => setSquad(addMySeat(squad, myName))}
+                onClick={joinSquad}
                 className="rounded-field border-[1.5px] border-accent p-[13px] text-[14px] font-extrabold text-accent-link"
               >
                 Participar en el torneo
@@ -1125,7 +1180,7 @@ export function Wizard({ myName }: { myName: string }) {
             disciplines={disciplines}
             ownOrder={ownOrder}
             orders={orders}
-            onMoveGlobal={(from, to) => setSquad(moveSeat(squad, from, to))}
+            onMoveGlobal={moveGlobalSeat}
             onMoveOwn={changeOrderAt}
           />
         )}
@@ -1179,7 +1234,7 @@ export function Wizard({ myName }: { myName: string }) {
         <SalirDelPlantel
           onCancel={() => setLeaving(false)}
           onConfirm={() => {
-            if (mySeat !== null) setSquad(removeSeatAt(squad, mySeat))
+            if (mySeat !== null) removeSeat(mySeat)
             setLeaving(false)
           }}
         />

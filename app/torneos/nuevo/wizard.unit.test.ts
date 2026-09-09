@@ -6,6 +6,12 @@ import { PasoDisciplinas, PasoFormato, PasoOrdenInicial, SelectorDeLados } from 
 import { freshDisciplineConfig, type DisciplineKind } from './wizard-state'
 
 const NO_OWN_ORDER: Record<DisciplineKind, boolean> = { PADEL: false, FIFA: false }
+// Minor de esta tarea: el test "cada tarjeta lee su PROPIO ownOrder" pasaba
+// `NO_OWN_ORDER` como `fixedTeams` -- el mismo test que existe para probar
+// que las props NO se cruzan estaba cruzando dos props. Misma FORMA
+// (`Record<DisciplineKind, boolean>`, las dos en `false`), pero otro nombre
+// para no repetir la confusión.
+const NO_FIXED_TEAMS: Record<DisciplineKind, boolean> = { PADEL: false, FIFA: false }
 
 const ROUND_ROBIN_ALL: Record<DisciplineKind, MatchdayFormat> = {
   PADEL: { kind: 'ROUND_ROBIN' },
@@ -257,7 +263,7 @@ describe('paso 4 del wizard — Masters y Formato de las fechas, por disciplina 
         pairSizes: { PADEL: 2, FIFA: 2 },
         hasMasters: { PADEL: true, FIFA: true },
         formatoDefault: ROUND_ROBIN_ALL,
-        fixedTeams: NO_OWN_ORDER,
+        fixedTeams: NO_FIXED_TEAMS,
         ownOrder: { PADEL: false, FIFA: true },
         errors: { PADEL: [], FIFA: [] },
         onChangeConfig: () => {},
@@ -357,7 +363,8 @@ describe('PasoOrdenInicial', () => {
         mySeat: null,
         disciplines: ['PADEL', 'FIFA'],
         ownOrder: { PADEL: false, FIFA: true },
-        orders: { FIFA: ['Fede', 'Colo', 'Nacho'] },
+        // Índices sobre `orderedNames` (F1): Fede=2, Colo=0, Nacho=1.
+        orders: { FIFA: [2, 0, 1] },
         onMoveGlobal: () => {},
         onMoveOwn: () => {},
       }),
@@ -367,6 +374,34 @@ describe('PasoOrdenInicial', () => {
     expect(paso).not.toContain('Pádel')
     // Dos listas -- la global (3 filas) y la propia de FIFA (3 filas más).
     expect(paso.match(/⠿/g)).toHaveLength(6)
+  })
+
+  /**
+   * F3 (dos jueces ciegos, `37b225b..d33377a`): con UNA sola disciplina
+   * marcada, ninguna tarjeta propia se dibuja -- ni siquiera si `ownOrder`/
+   * `orders` traen una entrada sobrante de cuando había 2+ marcadas
+   * (destildar la otra no los limpia). El checkbox que la prendería
+   * (`FormatoDeUnaDisciplina`, paso Formato) ya no está visible con una sola
+   * disciplina -- "un control que ya no se ve no puede seguir mandando".
+   * Reachable: Pádel + FIFA, prender "orden propio" en FIFA, volver al paso
+   * 1 y destildar Pádel deja un torneo de UNA sola disciplina (FIFA) con
+   * `ownOrder.FIFA`/`orders.FIFA` todavía puestos.
+   */
+  it('con una sola disciplina marcada, no dibuja ninguna tarjeta propia aunque ownOrder/orders tengan sobrantes', () => {
+    const paso = renderToStaticMarkup(
+      createElement(PasoOrdenInicial, {
+        orderedNames: ['Colo', 'Nacho', 'Fede'],
+        mySeat: 0,
+        disciplines: ['FIFA'],
+        ownOrder: { PADEL: false, FIFA: true },
+        orders: { FIFA: [2, 0, 1] },
+        onMoveGlobal: () => {},
+        onMoveOwn: () => {},
+      }),
+    )
+    expect(paso).not.toContain('FIFA')
+    // Sólo la lista global -- ninguna tarjeta propia agregó filas de más.
+    expect(paso.match(/⠿/g)).toHaveLength(3)
   })
 })
 

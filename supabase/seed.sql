@@ -95,3 +95,22 @@ select discipline.id, entries.id, season.id,
 from discipline
 cross join entries
 cross join season;
+
+-- Gemelo de `discipline_entries` arriba, para `season_seed_order`
+-- (0080_season_seed_order.sql): este seed corre DESPUÉS de las migraciones,
+-- así que el backfill de 0080 nunca vio esta temporada — sin este insert, el
+-- torneo demo queda con 8 SQUAD y CERO filas en season_seed_order, y
+-- `seasonSeedOrder` (`db/read.ts`) los manda a todos al final por igual
+-- (mismo síntoma que C7 tuvo con `discipline_entries` antes de la migración
+-- de arriba).
+--
+-- Se lee de `discipline_entries`, no se recalcula: el `insert` de arriba ya
+-- corrió (statement separado, los CTEs de `with season as (...)` de más
+-- arriba no sobreviven fuera de ESE statement) y con una sola disciplina el
+-- orden de temporada es exactamente el mismo número que ya quedó ahí. El
+-- `invite_token = 'demo'` (fijo, arriba) es el único identificador que
+-- sobrevive statement a statement sin volver a declarar el CTE entero.
+insert into public.season_seed_order (season_id, entry_id, seed_position)
+select season_id, entry_id, seed_position
+  from public.discipline_entries
+ where season_id = (select id from public.seasons where invite_token = 'demo');

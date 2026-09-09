@@ -850,6 +850,45 @@ export type Database = {
         }
         Relationships: []
       }
+      season_seed_order: {
+        Row: {
+          created_at: string
+          entry_id: string
+          entry_kind: string
+          season_id: string
+          seed_position: number
+        }
+        Insert: {
+          created_at?: string
+          entry_id: string
+          entry_kind?: string
+          season_id: string
+          seed_position: number
+        }
+        Update: {
+          created_at?: string
+          entry_id?: string
+          entry_kind?: string
+          season_id?: string
+          seed_position?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "season_seed_order_entry_id_entry_kind_fkey"
+            columns: ["entry_id", "entry_kind"]
+            isOneToOne: false
+            referencedRelation: "entries"
+            referencedColumns: ["id", "kind"]
+          },
+          {
+            foreignKeyName: "season_seed_order_entry_id_season_id_fkey"
+            columns: ["entry_id", "season_id"]
+            isOneToOne: false
+            referencedRelation: "entries"
+            referencedColumns: ["id", "season_id"]
+          },
+        ]
+      }
       seasons: {
         Row: {
           created_at: string

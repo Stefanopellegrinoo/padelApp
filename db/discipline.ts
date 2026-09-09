@@ -2,7 +2,8 @@ import type { DisciplineId, MatchdayFormat, SeasonConfig, SideSize } from '@/cor
 import type { Client } from './client'
 import type { Json } from './database.types'
 import { EdgeError } from './errors'
-import { defaultDisciplineId, squadSeedOrder } from './season'
+import { seasonSeedOrder } from './read'
+import { defaultDisciplineId } from './season'
 import { assertValidConfig } from './validate'
 
 /** `disciplineConfig`'s return: la config Y el `pair_size`/`allows_draw` reales, del mismo select. */
@@ -443,21 +444,25 @@ export async function addDiscipline(
   }
 
   if (seats !== null && seats.length > 0) {
-    // Decisión #4044: la disciplina NUEVA arranca con el orden de la PRIMARIA
-    // (el admin la reordena después si quiere). Salía de
-    // `entries.seed_position`, que el contract relaja a `null` para el SQUAD
-    // — y `discipline_entries.seed_position` es `not null check (>= 0)`, así
-    // que eso no degradaba REQ-D1-2: lo rompía entero.
+    // Decisión #4044 SUPERSEDED por 0080_season_seed_order.sql (torneo-
+    // multi-disciplina tanda 1). #4044 decía: la disciplina NUEVA arranca
+    // con el orden de la PRIMARIA (el admin la reordena después si quiere),
+    // y esa era la única fuente que existía para "el orden a nivel torneo".
+    // Deja de ser correcta el día que `seedNames` (PR anterior a esta)
+    // vuelve el orden genuinamente POR DISCIPLINA: copiar la primaria
+    // hubiera sido copiar el orden propio de UNA disciplina, no el de la
+    // temporada — exactamente el bug que `season_seed_order` (0080) existe
+    // para evitar. Ahora arranca con ESE orden, que ninguna disciplina en
+    // particular puede secuestrar.
     //
-    // Se numera 0,1,2… en vez de copiar el número de la primaria: con un
-    // `entryIds` parcial los de la primaria vienen con huecos, y esta
-    // disciplina no tiene por qué heredarlos. Quien no juega la primaria no
-    // tiene orden que copiar y va al final, mismo criterio que
-    // `seasonSeedOrder` (`db/read.ts`) y que `season_invite` (0026).
-    const primaryId = await defaultDisciplineId(supabase, seasonId)
-    const rank = new Map(
-      (primaryId === null ? [] : await squadSeedOrder(supabase, primaryId)).map((entryId, index) => [entryId, index]),
-    )
+    // Se numera 0,1,2… en vez de copiar el número crudo de
+    // `season_seed_order`: con un `entryIds` parcial, sus posiciones vienen
+    // con huecos (los de la temporada, no los de esta disciplina nueva), y
+    // esta disciplina no tiene por qué heredarlos. Quien no tiene fila en
+    // `season_seed_order` no tiene orden que copiar y va al final —no
+    // debería pasar nunca, ver el docblock de `seasonSeedOrder`—, mismo
+    // criterio que esa función.
+    const rank = await seasonSeedOrder(supabase, seasonId)
     const ordered = [...seats].sort(
       (left, right) =>
         (rank.get(left.id) ?? Number.MAX_SAFE_INTEGER) - (rank.get(right.id) ?? Number.MAX_SAFE_INTEGER),

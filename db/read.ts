@@ -785,36 +785,40 @@ export async function seasonMatchdaysOf(supabase: Client, seasonId: string): Pro
  *
  * Delega en `seasonSquadMembersOf` y tira los campos de más (C37): las dos
  * traían la misma fila con el mismo orden, y ese orden dejó de ser un
- * `.order()` de una columna para pasar a resolverse contra la disciplina
- * primaria. Duplicarlo era duplicar la parte que se puede desincronizar.
+ * `.order()` de una columna para pasar a resolverse contra `season_seed_order`
+ * (0080, torneo-multi-disciplina tanda 1). Duplicarlo era duplicar la parte
+ * que se puede desincronizar.
  */
 export async function seasonSquadOf(supabase: Client, seasonId: string): Promise<EntryId[]> {
   return (await seasonSquadMembersOf(supabase, seasonId)).map((member) => member.id)
 }
 
 /**
- * El orden del plantel A NIVEL TORNEO: `entry_id -> seed_position` de la
- * disciplina PRIMARIA. Quien no juega la primaria no está en el mapa.
+ * El orden del plantel A NIVEL TORNEO: `entry_id -> seed_position` de
+ * `season_seed_order` (0080_season_seed_order.sql, torneo-multi-disciplina
+ * tanda 1).
  *
- * Decisión #4044 (C37): `entries.seed_position` deja de tener valor para el
- * SQUAD con el contract —se relaja y se ata a `kind = 'GUEST'`—, y el orden
- * pasa a vivir sólo en `discipline_entries`, que es POR DISCIPLINA. La
- * pregunta que quedaba abierta desde PR 7 es cuál de ellas ordena el TORNEO,
- * y la respuesta es la primaria: es la que se sembró desde
- * `entries.seed_position` en el backfill de 0023, así que elegirla es cero
- * cambio visible para las temporadas que ya existen.
+ * Decisión #4044 (C37) SUPERSEDED por esta PR. #4044 decía que la respuesta
+ * era la disciplina PRIMARIA —la que se sembró desde `entries.seed_position`
+ * en el backfill de 0023— y esa respuesta fue correcta mientras el orden de
+ * cada disciplina era siempre el mismo. Deja de serlo el día que `seedNames`
+ * (PR anterior a esta) vuelve el orden genuinamente POR DISCIPLINA: una
+ * primaria con `seedNames` propio secuestraba en silencio esta lectura, y
+ * con ella la pantalla de Unirse, Ajustes › Plantel y la tabla global. Este
+ * mapa ya no se deriva de NINGUNA disciplina — se persiste aparte
+ * (`createSeason`, `add_squad_seat`, `promote_guest` lo escriben; el
+ * backfill de 0080 lo sembró para las temporadas que ya existían).
  *
- * `defaultDisciplineId` es el mismo criterio que usan `create_masters`
- * (0050) y `season_invite` (0026) —`order by position, created_at limit 1`—
- * y se reusa a propósito en vez de escribir uno nuevo.
+ * Quien no tiene fila en `season_seed_order` no está en el mapa —debería no
+ * pasar nunca, todo escritor de plantel deja una fila— y `seasonSquadMembersOf`
+ * (acá abajo) es quien decide qué hacer con eso: no perderlo, mandarlo al
+ * final.
  */
-async function seasonSeedOrder(supabase: Client, seasonId: string): Promise<Map<string, number>> {
-  const disciplineId = await defaultDisciplineId(supabase, seasonId)
-  if (disciplineId === null) return new Map()
+export async function seasonSeedOrder(supabase: Client, seasonId: string): Promise<Map<string, number>> {
   const { data, error } = await supabase
-    .from('discipline_entries')
+    .from('season_seed_order')
     .select('entry_id, seed_position')
-    .eq('discipline_id', disciplineId)
+    .eq('season_id', seasonId)
   if (error) throw new EdgeError(`No se pudo leer el orden del plantel: ${error.message}`)
   return new Map((data ?? []).map((seat) => [seat.entry_id, seat.seed_position]))
 }
@@ -838,11 +842,15 @@ export interface SquadMember {
  * disciplina — esa llamada caía en la disciplina por defecto y perdía a
  * cualquier SQUAD promovido desde otra (`db/read.ts:419`).
  *
- * CUIDADO al tocar esto (C37): desde que el orden es el de la primaria, acá
- * SÍ se lee `discipline_entries` — pero sólo para ORDENAR, nunca para
- * filtrar. Quien no juega la primaria va al final (`seasonSeedOrder`), no
- * afuera. Convertir ese `?? MAX_SAFE_INTEGER` en un `.filter()` reabre
- * exactamente el agujero que esta función existe para tapar.
+ * CUIDADO al tocar esto (C37, superseded por 0080): el orden ya no viene de
+ * NINGUNA disciplina — acá se lee `season_seed_order` (`seasonSeedOrder`,
+ * arriba), la tabla que `createSeason`/`add_squad_seat`/`promote_guest`
+ * mantienen aparte. El `?? MAX_SAFE_INTEGER` de más abajo sigue existiendo
+ * igual, pero ya no es "quien no juega la primaria": es la red de
+ * seguridad para un SQUAD sin fila en `season_seed_order`, algo que un
+ * escritor de plantel bien portado nunca debería dejar pasar. Convertir eso
+ * en un `.filter()` reabriría el agujero que esta función existe para
+ * tapar: perder a alguien en vez de mandarlo al final.
  */
 export async function seasonSquadMembersOf(supabase: Client, seasonId: string): Promise<SquadMember[]> {
   const [{ data, error }, order] = await Promise.all([
@@ -853,18 +861,17 @@ export async function seasonSquadMembersOf(supabase: Client, seasonId: string): 
       .eq('kind', 'SQUAD')
       // El orden REAL lo pone `seasonSeedOrder` acá abajo; éste es sólo el de
       // entrada, y tiene que ser determinístico igual porque es el desempate
-      // de quien no juega la primaria. `created_at` solo no alcanza:
-      // `createSeason` inserta todo el plantel en UNA sentencia, así que
-      // comparten el `now()` al milisegundo — de ahí el `id` detrás.
+      // de quien no tiene fila en `season_seed_order`. `created_at` solo no
+      // alcanza: `createSeason` inserta todo el plantel en UNA sentencia,
+      // así que comparten el `now()` al milisegundo — de ahí el `id` detrás.
       .order('created_at', { ascending: true })
       .order('id', { ascending: true }),
     seasonSeedOrder(supabase, seasonId),
   ])
   if (error) throw new EdgeError(`No se pudo leer el plantel: ${error.message}`)
-  //`?? MAX_SAFE_INTEGER`: quien no juega la primaria va al FINAL, no se
-  // pierde (REQ-D9 — esta función existe justamente para no perder a nadie) y
-  // no se cuela en el medio. Mismo criterio que `season_invite` (0026) desde
-  // PR 9: `order by (de.seed_position is null), de.seed_position`.
+  //`?? MAX_SAFE_INTEGER`: quien no tiene fila en `season_seed_order` va al
+  // FINAL, no se pierde (REQ-D9 — esta función existe justamente para no
+  // perder a nadie) y no se cuela en el medio.
   return (data ?? [])
     .map((row) => ({ row, seed: order.get(row.id) ?? Number.MAX_SAFE_INTEGER }))
     .sort((left, right) => left.seed - right.seed)

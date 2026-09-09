@@ -336,44 +336,46 @@ describe('db/read', () => {
       expect(seasonAwards.get(fifaId)?.get(1)).toHaveLength(entryIds.length)
     })
 
-    // C37 / decisión #4044: el orden del plantel A NIVEL TORNEO es el de la
-    // disciplina PRIMARIA — `discipline_entries` de la que resuelve
-    // `defaultDisciplineId`.
+    // C37 / decisión #4044 SUPERSEDED (torneo-multi-disciplina tanda 1): el
+    // orden del plantel A NIVEL TORNEO ya no se deriva de NINGUNA disciplina
+    // — vive aparte en `season_seed_order` (0080_season_seed_order.sql),
+    // porque #4044 ("es el de la disciplina primaria") dejó de ser correcta
+    // el día que el orden pasó a ser genuinamente POR DISCIPLINA
+    // (`seedNames`, PR anterior a esta): una primaria con orden propio
+    // secuestraba en silencio esta lectura.
     //
-    // La divergencia es a propósito: se invierte el orden de la primaria para
-    // que el test no pueda pasar por casualidad. Sigue siendo la prueba
-    // correcta después del CONTRACT: lo que se compara son DOS órdenes de
-    // `discipline_entries` (el de la primaria contra el de la otra), no el
-    // viejo `entries.seed_position`, que ya no existe para el SQUAD.
-    it('ordena por la disciplina primaria, no por entries.seed_position (C37)', async () => {
+    // La divergencia es a propósito: se invierte `season_seed_order` para
+    // que el test no pueda pasar por casualidad. Manipularlo directo (no vía
+    // ningún escritor de producción) prueba que la LECTURA de verdad mira
+    // esa tabla y ninguna otra.
+    it('ordena por season_seed_order, no por ninguna disciplina (C37 superseded)', async () => {
       const owner = await createTestUser()
-      const { seasonId, entryIds, disciplineIds } = await createSeason({
+      const { seasonId, entryIds } = await createSeason({
         admin: owner,
         squad: await fillerPlayers(4),
         disciplines: [{ kind: 'PADEL', weight: 1 }, { kind: 'FIFA', weight: 0.5 }],
       })
-      const [padelId] = disciplineIds
-      if (padelId === undefined) throw new Error('createSeason no armó la primaria.')
       if (entryIds.length !== 4) throw new Error('createSeason no armó el plantel de 4.')
 
-      // Pádel (la primaria) queda al revés que `entries.seed_position`, que
-      // sigue en 0,1,2,3. Se escribe con el parking de dos pasadas del propio
-      // schema para no chocar contra `discipline_entries_seed`.
+      // season_seed_order queda al revés de como la factory lo sembró.
+      // Parking de dos pasadas para no chocar contra
+      // `season_seed_order_seed` (mismo patrón que `discipline_entries_seed`,
+      // 0023).
       const db = adminClient()
       const reversed = [...entryIds].reverse()
       for (const [index, entryId] of reversed.entries()) {
         const { error } = await db
-          .from('discipline_entries')
+          .from('season_seed_order')
           .update({ seed_position: index + 100 })
-          .eq('discipline_id', padelId)
+          .eq('season_id', seasonId)
           .eq('entry_id', entryId)
         if (error) throw new Error(error.message)
       }
       for (const [index, entryId] of reversed.entries()) {
         const { error } = await db
-          .from('discipline_entries')
+          .from('season_seed_order')
           .update({ seed_position: index })
-          .eq('discipline_id', padelId)
+          .eq('season_id', seasonId)
           .eq('entry_id', entryId)
         if (error) throw new Error(error.message)
       }
@@ -382,30 +384,31 @@ describe('db/read', () => {
       expect((await seasonSquadMembersOf(owner.client, seasonId)).map((member) => member.id)).toEqual(reversed)
     })
 
-    // La otra mitad de #4044: quien NO juega la primaria no tiene orden de
-    // torneo — va al final, en vez de colarse en el medio por un
-    // `entries.seed_position` que ya no significa nada. Mismo criterio que
-    // `season_invite` (0026) viene usando desde PR 9:
-    // `order by (de.seed_position is null), de.seed_position`.
-    it('manda al final a quien no juega la primaria, sin perderlo (C37)', async () => {
+    // La otra mitad de #4044 superseded: ya no es "quien no juega la
+    // primaria" —season_seed_order no depende de ninguna disciplina—, es la
+    // red de seguridad para un SQUAD sin fila ahí (staleness, no debería
+    // pasar con los escritores de producción). Va al final, en vez de
+    // colarse en el medio o desaparecer.
+    it('manda al final a quien no tiene fila en season_seed_order, sin perderlo (C37 superseded)', async () => {
       const owner = await createTestUser()
-      const { seasonId, entryIds, disciplineIds } = await createSeason({
+      const { seasonId, entryIds } = await createSeason({
         admin: owner,
         squad: await fillerPlayers(4),
         disciplines: [{ kind: 'PADEL', weight: 1 }, { kind: 'FIFA', weight: 0.5 }],
       })
-      const [padelId] = disciplineIds
       const firstEntryId = entryIds[0]
-      if (padelId === undefined || firstEntryId === undefined) throw new Error('createSeason no armó el fixture.')
+      if (firstEntryId === undefined) throw new Error('createSeason no armó el fixture.')
 
-      // El primero del plantel deja de jugar Pádel. Sigue siendo SQUAD de la
-      // temporada (juega FIFA), así que ninguna de las dos lectoras lo puede
-      // perder — REQ-D9, el mismo contrato que el test de acá arriba.
+      // El primero del plantel pierde su fila de season_seed_order --
+      // simula la staleness que la app nunca debería producir, no un caso
+      // de negocio real. Sigue siendo SQUAD de la temporada, así que
+      // ninguna de las dos lectoras lo puede perder — REQ-D9, el mismo
+      // contrato que el test de acá arriba.
       const db = adminClient()
       const { error } = await db
-        .from('discipline_entries')
+        .from('season_seed_order')
         .delete()
-        .eq('discipline_id', padelId)
+        .eq('season_id', seasonId)
         .eq('entry_id', firstEntryId)
       if (error) throw new Error(error.message)
 

@@ -609,39 +609,39 @@ describe('addDiscipline (PR 13, REQ-D1-2)', () => {
     expect(await squadSeedOrder(admin.client, partialId)).toEqual(subset)
   })
 
-  // C37 / decisión #4044: "una disciplina nueva COPIA el orden de la primaria
-  // como punto de partida". Hasta acá lo copiaba de `entries.seed_position`,
-  // que el contract relaja a `null` para el SQUAD — y `discipline_entries.
-  // seed_position` es `not null check (>= 0)`, así que el `drop not null` no
-  // degradaba esto: lo reventaba entero (REQ-D1-2 completo).
-  //
-  // La divergencia es a propósito: mientras el dual-write siga vivo los dos
-  // órdenes coinciden y copiar del lugar equivocado pasaría igual.
-  it('copia el orden de la PRIMARIA, no el de entries.seed_position (C37)', async () => {
+  // C37 / decisión #4044 SUPERSEDED (torneo-multi-disciplina tanda 1):
+  // "una disciplina nueva COPIA el orden de la primaria como punto de
+  // partida" era correcto mientras la primaria fuera la única fuente de "el
+  // orden a nivel torneo". Deja de serlo con `seedNames` (PR anterior a
+  // esta) — copiar la primaria sería copiar el orden propio de UNA
+  // disciplina, no el de la temporada. Ahora copia `season_seed_order`
+  // (0080_season_seed_order.sql), que ninguna disciplina puede secuestrar.
+  it('copia el orden de season_seed_order, no el de ninguna disciplina (C37 superseded)', async () => {
     const admin = await createTestUser()
-    const { seasonId, disciplineId: padelId, entryIds } = await createSeason({
+    const { seasonId, entryIds } = await createSeason({
       admin,
       squad: [admin.playerId, ...(await fillerPlayers(7))],
     })
     if (entryIds.length !== 8) throw new Error('Faltan asientos.')
 
-    // Pádel (la primaria) queda al revés que `entries.seed_position`, que
-    // sigue en 0..7. Parking de dos pasadas por `discipline_entries_seed`.
+    // season_seed_order queda al revés de como la factory lo sembró.
+    // Parking de dos pasadas por `season_seed_order_seed` (mismo patrón que
+    // `discipline_entries_seed`, 0023).
     const db = adminClient()
     const reversed = [...entryIds].reverse()
     for (const [index, entryId] of reversed.entries()) {
       const { error } = await db
-        .from('discipline_entries')
+        .from('season_seed_order')
         .update({ seed_position: index + 100 })
-        .eq('discipline_id', padelId)
+        .eq('season_id', seasonId)
         .eq('entry_id', entryId)
       if (error) throw new Error(error.message)
     }
     for (const [index, entryId] of reversed.entries()) {
       const { error } = await db
-        .from('discipline_entries')
+        .from('season_seed_order')
         .update({ seed_position: index })
-        .eq('discipline_id', padelId)
+        .eq('season_id', seasonId)
         .eq('entry_id', entryId)
       if (error) throw new Error(error.message)
     }
@@ -650,12 +650,14 @@ describe('addDiscipline (PR 13, REQ-D1-2)', () => {
     expect(await squadSeedOrder(admin.client, fifaId)).toEqual(reversed)
   })
 
-  // La otra mitad de #4044 acá: quien no juega la primaria no tiene orden que
-  // copiar. Va al final — no se pierde (seguiría siendo asiento de la
-  // temporada) y no rompe el `not null` de `discipline_entries`.
-  it('manda al final a quien no juega la primaria al sembrar la nueva (C37)', async () => {
+  // La otra mitad de #4044 superseded: ya no es "quien no juega la
+  // primaria" —`season_seed_order` no depende de ninguna disciplina—, es la
+  // red de seguridad para un SQUAD sin fila ahí (staleness, no debería
+  // pasar con los escritores de producción). Va al final — no se pierde y
+  // no rompe el `not null` de `discipline_entries`.
+  it('manda al final a quien no tiene fila en season_seed_order al sembrar la nueva (C37 superseded)', async () => {
     const admin = await createTestUser()
-    const { seasonId, disciplineId: padelId, entryIds } = await createSeason({
+    const { seasonId, entryIds } = await createSeason({
       admin,
       squad: [admin.playerId, ...(await fillerPlayers(7))],
     })
@@ -664,9 +666,9 @@ describe('addDiscipline (PR 13, REQ-D1-2)', () => {
 
     const db = adminClient()
     const { error } = await db
-      .from('discipline_entries')
+      .from('season_seed_order')
       .delete()
-      .eq('discipline_id', padelId)
+      .eq('season_id', seasonId)
       .eq('entry_id', orphan)
     if (error) throw new Error(error.message)
 

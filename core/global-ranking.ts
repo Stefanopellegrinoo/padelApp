@@ -46,10 +46,11 @@ export interface GlobalRankingRow {
  * (`page.tsx` le pasa el mismo `squadIds` a cada disciplina), así que el
  * `ranking` de la PRIMERA disciplina de `disciplines` ya contiene a todos y
  * `order` termina siendo, en los hechos, el orden de esa disciplina — puntos
- * de la disciplina [0] desc, y a igualdad de eso, `discipline_entries.seed_position`
- * de la disciplina PRIMARIA (`seasonSeedOrder`, `db/read.ts:811-820` — NO
- * `entries.seed_position`, que la decisión #4044/C37 dejó sin valor para el
- * SQUAD). Es determinístico (medido, 21 renders idénticos), pero desde
+ * de la disciplina [0] desc, y a igualdad de eso, el orden de `season_seed_order`
+ * (`seasonSeedOrder`, `db/read.ts` — tabla propia desde 0080, torneo-multi-
+ * disciplina tanda 1; NI `discipline_entries` de ninguna disciplina en
+ * particular NI `entries.seed_position`, que la decisión #4044/C37 dejó sin
+ * valor para el SQUAD). Es determinístico (medido, 21 renders idénticos), pero desde
  * que `position` se comparte YA NO decide el podio: antes, la disciplina que
  * el caller pusiera primero se quedaba con el voto de calidad del desempate
  * global (cambiar `disciplines.position` invertía quién se veía 2º y quién

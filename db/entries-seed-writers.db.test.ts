@@ -18,8 +18,10 @@
  * tanda que agregue uno se entere ACÁ y no aplicando la DDL.
  *
  * El orden del plantel NO se pierde: vive en `discipline_entries.seed_position`
- * desde PR 7, y el orden a nivel TORNEO es el de la disciplina primaria
- * (decisión #4044) — `db/read.ts: seasonSeedOrder`.
+ * desde PR 7 (POR disciplina), y el orden a nivel TORNEO vive aparte en
+ * `season_seed_order` desde 0080 (torneo-multi-disciplina tanda 1) — la
+ * decisión #4044 de "es el de la disciplina primaria" quedó superseded por
+ * esa migración; ver `db/read.ts: seasonSeedOrder`.
  *
  * Un GUEST SÍ conserva su `seed_position`, y es correlativo POR FECHA: el
  * contract se lo exige `not null`. `addGuestSeat` (`db/matchday.ts`) es su

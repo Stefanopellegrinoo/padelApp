@@ -20,6 +20,11 @@ const TABLES = [
   'match_sets',
   'awards',
   'friendships',
+  // WU4 (tanda 3, round 2 review fix): `season_seed_order` (0080) nunca
+  // había entrado acá -- ninguno de los dos loops de abajo (anon, stranger)
+  // la ejercitaba, así que su RLS quedó fuera de esta suite desde que la
+  // tabla existe.
+  'season_seed_order',
 ] as const
 
 // `match_participants` (0071) va en un array aparte, no adentro de `TABLES`:
@@ -204,7 +209,7 @@ describe('RLS — lectura', () => {
     expect(error?.code).toBe('42501')
   })
 
-  it('anon no ve una sola fila de ninguna de las catorce tablas', async () => {
+  it('anon no ve una sola fila de ninguna de las quince tablas', async () => {
     const anon = anonClient()
 
     for (const table of TABLES) {
@@ -506,6 +511,51 @@ describe('RLS — escritura', () => {
     const { data, error } = await admin.client
       .from('match_sets')
       .insert({ match_id: matchId, set_number: 1, games_a: 6, games_b: 3 })
+      .select()
+
+    expect(error).toBeNull()
+    expect(data).toHaveLength(1)
+  })
+
+  // WU4 (tanda 3, round 2 review fix): ningún loop genérico de arriba ejercita
+  // la ESCRITURA de `season_seed_order` -- todos los escritores de producción
+  // (`createSeason`, `add_squad_seat`, `promote_guest`) la tocan desde una
+  // función `security definer` o desde `adminClient()` (`service_role`), y
+  // los dos saltean RLS por completo (dueño de la función / rol admin de
+  // Postgres). Estos dos tests son los ÚNICOS de toda la suite que le pegan a
+  // `season_seed_order_write` con un cliente `authenticated` de verdad.
+  // Confirmado a mano: cambiar `is_season_admin` por `is_participant` en esa
+  // política (0080) sólo lo agarra el primero de los dos.
+  it('un participante que no organiza no puede escribir season_seed_order', async () => {
+    const admin = await createTestUser()
+    const member = await createTestUser()
+    const { seasonId, entryIds } = await createSeason({ admin, squad: [member.playerId] })
+    const entryId = entryIds[0]
+    if (entryId === undefined) throw new Error('Falta el asiento de test.')
+
+    const { data, error } = await member.client
+      .from('season_seed_order')
+      .update({ seed_position: 99 })
+      .eq('season_id', seasonId)
+      .eq('entry_id', entryId)
+      .select()
+
+    // Bloqueado por RLS en UPDATE: cero filas afectadas, no un error.
+    expect(error).toBeNull()
+    expect(data).toEqual([])
+  })
+
+  it('el admin sí puede escribir season_seed_order de su propio torneo', async () => {
+    const admin = await createTestUser()
+    const { seasonId, entryIds } = await createSeason({ admin, squad: [admin.playerId] })
+    const entryId = entryIds[0]
+    if (entryId === undefined) throw new Error('Falta el asiento de test.')
+
+    const { data, error } = await admin.client
+      .from('season_seed_order')
+      .update({ seed_position: 0 })
+      .eq('season_id', seasonId)
+      .eq('entry_id', entryId)
       .select()
 
     expect(error).toBeNull()

@@ -260,31 +260,40 @@ describe('season_seed_order — backfill de 0080 (torneo-multi-disciplina tanda 
     const db = adminClient()
     // Nadie juega la primaria: todos caen al tail, cuyo orden depende
     // ENTERO de `order by s.created_at, s.entry_id`.
-    const { error: clearPrimaryError } = await db.from('discipline_entries').delete().eq('discipline_id', disciplineId)
-    if (clearPrimaryError) throw new Error(clearPrimaryError.message)
+    //
+    // WU5 (tanda 5, round 3 review fix): desde acá hasta la restauración de
+    // abajo los 6 SQUAD quedan a propósito sin NINGUNA fila en
+    // discipline_entries — exactamente lo que envenena
+    // `db/discipline.db.test.ts:250` (`countOrphanedSquadEntries`, sin
+    // escopear) si un `expect` de en medio revienta y la restauración nunca
+    // corre. `try/finally` la corre pase lo que pase.
+    try {
+      const { error: clearPrimaryError } = await db.from('discipline_entries').delete().eq('discipline_id', disciplineId)
+      if (clearPrimaryError) throw new Error(clearPrimaryError.message)
 
-    await clearSeedOrder(seasonId)
-    backfillSeason(seasonId)
+      await clearSeedOrder(seasonId)
+      backfillSeason(seasonId)
 
-    const rows = await seedOrderOf(seasonId)
-    // El orden de alta es el de `entryIds` (la factory los crea uno por uno,
-    // en ese orden — mismo criterio que documenta `test/factories.ts`).
-    expect(rows.map((row) => row.entry_id)).toEqual(entryIds)
-
-    // Limpieza: sin esto, los 6 SQUAD quedan sin NINGUNA fila en
-    // discipline_entries para siempre y envenenan
-    // `db/discipline.db.test.ts:234-248` (`countOrphanedSquadEntries`), que
-    // mide contra la base COMPLETA y sin escopear — mismo trap medido y
-    // evitado en `db/season-seed-order-writers.db.test.ts` (WU2). El hueco
-    // sólo hacía falta DURANTE el backfill de arriba.
-    const { error: restoreError } = await db.from('discipline_entries').insert(
-      entryIds.map((entryId, index) => ({
-        discipline_id: disciplineId,
-        entry_id: entryId,
-        season_id: seasonId,
-        seed_position: index,
-      })),
-    )
-    if (restoreError) throw new Error(restoreError.message)
+      const rows = await seedOrderOf(seasonId)
+      // El orden de alta es el de `entryIds` (la factory los crea uno por uno,
+      // en ese orden — mismo criterio que documenta `test/factories.ts`).
+      expect(rows.map((row) => row.entry_id)).toEqual(entryIds)
+    } finally {
+      // Limpieza: sin esto, los 6 SQUAD quedan sin NINGUNA fila en
+      // discipline_entries para siempre y envenenan
+      // `db/discipline.db.test.ts:234-248` (`countOrphanedSquadEntries`), que
+      // mide contra la base COMPLETA y sin escopear — mismo trap medido y
+      // evitado en `db/season-seed-order-writers.db.test.ts` (WU2). El hueco
+      // sólo hacía falta DURANTE el backfill de arriba.
+      const { error: restoreError } = await db.from('discipline_entries').insert(
+        entryIds.map((entryId, index) => ({
+          discipline_id: disciplineId,
+          entry_id: entryId,
+          season_id: seasonId,
+          seed_position: index,
+        })),
+      )
+      if (restoreError) throw new Error(restoreError.message)
+    }
   })
 })

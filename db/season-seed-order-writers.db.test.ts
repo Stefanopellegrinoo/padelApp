@@ -254,52 +254,65 @@ describe('add_squad_seat usa el max de season_seed_order, nunca el de discipline
     // cada una, el índice global). Sacarlo de las DOS deja el máximo de
     // discipline_entries en 2 -- Jugador 4 sigue siendo SQUAD de la
     // temporada, sólo que todavía no juega ninguna disciplina.
-    const { error: padelGapError } = await db
-      .from('discipline_entries')
-      .delete()
-      .eq('discipline_id', padelId)
-      .eq('entry_id', fourth)
-    if (padelGapError) throw new Error(padelGapError.message)
-    const { error: fifaGapError } = await db
-      .from('discipline_entries')
-      .delete()
-      .eq('discipline_id', fifaId)
-      .eq('entry_id', fourth)
-    if (fifaGapError) throw new Error(fifaGapError.message)
+    //
+    // WU5 (tanda 5, round 3 review fix): desde acá hasta la limpieza de abajo
+    // la base queda a propósito con Jugador 4 sin NINGUNA fila en
+    // discipline_entries -- exactamente el estado que envenena
+    // `db/discipline.db.test.ts:250` (`countOrphanedSquadEntries`, sin
+    // escopear). Antes, si el `expect` de abajo fallaba, la limpieza nunca
+    // corría y el huérfano quedaba para siempre -- pasó de verdad durante esta
+    // ronda de review. `try/finally` hace que la limpieza corra pase lo que
+    // pase adentro.
+    try {
+      const { error: padelGapError } = await db
+        .from('discipline_entries')
+        .delete()
+        .eq('discipline_id', padelId)
+        .eq('entry_id', fourth)
+      if (padelGapError) throw new Error(padelGapError.message)
+      const { error: fifaGapError } = await db
+        .from('discipline_entries')
+        .delete()
+        .eq('discipline_id', fifaId)
+        .eq('entry_id', fourth)
+      if (fifaGapError) throw new Error(fifaGapError.message)
 
-    const newId = await addSquadSeat(admin.client, seasonId, 'El quinto')
+      const newId = await addSquadSeat(admin.client, seasonId, 'El quinto')
 
-    const { data: newRow, error: newRowError } = await db
-      .from('season_seed_order')
-      .select('seed_position')
-      .eq('season_id', seasonId)
-      .eq('entry_id', newId)
-      .single()
-    if (newRowError) throw new Error(newRowError.message)
-    // El máximo REAL de season_seed_order es 3 (los 4 SQUAD siguen ahí,
-    // incluido Jugador 4): el nuevo va a la posición 4, no a la 3 que daría
-    // leer discipline_entries.
-    expect(newRow.seed_position).toBe(4)
-
-    // Limpieza: sin esto, Jugador 4 queda SQUAD sin ninguna fila en
-    // discipline_entries para siempre, y envenena
-    // `db/discipline.db.test.ts:234-248` (`countOrphanedSquadEntries`), que
-    // mide contra la base COMPLETA y sin escopear -- medido, rompió esa
-    // guardia la primera vez que corrió esta suite entera. El hueco sólo
-    // hacía falta DURANTE el alta de arriba, no como estado final. La
-    // posición no puede ser la 3 fija: `addSquadSeat` ya usó el hueco de
-    // PADEL para "El quinto" -- se recalcula el próximo lugar libre en vez de
-    // asumir uno.
-    const { data: padelSeats, error: padelSeatsError } = await db
-      .from('discipline_entries')
-      .select('seed_position')
-      .eq('discipline_id', padelId)
-    if (padelSeatsError) throw new Error(padelSeatsError.message)
-    const nextPadelSeat = Math.max(-1, ...(padelSeats ?? []).map((row) => row.seed_position)) + 1
-    const { error: cleanupError } = await db
-      .from('discipline_entries')
-      .insert({ discipline_id: padelId, entry_id: fourth, season_id: seasonId, seed_position: nextPadelSeat })
-    if (cleanupError) throw new Error(cleanupError.message)
+      const { data: newRow, error: newRowError } = await db
+        .from('season_seed_order')
+        .select('seed_position')
+        .eq('season_id', seasonId)
+        .eq('entry_id', newId)
+        .single()
+      if (newRowError) throw new Error(newRowError.message)
+      // El máximo REAL de season_seed_order es 3 (los 4 SQUAD siguen ahí,
+      // incluido Jugador 4): el nuevo va a la posición 4, no a la 3 que daría
+      // leer discipline_entries.
+      expect(newRow.seed_position).toBe(4)
+    } finally {
+      // Limpieza: sin esto, Jugador 4 queda SQUAD sin ninguna fila en
+      // discipline_entries para siempre, y envenena
+      // `db/discipline.db.test.ts:234-248` (`countOrphanedSquadEntries`), que
+      // mide contra la base COMPLETA y sin escopear -- medido, rompió esa
+      // guardia la primera vez que corrió esta suite entera. El hueco sólo
+      // hacía falta DURANTE el alta de arriba, no como estado final. La
+      // posición no puede ser la 3 fija: `addSquadSeat` ya usó el hueco de
+      // PADEL para "El quinto" -- se recalcula el próximo lugar libre en vez de
+      // asumir uno. Sólo restaura PADEL (no FIFA): alcanza para que `fourth`
+      // deje de ser huérfano -- el hueco en FIFA es un residuo aceptado de
+      // este fixture, no una violación del invariante global.
+      const { data: padelSeats, error: padelSeatsError } = await db
+        .from('discipline_entries')
+        .select('seed_position')
+        .eq('discipline_id', padelId)
+      if (padelSeatsError) throw new Error(padelSeatsError.message)
+      const nextPadelSeat = Math.max(-1, ...(padelSeats ?? []).map((row) => row.seed_position)) + 1
+      const { error: cleanupError } = await db
+        .from('discipline_entries')
+        .insert({ discipline_id: padelId, entry_id: fourth, season_id: seasonId, seed_position: nextPadelSeat })
+      if (cleanupError) throw new Error(cleanupError.message)
+    }
   })
 })
 

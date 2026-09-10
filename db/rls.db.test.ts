@@ -522,10 +522,18 @@ describe('RLS — escritura', () => {
   // (`createSeason`, `add_squad_seat`, `promote_guest`) la tocan desde una
   // función `security definer` o desde `adminClient()` (`service_role`), y
   // los dos saltean RLS por completo (dueño de la función / rol admin de
-  // Postgres). Estos dos tests son los ÚNICOS de toda la suite que le pegan a
+  // Postgres). Estos tres tests son los ÚNICOS de toda la suite que le pegan a
   // `season_seed_order_write` con un cliente `authenticated` de verdad.
   // Confirmado a mano: cambiar `is_season_admin` por `is_participant` en esa
   // política (0080) sólo lo agarra el primero de los dos.
+  //
+  // Los dos de arriba pasan por `.update`, que RLS filtra con `USING` --
+  // ninguno ejercita un INSERT, que `season_seed_order_write` gobierna SÓLO
+  // con `WITH CHECK` (no hay fila existente que un `USING` pueda filtrar).
+  // WU4 (tanda 5, round 3 review fix): medido, `alter policy
+  // season_seed_order_write ... with check (true)` deja la suite ENTERA en
+  // verde sin este tercer test -- un participante cualquiera podría insertar
+  // filas de `season_seed_order` de su temporada y reescribir el orden.
   it('un participante que no organiza no puede escribir season_seed_order', async () => {
     const admin = await createTestUser()
     const member = await createTestUser()
@@ -560,6 +568,58 @@ describe('RLS — escritura', () => {
 
     expect(error).toBeNull()
     expect(data).toHaveLength(1)
+  })
+
+  // WU4 (tanda 5, round 3 review fix): el `insert` de acá abajo va sobre la
+  // fila que el backfill de `createSeason` ya escribió para `member` --
+  // borrada con `adminClient()` primero, para no chocar con la PK, y
+  // repuesta en el `finally` pase lo que pase (mismo criterio que WU5).
+  it('un participante que no organiza no puede insertar season_seed_order', async () => {
+    const admin = await createTestUser()
+    const member = await createTestUser()
+    const { seasonId, entryIds } = await createSeason({ admin, squad: [member.playerId] })
+    const entryId = entryIds[0]
+    if (entryId === undefined) throw new Error('Falta el asiento de test.')
+
+    const db = adminClient()
+    const { error: deleteError } = await db
+      .from('season_seed_order')
+      .delete()
+      .eq('season_id', seasonId)
+      .eq('entry_id', entryId)
+    if (deleteError) throw new Error(deleteError.message)
+
+    try {
+      const { data, error } = await member.client
+        .from('season_seed_order')
+        .insert({ season_id: seasonId, entry_id: entryId, seed_position: 0 })
+        .select()
+
+      // Bloqueado por RLS en INSERT (`WITH CHECK`): a diferencia de UPDATE,
+      // acá SÍ llega un error -- no hay fila existente que un `USING` pueda
+      // filtrar, así que Postgres rechaza la fila nueva de una, no la deja
+      // pasar con cero filas afectadas.
+      expect(error).not.toBeNull()
+      expect(data).toBeNull()
+
+      const { data: row, error: rowError } = await db
+        .from('season_seed_order')
+        .select('entry_id')
+        .eq('season_id', seasonId)
+        .eq('entry_id', entryId)
+        .maybeSingle()
+      if (rowError) throw new Error(rowError.message)
+      expect(row).toBeNull()
+    } finally {
+      // `upsert`, no `insert`: si el insert de `member` de arriba llegó a
+      // colarse (por ejemplo con la política mutada a `with check (true)`),
+      // la fila YA existe acá y un `insert` chocaría contra la PK,
+      // enmascarando el fallo real del `try` con un error de limpieza.
+      const { error: restoreError } = await db
+        .from('season_seed_order')
+        .upsert({ season_id: seasonId, entry_id: entryId, seed_position: 0 }, { onConflict: 'season_id,entry_id' })
+      if (restoreError) throw new Error(restoreError.message)
+    }
   })
 })
 

@@ -133,6 +133,26 @@ create policy season_seed_order_write on public.season_seed_order
 -- tanda.)
 revoke all on public.season_seed_order from anon;
 
+-- WU3 (tanda 5, round 3 review fix): el comentario de arriba medía la mitad
+-- del problema. El mismo `pg_default_acl` que le da `Dxtm` a `anon` se lo da
+-- IGUAL a `authenticated` y a `service_role` — medido: `relacl` queda
+-- `authenticated=arwdDxtm/postgres` después del `grant` de la línea 108, que
+-- sólo agrega `arwd` encima de lo que el default privilege ya puso. La `D` es
+-- TRUNCATE, y TRUNCATE no está sujeto a row level security (Postgres lo dice
+-- explícitamente en su documentación de RLS) — así que `season_seed_order_write`
+-- de arriba, pensada para frenar a un participante que no organiza, no frena
+-- nada acá: confirmado a mano, `set role authenticated; truncate table
+-- public.season_seed_order;` vació la tabla entera (33396 filas locales al
+-- medir) sin que RLS dijera una palabra. `service_role` sí necesita TRUNCATE
+-- (saltea RLS por diseño, es el rol de administración) — el revoke es sólo
+-- para `authenticated`.
+--
+-- `discipline_entries` (0023) tiene la MISMA forma — nunca tuvo este revoke,
+-- así que hoy también deja truncar a cualquier `authenticated` — pero es
+-- anterior a esta rama y queda fuera del alcance de esta tanda; que quede
+-- escrito acá para que una auditoría futura lo encuentre.
+revoke truncate on public.season_seed_order from authenticated;
+
 -- ── shift_season_seeds_up: mismo parking que shift_seeds_up, a nivel temporada ──
 -- WU1 (tanda 3, round 2 review fix, agregada acá y no en 0081 donde se
 -- USA por primera vez): `db/migrations.unit.test.ts` exige una función por

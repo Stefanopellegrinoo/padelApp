@@ -110,7 +110,23 @@ cross join season;
 -- orden de temporada es exactamente el mismo número que ya quedó ahí. El
 -- `invite_token = 'demo'` (fijo, arriba) es el único identificador que
 -- sobrevive statement a statement sin volver a declarar el CTE entero.
+--
+-- WU6 (tanda 3, round 2 review fix): filtra ADEMÁS por `discipline_id` —la
+-- ÚNICA de la temporada demo, resuelta con el mismo criterio "primaria" que
+-- 0080_season_seed_order.sql (`order by position, created_at limit 1`)—, no
+-- sólo por `season_id`. Sin el filtro de disciplina esto era correcto hoy
+-- (una sola PADEL) pero un supuesto no verificado por ningún guard: el día
+-- que este seed sume una segunda disciplina, `discipline_entries` tendría
+-- DOS filas por `entry_id` (una por disciplina) y este `insert` las mandaría
+-- las dos contra la misma clave `(season_id, entry_id)` de
+-- `season_seed_order` — `db:reset` se caería con una violación de PK.
 insert into public.season_seed_order (season_id, entry_id, seed_position)
-select season_id, entry_id, seed_position
-  from public.discipline_entries
- where season_id = (select id from public.seasons where invite_token = 'demo');
+select de.season_id, de.entry_id, de.seed_position
+  from public.discipline_entries de
+ where de.season_id = (select id from public.seasons where invite_token = 'demo')
+   and de.discipline_id = (
+     select id from public.disciplines
+      where season_id = (select id from public.seasons where invite_token = 'demo')
+      order by position, created_at
+      limit 1
+   );

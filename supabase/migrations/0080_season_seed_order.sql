@@ -113,8 +113,24 @@ create policy season_seed_order_read on public.season_seed_order
 create policy season_seed_order_write on public.season_seed_order
   for all to authenticated
   using (public.is_season_admin(season_id)) with check (public.is_season_admin(season_id));
--- Mismo motivo que `discipline_entries`: `anon` no tiene ningún negocio acá,
--- y sin este revoke heredaría TRUNCATE del blanket grant.
+-- Mismo motivo que `discipline_entries`: `anon` no tiene ningún negocio acá.
+-- El revoke es necesario — medido, `anon` queda con `Dxtm` (TRUNCATE,
+-- REFERENCES, TRIGGER, MAINTAIN) en esta tabla sin él — pero NO por el
+-- blanket grant de 0002_rls.sql:117 (`grant select, insert, update, delete
+-- on all tables in schema public`): ese es un grant DE UNA SOLA VEZ, sobre
+-- las tablas que existían el día que 0002 corrió — `season_seed_order` nace
+-- acá, migraciones después, y nunca lo tocó. Además ese grant ni siquiera
+-- incluye TRUNCATE (sólo select/insert/update/delete), así que tampoco sería
+-- el mecanismo aunque la tabla hubiera existido.
+--
+-- La fuente real es `pg_default_acl` del rol `postgres` en el esquema
+-- `public`: la misma "Dxtm" que 0002_rls.sql:105-107 mide en las tablas
+-- ORIGINALES antes de cualquier grant explícito — un default privilege que
+-- Supabase deja armado para toda tabla NUEVA del esquema, no algo que 0002
+-- otorgó. (`discipline_entries`/`disciplines` citan el mismo mecanismo
+-- equivocado en sus propios comentarios; el revoke ahí también es correcto,
+-- sólo la explicación está mal — no se tocan acá, fuera del alcance de esta
+-- tanda.)
 revoke all on public.season_seed_order from anon;
 
 -- ── shift_season_seeds_up: mismo parking que shift_seeds_up, a nivel temporada ──

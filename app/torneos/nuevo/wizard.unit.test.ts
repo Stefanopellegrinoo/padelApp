@@ -403,6 +403,34 @@ describe('PasoOrdenInicial', () => {
     // Sólo la lista global -- ninguna tarjeta propia agregó filas de más.
     expect(paso.match(/⠿/g)).toHaveLength(3)
   })
+
+  /**
+   * WU4 (ronda 2 de revisión), la fila fantasma: verificado alcanzable --
+   * plantel `[Ana, Beto, Caro, Dani, Eze]`, se prende "orden propio" de FIFA
+   * copiando el orden global (`[0,1,2,3,4]`), se vuelve al paso 1 y se vacía
+   * a MANO el nombre de una fila del medio (Caro, índice 2) sin sacar la
+   * fila. `filledSeatIndices` (al prender el toggle) y `seedOrderFrom` (al
+   * submit) ya filtran ese caso -- el render de EN MEDIO no hacía ninguno de
+   * los dos, y dibujaba una fila fantasma con flechas que funcionan y un
+   * `aria-label="Subir a  en FIFA"`.
+   */
+  it('un asiento vaciado a mano no dibuja una fila fantasma en la tarjeta propia', () => {
+    const paso = renderToStaticMarkup(
+      createElement(PasoOrdenInicial, {
+        orderedNames: ['Ana', 'Beto', '', 'Dani', 'Eze'],
+        mySeat: 0,
+        disciplines: ['PADEL', 'FIFA'],
+        ownOrder: { PADEL: false, FIFA: true },
+        orders: { FIFA: [0, 1, 2, 3, 4] },
+        onMoveGlobal: () => {},
+        onMoveOwn: () => {},
+      }),
+    )
+    expect(paso).not.toContain('aria-label="Subir a  en FIFA"')
+    expect(paso).not.toContain('aria-label="Bajar a  en FIFA"')
+    // La tarjeta de FIFA dibuja 4 filas, no 5 -- la del medio, vacía, no cuenta.
+    expect(paso.slice(paso.indexOf('FIFA')).match(/⠿/g)).toHaveLength(4)
+  })
 })
 
 /**

@@ -701,6 +701,17 @@ export function PasoOrdenInicial({
                 <div className="overflow-hidden rounded-[14px] border border-line">
                   {order.map((at, index) => {
                     const seat = orderedNames[at] ?? ''
+                    // WU4 (ronda 2 de revisión), la fila fantasma: un `at`
+                    // que ya no señala a un asiento con nombre (una fila del
+                    // MEDIO vaciada a mano, sin pasar por `removeSeat`) no
+                    // dibuja nada acá -- mismo criterio que
+                    // `filledSeatIndices`/`seedOrderFrom` ya aplican al
+                    // prender el toggle y al submit. `index` se deja SIN
+                    // renumerar (sigue siendo la posición real en `order`):
+                    // `onMoveOwn` opera sobre esas posiciones reales, y
+                    // renumerar acá correría el `from`/`to` que el usuario
+                    // ve contra los que el estado en realidad tiene.
+                    if (seat.trim().length === 0) return null
                     return (
                       <div
                         key={index}

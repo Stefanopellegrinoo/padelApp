@@ -50,10 +50,25 @@ async function squadEntryIdsOf(seasonId: string): Promise<string[]> {
   return (data ?? []).map((row) => row.id)
 }
 
-/** 0..N-1, contiguo, sin duplicados: la única forma legal de que quede una tabla de N SQUAD. */
+/** 0..N-1, contiguo, sin duplicados: la única forma legal de que quede una tabla de N SQUAD RECIÉN armada, sin ningún removeSeat todavía. */
 function expectContiguous(positions: number[], count: number): void {
   expect(positions).toHaveLength(count)
   expect([...positions].sort((a, b) => a - b)).toEqual(Array.from({ length: count }, (_, index) => index))
+}
+
+/**
+ * WU2 (tanda 3, round 2 review fix): lo único que `season_seed_order`
+ * GARANTIZA de verdad es "una fila por SQUAD, posiciones únicas" — el índice
+ * único `season_seed_order_seed` (0080) exige eso y nada más. `expectContiguous`
+ * (0..N-1 sin huecos) es más estricto que la garantía real: sólo se cumple
+ * mientras nadie sacó a nadie todavía. `removeSeat` deja huecos A PROPÓSITO
+ * (0080:48-52, mismo criterio que `discipline_entries` desde 0023) — usar
+ * `expectContiguous` después de una baja pediría algo que el sistema nunca
+ * prometió.
+ */
+function expectUniquePositions(positions: number[], count: number): void {
+  expect(positions).toHaveLength(count)
+  expect(new Set(positions).size).toBe(count)
 }
 
 describe('createSeason escribe season_seed_order desde el orden GLOBAL de squadNames', () => {
@@ -177,6 +192,167 @@ describe('add_squad_seat — dos altas concurrentes a la misma temporada (WU5)',
 
     expect(a).not.toBe(b)
     expectContiguous(await seedOrderPositions(seasonId), 6)
+  })
+})
+
+// ── el max de season_seed_order no se puede confundir con el de discipline_entries (WU2) ──
+// WU2 (tanda 3, round 2 review fix): TODA la guardia de arriba usaba
+// fixtures de UNA SOLA disciplina, donde `max(season_seed_order.seed_position)`
+// y `max(discipline_entries.seed_position)` dan el MISMO entero -- una
+// mutación que confundiera las dos tablas pasaba esta guardia entera en
+// verde sin que nada lo notara. Este fixture arma DOS disciplinas donde
+// NINGUNA tiene el plantel completo (a `Jugador 4` no lo suma ninguna de
+// las dos, REQ-D1-4 "no todos juegan todo"), así que el máximo de
+// `discipline_entries` -- lea de la disciplina que lea, o de las dos juntas
+// sin filtrar por `discipline_id` -- queda en 2, mientras que
+// `season_seed_order` (que SIEMPRE tiene una fila por SQUAD, sin excepción)
+// sigue en 3. Confirmado a mano: reemplazar el `from public.season_seed_order`
+// de `add_squad_seat` por `from public.discipline_entries` (misma
+// `where season_id = p_season`, la columna existe en las dos tablas) hace que
+// este test choque contra `season_seed_order_seed` (23505) en vez de pasar.
+describe('add_squad_seat usa el max de season_seed_order, nunca el de discipline_entries (WU2)', () => {
+  it('con dos disciplinas de solape parcial, el alta toma la posición real de la TEMPORADA', async () => {
+    const admin = await createTestUser()
+    const squadNames = Array.from({ length: 4 }, (_, index) => `Jugador ${index + 1}`)
+    const config = defaultConfig(4)
+    // FIFA de a uno necesita 4 valores de puntos (uno por lado, squadSize /
+    // sideSize = 4/1), no los 2 de `defaultConfig` (pensado para parejas) --
+    // mismo ajuste que `closedSoloMatchdayWithGuest`, más abajo en este mismo
+    // archivo.
+    const fifaConfig = { ...config, points: [4, 3, 2, 1] }
+    const { seasonId } = await createSeason(admin.client, {
+      name: 'Torneo con solape parcial',
+      squadNames,
+      config,
+      disciplines: [
+        { kind: 'PADEL', config },
+        { kind: 'FIFA', pairSize: 1, config: fifaConfig },
+      ],
+    })
+
+    const db = adminClient()
+    const { data: disciplines, error: disciplinesError } = await db
+      .from('disciplines')
+      .select('id')
+      .eq('season_id', seasonId)
+      .order('position', { ascending: true })
+    if (disciplinesError) throw new Error(disciplinesError.message)
+    const [padelId, fifaId] = (disciplines ?? []).map((row) => row.id)
+    if (padelId === undefined || fifaId === undefined) throw new Error('Faltan las dos disciplinas.')
+
+    const { data: entries, error: entriesError } = await db
+      .from('entries')
+      .select('id')
+      .eq('season_id', seasonId)
+      .eq('kind', 'SQUAD')
+      .order('created_at', { ascending: true })
+    if (entriesError) throw new Error(entriesError.message)
+    const fourth = entries?.[3]?.id
+    if (fourth === undefined) throw new Error('Falta el cuarto asiento.')
+
+    // `createSeason` sumó a Jugador 4 a las dos disciplinas (posición 3 en
+    // cada una, el índice global). Sacarlo de las DOS deja el máximo de
+    // discipline_entries en 2 -- Jugador 4 sigue siendo SQUAD de la
+    // temporada, sólo que todavía no juega ninguna disciplina.
+    const { error: padelGapError } = await db
+      .from('discipline_entries')
+      .delete()
+      .eq('discipline_id', padelId)
+      .eq('entry_id', fourth)
+    if (padelGapError) throw new Error(padelGapError.message)
+    const { error: fifaGapError } = await db
+      .from('discipline_entries')
+      .delete()
+      .eq('discipline_id', fifaId)
+      .eq('entry_id', fourth)
+    if (fifaGapError) throw new Error(fifaGapError.message)
+
+    const newId = await addSquadSeat(admin.client, seasonId, 'El quinto')
+
+    const { data: newRow, error: newRowError } = await db
+      .from('season_seed_order')
+      .select('seed_position')
+      .eq('season_id', seasonId)
+      .eq('entry_id', newId)
+      .single()
+    if (newRowError) throw new Error(newRowError.message)
+    // El máximo REAL de season_seed_order es 3 (los 4 SQUAD siguen ahí,
+    // incluido Jugador 4): el nuevo va a la posición 4, no a la 3 que daría
+    // leer discipline_entries.
+    expect(newRow.seed_position).toBe(4)
+
+    // Limpieza: sin esto, Jugador 4 queda SQUAD sin ninguna fila en
+    // discipline_entries para siempre, y envenena
+    // `db/discipline.db.test.ts:234-248` (`countOrphanedSquadEntries`), que
+    // mide contra la base COMPLETA y sin escopear -- medido, rompió esa
+    // guardia la primera vez que corrió esta suite entera. El hueco sólo
+    // hacía falta DURANTE el alta de arriba, no como estado final. La
+    // posición no puede ser la 3 fija: `addSquadSeat` ya usó el hueco de
+    // PADEL para "El quinto" -- se recalcula el próximo lugar libre en vez de
+    // asumir uno.
+    const { data: padelSeats, error: padelSeatsError } = await db
+      .from('discipline_entries')
+      .select('seed_position')
+      .eq('discipline_id', padelId)
+    if (padelSeatsError) throw new Error(padelSeatsError.message)
+    const nextPadelSeat = Math.max(-1, ...(padelSeats ?? []).map((row) => row.seed_position)) + 1
+    const { error: cleanupError } = await db
+      .from('discipline_entries')
+      .insert({ discipline_id: padelId, entry_id: fourth, season_id: seasonId, seed_position: nextPadelSeat })
+    if (cleanupError) throw new Error(cleanupError.message)
+  })
+})
+
+// ── add_squad_seat después de un removeSeat: el hueco no se pisa (WU2) ─────
+// WU2 (tanda 3, round 2 review fix): TODOS los fixtures de este archivo
+// agregan asientos en orden, sin bajas de por medio, así que
+// `season_seed_order` siempre queda 0..N-1 SIN huecos al momento del alta --
+// ahí, `count(*)` y `max(seed_position)+1` dan el MISMO número, y una
+// mutación que cambiara uno por el otro pasaba la guardia entera en verde.
+// Este fixture saca a `Jugador 2` (posición 1, no la más alta) ANTES de dar
+// de alta: el hueco queda en el medio, `count(*)` (3) queda POR DEBAJO de
+// `max(seed_position)+1` (4) -- confirmado a mano, la misma mutación de
+// arriba hace que el alta choque contra la posición 3 (la de Jugador 4, que
+// sigue ahí) en vez de tomar la 4 real.
+describe('add_squad_seat después de un removeSeat, con un hueco en el medio (WU2)', () => {
+  it('el asiento nuevo no pisa ninguna posición existente', async () => {
+    const admin = await createTestUser()
+    const squadNames = Array.from({ length: 4 }, (_, index) => `Jugador ${index + 1}`)
+    const { seasonId } = await createSeason(admin.client, {
+      name: 'Torneo con hueco antes del alta',
+      squadNames,
+      config: defaultConfig(4),
+    })
+    const db = adminClient()
+    const { data: entries, error: entriesError } = await db
+      .from('entries')
+      .select('id')
+      .eq('season_id', seasonId)
+      .eq('kind', 'SQUAD')
+      .order('created_at', { ascending: true })
+    if (entriesError) throw new Error(entriesError.message)
+    // Jugador 2 (posición 1): NO es la más alta -- sacarlo deja el hueco en
+    // el medio ({0,2,3}) y no toca la posición 3, que es la que importa.
+    const target = entries?.[1]?.id
+    if (target === undefined) throw new Error('Falta un asiento para sacar.')
+
+    await removeSeat(admin.client, target)
+    expect(await seedOrderPositions(seasonId)).toHaveLength(3)
+
+    const newId = await addSquadSeat(admin.client, seasonId, 'El nuevo, después del hueco')
+
+    // No `expectContiguous`: después de una baja, 0..N-1 sin huecos no es lo
+    // que el sistema garantiza (ver el comentario grande de
+    // `expectUniquePositions`, arriba). Lo real es "posiciones únicas".
+    expectUniquePositions(await seedOrderPositions(seasonId), 4)
+    const { data: newRow, error: newRowError } = await db
+      .from('season_seed_order')
+      .select('seed_position')
+      .eq('season_id', seasonId)
+      .eq('entry_id', newId)
+      .single()
+    if (newRowError) throw new Error(newRowError.message)
+    expect(newRow.seed_position).toBe(4)
   })
 })
 

@@ -5,6 +5,7 @@ import {
   FORMATO_DEFAULT_OPTIONS,
   STEPPERS,
   type Squad,
+  addBlankSeat,
   addMySeat,
   addToOrder,
   addToOrders,
@@ -12,6 +13,7 @@ import {
   buildDisciplines,
   configFor,
   disciplinesWarning,
+  editSeatState,
   effectiveFixedTeams,
   effectiveFloor,
   effectiveHasMasters,
@@ -21,6 +23,8 @@ import {
   formatoDefaultKey,
   freshDisciplineConfig,
   isSameFormatoDefault,
+  joinSquadState,
+  moveGlobalSeatState,
   moveInOrder,
   moveSeat,
   namesAfterEdit,
@@ -29,9 +33,10 @@ import {
   removeFromOrder,
   removeFromOrders,
   removeSeatAt,
+  removeSeatState,
   resizeConfig,
   resizeConfigs,
-  seedNamesFrom,
+  seedOrderFrom,
   squadWarning,
   steppersFor,
   submitSeats,
@@ -486,6 +491,92 @@ describe('moveSeat', () => {
 })
 
 /**
+ * WU2 (ronda 2 de revisión): los cuatro handlers que hilan `squad` y
+ * `orders` a la vez (`editSeatName`/`joinSquad`/`removeSeat`/`moveGlobalSeat`,
+ * `wizard.tsx`) vivían enteros adentro de `Wizard`, sin ningún test que los
+ * ejercitara juntos -- esta suite no tiene runner de clicks/tecleo, así que
+ * la lógica que sólo existía adentro de un handler de `.tsx` quedaba
+ * estructuralmente fuera de su alcance (mismo defecto que
+ * `app/cableado-de-formato.unit.test.ts` ya documenta para el paso 4).
+ *
+ * Reemplaza al patrón anterior (dos llamadas sueltas por handler, una a
+ * `setSquad`/`setSquadState` y otra a `setOrdersState`) por UNA función pura
+ * que arma las DOS mitades del estado combinado a la vez -- mismo criterio
+ * que ya usa el resto de `wizard-state.ts`: la lógica vive acá, testeada sin
+ * DOM, y `wizard.tsx` sólo aplica los dos setters con lo que le devuelven
+ * (pin de ese cableado en `app/cableado-de-formato.unit.test.ts`).
+ */
+describe('editSeatState', () => {
+  it('un asiento en blanco que pasa a tener contenido entra a cada orden propio que ya exista', () => {
+    const squad: Squad = { names: ['Colo', ''], mySeat: 0 }
+    const next = editSeatState(squad, { FIFA: [0] }, 1, 'Nacho')
+    expect(next.squad.names).toEqual(['Colo', 'Nacho', ''])
+    expect(next.orders).toEqual({ FIFA: [0, 1] })
+  })
+
+  it('una renombrada (la fila ya tenía nombre) no toca orders para nada', () => {
+    const squad: Squad = { names: ['Colo', 'Nacho'], mySeat: 0 }
+    const next = editSeatState(squad, { FIFA: [1, 0] }, 0, 'Coco')
+    expect(next.squad.names).toEqual(['Coco', 'Nacho'])
+    expect(next.orders).toEqual({ FIFA: [1, 0] })
+  })
+})
+
+describe('joinSquadState', () => {
+  it('el organizador entra en un asiento NUEVO al final, y ese índice entra a cada orden propio', () => {
+    const squad: Squad = { names: ['Nacho', 'Fede'], mySeat: null }
+    const next = joinSquadState(squad, { FIFA: [1, 0] }, 'Colo')
+    expect(next.squad).toEqual({ names: ['Nacho', 'Fede', 'Colo'], mySeat: 2 })
+    expect(next.orders).toEqual({ FIFA: [1, 0, 2] })
+  })
+})
+
+describe('removeSeatState', () => {
+  // El caso PELIGROSO que WU2 midió: sacar un asiento del medio sin correr
+  // el orden propio deja índices viejos leídos contra un plantel corrido --
+  // gente equivocada, sin ningún error, porque el guard de permutación de
+  // `db/season.ts` lo sigue aceptando (misma CANTIDAD de índices, sólo que
+  // corridos).
+  it('sacar un asiento del medio corre los índices de más atrás del orden propio, igual que a mySeat', () => {
+    const squad: Squad = { names: ['Ana', 'Beto', 'Caro', 'Dani'], mySeat: null }
+    // FIFA: [1, 3, 0, 2] -- Beto, Dani, Ana, Caro. Sacamos a Ana (índice 0).
+    const next = removeSeatState(squad, { FIFA: [1, 3, 0, 2] }, 0)
+    expect(next.squad.names).toEqual(['Beto', 'Caro', 'Dani'])
+    // Correcto: Beto, Dani, Caro -- índices [0, 2, 1] sobre el plantel nuevo.
+    expect(next.orders).toEqual({ FIFA: [0, 2, 1] })
+  })
+})
+
+describe('moveGlobalSeatState', () => {
+  it('el swap del orden global arrastra mySeat Y corre cada orden propio', () => {
+    const squad: Squad = { names: ['Nacho', 'Colo'], mySeat: 1 }
+    const next = moveGlobalSeatState(squad, { FIFA: [0, 1] }, 1, 0)
+    expect(next.squad).toEqual({ names: ['Colo', 'Nacho'], mySeat: 0 })
+    expect(next.orders).toEqual({ FIFA: [1, 0] })
+  })
+
+  // WU5 (ronda 2 de revisión): `moveSeat` se niega a mover fuera de rango
+  // (deja `squad` intacto), pero `swapInOrders` sueltas swapeaba igual --
+  // las dos mitades de UNA acción de usuario en desacuerdo sobre qué es
+  // "fuera de rango". Acá comparten UN solo guard: fuera de rango no toca
+  // NINGUNA de las dos mitades.
+  it('fuera de rango no toca ni squad ni orders -- las dos mitades comparten el mismo guard', () => {
+    const squad: Squad = { names: ['Colo', 'Nacho'], mySeat: 0 }
+    const orders = { FIFA: [0, 1] }
+    expect(moveGlobalSeatState(squad, orders, 0, -1)).toEqual({ squad, orders })
+    expect(moveGlobalSeatState(squad, orders, 1, 2)).toEqual({ squad, orders })
+  })
+})
+
+/** "+ Agregar jugador" (paso 1): agrega una fila en blanco al final -- no toca `orders`, una fila en blanco todavía no es un asiento (`addToOrders` corre recién en `editSeatState`, cuando esa fila deja de estarlo). */
+describe('addBlankSeat', () => {
+  it('agrega una fila en blanco al final, sin tocar mySeat', () => {
+    const squad: Squad = { names: ['Colo', 'Nacho'], mySeat: 0 }
+    expect(addBlankSeat(squad)).toEqual({ names: ['Colo', 'Nacho', ''], mySeat: 0 })
+  })
+})
+
+/**
  * F1 (dos jueces ciegos, `37b225b..d33377a`): los índices de `names` que de
  * verdad tienen alguien -- sin las filas en blanco del MEDIO
  * (`withoutTrailingBlanks` sólo saca las del final). Es lo que arranca el
@@ -620,46 +711,60 @@ describe('swapInOrder / swapInOrders', () => {
 })
 
 /**
- * `seedNamesFrom` traduce los ÍNDICES de un orden propio a los nombres
- * reales del submit -- una sola vez, al armar el payload
- * (`newTournamentPayload`), no mientras se edita el plantel.
+ * `seedOrderFrom` traduce los ÍNDICES CRUDOS de un orden propio (posiciones
+ * sobre `squad.names`, F1) a índices sobre `squadNames` -- la lista YA
+ * FILTRADA que `submitSeats`/`db/season.ts` usan como base -- una sola vez,
+ * al armar el payload (`newTournamentPayload`), no mientras se edita el
+ * plantel.
+ *
+ * WU1 (ronda 2 de revisión): reemplaza a `seedNamesFrom`, que traducía a
+ * NOMBRES -- un formato que la identidad del asiento no sobrevivía cruzar:
+ * `seedOrderIndices` (`db/season.ts`, borrada en esta tarea) tenía que
+ * ADIVINAR cuál de dos jugadores con el MISMO nombre era, con un scan de
+ * primero-libre sin forma de saber cuál arrastró el usuario. Medido:
+ * `squad.names = ['Ana','Juan','Luis','Juan']`, `orders.FIFA = [3,0,1,2]`
+ * (el SEGUNDO Juan arriba) cruzaba como `['Juan','Ana','Juan','Luis']` y el
+ * server volvía a elegir el PRIMER Juan -- invitación y seed para la
+ * persona equivocada. Con índices de punta a punta no hay nada que adivinar.
  */
-describe('seedNamesFrom', () => {
-  it('traduce cada índice a su nombre, en el orden pedido', () => {
-    expect(seedNamesFrom([2, 0, 3, 1], ['Colo', 'Nacho', 'Fede', 'Marce'])).toEqual([
-      'Fede',
-      'Colo',
-      'Marce',
-      'Nacho',
-    ])
+describe('seedOrderFrom', () => {
+  it('traduce cada índice crudo a su posición dentro de squadNames, en el orden pedido', () => {
+    expect(seedOrderFrom([2, 0, 3, 1], ['Colo', 'Nacho', 'Fede', 'Marce'])).toEqual([2, 0, 3, 1])
+  })
+
+  // Con un blanco en el medio, la posición dentro de squadNames YA NO es el
+  // índice crudo: squadNames = ['Colo', 'Fede'], así que el índice crudo 2
+  // (Fede) traduce a la posición 1, no a la 2.
+  it('con un blanco en el medio, traduce al índice REINDEXADO de squadNames', () => {
+    expect(seedOrderFrom([2, 0], ['Colo', '', 'Fede'])).toEqual([1, 0])
   })
 
   // Un índice que ya no señala a un asiento con nombre (sacado o vaciado a
   // mano) se descarta -- red de seguridad además de `removeFromOrders`.
   it('descarta un índice que ya no tiene nombre', () => {
-    expect(seedNamesFrom([0, 1, 2], ['Colo', '', 'Fede'])).toEqual(['Colo', 'Fede'])
+    expect(seedOrderFrom([0, 1, 2], ['Colo', '', 'Fede'])).toEqual([0, 1])
   })
 
   // Un asiento con nombre que `order` no llegó a anotar se agrega al final,
   // en el orden del plantel -- el resultado sigue siendo una permutación
-  // COMPLETA, la que exige `isPermutationOf` (`db/season.ts`).
+  // COMPLETA de `[0, squadNames.length)`, la que exige `isIndexPermutation`
+  // (`db/season.ts`).
   it('agrega al final los asientos que el orden no anotó', () => {
-    expect(seedNamesFrom([2], ['Colo', 'Nacho', 'Fede'])).toEqual(['Fede', 'Colo', 'Nacho'])
+    expect(seedOrderFrom([2], ['Colo', 'Nacho', 'Fede'])).toEqual([2, 0, 1])
   })
 
-  it('recorta espacios sueltos del nombre', () => {
-    expect(seedNamesFrom([0], ['  Colo  '])).toEqual(['Colo'])
+  // WU5 (ronda 2 de revisión): un índice fuera de rango o negativo se
+  // descarta igual que uno sin nombre -- nunca revienta ni se cuela.
+  it('descarta un índice fuera de rango o negativo', () => {
+    expect(seedOrderFrom([-1, 0, 99, 1], ['Colo', 'Nacho'])).toEqual([0, 1])
   })
 
   // F2 (dos jueces ciegos): dos asientos con el MISMO nombre son dos
-  // jugadores distintos -- por índice, nunca se confunden entre sí.
+  // jugadores distintos -- por índice, nunca se confunden entre sí. Acá el
+  // plantel no tiene blancos, así que la posición coincide con el índice
+  // crudo, pero lo que importa es que CADA índice trae SU propio asiento.
   it('nombres duplicados: cada índice trae SU propio asiento, sin mezclarse', () => {
-    expect(seedNamesFrom([1, 3, 0, 2], ['Juan', 'Juan', 'Ana', 'Luis'])).toEqual([
-      'Juan',
-      'Luis',
-      'Juan',
-      'Ana',
-    ])
+    expect(seedOrderFrom([1, 3, 0, 2], ['Juan', 'Juan', 'Ana', 'Luis'])).toEqual([1, 3, 0, 2])
   })
 })
 
@@ -701,19 +806,40 @@ describe('F1 -- identidad por índice, no por nombre', () => {
     const order = [2, 3, 0, 1]
     // Retipear CUALQUIER nombre del plantel (índice 2, "Caro") no toca
     // `order` para nada -- `wizard.tsx` ya no llama a ningún reconciliador
-    // al renombrar, así que el orden por índice sigue siendo el mismo.
-    expect(seedNamesFrom(order, ['Ana', 'Beto', 'Caro', 'Dani'])).toEqual(['Caro', 'Dani', 'Ana', 'Beto'])
+    // al renombrar, así que el orden por índice sigue siendo el mismo. Sin
+    // blancos, la posición dentro de `squadNames` coincide con el índice crudo.
+    expect(seedOrderFrom(order, ['Ana', 'Beto', 'Caro', 'Dani'])).toEqual([2, 3, 0, 1])
   })
 
-  // F2: mySeat es uno de los duplicados -- ninguna ambigüedad por índice.
+  // F2/WU1: mySeat es uno de los duplicados -- ninguna ambigüedad por
+  // índice. El caso MEDIDO en la ronda 2: dos "Juan" son dos ÍNDICES
+  // distintos, y `seedOrderFrom` nunca los confunde entre sí -- a
+  // diferencia de `seedNamesFrom` (borrada), que los volvía al MISMO texto
+  // y le hacía perder la identidad al cruzar a `db/season.ts`.
   it('con nombres duplicados, incluso si mySeat es uno de ellos, cada índice mantiene su identidad', () => {
     const names = ['Juan', 'Juan', 'Ana', 'Luis']
     const mySeat = 1 // el SEGUNDO Juan
     const order = [3, 1, 2, 0] // Luis, mi Juan, Ana, el otro Juan
-    expect(seedNamesFrom(order, names)).toEqual(['Luis', 'Juan', 'Ana', 'Juan'])
+    expect(seedOrderFrom(order, names)).toEqual([3, 1, 2, 0])
     // Y el asiento propio se sigue leyendo del plantel por índice, ajeno a
     // cuál de los dos "Juan" haya en `order` -- mismo criterio que `Squad.mySeat`.
     expect(names[mySeat]).toBe('Juan')
+  })
+
+  /**
+   * WU1, la prueba central: el round trip MEDIDO en la ronda 2 -- el mismo
+   * escenario del docblock de `seedOrderFrom`, ahora como pin ejecutable.
+   * Con `seedNamesFrom` (nombres) esto colapsaba a `['Juan','Ana','Juan','Luis']`
+   * y `db/season.ts` volvía a elegir el PRIMER Juan sin importar cuál asiento
+   * arrastró el usuario. Con índices de punta a punta, el resultado señala
+   * exactamente al asiento 3 -- nunca al 1.
+   */
+  it('el round trip medido: dos Juan, se arrastra el del asiento 3, y el resultado sigue señalando al 3', () => {
+    const names = ['Ana', 'Juan', 'Luis', 'Juan']
+    const order = [3, 0, 1, 2] // el usuario arrastró el Juan del asiento 3 arriba de todo
+    const result = seedOrderFrom(order, names)
+    expect(result).toEqual([3, 0, 1, 2])
+    expect(result[0]).toBe(3) // el asiento 3, no el 1 -- el OTRO Juan
   })
 })
 
@@ -1235,10 +1361,13 @@ describe('newTournamentPayload', () => {
    * `37b225b..d33377a`) igual que los cuatro anteriores, pero `Partial` a
    * diferencia de ellos: "ninguna disciplina tiene orden propio" (entrada
    * ausente) es el estado normal del 100% de los torneos de hoy, no un
-   * olvido. Con `{}`, ninguna fila manda `seedNames` -- exactamente el
+   * olvido. Con `{}`, ninguna fila manda `seedOrder` -- exactamente el
    * comportamiento de todos los tests de arriba, que lo pasan así.
+   *
+   * WU1 (ronda 2 de revisión): el campo se llama `seedOrder` y viaja como
+   * ÍNDICES, no `seedNames` con nombres -- ver el docblock de `seedOrderFrom`.
    */
-  it('con orders vacío, ninguna fila manda seedNames -- comportamiento de siempre', () => {
+  it('con orders vacío, ninguna fila manda seedOrder -- comportamiento de siempre', () => {
     const squad: Squad = { names: Array(8).fill('Jugador'), mySeat: null }
     const configs = { PADEL: configFor(8, 2), FIFA: configFor(8, 2) }
     const payload = newTournamentPayload(
@@ -1252,10 +1381,10 @@ describe('newTournamentPayload', () => {
       NO_FIXED_TEAMS,
       {},
     )
-    expect(payload.disciplines[0]).not.toHaveProperty('seedNames')
+    expect(payload.disciplines[0]).not.toHaveProperty('seedOrder')
   })
 
-  it('una disciplina con orden propio manda seedNames; la vecina sin toggle no manda nada', () => {
+  it('una disciplina con orden propio manda seedOrder; la vecina sin toggle no manda nada', () => {
     const names = ['Colo', 'Nacho', 'Fede', 'Marce']
     const squad: Squad = { names, mySeat: null }
     const configs = { PADEL: configFor(4, 1), FIFA: configFor(4, 1) }
@@ -1268,16 +1397,18 @@ describe('newTournamentPayload', () => {
       { PADEL: false, FIFA: false },
       ROUND_ROBIN_ALL,
       NO_FIXED_TEAMS,
-      // Índices (F1), no nombres: Fede=2, Marce=3, Colo=0, Nacho=1.
+      // Índices (F1), no nombres: Fede=2, Marce=3, Colo=0, Nacho=1. Sin
+      // blancos en el plantel, la posición dentro de squadNames coincide
+      // con el índice crudo.
       { FIFA: [2, 3, 0, 1] },
     )
     const padel = payload.disciplines.find((row) => row.kind === 'PADEL')
     const fifa = payload.disciplines.find((row) => row.kind === 'FIFA')
-    expect(padel).not.toHaveProperty('seedNames')
-    expect(fifa?.seedNames).toEqual(['Fede', 'Marce', 'Colo', 'Nacho'])
+    expect(padel).not.toHaveProperty('seedOrder')
+    expect(fifa?.seedOrder).toEqual([2, 3, 0, 1])
   })
 
-  // `seedNamesFrom` (F1, arriba) agrega al final cualquier asiento que
+  // `seedOrderFrom` (WU1, arriba) agrega al final cualquier asiento que
   // `order` no llegó a anotar -- sin esto, un jugador agregado DESPUÉS de
   // prender el orden propio (`Marce`, acá) quedaría sin `seed_position` en
   // esa disciplina y `createSeason` lo rebotaría por el guard de
@@ -1300,15 +1431,15 @@ describe('newTournamentPayload', () => {
       { FIFA: [2, 0, 1] }, // Fede, Colo, Nacho -- "Marce" (índice 3) no está anotada
     )
     const fifa = payload.disciplines.find((row) => row.kind === 'FIFA')
-    expect(fifa?.seedNames).toEqual(['Fede', 'Colo', 'Nacho', 'Marce'])
+    expect(fifa?.seedOrder).toEqual([2, 0, 1, 3])
   })
 
-  // F3 (dos jueces ciegos): con UNA sola disciplina marcada, `seedNames`
+  // F3 (dos jueces ciegos): con UNA sola disciplina marcada, `seedOrder`
   // nunca viaja -- ni siquiera si `orders` trae una entrada sobrante (de
   // cuando había 2+ marcadas y se destildó la otra, o de la propia
   // disciplina si su checkbox ya no está visible). El gate es
   // `picked.length > 1`, no `ownOrder !== undefined`.
-  it('con una sola disciplina, seedNames no viaja aunque orders traiga una entrada sobrante', () => {
+  it('con una sola disciplina, seedOrder no viaja aunque orders traiga una entrada sobrante', () => {
     const squad: Squad = { names: Array(8).fill('Jugador'), mySeat: null }
     const configs = { PADEL: configFor(8, 2), FIFA: configFor(8, 2) }
     const payload = newTournamentPayload(
@@ -1322,7 +1453,41 @@ describe('newTournamentPayload', () => {
       NO_FIXED_TEAMS,
       { PADEL: [3, 2, 1, 0, 4, 5, 6, 7] },
     )
-    expect(payload.disciplines[0]).not.toHaveProperty('seedNames')
+    expect(payload.disciplines[0]).not.toHaveProperty('seedOrder')
+  })
+
+  /**
+   * WU5 (ronda 2 de revisión): `newTournamentPayload` tiene que traducir
+   * `orders[kind]` contra `squad.names` -- el plantel CRUDO, con blancos del
+   * medio incluidos -- y no contra `seats.squadNames` -- la versión YA
+   * reindexada que `submitSeats` produce. Mutar el segundo argumento de
+   * `seedOrderFrom` de uno a otro sobrevivía 1050/1050 antes de este test:
+   * con un blanco en el MEDIO (`filled === 4`, un estado normal, no un
+   * error), los índices que `orders[kind]` trae son posiciones sobre el
+   * plantel CRUDO -- traducirlos contra la versión ya achicada corre a cada
+   * jugador un lugar de más a partir del blanco.
+   */
+  it('traduce el orden propio contra squad.names crudo, no contra seats.squadNames ya reindexado', () => {
+    // ['Ana', '', 'Beto', 'Caro', 'Dani'] -- blanco en el MEDIO, filled === 4.
+    const names = ['Ana', '', 'Beto', 'Caro', 'Dani']
+    const squad: Squad = { names, mySeat: null }
+    const configs = { PADEL: configFor(4, 1), FIFA: configFor(4, 1) }
+    const payload = newTournamentPayload(
+      'Mixto',
+      squad,
+      configs,
+      ['PADEL', 'FIFA'],
+      { PADEL: 1, FIFA: 1 },
+      { PADEL: false, FIFA: false },
+      ROUND_ROBIN_ALL,
+      NO_FIXED_TEAMS,
+      // Índices CRUDOS de squad.names: Dani(4), Ana(0), Caro(3), Beto(2).
+      { FIFA: [4, 0, 3, 2] },
+    )
+    const fifa = payload.disciplines.find((row) => row.kind === 'FIFA')
+    // squadNames real = ['Ana','Beto','Caro','Dani'] (0..3). Traducidos:
+    // Dani=3, Ana=0, Caro=2, Beto=1.
+    expect(fifa?.seedOrder).toEqual([3, 0, 2, 1])
   })
 })
 

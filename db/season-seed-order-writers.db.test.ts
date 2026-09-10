@@ -85,12 +85,12 @@ describe('createSeason escribe season_seed_order desde el orden GLOBAL de squadN
     expect(await squadEntryIdsOf(seasonId)).toHaveLength(6)
   })
 
-  // La trampa que este cambio existe para evitar: `disciplines[0].seedNames`
-  // (PR anterior) es un orden POR DISCIPLINA, no el de la temporada. Si
-  // `createSeason` copiara ese orden acá, una primaria con `seedNames`
-  // propio volvería a secuestrar en silencio la pantalla de Unirse — la
-  // razón entera de esta migración.
-  it('usa squadNames, nunca el seedNames de ninguna disciplina', async () => {
+  // La trampa que este cambio existe para evitar: `disciplines[0].seedOrder`
+  // (PR anterior, `seedNames` renombrado a `seedOrder` en WU1) es un orden
+  // POR DISCIPLINA, no el de la temporada. Si `createSeason` copiara ese
+  // orden acá, una primaria con `seedOrder` propio volvería a secuestrar en
+  // silencio la pantalla de Unirse — la razón entera de esta migración.
+  it('usa squadNames, nunca el seedOrder de ninguna disciplina', async () => {
     const admin = await createTestUser()
     const names = Array.from({ length: 4 }, (_, index) => `Jugador ${index + 1}`)
     const config = defaultConfig(4)
@@ -98,7 +98,7 @@ describe('createSeason escribe season_seed_order desde el orden GLOBAL de squadN
       name: 'Torneo con orden propio por disciplina',
       squadNames: names,
       config,
-      disciplines: [{ kind: 'PADEL', config, seedNames: [names[3]!, names[2]!, names[1]!, names[0]!] }],
+      disciplines: [{ kind: 'PADEL', config, seedOrder: [3, 2, 1, 0] }],
     })
 
     const db = adminClient()

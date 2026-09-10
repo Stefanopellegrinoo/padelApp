@@ -195,38 +195,25 @@ export async function frozenPointsOf(
 }
 
 /**
- * ¿`a` y `b` tienen exactamente los mismos elementos, en cualquier orden?
- * Multiset, no `Set`: dos jugadores con el mismo nombre son dos asientos
- * distintos (el plantel no exige nombres únicos), así que "está o no está"
- * tiene que contar CUÁNTAS veces aparece cada nombre, no sólo si aparece.
- * `sort()` en copias -- nunca los arrays originales -- es la forma barata de
- * comparar multisets sin armar un `Map` de conteos.
- */
-function isPermutationOf(a: readonly string[], b: readonly string[]): boolean {
-  if (a.length !== b.length) return false
-  const sortedA = [...a].sort()
-  const sortedB = [...b].sort()
-  return sortedA.every((value, index) => value === sortedB[index])
-}
-
-/**
- * Para el `seedNames` de UNA disciplina, en qué índice de `squadNames` está
- * cada seed -- es decir, el `squadNames`/`entryRows` que le corresponde a
- * cada posición 0..N-1 de ESTA disciplina.
+ * ¿`order` es una permutación GENUINA de `[0, length)` -- cada índice de
+ * asiento aparece EXACTAMENTE una vez?
  *
- * Consume cada nombre de `squadNames` una sola vez (`used`), en el orden en
- * que `seedNames` lo pide: con nombres repetidos (multiset, no `Set` --
- * mismo motivo que `isPermutationOf`) es lo que evita que dos seeds
- * distintos de `seedNames` apunten al MISMO asiento de `squadNames`.
- * `isPermutationOf` ya garantizó que hay exactamente uno para cada uno.
+ * WU1 (ronda 2 de revisión): reemplaza a `isPermutationOf` (multiset de
+ * NOMBRES, borrada en esta tarea) desde que `seedOrder` dejó de viajar como
+ * `seedNames: string[]` -- dos jugadores con el mismo nombre ya no se pueden
+ * confundir porque acá no hay ningún nombre que comparar, sólo el ÍNDICE de
+ * asiento en `squadNames`. `seen` -- no un `sort()` de copias, como hacía la
+ * versión de nombres -- porque acá el universo es conocido de antemano
+ * (`[0, length)`), así que un array de flags es más directo que ordenar.
  */
-function seedOrderIndices(squadNames: readonly string[], seedNames: readonly string[]): number[] {
-  const used = new Array(squadNames.length).fill(false)
-  return seedNames.map((name) => {
-    const at = squadNames.findIndex((candidate, index) => !used[index] && candidate === name)
-    used[at] = true
-    return at
-  })
+function isIndexPermutation(order: readonly number[], length: number): boolean {
+  if (order.length !== length) return false
+  const seen = new Array<boolean>(length).fill(false)
+  for (const at of order) {
+    if (at < 0 || at >= length || seen[at]) return false
+    seen[at] = true
+  }
+  return true
 }
 
 /** Una disciplina a crear junto con la temporada. `config` es obligatoria: cada disciplina puede declarar la suya, no hereda de la temporada. */
@@ -275,21 +262,31 @@ export interface NewSeasonDiscipline {
    * de todas las disciplinas nuevas, sin usar la libertad que la columna ya
    * daba.
    *
-   * Nombres, no índices ni ids: es el mismo vocabulario que `squadNames`, y a
-   * esta altura (paso "Orden inicial" del wizard, antes de crear el torneo)
-   * no hay otro identificador para referirse a un asiento.
+   * ÍNDICES sobre `squadNames`, NO nombres (WU1, ronda 2 de revisión): este
+   * campo se llamaba `seedNames: string[]` y viajaba como texto -- dos
+   * asientos con el mismo nombre eran indistinguibles apenas cruzaba este
+   * borde, porque el wizard mueve el asiento por ÍNDICE (`orders`,
+   * `wizard-state.ts`, desde la corrección del round 1) pero
+   * `seedNamesFrom` (borrada) lo convertía a nombre JUSTO en el punto de
+   * unión con el server, y `seedOrderIndices` (también borrada) tenía que
+   * ADIVINAR cuál de dos nombres iguales era, con un scan de primero-libre
+   * sin forma de saber cuál arrastró el usuario. Medido:
+   * `squadNames = ['Ana','Juan','Luis','Juan']`, orden deseado = el asiento
+   * 3 primero -- con nombres eso cruzaba como `['Juan','Ana','Juan','Luis']`
+   * y el server volvía a elegir el asiento 1, no el 3. Con índices de punta
+   * a punta no hay nada que adivinar.
    *
    * Sin especificar, `undefined`: la disciplina sigue el orden GLOBAL de
    * `squadNames` -- el comportamiento de siempre, el que toma el 100% de los
    * torneos existentes y el que sigue tomando cualquier disciplina cuyo
    * checkbox de "orden propio" (paso "Formato" del wizard) esté apagado.
    *
-   * Tiene que ser una PERMUTACIÓN de `squadNames` -- mismo largo, mismo
-   * multiset -- o `createSeason` la rechaza (ver el guard más abajo): un
-   * `seedNames` que no calce se comería un asiento en silencio o dejaría a
-   * otro con dos.
+   * Tiene que ser una PERMUTACIÓN de `[0, squadNames.length)` -- cada índice
+   * exactamente una vez -- o `createSeason` la rechaza (ver el guard más
+   * abajo, `isIndexPermutation`): un `seedOrder` que no calce se comería un
+   * asiento en silencio o dejaría a otro con dos.
    */
-  seedNames?: string[]
+  seedOrder?: number[]
 }
 
 export interface NewSeason {
@@ -361,11 +358,12 @@ export async function createSeason(
         `El plantel tiene ${squadNames.length} nombres y la configuración de ${spec.kind ?? 'PADEL'} dice ${spec.config.squadSize}.`,
       )
     }
-    // Guard de permutación (ver el docblock de `seedNames` en
-    // `NewSeasonDiscipline`): mismo largo Y mismo multiset que `squadNames`,
-    // o esta disciplina se queda sin poder calcular un `seed_position` para
-    // cada asiento -- comerse uno o duplicar otro en silencio.
-    if (spec.seedNames !== undefined && !isPermutationOf(spec.seedNames, squadNames)) {
+    // Guard de permutación (ver el docblock de `seedOrder` en
+    // `NewSeasonDiscipline`): tiene que cubrir CADA índice de
+    // `[0, squadNames.length)` exactamente una vez, o esta disciplina se
+    // queda sin poder calcular un `seed_position` para cada asiento --
+    // comerse uno o duplicar otro en silencio.
+    if (spec.seedOrder !== undefined && !isIndexPermutation(spec.seedOrder, squadNames.length)) {
       throw new EdgeError(
         `El orden propio de ${spec.kind ?? 'PADEL'} no coincide con el plantel: tiene que ser el mismo plantel, sólo reordenado.`,
       )
@@ -488,14 +486,14 @@ export async function createSeason(
     try {
       seatRows = disciplineRows.flatMap((discipline, disciplineIndex) => {
         const spec = disciplineSpecs[disciplineIndex]!
-        const seedNames = spec.seedNames
+        const seedOrder = spec.seedOrder
         // El índice del array, no una columna de vuelta (C37): `insert ...
         // returning` devuelve las filas en el orden del `values`, así que
         // `entryRows[i]` es `squadNames[i]`. Lo fija el test de
         // `db/entries.db.test.ts` que compara nombre por nombre contra
         // `seedPosition` 0..7 — si PostgREST dejara de conservar ese orden,
         // cae ahí y no en una tabla desordenada en producción.
-        if (seedNames === undefined) {
+        if (seedOrder === undefined) {
           return entryRows.map((row, index) => ({
             discipline_id: discipline.id,
             entry_id: row.id,
@@ -503,19 +501,27 @@ export async function createSeason(
             seed_position: index,
           }))
         }
-        // `spec.seedNames` (PR11c) es la EXCEPCIÓN a ese índice global: cuando
-        // la disciplina trae su propio orden, `seedOrderIndices` traduce ese
-        // orden a índices sobre `squadNames`/`entryRows`, y el `seed_position`
-        // que se escribe es la POSICIÓN dentro de `seedNames` (0..N-1), no el
-        // índice global.
-        return seedOrderIndices(squadNames, seedNames).map((globalIndex, seedPosition) => {
-          // F6: guard explícito, no confiar en que el guard de permutación
-          // 130 líneas más arriba (`isPermutationOf`) sea el único camino
-          // hasta acá para siempre -- si `globalIndex` alguna vez llega en
-          // -1, `entryRows[-1]` es `undefined` y `.id` tira un TypeError
-          // que, sin este guard, sería el throw sin try/catch descripto
-          // arriba.
-          if (globalIndex < 0) {
+        // `spec.seedOrder` (PR11c, formato de índices desde WU1) es la
+        // EXCEPCIÓN a ese índice global: cuando la disciplina trae su propio
+        // orden, cada elemento YA ES el índice sobre `squadNames`/`entryRows`
+        // -- no hace falta traducir nada más, `seedOrderFrom`
+        // (`wizard-state.ts`) hizo esa traducción una sola vez, en el wizard.
+        // El `seed_position` que se escribe es la POSICIÓN dentro de
+        // `seedOrder` (0..N-1), no el índice global.
+        return seedOrder.map((globalIndex, seedPosition) => {
+          // F6, vigente tras WU1: guard explícito, no confiar en que el
+          // guard de permutación 130 líneas más arriba (`isIndexPermutation`)
+          // sea el único camino hasta acá para siempre. WU5 (ronda 2 de
+          // revisión): el chequeo `globalIndex < 0` de acá quedó
+          // PROVABLEMENTE inalcanzable con el formato de índices --
+          // `isIndexPermutation` ya rechaza cualquier `seedOrder` con un
+          // valor negativo antes de llegar a este punto. Lo que SÍ sigue
+          // siendo posible (aunque no esté medido, es la misma clase de
+          // hazard que `entryRows.length` ya asumía implícitamente en la
+          // rama sin `seedOrder`, arriba) es que `entryRows` vuelva más
+          // corto que `squadNames` -- p.ej. si RLS filtrara alguna fila del
+          // propio `.select()` del insert -- y ahí SÍ hace falta el guard.
+          if (globalIndex >= entryRows.length) {
             throw new EdgeError(
               `No se pudo ubicar el orden propio de ${spec.kind ?? 'PADEL'} en el plantel.`,
             )

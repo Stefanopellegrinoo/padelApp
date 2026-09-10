@@ -384,6 +384,25 @@ export function moveSeat({ names, mySeat }: Squad, from: number, to: number): Sq
 }
 
 /**
+ * Agrega una fila en blanco al final del plantel -- "+ Agregar jugador"
+ * (paso 1). No toca `orders`: una fila en blanco todavía no es un asiento
+ * (`addToOrders` corre recién en `editSeatState`, más abajo, cuando esa fila
+ * deja de estarlo).
+ *
+ * WU2 (ronda 2 de revisión): antes era un `setSquad({...squad, names:
+ * [...names, '']})` a mano, adentro del JSX de `wizard.tsx` -- la única de
+ * las mutaciones de plantel que no pasaba por una función con nombre acá.
+ * Hoy es inofensiva (agregar SIEMPRE un blanco no corre ningún índice), pero
+ * es la forma del próximo bug: cualquiera que la toque después hereda el
+ * mismo riesgo que `editSeatName`/`joinSquad`/`removeSeat`/`moveGlobalSeat`
+ * ya tenían antes de esta tarea. Ruteada por el mismo camino que las demás
+ * desde acá.
+ */
+export function addBlankSeat(squad: Squad): Squad {
+  return { ...squad, names: [...squad.names, ''] }
+}
+
+/**
  * Sube o baja una fila del orden PROPIO de una disciplina -- igual que
  * `moveSeat`, pero sin `mySeat` que arrastrar: esta lista es de ÍNDICES de
  * asiento (F1, ver el docblock de `Squad` más arriba), y la marca "vos" que
@@ -412,7 +431,7 @@ export function filledSeatIndices(names: readonly string[]): number[] {
  * disciplina (`FormatoDeUnaDisciplina`, wizard.tsx, sólo con `label !==
  * null` -- ver su docblock): prender COPIA el orden GLOBAL de este instante,
  * apagar BORRA la entrada entera -- nunca la deja en `[]`, que es un
- * `seedNames` que no calza con NADA de permutación (`isPermutationOf`,
+ * `seedOrder` que no calza con NADA de permutación (`isIndexPermutation`,
  * `db/season.ts`).
  *
  * F1 (dos jueces ciegos, `37b225b..d33377a`): la copia es de ÍNDICES de
@@ -525,34 +544,138 @@ export function swapInOrders(
 }
 
 /**
- * El `seedNames` final de una disciplina con orden propio: traduce los
- * ÍNDICES de `order` (F1) a los nombres reales del submit, una sola vez,
- * ACÁ -- no antes: el índice sobrevive a cualquier renombrada en el camino
+ * El estado combinado (`squad` + `orders`) después de tipear `value` en la
+ * fila `index` del plantel (paso 1).
+ *
+ * WU2 (ronda 2 de revisión): antes vivía partido en dos llamadas sueltas
+ * adentro de `editSeatName` (`wizard.tsx`), sin ningún test que las
+ * ejercitara juntas -- esta suite no tiene runner de clicks/tecleo, así que
+ * la lógica que sólo existía adentro de un handler de `.tsx` quedaba
+ * estructuralmente fuera de su alcance (mismo defecto que
+ * `app/cableado-de-formato.unit.test.ts` ya documenta para el punto de
+ * unión del paso 4 -- "extraer a un módulo puro MUEVE el riesgo al punto de
+ * unión, y ahí no queda nada"). Acá la lógica entera queda adentro del
+ * módulo puro, testeable sin DOM; `wizard.tsx` sólo aplica las dos mitades
+ * del resultado (pin de ese cableado en `app/cableado-de-formato.unit.test.ts`).
+ *
+ * Un asiento en blanco que pasa a tener contenido es un asiento NUEVO --
+ * entra al final de cada orden propio que ya exista (`addToOrders`); uno que
+ * ya tenía nombre es una renombrada y no hace falta tocar `orders` (F1: el
+ * índice sigue señalando al mismo asiento, se llame como se llame).
+ */
+export function editSeatState(
+  squad: Squad,
+  orders: Partial<Record<DisciplineKind, number[]>>,
+  index: number,
+  value: string,
+): { squad: Squad; orders: Partial<Record<DisciplineKind, number[]>> } {
+  const wasBlank = (squad.names[index] ?? '').trim().length === 0
+  const nextSquad = { ...squad, names: namesAfterEdit(squad.names, index, value) }
+  const nextOrders = wasBlank && value.trim().length > 0 ? addToOrders(orders, index) : orders
+  return { squad: nextSquad, orders: nextOrders }
+}
+
+/**
+ * El estado combinado tras "Participar en el torneo" (WU2): el organizador
+ * entra al plantel en un asiento NUEVO, al final -- mismo criterio que
+ * `editSeatState` para un asiento que aparece, así que también entra a cada
+ * orden propio que ya exista.
+ */
+export function joinSquadState(
+  squad: Squad,
+  orders: Partial<Record<DisciplineKind, number[]>>,
+  myName: string,
+): { squad: Squad; orders: Partial<Record<DisciplineKind, number[]>> } {
+  return { squad: addMySeat(squad, myName), orders: addToOrders(orders, squad.names.length) }
+}
+
+/**
+ * El estado combinado tras sacar la fila `index` del plantel (WU2): la cruz
+ * de paso 1, o "Sacame del plantel" para la propia. `removeFromOrders` corre
+ * la MISMA fórmula que `removeSeatAt` ya aplica a `mySeat`, generalizada a
+ * cada orden propio.
+ */
+export function removeSeatState(
+  squad: Squad,
+  orders: Partial<Record<DisciplineKind, number[]>>,
+  index: number,
+): { squad: Squad; orders: Partial<Record<DisciplineKind, number[]>> } {
+  return { squad: removeSeatAt(squad, index), orders: removeFromOrders(orders, index) }
+}
+
+/**
+ * El estado combinado tras el swap del orden GLOBAL (paso "Orden inicial",
+ * WU2): `swapInOrders` sigue la MISMA fórmula que `moveSeat` ya aplica a
+ * `mySeat` -- si un orden propio ya tenía anotado alguno de los dos
+ * asientos, tiene que seguir señalando a la MISMA persona después del swap.
+ *
+ * WU5 (ronda 2 de revisión): el guard de rango es UNO SOLO para las dos
+ * mitades -- antes `moveSeat` se negaba a mover fuera de rango (dejaba
+ * `squad` intacto) pero `swapInOrders`, llamada suelta, swapeaba igual;
+ * inalcanzable hoy porque las flechas de `wizard.tsx` salen `disabled` en
+ * los bordes, pero las dos mitades de UNA sola acción de usuario no tienen
+ * por qué discrepar sobre qué es "fuera de rango".
+ */
+export function moveGlobalSeatState(
+  squad: Squad,
+  orders: Partial<Record<DisciplineKind, number[]>>,
+  from: number,
+  to: number,
+): { squad: Squad; orders: Partial<Record<DisciplineKind, number[]>> } {
+  if (from < 0 || from >= squad.names.length || to < 0 || to >= squad.names.length) {
+    return { squad, orders }
+  }
+  return { squad: moveSeat(squad, from, to), orders: swapInOrders(orders, from, to) }
+}
+
+/**
+ * El `seedOrder` final de una disciplina con orden propio: traduce los
+ * ÍNDICES CRUDOS de `order` (posiciones sobre `squad.names`, F1) a índices
+ * sobre `squadNames` -- la lista YA FILTRADA que `submitSeats` produce y que
+ * `db/season.ts` usa como base (`entryRows`) -- una sola vez, ACÁ, no antes:
+ * el índice crudo sobrevive a cualquier renombrada en el camino
  * (`Squad.mySeat` ya vive de esta misma garantía), así que no hace falta
  * reconciliar nada mientras se edita el plantel.
  *
+ * WU1 (ronda 2 de revisión): reemplaza a `seedNamesFrom`, que traducía a
+ * NOMBRES -- un formato que la identidad del asiento no sobrevivía cruzar el
+ * borde con el server. Medido: `squad.names = ['Ana','Juan','Luis','Juan']`,
+ * `orders.FIFA = [3,0,1,2]` (el usuario arrastró el Juan del asiento 3)
+ * cruzaba como `['Juan','Ana','Juan','Luis']` -- dos nombres iguales, la
+ * posición ya no dice CUÁL Juan es cuál -- y `seedOrderIndices`
+ * (`db/season.ts`, borrada en esta tarea) volvía a elegir el PRIMER Juan con
+ * un scan de primero-libre, sin forma de saber cuál era. Con índices de
+ * punta a punta no hay nada que adivinar: el resultado de esta función ya
+ * es la posición DEFINITIVA dentro de `squadNames`, y viaja tal cual hasta
+ * `db/season.ts`.
+ *
  * Cualquier índice que ya no señale a un asiento con nombre (uno sacado sin
- * pasar por `removeFromOrders`, o uno vaciado a mano) se descarta -- mismo
- * espíritu que la vieja `reconcileOrder` con un nombre que ya no está. Y
- * cualquier asiento del plantel que `order` no llegó a anotar se agrega al
- * final, en el orden del plantel -- así el resultado es SIEMPRE una
- * permutación completa de los nombres cargados, la que exige el guard de
- * `createSeason` (`isPermutationOf`, `db/season.ts`).
+ * pasar por `removeFromOrders`, uno vaciado a mano, o uno fuera de rango) se
+ * descarta -- mismo espíritu que la vieja `reconcileOrder` con un nombre que
+ * ya no está. Y cualquier asiento del plantel que `order` no llegó a anotar
+ * se agrega al final, en el orden del plantel -- así el resultado es
+ * SIEMPRE una permutación completa de `[0, squadNames.length)`, la que
+ * exige el guard de `createSeason` (`isIndexPermutation`, `db/season.ts`).
  */
-export function seedNamesFrom(order: readonly number[], names: readonly string[]): string[] {
-  const bySeat = names
+export function seedOrderFrom(order: readonly number[], names: readonly string[]): number[] {
+  const filled = names
     .map((name, at) => ({ name: name.trim(), at }))
     .filter((seat) => seat.name.length > 0)
-  const byAt = new Map(bySeat.map((seat) => [seat.at, seat.name]))
-  const used = new Set<number>()
-  const kept: string[] = []
+  // WU5 (ronda 2 de revisión): `usedAt` es defensa contra un `order` con un
+  // índice repetido -- hoy inalcanzable, `orders[kind]` sólo se arma con
+  // `addToOrders`/`removeFromOrders`/`swapInOrders`/`moveInOrder`, y las
+  // cuatro preservan la unicidad por construcción. Se queda como red barata
+  // para cualquier otro caller de esta función exportada, no porque haya un
+  // camino de producción que hoy la dispare.
+  const positionOf = new Map(filled.map((seat, position) => [seat.at, position]))
+  const usedAt = new Set<number>()
+  const kept: number[] = []
   for (const at of order) {
-    const name = byAt.get(at)
-    if (name === undefined || used.has(at)) continue
-    kept.push(name)
-    used.add(at)
+    if (!positionOf.has(at) || usedAt.has(at)) continue
+    kept.push(positionOf.get(at)!)
+    usedAt.add(at)
   }
-  const remaining = bySeat.filter((seat) => !used.has(seat.at)).map((seat) => seat.name)
+  const remaining = filled.filter((seat) => !usedAt.has(seat.at)).map((seat) => positionOf.get(seat.at)!)
   return [...kept, ...remaining]
 }
 
@@ -662,7 +785,7 @@ export function newTournamentPayload(
   /**
    * El orden PROPIO de cada disciplina que prendió el toggle del paso
    * Formato (`orders`, `Wizard`), por ÍNDICE de asiento (F1, ver
-   * `toggleOwnOrder`/`seedNamesFrom` más arriba) -- `Partial`, a diferencia
+   * `toggleOwnOrder`/`seedOrderFrom` más arriba) -- `Partial`, a diferencia
    * de los cuatro `Record` de arriba: "ninguna disciplina tiene orden
    * propio" (entrada ausente) es el estado NORMAL del 100% de los torneos de
    * hoy, no un olvido.
@@ -688,7 +811,7 @@ export function newTournamentPayload(
       hasMasters?: boolean
       formatoDefault?: MatchdayFormat
       fixedTeams?: boolean
-      seedNames?: string[]
+      seedOrder?: number[]
     }
   >
 } {
@@ -714,7 +837,7 @@ export function newTournamentPayload(
             }
           : {}
       const ownOrder = orders[kind]
-      // `seedNames` sólo se agrega con 2+ disciplinas marcadas (F3, dos
+      // `seedOrder` sólo se agrega con 2+ disciplinas marcadas (F3, dos
       // jueces ciegos, `37b225b..d33377a`) -- MISMO gate que
       // `hasMasters`/`formatoDefault` arriba, `picked.length > 1`, y por la
       // MISMA razón: con una sola disciplina el paso Formato no dibuja el
@@ -725,21 +848,24 @@ export function newTournamentPayload(
       // arriba). Gatear sólo en `ownOrder === undefined` (la versión de
       // antes de esta tarea) dejaba pasar justo ese sobrante: elegir Pádel +
       // FIFA, prender "orden propio" en Pádel, volver al paso 1 y destildar
-      // FIFA deja un torneo de UNA sola disciplina (Pádel) con `seedNames`
+      // FIFA deja un torneo de UNA sola disciplina (Pádel) con `seedOrder`
       // en el payload, tomando el camino nuevo en vez del de siempre.
       //
-      // `seedNamesFrom` (F1, arriba) traduce los ÍNDICES de `ownOrder` a los
-      // nombres reales de ESTE submit -- `squad.names`, no `seats.squadNames`:
-      // la función ya filtra los blancos por su cuenta, y necesita los
-      // índices ORIGINALES del plantel (los que `ownOrder` usa), no los
-      // reindexados que deja `submitSeats`.
-      const seedNames =
-        picked.length > 1 && ownOrder !== undefined ? { seedNames: seedNamesFrom(ownOrder, squad.names) } : {}
+      // `seedOrderFrom` (WU1, arriba) traduce los ÍNDICES CRUDOS de
+      // `ownOrder` a posiciones dentro de `seats.squadNames` -- WU5 (ronda 2
+      // de revisión): el segundo argumento tiene que ser `squad.names`, EL
+      // PLANTEL CRUDO, nunca `seats.squadNames` (ya reindexado). `ownOrder`
+      // trae índices ORIGINALES sobre `squad.names` (los que `orders` usa en
+      // todo momento, F1) -- traducirlos contra la versión YA achicada
+      // correría a cada jugador un lugar de más apenas hubiera un blanco en
+      // el medio (`filled === floor`, un estado normal, no un error).
+      const seedOrder =
+        picked.length > 1 && ownOrder !== undefined ? { seedOrder: seedOrderFrom(ownOrder, squad.names) } : {}
       return buildDisciplines([kind], resized, pairSize).map((row) => ({
         ...row,
         ...extra,
         fixedTeams: effectiveFixedTeams(pairSize, fixedTeams[kind]),
-        ...seedNames,
+        ...seedOrder,
       }))
     }),
   }

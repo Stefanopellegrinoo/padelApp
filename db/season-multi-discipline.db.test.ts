@@ -524,17 +524,21 @@ describe('createSeason con el plantel al piso real de una disciplina de a uno', 
  * `discipline_entries.seed_position` (arriba, `squadSeedOrder`) YA es una
  * columna por disciplina — hasta acá `createSeason` simplemente escribía el
  * mismo índice de `squadNames` en la fila de TODAS las disciplinas (el orden
- * global). `NewSeasonDiscipline.seedNames` es el primer caller que aprovecha
+ * global). `NewSeasonDiscipline.seedOrder` es el primer caller que aprovecha
  * que la columna ya soporta esto: nada de esquema cambia, sólo lo que
  * `createSeason` calcula antes de insertar.
  *
- * `seedNames` es un array de NOMBRES, no de índices ni de ids: es el mismo
- * vocabulario que `squadNames`, porque a esta altura del wizard (paso "Orden
- * inicial", todavía sin crear el torneo) no existe otro identificador con el
- * que un caller pueda referirse a un asiento.
+ * WU1 (ronda 2 de revisión): `seedOrder` es un array de ÍNDICES sobre
+ * `squadNames`, no de NOMBRES -- reemplaza a `seedNames` (borrado en esta
+ * tarea). Con nombres, dos asientos con el MISMO nombre eran indistinguibles
+ * en cuanto cruzaban este borde: `seedOrderIndices` (también borrado) tenía
+ * que ADIVINAR cuál de los dos era con un scan de primero-libre, sin forma
+ * de saber cuál arrastró el usuario en el wizard. Con índices de punta a
+ * punta no hay nada que adivinar -- ver `describe('con nombres duplicados...'`
+ * más abajo, que es exactamente el caso que esto arregla.
  */
-describe('createSeason con orden propio por disciplina (seedNames)', () => {
-  it('dos disciplinas con seedNames en órdenes distintos escriben seed_position distinto cada una', async () => {
+describe('createSeason con orden propio por disciplina (seedOrder)', () => {
+  it('dos disciplinas con seedOrder en órdenes distintos escriben seed_position distinto cada una', async () => {
     const admin = await createTestUser()
     const config = defaultConfig(4)
     const names = squadNames(4)
@@ -544,9 +548,9 @@ describe('createSeason con orden propio por disciplina (seedNames)', () => {
       config,
       disciplines: [
         // Pádel: orden invertido respecto del plantel.
-        { kind: 'PADEL', config, seedNames: [names[3]!, names[2]!, names[1]!, names[0]!] },
+        { kind: 'PADEL', config, seedOrder: [3, 2, 1, 0] },
         // FIFA: mismo conjunto, otro orden -- ninguno de los dos es el global.
-        { kind: 'FIFA', config, seedNames: [names[1]!, names[3]!, names[0]!, names[2]!] },
+        { kind: 'FIFA', config, seedOrder: [1, 3, 0, 2] },
       ],
     })
 
@@ -581,7 +585,7 @@ describe('createSeason con orden propio por disciplina (seedNames)', () => {
     )
   })
 
-  it('la disciplina sin seedNames sigue el orden global, aunque la vecina tenga el suyo propio', async () => {
+  it('la disciplina sin seedOrder sigue el orden global, aunque la vecina tenga el suyo propio', async () => {
     const admin = await createTestUser()
     const config = defaultConfig(4)
     const names = squadNames(4)
@@ -590,8 +594,8 @@ describe('createSeason con orden propio por disciplina (seedNames)', () => {
       squadNames: names,
       config,
       disciplines: [
-        { kind: 'PADEL', config, seedNames: [names[1]!, names[0]!, names[3]!, names[2]!] },
-        { kind: 'FIFA', config }, // sin seedNames: comportamiento de siempre, el índice global.
+        { kind: 'PADEL', config, seedOrder: [1, 0, 3, 2] },
+        { kind: 'FIFA', config }, // sin seedOrder: comportamiento de siempre, el índice global.
       ],
     })
 
@@ -609,24 +613,20 @@ describe('createSeason con orden propio por disciplina (seedNames)', () => {
     expect(fifaSeats?.map((row) => row.entry_id)).toEqual(names.map(idFor))
   })
 
-  // El guard de permutación: `seedNames` tiene que ser el MISMO conjunto que
-  // `squadNames`, sólo reordenado -- ni de menos (falta un nombre) ni de más
-  // (repite uno que no compensa una ausencia). Sin este guard, un `seedNames`
-  // roto se comería en silencio a un jugador (nunca entra a
-  // `discipline_entries` de esa disciplina) o lo dejaría con dos asientos.
+  // El guard de permutación: `seedOrder` tiene que ser una permutación
+  // GENUINA de `[0, squadNames.length)` -- cada índice exactamente una vez,
+  // ni de menos (falta uno) ni de más (repite uno que no compensa una
+  // ausencia). Sin este guard, un `seedOrder` roto se comería en silencio a
+  // un jugador (nunca entra a `discipline_entries` de esa disciplina) o lo
+  // dejaría con dos asientos.
   //
-  // F5 (revisión ciega dual, 37b225b..d33377a): un `.rejects.toThrow()` a
-  // secas queda verde aunque el rechazo real sea un `TypeError` sin
-  // mensaje en español (medido: debilitar `isPermutationOf` a
-  // `a.every(v => b.includes(v))` deja pasar un plantel corto y el
-  // `TypeError: Cannot read properties of undefined (reading 'id')` que
-  // sigue explota más abajo, no el `EdgeError` que el usuario tiene que
-  // leer) -- y también queda verde si el guard se corre de lugar y deja
-  // temporadas huérfanas atrás (medido: moverlo a justo antes del insert de
-  // `discipline_entries` no lo hace fallar, sólo cambia CUÁNDO). Estos dos
-  // tests ahora piden las tres cosas: el TIPO del error, el MENSAJE exacto,
-  // y que no quede ninguna fila de `seasons` con ese nombre.
-  it('rebota si seedNames no calza en cantidad con el plantel', async () => {
+  // F5 (revisión ciega dual, 37b225b..d33377a), vigente tras WU1: un
+  // `.rejects.toThrow()` a secas queda verde aunque el rechazo real sea un
+  // `TypeError` sin mensaje en español -- y también queda verde si el guard
+  // se corre de lugar y deja temporadas huérfanas atrás. Estos dos tests
+  // piden las tres cosas: el TIPO del error, el MENSAJE exacto, y que no
+  // quede ninguna fila de `seasons` con ese nombre.
+  it('rebota si seedOrder no calza en cantidad con el plantel', async () => {
     const admin = await createTestUser()
     const config = defaultConfig(4)
     const names = squadNames(4)
@@ -637,7 +637,7 @@ describe('createSeason con orden propio por disciplina (seedNames)', () => {
         name: seasonName,
         squadNames: names,
         config,
-        disciplines: [{ kind: 'PADEL', config, seedNames: [names[0]!, names[1]!, names[2]!] }],
+        disciplines: [{ kind: 'PADEL', config, seedOrder: [0, 1, 2] }],
       })
     } catch (err) {
       caught = err
@@ -652,7 +652,7 @@ describe('createSeason con orden propio por disciplina (seedNames)', () => {
     expect(data).toEqual([])
   })
 
-  it('rebota si seedNames repite un nombre en vez de traer al que falta', async () => {
+  it('rebota si seedOrder repite un índice en vez de traer al que falta', async () => {
     const admin = await createTestUser()
     const config = defaultConfig(4)
     const names = squadNames(4)
@@ -663,8 +663,8 @@ describe('createSeason con orden propio por disciplina (seedNames)', () => {
         name: seasonName,
         squadNames: names,
         config,
-        // Repite names[0] en vez de traer names[1]: misma longitud, multiset distinto.
-        disciplines: [{ kind: 'PADEL', config, seedNames: [names[0]!, names[0]!, names[2]!, names[3]!] }],
+        // Repite el índice 0 en vez de traer el 1: misma longitud, no es permutación.
+        disciplines: [{ kind: 'PADEL', config, seedOrder: [0, 0, 2, 3] }],
       })
     } catch (err) {
       caught = err
@@ -679,32 +679,33 @@ describe('createSeason con orden propio por disciplina (seedNames)', () => {
     expect(data).toEqual([])
   })
 
-  // F4 (revisión ciega dual, 37b225b..d33377a): la máscara `used` de
-  // `seedOrderIndices` (`db/season.ts`) no tenía NINGÚN test que la
-  // ejercitara con nombres repetidos -- medido, reemplazar su cuerpo entero
-  // por `seedNames.map((name) => squadNames.indexOf(name))` pasa la suite
-  // COMPLETA de la base. Esa mutación es genuinamente incorrecta: sin la
-  // máscara, dos "Juan" en `seedNames` resuelven SIEMPRE al mismo índice
-  // (el primero), y el segundo `discipline_entries` con el mismo
-  // `entry_id` para la misma disciplina viola la PK `(discipline_id,
-  // entry_id)` -- el torneo entero muere. Este test ejercita esa máscara
-  // de verdad: plantel con dos "Juan" y `seedNames` que los intercala.
-  it('con nombres duplicados en el plantel, seedNames interleaved arma un entry_id DISTINTO para cada seed (F4)', async () => {
+  /**
+   * F4 (revisión ciega dual, 37b225b..d33377a) + WU1 (ronda 2): CON
+   * `seedOrder` ya no hace falta ninguna máscara `used` que adivine cuál
+   * "Juan" es cuál -- cada índice de `seedOrder` señala a un asiento
+   * PRECISO de `squadNames`, sin ambigüedad posible aunque el plantel tenga
+   * nombres repetidos. Este test es el reemplazo directo del viejo F4 (que
+   * medía la máscara de `seedOrderIndices`, un mecanismo que WU1 borró
+   * entero): plantel con dos "Juan" (índices 0 y 1) y `seedOrder` que pide
+   * EXPLÍCITAMENTE el índice 1 (el segundo Juan) antes que el 0.
+   */
+  it('con nombres duplicados en el plantel, seedOrder distingue cada índice sin ambigüedad', async () => {
     const admin = await createTestUser()
     const config = defaultConfig(4)
     const names = ['Juan', 'Juan', 'Ana', 'Luis']
     const { seasonId } = await createSeason(admin.client, {
-      name: 'Duplicados F4',
+      name: 'Duplicados WU1',
       squadNames: names,
       config,
       disciplines: [
-        // Sin seedNames: cae al índice global de siempre -- sirve acá como
+        // Sin seedOrder: cae al índice global de siempre -- sirve acá como
         // referencia para saber CUÁL entry_id es cuál "Juan", algo que el
         // nombre solo no puede distinguir (son duplicados).
         { kind: 'PADEL', config },
-        // Interleaved: Juan(0), Ana(2), Luis(3), Juan(1) -- el segundo
-        // "Juan" tiene que resolver al OTRO asiento, no repetir el primero.
-        { kind: 'FIFA', config, seedNames: ['Juan', 'Ana', 'Luis', 'Juan'] },
+        // El SEGUNDO Juan (índice 1) primero, después Ana, Luis, y por
+        // último el PRIMER Juan (índice 0) -- explícito por índice, nunca
+        // por nombre.
+        { kind: 'FIFA', config, seedOrder: [1, 2, 3, 0] },
       ],
     })
 
@@ -717,7 +718,7 @@ describe('createSeason con orden propio por disciplina (seedNames)', () => {
     const padelId = disciplines!.find((row) => row.kind === 'PADEL')!.id
     const fifaId = disciplines!.find((row) => row.kind === 'FIFA')!.id
 
-    // PADEL, sin seedNames, da la referencia: seed_position i == squadNames[i].
+    // PADEL, sin seedOrder, da la referencia: seed_position i == squadNames[i].
     const { data: padelSeats } = await db
       .from('discipline_entries')
       .select('entry_id, seed_position')
@@ -732,15 +733,87 @@ describe('createSeason con orden propio por disciplina (seedNames)', () => {
       .order('seed_position', { ascending: true })
     const fifaEntryIds = fifaSeats!.map((row) => row.entry_id)
 
-    // seedOrderIndices(['Juan','Juan','Ana','Luis'], ['Juan','Ana','Luis','Juan']) === [0, 2, 3, 1].
+    // seedOrder = [1, 2, 3, 0] -- el SEGUNDO Juan primero, nunca el primero.
     expect(fifaEntryIds).toEqual([
-      entryIdByIndex[0],
+      entryIdByIndex[1],
       entryIdByIndex[2],
       entryIdByIndex[3],
-      entryIdByIndex[1],
+      entryIdByIndex[0],
     ])
     // Los cuatro entry_id de FIFA son DISTINTOS entre sí -- ninguna PK
     // (discipline_id, entry_id) duplicada.
     expect(new Set(fifaEntryIds).size).toBe(4)
+  })
+
+  /**
+   * WU1, la prueba END-TO-END que el round 2 de revisión pidió
+   * explícitamente: componer el payload que arma el WIZARD
+   * (`newTournamentPayload`, `app/torneos/nuevo/wizard-state.ts`) con
+   * `createSeason` de verdad -- no cada mitad por separado, que es
+   * EXACTAMENTE donde la identidad se perdía antes de esta tarea
+   * (`seedNamesFrom` convertía índices a nombres, `seedOrderIndices` volvía
+   * a adivinar índices desde esos nombres, y con un plantel de nombres
+   * duplicados esas dos conversiones no eran inversas entre sí).
+   *
+   * Plantel `[Ana, Juan, Luis, Juan]` -- dos Juan, índices 1 y 3. El wizard
+   * arrastra el Juan del asiento 3 (`orders.FIFA = [3, 0, 1, 2]`, el mismo
+   * escenario medido en el reporte). Con `seedOrder` de punta a punta, el
+   * entry_id que FIFA pone primero tiene que ser el del asiento 3 -- nunca
+   * el del 1.
+   */
+  it('round trip wizard -> createSeason: dos Juan, se arrastra el asiento 3, y FIFA arranca con ESE Juan', async () => {
+    const admin = await createTestUser()
+    const squad: Squad = { names: ['Ana', 'Juan', 'Luis', 'Juan'], mySeat: null }
+    const configs = { PADEL: defaultConfig(4, 1), FIFA: defaultConfig(4, 1) }
+    const payload = newTournamentPayload(
+      'Wizard round trip',
+      squad,
+      configs,
+      ['PADEL', 'FIFA'],
+      { PADEL: 1, FIFA: 1 },
+      { PADEL: false, FIFA: false },
+      { PADEL: { kind: 'ROUND_ROBIN' }, FIFA: { kind: 'ROUND_ROBIN' } },
+      { PADEL: false, FIFA: false },
+      { FIFA: [3, 0, 1, 2] }, // el usuario arrastró el Juan del asiento 3 arriba de todo
+    )
+
+    const { seasonId } = await createSeason(admin.client, {
+      name: payload.name,
+      squadNames: payload.squadNames,
+      config: payload.config,
+      mySeatIndex: payload.mySeatIndex,
+      disciplines: payload.disciplines,
+    })
+
+    const db = adminClient()
+    const { data: disciplines } = await db.from('disciplines').select('id, kind').eq('season_id', seasonId)
+    const padelId = disciplines!.find((row) => row.kind === 'PADEL')!.id
+    const fifaId = disciplines!.find((row) => row.kind === 'FIFA')!.id
+
+    // PADEL no tiene seedOrder propio: sigue el índice GLOBAL de siempre --
+    // sirve de referencia para saber cuál entry_id es el asiento 3 (el
+    // SEGUNDO "Juan"), algo que el nombre solo no puede distinguir.
+    const { data: padelSeats } = await db
+      .from('discipline_entries')
+      .select('entry_id, seed_position')
+      .eq('discipline_id', padelId)
+      .order('seed_position', { ascending: true })
+    const entryIdBySquadIndex = padelSeats!.map((row) => row.entry_id)
+    const seat3EntryId = entryIdBySquadIndex[3]! // el Juan que el usuario arrastró
+    const seat1EntryId = entryIdBySquadIndex[1]! // el OTRO Juan
+    expect(seat3EntryId).not.toBe(seat1EntryId)
+
+    const { data: fifaSeats } = await db
+      .from('discipline_entries')
+      .select('entry_id, seed_position')
+      .eq('discipline_id', fifaId)
+      .order('seed_position', { ascending: true })
+
+    // FIFA arranca con el asiento 3 -- el que el usuario arrastró -- nunca
+    // con el asiento 1, el otro "Juan". Con `seedNamesFrom`/`seedOrderIndices`
+    // (borrados en WU1) esto colapsaba a nombres y el server volvía a elegir
+    // el PRIMER "Juan" (asiento 1) sin importar cuál arrastró el usuario.
+    expect(fifaSeats![0]!.entry_id).toBe(seat3EntryId)
+    expect(fifaSeats![0]!.entry_id).not.toBe(seat1EntryId)
   })
 })

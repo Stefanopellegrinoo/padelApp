@@ -432,6 +432,60 @@ describe('promote_guest escribe season_seed_order, siempre al final (0082)', () 
   })
 })
 
+// ── promote_guest (0082) — p_before A NIVEL TEMPORADA, sin cobertura (WU2) ──
+// WU2 (tanda 5, round 3 review fix): hasta acá NINGÚN test de esta suite
+// promovía un invitado con `p_before` y miraba `season_seed_order` -- el
+// único test con `p_before` (`db/promote.db.test.ts:513`) sólo asertea
+// `discipline_entries`. Revertir 0082:147-159 (el bloque de `p_before` a
+// nivel TEMPORADA) al viejo `select coalesce(max(seed_position), -1) + 1
+// into v_season_at` de siempre-al-final dejaba la suite ENTERA en verde
+// antes de este test -- confirmado a mano, aplicando esa mutación a la
+// función viva: el invitado promovido con `p_before` termina en la posición
+// 4 (el final) en vez de la 2 (el lugar de `p_before`), y este test es el
+// único que lo nota.
+describe('promote_guest — p_before corre la cola de season_seed_order igual que discipline_entries (0082, WU2)', () => {
+  it('el invitado promovido toma el lugar de p_before en season_seed_order, no el final', async () => {
+    const { admin, seasonId, guestId } = await closedSoloMatchdayWithGuest()
+    const db = adminClient()
+    const { data: squad, error: squadError } = await db
+      .from('season_seed_order')
+      .select('entry_id, seed_position')
+      .eq('season_id', seasonId)
+      .order('seed_position', { ascending: true })
+    if (squadError) throw new Error(squadError.message)
+    // Jugador 3 (posición 2, ni el primero ni el último): confirma que
+    // `p_before` corre la cola de verdad, no que coincide con el final por
+    // casualidad.
+    const target = squad?.[2]
+    if (target === undefined) throw new Error('Falta un asiento de referencia.')
+    expect(target.seed_position).toBe(2)
+
+    await promoteGuest(admin.client, guestId, target.entry_id)
+
+    const after = await seedOrderPositions(seasonId)
+    expectContiguous(after, 5)
+    const { data: guestRow, error: guestError } = await db
+      .from('season_seed_order')
+      .select('seed_position')
+      .eq('season_id', seasonId)
+      .eq('entry_id', guestId)
+      .single()
+    if (guestError) throw new Error(guestError.message)
+    // El invitado toma el lugar de `target` (posición 2)...
+    expect(guestRow.seed_position).toBe(2)
+    const { data: targetRow, error: targetError } = await db
+      .from('season_seed_order')
+      .select('seed_position')
+      .eq('season_id', seasonId)
+      .eq('entry_id', target.entry_id)
+      .single()
+    if (targetError) throw new Error(targetError.message)
+    // ...y `target` (y todo lo que estaba en o después de su posición) corre
+    // uno para atrás.
+    expect(targetRow.seed_position).toBe(3)
+  })
+})
+
 // ── removeSeat no necesita ningún cambio ────────────────────────────────────
 // La FK `(entry_id, season_id) references entries (id, season_id) on delete
 // cascade` (0080) hace todo el trabajo: borrar el asiento de `entries` se

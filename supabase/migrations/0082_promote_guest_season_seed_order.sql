@@ -125,6 +125,13 @@ begin
     end if;
   end if;
 
+  -- WU5 (tanda 3, round 2 review fix): mismo lock que `add_squad_seat`
+  -- (0081) y mismo motivo -- ver el comentario grande ahí. Lockea `seasons`
+  -- ANTES de leer `max(seed_position)` de `season_seed_order` para que dos
+  -- escritores concurrentes de la MISMA temporada no lean el mismo max y
+  -- choquen contra `season_seed_order_seed` (23505) sin traducir.
+  perform 1 from public.seasons where id = v_season for update;
+
   -- season_seed_order (0080): WU1 -- `p_before` corre la cola acá también,
   -- con `shift_season_seeds_up` (0081), mismo criterio que `add_squad_seat`.
   if p_before is null then

@@ -149,6 +149,37 @@ describe('add_squad_seat escribe season_seed_order, p_before corre la cola (0081
   })
 })
 
+// ── add_squad_seat — dos altas concurrentes no chocan (WU5) ────────────────
+// WU5 (tanda 3, round 2 review fix): antes del lock de `seasons` en
+// `add_squad_seat`/`promote_guest` (0081/0082), dos transacciones
+// concurrentes a la MISMA temporada leían el mismo `max(seed_position)` de
+// `season_seed_order` y la segunda en confirmar chocaba contra el índice
+// único `season_seed_order_seed` (23505) -- ese mensaje le llegaba CRUDO al
+// admin (`db/entries.ts` pasa `error.message` sin traducir, a propósito,
+// para los mensajes en castellano de la función; uno que se escapa de ahí es
+// justo el que no lo está). El fix serializa con `select ... from seasons
+// ... for update`: la segunda espera a la primera y lee el max actualizado,
+// no falla.
+describe('add_squad_seat — dos altas concurrentes a la misma temporada (WU5)', () => {
+  it('las dos entran, sin 23505 y sin pisarse la posición', async () => {
+    const admin = await createTestUser()
+    const squadNames = Array.from({ length: 4 }, (_, index) => `Jugador ${index + 1}`)
+    const { seasonId } = await createSeason(admin.client, {
+      name: 'Torneo con alta concurrente',
+      squadNames,
+      config: defaultConfig(4),
+    })
+
+    const [a, b] = await Promise.all([
+      addSquadSeat(admin.client, seasonId, 'Concurrente A'),
+      addSquadSeat(admin.client, seasonId, 'Concurrente B'),
+    ])
+
+    expect(a).not.toBe(b)
+    expectContiguous(await seedOrderPositions(seasonId), 6)
+  })
+})
+
 // ── promote_guest (0082) — sin `p_before`, sigue yendo al final ────────────
 // Scaffolding local a este archivo (mismo criterio que `promote.db.test.ts`):
 // una disciplina de a uno evita el guard "¿cobró el compañero?" y llega al

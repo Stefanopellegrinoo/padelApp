@@ -64,6 +64,22 @@ begin
   insert into public.entries (season_id, kind, display_name)
   values (p_season, 'SQUAD', trim(p_name)) returning id into v_id;
 
+  -- WU5 (tanda 3, round 2 review fix): lockea la fila de `seasons` ANTES de
+  -- leer `max(seed_position)` de `season_seed_order`. Sin esto, dos altas
+  -- concurrentes a la MISMA temporada leen el mismo max y la segunda en
+  -- confirmar choca contra `season_seed_order_seed` (23505) -- medido con
+  -- dos transacciones simultáneas -- y ese 23505 le llegaba crudo al admin
+  -- (`db/entries.ts` pasa `error.message` derecho, sin traducir, a
+  -- propósito, para los mensajes en castellano de esta función; uno que se
+  -- escapa de acá es el único que no lo está). Reusa `seasons` como mutex en
+  -- vez de un advisory lock separado -- ya hay una fila por temporada, sin
+  -- tabla nueva -- y REMUEVE la carrera en vez de sólo traducir el error: la
+  -- segunda transacción espera acá y lee el max ya actualizado por la
+  -- primera, no falla. El camino por disciplina (`shift_seeds_up`, más
+  -- abajo) tiene la misma forma de carrera y es de antes de esta rama -- no
+  -- se toca acá, ver 0023 ("techo conocido y aceptado").
+  perform 1 from public.seasons where id = p_season for update;
+
   -- season_seed_order (0080): WU1 -- `p_before` corre la cola acá también,
   -- con `shift_season_seeds_up` (arriba). El caso "no tiene fila en
   -- season_seed_order" no debería darse -- `p_before` ya se validó arriba

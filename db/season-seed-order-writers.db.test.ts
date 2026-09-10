@@ -20,6 +20,19 @@
  * base, aíslan por temporada, no por proceso") — huérfanos fantasma en 3 de
  * ~7 corridas, no una regresión real. Este archivo no repite eso: cada
  * `select` de acá lleva su propio `.eq('season_id', ...)`.
+ *
+ * WU6 (tanda 5, round 3 review fix): esa escopeada es también su límite —
+ * la garantía real que `db/entries-seed-writers.db.test.ts` promete
+ * (agarrar a un escritor NUEVO que se olvide de la tabla) viene, del lado de
+ * `discipline_entries`, del tripwire GLOBAL y sin escopear de
+ * `countOrphanedSquadEntries`. `season_seed_order` no tiene un tripwire
+ * equivalente, y no es trivial agregar uno hoy: la base local de desarrollo
+ * ya acumula asientos SQUAD sin ninguna fila en `season_seed_order` (de
+ * temporadas o fixtures de ANTES de que esta cobertura existiera), así que
+ * un `count(*) = 0` sin escopear rompería contra ese pasivo, no contra una
+ * regresión real. Este archivo prueba lo que puede probar (los escritores
+ * de producción, uno por uno, en temporadas propias) — no la garantía
+ * global que su docblock sugiere por comparación con su mirror.
  */
 import { describe, expect, it } from 'vitest'
 import { defaultConfig } from '@/core'
@@ -161,6 +174,98 @@ describe('add_squad_seat escribe season_seed_order, p_before corre la cola (0081
       .single()
     if (newRowError) throw new Error(newRowError.message)
     expect(newRow.seed_position).toBe(0)
+  })
+})
+
+// ── add_squad_seat — p_before sin fila en season_seed_order (0081:96-98, WU6) ──
+// WU6 (tanda 5, round 3 review fix): el comentario de 0081 dice que este
+// caso "no debería darse" (todo SQUAD tiene una fila en `season_seed_order`)
+// pero, si pasa igual —una fila borrada a mano, una migración vieja que
+// dejó un hueco—, el nivel TEMPORADA cae al final (mismo `if v_season_at is
+// null` que el "no juega esta disciplina" de `discipline_entries`), sin
+// avisar. El comportamiento coincide con el comentario; lo que faltaba era
+// un test que lo fije. Este archivo simula el hueco borrando la fila de
+// `season_seed_order` de `target` (con `adminClient`, y restaurada en el
+// `finally`) SIN tocar su fila de `discipline_entries` -- ahí `p_before`
+// sigue siendo un asiento real de la disciplina, así que los dos niveles
+// divergen: temporada al final, disciplina en el lugar de `target`.
+describe('add_squad_seat — p_before sin fila en season_seed_order cae al final de la temporada (0081:96-98, WU6)', () => {
+  it('la temporada lo manda al final; la disciplina sigue corriendo la cola normal', async () => {
+    const admin = await createTestUser()
+    const squadNames = Array.from({ length: 4 }, (_, index) => `Jugador ${index + 1}`)
+    const { seasonId } = await createSeason(admin.client, {
+      name: 'Torneo con hueco en season_seed_order',
+      squadNames,
+      config: defaultConfig(4),
+    })
+    const db = adminClient()
+    const { data: seasonRows, error: seasonRowsError } = await db
+      .from('season_seed_order')
+      .select('entry_id, seed_position')
+      .eq('season_id', seasonId)
+      .order('seed_position', { ascending: true })
+    if (seasonRowsError) throw new Error(seasonRowsError.message)
+    // Jugador 2 (posición 1): ni el primero ni el último, para que "al
+    // final" y "en su lugar" no coincidan por casualidad.
+    const target = seasonRows?.[1]
+    if (target === undefined) throw new Error('Falta un asiento de referencia.')
+    const { data: disciplines, error: disciplinesError } = await db
+      .from('disciplines')
+      .select('id')
+      .eq('season_id', seasonId)
+    if (disciplinesError) throw new Error(disciplinesError.message)
+    const disciplineId = disciplines?.[0]?.id
+    if (disciplineId === undefined) throw new Error('Falta la disciplina.')
+    const { data: targetDisciplineSeat, error: targetDisciplineSeatError } = await db
+      .from('discipline_entries')
+      .select('seed_position')
+      .eq('discipline_id', disciplineId)
+      .eq('entry_id', target.entry_id)
+      .single()
+    if (targetDisciplineSeatError) throw new Error(targetDisciplineSeatError.message)
+
+    const { error: gapError } = await db
+      .from('season_seed_order')
+      .delete()
+      .eq('season_id', seasonId)
+      .eq('entry_id', target.entry_id)
+    if (gapError) throw new Error(gapError.message)
+
+    try {
+      const newId = await addSquadSeat(admin.client, seasonId, 'El quinto', target.entry_id)
+
+      // Temporada: cae al final -- el máximo de lo que QUEDA en
+      // season_seed_order (target ya no está) más uno, no el lugar de
+      // `target`.
+      const remainingMax = Math.max(...seasonRows.filter((row) => row.entry_id !== target.entry_id).map((row) => row.seed_position))
+      const { data: newSeasonRow, error: newSeasonRowError } = await db
+        .from('season_seed_order')
+        .select('seed_position')
+        .eq('season_id', seasonId)
+        .eq('entry_id', newId)
+        .single()
+      if (newSeasonRowError) throw new Error(newSeasonRowError.message)
+      expect(newSeasonRow.seed_position).toBe(remainingMax + 1)
+
+      // Disciplina: sigue corriendo la cola de verdad -- `target` SÍ tiene
+      // fila acá, nunca se tocó.
+      const { data: newDisciplineRow, error: newDisciplineRowError } = await db
+        .from('discipline_entries')
+        .select('seed_position')
+        .eq('discipline_id', disciplineId)
+        .eq('entry_id', newId)
+        .single()
+      if (newDisciplineRowError) throw new Error(newDisciplineRowError.message)
+      expect(newDisciplineRow.seed_position).toBe(targetDisciplineSeat.seed_position)
+    } finally {
+      // El hueco de arriba era sólo para simular el caso "no debería darse"
+      // -- se repone en la MISMA posición que tenía: nada más la ocupó,
+      // porque el nivel temporada no corrió ningún `shift` (cayó al final).
+      const { error: restoreError } = await db
+        .from('season_seed_order')
+        .insert({ season_id: seasonId, entry_id: target.entry_id, seed_position: target.seed_position })
+      if (restoreError) throw new Error(restoreError.message)
+    }
   })
 })
 

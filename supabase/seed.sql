@@ -120,6 +120,18 @@ cross join season;
 -- DOS filas por `entry_id` (una por disciplina) y este `insert` las mandaría
 -- las dos contra la misma clave `(season_id, entry_id)` de
 -- `season_seed_order` — `db:reset` se caería con una violación de PK.
+--
+-- WU6 (tanda 5, round 3 review fix): esto copia SÓLO la parte "primaria" del
+-- criterio de 0080 —el `left join` contra `discipline_entries` de la
+-- primaria—, no las otras dos: no hay `tail` (`row_number()` para un SQUAD
+-- que no juega la primaria) ni el `raise exception 'Backfill incompleto'`
+-- que 0080 sí tiene. Hoy da lo mismo (la única disciplina de este seed es la
+-- primaria, y el insert de `discipline_entries` de más arriba metió a los 8
+-- SQUAD ahí) — el guard de abajo es lo que hace ese "hoy da lo mismo" una
+-- garantía verificada y no un supuesto: el día que este seed sume una
+-- segunda disciplina con solape parcial, un SQUAD que no juegue la primaria
+-- quedaría sin fila acá, en silencio, y `db:reset` seguiría en verde sin
+-- este chequeo.
 insert into public.season_seed_order (season_id, entry_id, seed_position)
 select de.season_id, de.entry_id, de.seed_position
   from public.discipline_entries de
@@ -130,3 +142,18 @@ select de.season_id, de.entry_id, de.seed_position
       order by position, created_at
       limit 1
    );
+
+-- Mismo tripwire que 0080_season_seed_order.sql:97-103, escopeado a esta
+-- única temporada: si el día de mañana este seed suma una disciplina y algún
+-- SQUAD queda sin fila en `season_seed_order` (el caso que el comentario de
+-- arriba documenta y que este insert no cubre), que `db:reset` se caiga
+-- ACÁ, ruidoso, y no en la pantalla de Unirse del demo mostrando el plantel
+-- incompleto.
+do $$ declare v_want int; v_got int; v_season uuid; begin
+  select id into v_season from public.seasons where invite_token = 'demo';
+  select count(*) into v_want from public.entries where kind = 'SQUAD' and season_id = v_season;
+  select count(*) into v_got  from public.season_seed_order where season_id = v_season;
+  if v_want <> v_got then
+    raise exception 'Backfill incompleto en supabase/seed.sql: % asientos SQUAD, % filas en season_seed_order. Este insert sólo copia la disciplina PRIMARIA -- si un SQUAD no la juega, hace falta el tail que 0080_season_seed_order.sql sí tiene.', v_want, v_got;
+  end if;
+end $$;

@@ -490,6 +490,87 @@ describe('el wizard — TITLES/HELP/blocked/advance no se desalinean entre sí (
     expect(advance).toContain('if (step === 3) {')
     expect(advance).not.toContain('if (step === 2) {')
   })
+
+  /**
+   * WU3 (ronda 2 de revisión): F7 pinea `blocked`/`advance` y a los cuatro
+   * `TITLES`/`HELP`, pero dejó afuera una QUINTA ubicación sin pinear -- los
+   * gates de RENDER en sí. Medido: swapear `{step === 2 && <PasoFormato/>}`
+   * con `{step === 3 && <PasoOrdenInicial/>}` sobrevive 1050/1050 + `tsc`
+   * limpio: el paso 2 queda titulado "Formato" pero dibuja la lista de
+   * orden, y `blocked` (`step === 2 && anyErrors`) apaga "Continuar" sobre un
+   * paso cuyos `<Aviso>` de error viven DENTRO de `PasoFormato`, que ya no se
+   * ve ahí -- el mismo soft-lock que el comentario de F7 dice prevenir.
+   */
+  it('PasoFormato se dibuja en el paso 2, no en el 3', () => {
+    expect(fuente).toMatch(/\{step === 2 && \(\s*<PasoFormato\b/)
+    expect(fuente).not.toMatch(/\{step === 3 && \(\s*<PasoFormato\b/)
+  })
+
+  it('PasoOrdenInicial se dibuja en el paso 3, no en el 2', () => {
+    expect(fuente).toMatch(/\{step === 3 && \(\s*<PasoOrdenInicial\b/)
+    expect(fuente).not.toMatch(/\{step === 2 && \(\s*<PasoOrdenInicial\b/)
+  })
+
+  /** "Usar los defaults" (wizard.tsx) también está gateado a mano al `step === 2` -- mismo riesgo de desalineación que arriba, mismo pin. */
+  it('"Usar los defaults" está gateado al paso 2 (Formato)', () => {
+    const boton = /\{step === 2 && \(\s*<button[\s\S]*?Usar los defaults[\s\S]*?\)\}/.exec(fuente)?.[0] ?? ''
+    expect(boton).not.toBe('')
+    expect(boton.length).toBeLessThan(800) // no se comió de más: sigue siendo ESTE botón, no el resto del archivo.
+  })
+})
+
+/**
+ * WU2 (ronda 2 de revisión): los cuatro handlers que hilan `squad` y
+ * `orders` a la vez vivían con la lógica ADENTRO del handler de `.tsx` --
+ * `wizard-state.unit.test.ts` cubre la función pura que cada uno ahora
+ * arma (`editSeatState`/`joinSquadState`/`removeSeatState`/
+ * `moveGlobalSeatState`), pero eso no prueba que el HANDLER de `wizard.tsx`
+ * de verdad la llame y aplique las DOS mitades del resultado -- mismo techo
+ * que el resto de este archivo: sin clicks, la suite no llega a ejecutar el
+ * cuerpo del handler, así que el ÚNICO lugar donde un mis-wire se puede
+ * cazar es pinchando el ARGUMENTO por FUENTE (ronda 18).
+ */
+describe('los handlers de orders del wizard -- el cableado que ningún render alcanza (WU2)', () => {
+  const fuente = sinComentarios(
+    readFileSync(join(process.cwd(), 'app/torneos/nuevo/wizard.tsx'), 'utf8'),
+  )
+
+  it('editSeatName arma el estado combinado con editSeatState y aplica las dos mitades', () => {
+    const cuerpo = /const editSeatName = \(index: number, value: string\) => \{[\s\S]*?\n {2}\}/.exec(fuente)?.[0] ?? ''
+    expect(cuerpo).not.toBe('')
+    expect(cuerpo).toContain('editSeatState(squad, orders, index, value)')
+    expect(cuerpo).toMatch(/setSquad\([\w.]+\)/)
+    expect(cuerpo).toMatch(/setOrdersState\([\w.]+\)/)
+  })
+
+  it('joinSquad arma el estado combinado con joinSquadState y aplica las dos mitades', () => {
+    const cuerpo = /const joinSquad = \(\) => \{[\s\S]*?\n {2}\}/.exec(fuente)?.[0] ?? ''
+    expect(cuerpo).not.toBe('')
+    expect(cuerpo).toContain('joinSquadState(squad, orders, myName)')
+    expect(cuerpo).toMatch(/setSquad\([\w.]+\)/)
+    expect(cuerpo).toMatch(/setOrdersState\([\w.]+\)/)
+  })
+
+  it('removeSeat arma el estado combinado con removeSeatState y aplica las dos mitades', () => {
+    const cuerpo = /const removeSeat = \(index: number\) => \{[\s\S]*?\n {2}\}/.exec(fuente)?.[0] ?? ''
+    expect(cuerpo).not.toBe('')
+    expect(cuerpo).toContain('removeSeatState(squad, orders, index)')
+    expect(cuerpo).toMatch(/setSquad\([\w.]+\)/)
+    expect(cuerpo).toMatch(/setOrdersState\([\w.]+\)/)
+  })
+
+  it('moveGlobalSeat arma el estado combinado con moveGlobalSeatState y aplica las dos mitades', () => {
+    const cuerpo = /const moveGlobalSeat = \(from: number, to: number\) => \{[\s\S]*?\n {2}\}/.exec(fuente)?.[0] ?? ''
+    expect(cuerpo).not.toBe('')
+    expect(cuerpo).toContain('moveGlobalSeatState(squad, orders, from, to)')
+    expect(cuerpo).toMatch(/setSquad\([\w.]+\)/)
+    expect(cuerpo).toMatch(/setOrdersState\([\w.]+\)/)
+  })
+
+  /** wizard.tsx:1135 (WU2): "+ Agregar jugador" era un `setSquad` a mano, con la misma forma que el resto de las mutaciones de plantel -- ahora pasa por `addBlankSeat`, igual que las otras cuatro. */
+  it('"+ Agregar jugador" pasa por addBlankSeat, no arma el array a mano', () => {
+    expect(fuente).toMatch(/setSquad\(addBlankSeat\(squad\)\)/)
+  })
 })
 
 // ── S76 / la mitad anónima de W64 ────────────────────────────────────────────

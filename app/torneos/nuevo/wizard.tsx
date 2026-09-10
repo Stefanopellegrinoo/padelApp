@@ -12,27 +12,25 @@ import {
   FORMATO_DEFAULT_OPTIONS,
   type DisciplineKind,
   type Squad,
-  addMySeat,
-  addToOrders,
+  addBlankSeat,
   automaticHasMasters,
   disciplinesWarning,
+  editSeatState,
   effectiveFloor,
   filledCount,
   formatErrors,
   formatoDefaultKey,
   freshDisciplineConfig,
   isSameFormatoDefault,
+  joinSquadState,
+  moveGlobalSeatState,
   moveInOrder,
-  moveSeat,
-  namesAfterEdit,
   newTournamentPayload,
-  removeFromOrders,
-  removeSeatAt,
+  removeSeatState,
   resizeConfigs,
   squadWarning,
   steppersFor,
   summaryOf,
-  swapInOrders,
   toggleDiscipline,
   toggleOwnOrder,
   withoutTrailingBlanks,
@@ -875,42 +873,40 @@ export function Wizard({ myName }: { myName: string }) {
     setConfigsState((current) => resizeConfigs(current, filledCount(next.names), pairSizes))
   }
 
-  // La fila `index` del plantel (paso 1) cambia de valor. Si esa fila estaba
-  // en blanco y pasa a tener contenido, es un asiento NUEVO -- entra al
-  // final de cada orden propio que ya exista (`addToOrders`); si ya tenía
-  // nombre, es una renombrada y no hace falta tocar nada (F1: el índice
-  // sigue señalando al mismo asiento, se llame como se llame).
+  // WU2 (ronda 2 de revisión): los cuatro handlers de acá abajo arman el
+  // estado combinado (`squad` + `orders`) con UNA función pura de
+  // `wizard-state.ts` (`editSeatState`/`joinSquadState`/`removeSeatState`/
+  // `moveGlobalSeatState`, testeadas ahí) y sólo aplican las dos mitades del
+  // resultado -- antes cada uno hilaba la lógica ACÁ, adentro del handler,
+  // sin ningún test que la ejercitara (esta suite no tiene runner de
+  // clicks/tecleo; pin de este cableado en `app/cableado-de-formato.unit.test.ts`).
+
+  // La fila `index` del plantel (paso 1) cambia de valor.
   const editSeatName = (index: number, value: string) => {
-    const wasBlank = (names[index] ?? '').trim().length === 0
-    setSquad({ ...squad, names: namesAfterEdit(names, index, value) })
-    if (wasBlank && value.trim().length > 0) setOrdersState((current) => addToOrders(current, index))
+    const next = editSeatState(squad, orders, index, value)
+    setSquad(next.squad)
+    setOrdersState(next.orders)
   }
 
-  // "Participar en el torneo": el organizador entra al plantel en un asiento
-  // NUEVO (`addMySeat`, al final) -- mismo criterio que `editSeatName` de
-  // arriba para un asiento que aparece, así que también entra a cada orden
-  // propio que ya exista.
+  // "Participar en el torneo": el organizador entra al plantel en un asiento NUEVO, al final.
   const joinSquad = () => {
-    setOrdersState((current) => addToOrders(current, names.length))
-    setSquad(addMySeat(squad, myName))
+    const next = joinSquadState(squad, orders, myName)
+    setSquad(next.squad)
+    setOrdersState(next.orders)
   }
 
-  // Saca la fila `index` del plantel (la cruz de paso 1, o "Sacame del
-  // plantel" para la propia): `removeFromOrders` corre la MISMA fórmula que
-  // `removeSeatAt` ya aplica a `mySeat`, generalizada a cada orden propio.
+  // Saca la fila `index` del plantel (la cruz de paso 1, o "Sacame del plantel" para la propia).
   const removeSeat = (index: number) => {
-    setSquad(removeSeatAt(squad, index))
-    setOrdersState((current) => removeFromOrders(current, index))
+    const next = removeSeatState(squad, orders, index)
+    setSquad(next.squad)
+    setOrdersState(next.orders)
   }
 
-  // El swap del orden GLOBAL (paso "Orden inicial", lista de arriba):
-  // `swapInOrders` sigue la MISMA fórmula que `moveSeat` ya aplica a
-  // `mySeat` -- si un orden propio ya tenía anotado alguno de los dos
-  // asientos, tiene que seguir señalando a la MISMA persona después del
-  // swap, no a la que quedó parada en ese índice.
+  // El swap del orden GLOBAL (paso "Orden inicial", lista de arriba).
   const moveGlobalSeat = (from: number, to: number) => {
-    setSquad(moveSeat(squad, from, to))
-    setOrdersState((current) => swapInOrders(current, from, to))
+    const next = moveGlobalSeatState(squad, orders, from, to)
+    setSquad(next.squad)
+    setOrdersState(next.orders)
   }
 
   // Cada radio "Lados" manda sólo sobre SU disciplina, y ahora SIEMPRE rehace
@@ -1132,7 +1128,7 @@ export function Wizard({ myName }: { myName: string }) {
                 Task 3): la fila para sumar un jugador más siempre está. */}
             <button
               type="button"
-              onClick={() => setSquad({ ...squad, names: [...names, ''] })}
+              onClick={() => setSquad(addBlankSeat(squad))}
               className="rounded-field border-[1.5px] border-line p-[13px] text-[14px] font-[750] text-muted"
             >
               + Agregar jugador

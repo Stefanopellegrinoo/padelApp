@@ -51,6 +51,21 @@ begin
     raise exception 'Sólo quien organiza la temporada puede sumar un invitado al plantel.';
   end if;
 
+  -- WU1 (tanda 5, round 3 review fix): mismo advisory lock que
+  -- `add_squad_seat` (0081), mismo motivo -- ver el comentario grande ahí.
+  -- Reemplaza el `perform 1 from public.seasons ... for update` que WU5
+  -- (tanda 3, round 2 review fix) agregaba más abajo, después del bloque de
+  -- `discipline_entries`: ESE orden (discipline_entries → seasons →
+  -- season_seed_order) era el inverso del de `add_squad_seat` (seasons →
+  -- season_seed_order → discipline_entries) -- el hallazgo B2 de la ronda 3.
+  -- Tomarlo apenas se conoce `v_season` —el `for update` de arriba, sobre la
+  -- fila de `entries` del invitado, es previo por necesidad: sin él no hay
+  -- `v_season` que lockear, y no participa de la cadena `seasons` /
+  -- `discipline_entries` / `season_seed_order` que causaba B1/B2— y antes de
+  -- cualquier otro guard o `for update` de esa cadena hace que las dos
+  -- funciones acuerden el mismo orden.
+  perform pg_advisory_xact_lock(hashtextextended(v_season::text, 0));
+
   if v_kind <> 'GUEST' then
     raise exception 'Ese asiento ya es del plantel.';
   end if;
@@ -125,12 +140,11 @@ begin
     end if;
   end if;
 
-  -- WU5 (tanda 3, round 2 review fix): mismo lock que `add_squad_seat`
-  -- (0081) y mismo motivo -- ver el comentario grande ahí. Lockea `seasons`
-  -- ANTES de leer `max(seed_position)` de `season_seed_order` para que dos
-  -- escritores concurrentes de la MISMA temporada no lean el mismo max y
-  -- choquen contra `season_seed_order_seed` (23505) sin traducir.
-  perform 1 from public.seasons where id = v_season for update;
+  -- El mutex que serializa dos escritores concurrentes de la MISMA
+  -- temporada —y evita que los dos lean el mismo `max(seed_position)` y el
+  -- segundo choque contra `season_seed_order_seed` (23505) sin traducir— ya
+  -- se tomó arriba, con el advisory lock (WU1, tanda 5, ver el comentario
+  -- grande junto al guard de admin).
 
   -- season_seed_order (0080): WU1 -- `p_before` corre la cola acá también,
   -- con `shift_season_seeds_up` (0081), mismo criterio que `add_squad_seat`.

@@ -1037,6 +1037,10 @@ export type Database = {
         Args: { p_matchday: string; p_status: string }
         Returns: undefined
       }
+      shift_season_seeds_up: {
+        Args: { p_from: number; p_season: string }
+        Returns: undefined
+      }
       shift_seeds_up: {
         Args: { p_discipline: string; p_from: number }
         Returns: undefined

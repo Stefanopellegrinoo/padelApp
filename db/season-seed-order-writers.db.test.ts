@@ -106,13 +106,14 @@ describe('createSeason escribe season_seed_order desde el orden GLOBAL de squadN
   })
 })
 
-// ── add_squad_seat (0081) — tail-only a nivel temporada ────────────────────
-// El corrimiento de `p_before` sigue siendo real DENTRO de la disciplina
-// (discipline_entries no cambia); a nivel TEMPORADA el asiento nuevo entra
-// siempre al final. Ver el comentario grande de 0081 para el porqué
-// completo: no hay pantalla que hoy pida "antes de quién" a nivel temporada.
-describe('add_squad_seat escribe season_seed_order, siempre al final (0081)', () => {
-  it('el asiento nuevo va al final de season_seed_order aunque p_before lo adelante en su disciplina', async () => {
+// ── add_squad_seat (0081) — p_before corre la cola A LOS DOS NIVELES ───────
+// WU1 (tanda 3, round 2 review fix): la pantalla de Ajustes › Plantel SÍ deja
+// elegir "antes de quién" a nivel TEMPORADA (`ajustes/plantel.tsx`), así que
+// `p_before` tiene que correr la cola en `season_seed_order` igual que ya
+// corría en `discipline_entries` -- `shift_season_seeds_up` (0081) es el
+// mirror de `shift_seeds_up` para esa tabla.
+describe('add_squad_seat escribe season_seed_order, p_before corre la cola (0081, WU1)', () => {
+  it('el asiento nuevo toma el lugar de p_before en season_seed_order, no el final', async () => {
     const admin = await createTestUser()
     const squadNames = Array.from({ length: 4 }, (_, index) => `Jugador ${index + 1}`)
     const { seasonId } = await createSeason(admin.client, {
@@ -131,9 +132,9 @@ describe('add_squad_seat escribe season_seed_order, siempre al final (0081)', ()
       .single()
     if (firstError || firstEntry === null) throw new Error(firstError?.message)
 
-    // "Antes de Jugador 1": el `p_before` que sí corre la cola en
-    // discipline_entries. A nivel temporada no importa -- el nuevo tiene que
-    // aparecer al FINAL de season_seed_order, no adelante de nadie.
+    // "Antes de Jugador 1": el `p_before` corre la cola en discipline_entries
+    // Y en season_seed_order (WU1) -- el nuevo toma la posición 0, el lugar
+    // que tenía Jugador 1, no el final.
     const newId = await addSquadSeat(admin.client, seasonId, 'El quinto', firstEntry.id)
 
     expectContiguous(await seedOrderPositions(seasonId), 5)
@@ -144,11 +145,11 @@ describe('add_squad_seat escribe season_seed_order, siempre al final (0081)', ()
       .eq('entry_id', newId)
       .single()
     if (newRowError) throw new Error(newRowError.message)
-    expect(newRow.seed_position).toBe(4)
+    expect(newRow.seed_position).toBe(0)
   })
 })
 
-// ── promote_guest (0082) — mismo tail-only ──────────────────────────────────
+// ── promote_guest (0082) — sin `p_before`, sigue yendo al final ────────────
 // Scaffolding local a este archivo (mismo criterio que `promote.db.test.ts`):
 // una disciplina de a uno evita el guard "¿cobró el compañero?" y llega al
 // promote_guest real con el mínimo de pasos.

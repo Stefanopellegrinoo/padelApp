@@ -10,20 +10,20 @@
 -- disciplina con su parking y su caso "no juega esta disciplina"— es byte a
 -- byte lo que ya estaba.
 --
--- **TAIL-ONLY, a propósito, y no como el loop de acá abajo.** `p_before`
--- sigue posicionando de verdad DENTRO de cada disciplina (el loop no
--- cambia), pero a nivel TEMPORADA el asiento nuevo entra siempre al final:
--- `max(seed_position) + 1` de `season_seed_order`, sin `shift_seeds_up` ni
--- ningún corrimiento. Hacerlo bien (honrar `p_before` también a nivel
--- temporada) necesitaría el mismo parking de dos pasadas que
--- `shift_seeds_up` hace por disciplina — duplicado a un segundo nivel, por
--- un caso que hoy no tiene pantalla: no existe ningún flujo que deje elegir
--- "antes de quién" a nivel TEMPORADA (el wizard fija el orden inicial una
--- sola vez, al crear — `db/season.ts: createSeason` — y no hay pantalla de
--- reordenar el plantel de la temporada después). Cuando esa pantalla exista
--- de verdad, ahí se justifica escribir un `shift_seeds_up` a nivel
--- temporada; hasta entonces, uno que no se puede probar contra ningún
--- caller real es peor que no tenerlo.
+-- **`p_before` corre la cola A LOS DOS NIVELES, temporada y disciplina.**
+-- WU1 (tanda 3, round 2 review fix) corrige la premisa con la que había
+-- nacido este archivo: acá abajo decía "no existe ningún flujo que deje
+-- elegir 'antes de quién' a nivel TEMPORADA" — falso. `ajustes/plantel.tsx`
+-- ofrece ese selector ("Posición" → "Antes de {seat.name}") desde Ajustes ›
+-- Plantel, que es season-level (la lista que dibuja sale de
+-- `seasonSquadMembersOf`, que desde esta misma PR lee `season_seed_order`) —
+-- medido: agregar "antes de Juan" no movía nada en esa pantalla porque el
+-- `p_before` de acá sólo corría `discipline_entries`. El corrimiento usa
+-- `shift_season_seeds_up` (0080_season_seed_order.sql, agregada ahí y no
+-- acá: `db/migrations.unit.test.ts` exige una función por restatement desde
+-- 0026, y 0080 es la única migración de esta tanda que todavía no tenía
+-- ninguna) — mismo parking de dos pasadas que `shift_seeds_up` (0023) pero
+-- sobre `season_seed_order`.
 --
 -- La firma NO cambia, así que va `create or replace` y los grants
 -- sobreviven (mismo motivo que 0061 documentó sobre el `drop function` de
@@ -64,9 +64,26 @@ begin
   insert into public.entries (season_id, kind, display_name)
   values (p_season, 'SQUAD', trim(p_name)) returning id into v_id;
 
-  -- season_seed_order (0080): tail-only, ver el comentario grande de arriba.
-  select coalesce(max(seed_position), -1) + 1 into v_season_at
-    from public.season_seed_order where season_id = p_season;
+  -- season_seed_order (0080): WU1 -- `p_before` corre la cola acá también,
+  -- con `shift_season_seeds_up` (arriba). El caso "no tiene fila en
+  -- season_seed_order" no debería darse -- `p_before` ya se validó arriba
+  -- como un SQUAD real de esta temporada, y todo SQUAD tiene exactamente una
+  -- fila acá (a diferencia de `discipline_entries`, donde "no juega esta
+  -- disciplina" sí es legítimo) -- pero se cubre igual que el loop de abajo,
+  -- al final, en vez de asumir `not null`.
+  if p_before is null then
+    select coalesce(max(seed_position), -1) + 1 into v_season_at
+      from public.season_seed_order where season_id = p_season;
+  else
+    select seed_position into v_season_at from public.season_seed_order
+     where season_id = p_season and entry_id = p_before for update;
+    if v_season_at is null then
+      select coalesce(max(seed_position), -1) + 1 into v_season_at
+        from public.season_seed_order where season_id = p_season;
+    else
+      perform public.shift_season_seeds_up(p_season, v_season_at);
+    end if;
+  end if;
   insert into public.season_seed_order (season_id, entry_id, seed_position)
   values (p_season, v_id, v_season_at);
 

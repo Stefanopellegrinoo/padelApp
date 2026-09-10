@@ -10,14 +10,15 @@
 -- el casillero de puntos que crece la config, la copia de awards y de
 -- `award_lines`— es byte a byte lo que ya estaba.
 --
--- **TAIL-ONLY, mismo motivo que `add_squad_seat` (0081).** `p_before` sigue
--- posicionando de verdad DENTRO de `discipline_entries` de la disciplina de
--- esta fecha; a nivel TEMPORADA el invitado promovido entra siempre al
--- final (`max(seed_position) + 1` de `season_seed_order`), sin
--- `shift_seeds_up` a ese nivel. Ver el comentario grande de 0081 para el
--- porqué completo — es el mismo acá: no hay pantalla que hoy pida "antes de
--- quién" a nivel temporada, y escribir ese corrimiento sin un caller real
--- que lo ejercite es peor que no escribirlo.
+-- **`p_before` corre la cola A LOS DOS NIVELES, mismo fix que `add_squad_seat`
+-- (0081, WU1).** Este archivo decía acá que el invitado promovido entraba
+-- siempre al final de `season_seed_order` porque "no hay pantalla que hoy
+-- pida 'antes de quién' a nivel temporada" — falso, ver el comentario
+-- grande de 0081: `fechas/[n]/sumar.tsx` ofrece el mismo selector
+-- "Posición" que `ajustes/plantel.tsx`, y las dos pantallas son season-level.
+-- Usa `shift_season_seeds_up` (definida en 0081, ya aplicada para cuando
+-- corre esta migración) con el mismo criterio que el bloque de
+-- `discipline_entries` unas líneas más abajo.
 --
 -- La firma NO cambia: `create or replace`, y los grants sobreviven.
 create or replace function public.promote_guest(p_entry uuid, p_before uuid default null)
@@ -124,10 +125,21 @@ begin
     end if;
   end if;
 
-  -- season_seed_order (0080): tail-only, ver el comentario grande de arriba
-  -- (mismo criterio que `add_squad_seat`, 0081).
-  select coalesce(max(seed_position), -1) + 1 into v_season_at
-    from public.season_seed_order where season_id = v_season;
+  -- season_seed_order (0080): WU1 -- `p_before` corre la cola acá también,
+  -- con `shift_season_seeds_up` (0081), mismo criterio que `add_squad_seat`.
+  if p_before is null then
+    select coalesce(max(seed_position), -1) + 1 into v_season_at
+      from public.season_seed_order where season_id = v_season;
+  else
+    select seed_position into v_season_at from public.season_seed_order
+     where season_id = v_season and entry_id = p_before for update;
+    if v_season_at is null then
+      select coalesce(max(seed_position), -1) + 1 into v_season_at
+        from public.season_seed_order where season_id = v_season;
+    else
+      perform public.shift_season_seeds_up(v_season, v_season_at);
+    end if;
+  end if;
 
   -- Decision de producto (Stefano): al sumar un invitado de a uno, la app
   -- agrega el casillero de puntos SOLA, con 0, y sube el plantel. El admin

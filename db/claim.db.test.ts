@@ -338,17 +338,16 @@ describe('season_invite', () => {
     expect(data?.[0]?.disciplines).toEqual(['PADEL'])
   })
 
-  // Hasta 0083 (torneo-multi-disciplina tanda 1), el picker ordenaba por
-  // `discipline_entries` de la disciplina PRIMARIA — "antes de Juan" se veía
-  // ahí porque la primaria era la única fuente que existía. Desde 0083 el
-  // picker ordena por `season_seed_order`, y `add_squad_seat` (0081) escribe
-  // esa tabla TAIL-ONLY a nivel temporada: "antes de Juan" sigue corriendo
-  // la cola de verdad DENTRO de la disciplina, pero a nivel temporada el
-  // asiento nuevo entra siempre al final. Es la decisión documentada en
-  // 0081 (no hay pantalla que hoy pida "antes de quién" a nivel temporada) —
-  // este test la mide contra los dos lugares a la vez para que la
-  // divergencia entre disciplina y temporada quede escrita, no implícita.
-  it('season_invite es tail-only por temporada; discipline_entries sigue corriendo "antes de Juan"', async () => {
+  // WU1 (tanda 3, round 2 review fix): la premisa que 0081/0082 escribieron
+  // ("no existe ningún flujo que deje elegir 'antes de quién' a nivel
+  // TEMPORADA") era falsa — `ajustes/plantel.tsx` y `fechas/[n]/sumar.tsx`
+  // ofrecen ese selector desde la pantalla de Ajustes, que es season-level, y
+  // el picker de Unirse (`season_invite`) lee exactamente lo que esa pantalla
+  // escribe (`season_seed_order`). Este test mide, contra los dos lugares a
+  // la vez, que "antes de Juan" corre la cola en los dos: en
+  // `discipline_entries` (nunca dejó de hacerlo) y ahora también en
+  // `season_seed_order`, restaurado por `shift_season_seeds_up`.
+  it('ordena por season_seed_order y discipline_entries: "antes de Juan" aparece antes de Juan en los dos', async () => {
     const admin = await createTestUser()
     const { seasonId, disciplineIds } = await createSeason({ admin, disciplines: [{ kind: 'PADEL' }] })
     const [padelId] = disciplineIds
@@ -367,8 +366,8 @@ describe('season_invite', () => {
 
     const juan = await seat('Juan')
     const pedro = await seat('Pedro')
-    // "antes de Juan": corre la cola en discipline_entries. A nivel
-    // temporada (season_seed_order) no importa -- Nuevo entra al final.
+    // "antes de Juan": corre la cola en discipline_entries Y en
+    // season_seed_order (WU1) -- Nuevo entra antes de Juan en los dos.
     const nuevo = await seat('Nuevo', juan)
 
     const db = adminClient()
@@ -384,12 +383,11 @@ describe('season_invite', () => {
     })
     if (pickerError) throw new Error(pickerError.message)
 
-    // El picker (season_seed_order, tail-only): orden de creación, "antes de
-    // Juan" no lo adelanta.
-    expect((picker ?? []).map((row) => row.entry_id)).toEqual([juan, pedro, nuevo])
+    // El picker (season_seed_order): "antes de Juan" también lo adelanta.
+    expect((picker ?? []).map((row) => row.entry_id)).toEqual([nuevo, juan, pedro])
 
-    // Pero DENTRO de la disciplina, "antes de Juan" sigue siendo real -- lo
-    // que este test medía originalmente y que 0081 no cambia.
+    // Y DENTRO de la disciplina, "antes de Juan" sigue siendo real -- lo que
+    // este test medía originalmente y que WU1 no cambia.
     const { data: seats, error: seatsError } = await db
       .from('discipline_entries')
       .select('entry_id')

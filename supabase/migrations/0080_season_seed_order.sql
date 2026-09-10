@@ -116,3 +116,44 @@ create policy season_seed_order_write on public.season_seed_order
 -- Mismo motivo que `discipline_entries`: `anon` no tiene ningún negocio acá,
 -- y sin este revoke heredaría TRUNCATE del blanket grant.
 revoke all on public.season_seed_order from anon;
+
+-- ── shift_season_seeds_up: mismo parking que shift_seeds_up, a nivel temporada ──
+-- WU1 (tanda 3, round 2 review fix, agregada acá y no en 0081 donde se
+-- USA por primera vez): `db/migrations.unit.test.ts` exige una función por
+-- restatement desde 0026 en adelante, y 0080 —a diferencia de 0081/0082/
+-- 0083, que ya tienen la suya (`add_squad_seat`/`promote_guest`/
+-- `season_invite`)— todavía no define ninguna. `add_squad_seat` (0081) y
+-- `promote_guest` (0082) la llaman para honrar `p_before` a nivel TEMPORADA,
+-- exactamente el mismo corrimiento que `shift_seeds_up` (0023) ya hacía por
+-- disciplina — el comentario grande de 0023 (líneas 92-151) explica el
+-- porqué del parking de dos pasadas y el `+2` palabra por palabra; acá sólo
+-- cambia la tabla y la columna de scope (`season_id` en vez de
+-- `discipline_id`).
+--
+-- Plana, no `security definer`: hereda el rol de quien la llama, que durante
+-- `add_squad_seat`/`promote_guest` YA es el dueño DEFINER de esas
+-- funciones — y con el `execute` sacado a `public`, `anon` Y
+-- `authenticated`: nadie la llama por RPC, sólo esas dos.
+create function public.shift_season_seeds_up(p_season uuid, p_from int)
+returns void
+language plpgsql
+set search_path = ''
+as $$
+declare
+  v_park int;
+begin
+  select coalesce(max(seed_position), -1) + 2 into v_park
+    from public.season_seed_order
+   where season_id = p_season;
+
+  update public.season_seed_order
+     set seed_position = seed_position + v_park
+   where season_id = p_season and seed_position >= p_from;
+
+  update public.season_seed_order
+     set seed_position = seed_position - v_park + 1
+   where season_id = p_season and seed_position >= v_park;
+end;
+$$;
+
+revoke execute on function public.shift_season_seeds_up(uuid, int) from public, anon, authenticated;

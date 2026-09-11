@@ -517,9 +517,16 @@ describe('editSeatState', () => {
 
   it('una renombrada (la fila ya tenía nombre) no toca orders para nada', () => {
     const squad: Squad = { names: ['Colo', 'Nacho'], mySeat: 0 }
-    const next = editSeatState(squad, { FIFA: [1, 0] }, 0, 'Coco')
+    // WU7 (ronda 3 de revisión): `{ FIFA: [1] }`, SIN el índice 0 -- con
+    // `{ FIFA: [1, 0] }` (el fixture de antes) `addToOrder` ya no agrega
+    // nada porque el 0 estaba anotado, así que dropear `wasBlank &&` en
+    // `editSeatState` (wizard-state.ts) quedaba indistinguible: el guard de
+    // sobra corría igual y el resultado daba lo mismo. Con el 0 AUSENTE,
+    // dropear el guard sí agrega el índice 0 -- `{ FIFA: [1, 0] }`,
+    // DISTINTO de lo esperado.
+    const next = editSeatState(squad, { FIFA: [1] }, 0, 'Coco')
     expect(next.squad.names).toEqual(['Coco', 'Nacho'])
-    expect(next.orders).toEqual({ FIFA: [1, 0] })
+    expect(next.orders).toEqual({ FIFA: [1] })
   })
 })
 
@@ -646,8 +653,8 @@ describe('visibleOrderPositions', () => {
  * El toggle "orden propio" del paso Formato (docs/tipos-de-torneo.md §3):
  * prender copia el orden GLOBAL de ESE instante a la entrada de la
  * disciplina, apagar la borra entera -- no la deja vacía, que sería un
- * `seedNames: []` que no calza con NADA de permutación (`db/season.ts`,
- * `isPermutationOf`).
+ * `seedOrder: []` que no calza con NADA de permutación (`db/season.ts`,
+ * `isIndexPermutation`).
  *
  * F1: la copia es de ÍNDICES (`filledSeatIndices`), no de nombres --
  * reconciliar por VALOR era exactamente lo que perdía el asiento de una
@@ -808,6 +815,27 @@ describe('seedOrderFrom', () => {
   // crudo, pero lo que importa es que CADA índice trae SU propio asiento.
   it('nombres duplicados: cada índice trae SU propio asiento, sin mezclarse', () => {
     expect(seedOrderFrom([1, 3, 0, 2], ['Juan', 'Juan', 'Ana', 'Luis'])).toEqual([1, 3, 0, 2])
+  })
+
+  /**
+   * WU7 (ronda 3 de revisión): `usedAt` (la defensa contra un `order` con un
+   * índice repetido, ver su docblock arriba) no tiene camino de producción
+   * hoy -- `orders[kind]` sólo se arma con `addToOrders`/`removeFromOrders`/
+   * `swapInOrders`/`moveInOrder`, y las cuatro preservan la unicidad por
+   * construcción. Decisión: TESTEARLA en vez de borrarla -- `seedOrderFrom`
+   * es una función EXPORTADA (el punto de unión con `db/season.ts`, donde
+   * un `order` repetido produciría una lista más larga que
+   * `squadNames.length` y `isIndexPermutation` la rechazaría igual, pero
+   * tarde y con un mensaje que no explica la causa real), así que su
+   * contrato -- "siempre una permutación COMPLETA, ni de más ni de menos,
+   * pase lo que pase traiga `order`" -- es alcanzable en un test directo
+   * sobre la función exportada, sin necesitar un camino de UI.
+   */
+  it('un índice repetido en order no se duplica en el resultado -- red defensiva para cualquier caller de esta función exportada', () => {
+    // order repite el 0 en vez de traer el 1: Ana (0) entra una sola vez,
+    // Caro (2) mantiene su lugar pedido, y Beto (1, el que nunca se pidió)
+    // se agrega al final -- sigue siendo una permutación de largo 3, no 4.
+    expect(seedOrderFrom([0, 0, 2], ['Ana', 'Beto', 'Caro'])).toEqual([0, 2, 1])
   })
 })
 

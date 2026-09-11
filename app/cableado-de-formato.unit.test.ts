@@ -473,9 +473,18 @@ describe('el wizard — TITLES/HELP/blocked/advance no se desalinean entre sí (
     )
   })
 
-  it('HELP trae el texto de Formato, después el de Orden inicial y por último el vacío de Listo -- en ESE orden', () => {
+  /**
+   * WU7 (ronda 3 de revisión): el pin de antes anclaba en la COLA del
+   * array (los últimos tres elementos más el `]` de cierre), así que
+   * `HELP[0]` quedaba sin pinear -- insertar un elemento nuevo ANTES de él
+   * (`const HELP = ['nuevo', 'Como lo llaman...', ...]`) corre todos los
+   * índices un lugar y sigue matcheando la cola intacta. Ahora ancla desde
+   * `const HELP = [` -- los CINCO textos, en orden, sin nada antes del
+   * primero.
+   */
+  it('HELP tiene los cinco textos completos, en el orden Nombre/Plantel/Formato/Orden inicial/Listo -- nada se puede insertar antes del primero', () => {
     expect(fuente).toMatch(
-      /'Todos tienen un valor que ya funciona\. Si no te importa, seguí de largo\.',\s*'Ordenalos del mejor al peor\. Es el criterio que corta los empates hasta que haya fechas jugadas, y de ahí salen las primeras parejas\.',\s*'',\s*\]/,
+      /const HELP = \[\s*'Como lo llaman en el grupo\. Se puede cambiar después\.',\s*'',\s*'Todos tienen un valor que ya funciona\. Si no te importa, seguí de largo\.',\s*'Ordenalos del mejor al peor\. Es el criterio que corta los empates hasta que haya fechas jugadas, y de ahí salen las primeras parejas\.',\s*'',\s*\]/,
     )
   })
 
@@ -516,6 +525,21 @@ describe('el wizard — TITLES/HELP/blocked/advance no se desalinean entre sí (
     const boton = /\{step === 2 && \(\s*<button[\s\S]*?Usar los defaults[\s\S]*?\)\}/.exec(fuente)?.[0] ?? ''
     expect(boton).not.toBe('')
     expect(boton.length).toBeLessThan(800) // no se comió de más: sigue siendo ESTE botón, no el resto del archivo.
+  })
+
+  /**
+   * WU7 (ronda 3 de revisión): el pin de arriba sólo prueba que EL GATE del
+   * paso está bien puesto -- nada ahí adentro pincha el `onClick` en sí. Se
+   * puede vaciar el cuerpo (`onClick={() => {}}`) sin que ese test se
+   * entere: sigue habiendo un `<button>` con el texto "Usar los defaults"
+   * dentro de `{step === 2 && (...)}`. Este pin exige el cuerpo real: rehace
+   * la config de CADA disciplina marcada con `freshDisciplineConfig`.
+   */
+  it('"Usar los defaults" de verdad rehace la config de cada disciplina marcada, no un botón vacío', () => {
+    const boton = /\{step === 2 && \(\s*<button[\s\S]*?Usar los defaults[\s\S]*?\)\}/.exec(fuente)?.[0] ?? ''
+    expect(boton).toContain('setConfigsState((current) => {')
+    expect(boton).toContain('for (const kind of disciplines)')
+    expect(boton).toContain('next[kind] = freshDisciplineConfig(kind, filled, pairSizes[kind])')
   })
 })
 

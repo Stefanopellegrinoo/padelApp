@@ -1085,17 +1085,17 @@ describe('newTournamentPayload', () => {
   it('arma exactamente el payload que createTournament espera, para pádel', () => {
     const squad: Squad = { names: Array(8).fill('Jugador'), mySeat: 0 }
     const configs = { PADEL: configFor(8, 2), FIFA: configFor(8, 2) }
-    const payload = newTournamentPayload(
-      'Los Jueves',
+    const payload = newTournamentPayload({
+      name: 'Los Jueves',
       squad,
       configs,
-      ['PADEL'],
-      { PADEL: 2, FIFA: 2 },
-      { PADEL: true, FIFA: true },
-      ROUND_ROBIN_ALL,
-      NO_FIXED_TEAMS,
-      {},
-    )
+      picked: ['PADEL'],
+      pairSizes: { PADEL: 2, FIFA: 2 },
+      hasMasters: { PADEL: true, FIFA: true },
+      formatoDefault: ROUND_ROBIN_ALL,
+      fixedTeams: NO_FIXED_TEAMS,
+      orders: {},
+    })
     expect(payload).toEqual({
       name: 'Los Jueves',
       squadNames: squad.names,
@@ -1121,17 +1121,17 @@ describe('newTournamentPayload', () => {
   it('el squadSize del payload sale del plantel cargado, no el que traía la config', () => {
     const squad: Squad = { names: [...Array(8).fill('Jugador'), '', ''], mySeat: null }
     const configs = { PADEL: configFor(12, 2), FIFA: configFor(12, 2) }
-    const payload = newTournamentPayload(
-      'X',
+    const payload = newTournamentPayload({
+      name: 'X',
       squad,
       configs,
-      ['PADEL'],
-      { PADEL: 2, FIFA: 2 },
-      { PADEL: true, FIFA: true },
-      ROUND_ROBIN_ALL,
-      NO_FIXED_TEAMS,
-      {},
-    )
+      picked: ['PADEL'],
+      pairSizes: { PADEL: 2, FIFA: 2 },
+      hasMasters: { PADEL: true, FIFA: true },
+      formatoDefault: ROUND_ROBIN_ALL,
+      fixedTeams: NO_FIXED_TEAMS,
+      orders: {},
+    })
     expect(payload.squadNames).toHaveLength(8)
     expect(payload.config.squadSize).toBe(8)
     expect(payload.config.points).toEqual(defaultConfig(8, 2).points)
@@ -1143,17 +1143,17 @@ describe('newTournamentPayload', () => {
   it('con pairSize=1, las disciplines del payload salen con la curva de la decisión #3963', () => {
     const squad: Squad = { names: Array(8).fill('Jugador'), mySeat: null }
     const configs = { PADEL: configFor(8, 2), FIFA: configFor(8, 1) }
-    const payload = newTournamentPayload(
-      'Liga FIFA',
+    const payload = newTournamentPayload({
+      name: 'Liga FIFA',
       squad,
       configs,
-      ['FIFA'],
-      { PADEL: 2, FIFA: 1 },
-      { PADEL: true, FIFA: false },
-      ROUND_ROBIN_ALL,
-      NO_FIXED_TEAMS,
-      {},
-    )
+      picked: ['FIFA'],
+      pairSizes: { PADEL: 2, FIFA: 1 },
+      hasMasters: { PADEL: true, FIFA: false },
+      formatoDefault: ROUND_ROBIN_ALL,
+      fixedTeams: NO_FIXED_TEAMS,
+      orders: {},
+    })
     expect(payload.disciplines).toEqual([
       {
         kind: 'FIFA',
@@ -1173,17 +1173,17 @@ describe('newTournamentPayload', () => {
   it('con una sola disciplina, hasMasters y formatoDefault NO viajan en el payload', () => {
     const squad: Squad = { names: Array(8).fill('Jugador'), mySeat: null }
     const configs = { PADEL: configFor(8, 2), FIFA: configFor(8, 2) }
-    const payload = newTournamentPayload(
-      'Los Jueves',
+    const payload = newTournamentPayload({
+      name: 'Los Jueves',
       squad,
       configs,
-      ['PADEL'],
-      { PADEL: 2, FIFA: 2 },
-      { PADEL: false, FIFA: false },
-      { PADEL: { kind: 'GROUPS_KNOCKOUT', groups: 4, qualifiersPerGroup: 2 }, FIFA: { kind: 'ROUND_ROBIN' } },
-      { PADEL: true, FIFA: false },
-      {},
-    )
+      picked: ['PADEL'],
+      pairSizes: { PADEL: 2, FIFA: 2 },
+      hasMasters: { PADEL: false, FIFA: false },
+      formatoDefault: { PADEL: { kind: 'GROUPS_KNOCKOUT', groups: 4, qualifiersPerGroup: 2 }, FIFA: { kind: 'ROUND_ROBIN' } },
+      fixedTeams: { PADEL: true, FIFA: false },
+      orders: {},
+    })
     expect(payload.disciplines[0]).not.toHaveProperty('hasMasters')
     expect(payload.disciplines[0]).not.toHaveProperty('formatoDefault')
     // `fixedTeams`, al revés que las otras dos: viaja SIEMPRE, aunque haya
@@ -1211,17 +1211,17 @@ describe('newTournamentPayload', () => {
       PADEL: { ...configFor(8, 2), regularMatchdays: 10 },
       FIFA: { ...configFor(8, 1), regularMatchdays: 12 },
     }
-    const payload = newTournamentPayload(
-      'Mixto',
+    const payload = newTournamentPayload({
+      name: 'Mixto',
       squad,
       configs,
-      ['PADEL', 'FIFA'],
-      { PADEL: 2, FIFA: 1 },
-      { PADEL: true, FIFA: false },
-      { PADEL: { kind: 'ROUND_ROBIN' }, FIFA: { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 } },
-      { PADEL: true, FIFA: false },
-      {},
-    )
+      picked: ['PADEL', 'FIFA'],
+      pairSizes: { PADEL: 2, FIFA: 1 },
+      hasMasters: { PADEL: true, FIFA: false },
+      formatoDefault: { PADEL: { kind: 'ROUND_ROBIN' }, FIFA: { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 } },
+      fixedTeams: { PADEL: true, FIFA: false },
+      orders: {},
+    })
 
     expect(payload.disciplines).toHaveLength(2)
     const padel = payload.disciplines.find((row) => row.kind === 'PADEL')
@@ -1262,17 +1262,17 @@ describe('newTournamentPayload', () => {
   it('con las DOS en pairSize 2 (sin clamp), cada fila lee SU PROPIO hasMasters', () => {
     const squad: Squad = { names: Array(8).fill('Jugador'), mySeat: null }
     const configs = { PADEL: configFor(8, 2), FIFA: configFor(8, 2) }
-    const payload = newTournamentPayload(
-      'Mixto',
+    const payload = newTournamentPayload({
+      name: 'Mixto',
       squad,
       configs,
-      ['PADEL', 'FIFA'],
-      { PADEL: 2, FIFA: 2 },
-      { PADEL: true, FIFA: false },
-      ROUND_ROBIN_ALL,
-      NO_FIXED_TEAMS,
-      {},
-    )
+      picked: ['PADEL', 'FIFA'],
+      pairSizes: { PADEL: 2, FIFA: 2 },
+      hasMasters: { PADEL: true, FIFA: false },
+      formatoDefault: ROUND_ROBIN_ALL,
+      fixedTeams: NO_FIXED_TEAMS,
+      orders: {},
+    })
     const padel = payload.disciplines.find((row) => row.kind === 'PADEL')
     const fifa = payload.disciplines.find((row) => row.kind === 'FIFA')
     expect(padel?.hasMasters).toBe(true)
@@ -1288,17 +1288,17 @@ describe('newTournamentPayload', () => {
   it('con las DOS en pairSize 2 (sin clamp), cada fila lee SU PROPIO fixedTeams', () => {
     const squad: Squad = { names: Array(8).fill('Jugador'), mySeat: null }
     const configs = { PADEL: configFor(8, 2), FIFA: configFor(8, 2) }
-    const payload = newTournamentPayload(
-      'Mixto',
+    const payload = newTournamentPayload({
+      name: 'Mixto',
       squad,
       configs,
-      ['PADEL', 'FIFA'],
-      { PADEL: 2, FIFA: 2 },
-      { PADEL: true, FIFA: false },
-      ROUND_ROBIN_ALL,
-      { PADEL: true, FIFA: false },
-      {},
-    )
+      picked: ['PADEL', 'FIFA'],
+      pairSizes: { PADEL: 2, FIFA: 2 },
+      hasMasters: { PADEL: true, FIFA: false },
+      formatoDefault: ROUND_ROBIN_ALL,
+      fixedTeams: { PADEL: true, FIFA: false },
+      orders: {},
+    })
     const padel = payload.disciplines.find((row) => row.kind === 'PADEL')
     const fifa = payload.disciplines.find((row) => row.kind === 'FIFA')
     expect(padel?.fixedTeams).toBe(true)
@@ -1311,17 +1311,17 @@ describe('newTournamentPayload', () => {
   it('effectiveHasMasters se aplica en el payload real: pairSize 1 fuerza false aunque el checkbox diga true', () => {
     const squad: Squad = { names: Array(8).fill('Jugador'), mySeat: null }
     const configs = { PADEL: configFor(8, 2), FIFA: configFor(8, 1) }
-    const payload = newTournamentPayload(
-      'Mixto',
+    const payload = newTournamentPayload({
+      name: 'Mixto',
       squad,
       configs,
-      ['PADEL', 'FIFA'],
-      { PADEL: 2, FIFA: 1 },
-      { PADEL: true, FIFA: true }, // FIFA en true a mano -- inválido para pairSize 1
-      ROUND_ROBIN_ALL,
-      NO_FIXED_TEAMS,
-      {},
-    )
+      picked: ['PADEL', 'FIFA'],
+      pairSizes: { PADEL: 2, FIFA: 1 },
+      hasMasters: { PADEL: true, FIFA: true },  // FIFA en true a mano -- inválido para pairSize 1
+      formatoDefault: ROUND_ROBIN_ALL,
+      fixedTeams: NO_FIXED_TEAMS,
+      orders: {},
+    })
     const fifa = payload.disciplines.find((row) => row.kind === 'FIFA')
     expect(fifa?.hasMasters).toBe(false)
   })
@@ -1338,17 +1338,17 @@ describe('newTournamentPayload', () => {
   it('effectiveFixedTeams se aplica en el payload real: pairSize 1 fuerza false aunque el checkbox diga true', () => {
     const squad: Squad = { names: Array(8).fill('Jugador'), mySeat: null }
     const configs = { PADEL: configFor(8, 2), FIFA: configFor(8, 1) }
-    const payload = newTournamentPayload(
-      'Mixto',
+    const payload = newTournamentPayload({
+      name: 'Mixto',
       squad,
       configs,
-      ['PADEL', 'FIFA'],
-      { PADEL: 2, FIFA: 1 },
-      { PADEL: true, FIFA: true },
-      ROUND_ROBIN_ALL,
-      { PADEL: true, FIFA: true }, // FIFA en true a mano -- inválido para pairSize 1
-      {},
-    )
+      picked: ['PADEL', 'FIFA'],
+      pairSizes: { PADEL: 2, FIFA: 1 },
+      hasMasters: { PADEL: true, FIFA: true },
+      formatoDefault: ROUND_ROBIN_ALL,
+      fixedTeams: { PADEL: true, FIFA: true },  // FIFA en true a mano -- inválido para pairSize 1
+      orders: {},
+    })
     const fifa = payload.disciplines.find((row) => row.kind === 'FIFA')
     expect(fifa?.fixedTeams).toBe(false)
   })
@@ -1361,17 +1361,17 @@ describe('newTournamentPayload', () => {
     const squad: Squad = { names: Array(8).fill('Jugador'), mySeat: null }
     const edited = { ...configFor(8, 1), points: [20, 12, 6, 2, 0, 0, 0, 0] }
     const configs = { PADEL: configFor(8, 2), FIFA: edited }
-    const payload = newTournamentPayload(
-      'Liga FIFA',
+    const payload = newTournamentPayload({
+      name: 'Liga FIFA',
       squad,
       configs,
-      ['FIFA'],
-      { PADEL: 2, FIFA: 1 },
-      { PADEL: true, FIFA: false },
-      ROUND_ROBIN_ALL,
-      NO_FIXED_TEAMS,
-      {},
-    )
+      picked: ['FIFA'],
+      pairSizes: { PADEL: 2, FIFA: 1 },
+      hasMasters: { PADEL: true, FIFA: false },
+      formatoDefault: ROUND_ROBIN_ALL,
+      fixedTeams: NO_FIXED_TEAMS,
+      orders: {},
+    })
     expect(payload.disciplines[0]?.config.points).toEqual([20, 12, 6, 2, 0, 0, 0, 0])
   })
 
@@ -1381,17 +1381,17 @@ describe('newTournamentPayload', () => {
       PADEL: { ...configFor(8, 2), points: [20, 12, 6, 2] },
       FIFA: configFor(8, 1),
     }
-    const payload = newTournamentPayload(
-      'Mixto',
+    const payload = newTournamentPayload({
+      name: 'Mixto',
       squad,
       configs,
-      ['PADEL', 'FIFA'],
-      { PADEL: 2, FIFA: 1 },
-      { PADEL: true, FIFA: false },
-      ROUND_ROBIN_ALL,
-      NO_FIXED_TEAMS,
-      {},
-    )
+      picked: ['PADEL', 'FIFA'],
+      pairSizes: { PADEL: 2, FIFA: 1 },
+      hasMasters: { PADEL: true, FIFA: false },
+      formatoDefault: ROUND_ROBIN_ALL,
+      fixedTeams: NO_FIXED_TEAMS,
+      orders: {},
+    })
     const padel = payload.disciplines.find((row) => row.kind === 'PADEL')
     const fifa = payload.disciplines.find((row) => row.kind === 'FIFA')
     expect(padel?.config.points).toEqual([20, 12, 6, 2])
@@ -1413,17 +1413,17 @@ describe('newTournamentPayload', () => {
   it('con orders vacío, ninguna fila manda seedOrder -- comportamiento de siempre', () => {
     const squad: Squad = { names: Array(8).fill('Jugador'), mySeat: null }
     const configs = { PADEL: configFor(8, 2), FIFA: configFor(8, 2) }
-    const payload = newTournamentPayload(
-      'Los Jueves',
+    const payload = newTournamentPayload({
+      name: 'Los Jueves',
       squad,
       configs,
-      ['PADEL'],
-      { PADEL: 2, FIFA: 2 },
-      { PADEL: true, FIFA: true },
-      ROUND_ROBIN_ALL,
-      NO_FIXED_TEAMS,
-      {},
-    )
+      picked: ['PADEL'],
+      pairSizes: { PADEL: 2, FIFA: 2 },
+      hasMasters: { PADEL: true, FIFA: true },
+      formatoDefault: ROUND_ROBIN_ALL,
+      fixedTeams: NO_FIXED_TEAMS,
+      orders: {},
+    })
     expect(payload.disciplines[0]).not.toHaveProperty('seedOrder')
   })
 
@@ -1431,20 +1431,20 @@ describe('newTournamentPayload', () => {
     const names = ['Colo', 'Nacho', 'Fede', 'Marce']
     const squad: Squad = { names, mySeat: null }
     const configs = { PADEL: configFor(4, 1), FIFA: configFor(4, 1) }
-    const payload = newTournamentPayload(
-      'Mixto',
+    const payload = newTournamentPayload({
+      name: 'Mixto',
       squad,
       configs,
-      ['PADEL', 'FIFA'],
-      { PADEL: 1, FIFA: 1 },
-      { PADEL: false, FIFA: false },
-      ROUND_ROBIN_ALL,
-      NO_FIXED_TEAMS,
+      picked: ['PADEL', 'FIFA'],
+      pairSizes: { PADEL: 1, FIFA: 1 },
+      hasMasters: { PADEL: false, FIFA: false },
+      formatoDefault: ROUND_ROBIN_ALL,
+      fixedTeams: NO_FIXED_TEAMS,
       // Índices (F1), no nombres: Fede=2, Marce=3, Colo=0, Nacho=1. Sin
       // blancos en el plantel, la posición dentro de squadNames coincide
       // con el índice crudo.
-      { FIFA: [2, 3, 0, 1] },
-    )
+      orders: { FIFA: [2, 3, 0, 1] },
+    })
     const padel = payload.disciplines.find((row) => row.kind === 'PADEL')
     const fifa = payload.disciplines.find((row) => row.kind === 'FIFA')
     expect(padel).not.toHaveProperty('seedOrder')
@@ -1462,17 +1462,17 @@ describe('newTournamentPayload', () => {
     const names = ['Colo', 'Nacho', 'Fede', 'Marce']
     const squad: Squad = { names, mySeat: null }
     const configs = { PADEL: configFor(4, 1), FIFA: configFor(4, 1) }
-    const payload = newTournamentPayload(
-      'Mixto',
+    const payload = newTournamentPayload({
+      name: 'Mixto',
       squad,
       configs,
-      ['PADEL', 'FIFA'],
-      { PADEL: 1, FIFA: 1 },
-      { PADEL: false, FIFA: false },
-      ROUND_ROBIN_ALL,
-      NO_FIXED_TEAMS,
-      { FIFA: [2, 0, 1] }, // Fede, Colo, Nacho -- "Marce" (índice 3) no está anotada
-    )
+      picked: ['PADEL', 'FIFA'],
+      pairSizes: { PADEL: 1, FIFA: 1 },
+      hasMasters: { PADEL: false, FIFA: false },
+      formatoDefault: ROUND_ROBIN_ALL,
+      fixedTeams: NO_FIXED_TEAMS,
+      orders: { FIFA: [2, 0, 1] },  // Fede, Colo, Nacho -- "Marce" (índice 3) no está anotada
+    })
     const fifa = payload.disciplines.find((row) => row.kind === 'FIFA')
     expect(fifa?.seedOrder).toEqual([2, 0, 1, 3])
   })
@@ -1485,17 +1485,17 @@ describe('newTournamentPayload', () => {
   it('con una sola disciplina, seedOrder no viaja aunque orders traiga una entrada sobrante', () => {
     const squad: Squad = { names: Array(8).fill('Jugador'), mySeat: null }
     const configs = { PADEL: configFor(8, 2), FIFA: configFor(8, 2) }
-    const payload = newTournamentPayload(
-      'Los Jueves',
+    const payload = newTournamentPayload({
+      name: 'Los Jueves',
       squad,
       configs,
-      ['PADEL'],
-      { PADEL: 2, FIFA: 2 },
-      { PADEL: true, FIFA: true },
-      ROUND_ROBIN_ALL,
-      NO_FIXED_TEAMS,
-      { PADEL: [3, 2, 1, 0, 4, 5, 6, 7] },
-    )
+      picked: ['PADEL'],
+      pairSizes: { PADEL: 2, FIFA: 2 },
+      hasMasters: { PADEL: true, FIFA: true },
+      formatoDefault: ROUND_ROBIN_ALL,
+      fixedTeams: NO_FIXED_TEAMS,
+      orders: { PADEL: [3, 2, 1, 0, 4, 5, 6, 7] },
+    })
     expect(payload.disciplines[0]).not.toHaveProperty('seedOrder')
   })
 
@@ -1515,18 +1515,18 @@ describe('newTournamentPayload', () => {
     const names = ['Ana', '', 'Beto', 'Caro', 'Dani']
     const squad: Squad = { names, mySeat: null }
     const configs = { PADEL: configFor(4, 1), FIFA: configFor(4, 1) }
-    const payload = newTournamentPayload(
-      'Mixto',
+    const payload = newTournamentPayload({
+      name: 'Mixto',
       squad,
       configs,
-      ['PADEL', 'FIFA'],
-      { PADEL: 1, FIFA: 1 },
-      { PADEL: false, FIFA: false },
-      ROUND_ROBIN_ALL,
-      NO_FIXED_TEAMS,
+      picked: ['PADEL', 'FIFA'],
+      pairSizes: { PADEL: 1, FIFA: 1 },
+      hasMasters: { PADEL: false, FIFA: false },
+      formatoDefault: ROUND_ROBIN_ALL,
+      fixedTeams: NO_FIXED_TEAMS,
       // Índices CRUDOS de squad.names: Dani(4), Ana(0), Caro(3), Beto(2).
-      { FIFA: [4, 0, 3, 2] },
-    )
+      orders: { FIFA: [4, 0, 3, 2] },
+    })
     const fifa = payload.disciplines.find((row) => row.kind === 'FIFA')
     // squadNames real = ['Ana','Beto','Caro','Dani'] (0..3). Traducidos:
     // Dani=3, Ana=0, Caro=2, Beto=1.

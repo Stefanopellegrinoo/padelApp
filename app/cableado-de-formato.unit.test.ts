@@ -599,6 +599,52 @@ describe('los handlers de squad+orders del wizard -- el cableado que ningún ren
   })
 })
 
+/**
+ * WU6 (ronda 3 de revisión): `newTournamentPayload` pasó de nueve
+ * parámetros posicionales a un objeto de propiedades NOMBRADAS
+ * (`wizard-state.ts`) porque `hasMasters` y `fixedTeams` comparten
+ * EXACTAMENTE el mismo tipo (`Record<DisciplineKind, boolean>`) -- medido,
+ * swapear esos dos argumentos en este call site dejaba `tsc` limpio y
+ * 1069/1069 en verde, y los defaults de producción hacían la mutación
+ * SILENCIOSA en el caso más común (todo torneo de `pairSize: 2` nacería con
+ * `fixed_teams = true` y sin Masters).
+ *
+ * Un objeto no vuelve el swap IMPOSIBLE de escribir -- `hasMasters:
+ * fixedTeams, ..., fixedTeams: hasMasters` sigue tipando -- pero deja de ser
+ * un reordenamiento silencioso de dos líneas consecutivas: hay que
+ * reescribir la CLAVE de cada una, un cambio de texto visible y pincheable.
+ * Este pin exige la forma SHORTHAND (`hasMasters,`/`fixedTeams,`, el nombre
+ * del campo solo, sin `:`) para las dos claves de riesgo -- cualquier swap
+ * (`hasMasters: fixedTeams`) dejaría de ser shorthand y el pin se rompe.
+ */
+describe('el submit del wizard -- newTournamentPayload como objeto nombrado, no nueve posicionales (WU6, ronda 3 de revisión)', () => {
+  const fuente = sinComentarios(
+    readFileSync(join(process.cwd(), 'app/torneos/nuevo/wizard.tsx'), 'utf8'),
+  )
+  const llamada = /newTournamentPayload\(\{[^)]*\}\)/.exec(fuente)?.[0] ?? ''
+
+  it('el call site de submit() llama a newTournamentPayload', () => {
+    expect(llamada).not.toBe('')
+  })
+
+  it('hasMasters y fixedTeams viajan en shorthand -- un swap de sus VALORES dejaría de serlo', () => {
+    expect(llamada).toMatch(/\bhasMasters,/)
+    expect(llamada).toMatch(/\bfixedTeams,/)
+    expect(llamada).not.toMatch(/\bhasMasters: fixedTeams\b/)
+    expect(llamada).not.toMatch(/\bfixedTeams: hasMasters\b/)
+  })
+
+  it('las nueve claves están, cada una con su propio dato -- picked explícito (la variable local se llama disciplines)', () => {
+    expect(llamada).toMatch(/\bname,/)
+    expect(llamada).toMatch(/\bsquad,/)
+    expect(llamada).toMatch(/\bconfigs,/)
+    expect(llamada).toMatch(/\bpicked: disciplines,/)
+    expect(llamada).toMatch(/\bpairSizes,/)
+    expect(llamada).toMatch(/\bformatoDefault,/)
+    expect(llamada).toMatch(/\borders,?\s*\}\)/)
+  })
+})
+
 // ── S76 / la mitad anónima de W64 ────────────────────────────────────────────
 //
 // Reglas es la ÚNICA pantalla pública del torneo, y hasta acá su rama sin

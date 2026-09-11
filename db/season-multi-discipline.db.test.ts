@@ -348,17 +348,17 @@ describe('createSeason vía el wizard real, disciplina de a uno (C29)', () => {
     const configs = { PADEL: defaultConfig(8), FIFA: defaultConfig(8, 1) }
     const squad: Squad = { names: squadNames(8), mySeat: null }
 
-    const payload = newTournamentPayload(
-      'Liga FIFA',
+    const payload = newTournamentPayload({
+      name: 'Liga FIFA',
       squad,
       configs,
-      ['FIFA'],
-      { PADEL: 2, FIFA: 1 },
-      { PADEL: true, FIFA: false },
-      { PADEL: { kind: 'ROUND_ROBIN' }, FIFA: { kind: 'ROUND_ROBIN' } },
-      { PADEL: false, FIFA: false },
-      {},
-    )
+      picked: ['FIFA'],
+      pairSizes: { PADEL: 2, FIFA: 1 },
+      hasMasters: { PADEL: true, FIFA: false },
+      formatoDefault: { PADEL: { kind: 'ROUND_ROBIN' }, FIFA: { kind: 'ROUND_ROBIN' } },
+      fixedTeams: { PADEL: false, FIFA: false },
+      orders: {},
+    })
     const { seasonId } = await createSeason(admin.client, payload)
 
     const db = adminClient()
@@ -393,17 +393,17 @@ describe('createSeason vía el wizard real, disciplina de a uno (C29)', () => {
     const configs = { PADEL: defaultConfig(8), FIFA: defaultConfig(8, 1) }
     const squad: Squad = { names: squadNames(8), mySeat: null }
 
-    const payload = newTournamentPayload(
-      'Mixto',
+    const payload = newTournamentPayload({
+      name: 'Mixto',
       squad,
       configs,
-      ['PADEL', 'FIFA'],
-      { PADEL: 2, FIFA: 1 },
-      { PADEL: true, FIFA: false },
-      { PADEL: { kind: 'ROUND_ROBIN' }, FIFA: { kind: 'ROUND_ROBIN' } },
-      { PADEL: false, FIFA: false },
-      {},
-    )
+      picked: ['PADEL', 'FIFA'],
+      pairSizes: { PADEL: 2, FIFA: 1 },
+      hasMasters: { PADEL: true, FIFA: false },
+      formatoDefault: { PADEL: { kind: 'ROUND_ROBIN' }, FIFA: { kind: 'ROUND_ROBIN' } },
+      fixedTeams: { PADEL: false, FIFA: false },
+      orders: {},
+    })
     const { seasonId } = await createSeason(admin.client, payload)
 
     const db = adminClient()
@@ -441,17 +441,17 @@ describe('createSeason vía el wizard real, disciplina de a uno (C29)', () => {
     const configs = { PADEL: defaultConfig(8), FIFA: defaultConfig(8, 1) }
     const squad: Squad = { names: squadNames(8), mySeat: null }
 
-    const payload = newTournamentPayload(
-      'Mixto Masters',
+    const payload = newTournamentPayload({
+      name: 'Mixto Masters',
       squad,
       configs,
-      ['PADEL', 'FIFA'],
-      { PADEL: 2, FIFA: 1 },
-      { PADEL: true, FIFA: false },
-      { PADEL: { kind: 'ROUND_ROBIN' }, FIFA: { kind: 'ROUND_ROBIN' } },
-      { PADEL: false, FIFA: false },
-      {},
-    )
+      picked: ['PADEL', 'FIFA'],
+      pairSizes: { PADEL: 2, FIFA: 1 },
+      hasMasters: { PADEL: true, FIFA: false },
+      formatoDefault: { PADEL: { kind: 'ROUND_ROBIN' }, FIFA: { kind: 'ROUND_ROBIN' } },
+      fixedTeams: { PADEL: false, FIFA: false },
+      orders: {},
+    })
     const { seasonId } = await createSeason(admin.client, payload)
 
     const db = adminClient()
@@ -487,17 +487,17 @@ describe('createSeason con el plantel al piso real de una disciplina de a uno', 
     const configs = { PADEL: defaultConfig(2, 1), FIFA: defaultConfig(2, 1) }
     const squad: Squad = { names: squadNames(2), mySeat: null }
 
-    const payload = newTournamentPayload(
-      'Dos amigos',
+    const payload = newTournamentPayload({
+      name: 'Dos amigos',
       squad,
       configs,
-      ['FIFA'],
-      { PADEL: 2, FIFA: 1 },
-      { PADEL: true, FIFA: false },
-      { PADEL: { kind: 'ROUND_ROBIN' }, FIFA: { kind: 'ROUND_ROBIN' } },
-      { PADEL: false, FIFA: false },
-      {},
-    )
+      picked: ['FIFA'],
+      pairSizes: { PADEL: 2, FIFA: 1 },
+      hasMasters: { PADEL: true, FIFA: false },
+      formatoDefault: { PADEL: { kind: 'ROUND_ROBIN' }, FIFA: { kind: 'ROUND_ROBIN' } },
+      fixedTeams: { PADEL: false, FIFA: false },
+      orders: {},
+    })
     const { seasonId } = await createSeason(admin.client, payload)
 
     const db = adminClient()
@@ -826,17 +826,17 @@ describe('createSeason con orden propio por disciplina (seedOrder)', () => {
     const admin = await createTestUser()
     const squad: Squad = { names: ['Ana', 'Juan', 'Luis', 'Juan'], mySeat: null }
     const configs = { PADEL: defaultConfig(4, 1), FIFA: defaultConfig(4, 1) }
-    const payload = newTournamentPayload(
-      'Wizard round trip',
+    const payload = newTournamentPayload({
+      name: 'Wizard round trip',
       squad,
       configs,
-      ['PADEL', 'FIFA'],
-      { PADEL: 1, FIFA: 1 },
-      { PADEL: false, FIFA: false },
-      { PADEL: { kind: 'ROUND_ROBIN' }, FIFA: { kind: 'ROUND_ROBIN' } },
-      { PADEL: false, FIFA: false },
-      { FIFA: [3, 0, 1, 2] }, // el usuario arrastró el Juan del asiento 3 arriba de todo
-    )
+      picked: ['PADEL', 'FIFA'],
+      pairSizes: { PADEL: 1, FIFA: 1 },
+      hasMasters: { PADEL: false, FIFA: false },
+      formatoDefault: { PADEL: { kind: 'ROUND_ROBIN' }, FIFA: { kind: 'ROUND_ROBIN' } },
+      fixedTeams: { PADEL: false, FIFA: false },
+      orders: { FIFA: [3, 0, 1, 2] },  // el usuario arrastró el Juan del asiento 3 arriba de todo
+    })
 
     const { seasonId } = await createSeason(admin.client, {
       name: payload.name,

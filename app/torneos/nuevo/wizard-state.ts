@@ -825,36 +825,56 @@ export function submitSeats({ names, mySeat }: Squad): {
  * (`disciplines_fixed_teams_needs_pair`, 0077) pase lo que pase haya elegido
  * el control — el guard vive ACÁ, no confiando en que el control quede
  * siempre deshabilitado a tiempo.
+ *
+ * `orders` es el orden PROPIO de cada disciplina que prendió el toggle del
+ * paso Formato (`Wizard`), por ÍNDICE de asiento (F1, ver
+ * `toggleOwnOrder`/`seedOrderFrom` más arriba) -- `Partial`, a diferencia de
+ * los cuatro `Record` de arriba: "ninguna disciplina tiene orden propio"
+ * (entrada ausente) es el estado NORMAL del 100% de los torneos de hoy, no
+ * un olvido.
+ *
+ * UN OBJETO, no nueve parámetros posicionales (WU6, ronda 3 de revisión):
+ * `hasMasters` y `fixedTeams` comparten EXACTAMENTE el mismo tipo
+ * (`Record<DisciplineKind, boolean>`) -- medido, swapear sus dos argumentos
+ * en el call site de `wizard.tsx` deja `tsc` limpio y 1069/1069 en verde, y
+ * los defaults de producción (`hasMasters` en `true`/`true`, `fixedTeams` en
+ * `false`/`false`) hacen que la mutación sea SILENCIOSA en el caso más común
+ * (todo torneo de `pairSize: 2` nacería con `fixed_teams = true` y sin
+ * Masters, incluida la ÚNICA disciplina, porque `fixedTeams` viaja siempre y
+ * `hasMasters` sólo con `picked.length > 1`). Con un objeto de propiedades
+ * NOMBRADAS, swapear los VALORES de dos claves ya no es reordenar dos
+ * argumentos consecutivos -- hay que reescribir la clave de cada línea, un
+ * cambio visible y pincheable por fuente (`app/cableado-de-formato.unit.test.ts`).
+ *
+ * Sigue siendo un objeto con las nueve claves OBLIGATORIAS (F8, dos jueces
+ * ciegos, `37b225b..d33377a`, ver el docblock viejo de `orders` que este
+ * comentario reemplaza): ninguna es opcional ni tiene default -- olvidar una
+ * en el único call site de producción (`Wizard`, `wizard.tsx`) sigue siendo
+ * un error de `tsc`, no un test que haya que escribir y mantener.
  */
-export function newTournamentPayload(
-  name: string,
-  squad: Squad,
-  configs: Record<DisciplineKind, SeasonConfig>,
-  picked: readonly DisciplineKind[],
-  pairSizes: Record<DisciplineKind, SideSize>,
-  hasMasters: Record<DisciplineKind, boolean>,
-  formatoDefault: Record<DisciplineKind, MatchdayFormat>,
-  fixedTeams: Record<DisciplineKind, boolean>,
-  /**
-   * El orden PROPIO de cada disciplina que prendió el toggle del paso
-   * Formato (`orders`, `Wizard`), por ÍNDICE de asiento (F1, ver
-   * `toggleOwnOrder`/`seedOrderFrom` más arriba) -- `Partial`, a diferencia
-   * de los cuatro `Record` de arriba: "ninguna disciplina tiene orden
-   * propio" (entrada ausente) es el estado NORMAL del 100% de los torneos de
-   * hoy, no un olvido.
-   *
-   * OBLIGATORIO igual que los cuatro anteriores (F8, dos jueces ciegos,
-   * `37b225b..d33377a`): tenía un default `= {}` que dejaba a `tsc` en
-   * silencio si alguien sacaba el argumento del único call site de
-   * producción (`Wizard`, `wizard.tsx`) -- exactamente el defecto que el
-   * docblock de `fixedTeams`/`hasMasters` de arriba ya argumenta para SUS
-   * cuatro parámetros: "olvidarlos en el sitio del submit es un error de
-   * `tsc`, no un test que haya que escribir y mantener". Un `Partial`
-   * obligatorio sigue sin forzar a nadie a rellenar las dos claves -- sólo a
-   * escribir el argumento, aunque sea `{}` a propósito.
-   */
-  orders: Partial<Record<DisciplineKind, number[]>>,
-): {
+export interface NewTournamentPayloadInput {
+  name: string
+  squad: Squad
+  configs: Record<DisciplineKind, SeasonConfig>
+  picked: readonly DisciplineKind[]
+  pairSizes: Record<DisciplineKind, SideSize>
+  hasMasters: Record<DisciplineKind, boolean>
+  formatoDefault: Record<DisciplineKind, MatchdayFormat>
+  fixedTeams: Record<DisciplineKind, boolean>
+  orders: Partial<Record<DisciplineKind, number[]>>
+}
+
+export function newTournamentPayload({
+  name,
+  squad,
+  configs,
+  picked,
+  pairSizes,
+  hasMasters,
+  formatoDefault,
+  fixedTeams,
+  orders,
+}: NewTournamentPayloadInput): {
   name: string
   squadNames: string[]
   mySeatIndex: number | null

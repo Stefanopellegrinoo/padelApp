@@ -1022,17 +1022,14 @@ export function Wizard({ myName }: { myName: string }) {
     setError(null)
     startTransition(async () => {
       const result = await createTournament(
-        newTournamentPayload(
-          name,
-          squad,
-          configs,
-          disciplines,
-          pairSizes,
-          hasMasters,
-          formatoDefault,
-          fixedTeams,
-          orders,
-        ),
+        // WU6 (ronda 3 de revisión): objeto de propiedades NOMBRADAS, no
+        // nueve posicionales -- `hasMasters`/`fixedTeams` comparten tipo
+        // (`Record<DisciplineKind, boolean>`) y swapearlos acá adentro
+        // pasaba `tsc` limpio (ver el docblock de `newTournamentPayload`,
+        // `wizard-state.ts`). Shorthand en ocho de las nueve claves (el
+        // nombre del campo coincide con el de la variable local) -- sólo
+        // `picked` es explícito, porque acá se llama `disciplines`.
+        newTournamentPayload({ name, squad, configs, picked: disciplines, pairSizes, hasMasters, formatoDefault, fixedTeams, orders }),
       )
       if (!result.ok) {
         setError(result.error)

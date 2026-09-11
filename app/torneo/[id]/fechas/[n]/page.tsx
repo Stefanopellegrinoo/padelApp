@@ -364,12 +364,18 @@ export default async function FechaDetailPage({ params }: PageProps) {
       }
     })
 
-    // Cargar, cerrar y reabrir son de quien organiza. La fecha cerrada no se
-    // carga más —el handoff §9c: "sin botones de carga"—, y sólo se reabre la
-    // última cerrada: las parejas de las que siguen salieron de esta tabla.
+    // Cerrar y reabrir son de quien organiza. La fecha cerrada no se carga más
+    // —el handoff §9c: "sin botones de carga"—, y sólo se reabre la última
+    // cerrada: las parejas de las que siguen salieron de esta tabla.
     // `reopen_matchday` lo vuelve a verificar y su mensaje es el que se muestra.
+    //
+    // Cargar es la excepción: con `playersCanScore` prendido en Ajustes lo hace
+    // cualquiera del torneo (0089). No hay un `isParticipant` que sumar acá
+    // porque esta pantalla ya es de participantes: `seasons_read` no le deja
+    // leer el torneo a nadie más. La guarda de verdad es `match_sets_write`;
+    // esto es sólo no dibujar un botón que va a rebotar.
     const cargaContext =
-      header.isAdmin && status === 'OPEN'
+      (header.isAdmin || header.playersCanScore) && status === 'OPEN'
         ? { seasonId, matchdayId: matchday.id, matchdayNumber: matchday.number, format: config.matchFormat }
         : null
     const remainingMatches = detail.matches.filter((match) => match.sets.length === 0).length

@@ -20,6 +20,8 @@ export interface SeasonHeader {
   status: string
   regularMatchdays: number
   isAdmin: boolean
+  /** The admin let the squad load the results themselves (`seasons.players_can_score`, 0089). Opening, closing and every setting stay admin-only. */
+  playersCanScore: boolean
   /** The full config, for screens that need more than `regularMatchdays` — e.g. `narrateRules`. */
   config: SeasonConfig
   /** The share link's token. Every participant can already read this column; the wizard and the settings screen show it. */
@@ -86,6 +88,7 @@ interface SeasonRow {
   config: unknown
   created_by: string
   invite_token: string
+  players_can_score: boolean
 }
 
 interface MatchdayRow {
@@ -113,6 +116,7 @@ function toSeasonHeader(row: SeasonRow, userId: string | null): SeasonHeader {
     isAdmin: row.created_by === userId,
     config,
     inviteToken: row.invite_token,
+    playersCanScore: row.players_can_score,
   }
 }
 
@@ -126,7 +130,7 @@ function toMatchdaySummary(row: MatchdayRow): MatchdaySummary {
   }
 }
 
-const SEASON_HEADER_COLUMNS = 'id, name, status, config, created_by, invite_token'
+const SEASON_HEADER_COLUMNS = 'id, name, status, config, created_by, invite_token, players_can_score'
 
 /** Every season where the caller has a seat — admin or squad. RLS does the filtering; this only shapes the rows. */
 export async function mySeasons(supabase: Client): Promise<SeasonHeader[]> {

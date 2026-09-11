@@ -11,7 +11,7 @@
  * `is_season_admin(season_id)` para insert, update y delete.
  */
 import type { Client } from './client'
-import { EdgeError } from './errors'
+import { EdgeError, rpcErrorMessage } from './errors'
 
 /**
  * Agrega un asiento al plantel. `beforeEntryId` es "antes de este asiento": el
@@ -56,7 +56,7 @@ export async function addSquadSeat(
   // está en el plantel." — dos oraciones peleadas — y, cuando el error no era
   // uno de los nuestros, pegaba el inglés crudo de Postgres atrás de una
   // frase en castellano.
-  if (error !== null) throw new EdgeError(error.message)
+  if (error !== null) throw new EdgeError(rpcErrorMessage(error))
   // `data === null` con `error === null` no debería pasar —la función devuelve
   // el uuid del asiento— pero interpolarlo daba literalmente "undefined".
   if (data === null) throw new EdgeError('No se pudo agregar el jugador.')
@@ -91,7 +91,7 @@ export async function promoteGuest(
   // Sin prefijo, igual que `addSquadSeat` y el resto de las llamadas a RPC de
   // este archivo: los `raise` de `promote_guest` ya están en castellano y
   // pensados para que los lea el admin.
-  if (error !== null) throw new EdgeError(error.message)
+  if (error !== null) throw new EdgeError(rpcErrorMessage(error))
 }
 
 /**
@@ -122,7 +122,7 @@ export async function claimOwnSeat(
     p_token: season.invite_token,
     p_entry: entryId,
   })
-  if (error !== null) throw new EdgeError(error.message)
+  if (error !== null) throw new EdgeError(rpcErrorMessage(error))
 }
 
 /** Cambia el nombre del asiento. No toca `player_id`: renombrar no desvincula. */
@@ -221,5 +221,5 @@ export async function removeSeat(supabase: Client, entryId: string): Promise<voi
   // Sin prefijo, igual que `addSquadSeat` y `promoteGuest`: los `raise` de
   // `remove_squad_seat` ya están en castellano y escritos para que los lea el
   // admin.
-  throw new EdgeError(error.message)
+  throw new EdgeError(rpcErrorMessage(error))
 }

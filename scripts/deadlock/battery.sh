@@ -54,6 +54,19 @@ export PGPASSWORD=${PGPASSWORD:-postgres}
 psql -h "${PGHOST:-127.0.0.1}" -p "${PGPORT:-54322}" -U "${PGUSER:-postgres}" \
   -d "${PGDATABASE:-postgres}" -q -v ON_ERROR_STOP=1 -f "$here/fixture.sql" || exit 1
 
+# Preflight: desde 0086 el delete de un asiento corre adentro de la sección
+# crítica del advisory, así que una FK hacia `entries` sin índice en su columna
+# líder convierte cada baja en un `Seq Scan` de tabla entera con toda la
+# temporada esperando detrás (0087 los agregó; ver `dl.fk_sin_indice()`).
+sin_indice=$(psql -h "${PGHOST:-127.0.0.1}" -p "${PGPORT:-54322}" -U "${PGUSER:-postgres}" \
+  -d "${PGDATABASE:-postgres}" -Atc "select fk from dl.fk_sin_indice();")
+if [[ -n "$sin_indice" ]]; then
+  echo "FALLA (preflight): hay FKs hacia entries sin índice en su columna líder."
+  echo "Cada baja de asiento las escanea enteras SOSTENIENDO el advisory:"
+  printf '  %s\n' $sin_indice
+  exit 1
+fi
+
 fail=0
 R() { "$here/run.sh" "$1" "$2" "$3" "$N" "$4" || fail=$((fail + 1)); }
 echo "### N=$N por par. Solapamiento garantizado por barrera — leer el encabezado"

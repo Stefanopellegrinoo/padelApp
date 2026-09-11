@@ -279,6 +279,24 @@ export async function updateSeasonRules(
   if (error !== null) throw new EdgeError(`No se pudieron guardar las reglas: ${error.message}`)
 }
 
+/**
+ * The "players load the results" permission (`seasons.players_can_score`, 0089).
+ * `seasons_update` already restricts the row to `created_by`, so a player who
+ * calls this gets zero rows back, not a write — the guard is RLS, not this
+ * function.
+ */
+export async function updateSeasonPlayersCanScore(
+  supabase: Client,
+  seasonId: string,
+  enabled: boolean,
+): Promise<void> {
+  const { error } = await supabase
+    .from('seasons')
+    .update({ players_can_score: enabled })
+    .eq('id', seasonId)
+  if (error !== null) throw new EdgeError(`No se pudo guardar el permiso: ${error.message}`)
+}
+
 /** The only writer in this plan: `assertValidConfig` runs before the update lands. */
 export async function updateSeasonConfig(
   supabase: Client,

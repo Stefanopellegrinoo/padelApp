@@ -391,11 +391,15 @@ describe('the squad seats', () => {
     await expect(unlinkSeat(player.client, entryIds[0]!)).rejects.toThrow(
       /sólo puede hacerlo quien organiza/,
     )
-    // ponytail: `removeSeat` es un DELETE y sigue sin avisar — mismo defecto,
-    // no medido por la ronda 15 (que nombró cuatro updates). Se deja como
-    // estaba en vez de cambiarlo a ojo; el estado de abajo prueba que tampoco
-    // borra nada.
-    await removeSeat(player.client, seatId)
+    // `removeSeat` ya no es un DELETE mudo. Era el único de los cuatro que
+    // callaba: RLS filtraba la fila, PostgREST no considera error un delete
+    // que no toca nada, y a quien no organiza se le decía que sacó al jugador
+    // mientras el plantel seguía intacto. Ahora la autorización vive en
+    // `remove_squad_seat` (0086) con un `raise` explícito, mismo criterio que
+    // `add_squad_seat` en la línea de arriba.
+    await expect(removeSeat(player.client, seatId)).rejects.toThrow(
+      /Sólo quien organiza la temporada/,
+    )
 
     const seats = await entriesOf(admin.client, seasonId)
     expect(seats.filter((e) => e.kind === 'SQUAD')).toHaveLength(8)

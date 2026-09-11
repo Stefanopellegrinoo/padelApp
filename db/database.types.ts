@@ -997,6 +997,7 @@ export type Database = {
         Returns: undefined
       }
       redraft_matchday: { Args: { p_matchday: string }; Returns: undefined }
+      remove_squad_seat: { Args: { p_entry: string }; Returns: undefined }
       reopen_matchday: { Args: { p_matchday: string }; Returns: undefined }
       season_invite: {
         Args: { p_token: string }

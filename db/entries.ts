@@ -188,44 +188,38 @@ export async function unlinkSeat(supabase: Client, entryId: string): Promise<voi
  * esa columna y el índice pide único, no consecutivo. Renumerar sería reescribir
  * el orden de desempate inicial de todos los demás por sacar a uno.
  *
- * **WU5 (tanda 7): clase de deadlock pre-existente, conocida y NO arreglada
- * acá — registrada, no resuelta.** Este `delete` es un round trip crudo,
- * sin advisory lock ni `for update` propio: no coordina con nada. Cuando
- * corre a la vez que `add_squad_seat`/`promote_guest` están corriendo el
- * corrimiento de cola de OTRO asiento (`shift_seeds_up`, 0023, o su
- * gemelo a nivel temporada `shift_season_seeds_up`, 0080), la cascada de
- * este `delete` (`entries` → `discipline_entries` y `entries` →
- * `season_seed_order`, las dos `on delete cascade`, en el orden que fije
- * el OID del trigger — no el de esta lista) puede cruzarse con el `for
- * update` que el corrimiento ya tiene tomado sobre otra fila de esa misma
- * tabla, y las dos transacciones esperarse en círculo.
+ * **Toma el advisory lock por temporada**, y por eso es una RPC y no un
+ * `delete` directo. Era el último escritor del plantel que no coordinaba con
+ * nada: la cascada de su `delete` (`entries` → `discipline_entries` y
+ * `entries` → `season_seed_order`, las dos `on delete cascade`) se cruzaba
+ * con los locks que `shift_seeds_up` (0023) y `shift_season_seeds_up` (0080)
+ * ya tenían tomados sobre otras filas de esas mismas tablas, y las dos
+ * transacciones se esperaban en círculo. Medido con dos sesiones psql y
+ * barrera de arranque: 60/60 deadlocks contra `add_squad_seat(p_before)` y
+ * 60/60 contra `shift_seeds_up` antes de `remove_squad_seat` (0086), 0/60
+ * después. El cliente de Supabase no puede tomar un advisory lock —no tiene
+ * transacciones—, así que el lock y el delete viajan juntos en la función,
+ * igual que en `addSquadSeat`.
  *
- * Medido: `removeSeat` ‖ `shift_seeds_up` (la carrera original, documentada
- * como "techo conocido y aceptado" desde 0013/0023) da 30/200 deadlocks;
- * `removeSeat` ‖ `shift_season_seeds_up` (la gemela nueva, a nivel
- * temporada, que nace con 0080/0081) da 29/200 — básicamente la misma
- * probabilidad, porque es la MISMA causa en dos tablas distintas. El
- * advisory lock de WU1/WU2 (esta misma tanda) no la toca: serializa
- * `add_squad_seat`/`promote_guest` ENTRE SÍ, nunca contra `removeSeat`,
- * que no lo pide (ver el comentario corregido en
- * `0085_add_squad_seat_fixes_lock_comment.sql`).
- *
- * El owner decidió explícitamente no perseguirla en esta rama: el arreglo
- * real es que `removeSeat` tome el mismo advisory lock por temporada
- * ANTES de su `delete` — un cambio de comportamiento (una escritura hoy
- * instantánea empieza a esperar) que no entra en el alcance de esta tanda.
- * Que quede escrito ACÁ para el que la persiga después: el síntoma en
- * producción es `deadlock detected` o `lock timeout` sin traducir al
- * castellano (deuda aparte, tampoco de esta tanda).
+ * La autorización se mudó de RLS al `is_season_admin` explícito de la
+ * función, mismo camino que `addSquadSeat`. Eso cambia un mensaje y arregla
+ * un silencio: un delete que RLS filtraba NO es un error en PostgREST, así
+ * que a quien no organiza se le decía que sacó al jugador mientras el plantel
+ * seguía intacto. Ahora rebota.
  */
 export async function removeSeat(supabase: Client, entryId: string): Promise<void> {
-  const { error } = await supabase.from('entries').delete().eq('id', entryId)
+  const { error } = await supabase.rpc('remove_squad_seat', { p_entry: entryId })
   if (error === null) return
 
+  // La FK se chequea al final de la sentencia y sale de la función con su
+  // SQLSTATE intacto, así que este traductor sigue sirviendo tal cual.
   if (error.code === '23503') {
     throw new EdgeError(
       'Este jugador ya jugó alguna fecha, así que no se puede sacar: sus resultados quedarían colgados. Podés desvincular el reclamo y cambiarle el nombre.',
     )
   }
-  throw new EdgeError(`No se pudo sacar al jugador: ${error.message}`)
+  // Sin prefijo, igual que `addSquadSeat` y `promoteGuest`: los `raise` de
+  // `remove_squad_seat` ya están en castellano y escritos para que los lea el
+  // admin.
+  throw new EdgeError(error.message)
 }

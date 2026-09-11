@@ -1107,3 +1107,22 @@ describe('promoteGuest — una config corrupta se explica en castellano', () => 
     expect(await configOf(seasonId)).toEqual(rota)
   })
 })
+
+/**
+ * WU2 (tanda 7, BLOQUEA): el fix reordenó el arranque de `promote_guest`
+ * para que el advisory lock sea el PRIMER lock de la función --
+ * `0084_promote_guest_advisory_lock_first.sql` agrega un `select` de sólo
+ * lectura (sin `for update`) ANTES del advisory, y sólo DESPUÉS relockea
+ * la fila con el `for update` que ya estaba. El camino "el invitado no
+ * existe" ahora pasa por DOS chequeos de `v_season is null` en vez de uno
+ * -- éste prueba que sigue devolviendo el mismo mensaje de siempre, no un
+ * `TypeError` ni un mensaje distinto por el segundo `select`.
+ */
+describe('promoteGuest — un p_entry que no existe (WU2, tanda 7)', () => {
+  it('sigue devolviendo "Ese invitado no existe." después del reorder del advisory lock', async () => {
+    const admin = await createTestUser()
+    await expect(
+      promoteGuest(admin.client, '00000000-0000-0000-0000-000000000000'),
+    ).rejects.toThrow('Ese invitado no existe.')
+  })
+})

@@ -1,0 +1,308 @@
+-- ── promote_guest: el advisory lock pasa a ser el PRIMER lock (WU2, tanda
+--    7, BLOQUEA) ────────────────────────────────────────────────────────────
+-- Restatement quirúrgico de la definición viva (0082_promote_guest_season_
+-- seed_order.sql), verificada contra `pg_get_functiondef` antes de
+-- copiarla — no contra el archivo, que es como 0031 se copió de la
+-- migración equivocada en su momento (ver `db/migrations.unit.test.ts`).
+--
+-- **El comentario que vivía en 0082 (líneas 61-66 de ese archivo) decía que
+-- el `for update` sobre `entries` -tomado ANTES del advisory lock- era
+-- inofensivo porque "no participa de la cadena seasons/discipline_entries/
+-- season_seed_order". Esa premisa es FALSA, y esta migración la reemplaza
+-- por la que sí es cierta.** La cadena que importa acá no es esa: es
+-- `entries → matchdays`, el `for update` de esta misma función sobre la
+-- fila de `matchdays` (más abajo, sin cambios). Antes de que el advisory
+-- lock existiera (0082), el hueco entre lockear `entries` y lockear
+-- `matchdays` era de sub-milisegundos -- unas pocas líneas de PL/pgSQL sin
+-- ningún `await` de red en el medio. 0082 insertó el advisory lock JUSTO
+-- ADENTRO de ese hueco, no afuera de la cadena como decía el comentario, y
+-- una espera que antes era sub-milisegundo pasó a ser NO ACOTADA: si otra
+-- transacción ya tiene el advisory de esta misma temporada (`add_squad_
+-- seat` u otro `promote_guest`, corriendo su propia sección), esta
+-- transacción se queda esperando ahí, CON la fila de `entries` del
+-- invitado YA lockeada, todo el tiempo que la otra tarde.
+--
+-- Medido contra `close_matchday` (función de producción real, sin
+-- simulación, dos sesiones psql): un invitado que se promueve mientras UN
+-- CO-ADMIN cierra la misma fecha es alcanzable sin ningún artificio --
+-- `promote_guest` toma la fila de `entries` sin saber todavía si la fecha
+-- está cerrada, ese guard viene DESPUÉS, más abajo en esta misma función.
+-- Con el advisory sostenido por un tercero durante la ventana (para forzar
+-- el timing sin depender de que las dos sesiones se entrelacen por
+-- casualidad): 6/6 deadlock. Con el mismo timing y sin nadie sosteniendo
+-- el advisory: 0/6.
+--
+--   ERROR:  deadlock detected
+--   CONTEXT:  while locking tuple in relation "matchdays"
+--   SQL statement "select status, discipline_id, pair_size from public.
+--   matchdays where id = v_matchday for update"
+--   PL/pgSQL function public.promote_guest(uuid,uuid) line 53
+--
+-- **El fix**: el advisory lock pasa a ser el PRIMER lock de la función,
+-- antes de tocar ninguna fila real. Para llegar a `v_season` sin lockear
+-- nada se agrega un `select` de sólo lectura (sin `for update`) antes del
+-- advisory; el `select ... for update` de `entries` que ya estaba se
+-- mantiene, pero ahora corre DESPUÉS del advisory, no antes -- y con el
+-- advisory ya tomado, nadie más de `add_squad_seat`/`promote_guest` puede
+-- estar corriendo esta sección para la misma temporada, así que el hueco
+-- entre lockear `entries` y lockear `matchdays` vuelve a ser el de
+-- siempre: unas pocas líneas de PL/pgSQL, sin ninguna espera no acotada en
+-- el medio. Mismo criterio que `add_squad_seat` (0081) ya aplica desde que
+-- nació con el advisory lock.
+--
+-- El null-check de `v_season` se repite después del `for update`: la fila
+-- pudo, en teoría, desaparecer entre el `select` de sólo lectura y el
+-- `select ... for update` (nadie borra un GUEST hoy por ese camino, pero
+-- el guard es gratis y deja la ausencia tan ruidosa como siempre --
+-- "Ese invitado no existe." -- en vez de arrastrar variables NULL hacia
+-- los guards de abajo).
+--
+-- Todo lo demás -- los guards del reparto, el casillero de puntos que
+-- crece la config, la copia de awards y de `award_lines`, `p_before` a los
+-- dos niveles -- es byte a byte lo que ya estaba desde 0082. La firma NO
+-- cambia: `create or replace`, y los grants sobreviven.
+create or replace function public.promote_guest(p_entry uuid, p_before uuid default null)
+returns void language plpgsql security definer set search_path = '' as $$
+declare
+  v_season     uuid;
+  v_matchday   uuid;
+  v_discipline uuid;
+  v_kind       text;
+  v_name       text;
+  v_status     text;
+  v_disc_at    int;
+  v_season_at  int;
+  v_pair_size  int;
+  v_squad      int;
+  v_squad_raw  jsonb;
+  v_points     jsonb;
+begin
+  -- WU2: sólo lectura, SIN `for update` -- previo por necesidad (no hay
+  -- `v_season` que lockear con el advisory sin esto), y no lockea nada.
+  select season_id into v_season
+    from public.entries
+   where id = p_entry;
+
+  if v_season is null then
+    raise exception 'Ese invitado no existe.';
+  end if;
+
+  if not public.is_season_admin(v_season) then
+    raise exception 'Sólo quien organiza la temporada puede sumar un invitado al plantel.';
+  end if;
+
+  -- WU2 (tanda 7, BLOQUEA): PRIMER lock de la función -- antes de la fila
+  -- de `entries`, no después. Ver el comentario grande del encabezado de
+  -- este archivo para el motivo completo (por qué el orden viejo
+  -- deadlockeaba contra `close_matchday`, medido 6/6).
+  perform pg_advisory_xact_lock(hashtextextended(v_season::text, 0));
+
+  -- Recién ACÁ se lockea la fila real, ya con el advisory tomado.
+  select season_id, matchday_id, kind, display_name
+    into v_season, v_matchday, v_kind, v_name
+    from public.entries
+   where id = p_entry
+   for update;
+
+  if v_season is null then
+    raise exception 'Ese invitado no existe.';
+  end if;
+
+  if v_kind <> 'GUEST' then
+    raise exception 'Ese asiento ya es del plantel.';
+  end if;
+
+  if trim(coalesce(v_name, '')) = '' then
+    raise exception 'Falta ponerle nombre al invitado. Sin eso, no lo podés sumar al plantel.';
+  end if;
+
+  select status, discipline_id, pair_size into v_status, v_discipline, v_pair_size
+    from public.matchdays where id = v_matchday for update;
+
+  if v_status is null or v_status <> 'CLOSED' then
+    raise exception '%', case
+      when v_status is null then 'La fecha de este invitado ya no existe.'
+      when v_status = 'DRAFT' then 'Esta fecha todavía se está armando. Sacalo de invitado y agregalo al plantel como uno más.'
+      when v_status = 'OPEN' then 'Esta fecha está en juego y sus puntos se reparten al cerrarla. Cerrala primero y después sumalo.'
+      else 'Esta fecha no está cerrada, así que todavía no repartió ningún punto.'
+    end;
+  end if;
+
+  perform 1
+     from public.pairs
+    where matchday_id = v_matchday
+      and (entry_a = p_entry or entry_b = p_entry);
+  if not found then
+    raise exception 'En esta fecha no quedó en ninguna pareja, así que no hay ningún punto suyo que conservar. Agregalo al plantel desde Ajustes › Plantel.';
+  end if;
+
+  -- Saltea con un lado de uno: no hay compañero de quien preguntar, y este
+  --`case` devolvería NULL. Ver la cabecera del archivo.
+  if v_pair_size <> 1 and exists (
+    select 1
+      from public.pairs pr
+     where pr.matchday_id = v_matchday
+       and (pr.entry_a = p_entry or pr.entry_b = p_entry)
+       and not exists (
+         select 1
+           from public.awards a
+          where a.matchday_id = pr.matchday_id
+            and a.entry_id = case when pr.entry_a = p_entry then pr.entry_b else pr.entry_a end)
+  ) then
+    raise exception 'En esta fecha jugó en una pareja que no cobró puntos —lo habitual es que haya jugado con otro invitado—. Sumarlo acá le cambiaría los puntos a los demás, así que no se puede desde esta fecha.';
+  end if;
+
+  -- Guard de 0023, sin cambios: `p_before` tiene que ser un asiento SQUAD
+  -- real de esta temporada, o se refusa ENTERO sin tocar nada.
+  if p_before is not null then
+    perform 1 from public.entries
+     where id = p_before and season_id = v_season and kind = 'SQUAD';
+    if not found then
+      raise exception 'Ese jugador no está en el plantel.';
+    end if;
+  end if;
+
+  -- Restatement #1/3: la posición REAL, en discipline_entries de la
+  -- disciplina de esta fecha — misma mecánica que el loop de
+  -- `add_squad_seat` (0023), acá sin loop porque sólo hay una disciplina que
+  -- llenar.
+  if p_before is null then
+    select coalesce(max(seed_position), -1) + 1 into v_disc_at
+      from public.discipline_entries where discipline_id = v_discipline;
+  else
+    select seed_position into v_disc_at from public.discipline_entries
+     where discipline_id = v_discipline and entry_id = p_before for update;
+    if v_disc_at is null then
+      -- El asiento de referencia no juega ESTA disciplina: va al final,
+      -- mismo criterio que `add_squad_seat`.
+      select coalesce(max(seed_position), -1) + 1 into v_disc_at
+        from public.discipline_entries where discipline_id = v_discipline;
+    else
+      perform public.shift_seeds_up(v_discipline, v_disc_at);
+    end if;
+  end if;
+
+  -- El mutex que serializa dos escritores concurrentes de la MISMA
+  -- temporada —y evita que los dos lean el mismo `max(seed_position)` y el
+  -- segundo choque contra `season_seed_order_seed` (23505) sin traducir— ya
+  -- se tomó arriba, con el advisory lock (WU2, tanda 7, ahora el PRIMERO de
+  -- la función).
+
+  -- season_seed_order (0080): WU1 (tanda 5) -- `p_before` corre la cola acá
+  -- también, con `shift_season_seeds_up` (0081), mismo criterio que
+  -- `add_squad_seat`.
+  if p_before is null then
+    select coalesce(max(seed_position), -1) + 1 into v_season_at
+      from public.season_seed_order where season_id = v_season;
+  else
+    select seed_position into v_season_at from public.season_seed_order
+     where season_id = v_season and entry_id = p_before for update;
+    if v_season_at is null then
+      select coalesce(max(seed_position), -1) + 1 into v_season_at
+        from public.season_seed_order where season_id = v_season;
+    else
+      perform public.shift_season_seeds_up(v_season, v_season_at);
+    end if;
+  end if;
+
+  -- Decision de producto (Stefano): al sumar un invitado de a uno, la app
+  -- agrega el casillero de puntos SOLA, con 0, y sube el plantel. El admin
+  -- despues lo deja en 0 o le pone valor.
+  --
+  -- La lista de puntos tiene que tener un casillero por lado aunque valga 0
+  -- (`core/config.ts: validateConfig`, `points.length === floor(squadSize /
+  -- sideSize)`), y el 0 ya significa "de aca para abajo no se suma"
+  -- (`pointsErrors`). Lo que trababa la temporada nunca fue una regla de
+  -- reparto: era el LARGO. Sin esto, promover dejaba 9 jugadores contra 8
+  -- valores, la fecha siguiente no se podia sortear y —C22,
+  -- ronda 15— reabrir ESTA borraba los 8 premios y despues no dejaba cerrar.
+  --
+  -- Cambia a proposito la convencion de "agregar un asiento no toca squadSize
+  -- ni points" (decision registrada 3): aca la app no elige un reparto,
+  -- mantiene el invariante de largo que ella misma exige.
+  --
+  -- Solo con `pair_size = 1`. De a dos el invitado promovido no cambia los
+  -- lados que cobran —su pareja ya cobraba porque el companero era del
+  -- plantel—, asi que la lista sigue alcanzando; medido en la ronda 15
+  -- (promover → reabrir → re-cerrar da 8 premios, perfecto).
+  if v_pair_size = 1 then
+    -- Esto leia `(config ->> 'squadSize')::int` y
+    -- el cast reventaba ACA, antes de que el guard de abajo pudiera mirar nada
+    -- — con `squadSize = "ocho"` el admin recibia `invalid input syntax for
+    -- type integer: "ocho"`, la ultima de las siete filas de la matriz de W54
+    -- que le llegaba como "Referencia: NNNN". Se lee como jsonb, se chequea el
+    -- tipo, y recien despues se castea.
+    select config -> 'squadSize', config -> 'points'
+      into v_squad_raw, v_points
+      from public.disciplines where id = v_discipline for update;
+
+    --`||` sobre un jsonb que no es array no se queja — escribe
+    -- `[null,0]` o `[{},0]` y deja una config que `validateConfig` rechaza
+    -- entera, incluido cualquier intento de arreglarla desde Ajustes. La
+    -- config sale de `validateConfig` en todos los caminos de escritura, asi
+    -- que llegar aca con otra forma es corrupcion; se corta ruidoso.
+    if v_points is null or jsonb_typeof(v_points) <> 'array' then
+      raise exception 'La configuración de la disciplina está rota: la lista de puntos no es una lista.';
+    end if;
+    if v_squad_raw is null or jsonb_typeof(v_squad_raw) <> 'number' then
+      raise exception 'La configuración de la disciplina está rota: no dice de cuántos es el plantel.';
+    end if;
+    v_squad := (v_squad_raw #>> '{}')::int;
+
+    update public.disciplines
+       set config = jsonb_set(
+             jsonb_set(config, '{squadSize}', to_jsonb(v_squad + 1)),
+             '{points}', v_points || to_jsonb(0))
+     where id = v_discipline;
+  end if;
+
+  delete from public.pair_locks
+   where matchday_id = v_matchday
+     and (entry_a = p_entry or entry_b = p_entry);
+
+  -- C37: `seed_position = null`, no `v_at`. El invitado tenía una posición
+  -- REAL —correlativa por FECHA, `entries_guest_order`— y al pasar a SQUAD la
+  -- pierde, porque para el SQUAD esa columna es la réplica degradada que el
+  -- CHECK `entries_seed_shape` del contract va a prohibir. Va explícito y no
+  -- omitido: esto es un UPDATE de una fila que YA tiene valor de invitado.
+  -- Su posición en el plantel es la de `discipline_entries`, el insert de
+  -- acá abajo, que es donde `p_before` posiciona desde PR 9.
+  update public.entries
+     set kind = 'SQUAD', matchday_id = null, seed_position = null
+   where id = p_entry;
+
+  insert into public.discipline_entries (discipline_id, entry_id, season_id, seed_position)
+  values (v_discipline, p_entry, v_season, v_disc_at);
+
+  insert into public.season_seed_order (season_id, entry_id, seed_position)
+  values (v_season, p_entry, v_season_at);
+
+  -- Misma razón que el guard de arriba: con un lado de uno este `join` no
+  -- puede traer una fila (el `case` da NULL), y no hay nada que copiar porque
+  -- el invitado jugó solo y no cobró. Se saltea explícito en vez de dejar que
+  -- el `join` no matchee, para que el motivo quede escrito y no dependa de
+  -- volver a derivar la lógica de tres valores.
+  if v_pair_size <> 1 then
+    insert into public.awards (matchday_id, entry_id, season_id, position, points)
+    select pr.matchday_id, p_entry, v_season, a.position, a.points
+      from public.pairs pr
+      join public.awards a
+        on a.matchday_id = pr.matchday_id
+       and a.entry_id = case when pr.entry_a = p_entry then pr.entry_b else pr.entry_a end
+     where pr.matchday_id = v_matchday
+       and (pr.entry_a = p_entry or pr.entry_b = p_entry);
+
+    -- REQ-D10-3: el desglose del compañero, no sólo el total -- mismo `case`,
+    -- mismo `where`, la FK compuesta a `awards (matchday_id, entry_id)`
+    -- (0047) exige que el insert de arriba ya haya corrido.
+    insert into public.award_lines (matchday_id, entry_id, ordinal, reason, points)
+    select pr.matchday_id, p_entry, l.ordinal, l.reason, l.points
+      from public.pairs pr
+      join public.award_lines l
+        on l.matchday_id = pr.matchday_id
+       and l.entry_id = case when pr.entry_a = p_entry then pr.entry_b else pr.entry_a end
+     where pr.matchday_id = v_matchday
+       and (pr.entry_a = p_entry or pr.entry_b = p_entry);
+  end if;
+end;
+$$;

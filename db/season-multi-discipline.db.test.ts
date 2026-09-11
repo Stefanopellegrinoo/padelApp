@@ -680,6 +680,67 @@ describe('createSeason con orden propio por disciplina (seedOrder)', () => {
   })
 
   /**
+   * WU5 (ronda 3 de revisión, dos jueces ciegos, confirmado independiente por
+   * los dos): `isIndexPermutation` (`db/season.ts`) sólo comparaba rango
+   * (`at < 0 || at >= length`) y unicidad (`seen[at]`) -- `NaN`, `null`,
+   * `undefined` y un no-entero (`0.5`) hacen FALSAS las dos comparaciones de
+   * rango (`NaN < 0` y `NaN >= length` son las dos `false`) y `seen[at]` los
+   * indexa como una key de string que no choca con ningún índice real, así
+   * que quedaban ACEPTADOS. De ahí en más, `entryRows[globalIndex]!.id` (más
+   * abajo en este archivo) explota con un `TypeError` crudo -- no el
+   * `EdgeError` en español que el resto de este guard promete -- y
+   * `createTournament` (`app/torneos/nuevo/actions.ts`) sólo mapea
+   * `EdgeError`, así que cualquier otra cosa se reenvía tal cual al llamador.
+   *
+   * `disciplines` es JSON de cliente sin schema en runtime
+   * (`NewSeasonDiscipline` es sólo un tipo de TypeScript, borrado al
+   * compilar) -- `null` es la forma que toma `undefined`/`NaN` al cruzar
+   * JSON, así que estos cuatro valores son alcanzables desde afuera, no un
+   * caso de laboratorio. `as number[]` en el fixture simula exactamente esa
+   * falta de schema: ningún caller de producción con tipos intactos podría
+   * escribir este array.
+   */
+  it('rebota si seedOrder trae NaN, null, undefined o un no-entero, en vez de tirar un TypeError crudo', async () => {
+    const admin = await createTestUser()
+    const config = defaultConfig(4)
+    const names = squadNames(4)
+    const malformados = [
+      { label: 'NaN', seedOrder: [0, 1, 2, NaN] },
+      { label: 'null', seedOrder: [0, 1, 2, null] },
+      { label: 'undefined', seedOrder: [0, 1, 2, undefined] },
+      { label: 'no entero', seedOrder: [0, 1, 2, 0.5] },
+    ]
+
+    for (const { label, seedOrder } of malformados) {
+      let caught: unknown
+      try {
+        await createSeason(admin.client, {
+          name: `Orden malformado ${label}`,
+          squadNames: names,
+          config,
+          disciplines: [{ kind: 'PADEL', config, seedOrder: seedOrder as number[] }],
+        })
+      } catch (err) {
+        caught = err
+      }
+      expect(caught).toBeInstanceOf(EdgeError)
+      expect((caught as EdgeError).message).toBe(
+        'El orden propio de PADEL no coincide con el plantel: tiene que ser el mismo plantel, sólo reordenado.',
+      )
+    }
+
+    const db = adminClient()
+    const { data } = await db
+      .from('seasons')
+      .select('id')
+      .in(
+        'name',
+        malformados.map((m) => `Orden malformado ${m.label}`),
+      )
+    expect(data).toEqual([])
+  })
+
+  /**
    * F4 (revisión ciega dual, 37b225b..d33377a) + WU1 (ronda 2): CON
    * `seedOrder` ya no hace falta ninguna máscara `used` que adivine cuál
    * "Juan" es cuál -- cada índice de `seedOrder` señala a un asiento
@@ -815,5 +876,16 @@ describe('createSeason con orden propio por disciplina (seedOrder)', () => {
     // el PRIMER "Juan" (asiento 1) sin importar cuál arrastró el usuario.
     expect(fifaSeats![0]!.entry_id).toBe(seat3EntryId)
     expect(fifaSeats![0]!.entry_id).not.toBe(seat1EntryId)
+    // WU7 (ronda 3 de revisión): el test de arriba sólo miraba la posición
+    // 0 -- un `seedOrderFrom` que acertara el primer asiento y desordenara
+    // el resto (Ana/Luis/el otro Juan) quedaba verde igual. `orders.FIFA =
+    // [3, 0, 1, 2]` pide EXACTAMENTE ese orden de principio a fin: asiento
+    // 3, después 0 (Ana), después 1 (el otro Juan), después 2 (Luis).
+    expect(fifaSeats!.map((row) => row.entry_id)).toEqual([
+      entryIdBySquadIndex[3],
+      entryIdBySquadIndex[0],
+      entryIdBySquadIndex[1],
+      entryIdBySquadIndex[2],
+    ])
   })
 })

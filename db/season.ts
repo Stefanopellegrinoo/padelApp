@@ -205,12 +205,26 @@ export async function frozenPointsOf(
  * asiento en `squadNames`. `seen` -- no un `sort()` de copias, como hacía la
  * versión de nombres -- porque acá el universo es conocido de antemano
  * (`[0, length)`), así que un array de flags es más directo que ordenar.
+ *
+ * WU5 (ronda 3 de revisión, dos jueces ciegos, confirmado independiente por
+ * los dos): `Number.isInteger(at)` primero en la cadena -- sin esto, `NaN`,
+ * `null`, `undefined` y un no-entero (`0.5`) hacían FALSAS las dos
+ * comparaciones de rango (`NaN < 0`/`NaN >= length` son las dos `false`, y
+ * `null`/`undefined` coercionan a `0`) y `seen[at]` los indexaba como una
+ * key de string que no choca con ningún índice real -- quedaban ACEPTADOS.
+ * `disciplines` es JSON de cliente sin schema en runtime (`NewSeasonDiscipline`
+ * es sólo un tipo de TypeScript, borrado al compilar), y `null` es la forma
+ * que toma `undefined`/`NaN` al cruzar JSON -- alcanzable desde afuera, no
+ * un caso de laboratorio. `Number.isInteger` rechaza los cuatro con una sola
+ * llamada: a diferencia de la función global `isInteger`, no coacciona su
+ * argumento (`Number.isInteger(null)`/`Number.isInteger(undefined)` son
+ * `false` sin convertirlos a `0` primero).
  */
 function isIndexPermutation(order: readonly number[], length: number): boolean {
   if (order.length !== length) return false
   const seen = new Array<boolean>(length).fill(false)
   for (const at of order) {
-    if (at < 0 || at >= length || seen[at]) return false
+    if (!Number.isInteger(at) || at < 0 || at >= length || seen[at]) return false
     seen[at] = true
   }
   return true

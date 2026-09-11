@@ -12,6 +12,7 @@ import {
   FORMATO_DEFAULT_OPTIONS,
   type DisciplineKind,
   type Squad,
+  type SquadOrders,
   addBlankSeat,
   automaticHasMasters,
   disciplinesWarning,
@@ -787,10 +788,22 @@ export function Wizard({ myName }: { myName: string }) {
   // en el primer asiento. Es el caso de casi todos —el que organiza los jueves
   // juega los jueves— y así no hay nada que descubrir para participar: mirás la
   // lista y ya estás. El que sólo organiza se saca, que es el caso raro.
-  const [squad, setSquadState] = useState<Squad>(() => ({
-    names: [myName, ...Array<string>(floor - 1).fill('')],
-    mySeat: myName.trim().length === 0 ? null : 0,
+  //
+  // WU1 (ronda 3 de revisión): `squad` y `orders` viven en UN solo
+  // `useState<SquadOrders>`, no en dos sueltos -- ver el docblock de
+  // `SquadOrders` (`wizard-state.ts`) para el porqué. `orders` (por ÍNDICE
+  // de asiento, no por nombre -- F1, `wizard-state.ts`: un índice sobrevive
+  // a una renombrada, que es justo lo que `setSquad` dispara en CADA tecla
+  // de esta pantalla) arranca vacío -- ningún pádel existente cambia si
+  // nadie toca el checkbox "orden propio" (paso Formato).
+  const [squadOrders, setSquadOrdersState] = useState<SquadOrders>(() => ({
+    squad: {
+      names: [myName, ...Array<string>(floor - 1).fill('')],
+      mySeat: myName.trim().length === 0 ? null : 0,
+    },
+    orders: {},
   }))
+  const { squad, orders } = squadOrders
   // `configs` reemplaza al `config` único de antes de la Task 5: una entrada
   // POR DISCIPLINA (las dos, aunque el torneo sólo marque una — mismo
   // criterio que `pairSizes`), cada una con SU PROPIA curva de puntos y SUS
@@ -828,21 +841,18 @@ export function Wizard({ myName }: { myName: string }) {
   // Orden inicial propio, uno por disciplina -- plan de multi-disciplina.
   // `ownOrder` (el checkbox del paso Formato) modelado EXACTAMENTE como
   // `fixedTeams`, arriba: arranca en `false` para las dos, el orden GLOBAL
-  // de siempre. `orders` es la data real detrás del checkbox -- `Partial`,
-  // no un `Record` completo como `fixedTeams`: a diferencia de ese
-  // checkbox, "esta disciplina no tiene orden propio" no es un booleano que
-  // viva siempre con un valor, es la AUSENCIA de una lista entera (por eso
-  // el guard de permutación de `db/season.ts` lo trata como "seguí el
-  // global", no como "seedNames: []"). Las dos arrancan vacías/en `false`:
-  // ningún pádel existente cambia si nadie toca este checkbox.
+  // de siempre. `orders` (dentro de `squadOrders`, arriba) es la data real
+  // detrás del checkbox -- `Partial`, no un `Record` completo como
+  // `fixedTeams`: a diferencia de ese checkbox, "esta disciplina no tiene
+  // orden propio" no es un booleano que viva siempre con un valor, es la
+  // AUSENCIA de una lista entera (por eso el guard de permutación de
+  // `db/season.ts` lo trata como "seguí el global", no como
+  // "seedOrder: []"). Las dos arrancan en `false`: ningún pádel existente
+  // cambia si nadie toca este checkbox.
   const [ownOrder, setOwnOrderState] = useState<Record<DisciplineKind, boolean>>({
     PADEL: false,
     FIFA: false,
   })
-  // Por ÍNDICE de asiento, no por nombre (F1, wizard-state.ts): un índice
-  // sobrevive a una renombrada, que es justo lo que `setSquad` dispara en
-  // CADA tecla de esta pantalla.
-  const [orders, setOrdersState] = useState<Partial<Record<DisciplineKind, number[]>>>({})
   const [error, setError] = useState<string | null>(null)
   const [leaving, setLeaving] = useState(false)
   const [created, setCreated] = useState<{ seasonId: string; inviteToken: string } | null>(null)
@@ -867,58 +877,50 @@ export function Wizard({ myName }: { myName: string }) {
   const anyErrors = disciplines.some((kind) => errorsByKind[kind].length > 0)
   const disciplineWarning = disciplinesWarning(disciplines)
 
-  // Sólo plantel + configs -- desde F1 (wizard-state.ts) el orden propio de
-  // cada disciplina ya NO se reconcilia acá adentro por un diff de nombres:
-  // se ajusta por ÍNDICE, en el sitio EXACTO de cada operación
-  // (`editSeatName`/`joinSquad`/`removeSeat`/`moveGlobalSeat`, más abajo),
-  // igual que `mySeat` ya se ajusta en `namesAfterEdit`/`addMySeat`/
-  // `removeSeatAt`/`moveSeat` -- una renombrada no reordena nada (el índice
-  // no se mueve), así que esta función ya no tiene ninguna razón para tocar
-  // `orders`.
-  const setSquad = (next: Squad) => {
-    setSquadState(next)
+  // Plantel + orders JUNTOS (WU1, ronda 3) + configs -- desde F1
+  // (wizard-state.ts) el orden propio de cada disciplina ya NO se reconcilia
+  // acá adentro por un diff de nombres: se ajusta por ÍNDICE, en el sitio
+  // EXACTO de cada operación (`editSeatName`/`joinSquad`/`removeSeat`/
+  // `moveGlobalSeat`, más abajo, todas funciones puras de `wizard-state.ts`
+  // que ya devuelven las dos mitades juntas), igual que `mySeat` ya se
+  // ajusta en `namesAfterEdit`/`addMySeat`/`removeSeatAt`/`moveSeat`.
+  //
+  // Recibe el `SquadOrders` COMPLETO y lo aplica de UNA -- WU1 (ronda 3): la
+  // versión de WU2 (ronda 2) tomaba sólo `Squad` acá y `orders` viajaba por
+  // un `setOrdersState` suelto en cada handler; esa forma dejaba pasar una
+  // mutación de una sola palabra (`setOrdersState(next.orders)` →
+  // `setOrdersState(orders)`, el `orders` VIEJO) porque las dos expresiones
+  // comparten tipo y ningún pin de fuente la distinguía para siempre. Con UN
+  // solo parámetro tipado `SquadOrders`, pasar sólo una mitad es un error de
+  // `tsc` en cada call site, no un test que haya que escribir y mantener.
+  const setSquad = (next: SquadOrders) => {
+    setSquadOrdersState(next)
     // `resizeConfigs`, no un `resizeConfig` suelto (Task 5): agrandar o
     // achicar el plantel tiene que poner al día la curva de CADA
     // disciplina, cada una contra su propio `pairSize` — ya no hay una sola
     // curva compartida que corregir.
-    setConfigsState((current) => resizeConfigs(current, filledCount(next.names), pairSizes))
+    setConfigsState((current) => resizeConfigs(current, filledCount(next.squad.names), pairSizes))
   }
 
-  // WU2 (ronda 2 de revisión): los cuatro handlers de acá abajo arman el
-  // estado combinado (`squad` + `orders`) con UNA función pura de
-  // `wizard-state.ts` (`editSeatState`/`joinSquadState`/`removeSeatState`/
-  // `moveGlobalSeatState`, testeadas ahí) y sólo aplican las dos mitades del
-  // resultado -- antes cada uno hilaba la lógica ACÁ, adentro del handler,
-  // sin ningún test que la ejercitara (esta suite no tiene runner de
-  // clicks/tecleo; pin de este cableado en `app/cableado-de-formato.unit.test.ts`).
+  // Los cuatro handlers de acá abajo arman el estado combinado (`squad` +
+  // `orders`) con UNA función pura de `wizard-state.ts`
+  // (`editSeatState`/`joinSquadState`/`removeSeatState`/
+  // `moveGlobalSeatState`, testeadas ahí) y se lo pasan ENTERO a `setSquad`
+  // -- un solo call site por handler, sin variable intermedia que exponga
+  // `.squad`/`.orders` por separado (pin de este cableado en
+  // `app/cableado-de-formato.unit.test.ts`).
 
   // La fila `index` del plantel (paso 1) cambia de valor.
-  const editSeatName = (index: number, value: string) => {
-    const next = editSeatState(squad, orders, index, value)
-    setSquad(next.squad)
-    setOrdersState(next.orders)
-  }
+  const editSeatName = (index: number, value: string) => setSquad(editSeatState(squad, orders, index, value))
 
   // "Participar en el torneo": el organizador entra al plantel en un asiento NUEVO, al final.
-  const joinSquad = () => {
-    const next = joinSquadState(squad, orders, myName)
-    setSquad(next.squad)
-    setOrdersState(next.orders)
-  }
+  const joinSquad = () => setSquad(joinSquadState(squad, orders, myName))
 
   // Saca la fila `index` del plantel (la cruz de paso 1, o "Sacame del plantel" para la propia).
-  const removeSeat = (index: number) => {
-    const next = removeSeatState(squad, orders, index)
-    setSquad(next.squad)
-    setOrdersState(next.orders)
-  }
+  const removeSeat = (index: number) => setSquad(removeSeatState(squad, orders, index))
 
   // El swap del orden GLOBAL (paso "Orden inicial", lista de arriba).
-  const moveGlobalSeat = (from: number, to: number) => {
-    const next = moveGlobalSeatState(squad, orders, from, to)
-    setSquad(next.squad)
-    setOrdersState(next.orders)
-  }
+  const moveGlobalSeat = (from: number, to: number) => setSquad(moveGlobalSeatState(squad, orders, from, to))
 
   // Cada radio "Lados" manda sólo sobre SU disciplina, y ahora SIEMPRE rehace
   // la config de esa disciplina sola (Task 5): con una config genuinamente
@@ -948,19 +950,22 @@ export function Wizard({ myName }: { myName: string }) {
   // plantel crudo -- mismo criterio que arriba), apagar borra la entrada
   // entera (`toggleOwnOrder`, wizard-state.ts). Los dos casos actualizan
   // `orders` a la vez que `ownOrder` -- son la misma acción del usuario.
+  // `squad` no cambia acá (sólo `orders`, adentro de `squadOrders`): no pasa
+  // por `setSquad` porque no hay plantel que resizear.
   const changeOwnOrder = (kind: DisciplineKind, next: boolean) => {
     setOwnOrderState((current) => ({ ...current, [kind]: next }))
-    setOrdersState((current) => toggleOwnOrder(current, kind, next, orderedNames))
+    setSquadOrdersState((current) => ({ ...current, orders: toggleOwnOrder(current.orders, kind, next, orderedNames) }))
   }
   // Sube o baja una fila de la lista PROPIA de una disciplina
   // (`PasoOrdenInicial`): `moveInOrder` es el `moveSeat` de arriba sin
   // `mySeat` que arrastrar, porque esta lista es de ÍNDICES sueltos (F1),
-  // sin ningún asiento propio que seguir.
+  // sin ningún asiento propio que seguir. Mismo criterio que
+  // `changeOwnOrder`: sólo toca `orders`, `squad` queda como está.
   const changeOrderAt = (kind: DisciplineKind, from: number, to: number) =>
-    setOrdersState((current) => {
-      const order = current[kind]
+    setSquadOrdersState((current) => {
+      const order = current.orders[kind]
       if (order === undefined) return current
-      return { ...current, [kind]: moveInOrder(order, from, to) }
+      return { ...current, orders: { ...current.orders, [kind]: moveInOrder(order, from, to) } }
     })
 
   const blocked =
@@ -1139,7 +1144,7 @@ export function Wizard({ myName }: { myName: string }) {
                 Task 3): la fila para sumar un jugador más siempre está. */}
             <button
               type="button"
-              onClick={() => setSquad(addBlankSeat(squad))}
+              onClick={() => setSquad({ squad: addBlankSeat(squad), orders })}
               className="rounded-field border-[1.5px] border-line p-[13px] text-[14px] font-[750] text-muted"
             >
               + Agregar jugador

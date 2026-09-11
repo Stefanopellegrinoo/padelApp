@@ -544,6 +544,35 @@ export function swapInOrders(
 }
 
 /**
+ * El estado combinado del plantel -- `squad` + `orders` juntos, en UN solo
+ * lugar (WU1, ronda 3 de revisión).
+ *
+ * Antes de esta tarea las cuatro funciones de acá abajo devolvían un
+ * `{ squad, orders }` anónimo, y `wizard.tsx` lo aplicaba con DOS `useState`
+ * y DOS setters sueltos (`setSquad(next.squad)` + `setOrdersState(next.orders)`).
+ * Esa forma dejaba una mutación de una sola palabra indistinguible: pisar
+ * `next.orders` por el `orders` VIEJO del closure (`setOrdersState(orders)`)
+ * seguía siendo `Partial<Record<DisciplineKind, number[]>>` -- el mismo tipo
+ * que `next.orders` -- así que `tsc` no la veía, y los cuatro pins de
+ * `app/cableado-de-formato.unit.test.ts` eran una regexp que cualquier
+ * mutación futura le iba a ganar tarde o temprano (medido: sobrevivía en las
+ * cuatro variantes, `removeSeat` neutralizado corría cada índice un lugar y
+ * `moveGlobalSeat` neutralizado invertía en silencio el orden propio).
+ *
+ * Con las dos mitades en UN solo tipo con nombre y un ÚNICO setter que las
+ * exige juntas (`setSquad`, `wizard.tsx`), "aplicar una mitad y tirar la
+ * otra" deja de ser una asignación que `tsc` acepte: pasarle sólo un `Squad`
+ * o sólo un `Partial<Record<DisciplineKind, number[]>>` donde se espera un
+ * `SquadOrders` es un error de compilación, no un test que haya que escribir
+ * y mantener -- mismo criterio que ya fijaron los `Record` obligatorios de
+ * `newTournamentPayload` (ver su docblock, más abajo).
+ */
+export interface SquadOrders {
+  squad: Squad
+  orders: Partial<Record<DisciplineKind, number[]>>
+}
+
+/**
  * El estado combinado (`squad` + `orders`) después de tipear `value` en la
  * fila `index` del plantel (paso 1).
  *
@@ -555,8 +584,9 @@ export function swapInOrders(
  * `app/cableado-de-formato.unit.test.ts` ya documenta para el punto de
  * unión del paso 4 -- "extraer a un módulo puro MUEVE el riesgo al punto de
  * unión, y ahí no queda nada"). Acá la lógica entera queda adentro del
- * módulo puro, testeable sin DOM; `wizard.tsx` sólo aplica las dos mitades
- * del resultado (pin de ese cableado en `app/cableado-de-formato.unit.test.ts`).
+ * módulo puro, testeable sin DOM; `wizard.tsx` sólo aplica el resultado
+ * COMPLETO con un único `setSquad` (WU1, pin de ese cableado en
+ * `app/cableado-de-formato.unit.test.ts`).
  *
  * Un asiento en blanco que pasa a tener contenido es un asiento NUEVO --
  * entra al final de cada orden propio que ya exista (`addToOrders`); uno que
@@ -568,7 +598,7 @@ export function editSeatState(
   orders: Partial<Record<DisciplineKind, number[]>>,
   index: number,
   value: string,
-): { squad: Squad; orders: Partial<Record<DisciplineKind, number[]>> } {
+): SquadOrders {
   const wasBlank = (squad.names[index] ?? '').trim().length === 0
   const nextSquad = { ...squad, names: namesAfterEdit(squad.names, index, value) }
   const nextOrders = wasBlank && value.trim().length > 0 ? addToOrders(orders, index) : orders
@@ -585,7 +615,7 @@ export function joinSquadState(
   squad: Squad,
   orders: Partial<Record<DisciplineKind, number[]>>,
   myName: string,
-): { squad: Squad; orders: Partial<Record<DisciplineKind, number[]>> } {
+): SquadOrders {
   return { squad: addMySeat(squad, myName), orders: addToOrders(orders, squad.names.length) }
 }
 
@@ -599,7 +629,7 @@ export function removeSeatState(
   squad: Squad,
   orders: Partial<Record<DisciplineKind, number[]>>,
   index: number,
-): { squad: Squad; orders: Partial<Record<DisciplineKind, number[]>> } {
+): SquadOrders {
   return { squad: removeSeatAt(squad, index), orders: removeFromOrders(orders, index) }
 }
 
@@ -621,7 +651,7 @@ export function moveGlobalSeatState(
   orders: Partial<Record<DisciplineKind, number[]>>,
   from: number,
   to: number,
-): { squad: Squad; orders: Partial<Record<DisciplineKind, number[]>> } {
+): SquadOrders {
   if (from < 0 || from >= squad.names.length || to < 0 || to >= squad.names.length) {
     return { squad, orders }
   }

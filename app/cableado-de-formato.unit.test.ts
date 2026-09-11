@@ -520,56 +520,82 @@ describe('el wizard — TITLES/HELP/blocked/advance no se desalinean entre sí (
 })
 
 /**
- * WU2 (ronda 2 de revisión): los cuatro handlers que hilan `squad` y
- * `orders` a la vez vivían con la lógica ADENTRO del handler de `.tsx` --
- * `wizard-state.unit.test.ts` cubre la función pura que cada uno ahora
- * arma (`editSeatState`/`joinSquadState`/`removeSeatState`/
+ * WU2 (ronda 2 de revisión) + WU1 (ronda 3, ESTE fix): los cuatro handlers
+ * que hilan `squad` y `orders` a la vez vivían con la lógica ADENTRO del
+ * handler de `.tsx` -- `wizard-state.unit.test.ts` cubre la función pura que
+ * cada uno arma (`editSeatState`/`joinSquadState`/`removeSeatState`/
  * `moveGlobalSeatState`), pero eso no prueba que el HANDLER de `wizard.tsx`
- * de verdad la llame y aplique las DOS mitades del resultado -- mismo techo
- * que el resto de este archivo: sin clicks, la suite no llega a ejecutar el
- * cuerpo del handler, así que el ÚNICO lugar donde un mis-wire se puede
- * cazar es pinchando el ARGUMENTO por FUENTE (ronda 18).
+ * de verdad la llame -- mismo techo que el resto de este archivo: sin
+ * clicks, la suite no llega a ejecutar el cuerpo del handler, así que el
+ * ÚNICO lugar donde un mis-wire se puede cazar es pinchando el ARGUMENTO por
+ * FUENTE (ronda 18).
+ *
+ * El fix de WU2 (dos `useState`, dos setters sueltos por handler) resultó
+ * INCOMPLETO: `setOrdersState(next.orders)` y `setOrdersState(orders)` (el
+ * `orders` VIEJO del closure) comparten tipo, así que ninguna mutación de
+ * las dos rompía `tsc` -- medido, las cuatro variantes (una por handler)
+ * sobreviven 1069/1069 + `tsc` limpio. Una regexp más ajustada (`toMatch` de
+ * un argumento más específico) seguía siendo el mismo síntoma: la próxima
+ * mutación de UNA palabra le iba a ganar de nuevo.
+ *
+ * WU1 (ronda 3) saca el seam de raíz: `squad`+`orders` viven en UN solo
+ * `useState<SquadOrders>` y hay un ÚNICO `setSquad` que exige el objeto
+ * COMPLETO -- pasar sólo la mitad de un `SquadOrders` donde se espera el
+ * tipo entero es un error de `tsc`, no algo que un pin tenga que cazar en
+ * runtime. Los tests de acá abajo pinchan que cada handler sea EXACTAMENTE
+ * `setSquad(<la función pura>(...))`, una sola línea: cualquier
+ * reconstrucción que cherry-pickee un campo del objeto (`setSquad({
+ * ...editSeatState(...), orders })`, la única forma de reintroducir el bug
+ * que SÍ typechequea) necesita más código que este one-liner y deja de
+ * matchear el pin exacto.
  */
-describe('los handlers de orders del wizard -- el cableado que ningún render alcanza (WU2)', () => {
+describe('los handlers de squad+orders del wizard -- el cableado que ningún render alcanza (WU1, ronda 3 de revisión)', () => {
   const fuente = sinComentarios(
     readFileSync(join(process.cwd(), 'app/torneos/nuevo/wizard.tsx'), 'utf8'),
   )
 
-  it('editSeatName arma el estado combinado con editSeatState y aplica las dos mitades', () => {
-    const cuerpo = /const editSeatName = \(index: number, value: string\) => \{[\s\S]*?\n {2}\}/.exec(fuente)?.[0] ?? ''
-    expect(cuerpo).not.toBe('')
-    expect(cuerpo).toContain('editSeatState(squad, orders, index, value)')
-    expect(cuerpo).toMatch(/setSquad\([\w.]+\)/)
-    expect(cuerpo).toMatch(/setOrdersState\([\w.]+\)/)
+  it('squad y orders viven en UN solo useState<SquadOrders>, no en dos useState sueltos', () => {
+    expect(fuente).toMatch(/useState<SquadOrders>/)
+    expect(fuente).not.toMatch(/useState<Squad>/)
+    expect(fuente).not.toMatch(/useState<Partial<Record<DisciplineKind, number\[\]>>>/)
   })
 
-  it('joinSquad arma el estado combinado con joinSquadState y aplica las dos mitades', () => {
-    const cuerpo = /const joinSquad = \(\) => \{[\s\S]*?\n {2}\}/.exec(fuente)?.[0] ?? ''
-    expect(cuerpo).not.toBe('')
-    expect(cuerpo).toContain('joinSquadState(squad, orders, myName)')
-    expect(cuerpo).toMatch(/setSquad\([\w.]+\)/)
-    expect(cuerpo).toMatch(/setOrdersState\([\w.]+\)/)
+  /**
+   * `setSquad` es el ÚNICO punto que escribe `SquadOrders` -- pinchar que
+   * reciba `next` COMPLETO (no un campo reconstruido) cierra la puerta que
+   * la mutación de WU2 explotaba: si alguien reescribe esto para armar
+   * `{ squad: next.squad, orders }` (el `orders` viejo), esta línea exacta
+   * deja de existir.
+   */
+  it('setSquad aplica el objeto SquadOrders completo que le pasan, sin reconstruirlo', () => {
+    expect(fuente).toMatch(/const setSquad = \(next: SquadOrders\) => \{\s*setSquadOrdersState\(next\)/)
   })
 
-  it('removeSeat arma el estado combinado con removeSeatState y aplica las dos mitades', () => {
-    const cuerpo = /const removeSeat = \(index: number\) => \{[\s\S]*?\n {2}\}/.exec(fuente)?.[0] ?? ''
-    expect(cuerpo).not.toBe('')
-    expect(cuerpo).toContain('removeSeatState(squad, orders, index)')
-    expect(cuerpo).toMatch(/setSquad\([\w.]+\)/)
-    expect(cuerpo).toMatch(/setOrdersState\([\w.]+\)/)
+  it('editSeatName aplica editSeatState en un solo setSquad, sin setter aparte para orders', () => {
+    expect(fuente).toMatch(
+      /const editSeatName = \(index: number, value: string\) => setSquad\(editSeatState\(squad, orders, index, value\)\)/,
+    )
   })
 
-  it('moveGlobalSeat arma el estado combinado con moveGlobalSeatState y aplica las dos mitades', () => {
-    const cuerpo = /const moveGlobalSeat = \(from: number, to: number\) => \{[\s\S]*?\n {2}\}/.exec(fuente)?.[0] ?? ''
-    expect(cuerpo).not.toBe('')
-    expect(cuerpo).toContain('moveGlobalSeatState(squad, orders, from, to)')
-    expect(cuerpo).toMatch(/setSquad\([\w.]+\)/)
-    expect(cuerpo).toMatch(/setOrdersState\([\w.]+\)/)
+  it('joinSquad aplica joinSquadState en un solo setSquad, sin setter aparte para orders', () => {
+    expect(fuente).toMatch(/const joinSquad = \(\) => setSquad\(joinSquadState\(squad, orders, myName\)\)/)
   })
 
-  /** wizard.tsx:1135 (WU2): "+ Agregar jugador" era un `setSquad` a mano, con la misma forma que el resto de las mutaciones de plantel -- ahora pasa por `addBlankSeat`, igual que las otras cuatro. */
+  it('removeSeat aplica removeSeatState en un solo setSquad, sin setter aparte para orders', () => {
+    expect(fuente).toMatch(
+      /const removeSeat = \(index: number\) => setSquad\(removeSeatState\(squad, orders, index\)\)/,
+    )
+  })
+
+  it('moveGlobalSeat aplica moveGlobalSeatState en un solo setSquad, sin setter aparte para orders', () => {
+    expect(fuente).toMatch(
+      /const moveGlobalSeat = \(from: number, to: number\) => setSquad\(moveGlobalSeatState\(squad, orders, from, to\)\)/,
+    )
+  })
+
+  /** "+ Agregar jugador" (WU2): pasa por `addBlankSeat`, con `orders` intacto -- una fila en blanco no toca ningún orden propio. */
   it('"+ Agregar jugador" pasa por addBlankSeat, no arma el array a mano', () => {
-    expect(fuente).toMatch(/setSquad\(addBlankSeat\(squad\)\)/)
+    expect(fuente).toMatch(/setSquad\(\{ squad: addBlankSeat\(squad\), orders \}\)/)
   })
 })
 

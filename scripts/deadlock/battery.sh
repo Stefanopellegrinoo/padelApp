@@ -39,6 +39,14 @@
 #
 # Así que si tocás un lock: agregá el par acá y corré esto ANTES y DESPUÉS. Un
 # 0 sin un CTRL-POS al lado no dice nada.
+#
+# ── Esto GATEA: sale ≠ 0 ────────────────────────────────────────────────────
+# Cada par declara qué espera (`cero` o `positivo`) y `run.sh` sale ≠ 0 si no
+# se cumple o si alguna iteración no sincronizó. Antes esto salía 0 siempre:
+# estaba registrado como `test:deadlock` en package.json, o sea que en CI iba a
+# pasar en verde con el CTRL-NEG roto — justo la condición que el encabezado de
+# acá arriba dice que invalida todas las demás filas. Un gate que no puede
+# fallar es un reporte que alguien tiene que leer a ojo.
 set -u
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 N=${1:-60}
@@ -46,13 +54,14 @@ export PGPASSWORD=${PGPASSWORD:-postgres}
 psql -h "${PGHOST:-127.0.0.1}" -p "${PGPORT:-54322}" -U "${PGUSER:-postgres}" \
   -d "${PGDATABASE:-postgres}" -q -v ON_ERROR_STOP=1 -f "$here/fixture.sql" || exit 1
 
-R() { "$here/run.sh" "$@" "$N"; }
+fail=0
+R() { "$here/run.sh" "$1" "$2" "$3" "$N" "$4" || fail=$((fail + 1)); }
 echo "### N=$N por par. Solapamiento garantizado por barrera — leer el encabezado"
 echo "### de battery.sh antes de interpretar cualquier número."
 echo
 echo "── CONTROLES ──────────────────────────────────────────────────────────────"
-R "CTRL-NEG add_squad_seat || add_squad_seat" add_squad_seat.sql add_squad_seat.sql
-R "CTRL-POS shift_seeds_up || remove_squad_seat" shift_seeds_up.sql remove_squad_seat.sql
+R "CTRL-NEG add_squad_seat || add_squad_seat" add_squad_seat.sql add_squad_seat.sql cero
+R "CTRL-POS shift_seeds_up || remove_squad_seat" shift_seeds_up.sql remove_squad_seat.sql positivo
 echo
 # Son TRES, no cuatro: `add_squad_seat`, `promote_guest` y `remove_squad_seat`.
 # `claim_seat` es el otro escritor de `entries` grantado a `authenticated` y NO
@@ -60,17 +69,25 @@ echo
 # archivos). No está en esta sección porque no pertenece, y no está en la de
 # abajo porque nadie lo midió todavía: queda como par pendiente.
 echo "── LOS TRES ESCRITORES QUE TOMAN EL ADVISORY, ENTRE SÍ ────────────────────"
-R "add_squad_seat || promote_guest" add_squad_seat.sql promote_guest.sql
-R "add_squad_seat || remove_squad_seat" add_squad_seat.sql remove_squad_seat.sql
-R "promote_guest  || remove_squad_seat" promote_guest.sql remove_squad_seat.sql
-R "remove_squad_seat || remove_squad_seat" remove_squad_seat.sql remove_squad_seat.sql
+R "add_squad_seat || promote_guest" add_squad_seat.sql promote_guest.sql cero
+R "add_squad_seat || remove_squad_seat" add_squad_seat.sql remove_squad_seat.sql cero
+R "promote_guest  || remove_squad_seat" promote_guest.sql remove_squad_seat.sql cero
+R "remove_squad_seat || remove_squad_seat" remove_squad_seat.sql remove_squad_seat.sql cero
 echo
 echo "── CONTRA LOS ESCRITORES QUE NO TOMAN NINGÚN LOCK ─────────────────────────"
-R "add_squad_seat    || add_to_discipline" add_squad_seat.sql add_to_discipline.sql
-R "add_squad_seat    || remove_from_discipline" add_squad_seat.sql remove_from_discipline.sql
-R "add_squad_seat    || add_discipline" add_squad_seat.sql add_discipline.sql
-R "add_squad_seat    || delete_season" add_squad_seat.sql delete_season.sql
-R "remove_squad_seat || add_to_discipline" remove_squad_seat.sql add_to_discipline.sql
-R "remove_squad_seat || remove_from_discipline" remove_squad_seat.sql remove_from_discipline.sql
-R "remove_squad_seat || add_discipline" remove_squad_seat.sql add_discipline.sql
-R "remove_squad_seat || delete_season" remove_squad_seat.sql delete_season.sql
+R "add_squad_seat    || add_to_discipline" add_squad_seat.sql add_to_discipline.sql cero
+R "add_squad_seat    || remove_from_discipline" add_squad_seat.sql remove_from_discipline.sql cero
+R "add_squad_seat    || add_discipline" add_squad_seat.sql add_discipline.sql cero
+R "add_squad_seat    || delete_season" add_squad_seat.sql delete_season.sql cero
+R "remove_squad_seat || add_to_discipline" remove_squad_seat.sql add_to_discipline.sql cero
+R "remove_squad_seat || remove_from_discipline" remove_squad_seat.sql remove_from_discipline.sql cero
+R "remove_squad_seat || add_discipline" remove_squad_seat.sql add_discipline.sql cero
+R "remove_squad_seat || delete_season" remove_squad_seat.sql delete_season.sql cero
+
+echo
+if [[ $fail -ne 0 ]]; then
+  echo "FALLA: $fail par(es) no dieron lo esperado. Un CTRL roto invalida TODAS las"
+  echo "filas de abajo — mirá el encabezado de este archivo antes de creerle a ninguna."
+  exit 1
+fi
+echo "OK: todos los pares dieron lo esperado, controles incluidos."

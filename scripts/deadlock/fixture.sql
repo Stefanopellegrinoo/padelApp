@@ -146,11 +146,34 @@ grant execute on function dl.new_discipline() to authenticated;
 --      disciplinas de la temporada — es lo que la función promete;
 --   2. si `addDiscipline` creó d3, nace con TODO el plantel: un SQUAD sin fila
 --      ahí es el huérfano que vigila `db/discipline.db.test.ts`.
+--
+-- Y una tercera que vale para TODAS las filas de la batería, no sólo para las
+-- que crean algo: cada asiento SQUAD de la temporada tiene exactamente una
+-- fila en `season_seed_order`, y ninguna fila de esa tabla sobrevive sin su
+-- asiento. Es el invariante de toda la línea 0080-0086 y lo que
+-- `db/season-seed-order-writers.db.test.ts` custodia desde el otro lado. Sin
+-- esto, la columna ESTADO era una CONSTANTE cero en 5 de los 14 pares: los que
+-- no crean ni `'Nuevo'` ni `d3` no tenían nada que chequear y la fila igual
+-- imprimía `ESTADO=0`, que se lee como "estado verificado limpio" habiendo
+-- verificado nada. Fixture degenerado, la misma clase que la permutación
+-- identidad que no distingue `at` de `index`.
 create or replace function dl.inconsistent() returns text language plpgsql as $$
-declare v_season uuid; v_new uuid; v_d3 uuid; n int; out text := '';
+declare v_season uuid; v_new uuid; v_d3 uuid; n int; m int; out text := '';
 begin
   select v into v_season from dl.state where k = 'season';
   if not exists (select 1 from public.seasons where id = v_season) then return ''; end if;
+
+  select count(*) into n from public.entries e
+   where e.season_id = v_season and e.kind = 'SQUAD'
+     and not exists (select 1 from public.season_seed_order sso
+                      where sso.season_id = v_season and sso.entry_id = e.id);
+  if n > 0 then out := out || format('%s asiento(s) SQUAD sin fila en season_seed_order; ', n); end if;
+
+  select count(*) into m from public.season_seed_order sso
+   where sso.season_id = v_season
+     and not exists (select 1 from public.entries e
+                      where e.id = sso.entry_id and e.kind = 'SQUAD');
+  if m > 0 then out := out || format('%s fila(s) de season_seed_order sin asiento; ', m); end if;
 
   select id into v_new from public.entries
    where season_id = v_season and kind = 'SQUAD' and display_name = 'Nuevo' limit 1;

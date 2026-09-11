@@ -481,3 +481,143 @@ describe('RLS — funciones', () => {
     }
   })
 })
+
+/*
+ * El permiso "los jugadores cargan los resultados" (`seasons.players_can_score`,
+ * 0089). Lo prende el admin en Ajustes y abre UNA sola escritura: los sets de
+ * un partido de una fecha EN JUEGO. Abrir, cerrar y reabrir la fecha, y los
+ * ajustes del torneo, siguen siendo del admin — por eso los tres tests de
+ * abajo que verifican lo que el permiso NO abre valen tanto como el que
+ * verifica lo que sí.
+ *
+ * El caso "permiso apagado" ya lo cubre `un participante no puede cargar un
+ * resultado` (arriba): `false` es el default de la columna.
+ */
+describe('RLS — los jugadores cargan los resultados', () => {
+  async function allowPlayersToScore(seasonId: string) {
+    const { error } = await adminClient()
+      .from('seasons')
+      .update({ players_can_score: true })
+      .eq('id', seasonId)
+    if (error) throw new Error(error.message)
+  }
+
+  it('con el permiso prendido, un participante carga el resultado', async () => {
+    const admin = await createTestUser()
+    const member = await createTestUser()
+    const filler = await fillerPlayers(3)
+    const { seasonId, entryIds } = await createSeason({
+      admin,
+      squad: [member.playerId, ...filler],
+    })
+    const { matchId } = await buildMatch(seasonId, entryIds, 'OPEN')
+    await allowPlayersToScore(seasonId)
+
+    const { data, error } = await member.client
+      .from('match_sets')
+      .insert({ match_id: matchId, set_number: 1, games_a: 6, games_b: 3 })
+      .select()
+
+    expect(error).toBeNull()
+    expect(data).toHaveLength(1)
+  })
+
+  it('con el permiso prendido, un participante corrige el resultado que cargó otro', async () => {
+    const admin = await createTestUser()
+    const member = await createTestUser()
+    const filler = await fillerPlayers(3)
+    const { seasonId, entryIds } = await createSeason({
+      admin,
+      squad: [member.playerId, ...filler],
+    })
+    const { matchId } = await buildMatch(seasonId, entryIds, 'OPEN')
+    const { error: seedError } = await adminClient()
+      .from('match_sets')
+      .insert({ match_id: matchId, set_number: 1, games_a: 6, games_b: 3 })
+    if (seedError) throw new Error(seedError.message)
+    await allowPlayersToScore(seasonId)
+
+    // `saveResult` (db/matchday.ts) borra y vuelve a insertar: corregir es
+    // DELETE + INSERT, no UPDATE, así que el borrado ajeno es parte del permiso.
+    const { data, error } = await member.client
+      .from('match_sets')
+      .delete()
+      .eq('match_id', matchId)
+      .select()
+
+    expect(error).toBeNull()
+    expect(data).toHaveLength(1)
+  })
+
+  it('con el permiso prendido, la fecha cerrada sigue sin recibir resultados', async () => {
+    const admin = await createTestUser()
+    const member = await createTestUser()
+    const filler = await fillerPlayers(3)
+    const { seasonId, entryIds } = await createSeason({
+      admin,
+      squad: [member.playerId, ...filler],
+    })
+    const { matchId } = await buildMatch(seasonId, entryIds, 'CLOSED')
+    await allowPlayersToScore(seasonId)
+
+    const { data, error } = await member.client
+      .from('match_sets')
+      .insert({ match_id: matchId, set_number: 1, games_a: 6, games_b: 3 })
+      .select()
+
+    expect(data).toBeNull()
+    expect(error?.code).toBe('42501')
+  })
+
+  it('con el permiso prendido, un extraño sigue sin poder cargar', async () => {
+    const admin = await createTestUser()
+    const stranger = await createTestUser()
+    const filler = await fillerPlayers(4)
+    const { seasonId, entryIds } = await createSeason({ admin, squad: filler })
+    const { matchId } = await buildMatch(seasonId, entryIds, 'OPEN')
+    await allowPlayersToScore(seasonId)
+
+    const { data, error } = await stranger.client
+      .from('match_sets')
+      .insert({ match_id: matchId, set_number: 1, games_a: 6, games_b: 3 })
+      .select()
+
+    expect(data).toBeNull()
+    expect(error?.code).toBe('42501')
+  })
+
+  it('con el permiso prendido, un participante sigue sin poder cerrar la fecha', async () => {
+    const admin = await createTestUser()
+    const member = await createTestUser()
+    const filler = await fillerPlayers(3)
+    const { seasonId, entryIds } = await createSeason({
+      admin,
+      squad: [member.playerId, ...filler],
+    })
+    const { matchdayId } = await buildMatch(seasonId, entryIds, 'OPEN')
+    await allowPlayersToScore(seasonId)
+
+    const { error } = await member.client.rpc('close_matchday', {
+      p_matchday: matchdayId,
+      p_awards: [] as unknown as Json,
+    })
+
+    expect(error).not.toBeNull()
+  })
+
+  it('un participante no puede prender el permiso', async () => {
+    const admin = await createTestUser()
+    const member = await createTestUser()
+    const { seasonId } = await createSeason({ admin, squad: [member.playerId] })
+
+    const { data, error } = await member.client
+      .from('seasons')
+      .update({ players_can_score: true })
+      .eq('id', seasonId)
+      .select()
+
+    // Bloqueado por `seasons_update` (created_by): cero filas, no un error.
+    expect(error).toBeNull()
+    expect(data).toEqual([])
+  })
+})

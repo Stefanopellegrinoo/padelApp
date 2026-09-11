@@ -888,4 +888,73 @@ describe('createSeason con orden propio por disciplina (seedOrder)', () => {
       entryIdBySquadIndex[2],
     ])
   })
+
+  /**
+   * WU3 (tanda 7, BLOQUEA): mismo hazard que F6 (el bloque de
+   * `discipline_entries` de acá arriba, ya arreglado) pero en el `.insert()`
+   * de `entries`, 25 líneas más arriba en el archivo: el `.map()` corría
+   * ADENTRO del argumento de `.insert(...)`, sincrónico, ANTES de cualquier
+   * `await` y ANTES del `if (entriesError !== null)` que hace el rollback.
+   * Un `squadNames` con un elemento que no es string (`null` cruzando como
+   * JSON de Server Action sin schema en runtime, mismo argumento que
+   * `isIndexPermutation` ya acepta para `seedOrder`) hace explotar
+   * `seat.trim()` DESPUÉS de que `seasons` y sus `disciplines` ya se
+   * insertaron, y sin el hoist ese throw se escapa sin compensar -- la
+   * temporada y su disciplina quedan huérfanas para siempre.
+   */
+  it('un squadNames con null explota ANTES del insert, con rollback, no adentro sin compensar', async () => {
+    const admin = await createTestUser()
+    const config = defaultConfig(4)
+    const seasonName = 'Plantel con null'
+    let caught: unknown
+    try {
+      await createSeason(admin.client, {
+        name: seasonName,
+        squadNames: ['Ana', null, 'Caro', 'Dani'] as unknown as string[],
+        config,
+      })
+    } catch (err) {
+      caught = err
+    }
+    expect(caught).toBeInstanceOf(TypeError)
+
+    const db = adminClient()
+    const { data } = await db.from('seasons').select('id').eq('name', seasonName)
+    expect(data).toEqual([])
+  })
+
+  /**
+   * WU4 (tanda 7, BLOQUEA): `disciplines: []` no es nullish, así que
+   * `disciplineSpecs = disciplines ?? [...]` lo deja pasar TAL CUAL, y el
+   * `for (const spec of disciplineSpecs)` de la validación nunca corre --
+   * ni `assertValidConfig` ni el guard de `squadSize`. El resultado medido:
+   * `createSeason` devuelve OK con una temporada sin ninguna disciplina y
+   * su plantel sin ningún `discipline_entries` -- exactamente el estado que
+   * el tripwire global de `db/discipline.db.test.ts:250` (cuenta huérfanos
+   * en TODA la base, no sólo lo que este archivo crea) dice que nunca puede
+   * pasar. `db/test/factories.ts:100` ya tiene este guard para el helper de
+   * test; producción no lo tenía.
+   */
+  it('disciplines: [] se rechaza -- no es "sin disciplinas explícitas", es CERO disciplinas', async () => {
+    const admin = await createTestUser()
+    const config = defaultConfig(4)
+    const seasonName = 'Sin disciplinas'
+    let caught: unknown
+    try {
+      await createSeason(admin.client, {
+        name: seasonName,
+        squadNames: squadNames(4),
+        config,
+        disciplines: [],
+      })
+    } catch (err) {
+      caught = err
+    }
+    expect(caught).toBeInstanceOf(EdgeError)
+    expect((caught as EdgeError).message).toBe('El torneo necesita al menos una disciplina.')
+
+    const db = adminClient()
+    const { data } = await db.from('seasons').select('id').eq('name', seasonName)
+    expect(data).toEqual([])
+  })
 })

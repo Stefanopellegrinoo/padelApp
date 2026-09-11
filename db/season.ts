@@ -352,6 +352,20 @@ export async function createSeason(
   { name, squadNames, config, mySeatIndex = null, disciplines }: NewSeason,
 ): Promise<{ seasonId: string; inviteToken: string }> {
   const disciplineSpecs = disciplines ?? [{ kind: 'PADEL' as const, config }]
+  // WU4 (tanda 7, BLOQUEA): `[]` no es nullish, así que el `??` de arriba lo
+  // deja pasar tal cual -- y un `disciplineSpecs` vacío hace que el `for`
+  // de la validación (acá abajo) nunca corra ni una vuelta: ni
+  // `assertValidConfig` ni el guard de `squadSize`. Medido: `squadNames` de
+  // largo 2 con `disciplines: []` devolvía OK con una temporada sin
+  // ninguna disciplina y su plantel sin ningún `discipline_entries` --
+  // exactamente el estado que el tripwire global de
+  // `db/discipline.db.test.ts:250` dice que nunca puede pasar. Mismo guard
+  // que `db/test/factories.ts` ya tiene para el helper de test
+  // ('createSeason necesita al menos una disciplina.'), acá en el registro
+  // de EdgeError que usa el resto de esta función.
+  if (disciplineSpecs.length === 0) {
+    throw new EdgeError('El torneo necesita al menos una disciplina.')
+  }
   // `config` YA NO se escribe en `seasons.config` (C35, verify-report-go-no-go
   // #4034): esa columna no tiene lectores desde PR 5 y el `drop column` es del
   // CONTRACT. Acá sólo sobrevive como default de la disciplina implícita
@@ -458,16 +472,39 @@ export async function createSeason(
   // contract y el CHECK `entries_seed_shape` la va a prohibir. El orden del
   // plantel se escribe abajo, en `discipline_entries`, que es donde vive
   // desde PR 7.
+  //
+  // WU3 (tanda 7, BLOQUEA): esta lista se arma ACÁ, en una variable, ANTES
+  // del `.insert(...)` -- mismo hazard, mismo fix que F6 (el bloque de
+  // `discipline_entries`/`season_seed_order`, más abajo en este archivo).
+  // Adentro del argumento de `.insert()`, un `throw` acá -- `seat.trim()`
+  // con `seat = null` -- corre SINCRÓNICAMENTE, antes de que exista ningún
+  // `await` que lo atrape y ANTES del `if (entriesError !== null)` de
+  // abajo, que es quien hace el rollback: se escaparía de `createSeason`
+  // con la temporada y sus disciplinas YA insertadas y sin compensar.
+  // `squadNames` es `string[]` sólo en TypeScript -- `createTournament`
+  // (`app/torneos/nuevo/actions.ts`) es una Server Action, sus argumentos
+  // cruzan como JSON de cliente sin schema en runtime, y esa anotación se
+  // borra al compilar (mismo argumento de trust-boundary que
+  // `isIndexPermutation` ya acepta para `seedOrder`, línea ~216) -- un
+  // `null` en el medio del array es alcanzable desde afuera, no un caso de
+  // laboratorio. Hoisteado y con su propio `try` de acá abajo, ese throw SÍ
+  // dispara el rollback.
+  let squadRows: { season_id: string; display_name: string; kind: 'SQUAD'; player_id: string | null }[]
+  try {
+    squadRows = squadNames.map((seat, index) => ({
+      season_id: season.id,
+      display_name: seat.trim(),
+      kind: 'SQUAD' as const,
+      player_id: index === mySeatIndex ? myPlayerId : null,
+    }))
+  } catch (err) {
+    await supabase.from('seasons').delete().eq('id', season.id)
+    throw err
+  }
+
   const { data: entryRows, error: entriesError } = await supabase
     .from('entries')
-    .insert(
-      squadNames.map((seat, index) => ({
-        season_id: season.id,
-        display_name: seat.trim(),
-        kind: 'SQUAD' as const,
-        player_id: index === mySeatIndex ? myPlayerId : null,
-      })),
-    )
+    .insert(squadRows)
     .select('id')
   if (entriesError !== null || entryRows === null) {
     await supabase.from('seasons').delete().eq('id', season.id)
@@ -476,6 +513,59 @@ export async function createSeason(
         ? 'Falta un nombre del plantel.'
         : `No se pudo cargar el plantel: ${entriesError?.message}`,
     )
+  }
+
+  // `season_seed_order` (0080_season_seed_order.sql, torneo-multi-disciplina
+  // tanda 1): el orden a nivel TORNEO ya no se deriva de ninguna disciplina
+  // (decisión #4044 superseded — ver el docblock de `seasonSeedOrder`,
+  // `db/read.ts`). Se persiste ACÁ, en el índice de `squadNames` — el orden
+  // GLOBAL del wizard, nunca el `seedNames` de una disciplina en particular:
+  // si la primaria pidiera el suyo y esta tabla lo copiara, quedaríamos
+  // exactamente donde estábamos antes de esta PR, sólo que en una tabla
+  // nueva.
+  //
+  // WU1 (tanda 7, BLOQUEA): este insert se movió ACÁ, inmediatamente después
+  // de `entries` y ANTES de `discipline_entries` -- antes vivía después de
+  // ese bloque. `createSeason` no es una transacción (ver el docblock de la
+  // función): son 4+N round trips independientes a PostgREST, y si el
+  // proceso muere (crash, restart del contenedor, conexión cortada) entre
+  // dos de ellos, la temporada queda con lo que ya escribió y nada más -- no
+  // hay rollback que deshaga un `await` que nunca volvió. CUÁL de los dos
+  // insert queda afuera decide si ese hueco es ruidoso o invisible:
+  //
+  //   - Sin `discipline_entries`: `setAttendance`/el sorteo de la primera
+  //     fecha rebotan 23503 apenas se toca esa disciplina, y el tripwire
+  //     GLOBAL de `db/discipline.db.test.ts:250` (cuenta huérfanos en toda
+  //     la base) lo agarra igual. Ruidoso, se nota, y hay pantalla que
+  //     puede recrearlo (agregar la disciplina de nuevo reconstruye sus
+  //     asientos).
+  //
+  //   - Sin `season_seed_order`: NADA rebota. `seasonSquadMembersOf`
+  //     (`db/read.ts`) cae al `?? Number.MAX_SAFE_INTEGER` de todas las
+  //     filas, el sort estable estable queda atado a `entries.id` --un
+  //     `gen_random_uuid()`--, y el plantel se dibuja en un orden que no es
+  //     el del wizard ni se puede predecir. Encima no hay forma de curarlo:
+  //     ninguna pantalla ESCRIBE `season_seed_order` (sólo `add_squad_seat`/
+  //     `promote_guest`/`createSeason` lo hacen, y ninguno de los tres
+  //     backfillea lo que falta) y el backfill de la 0080 ya corrió una
+  //     sola vez, en su momento.
+  //
+  // Este reorder NO hace atómica a `createSeason` -- sigue siendo 4+N round
+  // trips y un crash en CUALQUIER punto sigue siendo posible-- sólo cambia
+  // CUÁL estado parcial es alcanzable, a propósito: el que un tripwire
+  // existente ya nota, en vez del que ninguna pantalla puede reparar.
+  if (entryRows.length > 0) {
+    const { error: seedOrderError } = await supabase.from('season_seed_order').insert(
+      entryRows.map((row, index) => ({
+        season_id: season.id,
+        entry_id: row.id,
+        seed_position: index,
+      })),
+    )
+    if (seedOrderError !== null) {
+      await supabase.from('seasons').delete().eq('id', season.id)
+      throw new EdgeError(`No se pudo guardar el orden del plantel: ${seedOrderError.message}`)
+    }
   }
 
   // Cada asiento entra a TODAS las disciplinas recién creadas, en el orden en
@@ -557,28 +647,6 @@ export async function createSeason(
     if (seatsError !== null) {
       await supabase.from('seasons').delete().eq('id', season.id)
       throw new EdgeError(`No se pudo asignar el plantel a las disciplinas: ${seatsError.message}`)
-    }
-  }
-
-  // `season_seed_order` (0080_season_seed_order.sql, torneo-multi-disciplina
-  // tanda 1): el orden a nivel TORNEO ya no se deriva de ninguna disciplina
-  // (decisión #4044 superseded — ver el docblock de `seasonSeedOrder`,
-  // `db/read.ts`). Se persiste ACÁ, en el índice de `squadNames` — el orden
-  // GLOBAL del wizard, nunca el `seedNames` de una disciplina en particular:
-  // si la primaria pidiera el suyo y esta tabla lo copiara, quedaríamos
-  // exactamente donde estábamos antes de esta PR, sólo que en una tabla
-  // nueva.
-  if (entryRows.length > 0) {
-    const { error: seedOrderError } = await supabase.from('season_seed_order').insert(
-      entryRows.map((row, index) => ({
-        season_id: season.id,
-        entry_id: row.id,
-        seed_position: index,
-      })),
-    )
-    if (seedOrderError !== null) {
-      await supabase.from('seasons').delete().eq('id', season.id)
-      throw new EdgeError(`No se pudo guardar el orden del plantel: ${seedOrderError.message}`)
     }
   }
 

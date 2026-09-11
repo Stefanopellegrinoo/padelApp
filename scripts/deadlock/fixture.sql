@@ -152,7 +152,8 @@ grant execute on function dl.new_discipline() to authenticated;
 -- fila en `season_seed_order`, y ninguna fila de esa tabla sobrevive sin su
 -- asiento. Es el invariante de toda la línea 0080-0086 y lo que
 -- `db/season-seed-order-writers.db.test.ts` custodia desde el otro lado. Sin
--- esto, la columna ESTADO era una CONSTANTE cero en 5 de los 14 pares: los que
+-- esto, la columna ESTADO era una CONSTANTE cero en 6 de los 14 pares de
+-- entonces: los que
 -- no crean ni `'Nuevo'` ni `d3` no tenían nada que chequear y la fila igual
 -- imprimía `ESTADO=0`, que se lee como "estado verificado limpio" habiendo
 -- verificado nada. Fixture degenerado, la misma clase que la permutación
@@ -196,34 +197,3 @@ begin
   end if;
   return out;
 end $$;
-
--- ── Preflight: toda FK hacia `entries` con índice en su columna líder ───────
--- No es higiene genérica de schema. Desde 0086, sacar un asiento corre ADENTRO
--- de la sección crítica del advisory, y un `delete from entries` dispara el
--- chequeo de integridad referencial de cada FK que lo referencia. Sin índice
--- en la columna líder, cada chequeo es un `Seq Scan` de la tabla ENTERA del
--- deployment —no de la temporada— y ese tiempo es exactamente el que
--- `add_squad_seat` y `promote_guest` de esa temporada pasan esperando detrás.
---
--- Antes de 0086 el mismo delete hacía los mismos scans sin sostener ningún
--- lock: no molestaba a nadie. WU1 los volvió serializantes, así que los
--- índices dejaron de ser una optimización y pasaron a ser parte del arreglo.
---
--- Vive acá y no en un `.db.test.ts` porque PostgREST no expone `pg_catalog`
--- (`supabase/config.toml`: `schemas = ["public", "graphql_public"]`), así que
--- desde vitest el catálogo no es alcanzable. El gate ya corre psql como
--- superusuario y es lo que uno corre cuando toca locks: es su lugar.
-create or replace function dl.fk_sin_indice() returns table (fk text) language sql stable as $$
-  select c.conname || ' (' || (
-           select string_agg(a.attname, ',' order by k.ord)
-             from unnest(c.conkey) with ordinality k(att, ord)
-             join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k.att
-         ) || ') en ' || c.conrelid::regclass::text
-    from pg_constraint c
-   where c.confrelid = 'public.entries'::regclass and c.contype = 'f'
-     and not exists (
-       select 1 from pg_index i
-        where i.indrelid = c.conrelid and i.indkey[0] = c.conkey[1]
-     )
-   order by 1;
-$$;

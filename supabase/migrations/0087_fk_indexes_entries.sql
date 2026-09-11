@@ -29,11 +29,44 @@
 -- advisory deja de depender del tamaño del deployment.
 --
 -- Seis índices y no siete: las dos FKs de `attendances` comparten `entry_id`
--- como columna líder, así que un solo índice cubre a las dos. El invariante lo
--- custodia `dl.fk_sin_indice()` (`scripts/deadlock/fixture.sql`), que corre
--- como preflight del gate y aborta si aparece una FK nueva sin índice —
--- `pg_catalog` no está expuesto por PostgREST, así que desde vitest no es
--- alcanzable.
+-- como columna líder, así que un solo índice cubre a las dos.
+--
+-- ── Costo del deploy, que también es parte del techo ────────────────────────
+-- `create index` sin `concurrently` toma `ShareLock`: bloquea INSERT/UPDATE/
+-- DELETE en `attendances`, `awards`, `pair_locks` y `pairs` mientras construye,
+-- sobre la misma `pairs` que este comentario proyecta mucho más grande que 200k.
+-- `concurrently` no se puede usar adentro de la transacción de una migración,
+-- así que queda así; lo que no puede quedar es sin escribirse.
+--
+-- ── Lo que NO tiene guardián automático ─────────────────────────────────────
+-- Hubo un preflight en el gate (`dl.fk_sin_indice()`) que chequeaba este
+-- invariante y se BORRÓ, porque estaba mal en las dos direcciones y una
+-- revisión lo demostró en vivo:
+--   · falso NEGATIVO: su modelo era `i.indkey[0] = c.conkey[1]`, sin mirar
+--     `indpred` ni `indisvalid`. Un índice PARCIAL sobre `entry_a` lo pasaba en
+--     verde mientras el plan volvía a `Seq Scan` adentro de la sección crítica.
+--   · falso POSITIVO: el chequeo de integridad referencial iguala TODAS las
+--     columnas de la FK, no sólo la primera, así que un índice `(season_id,
+--     entry_a)` sirve perfecto — y el preflight lo declaraba "sin índice" y
+--     abortaba el gate sobre un schema correcto.
+--   · y mira UN solo hop. El delete cascadea a `discipline_entries`, y
+--     `attendances` y `discipline_teams` referencian A ESA con `discipline_id`
+--     como columna líder, sin índice propio: esos chequeos también corren
+--     adentro del advisory. Hoy no se paga porque el planner reusa
+--     `attendances_entry_id_idx` (el que esta migración creó para OTRA FK) ya
+--     que `entry_id` también está en el predicado. Es suerte, no invariante:
+--     alguien que "optimice" ese índice a un compuesto reintroduce el scan.
+--
+-- El invariante correcto sería "toda FK alcanzable por la cascada del delete de
+-- un asiento tiene un índice USABLE por su chequeo de RI", y no está
+-- automatizado. Si tocás índices o agregás una tabla que referencie `entries`,
+-- `discipline_entries` o `season_seed_order`, medilo a mano:
+--
+--   explain (analyze, timing) select 1 from <tabla> where <cols de la fk> = ... for key share;
+--
+-- con volumen. Y `pg_catalog` no está expuesto por PostgREST
+-- (`supabase/config.toml`: `schemas = ["public", "graphql_public"]`), así que
+-- esto no es testeable desde vitest ni con un tripwire de `.db.test.ts`.
 create index if not exists attendances_entry_id_idx on public.attendances (entry_id);
 create index if not exists awards_entry_id_idx      on public.awards (entry_id);
 create index if not exists pair_locks_entry_a_idx   on public.pair_locks (entry_a);

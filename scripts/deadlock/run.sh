@@ -6,11 +6,13 @@
 #
 #   deadlock  40P01, el ciclo que Postgres detecta y aborta
 #   dup_key   23505, la escritura que se perdió sin deadlockear
-#   otros     iteraciones que terminaron con CUALQUIER otro error. No falla el
-#             gate por sí solo —hay pares donde un error es el resultado
-#             esperado, como `delete_season` volteando el alta concurrente—
-#             pero sin esta columna una fila donde las N iteraciones murieron
-#             antes de contender se lee idéntica a una que midió limpio.
+#   otros     iteraciones que terminaron con CUALQUIER otro error. FALLA el
+#             gate: una iteración que murió antes de contender no midió el
+#             orden de locks, y se lee idéntica a una que midió limpio. Los dos
+#             pares cuyo resultado esperado era un error (`delete_season`
+#             volteando el alta concurrente, y `add_discipline` contra una baja)
+#             se borraron de la batería en vez de excepcionarse: un par que
+#             nunca llega a contender no aporta información sobre deadlocks.
 #   ESTADO    iteraciones que dejaron la temporada rota (`dl.inconsistent()`)
 #   sin_sync  iteraciones donde los dos corredores NO llegaron juntos a la
 #             compuerta. Cualquier valor distinto de 2 cuenta: un 3 o un 4
@@ -18,9 +20,13 @@
 #             de que los de esta iteración estuvieran adentro.
 #
 # El último argumento es lo que se ESPERA, y es lo que convierte a esto en un
-# gate en vez de un reporte: `cero` exige `deadlock == 0`, `positivo` exige
-# `deadlock > 0` (los controles positivos). Sale ≠ 0 si la expectativa falla o
-# si hubo alguna iteración sin sincronizar.
+# gate en vez de un reporte: `cero` exige `deadlock == 0`; `positivo` exige
+# `deadlock >= N/2` y no `> 0` — un control positivo que pasa con 1 de 60 no
+# prueba que el instrumento sirva, prueba que tuvo suerte una vez.
+#
+# Sale ≠ 0 si la expectativa falla, si alguna iteración no sincronizó, si alguna
+# dejó la base inconsistente, o si alguna terminó con un error que no era ni el
+# deadlock ni el choque de unique que el par viene a medir.
 set -u
 export PGPASSWORD=${PGPASSWORD:-postgres}
 P=(psql -h "${PGHOST:-127.0.0.1}" -p "${PGPORT:-54322}" -U "${PGUSER:-postgres}" -d "${PGDATABASE:-postgres}" -q)
@@ -73,10 +79,17 @@ done
 fail=0
 case $esperado in
   cero)     [[ $dl -ne 0 ]] && fail=1 ;;
-  positivo) [[ $dl -eq 0 ]] && fail=1 ;;
+  # `>= N/2`, no `> 0`: ver el encabezado.
+  positivo) [[ $dl -lt $(( (N + 1) / 2 )) ]] && fail=1 ;;
   *) echo "esperado inválido: $esperado (usá cero|positivo)"; exit 2 ;;
 esac
 [[ $bad -ne 0 ]] && fail=1
+# ESTADO y otros TAMBIÉN gatean. Sin esto, una corrida que corrompía
+# `season_seed_order` en el 100% de las iteraciones salía con exit 0 — en la
+# única columna que detecta corrupción de datos, que es la señal más fuerte de
+# la tabla.
+[[ $inc -ne 0 ]] && fail=1
+[[ $otros -ne 0 ]] && fail=1
 
 printf '%-46s deadlock=%3d/%-3d dup_key=%3d otros=%3d ESTADO=%3d sin_sync=%d%s\n' \
   "$name" "$dl" "$N" "$dup" "$otros" "$inc" "$bad" "$([[ $fail -ne 0 ]] && echo '   ← FALLA')"

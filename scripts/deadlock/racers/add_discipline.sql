@@ -19,7 +19,6 @@
 -- compensación — si el proceso muere ahí, nadie la cura. Es la misma deuda de
 -- `createSeason`: cuatro round trips sin transacción.
 \set VERBOSITY verbose
-insert into dl.arrived values (pg_backend_pid());
 select dl.new_discipline();
 create temp table dl_seats as
   select e.id, e.season_id, (row_number() over (order by e.created_at, e.id)) - 1 as sp
@@ -28,6 +27,11 @@ create temp table dl_seats as
 -- La temp table la crea `postgres`; el insert corre como `authenticated`. Sin
 -- este grant el corredor muere con 42501 y el escenario no mide nada.
 grant select on dl_seats to authenticated;
+-- La anotación va ACÁ, después del trabajo pre-compuerta y pegada al
+-- `begin`: `dl.go_when_ready` cuenta ANOTADOS, así que anotarse antes de
+-- los round trips de arriba le regalaba ~5 ms de ventaja al otro corredor
+-- con `sin_sync=0`. Medido.
+insert into dl.arrived values (pg_backend_pid());
 begin;
 set local "request.jwt.claims" = '{"sub":"00000000-0000-0000-0000-000000000001"}';
 set local role authenticated;

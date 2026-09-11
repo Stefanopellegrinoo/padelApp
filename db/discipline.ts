@@ -1,7 +1,7 @@
 import type { DisciplineId, MatchdayFormat, SeasonConfig, SideSize } from '@/core'
 import type { Client } from './client'
 import type { Json } from './database.types'
-import { EdgeError } from './errors'
+import { EdgeError, writeErrorMessage } from './errors'
 import { seasonSeedOrder } from './read'
 import { defaultDisciplineId } from './season'
 import { assertValidConfig } from './validate'
@@ -477,7 +477,17 @@ export async function addDiscipline(
     )
     if (seatsError) {
       await supabase.from('disciplines').delete().eq('id', disciplineId)
-      throw new EdgeError(`No se pudo asignar el plantel a la nueva disciplina: ${seatsError.message}`)
+      // `writeErrorMessage` (`db/errors.ts`) y no `seatsError.message` crudo:
+      // ESTE es el lugar donde el 23505 sobre `discipline_entries_seed` llega
+      // de verdad. Medido instrumentando los dos lados de la carrera
+      // `add_squad_seat ‖ addDiscipline` (`npm run test:deadlock`): el 23505
+      // cae 60/60 acá, en el bulk insert, y nunca del lado de la RPC —
+      // `add_squad_seat` llega primero a la disciplina nueva (vacía) e inserta
+      // en `seed_position 0`, y este insert viene después con 0..19 y choca.
+      // Sin esto el admin leía `duplicate key value violates unique constraint
+      // "discipline_entries_seed"` tal cual, pegado atrás de una frase en
+      // castellano.
+      throw new EdgeError(`No se pudo asignar el plantel a la nueva disciplina: ${writeErrorMessage(seatsError)}`)
     }
   }
 

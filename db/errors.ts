@@ -56,40 +56,67 @@ const STATEMENT_TIMEOUT = '57014'
  * otra escritura ocupó ese lugar del orden en el mismo instante: se perdió
  * esta, no pasó nada más, y reintentar es exactamente lo correcto.
  *
- * Es el código que el gate reproduce con MÁS frecuencia de todos: el par
- * `add_squad_seat ‖ addDiscipline` da 60/60 (`npm run test:deadlock`). No
- * deadlockea —nadie espera a nadie, una de las dos simplemente pierde— y por
- * eso se le había escapado a un traductor pensado para esperas.
+ * **Cuál es el camino medido, y cuál NO.** El gate reproduce este choque 60/60
+ * en el par `add_squad_seat ‖ addDiscipline`, pero el 23505 lo recibe SIEMPRE
+ * el bulk insert de `addDiscipline`, nunca la RPC — y tiene que ser así:
+ * `add_squad_seat` llega primero a la disciplina nueva (vacía) e inserta en
+ * `seed_position 0`, y el bulk insert viene después con 0..19 y choca. Si gana
+ * el bulk, la RPC lee `max+1 = 20` y no choca con nada. Por eso esta traducción
+ * se aplica TAMBIÉN en `addDiscipline` (`db/discipline.ts`), que es donde el
+ * error aparece de verdad.
+ *
+ * Por esta vía (la RPC) la rama es alcanzable pero NO está medida: haría falta
+ * un `add_squad_seat` sin `p_before` contra `addToDiscipline` sobre la misma
+ * disciplina, o contra el bulk insert de `createSeason`. Queda escrito para que
+ * nadie la cite como medida.
  *
  * Se mira el NOMBRE del índice y no sólo el código: un `23505` sobre una
  * PRIMARY KEY es otra causa ("este jugador ya juega esta disciplina"), donde
- * "probá de nuevo" sería un consejo equivocado. Mismo distingo que
- * `addToDiscipline` (`db/discipline-entries.ts`) ya hacía.
+ * "probá de nuevo" sería un consejo equivocado. `addToDiscipline`
+ * (`db/discipline-entries.ts`) hace el mismo distingo pero con la polaridad
+ * INVERSA —lista negra: traduce todo 23505 y separa el de la PK— mientras acá
+ * es lista blanca. La lista blanca es la que no miente ante un unique nuevo.
  */
 const SEED_UNIQUE = /"(discipline_entries_seed|season_seed_order_seed)"/
 
 /**
- * El mensaje que le llega a la pantalla desde una RPC.
+ * Un jugador tiene a lo sumo UN asiento por temporada, y `claim_seat` lo
+ * chequea con un `if exists` que NO es atómico con su `update`: dos reclamos
+ * concurrentes del mismo jugador sobre asientos distintos pasan los dos el
+ * chequeo y el segundo rebota contra este índice. Reproducido en vivo.
+ *
+ * El texto copia el `raise` que `claim_seat` usa para el caso no concurrente
+ * ("Ya tenés un lugar en este torneo."), porque para quien está del otro lado
+ * de la pantalla es exactamente la misma situación.
+ */
+const ONE_SEAT_UNIQUE = /"entries_one_seat"/
+
+/**
+ * El mensaje que le llega a la pantalla cuando una escritura del plantel falla
+ * por algo que NO es uno de nuestros `raise`.
  *
  * Las funciones del plantel pasan su mensaje DERECHO, sin prefijo, porque sus
  * `raise` ya están en castellano (ver `addSquadSeat`, `db/entries.ts`). Este
- * traductor existe para lo que NO es uno de esos `raise`: desde que
- * `add_squad_seat`, `promote_guest` y `remove_squad_seat` toman el advisory
- * lock por temporada (0081/0084/0086) pueden esperar de verdad, y cuando la
- * espera termina mal el texto lo escribe Postgres, en inglés.
+ * traductor existe para el resto: desde que `add_squad_seat`, `promote_guest` y
+ * `remove_squad_seat` toman el advisory lock por temporada (0081/0084/0086)
+ * esas llamadas pueden esperar de verdad, y cuando la espera termina mal el
+ * texto lo escribe Postgres, en inglés.
  *
- * Son TRES, no cuatro. `claim_seat` —el cuarto call site donde se usa esto—
- * no toma ningún advisory: verificado contra `pg_proc.prosrc`, hace
- * `select seasons` → `select players` → `update entries ... where player_id is
- * null`, sin lock explícito. Se le aplica igual porque puede esperar sobre la
- * fila de `entries` como cualquier update, no porque esté en la sección
- * crítica del advisory.
+ * Son TRES las que toman el advisory, no cuatro. `claim_seat` —otro call site
+ * de esto— no toma ninguno: verificado contra `pg_proc.prosrc`, hace `select
+ * seasons` → `select players` → `update entries ... where player_id is null`,
+ * sin lock explícito. Se le aplica igual porque puede esperar sobre la fila de
+ * `entries` como cualquier update, y porque tiene su propio `23505`.
  *
- * Los dos mensajes dicen que no se guardó nada porque es cierto: las tres
- * cosas abortan la transacción de la función, que es un único statement, así
- * que no queda nada a medias.
+ * **No se llama `rpcErrorMessage`** aunque nació ahí: `addDiscipline`
+ * (`db/discipline.ts`) no es una RPC y es el lugar donde el `23505` sobre el
+ * orden aparece de verdad (ver `SEED_UNIQUE`). Un nombre que excluye a uno de
+ * sus call sites es la clase de premisa falsa que esta rama ya pagó tres veces.
+ *
+ * Todos los mensajes dicen que no se guardó nada porque es cierto: cada uno de
+ * estos códigos aborta la transacción completa de la escritura.
  */
-export function rpcErrorMessage(error: { code?: string | null; message: string }): string {
+export function writeErrorMessage(error: { code?: string | null; message: string }): string {
   const code = error.code ?? ''
   if (LOCK_CONTENTION.has(code)) {
     return 'Otra persona estaba cambiando el plantel de este torneo al mismo tiempo. No se guardó nada: probá de nuevo.'
@@ -98,9 +125,19 @@ export function rpcErrorMessage(error: { code?: string | null; message: string }
     return 'El cambio tardó demasiado y se canceló. No se guardó nada: probá de nuevo.'
   }
   if (code === '23505' && SEED_UNIQUE.test(error.message)) {
-    // Mismo texto que `addToDiscipline` para el mismo choque: es la misma cosa
-    // vista desde el otro lado de la carrera.
     return 'Otra alta ocupó ese lugar justo ahora. No se guardó nada: probá de nuevo.'
+  }
+  if (code === '23505' && ONE_SEAT_UNIQUE.test(error.message)) {
+    return 'Ya tenés un lugar en este torneo.'
+  }
+  // 23503 (`foreign_key_violation`): algo que este cambio referencia dejó de
+  // existir mientras se hacía. El caso medido por el gate es `add_squad_seat`
+  // contra un `deleteSeason` concurrente, 60/60 — el alta rebota contra
+  // `entries_season_id_fkey` porque la temporada se borró abajo. `removeSeat`
+  // traduce SU 23503 (el asiento que ya jugó) antes de llamar acá, así que ese
+  // caso no llega.
+  if (code === '23503') {
+    return 'Algo que este cambio necesita ya no existe: puede que alguien lo haya borrado mientras editabas. Recargá la pantalla.'
   }
   return error.message
 }

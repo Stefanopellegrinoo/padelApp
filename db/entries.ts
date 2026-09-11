@@ -187,6 +187,36 @@ export async function unlinkSeat(supabase: Client, entryId: string): Promise<voi
  * El hueco que queda en `seed_position` no molesta: `squadSeedOrder` ordena por
  * esa columna y el índice pide único, no consecutivo. Renumerar sería reescribir
  * el orden de desempate inicial de todos los demás por sacar a uno.
+ *
+ * **WU5 (tanda 7): clase de deadlock pre-existente, conocida y NO arreglada
+ * acá — registrada, no resuelta.** Este `delete` es un round trip crudo,
+ * sin advisory lock ni `for update` propio: no coordina con nada. Cuando
+ * corre a la vez que `add_squad_seat`/`promote_guest` están corriendo el
+ * corrimiento de cola de OTRO asiento (`shift_seeds_up`, 0023, o su
+ * gemelo a nivel temporada `shift_season_seeds_up`, 0080), la cascada de
+ * este `delete` (`entries` → `discipline_entries` y `entries` →
+ * `season_seed_order`, las dos `on delete cascade`, en el orden que fije
+ * el OID del trigger — no el de esta lista) puede cruzarse con el `for
+ * update` que el corrimiento ya tiene tomado sobre otra fila de esa misma
+ * tabla, y las dos transacciones esperarse en círculo.
+ *
+ * Medido: `removeSeat` ‖ `shift_seeds_up` (la carrera original, documentada
+ * como "techo conocido y aceptado" desde 0013/0023) da 30/200 deadlocks;
+ * `removeSeat` ‖ `shift_season_seeds_up` (la gemela nueva, a nivel
+ * temporada, que nace con 0080/0081) da 29/200 — básicamente la misma
+ * probabilidad, porque es la MISMA causa en dos tablas distintas. El
+ * advisory lock de WU1/WU2 (esta misma tanda) no la toca: serializa
+ * `add_squad_seat`/`promote_guest` ENTRE SÍ, nunca contra `removeSeat`,
+ * que no lo pide (ver el comentario corregido en
+ * `0085_add_squad_seat_fixes_lock_comment.sql`).
+ *
+ * El owner decidió explícitamente no perseguirla en esta rama: el arreglo
+ * real es que `removeSeat` tome el mismo advisory lock por temporada
+ * ANTES de su `delete` — un cambio de comportamiento (una escritura hoy
+ * instantánea empieza a esperar) que no entra en el alcance de esta tanda.
+ * Que quede escrito ACÁ para el que la persiga después: el síntoma en
+ * producción es `deadlock detected` o `lock timeout` sin traducir al
+ * castellano (deuda aparte, tampoco de esta tanda).
  */
 export async function removeSeat(supabase: Client, entryId: string): Promise<void> {
   const { error } = await supabase.from('entries').delete().eq('id', entryId)

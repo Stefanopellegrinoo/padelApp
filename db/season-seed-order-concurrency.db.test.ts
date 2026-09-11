@@ -73,8 +73,22 @@
  * volviera) es MENOR que el 4/5 medido arriba —no se remidió al número
  * nuevo, sería otra medición a mano que este archivo tampoco puede dar— así
  * que tratalo como lo que es: una prueba de humo barata y segura para el
- * pool, no un gate confiable. El gate confiable sigue siendo la medición a
- * mano de dos sesiones psql, documentada en 0081/0082/0084.
+ * pool, no un gate confiable.
+ *
+ * **El gate confiable ya no es "a mano": está versionado en
+ * `scripts/deadlock/` y se corre con `npm run test:deadlock`.** Dos sesiones
+ * psql con barrera de arranque — los dos corredores se anotan en una tabla y
+ * un controlador abre la compuerta cuando los dos están adentro—, así que el
+ * solapamiento no lo decide el scheduler. El par que este archivo persigue
+ * con 4/5 de suerte, ahí mide 12/12 con el bug puesto y 0/12 sin él, y viene
+ * con control negativo Y positivo para que sus ceros signifiquen algo.
+ *
+ * Este archivo NO se borró, a propósito. Corre dentro de `npm run test:db`
+ * sin depender de `psql` ni de bash, y cubre algo que el harness no: que N
+ * altas concurrentes terminen TODAS bien y dejen `season_seed_order`
+ * contiguo, visto desde el cliente de verdad y no desde una sesión SQL. Lo
+ * que cambió es su rango, no su contenido: es la prueba de humo, el gate está
+ * en `scripts/deadlock/`.
  */
 import { describe, expect, it } from 'vitest'
 import { defaultConfig } from '@/core'

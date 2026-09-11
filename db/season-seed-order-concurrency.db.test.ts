@@ -38,6 +38,43 @@
  * advisory lock el resultado es siempre limpio. La medición a mano (con dos
  * sesiones psql, en el reporte de esta tanda) es la evidencia determinística
  * que este archivo no puede dar por sí solo.
+ *
+ * **WU6 (tanda 7): qué tan bien detecta, de verdad, y por qué se le bajó la
+ * concurrencia.** Medido revirtiendo el advisory lock (volviendo al mutex de
+ * `seasons`) y corriendo el archivo 5 veces con `concurrentCount = 8`: 4 de
+ * 5 corridas lo agarraron en rojo (el caso B2 en soledad, sólo 2 de esas 5).
+ * No es un detector confiable — una corrida verde con el bug de vuelta no
+ * dice "no hay bug", dice "no tocó esta vez" — y por eso la evidencia real
+ * sigue siendo la medición a mano de arriba, no este archivo.
+ *
+ * Peor: cuando SÍ dispara, no siempre lo hace como `deadlock detected`. Con
+ * `concurrentCount = 8` y las dos pruebas de este archivo corriendo (hasta
+ * 8 RPCs bloqueados a la vez, cada uno con su propia conexión Postgres
+ * mientras espera el advisory), PostgREST no tiene `PGRST_DB_POOL` seteado
+ * (`supabase/config.toml` no lo toca — default 10) y ese pool casi se agota
+ * sólo con este archivo. Medido: la resaca de esa saturación se filtraba al
+ * `beforeAll`/primer `it` del SIGUIENTE archivo `.db.test.ts` de la suite,
+ * que fallaba con:
+ *
+ *   EdgeError: Timed out acquiring connection from connection pool.
+ *   Error: No se pudo leer el player creado por el trigger: Timed out
+ *   acquiring connection from connection pool.
+ *
+ * Un test flaky que a veces pone en rojo a OTRO archivo que no tiene nada
+ * que ver es peor que no tener test — enseña a re-correr en vez de mirar.
+ * La elección para esta tanda: NO se saltea (`skip`) — B1 sí reproduce el
+ * deadlock original con una probabilidad razonable a un costo de
+ * concurrencia bajo, y perderlo del todo es peor que dejarlo débil — se
+ * ACOTA la concurrencia a un número bien por debajo del pool (4, no 8) en
+ * las dos pruebas: nunca hay más de 4 RPCs de este archivo bloqueados al
+ * mismo tiempo, así que el archivo por sí solo no puede acercarse al techo
+ * de 10 ni empujar al siguiente a un timeout. El costo es honesto: con
+ * menos concurrencia la probabilidad de disparar el deadlock (si el bug
+ * volviera) es MENOR que el 4/5 medido arriba —no se remidió al número
+ * nuevo, sería otra medición a mano que este archivo tampoco puede dar— así
+ * que tratalo como lo que es: una prueba de humo barata y segura para el
+ * pool, no un gate confiable. El gate confiable sigue siendo la medición a
+ * mano de dos sesiones psql, documentada en 0081/0082/0084.
  */
 import { describe, expect, it } from 'vitest'
 import { defaultConfig } from '@/core'
@@ -61,7 +98,7 @@ function expectContiguous(positions: number[], count: number): void {
 
 // ── B1: muchas altas concurrentes a la MISMA temporada ─────────────────────
 describe('add_squad_seat bajo carga concurrente, misma temporada (WU1, B1)', () => {
-  it('8 altas a la vez terminan todas bien, sin deadlock ni duplicate key', async () => {
+  it('4 altas a la vez terminan todas bien, sin deadlock ni duplicate key', async () => {
     const admin = await createTestUser()
     const squadNames = Array.from({ length: 4 }, (_, index) => `Jugador ${index + 1}`)
     const { seasonId } = await createSeason(admin.client, {
@@ -70,13 +107,13 @@ describe('add_squad_seat bajo carga concurrente, misma temporada (WU1, B1)', () 
       config: defaultConfig(4),
     })
 
-    // 8, no más: `authenticated` corre con `statement_timeout = 8s`
-    // (`supabase/config.toml`), y estas llamadas se serializan A PROPÓSITO
-    // (el advisory lock es un mutex por temporada, no paralelismo) — con
-    // demasiada concurrencia el test se queda sin tiempo por la COLA, no por
-    // ningún bug, incluso ya arreglado. 8 alcanza para varias veces
-    // encimarse (y, sin el fix, para deadlockear) sin acercarse al techo.
-    const concurrentCount = 8
+    // WU6 (tanda 7): 4, no 8. Con 8 este archivo solo ya se acercaba al
+    // default de PostgREST (`PGRST_DB_POOL`, 10 sin setear) y midió
+    // starvation filtrándose al siguiente archivo de la suite (ver el
+    // docblock de arriba) — 4 sigue alcanzando para varias veces encimarse
+    // (y, sin el fix, para deadlockear) sin acercarse a ningún techo, ni el
+    // de `statement_timeout = 8s` (`supabase/config.toml`) ni el del pool.
+    const concurrentCount = 4
     // Todas al final (sin `p_before`): alcanza para disparar B1 — el
     // deadlock sale del insert + el mutex de arriba, no de `p_before`.
     const ids = await Promise.all(
@@ -142,12 +179,25 @@ describe('add_squad_seat y promote_guest concurrentes, misma temporada y discipl
     // tocan `discipline_entries` de la ÚNICA disciplina de la temporada
     // (`shift_seeds_up`), que es lo que hace falta para que B2 (orden opuesto
     // de locks entre las dos funciones) tenga con qué chocar.
-    const promotions = guestIds.map((guestId) => promoteGuest(admin.client, guestId, beforeForPromotions))
-    const adds = Array.from({ length: guestCount }, (_, index) =>
-      addSquadSeat(admin.client, seasonId, `Concurrente B2 ${index + 1}`, beforeForAdds),
+    //
+    // WU6 (tanda 7): antes, las 8 llamadas (4 promociones + 4 altas) salían
+    // en un solo `Promise.all` -- 8 RPCs bloqueados a la vez, mismo motivo
+    // de pool-starvation que el docblock de arriba documenta para B1. Acá
+    // se intercalan de a 2+2 (una promoción, una alta, dos veces) para que
+    // cada tanda SIGA teniendo la mezcla que hace falta para disparar B2,
+    // sin pasar nunca de 4 RPCs en vuelo.
+    const promotions = guestIds.map(
+      (guestId) => () => promoteGuest(admin.client, guestId, beforeForPromotions),
     )
-
-    await Promise.all([...promotions, ...adds])
+    const adds = Array.from(
+      { length: guestCount },
+      (_, index) => () => addSquadSeat(admin.client, seasonId, `Concurrente B2 ${index + 1}`, beforeForAdds),
+    )
+    const calls = adds.flatMap((add, index) => [promotions[index]!, add])
+    const MAX_IN_FLIGHT = 4
+    for (let i = 0; i < calls.length; i += MAX_IN_FLIGHT) {
+      await Promise.all(calls.slice(i, i + MAX_IN_FLIGHT).map((call) => call()))
+    }
 
     expectContiguous(await seedOrderPositions(seasonId), 4 + guestCount * 2)
   })

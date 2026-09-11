@@ -55,6 +55,48 @@ describe('rpcErrorMessage', () => {
     expect(message).toMatch(/probá de nuevo/i)
   })
 
+  /*
+   * El 23505 sobre un índice de `seed_position` es el código que el gate
+   * reproduce con MÁS frecuencia de todos: `add_squad_seat ‖ addDiscipline` da
+   * 60/60 (`npm run test:deadlock`). No deadlockea —nadie espera a nadie— pero
+   * una de las dos escrituras se pierde, y sin traducir el admin lee
+   * `duplicate key value violates unique constraint "discipline_entries_seed"`.
+   *
+   * `addToDiscipline` (`db/discipline-entries.ts`) ya traduce exactamente este
+   * caso; acá se reusa el mismo criterio y el mismo mensaje.
+   */
+  it('traduce el choque sobre el orden de una disciplina', () => {
+    const message = rpcErrorMessage({
+      code: '23505',
+      message: 'duplicate key value violates unique constraint "discipline_entries_seed"',
+    })
+
+    expect(message).not.toContain('duplicate key')
+    expect(message).toMatch(/probá de nuevo/i)
+  })
+
+  it('traduce el choque sobre el orden de la temporada', () => {
+    const message = rpcErrorMessage({
+      code: '23505',
+      message: 'duplicate key value violates unique constraint "season_seed_order_seed"',
+    })
+
+    expect(message).not.toContain('duplicate key')
+    expect(message).toMatch(/probá de nuevo/i)
+  })
+
+  /*
+   * Y NO traduce cualquier 23505: sobre la PRIMARY KEY la causa es otra
+   * —"este jugador ya juega esta disciplina"—, donde "probá de nuevo" es
+   * consejo equivocado. Mismo distingo por constraint que ya hace
+   * `addToDiscipline`, no un `if (code === '23505')` a lo bruto.
+   */
+  it('NO traduce un 23505 sobre la primary key, que es otra causa', () => {
+    const crudo = 'duplicate key value violates unique constraint "discipline_entries_pkey"'
+
+    expect(rpcErrorMessage({ code: '23505', message: crudo })).toBe(crudo)
+  })
+
   // Lo que el traductor NO tiene que hacer: pisar los mensajes que ya
   // escribimos nosotros. Un `raise exception` de plpgsql llega con SQLSTATE
   // P0001 y su texto en castellano -- prefijarlo o reemplazarlo era el defecto

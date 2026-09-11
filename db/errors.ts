@@ -51,6 +51,24 @@ const LOCK_CONTENTION = new Set(['40P01', '55P03'])
 const STATEMENT_TIMEOUT = '57014'
 
 /**
+ * Los dos índices únicos de `seed_position` — el de la disciplina (0023) y el
+ * de la temporada (0080). Un `23505` que nombra a uno de ellos significa que
+ * otra escritura ocupó ese lugar del orden en el mismo instante: se perdió
+ * esta, no pasó nada más, y reintentar es exactamente lo correcto.
+ *
+ * Es el código que el gate reproduce con MÁS frecuencia de todos: el par
+ * `add_squad_seat ‖ addDiscipline` da 60/60 (`npm run test:deadlock`). No
+ * deadlockea —nadie espera a nadie, una de las dos simplemente pierde— y por
+ * eso se le había escapado a un traductor pensado para esperas.
+ *
+ * Se mira el NOMBRE del índice y no sólo el código: un `23505` sobre una
+ * PRIMARY KEY es otra causa ("este jugador ya juega esta disciplina"), donde
+ * "probá de nuevo" sería un consejo equivocado. Mismo distingo que
+ * `addToDiscipline` (`db/discipline-entries.ts`) ya hacía.
+ */
+const SEED_UNIQUE = /"(discipline_entries_seed|season_seed_order_seed)"/
+
+/**
  * El mensaje que le llega a la pantalla desde una RPC.
  *
  * Las funciones del plantel pasan su mensaje DERECHO, sin prefijo, porque sus
@@ -78,6 +96,11 @@ export function rpcErrorMessage(error: { code?: string | null; message: string }
   }
   if (code === STATEMENT_TIMEOUT) {
     return 'El cambio tardó demasiado y se canceló. No se guardó nada: probá de nuevo.'
+  }
+  if (code === '23505' && SEED_UNIQUE.test(error.message)) {
+    // Mismo texto que `addToDiscipline` para el mismo choque: es la misma cosa
+    // vista desde el otro lado de la carrera.
+    return 'Otra alta ocupó ese lugar justo ahora. No se guardó nada: probá de nuevo.'
   }
   return error.message
 }

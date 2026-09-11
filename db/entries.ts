@@ -7,8 +7,15 @@
  * la config desde acá dejaría una config inválida a mitad de camino, que es lo
  * que `assertValidConfig` existe para impedir.
  *
- * La guardia real es RLS: `entries_write` (0002_rls.sql) pide
- * `is_season_admin(season_id)` para insert, update y delete.
+ * La guardia real depende del verbo, y desde 0086 ya no es una sola:
+ *
+ *   - `update` (`renameSeat`, `unlinkSeat`) sigue apoyado en RLS:
+ *     `entries_write` (0002_rls.sql) pide `is_season_admin(season_id)`.
+ *   - `insert` (`addSquadSeat` → `add_squad_seat`, 0013) y `delete`
+ *     (`removeSeat` → `remove_squad_seat`, 0086) NO pasan por RLS: las dos
+ *     funciones son `security definer`, así que RLS no las filtra y el guard
+ *     es el `is_season_admin` explícito de cada una. Por eso avisan con un
+ *     `raise` en castellano y no con `count: 'exact'`.
  */
 import type { Client } from './client'
 import { EdgeError, rpcErrorMessage } from './errors'
@@ -194,10 +201,29 @@ export async function unlinkSeat(supabase: Client, entryId: string): Promise<voi
  * `entries` → `season_seed_order`, las dos `on delete cascade`) se cruzaba
  * con los locks que `shift_seeds_up` (0023) y `shift_season_seeds_up` (0080)
  * ya tenían tomados sobre otras filas de esas mismas tablas, y las dos
- * transacciones se esperaban en círculo. Medido con dos sesiones psql y
- * barrera de arranque: 60/60 deadlocks contra `add_squad_seat(p_before)` y
- * 60/60 contra `shift_seeds_up` antes de `remove_squad_seat` (0086), 0/60
- * después. El cliente de Supabase no puede tomar un advisory lock —no tiene
+ * transacciones se esperaban en círculo.
+ *
+ * Medido con dos sesiones psql y barrera de arranque
+ * (`npm run test:deadlock`), y leelo con cuidado porque las dos filas NO
+ * dicen lo mismo:
+ *
+ *   `add_squad_seat(p_before)` ‖ delete crudo ..... 60/60 deadlock
+ *   `add_squad_seat(p_before)` ‖ esta función ..... 0/60   ← cerrado
+ *   `shift_seeds_up` suelta    ‖ delete crudo ..... 60/60 deadlock
+ *   `shift_seeds_up` suelta    ‖ esta función ..... 60/60  ← SIGUE IGUAL
+ *
+ * La segunda carrera no se cierra y no se puede cerrar desde acá: el advisory
+ * serializa sólo a quien lo PIDE, y `shift_seeds_up` llamada suelta no lo
+ * pide. No es alcanzable desde la app —su ACL es `postgres=X/postgres`, y sus
+ * dos únicos callers (`add_squad_seat`, `promote_guest`) toman el advisory
+ * antes de llamarla—, así que es una llamada que ningún cliente puede hacer.
+ * Por eso ese par vive en la batería como CTRL-POS: es el control que prueba
+ * que el harness todavía sabe encontrar un deadlock. Si alguna vez se expone
+ * un camino que corra el orden de seeds sin tomar el advisory (una pantalla
+ * de "reordenar plantel", por ejemplo), esa fila deja de ser un control y
+ * pasa a ser un bug.
+ *
+ * El cliente de Supabase no puede tomar un advisory lock —no tiene
  * transacciones—, así que el lock y el delete viajan juntos en la función,
  * igual que en `addSquadSeat`.
  *

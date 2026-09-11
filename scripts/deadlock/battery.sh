@@ -54,7 +54,12 @@ echo "── CONTROLES ───────────────────
 R "CTRL-NEG add_squad_seat || add_squad_seat" add_squad_seat.sql add_squad_seat.sql
 R "CTRL-POS shift_seeds_up || remove_squad_seat" shift_seeds_up.sql remove_squad_seat.sql
 echo
-echo "── LOS CUATRO ESCRITORES QUE TOMAN EL ADVISORY, ENTRE SÍ ──────────────────"
+# Son TRES, no cuatro: `add_squad_seat`, `promote_guest` y `remove_squad_seat`.
+# `claim_seat` es el otro escritor de `entries` grantado a `authenticated` y NO
+# toma ningún advisory (verificado contra `pg_proc.prosrc`, no contra los
+# archivos). No está en esta sección porque no pertenece, y no está en la de
+# abajo porque nadie lo midió todavía: queda como par pendiente.
+echo "── LOS TRES ESCRITORES QUE TOMAN EL ADVISORY, ENTRE SÍ ────────────────────"
 R "add_squad_seat || promote_guest" add_squad_seat.sql promote_guest.sql
 R "add_squad_seat || remove_squad_seat" add_squad_seat.sql remove_squad_seat.sql
 R "promote_guest  || remove_squad_seat" promote_guest.sql remove_squad_seat.sql

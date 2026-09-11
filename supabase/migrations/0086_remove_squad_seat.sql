@@ -19,12 +19,22 @@
 -- los dos están adentro, así el solapamiento no lo decide el jitter de
 -- arranque de los procesos), N=60 por par:**
 --
---   antes de esta migración:
---     `add_squad_seat(p_before)` ‖ delete crudo ....... 60/60 deadlock (40P01)
---     `shift_seeds_up`           ‖ delete crudo ....... 60/60 deadlock
+--   `add_squad_seat(p_before)` ‖ delete crudo ....... 60/60 deadlock (40P01)
+--   `add_squad_seat(p_before)` ‖ esta función ....... 0/60   ← cerrado
+--   `shift_seeds_up` suelta    ‖ delete crudo ....... 60/60 deadlock
+--   `shift_seeds_up` suelta    ‖ esta función ....... 60/60  ← SIGUE IGUAL
 --   control negativo, para que esos números signifiquen algo:
---     `add_squad_seat`           ‖ `add_squad_seat` .... 0/60 (el advisory ya
---                                                       funcionaba ENTRE ellas)
+--     `add_squad_seat`         ‖ `add_squad_seat` .... 0/60 (el advisory ya
+--                                                     funcionaba ENTRE ellas)
+--
+-- La cuarta fila NO es un fracaso de esta migración: el advisory serializa
+-- sólo a quien lo PIDE, y `shift_seeds_up` llamada suelta no lo pide. Tampoco
+-- es alcanzable desde la app — su ACL es `postgres=X/postgres` y sus dos
+-- únicos callers (`add_squad_seat`, `promote_guest`) toman el advisory antes
+-- de llamarla. Por eso ese par es el CTRL-POS de la batería: el control que
+-- prueba que el harness sigue sabiendo encontrar un deadlock. Queda escrito
+-- acá porque un "0/60 después" a secas sería falso, y en esta rama un
+-- comentario con premisa falsa ya costó dos rondas.
 --
 -- Sin barrera, contra PostgREST, la misma carrera medía 17/240 y 30/200: la
 -- barrera amplifica ~10x la probabilidad de solaparse, no inventa el ciclo.
@@ -34,8 +44,18 @@
 -- que RLS ya no la filtra y el guard tiene que estar acá. Eso arregla, de
 -- paso, el único de los cuatro escritores del plantel que callaba: un delete
 -- que RLS filtraba NO es un error en PostgREST, así que a quien no organiza se
--- le decía que sacó al jugador mientras el plantel seguía intacto (los otros
--- tres lo avisan con `count: 'exact'` desde W49).
+-- le decía que sacó al jugador mientras el plantel seguía intacto. Los otros
+-- tres ya avisaban, pero por dos caminos distintos: `renameSeat` y
+-- `unlinkSeat` con `count: 'exact'` desde W49 (siguen apoyados en RLS), y
+-- `add_squad_seat` con su propio `raise`, que es el camino que esta función
+-- copia.
+--
+-- Hermanos con el MISMO silencio que esta migración NO arregla, anotados para
+-- el que los persiga: `removeGuest` y `nameGuest` (`db/matchday.ts`) escriben
+-- `entries` sin `count` ni guard propio. No comparten el deadlock —un GUEST no
+-- tiene filas en `discipline_entries` ni en `season_seed_order`, las dos con
+-- `check (entry_kind = 'SQUAD')`, así que su cascada nunca cruza con los
+-- corrimientos de seeds— pero sí el silencio.
 --
 -- El 23503 de un asiento que ya jugó se sigue traduciendo en TypeScript, donde
 -- ya estaba: la FK (`pairs`/`awards` con `on delete no action`,

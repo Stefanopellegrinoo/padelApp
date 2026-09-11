@@ -6,12 +6,11 @@ import { rpcErrorMessage } from './errors'
  * `claim_seat`) pasan el mensaje de error DERECHO a la pantalla, sin prefijo:
  * sus `raise` ya están escritos en castellano y para que los lea el admin.
  *
- * El problema es lo que NO es uno de esos `raise`. Con el advisory lock por
- * temporada (0081/0084/0086) los cuatro caminos pueden esperar de verdad, y
- * cuando esa espera termina mal el mensaje lo escribe Postgres, en inglés:
- * `deadlock detected` (40P01) o `canceling statement due to lock timeout`
- * (55P03, con el `lock_timeout = 8s` que la sesión hereda del rol
- * `authenticator`). Eso es lo que este traductor ataja.
+ * El problema es lo que NO es uno de esos `raise`. Las TRES primeras toman el
+ * advisory lock por temporada (0081/0084/0086) — `claim_seat` no toma ninguno,
+ * verificado contra `pg_proc.prosrc` — así que pueden esperar de verdad, y
+ * cuando esa espera termina mal el mensaje lo escribe Postgres, en inglés.
+ * Eso es lo que este traductor ataja.
  */
 describe('rpcErrorMessage', () => {
   it('traduce el deadlock, que Postgres reporta en inglés', () => {
@@ -40,10 +39,11 @@ describe('rpcErrorMessage', () => {
    *
    *   {"code":"57014","message":"canceling statement due to statement timeout"}
    *
-   * no con 55P03. El `lock_timeout = 8s` está en el rol `authenticator` (el de
-   * login), no en `authenticated`, y el que gana es el `statement_timeout = 8s`
-   * de `authenticated`. Dejar 57014 afuera era dejar afuera el único código
-   * alcanzable por este camino.
+   * no con 55P03. El porqué está en `db/errors.ts`, y NO es que el
+   * `lock_timeout` se pierda al cambiar de rol: sobrevive. Es que en la sesión
+   * real los dos presupuestos valen 8s y el reloj del `statement_timeout`
+   * arranca antes. Con `lock_timeout` más corto, el que llega es 55P03 — por
+   * eso los dos casos tienen su test y ninguno de los dos sobra.
    */
   it('traduce el statement timeout, que es el que PostgREST devuelve de verdad', () => {
     const message = rpcErrorMessage({

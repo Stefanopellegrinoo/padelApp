@@ -19,6 +19,7 @@ import {
   editSeatState,
   effectiveFloor,
   filledCount,
+  filledSeatIndices,
   formatErrors,
   formatoDefaultKey,
   freshDisciplineConfig,
@@ -34,6 +35,7 @@ import {
   summaryOf,
   toggleDiscipline,
   toggleOwnOrder,
+  visibleOrderPositions,
   withoutTrailingBlanks,
 } from './wizard-state'
 
@@ -612,8 +614,24 @@ export function PasoFormato({
  * `orderedNames` (F1, `wizard-state.ts`) que `Wizard` ya mantiene al día en
  * el sitio exacto de cada operación del plantel (`editSeatName`/
  * `joinSquad`/`removeSeat`/`moveGlobalSeat`) — este componente sólo
- * traduce cada índice a su nombre (`orderedNames[at]`) y dibuja lo que le
- * pasan, no reconcilia nada por su cuenta.
+ * traduce cada índice a su nombre y dibuja lo que le pasan, no reconcilia
+ * nada por su cuenta.
+ *
+ * WU3/WU4 (ronda 3 de revisión): las DOS listas de acá abajo -- la global y
+ * la propia de cada disciplina -- filtran la fila fantasma (un `at` que ya
+ * no señala a un asiento con nombre, una fila del MEDIO vaciada a mano sin
+ * pasar por `removeSeat`) con la MISMA función, `visibleOrderPositions`
+ * (`filledSeatIndices` por debajo, `wizard-state.ts`), en vez de cada una
+ * con su propio filtro a medida -- filtrar recién en el `.map`, como hacía
+ * la versión de antes de esta tarea, ataba CUATRO cosas a la posición RAW de
+ * la fantasma en vez de a la posición VISIBLE: la numeración saltaba
+ * (1,2,4,5), el swap con la fantasma era un no-op visible sin feedback, el
+ * `disabled` del primer/último visible cayó sobre la fantasma en vez de la
+ * fila real, y toda fila visible de más ganaba un `border-t` de sobra. Acá,
+ * `visibleIndex` (la posición dentro de la lista YA filtrada) gobierna
+ * numeración/`disabled`/divisor, y `onMoveGlobal`/`onMoveOwn` siguen
+ * recibiendo posiciones REALES (`rawIndex`/`position`) -- así un solo click
+ * salta la fantasma en vez de quedarse pegado a ella.
  *
  * F3 (dos jueces ciegos, `37b225b..d33377a`): la tarjeta por disciplina sólo
  * se dibuja con 2+ marcadas (`disciplines.length > 1`), MISMO gate que el
@@ -644,6 +662,13 @@ export function PasoOrdenInicial({
   onMoveGlobal: (from: number, to: number) => void
   onMoveOwn: (kind: DisciplineKind, from: number, to: number) => void
 }) {
+  // WU4: el orden GLOBAL, en el fondo, es `orders[kind]` implícito
+  // `[0, 1, ..., orderedNames.length)` -- `visibleOrderPositions` sobre esa
+  // identidad da lo mismo que `filledSeatIndices(orderedNames)` directo (acá
+  // no hace falta traducir POSICIÓN a `at`: son el mismo número). `visible`
+  // trae los índices de asiento REALES de las filas que se ven, en orden.
+  const visibleGlobal = filledSeatIndices(orderedNames)
+
   return (
     <>
       <div className="overflow-hidden rounded-[14px] border border-line">
@@ -651,36 +676,45 @@ export function PasoOrdenInicial({
             el plantel tipeando de corrido deja siempre una fila en blanco
             colgando al final, y este paso la dibujaría con flechas de
             subir/bajar sobre un nombre que no existe (ver
-            `withoutTrailingBlanks`, wizard-state.ts). */}
-        {orderedNames.map((seat, index) => (
-          <div
-            key={index}
-            className={`flex items-center gap-2 px-3 py-2 ${index > 0 ? 'border-t border-line' : ''}`}
-          >
-            <span className="text-[13px] text-muted">⠿</span>
-            <span className="w-5 shrink-0 text-[13px] font-extrabold text-muted">{index + 1}</span>
-            <span className="min-w-0 flex-1 truncate text-[15px] font-bold">{seat}</span>
-            {index === mySeat && <Vos />}
-            <button
-              type="button"
-              aria-label={`Subir a ${seat}`}
-              disabled={index === 0}
-              onClick={() => onMoveGlobal(index, index - 1)}
-              className="h-[44px] w-[44px] shrink-0 rounded-[9px] bg-chip font-extrabold disabled:opacity-40"
+            `withoutTrailingBlanks`, wizard-state.ts). `visibleGlobal`, no
+            `orderedNames` directo: una fila del MEDIO vaciada a mano (sin
+            pasar por `removeSeat`) tampoco se dibuja acá (WU4). */}
+        {visibleGlobal.map((rawIndex, visibleIndex) => {
+          const seat = orderedNames[rawIndex]!
+          return (
+            <div
+              key={rawIndex}
+              className={`flex items-center gap-2 px-3 py-2 ${visibleIndex > 0 ? 'border-t border-line' : ''}`}
             >
-              ↑
-            </button>
-            <button
-              type="button"
-              aria-label={`Bajar a ${seat}`}
-              disabled={index === orderedNames.length - 1}
-              onClick={() => onMoveGlobal(index, index + 1)}
-              className="h-[44px] w-[44px] shrink-0 rounded-[9px] bg-chip font-extrabold disabled:opacity-40"
-            >
-              ↓
-            </button>
-          </div>
-        ))}
+              <span className="text-[13px] text-muted">⠿</span>
+              <span className="w-5 shrink-0 text-[13px] font-extrabold text-muted">{visibleIndex + 1}</span>
+              <span className="min-w-0 flex-1 truncate text-[15px] font-bold">{seat}</span>
+              {rawIndex === mySeat && <Vos />}
+              <button
+                type="button"
+                aria-label={`Subir a ${seat}`}
+                disabled={visibleIndex === 0}
+                // El vecino VISIBLE de arriba, no `rawIndex - 1` a secas: con
+                // una fantasma de por medio, ese vecino puede estar más lejos
+                // que un lugar -- un solo click tiene que saltarla entera
+                // (WU4), no quedarse pegado a un swap invisible contra ella.
+                onClick={() => onMoveGlobal(rawIndex, visibleGlobal[visibleIndex - 1] ?? -1)}
+                className="h-[44px] w-[44px] shrink-0 rounded-[9px] bg-chip font-extrabold disabled:opacity-40"
+              >
+                ↑
+              </button>
+              <button
+                type="button"
+                aria-label={`Bajar a ${seat}`}
+                disabled={visibleIndex === visibleGlobal.length - 1}
+                onClick={() => onMoveGlobal(rawIndex, visibleGlobal[visibleIndex + 1] ?? -1)}
+                className="h-[44px] w-[44px] shrink-0 rounded-[9px] bg-chip font-extrabold disabled:opacity-40"
+              >
+                ↓
+              </button>
+            </div>
+          )
+        })}
       </div>
 
       {/* Una tarjeta por disciplina con orden PROPIO -- las que se quedaron
@@ -694,38 +728,33 @@ export function PasoOrdenInicial({
           .filter((kind) => ownOrder[kind])
           .map((kind) => {
             const order = orders[kind] ?? []
+            // WU3: las posiciones de `order` cuyo asiento sigue teniendo
+            // nombre -- la fantasma queda afuera de esta lista, así que
+            // `visibleIndex` (numeración/`disabled`/divisor) nunca la cuenta,
+            // y el vecino que cada flecha usa para swapear (`position`) ya
+            // viene sin ella.
+            const visible = visibleOrderPositions(order, orderedNames)
             return (
               <div key={kind} className="flex flex-col gap-2">
                 <h3 className="text-[11.5px] font-extrabold uppercase tracking-[.14em] text-muted">
                   {DISCIPLINE_LABELS[kind]}
                 </h3>
                 <div className="overflow-hidden rounded-[14px] border border-line">
-                  {order.map((at, index) => {
-                    const seat = orderedNames[at] ?? ''
-                    // WU4 (ronda 2 de revisión), la fila fantasma: un `at`
-                    // que ya no señala a un asiento con nombre (una fila del
-                    // MEDIO vaciada a mano, sin pasar por `removeSeat`) no
-                    // dibuja nada acá -- mismo criterio que
-                    // `filledSeatIndices`/`seedOrderFrom` ya aplican al
-                    // prender el toggle y al submit. `index` se deja SIN
-                    // renumerar (sigue siendo la posición real en `order`):
-                    // `onMoveOwn` opera sobre esas posiciones reales, y
-                    // renumerar acá correría el `from`/`to` que el usuario
-                    // ve contra los que el estado en realidad tiene.
-                    if (seat.trim().length === 0) return null
+                  {visible.map((position, visibleIndex) => {
+                    const seat = orderedNames[order[position]!] ?? ''
                     return (
                       <div
-                        key={index}
-                        className={`flex items-center gap-2 px-3 py-2 ${index > 0 ? 'border-t border-line' : ''}`}
+                        key={position}
+                        className={`flex items-center gap-2 px-3 py-2 ${visibleIndex > 0 ? 'border-t border-line' : ''}`}
                       >
                         <span className="text-[13px] text-muted">⠿</span>
-                        <span className="w-5 shrink-0 text-[13px] font-extrabold text-muted">{index + 1}</span>
+                        <span className="w-5 shrink-0 text-[13px] font-extrabold text-muted">{visibleIndex + 1}</span>
                         <span className="min-w-0 flex-1 truncate text-[15px] font-bold">{seat}</span>
                         <button
                           type="button"
                           aria-label={`Subir a ${seat} en ${DISCIPLINE_LABELS[kind]}`}
-                          disabled={index === 0}
-                          onClick={() => onMoveOwn(kind, index, index - 1)}
+                          disabled={visibleIndex === 0}
+                          onClick={() => onMoveOwn(kind, position, visible[visibleIndex - 1] ?? -1)}
                           className="h-[44px] w-[44px] shrink-0 rounded-[9px] bg-chip font-extrabold disabled:opacity-40"
                         >
                           ↑
@@ -733,8 +762,8 @@ export function PasoOrdenInicial({
                         <button
                           type="button"
                           aria-label={`Bajar a ${seat} en ${DISCIPLINE_LABELS[kind]}`}
-                          disabled={index === order.length - 1}
-                          onClick={() => onMoveOwn(kind, index, index + 1)}
+                          disabled={visibleIndex === visible.length - 1}
+                          onClick={() => onMoveOwn(kind, position, visible[visibleIndex + 1] ?? -1)}
                           className="h-[44px] w-[44px] shrink-0 rounded-[9px] bg-chip font-extrabold disabled:opacity-40"
                         >
                           ↓

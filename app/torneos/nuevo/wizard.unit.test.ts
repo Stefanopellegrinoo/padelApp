@@ -374,6 +374,17 @@ describe('PasoOrdenInicial', () => {
     expect(paso).not.toContain('Pádel')
     // Dos listas -- la global (3 filas) y la propia de FIFA (3 filas más).
     expect(paso.match(/⠿/g)).toHaveLength(6)
+    // WU2 (ronda 3 de revisión): el fixture de arriba (`orders.FIFA = [2, 0,
+    // 1]`) YA es una permutación NO identidad -- alcanza con leer lo que de
+    // verdad dibuja, en vez de sólo contar filas. Antes esta prueba sólo
+    // pedía `toHaveLength(6)`, que no distingue `orderedNames[at]` (correcto)
+    // de `orderedNames[index]` (mutante, WU2): con esta permutación las dos
+    // lecturas dan secuencias DISTINTAS -- Fede/Colo/Nacho contra
+    // Colo/Nacho/Fede.
+    const fifa = paso.slice(paso.indexOf('FIFA'))
+    expect(fifa.indexOf('Fede')).toBeGreaterThanOrEqual(0)
+    expect(fifa.indexOf('Fede')).toBeLessThan(fifa.indexOf('Colo'))
+    expect(fifa.indexOf('Colo')).toBeLessThan(fifa.indexOf('Nacho'))
   })
 
   /**
@@ -430,6 +441,217 @@ describe('PasoOrdenInicial', () => {
     expect(paso).not.toContain('aria-label="Bajar a  en FIFA"')
     // La tarjeta de FIFA dibuja 4 filas, no 5 -- la del medio, vacía, no cuenta.
     expect(paso.slice(paso.indexOf('FIFA')).match(/⠿/g)).toHaveLength(4)
+  })
+})
+
+/**
+ * WU2 (ronda 3 de revisión): a QUÉ posición apuntan las flechas de la
+ * tarjeta propia, no sólo qué texto queda a la vista. `renderToStaticMarkup`
+ * no serializa `onClick` -- es una función, no texto -- así que ningún
+ * `toContain`/`toMatch` sobre el HTML puede distinguir
+ * `onMoveOwn(kind, index, index - 1)` (correcto) de `onMoveOwn(kind, at, at -
+ * 1)` (mutante, confunde la POSICIÓN dentro de `order` con lo que esa
+ * posición guarda) ni `index + 1` de `index - 1` (mutante, la flecha de bajar
+ * manda para arriba).
+ *
+ * `PasoOrdenInicial` no usa hooks -- llamarlo como función plana (sin
+ * `createElement`/`renderToStaticMarkup`) devuelve el mismo árbol de
+ * elementos que arma el runtime automático de JSX (`jsx()`/`jsxs()` de
+ * `react/jsx-runtime`), sin DOM ni click real. `botonPor` camina ese árbol
+ * por `aria-label` y devuelve las props del botón -- de ahí se invoca
+ * `onClick` directo y se mira con QUÉ lo llamaron.
+ */
+function botonPor(node: unknown, ariaLabel: string): { onClick?: () => void } | null {
+  if (node === null || node === undefined || typeof node !== 'object') return null
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const found = botonPor(child, ariaLabel)
+      if (found !== null) return found
+    }
+    return null
+  }
+  const props = (node as { props?: Record<string, unknown> }).props
+  if (props === undefined) return null
+  if (props['aria-label'] === ariaLabel) return props as { onClick?: () => void }
+  return botonPor(props.children, ariaLabel)
+}
+
+describe('PasoOrdenInicial -- a qué posición apuntan las flechas (WU2, ronda 3 de revisión)', () => {
+  // `orders.FIFA = [2, 0, 1]` -- NO identidad: posición 0 guarda at=2 (Fede),
+  // posición 1 guarda at=0 (Colo), posición 2 guarda at=1 (Nacho). Con una
+  // identidad ([0,1,2]) posición y `at` coinciden siempre y ninguna de las
+  // pruebas de acá abajo podría distinguir el mutante.
+  const props = {
+    orderedNames: ['Colo', 'Nacho', 'Fede'],
+    mySeat: null,
+    disciplines: ['PADEL', 'FIFA'] as DisciplineKind[],
+    ownOrder: { PADEL: false, FIFA: true },
+    orders: { FIFA: [2, 0, 1] },
+    onMoveGlobal: () => {},
+  }
+
+  it('"Bajar a Fede en FIFA" manda la POSICIÓN de Fede en order (0), no su asiento (2)', () => {
+    const calls: Array<[DisciplineKind, number, number]> = []
+    const tree = PasoOrdenInicial({ ...props, onMoveOwn: (kind, from, to) => calls.push([kind, from, to]) })
+    botonPor(tree, 'Bajar a Fede en FIFA')?.onClick?.()
+    // Correcto: posición 0 -> posición 1 (Fede baja un lugar, hacia Colo).
+    // Mutante `at` en vez de `index`: ['FIFA', 2, 3] -- asiento crudo, fuera
+    // del rango de `order` (longitud 3). Mutante signo: ['FIFA', 0, -1].
+    expect(calls).toEqual([['FIFA', 0, 1]])
+  })
+
+  it('"Subir a Colo en FIFA" manda la POSICIÓN de Colo en order (1), no su asiento (0)', () => {
+    const calls: Array<[DisciplineKind, number, number]> = []
+    const tree = PasoOrdenInicial({ ...props, onMoveOwn: (kind, from, to) => calls.push([kind, from, to]) })
+    botonPor(tree, 'Subir a Colo en FIFA')?.onClick?.()
+    // Correcto: posición 1 -> posición 0. Mutante `at`: ['FIFA', 0, -1].
+    expect(calls).toEqual([['FIFA', 1, 0]])
+  })
+})
+
+/**
+ * WU3 (ronda 3 de revisión): el fix de la fila fantasma (filtrar en el
+ * render, `PasoOrdenInicial` de antes de esta tarea) cambió UN defecto por
+ * CUATRO, todos con la MISMA raíz -- usar la posición RAW dentro de `order`
+ * (la que incluye a la fantasma) para numerar/deshabilitar/dibujar el
+ * divisor, en vez de la posición dentro de la lista VISIBLE.
+ *
+ * Fixture medido en el reporte: plantel `[Ana, Beto, Caro, Dani, Eze]`,
+ * `orders.FIFA = [0,1,2,3,4]` (identidad), Caro (posición 2) vaciada a mano
+ * sin sacar la fila.
+ */
+describe('PasoOrdenInicial -- la fila fantasma ya no arrastra otros cuatro defectos (WU3, ronda 3 de revisión)', () => {
+  const FANTASMA_EN_MEDIO = {
+    orderedNames: ['Ana', 'Beto', '', 'Dani', 'Eze'],
+    mySeat: null,
+    disciplines: ['PADEL', 'FIFA'] as DisciplineKind[],
+    ownOrder: { PADEL: false, FIFA: true },
+    orders: { FIFA: [0, 1, 2, 3, 4] },
+  }
+
+  it('la numeración no salta -- 1,2,3,4, no 1,2,4,5', () => {
+    const paso = renderToStaticMarkup(
+      createElement(PasoOrdenInicial, { ...FANTASMA_EN_MEDIO, onMoveGlobal: () => {}, onMoveOwn: () => {} }),
+    )
+    const fifa = paso.slice(paso.indexOf('FIFA'))
+    const numeros = [...fifa.matchAll(/w-5 shrink-0 text-\[13px\] font-extrabold text-muted">(\d+)</g)].map(
+      (m) => m[1],
+    )
+    expect(numeros).toEqual(['1', '2', '3', '4'])
+  })
+
+  it('"Bajar a Beto" cruza el agujero en un solo click -- apunta a la posición de Dani, no a la de la fantasma (antes, un no-op visible)', () => {
+    const calls: Array<[DisciplineKind, number, number]> = []
+    const tree = PasoOrdenInicial({
+      ...FANTASMA_EN_MEDIO,
+      onMoveGlobal: () => {},
+      onMoveOwn: (kind, from, to) => calls.push([kind, from, to]),
+    })
+    botonPor(tree, 'Bajar a Beto en FIFA')?.onClick?.()
+    // Beto está en la posición 1 de `order`; la fantasma (Caro) en la 2;
+    // Dani en la 3. Antes: `onMoveOwn(FIFA, 1, 2)` -- swap con la fantasma,
+    // no-op visible. Ahora: salta directo a la posición de Dani.
+    expect(calls).toEqual([['FIFA', 1, 3]])
+  })
+
+  it('si se vacía el PRIMER nombre, la primera fila visible sale con la flecha de subir disabled -- no enabled apuntando a la fantasma', () => {
+    const paso = renderToStaticMarkup(
+      createElement(PasoOrdenInicial, {
+        ...FANTASMA_EN_MEDIO,
+        orderedNames: ['', 'Beto', 'Caro', 'Dani', 'Eze'],
+        onMoveGlobal: () => {},
+        onMoveOwn: () => {},
+      }),
+    )
+    const fifa = paso.slice(paso.indexOf('FIFA'))
+    const subirBeto = /<button[^>]*aria-label="Subir a Beto en FIFA"[^>]*>/.exec(fifa)?.[0] ?? ''
+    expect(subirBeto).toContain('disabled=""')
+    // Numeración también arranca en 1, no en 2 -- la fantasma no cuenta.
+    const numeros = [...fifa.matchAll(/w-5 shrink-0 text-\[13px\] font-extrabold text-muted">(\d+)</g)].map(
+      (m) => m[1],
+    )
+    expect(numeros[0]).toBe('1')
+  })
+
+  it('si se vacía el ÚLTIMO nombre, la última fila visible sale con la flecha de bajar disabled', () => {
+    const paso = renderToStaticMarkup(
+      createElement(PasoOrdenInicial, {
+        ...FANTASMA_EN_MEDIO,
+        orderedNames: ['Ana', 'Beto', 'Caro', 'Dani', ''],
+        onMoveGlobal: () => {},
+        onMoveOwn: () => {},
+      }),
+    )
+    const fifa = paso.slice(paso.indexOf('FIFA'))
+    const bajarDani = /<button[^>]*aria-label="Bajar a Dani en FIFA"[^>]*>/.exec(fifa)?.[0] ?? ''
+    expect(bajarDani).toContain('disabled=""')
+  })
+
+  it('la primera fila visible no arrastra un border-t de sobra cuando la fantasma es la que abre la lista', () => {
+    const paso = renderToStaticMarkup(
+      createElement(PasoOrdenInicial, {
+        ...FANTASMA_EN_MEDIO,
+        orderedNames: ['', 'Beto', 'Caro', 'Dani', 'Eze'],
+        onMoveGlobal: () => {},
+        onMoveOwn: () => {},
+      }),
+    )
+    const fifa = paso.slice(paso.indexOf('FIFA'))
+    // 4 filas visibles -- sólo 3 llevan el divisor de arriba (todas menos la primera).
+    expect(fifa.match(/border-t border-line/g)?.length ?? 0).toBe(3)
+  })
+})
+
+/**
+ * WU4 (ronda 3 de revisión): la MISMA fila fantasma, sin filtrar, en la
+ * lista GLOBAL (`wizard.tsx:654-682`, sin gate de `ownOrder`) -- peor que la
+ * de la tarjeta propia porque sus flechas SÍ hacen algo: mueven un asiento
+ * real contra un casillero en blanco, y `submitSeats`/`seedOrderFrom` (que sí
+ * filtran los blancos) terminan viendo un orden distinto del que la pantalla
+ * mostró. Ruteada por la MISMA `filledSeatIndices` que ya usa
+ * `visibleOrderPositions` -- no una segunda copia del filtro.
+ */
+describe('PasoOrdenInicial -- la lista GLOBAL también filtra la fila fantasma (WU4, ronda 3 de revisión)', () => {
+  const NO_OWN_ORDER: Record<DisciplineKind, boolean> = { PADEL: false, FIFA: false }
+  const FANTASMA_GLOBAL = {
+    orderedNames: ['Ana', 'Beto', '', 'Dani', 'Eze'],
+    mySeat: 0,
+    disciplines: ['PADEL', 'FIFA'] as DisciplineKind[],
+    ownOrder: NO_OWN_ORDER,
+    orders: {},
+  }
+
+  it('un nombre vaciado a mano en el medio no dibuja una fila sin nombre', () => {
+    const paso = renderToStaticMarkup(
+      createElement(PasoOrdenInicial, { ...FANTASMA_GLOBAL, onMoveGlobal: () => {}, onMoveOwn: () => {} }),
+    )
+    expect(paso).not.toContain('aria-label="Subir a "')
+    expect(paso).not.toContain('aria-label="Bajar a "')
+  })
+
+  it('la numeración no salta -- 1,2,3,4, no 1,2,4,5', () => {
+    const paso = renderToStaticMarkup(
+      createElement(PasoOrdenInicial, { ...FANTASMA_GLOBAL, onMoveGlobal: () => {}, onMoveOwn: () => {} }),
+    )
+    const numeros = [...paso.matchAll(/w-5 shrink-0 text-\[13px\] font-extrabold text-muted">(\d+)</g)].map(
+      (m) => m[1],
+    )
+    expect(numeros).toEqual(['1', '2', '3', '4'])
+  })
+
+  it('"Bajar a Beto" cruza el agujero en un solo click -- apunta al asiento de Dani, no al casillero en blanco', () => {
+    const calls: Array<[number, number]> = []
+    const tree = PasoOrdenInicial({
+      ...FANTASMA_GLOBAL,
+      onMoveGlobal: (from, to) => calls.push([from, to]),
+      onMoveOwn: () => {},
+    })
+    botonPor(tree, 'Bajar a Beto')?.onClick?.()
+    // Ana=asiento 0, Beto=asiento 1, (blanco=asiento 2), Dani=asiento 3.
+    // Antes: `onMoveGlobal(1, 2)` -- swap contra el blanco, un no-op visible
+    // que además desalinea la numeración de lo que `submitSeats` termina
+    // sembrando. Ahora: salta directo al asiento de Dani.
+    expect(calls).toEqual([[1, 3]])
   })
 })
 

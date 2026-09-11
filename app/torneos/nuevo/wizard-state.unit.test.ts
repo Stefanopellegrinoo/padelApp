@@ -45,6 +45,7 @@ import {
   swapInOrders,
   toggleDiscipline,
   toggleOwnOrder,
+  visibleOrderPositions,
   withoutTrailingBlanks,
 } from './wizard-state'
 
@@ -596,6 +597,48 @@ describe('filledSeatIndices', () => {
 
   it('un espacio suelto no cuenta como cargado -- mismo criterio que filledCount', () => {
     expect(filledSeatIndices(['Colo', '   '])).toEqual([0])
+  })
+})
+
+/**
+ * WU3/WU4 (ronda 3 de revisión): las POSICIONES de `order` (no los `at` que
+ * guarda) cuyo asiento sigue teniendo nombre -- la fila fantasma. Filtrar
+ * recién en el `.map` de `wizard.tsx` (la versión de antes de esta tarea)
+ * dejaba CUATRO defectos atados a la posición RAW de la fantasma: la
+ * numeración saltaba (1,2,4,5 en vez de 1,2,3,4), el swap con la fantasma
+ * era un no-op visible sin feedback, el `disabled` del primer/último
+ * visible caía sobre la posición de la fantasma en vez de la real, y todo
+ * visible de más ganaba un `border-t` de sobra.
+ *
+ * Reusa `filledSeatIndices` -- no una copia del mismo filtro -- aplicada a
+ * los NOMBRES que `order` señala, en el orden en que `order` los trae: el
+ * orden GLOBAL es, en el fondo, este mismo cálculo con un `order` implícito
+ * `[0, 1, ..., n)` (`filledSeatIndices(names)` directo alcanza para ese
+ * caso). Devuelve POSICIONES (índices de `order`), no los `at` que `order`
+ * guarda -- lo que `onMoveGlobal`/`onMoveOwn` necesitan para swapear
+ * (`moveSeat`/`moveInOrder` operan sobre posiciones, F1).
+ */
+describe('visibleOrderPositions', () => {
+  it('sin fantasmas, da todas las posiciones', () => {
+    expect(visibleOrderPositions([2, 0, 1], ['Colo', 'Nacho', 'Fede'])).toEqual([0, 1, 2])
+  })
+
+  it('salta la posición cuyo `at` señala a un nombre en blanco', () => {
+    // order[1] = 2 -> names[2] = '' (Caro, vaciada a mano). Sólo esa
+    // posición (1) se salta -- las demás quedan, en el mismo orden.
+    expect(visibleOrderPositions([0, 2, 1, 3], ['Ana', 'Beto', '', 'Dani'])).toEqual([0, 2, 3])
+  })
+
+  it('un espacio suelto también cuenta como fantasma -- mismo criterio que filledSeatIndices', () => {
+    expect(visibleOrderPositions([0, 1], ['Colo', '   '])).toEqual([0])
+  })
+
+  it('distingue POSICIÓN (índice de order) de `at` (lo que order guarda) -- una permutación NO identidad', () => {
+    // order = [2, 0, 1]: posición 0 guarda at=2 (Fede), posición 1 guarda
+    // at=0 (Colo). Con una identidad ([0,1,2]) las dos lecturas coinciden
+    // siempre y esta prueba no podría existir.
+    expect(visibleOrderPositions([2, 0, 1], ['Colo', 'Nacho', 'Fede'])).not.toEqual([2, 0, 1])
+    expect(visibleOrderPositions([2, 0, 1], ['Colo', 'Nacho', 'Fede'])).toEqual([0, 1, 2])
   })
 })
 

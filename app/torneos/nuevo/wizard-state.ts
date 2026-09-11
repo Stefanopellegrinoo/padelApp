@@ -427,6 +427,29 @@ export function filledSeatIndices(names: readonly string[]): number[] {
 }
 
 /**
+ * Las POSICIONES de `order` (no los `at` que guarda) cuyo asiento sigue
+ * teniendo nombre -- WU3/WU4 (ronda 3 de revisión), la fila fantasma: un
+ * `at` que ya no señala a un asiento con nombre (una fila del MEDIO vaciada
+ * a mano, sin pasar por `removeSeat`) queda afuera.
+ *
+ * Reusa `filledSeatIndices` -- no una copia del mismo filtro -- aplicada a
+ * los NOMBRES que `order` señala, en el orden en que `order` los trae: el
+ * orden GLOBAL del paso "Orden inicial" es, en el fondo, este mismo cálculo
+ * con un `order` implícito `[0, 1, ..., n)` (`at === position` siempre ahí,
+ * así que `filledSeatIndices(names)` de una alcanza para ese caso -- las dos
+ * listas de `wizard.tsx` terminan rutéandose por la MISMA función, en vez de
+ * cada una con su propio filtro a medida).
+ *
+ * Devuelve POSICIONES, no los `at` que `order` guarda -- lo que
+ * `onMoveGlobal`/`onMoveOwn` necesitan para swapear (`moveSeat`/
+ * `moveInOrder` operan sobre posiciones de la lista, no sobre los índices
+ * de asiento que esas posiciones guardan, F1).
+ */
+export function visibleOrderPositions(order: readonly number[], names: readonly string[]): number[] {
+  return filledSeatIndices(order.map((at) => names[at] ?? ''))
+}
+
+/**
  * El estado de `orders` después de tocar el checkbox "orden propio" de una
  * disciplina (`FormatoDeUnaDisciplina`, wizard.tsx, sólo con `label !==
  * null` -- ver su docblock): prender COPIA el orden GLOBAL de este instante,

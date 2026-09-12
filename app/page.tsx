@@ -74,6 +74,12 @@ export default async function HomePage() {
         <p className="text-pretty pt-[2px] text-center text-[12.5px] font-medium text-muted">
           ¿Te pasaron un link de invitación? Abrilo y elegí tu nombre.
         </p>
+        <Link
+          href="/rapido"
+          className="text-pretty text-center text-[12.5px] font-bold text-accent-link underline underline-offset-2"
+        >
+          ¿Sólo una tarde? Armá un torneo rápido, sin cuenta.
+        </Link>
       </div>
     </main>
   )

@@ -72,9 +72,13 @@ definer`, **215 tests unitarios y 92 contra la base**. `npm run build` compila.
 
 **La superficie pública es `core/index.ts`.** Importar de una ruta profunda
 funciona igual —TypeScript no lo puede impedir— pero lo que no está en el index
-es detalle de implementación y puede cambiar sin aviso. Dos cosas quedaron
-adentro a propósito: `allMatchings` (sólo la usa `buildPairs`) y `orderByPoints`
-(los callers quieren `computeRanking`, que ya devuelve las filas ordenadas).
+es detalle de implementación y puede cambiar sin aviso. Adentro quedó UNA sola
+cosa a propósito: `orderByPoints` (los callers quieren `computeRanking`, que ya
+devuelve las filas ordenadas). `allMatchings` estuvo ahí mientras fue cierto que
+"sólo la usa `buildPairs`"; dejó de serlo cuando el torneo rápido (`app/rapido`)
+necesitó sortear parejas sin nada de la temporada alrededor, y se exportó en vez
+de dejar a un consumidor de afuera entrando por la ruta profunda y esquivando el
+límite en silencio.
 
 ---
 

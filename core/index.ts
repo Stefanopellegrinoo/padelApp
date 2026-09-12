@@ -88,13 +88,20 @@ export { rankingWithMovement } from './movement'
 export type { PlayedMatchday, PartnerRecord, PlayerTally } from './playerstats'
 export { tallyPlayers, partnerRecords, bestPair } from './playerstats'
 
+// ── Splitting a pool into pairs ──────────────────────────────────────────────
+// Dejó de ser interno el día que el torneo rápido (`app/rapido`) necesitó
+// sortear parejas sin nada de la temporada alrededor: ni puntos, ni snapshot,
+// ni defensores. Antes acá abajo decía "Only buildPairs needs it", y era cierto
+// hasta ese día — se exporta en vez de dejar a un consumidor de afuera entrando
+// por `@/core/matchings`, que es el límite declarado esquivado en silencio.
+//
+// CUIDADO al usarla: tira por arriba de MAX_PLAYERS, porque (n-1)!! llega a 654
+// millones con veinte jugadores. Quien la llame pone su propio techo antes.
+export { allMatchings } from './matchings'
+
 /*
  * Deliberately NOT exported — internal to the modules above:
  *
- *   allMatchings   (matchings.ts)  enumerates every way to split a pool into
- *                                  pairs. Only buildPairs needs it, and it
- *                                  throws above MAX_PLAYERS because (n-1)!!
- *                                  reaches 654 million at twenty players.
  *   orderByPoints  (order.ts)      sorts by points with the snapshot as
  *                                  tiebreak. Callers want computeRanking,
  *                                  which returns rows already in order.

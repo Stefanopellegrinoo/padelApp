@@ -71,15 +71,30 @@ export default async function HomePage() {
             </SubmitButton>
           </form>
         )}
+        {/*
+          El torneo rápido es la puerta más barata que tiene la app: no pide
+          cuenta, no pide link y se entiende en una tarde. Nació como un
+          renglón de 12.5px abajo de todo, debajo del párrafo gris de las
+          invitaciones, y ahí no lo encontraba nadie —se probó—. Un camino que
+          no pide cuenta no puede estar escondido detrás de los dos que sí la
+          piden: es el único que alguien puede recorrer entero sin registrarse,
+          así que es el que más barato sale mostrar.
+
+          Queda tercero y con borde, no lleno: sigue siendo secundario contra
+          "Crear mi torneo". Lo que cambió es que ahora se toca, no que grite.
+        */}
+        <Link
+          href="/rapido"
+          className="rounded-field border border-line p-4 text-center font-extrabold text-text"
+        >
+          Armar un torneo rápido
+          <span className="block pt-[3px] text-[12px] font-semibold text-muted">
+            Una tarde, sin cuenta.
+          </span>
+        </Link>
         <p className="text-pretty pt-[2px] text-center text-[12.5px] font-medium text-muted">
           ¿Te pasaron un link de invitación? Abrilo y elegí tu nombre.
         </p>
-        <Link
-          href="/rapido"
-          className="text-pretty text-center text-[12.5px] font-bold text-accent-link underline underline-offset-2"
-        >
-          ¿Sólo una tarde? Armá un torneo rápido, sin cuenta.
-        </Link>
       </div>
     </main>
   )

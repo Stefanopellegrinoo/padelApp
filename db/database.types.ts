@@ -896,6 +896,7 @@ export type Database = {
           id: string
           invite_token: string
           name: string
+          players_can_score: boolean
           rules_text: string
           rules_updated_at: string | null
         }
@@ -905,6 +906,7 @@ export type Database = {
           id?: string
           invite_token?: string
           name: string
+          players_can_score?: boolean
           rules_text?: string
           rules_updated_at?: string | null
         }
@@ -914,6 +916,7 @@ export type Database = {
           id?: string
           invite_token?: string
           name?: string
+          players_can_score?: boolean
           rules_text?: string
           rules_updated_at?: string | null
         }
@@ -992,6 +995,7 @@ export type Database = {
       matchday_season: { Args: { p_matchday: string }; Returns: string }
       my_player_id: { Args: never; Returns: string }
       open_matchday: { Args: { p_matchday: string }; Returns: undefined }
+      players_can_score: { Args: { p_season: string }; Returns: boolean }
       promote_guest: {
         Args: { p_before?: string; p_entry: string }
         Returns: undefined

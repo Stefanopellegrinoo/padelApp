@@ -15,7 +15,7 @@ import { addToDiscipline, removeFromDiscipline } from '@/db/discipline-entries'
 import { createTeam, deleteTeam } from '@/db/discipline-teams'
 import { addSquadSeat, claimOwnSeat, removeSeat, renameSeat, unlinkSeat } from '@/db/entries'
 import { EdgeError } from '@/db/errors'
-import { deleteSeason, renameSeason } from '@/db/season'
+import { deleteSeason, renameSeason, updateSeasonPlayersCanScore } from '@/db/season'
 import { serverClient } from '@/db/server'
 
 export type WriteResult = { ok: true } | { ok: false; error: string }
@@ -306,6 +306,21 @@ export async function removeTeam(seasonId: string, teamId: string): Promise<Writ
 export async function saveRules(seasonId: string, disciplineId: DisciplineId, text: string): Promise<WriteResult> {
   return onSeason(seasonId, async (supabase) => {
     await updateDisciplineRules(supabase, seasonId, disciplineId, text)
+  })
+}
+
+/**
+ * El permiso para que el plantel cargue los resultados. Revalida la temporada
+ * entera como todo lo de acá, y por un motivo concreto: lo que cambia con esto
+ * es la pantalla de la FECHA —le aparecen o le desaparecen los botones de
+ * carga a todos los demás—, no esta.
+ */
+export async function savePlayersCanScore(
+  seasonId: string,
+  enabled: boolean,
+): Promise<WriteResult> {
+  return onSeason(seasonId, async (supabase) => {
+    await updateSeasonPlayersCanScore(supabase, seasonId, enabled)
   })
 }
 

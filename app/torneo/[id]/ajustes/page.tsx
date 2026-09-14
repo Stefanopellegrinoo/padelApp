@@ -11,6 +11,7 @@ import {
 } from '@/db/read'
 import { serverClient } from '@/db/server'
 import { renameTournament } from './actions'
+import { CargaDeJugadores } from './carga-jugadores'
 import { CopiarLink } from './copiar'
 import { Disciplinas } from './disciplinas'
 import { EliminarTorneo } from './eliminar'
@@ -211,6 +212,15 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
           <div className={`${ROW} border-t border-line`}>
             <span className={LABEL}>Link de invitación</span>
             <CopiarLink token={header.inviteToken} />
+          </div>
+
+          {/* Lo único que abre: cargar el resultado de un partido de una fecha
+              EN JUEGO. Abrir, cerrar y reabrir la fecha, el formato, las reglas
+              y el plantel siguen siendo de quien organiza, con el permiso
+              prendido o apagado. */}
+          <div className={`${ROW} border-t border-line`}>
+            <span className={LABEL}>Los jugadores cargan los resultados</span>
+            <CargaDeJugadores seasonId={seasonId} enabled={header.playersCanScore} />
           </div>
         </div>
 

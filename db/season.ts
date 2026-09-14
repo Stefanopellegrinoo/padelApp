@@ -714,3 +714,24 @@ export async function renameSeason(
 // su reemplazo es `updateDisciplineRules` (`db/discipline.ts`), que además
 // dual-escribe `seasons.rules_text` en la disciplina default -- ver ese
 // comentario para el porqué del dual-write.
+// `updateSeasonConfig` también se fue con el CONTRACT: `disciplines.config`
+// es la fuente real desde PR 5 y su reemplazo es `updateDisciplineConfig`
+// (`db/discipline.ts`).
+
+/**
+ * The "players load the results" permission (`seasons.players_can_score`, 0089).
+ * `seasons_update` already restricts the row to `created_by`, so a player who
+ * calls this gets zero rows back, not a write — the guard is RLS, not this
+ * function.
+ */
+export async function updateSeasonPlayersCanScore(
+  supabase: Client,
+  seasonId: string,
+  enabled: boolean,
+): Promise<void> {
+  const { error } = await supabase
+    .from('seasons')
+    .update({ players_can_score: enabled })
+    .eq('id', seasonId)
+  if (error !== null) throw new EdgeError(`No se pudo guardar el permiso: ${error.message}`)
+}

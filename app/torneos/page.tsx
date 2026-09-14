@@ -115,14 +115,39 @@ async function cardFor(supabase: Client, header: SeasonHeader): Promise<SeasonCa
   }
 }
 
-function CrearTorneo({ className = '' }: { className?: string }) {
+/**
+ * Los dos caminos para arrancar algo, JUNTOS y en un solo componente.
+ *
+ * Antes esto era sólo "Crear torneo", y el torneo rápido vivía nada más que
+ * en la home (`app/page.tsx`). Para un usuario con sesión eso es casi
+ * invisible: `/torneos` ES la pantalla de entrada de la app —lo dice el
+ * comentario de abajo— y la home queda de paso. Se probó y no se encontraba.
+ *
+ * Van en el mismo componente y no como dos elementos suelos en cada rama a
+ * propósito: esta pantalla dibuja las acciones DOS veces (el estado vacío y
+ * el que ya tiene torneos), y con dos elementos separados agregar algo a una
+ * rama y olvidarlo en la otra es exactamente el error que trajo hasta acá.
+ * Un componente, dos call sites, imposible que divergan.
+ */
+function Acciones({ className = '' }: { className?: string }) {
   return (
-    <Link
-      href="/torneos/nuevo"
-      className={`rounded-field bg-accent p-4 text-center text-[15px] font-extrabold text-accent-text ${className}`}
-    >
-      Crear torneo
-    </Link>
+    <div className={`flex flex-col gap-[9px] ${className}`}>
+      <Link
+        href="/torneos/nuevo"
+        className="rounded-field bg-accent p-4 text-center text-[15px] font-extrabold text-accent-text"
+      >
+        Crear torneo
+      </Link>
+      <Link
+        href="/rapido"
+        className="rounded-field border border-line p-4 text-center text-[15px] font-extrabold text-text"
+      >
+        Armar un torneo rápido
+        <span className="block pt-[3px] text-[12px] font-semibold text-muted">
+          Una tarde, sin tabla ni fechas.
+        </span>
+      </Link>
+    </div>
   )
 }
 
@@ -167,7 +192,7 @@ export default async function MisTorneosPage() {
             Creá el tuyo y compartí el link con el grupo. Si alguien ya te pasó un link de
             invitación, abrilo y elegí tu nombre de la lista.
           </p>
-          <CrearTorneo className="mt-2" />
+          <Acciones className="mt-2" />
           {user === null && (
             <Link href="/login" className="text-center text-[12.5px] font-bold text-accent-link">
               Entrar
@@ -213,7 +238,7 @@ export default async function MisTorneosPage() {
             ))}
           </div>
 
-          <CrearTorneo className="mt-1" />
+          <Acciones className="mt-1" />
 
           {finished.length > 0 && (
             <>

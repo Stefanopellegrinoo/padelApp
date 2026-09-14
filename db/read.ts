@@ -76,6 +76,8 @@ export interface SeasonHeader {
   status: string
   regularMatchdays: number
   isAdmin: boolean
+  /** The admin let the squad load the results themselves (`seasons.players_can_score`, 0089). Opening, closing and every setting stay admin-only. */
+  playersCanScore: boolean
   /**
    * En orden de `position, created_at` — el mismo criterio que
    * `defaultDisciplineId` y `create_masters` (0021). Nunca vacío: REQ-NR-4 lo
@@ -227,6 +229,7 @@ interface SeasonRow {
   name: string
   created_by: string
   invite_token: string
+  players_can_score: boolean
 }
 
 interface DisciplineHeaderRow {
@@ -313,6 +316,7 @@ function toSeasonHeader(
     isAdmin: row.created_by === userId,
     disciplines,
     inviteToken: row.invite_token,
+    playersCanScore: row.players_can_score,
   }
 }
 
@@ -337,7 +341,7 @@ function toMatchdaySummary(row: MatchdayRow): MatchdaySummary {
 // #4026): `seasons.status` ya no tiene lector de producción. `SeasonHeader.
 // status` deriva de `disciplines.status` (REQ-D3-3, `seasonStatusOf`), con la
 // MISMA fila que `DISCIPLINE_HEADER_COLUMNS` ya trae — sin una consulta más.
-const SEASON_HEADER_COLUMNS = 'id, name, created_by, invite_token'
+const SEASON_HEADER_COLUMNS = 'id, name, created_by, invite_token, players_can_score'
 const DISCIPLINE_HEADER_COLUMNS =
   'id, season_id, kind, config, weight, pair_size, has_masters, allows_draw, formato_default, status'
 

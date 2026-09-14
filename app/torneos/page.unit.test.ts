@@ -41,6 +41,7 @@ function header(): SeasonHeader {
     status: 'ACTIVE',
     regularMatchdays: 10,
     isAdmin: false,
+    playersCanScore: false,
     inviteToken: 'token',
     disciplines: [discipline],
   }

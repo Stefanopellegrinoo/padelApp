@@ -250,6 +250,7 @@ describe('Jugador trae las estadísticas de la disciplina de la URL, no la [0] d
       status: 'ACTIVE',
       regularMatchdays: tPadel.config.regularMatchdays,
       isAdmin: false,
+      playersCanScore: false,
       inviteToken: 'token',
       disciplines: [tPadel, tFifa],
     })

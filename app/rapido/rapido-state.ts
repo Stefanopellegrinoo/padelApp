@@ -9,12 +9,12 @@
  * interna de `buildPairs`, y la alternativa —entrar por `@/core/matchings`—
  * era esquivar en silencio el límite que el propio `core/index.ts` declara.
  *
- * OJO con `allMatchings`: tira por arriba de MAX_PLAYERS (12), porque (n-1)!!
+ * OJO con `allMatchings`: tira por arriba de MAX_PAIRING_POOL (12), porque (n-1)!!
  * llega a 654 millones con veinte jugadores. El techo lo pone quien la llama;
  * acá lo pone `armadoWarning`, y `armarRotativas` repite la guarda por si
  * algún día se arma un torneo sin pasar por el aviso.
  */
-import { allMatchings, buildFixture, MAX_PLAYERS, type Pair } from '@/core'
+import { allMatchings, buildFixture, MAX_PAIRING_POOL, type Duo } from '@/core'
 
 // ── El deporte ────────────────────────────────────────────────────────────
 export const DEPORTES = ['PADEL', 'PING_PONG'] as const
@@ -153,10 +153,10 @@ export function armadoWarning(armado: Armado): string | null {
 
   // El techo es parejo para TODO armado, no sólo para ROTATIVAS: el motivo
   // real es que `allMatchings` (la usa el sorteo americano, más abajo) tira
-  // por encima de MAX_PLAYERS, así que el sorteo dejaría de funcionar. Un
+  // por encima de MAX_PAIRING_POOL, así que el sorteo dejaría de funcionar. Un
   // techo que dependiera del modo sería más confuso que uno solo para todos.
-  if (cantidad > MAX_PLAYERS) {
-    return `Como mucho ${MAX_PLAYERS} jugadores.`
+  if (cantidad > MAX_PAIRING_POOL) {
+    return `Como mucho ${MAX_PAIRING_POOL} jugadores.`
   }
 
   if (armado.modalidad === 'PAREJAS') {
@@ -238,9 +238,9 @@ function armarRotativas(armado: Armado, jugadores: string[], random: () => numbe
     const tamanioPool = Math.floor(orden.length / 2) * 2
     const pool = orden.slice(0, tamanioPool)
 
-    if (pool.length > MAX_PLAYERS) {
+    if (pool.length > MAX_PAIRING_POOL) {
       // Inalcanzable en la práctica: `armadoWarning` frena cualquier armado
-      // de más de MAX_PLAYERS jugadores antes de que llegue acá. Guarda
+      // de más de MAX_PAIRING_POOL jugadores antes de que llegue acá. Guarda
       // explícita porque `allMatchings` tira si esto pasa.
       throw new Error(`El pool de la ronda es demasiado grande: son ${pool.length}.`)
     }
@@ -248,7 +248,7 @@ function armarRotativas(armado: Armado, jugadores: string[], random: () => numbe
     // ponytail: sorteo greedy por ronda; si repetir compañero molesta de
     // verdad, acá va un diseño de whist
     const candidatos = allMatchings(pool.map(String))
-    let mejor: Pair[] | undefined
+    let mejor: Duo[] | undefined
     let mejorRepetidos = Infinity
     for (const candidato of candidatos) {
       const repetidos = candidato.filter((par) =>

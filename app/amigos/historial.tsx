@@ -1,6 +1,7 @@
 import type { CasualMatch, SharedMatch, TournamentMatch } from '@/db/friends'
 import { matchdayDay } from '@/app/format'
 import { DISCIPLINE_LABELS } from '@/app/torneos/nuevo/wizard-state'
+import type { ReactNode } from 'react'
 import { CasualMatchRow } from './[playerId]/cargar'
 
 export interface HistorialProps {
@@ -110,73 +111,169 @@ function autoriaDe(partido: CasualMatch): string {
   return `Cargó ${partido.createdBy} · editó ${partido.updatedBy}`
 }
 
+/** Ganados, perdidos y empatados de un lado del cara a cara. */
+export interface Registro {
+  won: number
+  lost: number
+  drew: number
+}
+
+export interface Resumen {
+  /** Todos los partidos de la lista, también los de torneo todavía sin resultado. */
+  total: number
+  /** De compañeros: el resultado de la pareja. */
+  juntos: Registro
+  /** Enfrentados: el TUYO contra él. */
+  enContra: Registro
+}
+
+/**
+ * El resumen del cara a cara, contado de la MISMA lista que se dibuja abajo
+ * -- plan 2a, §4.4: "si querés conservar un resumen arriba de la lista, que
+ * salga de la lista y no la reemplace". Cero consultas nuevas.
+ */
+export function resumenDe(partidos: readonly SharedMatch[]): Resumen {
+  const juntos: Registro = { won: 0, lost: 0, drew: 0 }
+  const enContra: Registro = { won: 0, lost: 0, drew: 0 }
+  for (const partido of partidos) {
+    if (partido.outcome === null) continue
+    const registro = partido.together ? juntos : enContra
+    registro[partido.outcome] += 1
+  }
+  return { total: partidos.length, juntos, enContra }
+}
+
+const MESES = [
+  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+]
+
+/** `"Octubre 2026"` -- el separador de la lista. Una fecha de torneo sin jugar no tiene mes. */
+export function mesDe(playedOn: string | null): string {
+  if (playedOn === null) return 'Sin fecha'
+  const [year, month] = playedOn.split('-')
+  return `${MESES[Number(month) - 1] ?? ''} ${year ?? ''}`
+}
+
+/**
+ * Agrupa por mes los partidos CONSECUTIVOS, sin reordenar: el orden ya lo
+ * decidió `historyWith` y acá no se vuelve a decidir.
+ */
+function porMes(partidos: readonly SharedMatch[]): { mes: string; partidos: SharedMatch[] }[] {
+  return partidos.reduce<{ mes: string; partidos: SharedMatch[] }[]>((grupos, partido) => {
+    const mes = mesDe(partido.playedOn)
+    const ultimo = grupos[grupos.length - 1]
+    if (ultimo !== undefined && ultimo.mes === mes) {
+      return [...grupos.slice(0, -1), { mes, partidos: [...ultimo.partidos, partido] }]
+    }
+    return [...grupos, { mes, partidos: [partido] }]
+  }, [])
+}
+
+// Las clases de cada línea de la tarjeta. Tamaños del registro de la casa:
+// kicker 12px, resultado como el nombre de una tarjeta de Mis torneos, el
+// resto en el gris de los subtítulos.
+const KICKER = 'min-w-0 text-[12px] font-bold text-muted'
+const RESULTADO = 'text-[15.5px] leading-[1.3] font-extrabold tracking-[-.02em]'
+const DETALLE = 'text-[13px] font-semibold text-muted'
+const AUTORIA = 'text-[11.5px] font-semibold text-muted'
+
+const INSIGNIA: Record<Resultado, { texto: string; clase: string }> = {
+  won: { texto: 'Ganado', clase: 'bg-ok-bg text-up' },
+  lost: { texto: 'Perdido', clase: 'bg-warn-bg text-down' },
+  drew: { texto: 'Empate', clase: 'bg-chip text-muted' },
+}
+
+/**
+ * La pastilla de resultado, en los colores con que la app ya dice "bien" y
+ * "mal" (Tabla, Stats). Es un `<span>`: el texto del partido sigue entero en
+ * los `<p>` y esto sólo lo deja leer de un vistazo.
+ */
+function Insignia({ outcome }: { outcome: Resultado | null }) {
+  if (outcome === null) return null
+  const { texto, clase } = INSIGNIA[outcome]
+  return (
+    <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10.5px] font-extrabold ${clase}`}>{texto}</span>
+  )
+}
+
+/** La primera línea de cada tarjeta: fecha y deporte a la izquierda, la pastilla a la derecha. */
+function Encabezado({ outcome, children }: { outcome: Resultado | null; children: ReactNode }) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <p className={KICKER}>{children}</p>
+      <Insignia outcome={outcome} />
+    </div>
+  )
+}
+
 /**
  * El historial (torneo + casual) con un amigo, sin leer nada -- recibe
  * `SharedMatch[]` ya mezclado y ordenado por props (`historyWith`, Task 2).
  * Mismo reparto que `rules-body.tsx`: la página lee, esto dibuja.
  *
- * Una lista, no dos contadores (diseño §4.4: *"un historial para acordarte
- * bien de cada partido que jugaste"*). Cada fila trae su propio detalle --
- * `historyWith` ya lo entrega por partido, así que agregarlo de nuevo en un
- * número sería tirar la mitad del dato que se acaba de pagar por leer.
+ * Una lista agrupada por mes (diseño §4.4: *"un historial para acordarte
+ * bien de cada partido que jugaste"*). Cada tarjeta trae su propio detalle.
+ *
+ * Los textos de cada `<p>` los fija `historial.unit.test.ts` línea por línea:
+ * todo lo decorativo (separador de mes, pastilla) va en `<span>`/`<h3>`.
  */
 export function Historial({ nombre, friendPlayerId, partidos }: HistorialProps) {
-  return (
-    <div className="flex flex-col gap-4">
-      {partidos.length === 0 ? (
-        // Estado vacío: dice qué falta, no dibuja una tabla sin filas.
-        <p className="text-pretty text-[13.5px] leading-[1.5] font-[550] text-muted">
+  if (partidos.length === 0) {
+    // Estado vacío: dice qué falta, no dibuja una tabla sin filas.
+    return (
+      <div className="flex flex-col gap-1 rounded-card border border-dashed border-line p-5 text-center">
+        <p className="text-pretty text-[15px] font-extrabold tracking-[-.02em]">
           Todavía no jugaron ningún partido juntos.
         </p>
-      ) : (
-        <div className="flex flex-col gap-1.5">
-          {partidos.map((partido) => {
+        <p className="text-pretty text-[13px] font-[550] text-muted">Cargá el primero y queda acá.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-5">
+      {porMes(partidos).map((grupo, index) => (
+        <section key={`${grupo.mes}-${index}`} className="flex flex-col gap-2">
+          <div className="flex items-center gap-3">
+            <h3 className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">{grupo.mes}</h3>
+            <span className="h-px flex-1 bg-line" />
+          </div>
+          {grupo.partidos.map((partido) => {
             if (partido.kind === 'tournament') {
               return (
                 <div
                   key={partido.matchId}
-                  className="flex flex-col gap-1 rounded-field border-[1.5px] border-line p-[14px]"
+                  className="flex flex-col gap-1 rounded-[14px] border border-line bg-surface p-[14px]"
                 >
-                  <p className="text-[13.5px] font-[550] text-muted">
-                    {/* Mismo mapa que ya usa el wizard de creación de torneos para
-                        'PADEL' -> 'Pádel' (`DISCIPLINE_LABELS`, `app/torneos/nuevo/wizard-state.ts:102`)
-                        -- mismo split que ya sigue `PublicFormat`/`DisciplineHeader`
-                        (`db/read.ts:156-166`): la capa de datos tipa el literal, la
-                        PANTALLA lo traduce a etiqueta con este mapa (acá; y en
-                        `app/torneo/[id]/page.tsx:136`, `ajustes/page.tsx:132`,
-                        `[disciplina]/ajustes/page.tsx:61`, `reglas/page.tsx:65,92`,
-                        `ajustes/disciplinas.tsx:75,208`).
-                        `db/read.ts` no traduce nada -- no importa `DISCIPLINE_LABELS`.
-                        Sin cast: `partido.sport` ya es literal `'PADEL' | 'FIFA'`
-                        (`db/friends.ts`), lo mismo que tipa `DisciplineKind`. */}
+                  {/* La etiqueta del deporte la traduce la PANTALLA con
+                      `DISCIPLINE_LABELS`, como el resto de la app; `db/` sólo
+                      tipa el literal `'PADEL' | 'FIFA'`. */}
+                  <Encabezado outcome={partido.outcome}>
                     {fechaDe(partido)} · {DISCIPLINE_LABELS[partido.sport]} · torneo {partido.seasonName}
-                  </p>
-                  <p className="text-[15px] font-extrabold tracking-[-.02em]">{resultadoDe(partido)}</p>
+                  </Encabezado>
+                  <p className={RESULTADO}>{resultadoDe(partido)}</p>
                 </div>
               )
             }
 
             const equipo = equipoDe(partido)
             return (
-              <CasualMatchRow
-                key={partido.matchId}
-                friendPlayerId={friendPlayerId}
-                partido={partido}
-              >
-                <p className="text-[13.5px] font-[550] text-muted">
+              <CasualMatchRow key={partido.matchId} friendPlayerId={friendPlayerId} partido={partido}>
+                <Encabezado outcome={partido.outcome}>
                   {matchdayDay(partido.playedOn)} · {DISCIPLINE_LABELS[partido.sport]}
-                </p>
-                <p className="text-[15px] font-extrabold tracking-[-.02em]">
+                </Encabezado>
+                <p className={RESULTADO}>
                   {resultadoCasualDe(partido, nombre)}
                   {equipo !== null ? `, ${equipo}` : ''}
                 </p>
-                <p className="text-[13.5px] font-[550] text-muted">{nombresDe(partido)}</p>
-                <p className="text-[13.5px] font-[550] text-muted">{autoriaDe(partido)}</p>
+                <p className={DETALLE}>{nombresDe(partido)}</p>
+                <p className={AUTORIA}>{autoriaDe(partido)}</p>
               </CasualMatchRow>
             )
           })}
-        </div>
-      )}
+        </section>
+      ))}
     </div>
   )
 }

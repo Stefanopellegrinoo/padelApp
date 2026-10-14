@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, it, expect } from 'vitest'
 import type { CasualMatch, SharedMatch, TournamentMatch } from '@/db/friends'
 import { matchdayDay } from '@/app/format'
-import { Historial } from './historial'
+import { Historial, mesDe, resumenDe } from './historial'
 
 // `SharedMatch` trae el detalle completo desde Task 2: fecha, torneo y
 // marcador. Un fixture acá completa TODOS los campos, como cualquier caller
@@ -365,5 +365,61 @@ describe('Historial', () => {
       `${matchdayDay('2026-08-14')} · Pádel · torneo Los Jueves`,
       'En contra: Ganaste 6-3',
     ])
+  })
+})
+
+describe('resumenDe', () => {
+  it('cuenta el cara a cara de la misma lista: juntos de la pareja, en contra el tuyo', () => {
+    const resumen = resumenDe([
+      partido({ matchId: '1', together: true, outcome: 'won' }),
+      partido({ matchId: '2', together: true, outcome: 'lost' }),
+      partido({ matchId: '3', together: false, outcome: 'won' }),
+      partidoCasual({ matchId: '4', together: false, outcome: 'drew' }),
+      partidoCasual({ matchId: '5', together: false, outcome: 'lost' }),
+    ])
+    expect(resumen).toEqual({
+      total: 5,
+      juntos: { won: 1, lost: 1, drew: 0 },
+      enContra: { won: 1, lost: 1, drew: 1 },
+    })
+  })
+
+  it('un partido de torneo sin resultado suma al total pero no a ningún lado', () => {
+    expect(resumenDe([partido({ outcome: null, score: null })])).toEqual({
+      total: 1,
+      juntos: { won: 0, lost: 0, drew: 0 },
+      enContra: { won: 0, lost: 0, drew: 0 },
+    })
+  })
+
+  it('sin partidos, todo en cero', () => {
+    expect(resumenDe([]).total).toBe(0)
+  })
+})
+
+describe('mesDe', () => {
+  it('nombra el mes y el año sin pasar por Date (sin corrimiento de huso)', () => {
+    expect(mesDe('2026-10-01')).toBe('Octubre 2026')
+    expect(mesDe('2026-01-31')).toBe('Enero 2026')
+  })
+
+  it('una fecha de torneo sin jugar no inventa un mes', () => {
+    expect(mesDe(null)).toBe('Sin fecha')
+  })
+
+  it('agrupa por mes sin reordenar: dos meses, dos separadores, en el orden que llegan', () => {
+    const html = renderToStaticMarkup(
+      Historial({
+        nombre: 'Juan',
+        friendPlayerId: 'amigo-1',
+        partidos: [
+          partidoCasual({ matchId: 'a', playedOn: '2026-10-11' }),
+          partidoCasual({ matchId: 'b', playedOn: '2026-10-04' }),
+          partido({ matchId: 'c', playedOn: '2026-09-18' }),
+        ],
+      }),
+    )
+    expect(html.match(/<h3/g)).toHaveLength(2)
+    expect(html.indexOf('Octubre 2026')).toBeLessThan(html.indexOf('Septiembre 2026'))
   })
 })

@@ -59,7 +59,7 @@ export function playersFromJson(raw: string): CasualPlayerInput[] {
     throw BAD_PLAYERS
   }
   if (!Array.isArray(parsed) || parsed.length === 0) throw BAD_PLAYERS
-  return parsed.map((item: unknown): CasualPlayerInput => {
+  const players = parsed.map((item: unknown): CasualPlayerInput => {
     if (typeof item !== 'object' || item === null) throw BAD_PLAYERS
     const { side, playerId, guestName } = item as Record<string, unknown>
     if (side !== 'mine' && side !== 'theirs') throw BAD_PLAYERS
@@ -71,4 +71,7 @@ export function playersFromJson(raw: string): CasualPlayerInput[] {
     }
     throw BAD_PLAYERS
   })
+  const ids = players.flatMap((player) => (player.playerId === null ? [] : [player.playerId]))
+  if (new Set(ids).size !== ids.length) throw new EdgeError('No podés elegir al mismo amigo dos veces.')
+  return players
 }

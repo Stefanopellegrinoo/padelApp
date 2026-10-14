@@ -69,14 +69,18 @@ function slotOf({ choice, name }: SlotChoice): Slot | null {
  *
  * Todos los campos son CONTROLADOS -- cada uno con su propio `useState`,
  * seedeado desde `initial` --, NO por lo que arma el hook de arriba. Toda
- * action de un `<form>` -- también una que TERMINA en error -- dispara un
- * `HTMLFormElement.reset()` nativo sobre el DOM (verificado en React 19:
+ * action de un `<form action={fn}>` -- también una que TERMINA en error --
+ * dispara un `HTMLFormElement.reset()` nativo (verificado en React 19:
  * `startHostTransition` → `requestFormReset$1` → `fiber.stateNode.reset()`).
- * Un input sin controlar (`defaultValue`) vuelve a su valor original con ese
- * reset, y la persona pierde lo tipeado. Uno controlado no: su valor sale de
- * un estado de React que el reset del DOM no toca, y el próximo render (el
- * mismo que muestra el error) lo vuelve a escribir. Los `<select>` de los
- * lugares y el modo también: sólo el `players` oculto viaja en el FormData.
+ * Los inputs de TEXTO controlados lo sobreviven (React mantiene su valor por
+ * defecto sincronizado con el estado), pero los radios y los `<select>`
+ * controlados NO: el reset los deja visualmente en su primer valor aunque el
+ * estado siga bien (lo prueba `cargar.unit.test.ts`). Por eso el envío es
+ * `onSubmit` + `startTransition(() => formAction(data))` y no `<form
+ * action>`: la action corre igual, pero React nunca pide el reset. Mismo
+ * criterio que `app/torneo/[id]/ajustes/disciplinas.tsx` (líneas 177 y 224),
+ * que dispara su escritura desde un `startTransition` y no desde `<form
+ * action>`. Sólo el `players` oculto viaja en el FormData, armado del estado.
  *
  * El "quién ganó" es SIEMPRE un radio obligatorio con las tres opciones
  * (ruling del orquestador, task-4-brief.md).
@@ -137,6 +141,7 @@ export function CasualForm({
 
   return (
     <form
+      // Ver el JSDoc de arriba: sin `<form action>` para que React no resetee radios ni selects.
       onSubmit={(event) => {
         event.preventDefault()
         const data = new FormData(event.currentTarget)

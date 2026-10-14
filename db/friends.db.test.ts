@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { defaultConfig, type SideSize } from '@/core'
 import { EdgeError } from './errors'
+import { playersFrom, playersFromJson } from '../app/amigos/[playerId]/cargar-state'
+import { casualInputFrom } from '../app/amigos/casual-form-data'
 import {
   historyWith,
   requestFriendship,
@@ -1521,5 +1523,71 @@ describe('partido casual — mensajes legibles', () => {
       expect(motivo).toBeInstanceOf(EdgeError)
       expect((motivo as EdgeError).message).toBe('Ese ID no es válido.')
     }
+  })
+})
+
+// ── el camino del servidor del formulario (plan-amigos-deporte-y-2v2, Tarea 4a) ─
+// Lo que `loadCasualMatch` hace con el FormData que arma `CasualForm`, menos
+// `serverClient()` (cookies): mismo parseo (`playersFromJson` +
+// `casualInputFrom`) y el mismo `createCasualMatch`, con un cliente autenticado.
+
+describe('partido casual — lo que manda el formulario', () => {
+  it('2v2 FIFA con invitado: los jugadores, lados y nombres quedan en la base y cada amigo lo ve', async () => {
+    const yo = await createTestUser()
+    const compa1 = await createTestUser()
+    const rival1 = await createTestUser()
+    await amistadAceptada(yo.playerId, compa1.playerId)
+    await amistadAceptada(yo.playerId, rival1.playerId)
+
+    // Exactamente lo que produce el formulario: `players` sale de `playersFrom`.
+    const formData = new FormData()
+    formData.set('friendPlayerId', rival1.playerId)
+    formData.set('sport', 'FIFA')
+    formData.set('playedOn', '2026-08-30')
+    formData.set('outcome', 'won')
+    formData.set('scoreMine', '4')
+    formData.set('scoreTheirs', '2')
+    formData.set('teamMine', 'River')
+    formData.set('teamTheirs', 'Boca')
+    formData.set(
+      'players',
+      JSON.stringify(
+        playersFrom('2v2', {
+          partner: { kind: 'friend', playerId: compa1.playerId },
+          rival1: { kind: 'friend', playerId: rival1.playerId },
+          rival2: { kind: 'guest', name: '  Tano ' },
+        }),
+      ),
+    )
+
+    const players = playersFromJson(String(formData.get('players') ?? ''))
+    const matchId = await createCasualMatch(yo.client, players, casualInputFrom(formData))
+
+    const { data, error } = await adminClient()
+      .from('casual_match_players')
+      .select('side, player_id, guest_name')
+      .eq('match_id', matchId)
+    expect(error).toBeNull()
+    const filas = (data ?? []).map((f) => `${f.side}|${f.player_id ?? ''}|${f.guest_name ?? ''}`).sort()
+    expect(filas).toEqual(
+      [
+        `A|${yo.playerId}|`,
+        `A|${compa1.playerId}|`,
+        `B|${rival1.playerId}|`,
+        'B||Tano',
+      ].sort(),
+    )
+
+    const deCompa = comoCasual((await historyWith(compa1.client, yo.playerId)).find((m) => m.matchId === matchId))
+    expect(deCompa.together).toBe(true)
+    expect(deCompa.outcome).toBe('won')
+    expect(deCompa.score).toEqual({ mine: 4, theirs: 2 })
+    expect(deCompa.rivals.sort()).toEqual([await nombreDe(rival1.playerId), 'Tano'].sort())
+
+    const deRival = comoCasual((await historyWith(rival1.client, yo.playerId)).find((m) => m.matchId === matchId))
+    expect(deRival.together).toBe(false)
+    expect(deRival.outcome).toBe('lost')
+    expect(deRival.teams).toEqual({ mine: 'Boca', theirs: 'River' })
+    expect(deRival.partners).toEqual(['Tano'])
   })
 })

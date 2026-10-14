@@ -53,6 +53,13 @@ describe('playersFromJson (borde de confianza)', () => {
   it('acepta un plantel bien formado', () => {
     expect(playersFromJson(JSON.stringify(ok))).toEqual(ok)
   })
+  it('rechaza el mismo amigo repetido con un mensaje claro', () => {
+    const raw = JSON.stringify([
+      { side: 'mine', playerId: 'a', guestName: null },
+      { side: 'theirs', playerId: 'a', guestName: null },
+    ])
+    expect(() => playersFromJson(raw)).toThrow('No podés elegir al mismo amigo dos veces.')
+  })
   it.each([
     ['JSON roto', '{'],
     ['no es un array', '{"side":"mine"}'],

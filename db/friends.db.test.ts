@@ -1186,29 +1186,43 @@ describe('partido casual — 1v1 y 2v2', () => {
     expect(jugadores).toEqual([])
   })
 
-  it('PADEL con goles, con equipos o con un set 3-3 se rechaza por CHECK aunque se saltee TypeScript', async () => {
+  it('la base no conoce deportes: valida la forma del id y lo genérico, no la lista', async () => {
     const yo = await createTestUser()
     const dos = await createTestUser()
     await amistadAceptada(yo.playerId, dos.playerId)
-    const setValido = [{ set_number: 1, games_a: 6, games_b: 4 }]
 
-    // Control positivo: un PADEL bien formado SÍ pasa por la misma RPC.
-    const control = await rpcDirecta(yo.client, yo.playerId, dos.playerId, { p_sport: 'PADEL', p_sets: setValido })
-    expect(control.error).toBeNull()
+    // Control positivo: un deporte nuevo y uno desconocido pasan la RPC.
+    for (const p_sport of ['PADEL', 'BASQUET', 'TEJO']) {
+      expect((await rpcDirecta(yo.client, yo.playerId, dos.playerId, { p_sport })).error).toBeNull()
+    }
 
     const casos: Array<[Record<string, unknown>, string]> = [
-      [{ p_sport: 'PADEL', p_sets: setValido, p_score_a: 1, p_score_b: 0 }, 'casual_padel_shape'],
-      [{ p_sport: 'PADEL', p_sets: setValido, p_team_a: 'Boca' }, 'casual_teams_fifa'],
+      [{ p_sport: 'padel' }, 'casual_sport_id'],
+      [{ p_sport: '' }, 'casual_sport_id'],
       [{ p_sport: 'PADEL', p_sets: [{ set_number: 1, games_a: 3, games_b: 3 }] }, 'casual_sets_no_draw'],
-      // Y pádel sin ganador: el empate no existe en pádel.
-      [{ p_sport: 'PADEL', p_sets: setValido, p_winner_side: null }, 'casual_padel_shape'],
+      [{ p_score_a: 1, p_score_b: null }, 'casual_score_pair'],
     ]
     for (const [overrides, constraint] of casos) {
       const { error } = await rpcDirecta(yo.client, yo.playerId, dos.playerId, overrides)
       expect(error?.code).toBe('23514')
       expect(error?.message).toContain(constraint)
     }
-    expect(await partidosCargadosPor(yo.playerId)).toBe(1)
+    expect(await partidosCargadosPor(yo.playerId)).toBe(3)
+  })
+
+  it('riesgo aceptado: una RPC directa puede guardar un PADEL con goles (la forma por familia la valida la app)', async () => {
+    const yo = await createTestUser()
+    const dos = await createTestUser()
+    await amistadAceptada(yo.playerId, dos.playerId)
+    const setValido = [{ set_number: 1, games_a: 6, games_b: 4 }]
+    // Ver el `ponytail:` de 0093_casual_sport_agnostic.sql.
+    const { error } = await rpcDirecta(yo.client, yo.playerId, dos.playerId, {
+      p_sport: 'PADEL',
+      p_sets: setValido,
+      p_score_a: 1,
+      p_score_b: 0,
+    })
+    expect(error).toBeNull()
   })
 
   it('PADEL a 3 sets: historyWith devuelve los tres sets en orden, orientados para cada lector', async () => {

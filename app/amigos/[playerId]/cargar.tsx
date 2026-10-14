@@ -28,12 +28,17 @@ import {
 
 const INITIAL_STATE: CasualFormState = { error: null }
 
-const INPUT =
-  'rounded-field border-[1.5px] border-line bg-surface p-[13px] text-[16px] font-bold text-text outline-none'
+// El registro de la casa para formularios: campos de `eliminar.tsx`, rótulos
+// en mayúscula de la carga de fechas (`PROMPT`, `carga.tsx`), opciones como
+// el `Opciones` de `/rapido` (elegida en verde lleno, el resto en chip).
+const FOCUS = 'outline-none focus-visible:ring-2 focus-visible:ring-accent-link'
+const INPUT = `w-full min-w-0 rounded-field border-[1.5px] border-line bg-bg p-[13px] text-[16px] font-bold text-text ${FOCUS}`
 const LABEL = 'text-[11.5px] font-extrabold text-muted'
 const LEGEND = 'text-[11.5px] font-extrabold uppercase tracking-[.14em] text-muted'
-const CHIP =
-  'flex min-h-[44px] flex-1 items-center gap-2.5 rounded-field border border-line p-2.5 text-[13.5px] font-[700]'
+/** Una opción de un grupo de radios, dibujada como botón: el radio queda accesible pero invisible. */
+const OPTION =
+  'flex min-h-[44px] flex-1 cursor-pointer items-center justify-center rounded-field bg-chip p-3 text-center text-[14px] font-extrabold has-[:checked]:bg-accent has-[:checked]:text-accent-text has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent-link'
+const ERROR_NOTE = 'rounded-field bg-live-bg px-3 py-2.5 text-[12.5px] font-bold text-live'
 const GUEST = '__guest__'
 
 const MODES: { value: Mode; label: string }[] = [
@@ -197,6 +202,40 @@ export function CasualForm({
       [key]: { ...current[key], ...next },
     }))
 
+  const slotField = (key: SlotKey) => (
+    <div key={key} className="flex flex-col gap-1">
+      <label htmlFor={`${uid}-${key}`} className={LABEL}>
+        {SLOT_LABELS[key]}
+      </label>
+      <select
+        id={`${uid}-${key}`}
+        data-slot={key}
+        value={slots[key].choice}
+        onChange={(e) => setSlot(key, { choice: e.target.value })}
+        className={INPUT}
+      >
+        <option value="">Elegí…</option>
+        {friends.map((friend) => (
+          <option key={friend.playerId} value={friend.playerId}>
+            {friend.displayName}
+          </option>
+        ))}
+        <option value={GUEST}>Otro (sin cuenta)</option>
+      </select>
+      {slots[key].choice === GUEST && (
+        <input
+          data-slot-name={key}
+          aria-label={`Nombre de ${SLOT_LABELS[key].toLowerCase()}`}
+          placeholder="Nombre"
+          value={slots[key].name}
+          onChange={(e) => setSlot(key, { name: e.target.value })}
+          className={INPUT}
+        />
+      )}
+    </div>
+  )
+  const slotKeys = slotsFor(mode)
+
   return (
     <form
       // Ver el JSDoc de arriba: sin `<form action>` para que React no resetee radios ni selects.
@@ -205,7 +244,7 @@ export function CasualForm({
         const data = new FormData(event.currentTarget)
         startTransition(() => formAction(data))
       }}
-      className="flex flex-col gap-3 rounded-field border-[1.5px] border-line p-[14px]"
+      className="flex flex-col gap-5 rounded-card border border-line bg-surface p-4"
     >
       <input type="hidden" name="friendPlayerId" value={friendPlayerId} />
       {initial !== undefined && <input type="hidden" name="matchId" value={initial.matchId} />}
@@ -213,11 +252,11 @@ export function CasualForm({
         <input type="hidden" name="players" value={JSON.stringify(playersFrom(mode, slotValues))} />
       )}
 
-      <fieldset className="flex flex-col gap-1.5">
-        <legend className={LEGEND}>Deporte</legend>
+      <fieldset className="flex flex-col gap-2">
+        <legend className={`${LEGEND} pb-2`}>Deporte</legend>
         <div className="flex gap-2">
           {DISCIPLINE_KINDS.map((kind) => (
-            <label key={kind} className={CHIP}>
+            <label key={kind} className={OPTION}>
               <input
                 type="radio"
                 name="sport"
@@ -225,7 +264,7 @@ export function CasualForm({
                 required
                 checked={sport === kind}
                 onChange={() => setSport(kind)}
-                className="h-5 w-5 shrink-0 accent-accent"
+                className="sr-only"
               />
               {DISCIPLINE_LABELS[kind]}
             </label>
@@ -233,66 +272,55 @@ export function CasualForm({
         </div>
       </fieldset>
 
-      {initial === undefined ? (
-        <>
-          <fieldset className="flex flex-col gap-1.5">
-            <legend className={LEGEND}>Formato</legend>
-            <div className="flex gap-2">
+      <div className="flex flex-col gap-2">
+        <span className={LEGEND}>Quiénes jugaron</span>
+        {initial === undefined ? (
+          <>
+            <fieldset className="flex gap-2">
+              <legend className="sr-only">Formato</legend>
               {MODES.map((candidate) => (
-                <label key={candidate.value} className={CHIP}>
+                <label key={candidate.value} className={OPTION}>
                   <input
                     type="radio"
                     name="mode"
                     value={candidate.value}
                     checked={mode === candidate.value}
                     onChange={() => setMode(candidate.value)}
-                    className="h-5 w-5 shrink-0 accent-accent"
+                    className="sr-only"
                   />
                   {candidate.label}
                 </label>
               ))}
-            </div>
-          </fieldset>
+            </fieldset>
 
-          {slotsFor(mode).map((key) => (
-            <div key={key} className="flex flex-col gap-1">
-              <label htmlFor={`${uid}-${key}`} className={LABEL}>
-                {SLOT_LABELS[key]}
-              </label>
-              <select
-                id={`${uid}-${key}`}
-                data-slot={key}
-                value={slots[key].choice}
-                onChange={(e) => setSlot(key, { choice: e.target.value })}
-                className={INPUT}
-              >
-                <option value="">Elegí…</option>
-                {friends.map((friend) => (
-                  <option key={friend.playerId} value={friend.playerId}>
-                    {friend.displayName}
-                  </option>
-                ))}
-                <option value={GUEST}>Otro (sin cuenta)</option>
-              </select>
-              {slots[key].choice === GUEST && (
-                <input
-                  data-slot-name={key}
-                  aria-label={`Nombre de ${SLOT_LABELS[key].toLowerCase()}`}
-                  placeholder="Nombre"
-                  value={slots[key].name}
-                  onChange={(e) => setSlot(key, { name: e.target.value })}
-                  className={INPUT}
-                />
-              )}
+            {/* Los dos lados como en un marcador: el tuyo arriba en verde
+                (vos siempre estás), el otro abajo, un "vs" en el medio. */}
+            <div className="flex flex-col gap-2 rounded-field bg-ok-bg p-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-up">Tu lado</span>
+                <span className="rounded-full bg-accent px-3 py-1.5 text-[12.5px] font-extrabold text-accent-text">
+                  Vos
+                </span>
+              </div>
+              {slotKeys.filter((key) => key === 'partner').map(slotField)}
             </div>
-          ))}
-        </>
-      ) : (
-        <p className="text-[13.5px] font-[550] text-muted">{initial.roster}</p>
-      )}
+            <div aria-hidden className="flex items-center gap-3">
+              <span className="h-px flex-1 bg-line" />
+              <span className="text-[11px] font-extrabold uppercase tracking-[.14em] text-muted">vs</span>
+              <span className="h-px flex-1 bg-line" />
+            </div>
+            <div className="flex flex-col gap-2 rounded-field bg-chip p-3">
+              <span className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">El otro lado</span>
+              {slotKeys.filter((key) => key !== 'partner').map(slotField)}
+            </div>
+          </>
+        ) : (
+          <p className="rounded-field bg-chip px-3 py-2.5 text-[13.5px] font-bold">{initial.roster}</p>
+        )}
+      </div>
 
       <div className="flex flex-col gap-1">
-        <label htmlFor={`${uid}-fecha`} className={LABEL}>
+        <label htmlFor={`${uid}-fecha`} className={LEGEND}>
           Fecha
         </label>
         <input
@@ -302,93 +330,101 @@ export function CasualForm({
           value={playedOn}
           onChange={(e) => setPlayedOn(e.target.value)}
           required
-          className={INPUT}
+          className={`${INPUT} dark:scheme-dark`}
         />
       </div>
 
       {isPadel && (
-        <>
+        <div className="flex flex-col gap-3">
+          <span className={LEGEND}>Resultado</span>
           <input type="hidden" name="setsToWin" value={format.setsToWin} />
           <input type="hidden" name="gamesPerSet" value={format.gamesPerSet} />
           <input type="hidden" name="sets" value={setsField(load)} />
-          {STEPPERS.filter((stepper) => stepper.key === 'setsToWin' || stepper.key === 'gamesPerSet').map((stepper) => {
-            const key = stepper.key as 'setsToWin' | 'gamesPerSet'
-            return (
-              <div key={key} data-stepper={key} className="flex items-center justify-between gap-3">
-                <span className={LABEL}>{stepper.label}</span>
-                <Stepper
-                  value={format[key]}
-                  min={stepper.min}
-                  max={stepper.max}
-                  onChange={(next) => setFormatKey(key, next)}
-                />
-              </div>
-            )
-          })}
-          <PadelSets load={load} format={format} otherSide={otherSide} onChange={setLoad} />
-        </>
-      )}
-
-      {!isPadel && (
-        <fieldset className="flex flex-col gap-1.5">
-          <legend className={LEGEND}>¿Quién ganó?</legend>
-          {(
-            [
-              ['won', 'Ganó tu lado'],
-              ['lost', `Ganó ${otherSide}`],
-              ['drew', 'Empataron'],
-            ] as const
-          ).map(([value, label]) => (
-            <label key={value} className="flex min-h-[38px] items-center gap-2 text-[13.5px] font-bold">
-              <input
-                type="radio"
-                name="outcome"
-                value={value}
-                required
-                checked={outcome === value}
-                onChange={() => setOutcome(value)}
-                className="h-4 w-4 shrink-0 accent-accent"
-              />
-              {label}
-            </label>
-          ))}
-        </fieldset>
-      )}
-
-      {!isPadel && (
-        <div className="flex gap-2">
-          <div className="flex flex-1 flex-col gap-1">
-            <label htmlFor={`${uid}-scoreMine`} className={LABEL}>
-              Goles de tu lado
-            </label>
-            <input
-              id={`${uid}-scoreMine`}
-              name="scoreMine"
-              type="number"
-              value={scoreMine}
-              onChange={(e) => setScoreMine(e.target.value)}
-              className={INPUT}
-            />
+          <div className="flex flex-col divide-y divide-line rounded-field border border-line bg-bg px-3">
+            {STEPPERS.filter((stepper) => stepper.key === 'setsToWin' || stepper.key === 'gamesPerSet').map(
+              (stepper) => {
+                const key = stepper.key as 'setsToWin' | 'gamesPerSet'
+                return (
+                  <div key={key} data-stepper={key} className="flex items-center justify-between gap-3 py-2">
+                    <span className="text-[13.5px] font-bold">{stepper.label}</span>
+                    <Stepper
+                      value={format[key]}
+                      min={stepper.min}
+                      max={stepper.max}
+                      onChange={(next) => setFormatKey(key, next)}
+                    />
+                  </div>
+                )
+              },
+            )}
           </div>
-          <div className="flex flex-1 flex-col gap-1">
-            <label htmlFor={`${uid}-scoreTheirs`} className={LABEL}>
-              {rival1Name !== undefined ? `Goles de ${rival1Name}` : 'Goles del otro lado'}
-            </label>
-            <input
-              id={`${uid}-scoreTheirs`}
-              name="scoreTheirs"
-              type="number"
-              value={scoreTheirs}
-              onChange={(e) => setScoreTheirs(e.target.value)}
-              className={INPUT}
-            />
+          <PadelSets load={load} format={format} otherSide={otherSide} onChange={setLoad} />
+        </div>
+      )}
+
+      {!isPadel && (
+        <div className="flex flex-col gap-3">
+          <fieldset className="flex flex-col gap-2">
+            <legend className={`${LEGEND} pb-2`}>¿Quién ganó?</legend>
+            {(
+              [
+                ['won', 'Ganó tu lado'],
+                ['lost', `Ganó ${otherSide}`],
+                ['drew', 'Empataron'],
+              ] as const
+            ).map(([value, label]) => (
+              <label key={value} className={OPTION}>
+                <input
+                  type="radio"
+                  name="outcome"
+                  value={value}
+                  required
+                  checked={outcome === value}
+                  onChange={() => setOutcome(value)}
+                  className="sr-only"
+                />
+                {label}
+              </label>
+            ))}
+          </fieldset>
+
+          <div className="flex items-end gap-2">
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
+              <label htmlFor={`${uid}-scoreMine`} className={`truncate ${LABEL}`}>
+                Goles de tu lado
+              </label>
+              <input
+                id={`${uid}-scoreMine`}
+                name="scoreMine"
+                type="number"
+                value={scoreMine}
+                onChange={(e) => setScoreMine(e.target.value)}
+                className={`${INPUT} h-[52px] text-center text-[20px] font-extrabold tabular-nums`}
+              />
+            </div>
+            <span aria-hidden className="pb-3 text-[20px] font-extrabold text-muted">
+              –
+            </span>
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
+              <label htmlFor={`${uid}-scoreTheirs`} className={`truncate ${LABEL}`}>
+                {rival1Name !== undefined ? `Goles de ${rival1Name}` : 'Goles del otro lado'}
+              </label>
+              <input
+                id={`${uid}-scoreTheirs`}
+                name="scoreTheirs"
+                type="number"
+                value={scoreTheirs}
+                onChange={(e) => setScoreTheirs(e.target.value)}
+                className={`${INPUT} h-[52px] text-center text-[20px] font-extrabold tabular-nums`}
+              />
+            </div>
           </div>
         </div>
       )}
 
       {sport === 'FIFA' && (
         <div className="flex gap-2">
-          <div className="flex flex-1 flex-col gap-1">
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
             <label htmlFor={`${uid}-teamMine`} className={LABEL}>
               Tu equipo
             </label>
@@ -400,7 +436,7 @@ export function CasualForm({
               className={INPUT}
             />
           </div>
-          <div className="flex flex-1 flex-col gap-1">
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
             <label htmlFor={`${uid}-teamTheirs`} className={LABEL}>
               Equipo del otro lado
             </label>
@@ -415,26 +451,29 @@ export function CasualForm({
         </div>
       )}
 
-      {state.error !== null && <p className="text-[12px] font-bold text-live">{state.error}</p>}
-      {problem !== null && state.error === null && <p className="text-[12px] font-bold text-muted">{problem}</p>}
-
-      <div className="flex gap-2">
-        <button
-          type="submit"
-          disabled={pending || problem !== null}
-          className="flex-1 rounded-field bg-accent p-3 text-center text-[14px] font-extrabold text-accent-text disabled:bg-chip disabled:text-muted"
-        >
-          {submitLabel}
-        </button>
-        {onCancel !== undefined && (
-          <button
-            type="button"
-            onClick={onCancel}
-            className="rounded-field bg-chip px-4 py-3 text-[13px] font-extrabold text-muted"
-          >
-            Cancelar
-          </button>
+      <div className="flex flex-col gap-2">
+        {state.error !== null && <p className={ERROR_NOTE}>{state.error}</p>}
+        {problem !== null && state.error === null && (
+          <p className="text-[12px] font-bold text-muted">{problem}</p>
         )}
+        <div className="flex gap-2">
+          <button
+            type="submit"
+            disabled={pending || problem !== null}
+            className="flex-1 rounded-field bg-accent p-4 text-center text-[15px] font-extrabold text-accent-text disabled:bg-chip disabled:text-muted disabled:opacity-100"
+          >
+            {submitLabel}
+          </button>
+          {onCancel !== undefined && (
+            <button
+              type="button"
+              onClick={onCancel}
+              className="rounded-field border border-line px-4 text-[14px] font-extrabold text-text"
+            >
+              Cancelar
+            </button>
+          )}
+        </div>
       </div>
     </form>
   )
@@ -442,7 +481,13 @@ export function CasualForm({
 
 const TAP = 'min-h-[44px] flex-1 rounded-field bg-chip px-3 text-[14px] font-extrabold'
 
-/** Los sets ya cargados y los dos toques del set en curso (A = mi lado). */
+/**
+ * Los sets ya cargados y los dos toques del set en curso (A = mi lado).
+ *
+ * Cada set es una pastilla como las marcas de fecha de la ficha del jugador:
+ * verde llena si lo ganó tu lado, gris si no. El marcador se lee de un vistazo
+ * sin tener que parsear "6-3 · 4-6".
+ */
 function PadelSets({
   load,
   format,
@@ -457,22 +502,37 @@ function PadelSets({
 }) {
   const complete = isComplete(load, format)
   return (
-    <div className="flex flex-col gap-2">
-      <span className={LEGEND}>Sets</span>
-      <p className="text-[14px] font-bold">
-        {load.sets.length === 0
-          ? 'Todavía no cargaste ninguno.'
-          : load.sets.map((set) => `${set.gamesA}-${set.gamesB}`).join(' · ')}
-      </p>
+    <div className="flex flex-col gap-2.5">
+      <div className="flex flex-wrap items-center gap-1.5" aria-live="polite">
+        {load.sets.length === 0 ? (
+          <p className="text-[13px] font-semibold text-muted">Todavía no cargaste ninguno.</p>
+        ) : (
+          load.sets.map((set, index) => (
+            <span
+              key={index}
+              aria-label={`Set ${index + 1}: ${set.gamesA} a ${set.gamesB}`}
+              className={`flex h-[38px] min-w-[52px] items-center justify-center rounded-[9px] px-2.5 text-[15px] font-extrabold tabular-nums ${
+                set.gamesA > set.gamesB ? 'bg-accent text-accent-text' : 'bg-chip text-muted'
+              }`}
+            >
+              {set.gamesA}-{set.gamesB}
+            </span>
+          ))
+        )}
+        {complete && <span className="text-[12px] font-extrabold text-up">Partido cerrado ✓</span>}
+      </div>
       {!complete && load.pendingWinner === null && (
-        <div className="flex gap-2">
-          <button type="button" className={TAP} onClick={() => onChange(chooseWinner(load, 'A'))}>
-            Ganó mi lado
-          </button>
-          <button type="button" className={TAP} onClick={() => onChange(chooseWinner(load, 'B'))}>
-            Ganó {otherSide}
-          </button>
-        </div>
+        <>
+          <span className={LABEL}>¿Quién ganó el set {load.sets.length + 1}?</span>
+          <div className="flex gap-2">
+            <button type="button" className={TAP} onClick={() => onChange(chooseWinner(load, 'A'))}>
+              Ganó mi lado
+            </button>
+            <button type="button" className={TAP} onClick={() => onChange(chooseWinner(load, 'B'))}>
+              Ganó {otherSide}
+            </button>
+          </div>
+        </>
       )}
       {!complete && load.pendingWinner !== null && (
         <>
@@ -482,7 +542,7 @@ function PadelSets({
               <button
                 key={games}
                 type="button"
-                className={TAP}
+                className={`${TAP} min-w-[52px] tabular-nums`}
                 onClick={() => onChange(chooseLoserGames(load, games, format))}
               >
                 {games}
@@ -494,7 +554,7 @@ function PadelSets({
       {(load.sets.length > 0 || load.pendingWinner !== null) && (
         <button
           type="button"
-          className="self-start text-[12px] font-extrabold text-accent-link"
+          className="-my-1 flex min-h-[40px] items-center self-start text-[12.5px] font-extrabold text-accent-link"
           onClick={() => onChange(startLoad())}
         >
           Volver a cargar
@@ -503,6 +563,8 @@ function PadelSets({
     </div>
   )
 }
+
+const ROW_ACTION = '-mx-2 min-h-[40px] rounded-field px-2 text-[12.5px] font-extrabold'
 
 /**
  * Una fila casual de `Historial` (`app/amigos/historial.tsx`), con Editar y
@@ -555,28 +617,32 @@ export function CasualMatchRow({
   }
 
   return (
-    <div className="flex flex-col gap-1 rounded-field border-[1.5px] border-line p-[14px]">
+    <div className="flex flex-col gap-1 rounded-[14px] border border-line bg-surface p-[14px]">
       {children}
-      <div className="flex gap-3 pt-1">
-        <button type="button" onClick={() => setEditing(true)} className="text-[12px] font-extrabold text-accent-link">
-          Editar
-        </button>
+      <div className="-mb-2 mt-2 flex items-center gap-2 border-t border-line pt-1.5">
+        {!confirmingDelete && (
+          <button type="button" onClick={() => setEditing(true)} className={`${ROW_ACTION} text-accent-link`}>
+            Editar
+          </button>
+        )}
         {confirmingDelete ? (
           <form
             action={removeCasualMatch}
             role="group"
             aria-label="Confirmar borrado"
-            className="flex items-center gap-3"
+            className="flex flex-1 items-center gap-2 rounded-field bg-live-bg py-1 pr-1 pl-3"
           >
             <input type="hidden" name="friendPlayerId" value={friendPlayerId} />
             <input type="hidden" name="matchId" value={partido.matchId} />
-            <span className="text-[12px] font-extrabold text-live">¿Borrar?</span>
-            <SubmitButton className="text-[12px] font-extrabold text-live disabled:opacity-60">Sí</SubmitButton>
+            <span className="flex-1 text-[12.5px] font-extrabold text-live">¿Borrar?</span>
+            <SubmitButton className="min-h-[40px] rounded-[9px] bg-live px-4 text-[13px] font-extrabold text-bg disabled:opacity-60">
+              Sí
+            </SubmitButton>
             <button
               type="button"
               autoFocus
               onClick={() => setConfirmingDelete(false)}
-              className="text-[12px] font-extrabold text-muted"
+              className="min-h-[40px] rounded-[9px] bg-bg px-4 text-[13px] font-extrabold text-text"
             >
               No
             </button>
@@ -585,7 +651,7 @@ export function CasualMatchRow({
           <button
             type="button"
             onClick={() => setConfirmingDelete(true)}
-            className="text-[12px] font-extrabold text-live"
+            className={`${ROW_ACTION} ml-auto text-live`}
           >
             Borrar
           </button>

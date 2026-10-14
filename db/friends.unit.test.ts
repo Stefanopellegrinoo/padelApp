@@ -719,8 +719,62 @@ describe('parseCasualResult', () => {
     expect(() => parseCasualResult(fifa({ scoreMine: '-1', scoreTheirs: '0', outcome: 'lost' }))).toThrow(EdgeError)
   })
 
-  it('deporte fuera de PADEL/FIFA', () => {
-    expect(() => parseCasualResult(fifa({ sport: 'Fifa', outcome: 'won' }))).toThrow('Elegí Pádel o FIFA.')
+  it('deporte fuera del registro', () => {
+    for (const sport of ['Fifa', 'TEJO', 'toString']) {
+      expect(() => parseCasualResult(fifa({ sport, outcome: 'won' }))).toThrow('Elegí un deporte de la lista.')
+    }
+  })
+
+  const pingPong = (over: Partial<CasualResultInput>) =>
+    ({ ...base, sport: 'PING_PONG', setsToWin: '2', gamesPerSet: '11', ...over })
+  const goals = (sport: string, over: Partial<CasualResultInput>) => ({ ...base, sport, ...over })
+
+  it('ping pong a 2 sets de 11: deriva won', () => {
+    const sets = '[{"mine":11,"theirs":9},{"mine":9,"theirs":11},{"mine":12,"theirs":10}]'
+    const r = parseCasualResult(pingPong({ sets }))
+    expect(r).toMatchObject({ sport: 'PING_PONG', outcome: 'won', scoreMine: null, teamMine: null })
+  })
+
+  it('ping pong: 11-10 no se gana por dos', () => {
+    expect(() => parseCasualResult(pingPong({ setsToWin: '1', sets: '[{"mine":11,"theirs":10}]' }))).toThrow(
+      /por dos/,
+    )
+  })
+
+  it('ping pong: gamesPerSet fijo en 11', () => {
+    expect(() => parseCasualResult(pingPong({ gamesPerSet: '12', sets: '[]' }))).toThrow(
+      'Los puntos por set tiene que ser un entero entre 11 y 11.',
+    )
+  })
+
+  it('ping pong: rechaza goles', () => {
+    expect(() => parseCasualResult(pingPong({ scoreMine: '1', scoreTheirs: '0' }))).toThrow(
+      'Los equipos son sólo para FIFA.',
+    )
+  })
+
+  it('básquet 81-77 con won, sin equipos', () => {
+    const r = parseCasualResult(goals('BASQUET', { scoreMine: '81', scoreTheirs: '77', outcome: 'won' }))
+    expect(r).toMatchObject({ sport: 'BASQUET', outcome: 'won', scoreMine: 81, teamMine: null, sets: null })
+  })
+
+  it('básquet: no admite empates', () => {
+    expect(() =>
+      parseCasualResult(goals('BASQUET', { scoreMine: '80', scoreTheirs: '80', outcome: 'won' })),
+    ).toThrow(/empate/)
+    expect(() => parseCasualResult(goals('BASQUET', { outcome: 'drew' }))).toThrow('Decinos quién ganó.')
+  })
+
+  it('básquet: rechaza equipos', () => {
+    expect(() => parseCasualResult(goals('BASQUET', { outcome: 'won', teamMine: 'Lakers' }))).toThrow(
+      'Los equipos son sólo para FIFA.',
+    )
+  })
+
+  it('fútbol 2-2 con drew es válido; con equipo se rechaza', () => {
+    const r = parseCasualResult(goals('FUTBOL', { scoreMine: '2', scoreTheirs: '2', outcome: 'drew' }))
+    expect(r).toMatchObject({ sport: 'FUTBOL', outcome: 'drew', scoreMine: 2, teamMine: null })
+    expect(() => parseCasualResult(goals('FUTBOL', { outcome: 'won', teamTheirs: 'Boca' }))).toThrow(EdgeError)
   })
 
   it('fecha inexistente', () => {

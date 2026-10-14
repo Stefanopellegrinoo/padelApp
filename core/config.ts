@@ -118,8 +118,8 @@ export function defaultConfig(squadSize: number, sideSize: SideSize = 2): Season
  * pádel. Una liga de FIFA nacía siendo pádel con otro nombre: sin marcador
  * abierto y sin empates, o sea sin poder cargar ni un `3-1` ni un `0-0`.
  *
- * Se DERIVA del `kind` vía el registro (`SPORTS`), y ésa es la diferencia con `pair_size`: un lado de
- * FIFA puede ser de uno o de dos (decisión de producto #5, ver `SideSize`),
+ * Se DERIVA del `kind` vía el registro (`SPORTS`), y ésa es la diferencia con `pair_size`: un lado
+ * de FIFA puede ser de uno o de dos (decisión de producto #5, ver `SideSize`),
  * pero un partido de FIFA se cuenta en goles siempre. No hay FIFA por sets.
  *
  * El empate viaja aparte del marcador —son dos ejes ortogonales, D1— porque

@@ -1,7 +1,7 @@
 import type { MatchFormat, SetsSport } from '@/core'
 import { EdgeError } from '@/db/errors'
 import type { CasualPlayerInput } from '@/db/friends'
-import type { LoadState } from '@/app/torneo/[id]/[disciplina]/fechas/[n]/carga-state'
+import { isComplete, type LoadState } from '@/app/torneo/[id]/[disciplina]/fechas/[n]/carga-state'
 
 /** Quién ocupa un lugar del partido: un amigo con cuenta o un invitado con nombre. */
 export type Slot = { kind: 'friend'; playerId: string } | { kind: 'guest'; name: string }
@@ -115,4 +115,24 @@ export function formatForSport(sport: SetsSport, sets: readonly PadelSet[]): Mat
 /** Los sets cargados como los lee `parseCasualResult`: JSON en mi orientación (A = mío). */
 export function setsField(state: LoadState): string {
   return JSON.stringify(state.sets.map((set) => ({ mine: set.gamesA, theirs: set.gamesB })))
+}
+
+/**
+ * Botones extra del segundo toque cuando se gana por dos: el perdedor llegó a
+ * `gamesPerSet - 1` o más (ping pong: 10..14 → 12-10 … 16-14). Con tie-break el
+ * set corta en `gamesPerSet` exacto y con marcador abierto no hay sets: nada.
+ * Acá y no en `carga-state.ts`: en el torneo `tieBreak` es siempre `true`.
+ */
+export function deuceOptions(format: MatchFormat): number[] {
+  if (format.tieBreak || format.openScore) return []
+  // ponytail: techo en 16-14; un 18-16 no se carga. Si aparece: un input numérico en vez de botones.
+  return Array.from({ length: 5 }, (_, index) => format.gamesPerSet - 1 + index)
+}
+
+/** Cierra el set en curso con el ganador en perdedor+2. Mismas guardas que `chooseLoserGames`. */
+export function chooseDeuce(state: LoadState, loser: number, format: MatchFormat): LoadState {
+  if (state.pendingWinner === null || isComplete(state, format)) return state
+  const set =
+    state.pendingWinner === 'A' ? { gamesA: loser + 2, gamesB: loser } : { gamesA: loser, gamesB: loser + 2 }
+  return { sets: [...state.sets, set], pendingWinner: null }
 }

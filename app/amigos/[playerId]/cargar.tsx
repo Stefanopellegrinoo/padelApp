@@ -1,10 +1,9 @@
 'use client'
 
 import { useActionState, useId, useState, useTransition, type ReactNode } from 'react'
-import { SPORTS, isSportId, sportOf, type MatchFormat, type SportId } from '@/core'
+import { SPORTS, SPORT_IDS, isSportId, sportLabel, sportOf, type MatchFormat, type SportId } from '@/core'
 import type { CasualMatch } from '@/db/friends'
 import { isComplete, startLoad, type LoadState } from '@/app/torneo/[id]/[disciplina]/fechas/[n]/carga-state'
-import { DISCIPLINE_KINDS, DISCIPLINE_LABELS } from '@/app/torneos/nuevo/wizard-state'
 import { SubmitButton } from '@/app/submit-button'
 import { editCasualMatch, removeCasualMatch, type CasualFormState } from '../actions'
 import {
@@ -159,6 +158,15 @@ export function CasualForm({
     })),
     pendingWinner: null,
   }))
+  // Cambiar de deporte arranca el resultado de cero: nada del anterior (formato,
+  // sets, empate, equipos) viaja escondido en el FormData.
+  const chooseSport = (id: SportId) => {
+    const next = sportOf(id)
+    setSport(id)
+    if (next.family === 'sets') setFormat(next.format)
+    setLoad(startLoad())
+    setGoals({ outcome: '', scoreMine: '', scoreTheirs: '', teamMine: '', teamTheirs: '' })
+  }
   const setFormatKey = (key: 'setsToWin' | 'gamesPerSet', value: number) => {
     setFormat((current) => ({ ...current, [key]: value }))
     setLoad(startLoad())
@@ -180,6 +188,8 @@ export function CasualForm({
   const slotProblem = initial === undefined ? slotsError(mode, slotValues, pageFriend) : null
   const problem =
     slotProblem ??
+    // Sólo al editar un id que salió del registro: no hay chip elegido ni resultado que dibujar.
+    (info === null ? 'Elegí el deporte para cargar el resultado.' : null) ??
     (info?.family === 'sets' && !isComplete(load, format) ? 'Cargá los sets hasta cerrar el partido.' : null)
   const setSlot = (key: SlotKey, next: Partial<SlotChoice>) =>
     setSlots((current) => ({
@@ -239,19 +249,20 @@ export function CasualForm({
 
       <fieldset className="flex flex-col gap-2">
         <legend className={`${LEGEND} pb-2`}>Deporte</legend>
-        <div className="flex gap-2">
-          {DISCIPLINE_KINDS.map((kind) => (
-            <label key={kind} className={OPTION}>
+        {/* 5 chips en 390px: 3 + 2 (un `flex` los aplasta). */}
+        <div className="grid grid-cols-3 gap-2">
+          {SPORT_IDS.map((id) => (
+            <label key={id} className={OPTION}>
               <input
                 type="radio"
                 name="sport"
-                value={kind}
+                value={id}
                 required
-                checked={sport === kind}
-                onChange={() => setSport(kind)}
+                checked={sport === id}
+                onChange={() => chooseSport(id)}
                 className="sr-only"
               />
-              {DISCIPLINE_LABELS[kind]}
+              {sportLabel(id)}
             </label>
           ))}
         </div>

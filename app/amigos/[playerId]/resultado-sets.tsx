@@ -10,7 +10,7 @@ import {
   type LoadState,
 } from '@/app/torneo/[id]/[disciplina]/fechas/[n]/carga-state'
 import { Stepper } from '@/app/torneos/nuevo/wizard'
-import { setsField } from './cargar-state'
+import { chooseDeuce, deuceOptions, setsField } from './cargar-state'
 import { LABEL, LEGEND } from './estilos'
 
 type FormatKey = 'setsToWin' | 'gamesPerSet'
@@ -137,6 +137,17 @@ function SetsTaps({
                 onClick={() => onChange(chooseLoserGames(load, games, format))}
               >
                 {games}
+              </button>
+            ))}
+            {deuceOptions(format).map((loser) => (
+              <button
+                key={`deuce-${loser}`}
+                type="button"
+                aria-label={`${loser + 2} a ${loser}`}
+                className={`${TAP} min-w-[52px] tabular-nums`}
+                onClick={() => onChange(chooseDeuce(load, loser, format))}
+              >
+                {loser}
               </button>
             ))}
           </div>

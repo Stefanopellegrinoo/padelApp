@@ -1,7 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import { EdgeError } from '@/db/errors'
 import { SPORTS } from '@/core'
-import { formatForSport, formatFromSets, playersFrom, playersFromJson, setsField, slotsError, slotsFor } from './cargar-state'
+import { chooseWinner, startLoad } from '@/app/torneo/[id]/[disciplina]/fechas/[n]/carga-state'
+import { setError } from '@/db/validate'
+import {
+  chooseDeuce,
+  deuceOptions,
+  formatForSport,
+  formatFromSets,
+  playersFrom,
+  playersFromJson,
+  setsField,
+  slotsError,
+  slotsFor,
+} from './cargar-state'
 
 const amigo = (playerId: string) => ({ kind: 'friend', playerId }) as const
 const invitado = (name: string) => ({ kind: 'guest', name }) as const
@@ -142,5 +154,43 @@ describe('setsField', () => {
       { mine: 6, theirs: 3 },
       { mine: 4, theirs: 6 },
     ])
+  })
+})
+
+describe('deuceOptions / chooseDeuce', () => {
+  const PING = SPORTS.PING_PONG.format
+
+  it('pádel (con tie-break) no tiene deuce', () => {
+    expect(deuceOptions(SPORTS.PADEL.format)).toEqual([])
+  })
+  it('marcador abierto no tiene deuce', () => {
+    expect(deuceOptions({ ...PING, openScore: true })).toEqual([])
+  })
+  it('ping pong ofrece del 12-10 al 16-14', () => {
+    expect(deuceOptions(PING)).toEqual([10, 11, 12, 13, 14])
+  })
+  it('cada opción, de cada lado, arma un set legal ganado por dos', () => {
+    for (const winner of ['A', 'B'] as const) {
+      for (const loser of deuceOptions(PING)) {
+        const set = chooseDeuce(chooseWinner(startLoad(), winner), loser, PING).sets[0]
+        expect(set).toBeDefined()
+        expect(setError(set!, PING, false)).toBeNull()
+        expect(winner === 'A' ? set!.gamesA : set!.gamesB).toBe(loser + 2)
+      }
+    }
+  })
+  it('sin ganador elegido no hace nada', () => {
+    const state = startLoad()
+    expect(chooseDeuce(state, 10, PING)).toBe(state)
+  })
+  it('un partido cerrado no crece', () => {
+    const closed = {
+      sets: [
+        { gamesA: 12, gamesB: 10 },
+        { gamesA: 11, gamesB: 5 },
+      ],
+      pendingWinner: 'A' as const,
+    }
+    expect(chooseDeuce(closed, 10, PING)).toBe(closed)
   })
 })

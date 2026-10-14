@@ -123,10 +123,15 @@ create policy casual_match_players_read on public.casual_match_players
 -- vez de contra la fila que se está insertando, y la puerta quedaría
 -- comparando una columna contra sí misma.
 --
--- "El partido es MÍO" (no "lo jugué"): sólo quien cargó suma jugadores. Los
--- demás no pueden meter a nadie (no hay grant de update/delete, así que
--- tampoco sacar) -- el plantel lo fija quien carga, en la misma transacción
--- que el partido (0092).
+-- "El partido es MÍO" (no "lo jugué"): sólo quien cargó suma jugadores, y
+-- SÓLO en la transacción que creó el partido: `m.created_at = now()`, y
+-- `now()` es el comienzo de la transacción en curso, así que eso sólo es
+-- cierto adentro de la misma llamada a la RPC (0092) que insertó la fila. El
+-- plantel es fijo: sin esta condición, quien cargó podía sumar dos filas en un
+-- request posterior y convertir un 1v1 en un 2v2 que el trigger de forma
+-- (0091) acepta. Funciona porque nadie puede escribir `created_at`: no está en
+-- el grant de insert (0072) ni en el de update. Los demás jugadores no meten a
+-- nadie nunca, y no hay grant de update/delete, así que tampoco se saca.
 create policy casual_match_players_insert on public.casual_match_players
   for insert to authenticated
   with check (
@@ -135,6 +140,7 @@ create policy casual_match_players_insert on public.casual_match_players
         from public.casual_matches m
        where m.id = casual_match_players.match_id
          and m.created_by = public.my_player_id()
+         and m.created_at = now()
     )
     and (
       casual_match_players.player_id is null

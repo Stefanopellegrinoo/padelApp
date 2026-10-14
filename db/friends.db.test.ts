@@ -1291,6 +1291,206 @@ describe('partido casual — 1v1 y 2v2', () => {
   })
 })
 
+// Directo contra la base, sin `db/friends.ts` en el medio: `updateCasualMatch`
+// y `deleteCasualMatch` frenan a un tercero en `miLadoEn` ANTES de escribir,
+// así que por ese camino una política floja no rompería ningún test. Acá cada
+// escritura llega a Postgres, y lo que se assertea es lo que la RLS (0090), los
+// grants (0072) y los CHECK dejan o no dejar pasar.
+//
+// Lo que NINGÚN test puede aislar, y por qué: `casual_matches_update.using` y
+// `_delete.using` siempre corren ANDeados con `casual_matches_read` (safeupdate
+// obliga a un `WHERE`, ver 0090). Los tests de tercero de abajo prueban la
+// combinación -- la misma limitación que ya documentaba la versión anterior.
+describe('partido casual — permisos directo contra la base', () => {
+  async function unoContraDos() {
+    const uno = await createTestUser()
+    const dos = await createTestUser()
+    const ajeno = await createTestUser()
+    await amistadAceptada(uno.playerId, dos.playerId)
+    return { uno, dos, ajeno }
+  }
+
+  async function filaDe(matchId: string) {
+    const { data, error } = await adminClient()
+      .from('casual_matches')
+      .select('updated_by, updated_at, winner_side, score_a, score_b')
+      .eq('id', matchId)
+      .single()
+    if (error !== null) throw new Error(`No se pudo releer el partido: ${error.message}`)
+    return data
+  }
+
+  it('un tercero no puede reescribir el partido por la RPC: 42501 y la fila intacta', async () => {
+    const { uno, dos, ajeno } = await unoContraDos()
+    const matchId = await createCasualMatch(uno.client, [rival(dos.playerId)], fifa())
+    const antes = await filaDe(matchId)
+
+    const { error } = await rpcDirecta(ajeno.client, ajeno.playerId, uno.playerId, {
+      p_id: matchId,
+      p_winner_side: 'B',
+      p_score_a: 0,
+      p_score_b: 9,
+    })
+    expect(error?.code).toBe('42501')
+    expect(await filaDe(matchId)).toEqual(antes)
+  })
+
+  it('un tercero no puede borrar el partido: el DELETE no toca ninguna fila', async () => {
+    const { uno, dos, ajeno } = await unoContraDos()
+    const matchId = await createCasualMatch(uno.client, [rival(dos.playerId)], fifa())
+
+    // Un `using` que filtra no es un error (204): por eso `count`, y releer.
+    const { error, count } = await ajeno.client
+      .from('casual_matches')
+      .delete({ count: 'exact' })
+      .eq('id', matchId)
+    expect(error).toBeNull()
+    expect(count).toBe(0)
+    expect(await partidosCargadosPor(uno.playerId)).toBe(1)
+  })
+
+  it('un tercero no puede agregar ni borrar sets de un partido ajeno', async () => {
+    const { uno, dos, ajeno } = await unoContraDos()
+    const matchId = await createCasualMatch(uno.client, [rival(dos.playerId)], padel([[6, 3], [6, 4]]))
+
+    const { error: insertError } = await ajeno.client
+      .from('casual_match_sets')
+      .insert({ match_id: matchId, set_number: 3, games_a: 0, games_b: 6 })
+    expect(insertError?.code).toBe('42501')
+
+    const { error: deleteError, count } = await ajeno.client
+      .from('casual_match_sets')
+      .delete({ count: 'exact' })
+      .eq('match_id', matchId)
+    expect(deleteError).toBeNull()
+    expect(count).toBe(0)
+
+    const { data: sets } = await adminClient().from('casual_match_sets').select('set_number').eq('match_id', matchId)
+    expect(sets).toHaveLength(2)
+  })
+
+  it('nadie inserta un partido a nombre de otro (created_by ajeno): 42501', async () => {
+    const { uno, dos } = await unoContraDos()
+    const { error } = await uno.client.from('casual_matches').insert({
+      sport: 'FIFA',
+      played_on: '2026-08-30',
+      winner_side: null,
+      created_by: dos.playerId,
+      updated_by: uno.playerId,
+    })
+    expect(error?.code).toBe('42501')
+    expect(await partidosCargadosPor(dos.playerId)).toBe(0)
+  })
+
+  it('un participante no puede editar firmando como otro (updated_by ajeno): rechazado y la fila intacta', async () => {
+    const { uno, dos } = await unoContraDos()
+    const matchId = await createCasualMatch(uno.client, [rival(dos.playerId)], fifa())
+    const antes = await filaDe(matchId)
+
+    // `dos` SÍ jugó -- pasa el `using` -- pero miente sobre quién tocó.
+    // Un `with check` que falla sobre una fila ya aceptada SÍ es error.
+    const { error } = await dos.client
+      .from('casual_matches')
+      .update({ score_a: 0, score_b: 5, winner_side: 'B', updated_by: uno.playerId })
+      .eq('id', matchId)
+    expect(error?.code).toBe('42501')
+    // `updated_at` incluido: si el ataque se hubiera colado, el trigger lo movía.
+    expect(await filaDe(matchId)).toEqual(antes)
+  })
+
+  it('un participante edita directo firmando como él, y el trigger avanza updated_at', async () => {
+    const { uno, dos } = await unoContraDos()
+    const matchId = await createCasualMatch(uno.client, [rival(dos.playerId)], fifa())
+    const antes = await filaDe(matchId)
+
+    const { error } = await dos.client
+      .from('casual_matches')
+      .update({ score_a: 0, score_b: 5, winner_side: 'B', updated_by: dos.playerId })
+      .eq('id', matchId)
+    expect(error).toBeNull()
+    const despues = await filaDe(matchId)
+    expect(despues.updated_by).toBe(dos.playerId)
+    // La escribe el TRIGGER (0072), no el cliente: no está en el grant.
+    expect(despues.updated_at).not.toBe(antes.updated_at)
+  })
+
+  it('la amistad es de ALTA, no de por vida: borrarla no impide seguir editando un partido ya cargado (§4.5)', async () => {
+    const { uno, dos } = await unoContraDos()
+    const matchId = await createCasualMatch(uno.client, [rival(dos.playerId)], fifa())
+
+    const [playerA, playerB] =
+      uno.playerId < dos.playerId ? [uno.playerId, dos.playerId] : [dos.playerId, uno.playerId]
+    const { error: unfriendError, count } = await uno.client
+      .from('friendships')
+      .delete({ count: 'exact' })
+      .eq('player_a', playerA)
+      .eq('player_b', playerB)
+    expect(unfriendError).toBeNull()
+    expect(count).toBe(1)
+
+    await expect(updateCasualMatch(dos.client, matchId, fifa({ outcome: 'drew', scoreMine: '1', scoreTheirs: '1' }))).resolves.toBe(
+      uno.playerId,
+    )
+    expect((await filaDe(matchId)).updated_by).toBe(dos.playerId)
+  })
+
+  it('un marcador a medias se rechaza al editar también, sin tocar la fila -- en TS y en la base', async () => {
+    const { uno, dos } = await unoContraDos()
+    const matchId = await createCasualMatch(uno.client, [rival(dos.playerId)], fifa())
+    const antes = await filaDe(matchId)
+
+    // Por la pantalla: lo frena `parseCasualResult` con un mensaje legible.
+    const error: unknown = await updateCasualMatch(
+      uno.client,
+      matchId,
+      fifa({ scoreMine: '', scoreTheirs: '5' }),
+    ).catch((e: unknown) => e)
+    expect((error as EdgeError).message).toContain('los dos números')
+
+    // Saltándose TypeScript: lo frena `casual_score_pair` (0072).
+    const { error: rpcError } = await rpcDirecta(uno.client, uno.playerId, dos.playerId, {
+      p_id: matchId,
+      p_score_a: null,
+      p_score_b: 5,
+    })
+    expect(rpcError?.code).toBe('23514')
+    expect(rpcError?.message).toContain('casual_score_pair')
+    expect(await filaDe(matchId)).toEqual(antes)
+  })
+
+  // Plantel fijo (ruling del controller, fix round 1): ni quien cargó puede
+  // sumar jugadores después. Sin `created_at = now()` en la política, dos
+  // filas en un mismo request convertían un 1v1 en un 2v2 válido.
+  it('quien cargó no puede sumar jugadores en un request posterior, aunque deje un 2v2 válido', async () => {
+    const { uno, dos } = await unoContraDos()
+    const matchId = await createCasualMatch(uno.client, [rival(dos.playerId)], fifa())
+
+    const { error } = await uno.client.from('casual_match_players').insert([
+      { match_id: matchId, side: 'A', player_id: null, guest_name: 'Colado A' },
+      { match_id: matchId, side: 'B', player_id: null, guest_name: 'Colado B' },
+    ])
+    expect(error?.code).toBe('42501')
+
+    const { data: jugadores } = await adminClient()
+      .from('casual_match_players')
+      .select('side')
+      .eq('match_id', matchId)
+    expect(jugadores).toHaveLength(2)
+  })
+
+  it('nadie puede mandar created_at al insertar un partido: no está en el grant de insert', async () => {
+    const { uno } = await unoContraDos()
+    const { error } = await uno.client.from('casual_matches').insert({
+      sport: 'FIFA',
+      played_on: '2026-08-30',
+      created_by: uno.playerId,
+      updated_by: uno.playerId,
+      created_at: new Date().toISOString(),
+    })
+    expect(error?.code).toBe('42501')
+  })
+})
+
 describe('partido casual — mensajes legibles', () => {
   it('no deja cargar un partido con uno mismo', async () => {
     const uno = await createTestUser()

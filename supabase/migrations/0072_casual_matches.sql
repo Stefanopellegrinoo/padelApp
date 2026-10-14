@@ -109,7 +109,15 @@ alter table public.casual_match_sets    enable row level security;
 -- (0002, 0009 -- detalle completo en 0070:29-49): el `grant` porque el CLI
 -- de Supabase no le da DML a los roles de la API solo, y el `revoke` de
 -- `anon` porque la nube alguna vez otorgó DML por defecto a tabla nueva.
-grant select, insert, delete on public.casual_matches to authenticated;
+grant select, delete on public.casual_matches to authenticated;
+-- INSERT por columna, SIN `created_at` ni `updated_at`: las dos salen del
+-- default `now()`, y `created_at` es además la llave del "plantel fijo" de
+-- `casual_match_players_insert` (0090: sólo se suman jugadores en la misma
+-- transacción que creó el partido, `created_at = now()`). Si el cliente
+-- pudiera mandarla, la fijaría en el futuro y esa ventana no se cerraría
+-- nunca. `id` sí está: la RPC (0092) lo genera antes de insertar.
+grant insert (id, sport, played_on, winner_side, score_a, score_b, team_a, team_b, created_by, updated_by)
+  on public.casual_matches to authenticated;
 -- Jugadores: sin update ni delete -- el plantel es fijo una vez cargado. Se
 -- van sólo con el partido (`on delete cascade`, y las acciones referenciales
 -- no pasan por RLS ni por grants).

@@ -1,4 +1,4 @@
-import type { MatchFormat } from '@/core'
+import type { MatchFormat, SetsSport } from '@/core'
 import { EdgeError } from '@/db/errors'
 import type { CasualPlayerInput } from '@/db/friends'
 import type { LoadState } from '@/app/torneo/[id]/[disciplina]/fechas/[n]/carga-state'
@@ -98,6 +98,18 @@ export function formatFromSets(sets: readonly PadelSet[]): Pick<MatchFormat, 'se
     setsToWin: Math.max(mine, theirs),
     gamesPerSet: Math.max(...sets.map((set) => Math.max(set.mine, set.theirs))),
   }
+}
+
+/**
+ * El formato a prellenar al editar: lo que se puede deducir de los sets, y lo
+ * fijo del deporte. Lo fijo manda: un deuce 12-10 en ping pong daría 12 por
+ * `formatFromSets`, pero el set sigue siendo a 11.
+ */
+export function formatForSport(sport: SetsSport, sets: readonly PadelSet[]): MatchFormat {
+  if (sets.length === 0) return sport.format
+  const format = { ...sport.format, ...formatFromSets(sets) }
+  const { min, max } = sport.gamesPerSet
+  return min === max ? { ...format, gamesPerSet: min } : format
 }
 
 /** Los sets cargados como los lee `parseCasualResult`: JSON en mi orientación (A = mío). */

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { EdgeError } from '@/db/errors'
-import { formatFromSets, playersFrom, playersFromJson, setsField, slotsError, slotsFor } from './cargar-state'
+import { SPORTS } from '@/core'
+import { formatForSport, formatFromSets, playersFrom, playersFromJson, setsField, slotsError, slotsFor } from './cargar-state'
 
 const amigo = (playerId: string) => ({ kind: 'friend', playerId }) as const
 const invitado = (name: string) => ({ kind: 'guest', name }) as const
@@ -101,6 +102,27 @@ describe('formatFromSets', () => {
         { mine: 6, theirs: 5 },
       ]),
     ).toEqual({ setsToWin: 2, gamesPerSet: 6 })
+  })
+})
+
+describe('formatForSport', () => {
+  it('pádel 4-2 es a 1 set de 4 games', () => {
+    expect(formatForSport(SPORTS.PADEL, [{ mine: 4, theirs: 2 }])).toEqual({
+      ...SPORTS.PADEL.format,
+      setsToWin: 1,
+      gamesPerSet: 4,
+    })
+  })
+  it('lo fijo del deporte manda: un deuce 12-10 en ping pong sigue siendo a 11', () => {
+    const format = formatForSport(SPORTS.PING_PONG, [
+      { mine: 12, theirs: 10 },
+      { mine: 11, theirs: 5 },
+    ])
+    expect(format.gamesPerSet).toBe(11)
+    expect(format.setsToWin).toBe(2)
+  })
+  it('sin sets es el formato por defecto del deporte', () => {
+    expect(formatForSport(SPORTS.PADEL, [])).toEqual(SPORTS.PADEL.format)
   })
 })
 

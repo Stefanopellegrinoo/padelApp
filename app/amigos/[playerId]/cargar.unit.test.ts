@@ -273,6 +273,51 @@ describe('CasualForm', () => {
     expect(details.open).toBe(true)
   })
 
+  describe('el resultado sale de la familia del deporte', () => {
+    async function editar(sport: string) {
+      container = document.createElement('div')
+      document.body.appendChild(container)
+      root = createRoot(container)
+      await act(async () => {
+        root?.render(
+          createElement(CasualForm, {
+            friendPlayerId: 'amigo-1',
+            friends: AMIGOS,
+            action: fallaSiempre,
+            submitLabel: 'Guardar cambios',
+            initial: {
+              matchId: 'm1',
+              sport,
+              playedOn: '2026-08-30',
+              outcome: 'won',
+              scoreMine: '80',
+              scoreTheirs: '70',
+              teamMine: '',
+              teamTheirs: '',
+              roster: 'vs Fede',
+            },
+          }),
+        )
+      })
+      return container
+    }
+
+    it('básquet no tiene empate y cuenta puntos', async () => {
+      const el = await editar('BASQUET')
+      expect(el.querySelector('input[name="outcome"][value="drew"]')).toBeNull()
+      expect(el.querySelector('input[name="outcome"][value="won"]')).not.toBeNull()
+      expect(el.textContent).toContain('Puntos de tu lado')
+      expect(el.querySelector('input[name="teamMine"]')).toBeNull()
+    })
+
+    it('FIFA tiene empate, cuenta goles y pide equipos', async () => {
+      const el = await editar('FIFA')
+      expect(el.querySelector('input[name="outcome"][value="drew"]')).not.toBeNull()
+      expect(el.textContent).toContain('Goles de tu lado')
+      expect(el.querySelector('input[name="teamMine"]')).not.toBeNull()
+    })
+  })
+
   describe('CasualMatchRow: menú ⋯ y Borrar con confirmación', () => {
     const partido: CasualMatch = {
       matchId: 'm1',

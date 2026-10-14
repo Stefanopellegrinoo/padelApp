@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import type { Client } from './client'
-import { historyWith, porFechaDescendente, type CasualMatch, type SharedMatch, type TournamentMatch } from './friends'
+import { EdgeError } from './errors'
+import {
+  historyWith,
+  parseCasualResult,
+  porFechaDescendente,
+  type CasualMatch,
+  type CasualResultInput,
+  type SharedMatch,
+  type TournamentMatch,
+} from './friends'
 
 /**
  * PostgREST corta CADA select en `PGRST_DB_MAX_ROWS` (1000,
@@ -587,5 +596,96 @@ describe('porFechaDescendente', () => {
     // Y el orden en sí: torneo antes que casual en un empate de fecha: entre
     // los dos de torneo, el `matchdayNumber` más alto primero (t2, n=5).
     expect(ordenA).toEqual(['t2', 't1', 'c1'])
+  })
+})
+
+describe('parseCasualResult', () => {
+  const base: CasualResultInput = {
+    sport: 'PADEL',
+    playedOn: '2026-05-01',
+    outcome: '',
+    scoreMine: '',
+    scoreTheirs: '',
+    teamMine: '',
+    teamTheirs: '',
+    setsToWin: '1',
+    gamesPerSet: '4',
+    sets: '[]',
+  }
+  const padel = (over: Partial<CasualResultInput>) => ({ ...base, ...over })
+  const fifa = (over: Partial<CasualResultInput>) => ({ ...base, sport: 'FIFA', ...over })
+
+  it('padel a 1 set a 4: deriva won del set', () => {
+    const r = parseCasualResult(padel({ sets: '[{"mine":4,"theirs":2}]', outcome: 'lost' }))
+    expect(r.outcome).toBe('won')
+    expect(r.sets).toEqual([{ mine: 4, theirs: 2 }])
+    expect(r.scoreMine).toBeNull()
+  })
+
+  it('padel a 2 sets de 6: gana quien lleva más sets', () => {
+    const sets = '[{"mine":6,"theirs":3},{"mine":4,"theirs":6},{"mine":6,"theirs":5}]'
+    expect(parseCasualResult(padel({ setsToWin: '2', gamesPerSet: '6', sets })).outcome).toBe('won')
+  })
+
+  it('padel: deriva lost cuando el rival gana el set', () => {
+    expect(parseCasualResult(padel({ sets: '[{"mine":1,"theirs":4}]' })).outcome).toBe('lost')
+  })
+
+  it('padel: falta un set', () => {
+    expect(() =>
+      parseCasualResult(padel({ setsToWin: '2', gamesPerSet: '6', sets: '[{"mine":6,"theirs":3}]' })),
+    ).toThrow(EdgeError)
+  })
+
+  it('padel: set imposible 4-4', () => {
+    expect(() => parseCasualResult(padel({ sets: '[{"mine":4,"theirs":4}]' }))).toThrow(EdgeError)
+  })
+
+  it('padel: gamesPerSet fuera de rango', () => {
+    expect(() =>
+      parseCasualResult(padel({ gamesPerSet: '12', sets: '[{"mine":12,"theirs":3}]' })),
+    ).toThrow(EdgeError)
+  })
+
+  it('padel: sets que no es JSON de pares enteros', () => {
+    expect(() => parseCasualResult(padel({ sets: 'nope' }))).toThrow(EdgeError)
+    expect(() => parseCasualResult(padel({ sets: '[{"mine":4.5,"theirs":2}]' }))).toThrow(EdgeError)
+  })
+
+  it('padel: rechaza equipos', () => {
+    expect(() =>
+      parseCasualResult(padel({ sets: '[{"mine":4,"theirs":2}]', teamMine: 'Boca' })),
+    ).toThrow('Los equipos son sólo para FIFA.')
+  })
+
+  it('fifa 2-2 con won (penales) es válido', () => {
+    const r = parseCasualResult(fifa({ scoreMine: '2', scoreTheirs: '2', outcome: 'won', teamMine: ' Boca ' }))
+    expect(r).toMatchObject({ sport: 'FIFA', outcome: 'won', scoreMine: 2, scoreTheirs: 2, teamMine: 'Boca', teamTheirs: null, format: null, sets: null })
+  })
+
+  it('fifa 3-1 con lost contradice el marcador', () => {
+    expect(() => parseCasualResult(fifa({ scoreMine: '3', scoreTheirs: '1', outcome: 'lost' }))).toThrow(
+      'El marcador dice otra cosa sobre quién ganó.',
+    )
+  })
+
+  it('fifa sin marcador + drew es válido', () => {
+    const r = parseCasualResult(fifa({ outcome: 'drew' }))
+    expect(r.scoreMine).toBeNull()
+    expect(r.outcome).toBe('drew')
+  })
+
+  it('fifa: outcome obligatorio y marcador a medias o negativo', () => {
+    expect(() => parseCasualResult(fifa({}))).toThrow(EdgeError)
+    expect(() => parseCasualResult(fifa({ scoreMine: '2', outcome: 'won' }))).toThrow(EdgeError)
+    expect(() => parseCasualResult(fifa({ scoreMine: '-1', scoreTheirs: '0', outcome: 'lost' }))).toThrow(EdgeError)
+  })
+
+  it('deporte fuera de PADEL/FIFA', () => {
+    expect(() => parseCasualResult(fifa({ sport: 'Fifa', outcome: 'won' }))).toThrow('Elegí Pádel o FIFA.')
+  })
+
+  it('fecha inexistente', () => {
+    expect(() => parseCasualResult(fifa({ playedOn: '2026-02-31', outcome: 'won' }))).toThrow(EdgeError)
   })
 })

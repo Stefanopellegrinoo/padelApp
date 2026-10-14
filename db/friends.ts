@@ -1,5 +1,6 @@
-import { tallySets, type SetScore } from '@/core'
+import { defaultConfig, disciplineProfile, tallySets, type MatchFormat, type SetScore } from '@/core'
 import { EdgeError } from './errors'
+import { matchError } from './validate'
 import type { Client } from './client'
 
 /**
@@ -767,6 +768,139 @@ function parseCasualInput(input: CasualMatchInput): ParsedCasualInput {
     scoreTheirs,
     teamMine: normalizeTeam(input.teamMine),
     teamTheirs: normalizeTeam(input.teamTheirs),
+  }
+}
+
+// Rangos de los steppers de formato. Copia de `STEPPERS`
+// (app/torneos/nuevo/wizard-state.ts:30): db/ no importa de app/.
+const SETS_TO_WIN_RANGE = { min: 1, max: 3 }
+const GAMES_PER_SET_RANGE = { min: 3, max: 9 }
+
+export const CASUAL_PADEL_DEFAULT: MatchFormat = disciplineProfile('PADEL', defaultConfig(4)).config.matchFormat
+
+/** Los campos del formulario del resultado casual, en crudo y en "mío/suyo". */
+export interface CasualResultInput {
+  sport: string
+  playedOn: string
+  outcome: string
+  scoreMine: string
+  scoreTheirs: string
+  teamMine: string
+  teamTheirs: string
+  /** Sólo PADEL. */
+  setsToWin: string
+  gamesPerSet: string
+  /** Sólo PADEL: JSON `[{mine, theirs}, ...]`. */
+  sets: string
+}
+
+export interface CasualResult {
+  sport: 'PADEL' | 'FIFA'
+  playedOn: string
+  outcome: 'won' | 'lost' | 'drew'
+  scoreMine: number | null
+  scoreTheirs: number | null
+  teamMine: string | null
+  teamTheirs: string | null
+  /** PADEL, sólo para validar: no se guarda. */
+  format: MatchFormat | null
+  sets: Array<{ mine: number; theirs: number }> | null
+}
+
+function intInRange(raw: string, range: { min: number; max: number }, what: string): number {
+  const n = raw.trim() === '' ? NaN : Number(raw)
+  if (!Number.isInteger(n) || n < range.min || n > range.max) {
+    throw new EdgeError(`${what} tiene que ser un entero entre ${range.min} y ${range.max}.`)
+  }
+  return n
+}
+
+function parseSets(raw: string): Array<{ mine: number; theirs: number }> {
+  let value: unknown
+  try {
+    value = JSON.parse(raw)
+  } catch {
+    throw new EdgeError('Los sets no son válidos.')
+  }
+  const ok =
+    Array.isArray(value) &&
+    value.every(
+      (s) =>
+        typeof s === 'object' && s !== null && Number.isInteger((s as { mine?: unknown }).mine) &&
+        Number.isInteger((s as { theirs?: unknown }).theirs),
+    )
+  if (!ok) throw new EdgeError('Los sets no son válidos.')
+  return (value as Array<{ mine: number; theirs: number }>).map(({ mine, theirs }) => ({ mine, theirs }))
+}
+
+function parsePadelResult(input: CasualResultInput) {
+  if (
+    input.scoreMine.trim() !== '' || input.scoreTheirs.trim() !== '' ||
+    normalizeTeam(input.teamMine) !== null || normalizeTeam(input.teamTheirs) !== null
+  ) {
+    throw new EdgeError('Los equipos son sólo para FIFA.')
+  }
+  const format: MatchFormat = {
+    ...CASUAL_PADEL_DEFAULT,
+    setsToWin: intInRange(input.setsToWin, SETS_TO_WIN_RANGE, 'Los sets por partido'),
+    gamesPerSet: intInRange(input.gamesPerSet, GAMES_PER_SET_RANGE, 'Los games por set'),
+  }
+  const sets = parseSets(input.sets)
+  const problem = matchError(sets.map((s) => ({ gamesA: s.mine, gamesB: s.theirs })), format, false)
+  if (problem !== null) throw new EdgeError(problem)
+  const mine = sets.filter((s) => s.mine > s.theirs).length
+  const theirs = sets.filter((s) => s.theirs > s.mine).length
+  return { outcome: mine > theirs ? ('won' as const) : ('lost' as const), format, sets }
+}
+
+function parseFifaResult(input: CasualResultInput): {
+  outcome: CasualOutcome
+  scoreMine: number | null
+  scoreTheirs: number | null
+} {
+  const outcome = input.outcome
+  if (outcome !== 'won' && outcome !== 'lost' && outcome !== 'drew') {
+    throw new EdgeError('Decinos quién ganó, o si empataron.')
+  }
+  const mineRaw = input.scoreMine.trim()
+  const theirsRaw = input.scoreTheirs.trim()
+  if ((mineRaw === '') !== (theirsRaw === '')) {
+    throw new EdgeError('Cargá los dos números del marcador, o dejalos los dos vacíos.')
+  }
+  if (mineRaw === '') return { outcome, scoreMine: null, scoreTheirs: null }
+  const scoreMine = Number(mineRaw)
+  const scoreTheirs = Number(theirsRaw)
+  const problem = matchError(
+    [{ gamesA: scoreMine, gamesB: scoreTheirs }],
+    disciplineProfile('FIFA', defaultConfig(4)).config.matchFormat,
+    true,
+  )
+  if (problem !== null) throw new EdgeError(problem)
+  // Con marcador empatado cualquier `outcome` vale (penales).
+  const derived = scoreMine > scoreTheirs ? 'won' : scoreMine < scoreTheirs ? 'lost' : null
+  if (derived !== null && derived !== outcome) {
+    throw new EdgeError('El marcador dice otra cosa sobre quién ganó.')
+  }
+  return { outcome, scoreMine, scoreTheirs }
+}
+
+/** Valida el resultado de un partido casual según su deporte (PADEL con sets, FIFA con goles). */
+export function parseCasualResult(input: CasualResultInput): CasualResult {
+  if (input.sport !== 'PADEL' && input.sport !== 'FIFA') throw new EdgeError('Elegí Pádel o FIFA.')
+  if (!esFechaReal(input.playedOn)) throw new EdgeError('Elegí una fecha real.')
+
+  if (input.sport === 'PADEL') {
+    const { outcome, format, sets } = parsePadelResult(input)
+    return {
+      sport: 'PADEL', playedOn: input.playedOn, outcome,
+      scoreMine: null, scoreTheirs: null, teamMine: null, teamTheirs: null, format, sets,
+    }
+  }
+  const { outcome, scoreMine, scoreTheirs } = parseFifaResult(input)
+  return {
+    sport: 'FIFA', playedOn: input.playedOn, outcome, scoreMine, scoreTheirs,
+    teamMine: normalizeTeam(input.teamMine), teamTheirs: normalizeTeam(input.teamTheirs),
+    format: null, sets: null,
   }
 }
 

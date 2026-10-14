@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { defaultConfig, type SideSize } from '@/core'
 import { EdgeError } from './errors'
 import { playersFrom, playersFromJson } from '../app/amigos/[playerId]/cargar-state'
-import { casualInputFrom } from '../app/amigos/casual-form-data'
+import { assertFriendPlays, casualInputFrom } from '../app/amigos/casual-form-data'
 import {
   historyWith,
   requestFriendship,
@@ -11,6 +11,7 @@ import {
   createCasualMatch,
   updateCasualMatch,
   deleteCasualMatch,
+  casualParticipantIds,
   type SharedMatch,
   type TournamentMatch,
   type CasualMatch,
@@ -1561,6 +1562,7 @@ describe('partido casual — lo que manda el formulario', () => {
     )
 
     const players = playersFromJson(String(formData.get('players') ?? ''))
+    assertFriendPlays(String(formData.get('friendPlayerId')), players)
     const matchId = await createCasualMatch(yo.client, players, casualInputFrom(formData))
 
     const { data, error } = await adminClient()
@@ -1643,3 +1645,28 @@ describe('partido casual — lo que manda el formulario', () => {
   })
 })
 
+
+describe('casualParticipantIds', () => {
+  it('devuelve las cuentas del partido (sin invitados) y rechaza un id que no es uuid', async () => {
+    const yo = await createTestUser()
+    const amigo = await createTestUser()
+    await amistadAceptada(yo.playerId, amigo.playerId)
+    const formData = new FormData()
+    formData.set('sport', 'FIFA')
+    formData.set('playedOn', '2026-08-30')
+    formData.set('outcome', 'won')
+    const matchId = await createCasualMatch(
+      yo.client,
+      [
+        { side: 'mine', playerId: null, guestName: 'Tano' },
+        { side: 'theirs', playerId: amigo.playerId, guestName: null },
+        { side: 'theirs', playerId: null, guestName: 'Beto' },
+      ],
+      casualInputFrom(formData),
+    )
+
+    expect((await casualParticipantIds(yo.client, matchId)).sort()).toEqual([yo.playerId, amigo.playerId].sort())
+    expect(await casualParticipantIds(yo.client, '')).toEqual([])
+    await expect(casualParticipantIds(yo.client, 'no-es-uuid')).rejects.toThrow('Ese ID no es válido.')
+  })
+})

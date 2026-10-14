@@ -19,8 +19,13 @@ export function slotsFor(mode: Mode): SlotKey[] {
   return SLOT_KEYS[mode]
 }
 
-/** Primer problema de los lugares del modo, o `null` si se puede enviar. */
-export function slotsError(mode: Mode, slots: Slots): string | null {
+/**
+ * Primer problema de los lugares del modo, o `null` si se puede enviar.
+ * `mustPlay` es el amigo de la pantalla: el historial es por amigo, así que un
+ * partido sin él no aparecería en ningún lado (el servidor lo exige también,
+ * `assertFriendPlays`).
+ */
+export function slotsError(mode: Mode, slots: Slots, mustPlay?: { playerId: string; name: string }): string | null {
   const seen = new Set<string>()
   for (const key of slotsFor(mode)) {
     const slot = slots[key]
@@ -32,6 +37,7 @@ export function slotsError(mode: Mode, slots: Slots): string | null {
       seen.add(slot.playerId)
     }
   }
+  if (mustPlay !== undefined && !seen.has(mustPlay.playerId)) return `Tiene que jugar ${mustPlay.name}.`
   return null
 }
 

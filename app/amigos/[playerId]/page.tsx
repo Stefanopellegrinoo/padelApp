@@ -64,8 +64,12 @@ export default async function AmigoPage({ params, searchParams }: PageProps) {
         </div>
       </header>
       {/* `<details>` nativo: cero estado de React. `open` lo maneja el DOM y el
-          formulario no se desmonta cuando la action vuelve con error. */}
-      <details className="flex flex-col gap-3">
+          formulario no se desmonta cuando la action vuelve con error.
+          `key`: al cargar bien, la action redirige a esta misma URL y React
+          conserva el DOM y el estado de los componentes -- el formulario
+          seguiría abierto y lleno, listo para reenviar un duplicado. Cambia la
+          cantidad de partidos, cambia la key, se remonta cerrado y vacío. */}
+      <details key={partidos.length} className="flex flex-col gap-3">
         <summary className="cursor-pointer rounded-field bg-accent p-3 text-center text-[14px] font-extrabold text-accent-text">
           Cargar partido
         </summary>

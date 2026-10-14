@@ -291,6 +291,9 @@ describe('CasualForm', () => {
       await act(async () => boton('Borrar').click())
       expect(removeCasualMatch).not.toHaveBeenCalled()
       expect(el.textContent).toContain('¿Borrar?')
+      // Borrar se desmonta: el foco va al "No" (default seguro), no al body.
+      expect(document.activeElement).toBe(boton('No'))
+      expect(el.querySelector('[role="group"]')?.getAttribute('aria-label')).toBe('Confirmar borrado')
 
       await act(async () => boton('No').click())
       expect(el.textContent).not.toContain('¿Borrar?')

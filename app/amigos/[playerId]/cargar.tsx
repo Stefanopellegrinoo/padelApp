@@ -109,7 +109,7 @@ function slotOf({ choice, name }: SlotChoice): Slot | null {
  * action>`. Sólo el `players` oculto viaja en el FormData, armado del estado.
  *
  * Fuera de pádel, el "quién ganó" es un radio obligatorio con las tres
- * opciones (ruling del orquestador, task-4-brief.md).
+ * opciones (ruling del plan, docs/plan-amigos-deporte-y-2v2.md).
  *
  * Pádel no tiene "quién ganó" ni marcador de texto: elige su formato con dos
  * `Stepper` y carga N sets con la máquina de dos toques de la carga de fechas
@@ -184,7 +184,11 @@ export function CasualForm({
   const rival1Name =
     mode === '1v1' ? friends.find((friend) => friend.playerId === slots.rival1.choice)?.displayName : undefined
   const otherSide = rival1Name ?? 'el otro lado'
-  const slotProblem = initial === undefined ? slotsError(mode, slotValues) : null
+  const pageFriend = {
+    playerId: friendPlayerId,
+    name: friends.find((friend) => friend.playerId === friendPlayerId)?.displayName ?? 'este amigo',
+  }
+  const slotProblem = initial === undefined ? slotsError(mode, slotValues, pageFriend) : null
   const problem =
     slotProblem ?? (isPadel && !isComplete(load, format) ? 'Cargá los sets hasta cerrar el partido.' : null)
   const setSlot = (key: SlotKey, next: Partial<SlotChoice>) =>
@@ -558,13 +562,19 @@ export function CasualMatchRow({
           Editar
         </button>
         {confirmingDelete ? (
-          <form action={removeCasualMatch} className="flex items-center gap-3">
+          <form
+            action={removeCasualMatch}
+            role="group"
+            aria-label="Confirmar borrado"
+            className="flex items-center gap-3"
+          >
             <input type="hidden" name="friendPlayerId" value={friendPlayerId} />
             <input type="hidden" name="matchId" value={partido.matchId} />
             <span className="text-[12px] font-extrabold text-live">¿Borrar?</span>
-            <SubmitButton className="text-[12px] font-extrabold text-live">Sí</SubmitButton>
+            <SubmitButton className="text-[12px] font-extrabold text-live disabled:opacity-60">Sí</SubmitButton>
             <button
               type="button"
+              autoFocus
               onClick={() => setConfirmingDelete(false)}
               className="text-[12px] font-extrabold text-muted"
             >

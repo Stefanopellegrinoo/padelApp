@@ -313,6 +313,19 @@ describe('Historial', () => {
     ])
   })
 
+  it('2v2 en contra con marcador empatado y el otro lado ganando nombra a los dos rivales', () => {
+    const l = lineas(
+      partidoCasual({
+        outcome: 'lost',
+        score: { mine: 2, theirs: 2 },
+        teams: { mine: null, theirs: null },
+        partners: ['Cami'],
+        rivals: ['Juan', 'Beto'],
+      }),
+    )
+    expect(l[1]).toBe('En contra: 2-2 · Ganaron Juan, Beto')
+  })
+
   it('together + marcador empatado + perdieron: "Perdieron", sin "Ganó"', () => {
     const l = lineas(
       partidoCasual({

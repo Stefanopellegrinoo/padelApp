@@ -1116,3 +1116,21 @@ export async function deleteCasualMatch(supabase: Client, matchId: string): Prom
   }
   return friendPlayerId
 }
+
+/**
+ * Las cuentas que juegan el partido, leídas ANTES de escribir (al borrar, las
+ * filas ya no existen después): alimenta `redirectTarget`
+ * (`app/amigos/casual-form-data.ts`). Un `matchId` vacío no es un partido: `[]`.
+ */
+export async function casualParticipantIds(supabase: Client, matchId: string): Promise<string[]> {
+  if (matchId === '') return []
+  const result = await supabase
+    .from('casual_match_players')
+    .select('player_id', { count: 'exact' })
+    .eq('match_id', matchId)
+  // 22P02: un id que ni castea a uuid -- sólo un POST armado a mano.
+  if (result.error?.code === '22P02') throw new EdgeError('Ese ID no es válido.')
+  return assertComplete(result, 'jugadores del partido').flatMap((fila) =>
+    fila.player_id === null ? [] : [fila.player_id],
+  )
+}

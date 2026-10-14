@@ -8,11 +8,12 @@ import {
   createCasualMatch,
   updateCasualMatch,
   deleteCasualMatch,
+  casualParticipantIds,
 } from '@/db/friends'
 import { EdgeError } from '@/db/errors'
 import { serverClient } from '@/db/server'
 import { playersFromJson } from './[playerId]/cargar-state'
-import { casualInputFrom, redirectTarget } from './casual-form-data'
+import { assertFriendPlays, casualInputFrom, redirectTarget } from './casual-form-data'
 
 /**
  * Las escrituras de Amigos que NO tienen estado de cliente que muestre un
@@ -83,6 +84,7 @@ export async function loadCasualMatch(_state: CasualFormState, formData: FormDat
     // `players` es un borde de confianza: `playersFromJson` valida la forma.
     // Yo no viajo en el plantel -- la base me pone del lado A.
     const players = playersFromJson(String(formData.get('players') ?? ''))
+    assertFriendPlays(friendPlayerId, players)
     await createCasualMatch(supabase, players, casualInputFrom(formData))
   } catch (error) {
     if (!(error instanceof EdgeError)) throw error
@@ -94,25 +96,10 @@ export async function loadCasualMatch(_state: CasualFormState, formData: FormDat
 }
 
 /**
- * Las cuentas que juegan el partido, leídas ANTES de escribir (al borrar, las
- * filas ya no existen después). Alimenta `redirectTarget`. Un error de lectura
- * no se traga: sube como `EdgeError` y la action lo muestra.
- */
-async function participantIds(
-  supabase: Awaited<ReturnType<typeof serverClient>>,
-  matchId: string,
-): Promise<string[]> {
-  if (matchId === '') return []
-  const { data, error } = await supabase.from('casual_match_players').select('player_id').eq('match_id', matchId)
-  if (error !== null) throw new EdgeError(`No se pudo leer el partido: ${error.message}`)
-  return (data ?? []).flatMap((fila) => (fila.player_id === null ? [] : [fila.player_id]))
-}
-
-/**
  * Edita un partido casual existente -- mismo patrón que `loadCasualMatch`.
  *
  * El redirect (`redirectTarget`) vuelve a la pantalla del `<form>` si ese amigo
- * es parte del partido (`participantIds`, verificado en la base -- un formulario armado a
+ * es parte del partido (`casualParticipantIds`, verificado en la base -- un formulario armado a
  * mano no puede mandar a cualquier página); si no, al `friendPlayerId` que
  * DEVUELVE `updateCasualMatch`.
  */
@@ -122,7 +109,7 @@ export async function editCasualMatch(_state: CasualFormState, formData: FormDat
   let path: string
   try {
     const supabase = await serverClient()
-    const ids = await participantIds(supabase, matchId)
+    const ids = await casualParticipantIds(supabase, matchId)
     const fromDb = await updateCasualMatch(supabase, matchId, casualInputFrom(formData))
     path = redirectTarget(submitted, ids, fromDb)
   } catch (error) {
@@ -130,8 +117,6 @@ export async function editCasualMatch(_state: CasualFormState, formData: FormDat
     return { error: error.message }
   }
 
-  // `null`: todos los demás jugadores eran invitados -- no hay pantalla de
-  // amigo a la que volver.
   revalidatePath(path)
   redirect(path)
 }
@@ -153,7 +138,7 @@ export async function removeCasualMatch(formData: FormData): Promise<void> {
   let problem: string | null = null
   try {
     const supabase = await serverClient()
-    const ids = await participantIds(supabase, matchId)
+    const ids = await casualParticipantIds(supabase, matchId)
     const fromDb = await deleteCasualMatch(supabase, matchId)
     path = redirectTarget(submitted, ids, fromDb)
   } catch (error) {

@@ -71,7 +71,9 @@ function resultadoCasualDe(partido: CasualMatch, nombreAmigo: string): string {
         : ''
   const marcadorEmpatado = partido.score !== null && partido.score.mine === partido.score.theirs
   if (marcadorEmpatado && partido.outcome !== 'drew') {
-    const ganador = partido.outcome === 'won' || partido.together ? verbo : `Ganó ${nombreAmigo}`
+    // En un 2v2 el otro lado son dos: nombrar a uno solo sería afirmar de más.
+    const rivales = partido.rivals.length > 1 ? `Ganaron ${partido.rivals.join(', ')}` : `Ganó ${nombreAmigo}`
+    const ganador = partido.outcome === 'won' || partido.together ? verbo : rivales
     return `${quien}: ${marcador} · ${ganador}`
   }
   return `${quien}: ${marcador !== '' ? `${verbo} ${marcador}` : verbo}`

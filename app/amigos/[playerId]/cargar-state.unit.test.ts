@@ -31,6 +31,20 @@ describe('slotsError', () => {
   it('ignora lo que sobra del modo (rival2 en 1v1)', () => {
     expect(slotsError('1v1', { rival1: amigo('a'), rival2: null })).toBeNull()
   })
+  it('exige que juegue el amigo de la pantalla (si no, el partido no aparece en ningún historial)', () => {
+    const delAmigo = { playerId: 'a', name: 'Fede' }
+    expect(slotsError('1v1', { rival1: invitado('Beto') }, delAmigo)).toBe('Tiene que jugar Fede.')
+    expect(slotsError('1v1', { rival1: amigo('b') }, delAmigo)).toBe('Tiene que jugar Fede.')
+    expect(slotsError('2v2', { partner: amigo('b'), rival1: invitado('Beto'), rival2: invitado('Tano') }, delAmigo)).toBe(
+      'Tiene que jugar Fede.',
+    )
+  })
+  it('acepta al amigo de la pantalla de compañero o de rival', () => {
+    const delAmigo = { playerId: 'a', name: 'Fede' }
+    expect(slotsError('1v1', { rival1: amigo('a') }, delAmigo)).toBeNull()
+    expect(slotsError('2v2', { partner: amigo('a'), rival1: invitado('Beto'), rival2: invitado('Tano') }, delAmigo)).toBeNull()
+    expect(slotsError('2v2', { partner: invitado('Beto'), rival1: invitado('Tano'), rival2: amigo('a') }, delAmigo)).toBeNull()
+  })
 })
 
 describe('playersFrom', () => {

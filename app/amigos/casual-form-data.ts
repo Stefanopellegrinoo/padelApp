@@ -1,4 +1,5 @@
-import type { CasualResultInput } from '@/db/friends'
+import { EdgeError } from '@/db/errors'
+import type { CasualPlayerInput, CasualResultInput } from '@/db/friends'
 
 /**
  * Los campos del formulario tal cual llegan de `FormData`: `parseCasualResult`
@@ -31,4 +32,17 @@ export function casualInputFrom(formData: FormData): CasualResultInput {
 export function redirectTarget(submittedFriendId: string, participantIds: readonly string[], fromDb: string | null): string {
   if (submittedFriendId !== '' && participantIds.includes(submittedFriendId)) return `/amigos/${submittedFriendId}`
   return fromDb === null ? '/amigos' : `/amigos/${fromDb}`
+}
+
+/**
+ * El historial es por amigo (`historyWith`): un partido cuyo plantel no incluye
+ * al amigo de la pantalla desde la que se cargó se guarda pero no aparece en
+ * ella, y quien lo cargó cree que falló y lo repite. Borde de confianza: el
+ * cliente ya lo exige (`slotsError`), pero el `players` lo puede armar a mano
+ * cualquiera.
+ */
+export function assertFriendPlays(friendPlayerId: string, players: readonly CasualPlayerInput[]): void {
+  if (friendPlayerId === '' || !players.some((player) => player.playerId === friendPlayerId)) {
+    throw new EdgeError('Tiene que jugar el amigo de esta pantalla.')
+  }
 }

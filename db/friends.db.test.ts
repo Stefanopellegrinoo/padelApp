@@ -985,6 +985,23 @@ describe('partido casual — 1v1 y 2v2', () => {
     expect(mio.score).toEqual({ mine: 3, theirs: 1 })
   })
 
+  it('un deporte sin lugar en el registro (TEJO) se lee sin tirar, con sus sets orientados', async () => {
+    const uno = await createTestUser()
+    const dos = await createTestUser()
+    await amistadAceptada(uno.playerId, dos.playerId)
+
+    const { data: matchId, error } = await rpcDirecta(uno.client, uno.playerId, dos.playerId, {
+      p_sport: 'TEJO',
+      p_sets: [{ set_number: 1, games_a: 6, games_b: 4 }],
+      p_winner_side: 'A',
+    })
+    expect(error).toBeNull()
+
+    const visto = comoCasual((await historyWith(dos.client, uno.playerId)).find((m) => m.matchId === matchId))
+    expect(visto.sport).toBe('TEJO')
+    expect(visto.sets).toEqual([{ mine: 4, theirs: 6 }])
+  })
+
   it('2v2 (yo + amigo1 contra amigo2 + el invitado "Tano"): cada uno lo ve desde su lado', async () => {
     const yo = await createTestUser()
     const amigo1 = await createTestUser()

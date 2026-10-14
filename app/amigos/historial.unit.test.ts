@@ -383,6 +383,15 @@ describe('Historial', () => {
     ).toEqual([`${matchdayDay('2026-08-23')} Pádel`, 'En contra', 'Cargó Fede', '6-3 4-6 6-5', 'Ganaste'])
   })
 
+  it('un deporte del registro muestra su etiqueta; uno que no está, su id tal cual y su marcador', () => {
+    const base = { teams: { mine: null, theirs: null }, rivals: ['Juan'] }
+    const basquet = lineas(partidoCasual({ ...base, sport: 'BASQUET', score: { mine: 80, theirs: 70 }, outcome: 'won' }))
+    expect(basquet[0]).toBe(`${matchdayDay('2026-08-23')} Básquet`)
+    const tejo = lineas(partidoCasual({ ...base, sport: 'TEJO', score: { mine: 3, theirs: 1 }, outcome: 'won' }))
+    expect(tejo[0]).toBe(`${matchdayDay('2026-08-23')} TEJO`)
+    expect(tejo.join('|')).toContain('3-1')
+  })
+
   it('la fila de torneo tiene la misma forma, sin nombres ni autoría', () => {
     expect(lineas(partido())).toEqual([
       `${matchdayDay('2026-08-14')} Pádel torneo Los Jueves`,

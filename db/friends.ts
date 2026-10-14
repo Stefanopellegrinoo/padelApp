@@ -1,6 +1,6 @@
 import {
-  defaultConfig, disciplineProfile, isSportId, SPORT_IDS, sportLabel, sportOf, tallySets,
-  type GoalsSport, type MatchFormat, type SetScore, type SetsSport, type SportId,
+  defaultConfig, disciplineProfile, isSportId, SPORT_IDS, sportFamily, sportLabel, sportOf, tallySets,
+  type GoalsSport, type MatchFormat, type SetScore, type SetsSport, type SportId, type TournamentSport,
 } from '@/core'
 import { EdgeError } from './errors'
 import { matchError } from './validate'
@@ -92,7 +92,7 @@ export interface TournamentMatch {
    * backfill, pero ese estado no sobrevivió a la migración siguiente) --
    * mismo patrón que `CasualMatch.playedOn` más abajo.
    */
-  sport: 'PADEL' | 'FIFA'
+  sport: TournamentSport
   /** El nombre del torneo, para que la fila diga de dónde salió. */
   seasonName: string
   /**
@@ -111,8 +111,12 @@ export interface CasualMatch {
   /** `casual_matches.played_on` -- `not null` en la tabla (0072): a diferencia
    * del torneo, un casual nunca sale sin fecha. */
   playedOn: string
-  /** Literal respaldado por el CHECK de `casual_matches.sport` (0072). */
-  sport: 'PADEL' | 'FIFA'
+  /**
+   * El id tal cual vino de la fila. Sin CHECK de lista en `casual_matches.sport`
+   * (0093) puede ser un deporte que el registro ya no tiene: quien lo muestra
+   * usa `sportLabel`, que devuelve el id si no lo conoce.
+   */
+  sport: string
   /**
    * `true` si el amigo de la pantalla jugó de TU lado; `false` si en contra.
    * Un casual puede ser 2v2 (0072), así que como en el torneo los dos casos
@@ -366,7 +370,7 @@ export async function historyWith(
     // (0015_disciplines.sql:15): mismo criterio que `toDisciplineHeader`
     // (`db/read.ts:270-285`), que castea en el mismo punto por el mismo motivo.
     const disciplineKindById = new Map(
-      disciplineRows.map((row) => [row.id, row.kind as 'PADEL' | 'FIFA']),
+      disciplineRows.map((row) => [row.id, row.kind as TournamentSport]),
     )
 
     // Consulta 5: los sets de los partidos compartidos. Sin sets, el partido
@@ -535,20 +539,17 @@ async function casualesEntre(supabase: Client, me: string, friendPlayerId: strin
     assertComplete(nombresResult, 'nombres').map((row) => [row.id, row.display_name] as const),
   )
 
-  const padelIds = partidos.filter((row) => row.sport === 'PADEL').map((row) => row.id)
   const setsPorPartido = new Map<string, Array<{ games_a: number; games_b: number }>>()
-  if (padelIds.length > 0) {
-    const setsResult = await supabase
-      .from('casual_match_sets')
-      .select('match_id, games_a, games_b', { count: 'exact' })
-      .in('match_id', padelIds)
-      .order('match_id', { ascending: true })
-      .order('set_number', { ascending: true })
-    for (const set of assertComplete(setsResult, 'sets casuales')) {
-      const bucket = setsPorPartido.get(set.match_id)
-      if (bucket === undefined) setsPorPartido.set(set.match_id, [set])
-      else bucket.push(set)
-    }
+  const setsResult = await supabase
+    .from('casual_match_sets')
+    .select('match_id, games_a, games_b', { count: 'exact' })
+    .in('match_id', ids)
+    .order('match_id', { ascending: true })
+    .order('set_number', { ascending: true })
+  for (const set of assertComplete(setsResult, 'sets casuales')) {
+    const bucket = setsPorPartido.get(set.match_id)
+    if (bucket === undefined) setsPorPartido.set(set.match_id, [set])
+    else bucket.push(set)
   }
 
   return partidos.map((row) => {
@@ -562,15 +563,16 @@ async function casualesEntre(supabase: Client, me: string, friendPlayerId: strin
       throw new EdgeError(`No se pudo leer de qué lado jugó cada uno en el partido ${row.id}.`)
     }
     const soyA = miLado === 'A'
+    // Un id fuera del registro no tiene familia: la forma de los datos decide
+    // (si tiene sets, se leen como sets).
+    const family = sportFamily(row.sport) ?? (setsPorPartido.has(row.id) ? 'sets' : 'goals')
     const nombre = (fila: CasualPlayerRow) => nombreDeJugador(nombrePorId, fila)
 
     return {
       kind: 'casual',
       matchId: row.id,
       playedOn: row.played_on,
-      // Cast respaldado por el CHECK de `casual_matches.sport` (0072) -- mismo
-      // criterio que `disciplineKindById` arriba.
-      sport: row.sport as 'PADEL' | 'FIFA',
+      sport: row.sport,
       together: suLado === miLado,
       partners: filas.filter((fila) => fila.side === miLado && fila.player_id !== me).map(nombre),
       rivals: filas.filter((fila) => fila.side !== miLado).map(nombre),
@@ -587,7 +589,7 @@ async function casualesEntre(supabase: Client, me: string, friendPlayerId: strin
             : { mine: row.score_b, theirs: row.score_a },
       teams: soyA ? { mine: row.team_a, theirs: row.team_b } : { mine: row.team_b, theirs: row.team_a },
       sets:
-        row.sport === 'PADEL'
+        family === 'sets'
           ? (setsPorPartido.get(row.id) ?? []).map((set) =>
               soyA ? { mine: set.games_a, theirs: set.games_b } : { mine: set.games_b, theirs: set.games_a },
             )

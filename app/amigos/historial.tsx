@@ -1,6 +1,6 @@
 import type { CasualMatch, SharedMatch, TournamentMatch } from '@/db/friends'
 import { matchdayDay } from '@/app/format'
-import { DISCIPLINE_LABELS } from '@/app/torneos/nuevo/wizard-state'
+import { sportLabel } from '@/core'
 import { Fragment, type ReactNode } from 'react'
 import { CasualMatchRow } from './[playerId]/cargar'
 
@@ -280,9 +280,9 @@ export function Historial({ nombre, friendPlayerId, partidos }: HistorialProps) 
             <span className="h-px flex-1 bg-line" />
           </div>
           {grupo.partidos.map((partido) => {
-            // La etiqueta del deporte la traduce la PANTALLA con
-            // `DISCIPLINE_LABELS`; `db/` sólo tipa `'PADEL' | 'FIFA'`.
-            const deporte = <span className={CHIP}>{DISCIPLINE_LABELS[partido.sport]}</span>
+            // `sportLabel` sirve para torneo y casual, y devuelve el id tal
+            // cual si el registro ya no conoce ese deporte.
+            const deporte = <span className={CHIP}>{sportLabel(partido.sport)}</span>
             if (partido.kind === 'tournament') {
               return (
                 <div key={partido.matchId} className={CARD}>
@@ -303,7 +303,7 @@ export function Historial({ nombre, friendPlayerId, partidos }: HistorialProps) 
               )
             }
 
-            const equipo = partido.sport === 'FIFA' ? equipoDe(partido) : null
+            const equipo = equipoDe(partido)
             const quienes = quienesDe(partido, nombre)
             return (
               <CasualMatchRow key={partido.matchId} friendPlayerId={friendPlayerId} partido={partido}>

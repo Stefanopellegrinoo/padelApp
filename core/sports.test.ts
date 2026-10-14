@@ -43,4 +43,12 @@ describe('registro de deportes', () => {
     expect(isSportId('toString')).toBe(false)
     expect(isSportId('FIFA')).toBe(true)
   })
+
+  it('disciplineProfile deriva empate y marcador abierto del registro', () => {
+    for (const kind of TOURNAMENT_SPORTS) {
+      const { config, allowsDraw } = disciplineProfile(kind, defaultConfig(4))
+      expect(allowsDraw).toBe(SPORTS[kind].allowsDraw)
+      expect(config.matchFormat.openScore).toBe(SPORTS[kind].family === 'goals')
+    }
+  })
 })

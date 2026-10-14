@@ -12,10 +12,13 @@ import {
   minSquadFor,
   pointsCountError,
   pointsErrors,
+  SPORTS,
+  TOURNAMENT_SPORTS,
   type MatchdayFormat,
   type MatchFormat,
   type SeasonConfig,
   type SideSize,
+  type TournamentSport,
 } from '@/core'
 
 /** Los rangos son medidas del handoff (§6 paso 4), no decisiones de este código. */
@@ -103,10 +106,16 @@ export function steppersFor(formats: readonly MatchFormat[]): Stepper[] {
  * 1 o más — no hay "+ agregar otra disciplina" acá. Dos disciplinas del MISMO
  * kind (dos Pádel) sólo se arman después, desde Ajustes (PR13): este paso
  * pregunta "qué juega el torneo", no "cuántas mesas de cada juego".
+ *
+ * Salen del registro de deportes (`core/sports.ts`); el literal de dos claves
+ * en `DISCIPLINE_LABELS` es a propósito: conserva la exhaustividad del Record.
  */
-export const DISCIPLINE_KINDS = ['PADEL', 'FIFA'] as const
-export type DisciplineKind = (typeof DISCIPLINE_KINDS)[number]
-export const DISCIPLINE_LABELS: Record<DisciplineKind, string> = { PADEL: 'Pádel', FIFA: 'FIFA' }
+export const DISCIPLINE_KINDS = TOURNAMENT_SPORTS
+export type DisciplineKind = TournamentSport
+export const DISCIPLINE_LABELS: Record<DisciplineKind, string> = {
+  PADEL: SPORTS.PADEL.label,
+  FIFA: SPORTS.FIFA.label,
+}
 
 /**
  * Suma o saca un kind del marcado, sin ordenar: el orden en que se TOCAN los

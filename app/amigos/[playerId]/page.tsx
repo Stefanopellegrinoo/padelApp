@@ -13,18 +13,20 @@ import { CasualForm } from './cargar'
  * jugador (9.5px de rótulo, número grande), con el número en verde o en
  * naranja según de qué lado quedó la cuenta -- los colores de la Tabla.
  */
-function Cuenta({ label, registro, detalle }: { label: string; registro: Registro; detalle: string }) {
+function Cuenta({ label, registro }: { label: string; registro: Registro }) {
   const tono = registro.won > registro.lost ? 'text-up' : registro.lost > registro.won ? 'text-down' : ''
   return (
     <div className="rounded-[14px] border border-line bg-surface p-[14px]">
       <span className="block text-[9.5px] font-extrabold uppercase tracking-[.13em] text-muted">{label}</span>
-      <span className={`mt-1 block text-[22px] font-extrabold tabular-nums ${tono}`}>
-        {registro.won}-{registro.lost}
+      <span className={`mt-1 block text-[24px] leading-[1.1] font-extrabold tabular-nums ${tono}`}>
+        {registro.won} – {registro.lost}
       </span>
-      <span className="block text-[11px] font-semibold text-muted">
-        {detalle}
-        {registro.drew > 0 ? ` · ${registro.drew} emp.` : ''}
-      </span>
+      <span className="block text-[11px] font-semibold text-muted">ganados – perdidos</span>
+      {registro.drew > 0 && (
+        <span className="block text-[11px] font-semibold text-muted">
+          y {registro.drew} {registro.drew === 1 ? 'empate' : 'empates'}
+        </span>
+      )}
     </div>
   )
 }
@@ -99,8 +101,8 @@ export default async function AmigoPage({ params, searchParams }: PageProps) {
           consultas nuevas, y nunca la reemplaza (plan 2a, §4.4). */}
       {resumen.total > 0 && (
         <div className="grid grid-cols-2 gap-2">
-          <Cuenta label="Juntos" registro={resumen.juntos} detalle="ganaron-perdieron" />
-          <Cuenta label="En contra" registro={resumen.enContra} detalle="ganaste-perdiste" />
+          <Cuenta label="Juntos" registro={resumen.juntos} />
+          <Cuenta label="En contra" registro={resumen.enContra} />
         </div>
       )}
 

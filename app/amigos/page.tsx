@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { initials } from '@/app/format'
 import { SubmitButton } from '@/app/submit-button'
+import { Volver } from '@/app/torneo/[id]/volver'
 import { friendsOf } from '@/db/friends'
 import { serverClient } from '@/db/server'
 import { accept, sendFriendRequest } from './actions'
@@ -63,6 +64,9 @@ export default async function AmigosPage({ searchParams }: PageProps) {
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-lg flex-col gap-6 bg-bg px-5 pb-8 text-text">
       <header className="flex flex-col gap-[3px] pt-4">
+        <div className="mb-2">
+          <Volver href="/torneos" label="Mis torneos" />
+        </div>
         <h1 className="text-[26px] font-extrabold tracking-[-.03em]">Amigos</h1>
         <p className="text-pretty text-[13.5px] leading-[1.5] font-[550] text-muted">
           Torneos y partidos casuales con cada uno.

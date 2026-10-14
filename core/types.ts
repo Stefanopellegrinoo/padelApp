@@ -39,6 +39,9 @@ export interface MatchFormat {
   openScore: boolean
 }
 
+/** Cómo se armó la primera fecha de un torneo: por nivel o al azar. */
+export type FirstFecha = 'NIVEL' | 'SORTEO'
+
 export interface SeasonConfig {
   /**
    * Squad size, not matchday size. At least `minSquadFor(sideSize)`
@@ -61,6 +64,8 @@ export interface SeasonConfig {
    * partidos de a dos y 66 de a uno.
    */
   maxMatches?: number
+  /** Cómo se armó la primera fecha. Ausente = torneo anterior a este plan. Sólo lo narra Reglas. */
+  firstFecha?: FirstFecha
 }
 
 /**
@@ -123,6 +128,9 @@ export type Phase = (typeof PHASE_ORDER)[number]
 export type MatchdayFormat =
   | { readonly kind: 'ROUND_ROBIN' }
   | { readonly kind: 'GROUPS_KNOCKOUT'; readonly groups: number; readonly qualifiersPerGroup: number }
+
+/** Lo que guarda `disciplines.formato_default` y, mientras la fecha está en DRAFT, `matchdays.formato`. */
+export type MatchdayFormatSetting = MatchdayFormat | { readonly kind: 'AUTO' }
 
 export interface SetScore {
   gamesA: number

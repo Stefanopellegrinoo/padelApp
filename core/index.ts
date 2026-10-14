@@ -44,6 +44,8 @@ export type {
   SetScore,
   Phase,
   MatchdayFormat,
+  MatchdayFormatSetting,
+  FirstFecha,
   MatchResult,
   SideStanding,
   Award,
@@ -74,7 +76,9 @@ export type { Duo } from './side'
 // disciplina de este tipo": la usan los dos caminos que crean una (el wizard y
 // "+ Agregar disciplina" de Ajustes), que antes armaban los dos su config con
 // `defaultConfig` y hacían nacer una liga de FIFA siendo pádel con otro nombre.
-export { validateConfig, defaultConfig, disciplineProfile, pointsCountError, pointsErrors } from './config'
+// `fichaSeed` es la ÚNICA lectura de la ficha de un deporte al crear una disciplina.
+export type { DisciplineSeed } from './config'
+export { validateConfig, defaultConfig, disciplineProfile, fichaSeed, pointsCountError, pointsErrors } from './config'
 
 // ── Building a matchday ──────────────────────────────────────────────────────
 // `buildSides` (PR16, design PUNTO 5) is the Side-native entry point: with
@@ -236,8 +240,23 @@ export { tallyPlayers, partnerRecords, bestPair } from './playerstats'
 export { allMatchings } from './matchings'
 
 //── El registro de deportes: un deporte es dato, la familia de marcador es la estrategia ──
-export type { ScoringFamily, Range, SetsSport, GoalsSport, Sport, SportId, TournamentSport } from './sports'
-export { SPORTS, SPORT_IDS, TOURNAMENT_SPORTS, isSportId, sportOf, sportLabel, sportFamily } from './sports'
+export type { ScoringFamily, Range, SetsSport, GoalsSport, Sport, SportId, TournamentSport, Modality, TournamentFicha } from './sports'
+export {
+  SPORTS,
+  SPORT_IDS,
+  TOURNAMENT_SPORTS,
+  MODALITY_ORDER,
+  isSportId,
+  isTournamentSport,
+  sportOf,
+  sportLabel,
+  sportFamily,
+  modalityOf,
+  modalityShape,
+  modalityLabel,
+  sideWords,
+  unitOf,
+} from './sports'
 
 /*
  * Deliberately NOT exported — internal to the modules above:

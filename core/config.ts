@@ -1,6 +1,6 @@
 import { minSquadFor } from './constants'
-import { SPORTS, type TournamentSport } from './sports'
-import type { SeasonConfig, SideSize } from './types'
+import { SPORTS, modalityShape, sportOf, type Modality, type SportId, type TournamentSport } from './sports'
+import type { MatchdayFormatSetting, SeasonConfig, SideSize } from './types'
 
 /**
  * Los seis puestos que pagan. Es la tabla de un torneo de seis parejas, y
@@ -144,6 +144,45 @@ export function disciplineProfile(
   }
 }
 
+/** Lo que escribe una disciplina nueva, sembrada desde la ficha de su deporte. */
+export interface DisciplineSeed {
+  config: SeasonConfig
+  pairSize: SideSize
+  fixedTeams: boolean
+  allowsDraw: boolean
+  hasMasters: boolean
+  formatoDefault: MatchdayFormatSetting
+}
+
+/**
+ * Siembra una disciplina desde la ficha: la ÚNICA lectura de la ficha al crear
+ * (el wizard y "Agregar un deporte"); una config guardada no se recalcula de
+ * acá. Para Pádel y FIFA da lo mismo que `disciplineProfile(kind, defaultConfig(n, lados))`
+ * más `firstFecha`: la ficha nombra lo de hoy, no lo cambia.
+ *
+ * Tira (Error, no EdgeError) si el deporte no tiene ficha o no ofrece esa
+ * modalidad: es un bug del llamador, no un error de usuario.
+ */
+export function fichaSeed(kind: SportId, squadSize: number, modality: Modality): DisciplineSeed {
+  const sport = sportOf(kind)
+  const ficha = sport.ficha
+  if (ficha === null || !ficha.modalities.some((option) => option.id === modality)) {
+    throw new Error(`${kind} no se juega en ${modality}.`)
+  }
+  const { pairSize, fixedTeams } = modalityShape(modality)
+  const base = defaultConfig(squadSize, pairSize)
+  // Copia: la config sembrada no puede compartir el objeto del registro.
+  const matchFormat = sport.family === 'sets' ? { ...sport.format } : { ...base.matchFormat, openScore: true }
+  return {
+    config: { ...base, ...ficha.season, matchFormat, firstFecha: ficha.firstFecha[modality] },
+    pairSize,
+    fixedTeams,
+    allowsDraw: sport.allowsDraw,
+    hasMasters: ficha.masters && pairSize === 2,
+    formatoDefault: ficha.fechaFormat,
+  }
+}
+
 /**
  * "¿Esta lista de puntos tiene la cantidad que corresponde?", o `null`.
  *
@@ -253,6 +292,10 @@ export function validateConfig(config: SeasonConfig, sideSize: SideSize): string
   }
   if (tiebreakSnapshotEvery < 1) {
     errors.push('El orden de desempate se tiene que refrescar cada 1 fecha o más.')
+  }
+  // La config viaja como JSON de cliente: el tipo no alcanza para esta clave.
+  if (config.firstFecha !== undefined && config.firstFecha !== 'NIVEL' && config.firstFecha !== 'SORTEO') {
+    errors.push('La primera fecha tiene que ser por nivel o al azar.')
   }
 
   return errors

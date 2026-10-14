@@ -143,11 +143,10 @@ function SetsTaps({
               <button
                 key={`deuce-${loser}`}
                 type="button"
-                aria-label={`${loser + 2} a ${loser}`}
                 className={`${TAP} min-w-[52px] tabular-nums`}
                 onClick={() => onChange(chooseDeuce(load, loser, format))}
               >
-                {loser}
+                {loser + 2}-{loser}
               </button>
             ))}
           </div>

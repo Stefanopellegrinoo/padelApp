@@ -32,12 +32,6 @@ type Resultado = NonNullable<TournamentMatch['outcome']>
 const VERBOS_JUNTOS: Record<Resultado, string> = { won: 'Ganaron', lost: 'Perdieron', drew: 'Empataron' }
 const VERBOS_CONTRA: Record<Resultado, string> = { won: 'Ganaste', lost: 'Perdiste', drew: 'Empataste' }
 
-// Un partido casual se lee en primera persona, como el torneo enfrentado.
-// `CasualMatch.together` ya existe (el casual puede ser 2v2, 0072), pero la
-// pantalla sólo carga 1v1 hasta la Tarea 4b de plan-amigos-deporte-y-2v2 --
-// el caso "juntos" del casual lo dibuja esa tarea.
-const VERBOS_CASUAL = VERBOS_CONTRA
-
 // Reusa `matchdayDay` (`app/format.ts`), la misma fecha que ya se lee en
 // Fechas, la tarjeta de próxima fecha y Mis torneos -- no hay motivo para que
 // el historial invente un cuarto formato de fecha en la app.
@@ -66,14 +60,27 @@ function resultadoDe(partido: TournamentMatch): string {
  * diseño: "2-2 · ganó Juan".
  */
 function resultadoCasualDe(partido: CasualMatch, nombreAmigo: string): string {
-  const marcador = partido.score !== null ? `${partido.score.mine}-${partido.score.theirs}` : ''
+  const quien = partido.together ? 'Juntos' : 'En contra'
+  const verbo = (partido.together ? VERBOS_JUNTOS : VERBOS_CONTRA)[partido.outcome]
+  // PADEL: los sets en mi orientación; FIFA: los goles. Nunca los dos.
+  const marcador =
+    partido.sets !== null
+      ? partido.sets.map((set) => `${set.mine}-${set.theirs}`).join(' ')
+      : partido.score !== null
+        ? `${partido.score.mine}-${partido.score.theirs}`
+        : ''
   const marcadorEmpatado = partido.score !== null && partido.score.mine === partido.score.theirs
   if (marcadorEmpatado && partido.outcome !== 'drew') {
-    const ganador = partido.outcome === 'won' ? 'Ganaste' : `Ganó ${nombreAmigo}`
-    return `${marcador} · ${ganador}`
+    const ganador = partido.outcome === 'won' || partido.together ? verbo : `Ganó ${nombreAmigo}`
+    return `${quien}: ${marcador} · ${ganador}`
   }
-  const verbo = VERBOS_CASUAL[partido.outcome]
-  return marcador !== '' ? `${verbo} ${marcador}` : verbo
+  return `${quien}: ${marcador !== '' ? `${verbo} ${marcador}` : verbo}`
+}
+
+// "con Juan · vs Ana, Beto"; en 1v1 no hay compañero y se omite el "con".
+function nombresDe(partido: CasualMatch): string {
+  const con = partido.partners.length > 0 ? `con ${partido.partners.join(', ')} · ` : ''
+  return `${con}vs ${partido.rivals.join(', ')}`
 }
 
 // El equipo con el que jugaste VOS -- el ejemplo del diseño (§4.4) sólo
@@ -158,12 +165,13 @@ export function Historial({ nombre, friendPlayerId, partidos }: HistorialProps) 
                 partido={partido}
               >
                 <p className="text-[13.5px] font-[550] text-muted">
-                  {matchdayDay(partido.playedOn)} · {partido.sport}
+                  {matchdayDay(partido.playedOn)} · {DISCIPLINE_LABELS[partido.sport]}
                 </p>
                 <p className="text-[15px] font-extrabold tracking-[-.02em]">
                   {resultadoCasualDe(partido, nombre)}
                   {equipo !== null ? `, ${equipo}` : ''}
                 </p>
+                <p className="text-[13.5px] font-[550] text-muted">{nombresDe(partido)}</p>
                 <p className="text-[13.5px] font-[550] text-muted">{autoriaDe(partido)}</p>
               </CasualMatchRow>
             )

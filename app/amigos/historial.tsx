@@ -50,14 +50,14 @@ function resultadoDe(partido: TournamentMatch): string {
 }
 
 /**
- * El resultado de un partido casual, en primera persona. §4.3 manda mostrar
- * el HECHO, no la interpretación: `winner_side` es un dato propio que no se
- * deduce del marcador (un 2-2 puede cerrar empatado o resolverse aparte --
- * por penales en FIFA, pero la app no sabe que "FIFA" es fútbol y no lo
- * nombra). Cuando el marcador queda empatado y sin embargo hay un ganador
- * (`outcome !== 'drew'`), decir "Ganaste 2-2" o "Perdiste 2-2" leería como un
- * error de tipeo -- se nombra al ganador en cambio, como en el ejemplo del
- * diseño: "2-2 · ganó Juan".
+ * El resultado de un partido casual, con el mismo prefijo que el torneo:
+ * "Juntos: Ganaron 4-2" si el amigo jugó de TU lado (verbos de pareja), "En
+ * contra: Perdiste 1-3" si no (verbos en segunda persona). El marcador son los
+ * sets (PADEL, separados por espacio) o los goles (FIFA), en tu orientación.
+ * §4.3 manda mostrar el HECHO: `winner_side` no se deduce del marcador, así
+ * que con el marcador empatado y un ganador se lo nombra en vez de "Ganaste
+ * 2-2": "En contra: 2-2 · Ganó Juan". Juntos no hay a quién nombrar, el verbo
+ * de pareja alcanza: "Juntos: 2-2 · Perdieron".
  */
 function resultadoCasualDe(partido: CasualMatch, nombreAmigo: string): string {
   const quien = partido.together ? 'Juntos' : 'En contra'

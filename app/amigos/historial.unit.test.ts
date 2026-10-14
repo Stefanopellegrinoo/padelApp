@@ -271,54 +271,81 @@ describe('Historial', () => {
     expect(html).not.toContain('penales')
   })
   // -- Casual con lados (plan amigos-deporte-y-2v2, Task 3). --
+  // Texto EXACTO de cada <p> de la fila: una línea de más o un reordenamiento
+  // rompe la comparación (un `toContain` los dejaría pasar).
 
-  const render = (p: SharedMatch) =>
-    renderToStaticMarkup(Historial({ nombre: 'Juan', friendPlayerId: 'amigo-1', partidos: [p] }))
-
-  it('2v2 juntos con invitado: prefijo, verbo de pareja y nombres', () => {
-    const html = render(
-      partidoCasual({
-        together: true,
-        outcome: 'won',
-        score: { mine: 4, theirs: 2 },
-        teams: { mine: null, theirs: null },
-        partners: ['Juan'],
-        rivals: ['Ana', 'Invitado Beto'],
-      }),
+  const lineas = (p: SharedMatch): string[] =>
+    [...renderToStaticMarkup(Historial({ nombre: 'Juan', friendPlayerId: 'amigo-1', partidos: [p] })).matchAll(/<p [^>]*>(.*?)<\/p>/g)].map(
+      (m) => m[1],
     )
-    expect(html).toContain('Juntos: Ganaron 4-2')
-    expect(html).toContain('con Juan · vs Ana, Invitado Beto')
+
+  it('2v2 juntos con invitado: fecha y deporte, resultado, nombres, autoría', () => {
+    expect(
+      lineas(
+        partidoCasual({
+          together: true,
+          outcome: 'won',
+          score: { mine: 4, theirs: 2 },
+          teams: { mine: null, theirs: null },
+          partners: ['Juan'],
+          rivals: ['Ana', 'Beto'],
+        }),
+      ),
+    ).toEqual([
+      `${matchdayDay('2026-08-23')} · FIFA`,
+      'Juntos: Ganaron 4-2',
+      'con Juan · vs Ana, Beto',
+      'Cargó Fede',
+    ])
   })
 
   it('1v1 en contra FIFA con marcador empatado nombra al ganador y omite "con"', () => {
-    const html = render(partidoCasual({ outcome: 'won', score: { mine: 2, theirs: 2 }, rivals: ['Juan'] }))
-    expect(html).toContain('En contra: 2-2 · Ganaste')
-    expect(html).toContain('vs Juan')
-    expect(html).not.toContain('con Juan')
+    expect(lineas(partidoCasual({ outcome: 'won', score: { mine: 2, theirs: 2 }, rivals: ['Juan'] }))).toEqual([
+      `${matchdayDay('2026-08-23')} · FIFA`,
+      'En contra: 2-2 · Ganaste, jugaste con Boca',
+      'vs Juan',
+      'Cargó Fede',
+    ])
+  })
+
+  it('together + marcador empatado + perdieron: "Perdieron", sin "Ganó"', () => {
+    const l = lineas(
+      partidoCasual({
+        together: true,
+        outcome: 'lost',
+        score: { mine: 2, theirs: 2 },
+        teams: { mine: null, theirs: null },
+        partners: ['Juan'],
+        rivals: ['Ana', 'Beto'],
+      }),
+    )
+    expect(l[1]).toBe('Juntos: 2-2 · Perdieron')
+    expect(l.join('|')).not.toContain('Ganó')
   })
 
   it('PADEL muestra el deporte y los sets en mi orientación', () => {
-    const html = render(
-      partidoCasual({
-        sport: 'PADEL',
-        outcome: 'won',
-        score: null,
-        teams: { mine: null, theirs: null },
-        sets: [
-          { mine: 6, theirs: 3 },
-          { mine: 4, theirs: 6 },
-          { mine: 6, theirs: 5 },
-        ],
-        rivals: ['Juan'],
-      }),
-    )
-    expect(html).toContain('Pádel')
-    expect(html).toContain('En contra: Ganaste 6-3 4-6 6-5')
+    expect(
+      lineas(
+        partidoCasual({
+          sport: 'PADEL',
+          outcome: 'won',
+          score: null,
+          teams: { mine: null, theirs: null },
+          sets: [
+            { mine: 6, theirs: 3 },
+            { mine: 4, theirs: 6 },
+            { mine: 6, theirs: 5 },
+          ],
+          rivals: ['Juan'],
+        }),
+      ),
+    ).toEqual([`${matchdayDay('2026-08-23')} · Pádel`, 'En contra: Ganaste 6-3 4-6 6-5', 'vs Juan', 'Cargó Fede'])
   })
 
   it('la fila de torneo queda idéntica a la de hoy', () => {
-    const html = render(partido())
-    expect(html).toContain('· Pádel · torneo Los Jueves')
-    expect(html).toContain('En contra: Ganaste 6-3')
+    expect(lineas(partido())).toEqual([
+      `${matchdayDay('2026-08-14')} · Pádel · torneo Los Jueves`,
+      'En contra: Ganaste 6-3',
+    ])
   })
 })

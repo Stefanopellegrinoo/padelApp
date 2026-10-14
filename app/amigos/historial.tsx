@@ -32,12 +32,6 @@ type Resultado = NonNullable<TournamentMatch['outcome']>
 const VERBOS_JUNTOS: Record<Resultado, string> = { won: 'Ganaron', lost: 'Perdieron', drew: 'Empataron' }
 const VERBOS_CONTRA: Record<Resultado, string> = { won: 'Ganaste', lost: 'Perdiste', drew: 'Empataste' }
 
-// Un partido casual es SIEMPRE "en contra" -- son dos personas, nunca dobles
-// (diseño §7) -- así que reusa el mismo verbo en primera persona que el
-// torneo enfrentado, sin el prefijo "En contra:" que ahí distingue del caso
-// de compañeros: acá ese caso no existe y no hay campo `together` que lo diga.
-const VERBOS_CASUAL = VERBOS_CONTRA
-
 // Reusa `matchdayDay` (`app/format.ts`), la misma fecha que ya se lee en
 // Fechas, la tarjeta de próxima fecha y Mis torneos -- no hay motivo para que
 // el historial invente un cuarto formato de fecha en la app.
@@ -56,24 +50,39 @@ function resultadoDe(partido: TournamentMatch): string {
 }
 
 /**
- * El resultado de un partido casual, en primera persona. §4.3 manda mostrar
- * el HECHO, no la interpretación: `winner` es un dato propio que no se
- * deduce del marcador (un 2-2 puede cerrar empatado o resolverse aparte --
- * por penales en FIFA, pero la app no sabe que "FIFA" es fútbol y no lo
- * nombra). Cuando el marcador queda empatado y sin embargo hay un ganador
- * (`outcome !== 'drew'`), decir "Ganaste 2-2" o "Perdiste 2-2" leería como un
- * error de tipeo -- se nombra al ganador en cambio, como en el ejemplo del
- * diseño: "2-2 · ganó Juan".
+ * El resultado de un partido casual, con el mismo prefijo que el torneo:
+ * "Juntos: Ganaron 4-2" si el amigo jugó de TU lado (verbos de pareja), "En
+ * contra: Perdiste 1-3" si no (verbos en segunda persona). El marcador son los
+ * sets (PADEL, separados por espacio) o los goles (FIFA), en tu orientación.
+ * §4.3 manda mostrar el HECHO: `winner_side` no se deduce del marcador, así
+ * que con el marcador empatado y un ganador se lo nombra en vez de "Ganaste
+ * 2-2": "En contra: 2-2 · Ganó Juan". Juntos no hay a quién nombrar, el verbo
+ * de pareja alcanza: "Juntos: 2-2 · Perdieron".
  */
 function resultadoCasualDe(partido: CasualMatch, nombreAmigo: string): string {
-  const marcador = partido.score !== null ? `${partido.score.mine}-${partido.score.theirs}` : ''
+  const quien = partido.together ? 'Juntos' : 'En contra'
+  const verbo = (partido.together ? VERBOS_JUNTOS : VERBOS_CONTRA)[partido.outcome]
+  // PADEL: los sets en mi orientación; FIFA: los goles. Nunca los dos.
+  const marcador =
+    partido.sets !== null
+      ? partido.sets.map((set) => `${set.mine}-${set.theirs}`).join(' ')
+      : partido.score !== null
+        ? `${partido.score.mine}-${partido.score.theirs}`
+        : ''
   const marcadorEmpatado = partido.score !== null && partido.score.mine === partido.score.theirs
   if (marcadorEmpatado && partido.outcome !== 'drew') {
-    const ganador = partido.outcome === 'won' ? 'Ganaste' : `Ganó ${nombreAmigo}`
-    return `${marcador} · ${ganador}`
+    // En un 2v2 el otro lado son dos: nombrar a uno solo sería afirmar de más.
+    const rivales = partido.rivals.length > 1 ? `Ganaron ${partido.rivals.join(', ')}` : `Ganó ${nombreAmigo}`
+    const ganador = partido.outcome === 'won' || partido.together ? verbo : rivales
+    return `${quien}: ${marcador} · ${ganador}`
   }
-  const verbo = VERBOS_CASUAL[partido.outcome]
-  return marcador !== '' ? `${verbo} ${marcador}` : verbo
+  return `${quien}: ${marcador !== '' ? `${verbo} ${marcador}` : verbo}`
+}
+
+// "con Juan · vs Ana, Beto"; en 1v1 no hay compañero y se omite el "con".
+function nombresDe(partido: CasualMatch): string {
+  const con = partido.partners.length > 0 ? `con ${partido.partners.join(', ')} · ` : ''
+  return `${con}vs ${partido.rivals.join(', ')}`
 }
 
 // El equipo con el que jugaste VOS -- el ejemplo del diseño (§4.4) sólo
@@ -113,9 +122,7 @@ function autoriaDe(partido: CasualMatch): string {
  */
 export function Historial({ nombre, friendPlayerId, partidos }: HistorialProps) {
   return (
-    <div className="flex flex-col gap-4 pt-4">
-      <h1 className="text-[26px] font-extrabold tracking-[-.03em]">{nombre}</h1>
-
+    <div className="flex flex-col gap-4">
       {partidos.length === 0 ? (
         // Estado vacío: dice qué falta, no dibuja una tabla sin filas.
         <p className="text-pretty text-[13.5px] leading-[1.5] font-[550] text-muted">
@@ -154,16 +161,16 @@ export function Historial({ nombre, friendPlayerId, partidos }: HistorialProps) 
               <CasualMatchRow
                 key={partido.matchId}
                 friendPlayerId={friendPlayerId}
-                friendName={nombre}
                 partido={partido}
               >
                 <p className="text-[13.5px] font-[550] text-muted">
-                  {matchdayDay(partido.playedOn)} · {partido.sport}
+                  {matchdayDay(partido.playedOn)} · {DISCIPLINE_LABELS[partido.sport]}
                 </p>
                 <p className="text-[15px] font-extrabold tracking-[-.02em]">
                   {resultadoCasualDe(partido, nombre)}
                   {equipo !== null ? `, ${equipo}` : ''}
                 </p>
+                <p className="text-[13.5px] font-[550] text-muted">{nombresDe(partido)}</p>
                 <p className="text-[13.5px] font-[550] text-muted">{autoriaDe(partido)}</p>
               </CasualMatchRow>
             )

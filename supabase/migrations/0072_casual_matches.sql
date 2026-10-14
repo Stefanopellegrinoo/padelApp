@@ -1,91 +1,150 @@
--- El partido casual (docs/historial-entre-amigos.md §4), tarea 1 de la
--- rebanada 2b -- SÓLO la tabla, su RLS y sus permisos. Nada la lee ni la
--- escribe todavía: la lectura conjunta con los partidos de torneo es la
--- tarea 2, y la pantalla que carga uno es la tarea 4. Hasta que esas
--- lleguen, esta tabla existe y no la usa nadie -- misma postura que
--- `0069_discipline_rules.sql` con `rules_text` recién agregada.
+-- El partido casual (docs/historial-entre-amigos.md §4), rediseñado por
+-- docs/plan-amigos-deporte-y-2v2.md (Tarea 2): el deporte es `PADEL | FIFA`,
+-- se juega 1v1 o 2v2, y cada lado puede tener amigos con cuenta o invitados
+-- (sólo un nombre). Tres tablas: el partido, quién jugó de qué lado, y los
+-- sets si fue pádel.
 --
--- `player_a`/`player_b` apuntan a `players` directamente, NO a `friendships`:
--- dejar de ser amigos no borra los partidos ya cargados (§4.5, último
--- párrafo) -- si la FK fuera a `friendships`, borrar esa fila se llevaría
--- puesta la historia.
+-- Este archivo se REESCRIBIÓ en el lugar: nunca llegó a `main` (`git log
+-- main -- supabase/migrations/0072_casual_matches.sql` vacío), así que no hay
+-- datos que migrar. Trae SÓLO las tablas, sus permisos y el trigger de
+-- `updated_at`. El resto vive aparte por la regla "una función por migración"
+-- (`db/migrations.unit.test.ts`):
+--   - `0090_is_casual_participant.sql`: el helper y TODAS las políticas (las
+--     políticas lo necesitan, así que van con él).
+--   - `0091_casual_match_shape.sql`: la forma del partido (1v1 o 2v2, quien
+--     carga juega), un constraint trigger diferido.
+--   - `0092_save_casual_match.sql`: el único camino de escritura, la RPC.
+-- Entre éste y `0090` las tres tablas tienen RLS prendida y ninguna política:
+-- nadie lee ni escribe nada, que es el estado seguro.
 create table public.casual_matches (
   id          uuid primary key default gen_random_uuid(),
-  player_a    uuid not null references public.players on delete cascade,
-  player_b    uuid not null references public.players on delete cascade,
-  sport       text not null check (length(trim(sport)) > 0),
+  sport       text not null check (sport in ('PADEL', 'FIFA')),
   played_on   date not null,
-  -- Quién ganó es un dato PROPIO, nunca deducido del marcador: un 2-2 que
-  -- termina con ganador se definió por penales, y ningún cálculo sobre el
-  -- marcador puede decir eso (diseño §4.2, §4.3). `null` = empataron.
-  winner      uuid references public.players,
-  score_a     int,
-  score_b     int,
-  -- `is null or length(trim(x)) > 0`: mismo criterio que `sport` arriba y
-  -- que `0001_schema.sql:6`/`0047_award_lines.sql:18` -- "sin equipo" tiene
-  -- una sola forma de decirse (`null`), no dos (`null` o `''`).
+  -- Quién ganó es un dato PROPIO, nunca deducido del marcador: un 2-2 de FIFA
+  -- que termina con ganador se definió por penales, y ningún cálculo sobre el
+  -- marcador puede decir eso (diseño §4.2, §4.3). Es un LADO, no una persona:
+  -- en un 2v2 ganan dos. `null` = empataron (sólo FIFA, ver abajo).
+  winner_side text check (winner_side in ('A', 'B')),
+  -- Goles: sólo FIFA. El resultado de pádel vive en `casual_match_sets`.
+  score_a     int check (score_a >= 0),
+  score_b     int check (score_b >= 0),
+  -- `is null or length(trim(x)) > 0`: mismo criterio que
+  -- `0001_schema.sql:6`/`0047_award_lines.sql:18` -- "sin equipo" tiene una
+  -- sola forma de decirse (`null`), no dos (`null` o `''`).
   team_a      text check (team_a is null or length(trim(team_a)) > 0),
   team_b      text check (team_b is null or length(trim(team_b)) > 0),
   created_by  uuid not null references public.players,
   updated_by  uuid not null references public.players,
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now(),
-  -- Mismo truco que `friendships` (0070:12-22): orden canónico, así que
-  -- (a,b) y (b,a) son el mismo par y un partido contra uno mismo (`a < a`)
-  -- es imposible.
-  constraint casual_ordered      check (player_a < player_b),
-  -- El ganador tiene que ser uno de los dos que jugaron -- sin esto la fila
-  -- puede afirmar que ganó un tercero que ni participó.
-  constraint casual_winner_plays check (winner is null or winner in (player_a, player_b)),
   -- O están los dos números o ninguno -- un marcador a medias no es un
   -- marcador. NO hay campo "por penales": es derivable de (marcador
-  -- empatado + winner no nulo), y guardarlo aparte sólo permite un registro
-  -- que se contradice solo (§4.3).
-  constraint casual_score_pair   check ((score_a is null) = (score_b is null)),
-  -- Mismo argumento que `casual_winner_plays` de arriba, aplicado a quién
-  -- cargó/tocó el partido en vez de a quién ganó: sin este check, un insert
-  -- de `service_role` (o un futuro camino de servidor) puede grabar que un
-  -- tercero cargó o tocó último un partido que no jugó, y §3.2 le muestra
-  -- ese nombre a los dos jugadores como si fuera cierto. `friendships` tiene
-  -- el mismo par constraint/FK para su propio `requested_by` (0070:16,21).
-  constraint casual_authors_play check (
-    created_by in (player_a, player_b) and updated_by in (player_a, player_b)
-  )
+  -- empatado + winner_side no nulo), y guardarlo aparte sólo permite un
+  -- registro que se contradice solo (§4.3).
+  constraint casual_score_pair  check ((score_a is null) = (score_b is null)),
+  -- "Con qué equipo jugaste" es de FIFA; en pádel no existe.
+  constraint casual_teams_fifa  check (sport = 'FIFA' or (team_a is null and team_b is null)),
+  -- pádel: sin goles, sin empate; el resultado vive en casual_match_sets
+  constraint casual_padel_shape check (sport <> 'PADEL' or (score_a is null and winner_side is not null))
+);
+-- Lo que este archivo YA NO tiene, a propósito: `casual_authors_play` (los
+-- autores tienen que haber jugado). `created_by` lo cubre el trigger de forma
+-- (0091: quien carga es uno de los jugadores), y `updated_by` el `with check`
+-- de `casual_matches_update` (0090: sólo un participante edita, y firma como
+-- él mismo). Un CHECK no puede mirar otra tabla, y los jugadores ahora viven
+-- en otra.
+--
+-- Lo que la base NO chequea, a propósito: que los sets cierren un partido
+-- legal para el formato elegido, y que `winner_side` coincida con ellos. El
+-- formato no se guarda y "legal" es `matchError`, que vive en TypeScript: lo
+-- valida `parseCasualResult` en el único camino de escritura (la RPC vía
+-- `db/friends.ts`). ponytail: un POST directo a la RPC puede guardar sets
+-- incoherentes en SU propio partido; si eso importa, un trigger diferido que
+-- cuente sets por lado.
+
+-- Quién jugó y de qué lado. Una fila por jugador: con cuenta (`player_id`) o
+-- invitado (`guest_name`), nunca las dos ni ninguna.
+--
+-- `player_id` apunta a `players` directamente, NO a `friendships`: dejar de
+-- ser amigos no borra los partidos ya cargados (§4.5, último párrafo) -- si
+-- la FK fuera a `friendships`, borrar esa fila se llevaría puesta la
+-- historia. `on delete cascade` en `player_id`: si se borra una cuenta, su
+-- fila desaparece y el partido queda desparejo (el trigger de forma de 0091
+-- corre en INSERT, no en este delete). Aceptado: la versión anterior de esta
+-- tabla cascadeaba el partido entero, mismo destino o peor.
+create table public.casual_match_players (
+  match_id   uuid not null references public.casual_matches on delete cascade,
+  side       text not null check (side in ('A', 'B')),
+  player_id  uuid references public.players on delete cascade,
+  guest_name text check (guest_name is null or length(trim(guest_name)) > 0),
+  constraint casual_player_xor check (num_nonnulls(player_id, guest_name) = 1),
+  -- NULLs distintos: varios invitados en el mismo partido entran sin chocar,
+  -- pero la misma cuenta no puede estar dos veces (ni de los dos lados).
+  unique (match_id, player_id)
+);
+-- `match_id` ya queda indexado por la `unique` de arriba (es su primera
+-- columna). Éste es el de "¿en qué partidos jugó X?": toda lectura del
+-- historial (`historyWith`) y el helper de RLS (0090) buscan por `player_id`.
+create index casual_match_players_by_player on public.casual_match_players (player_id);
+
+-- Espejo de match_sets (0001_schema.sql:194-204), mismo nombre de columnas.
+-- La PK compuesta reemplaza el `id` + `unique (match_id, set_number)` de
+-- allá: acá nadie referencia un set suelto.
+create table public.casual_match_sets (
+  match_id   uuid not null references public.casual_matches on delete cascade,
+  set_number int  not null check (set_number >= 1),
+  games_a    int  not null check (games_a >= 0),
+  games_b    int  not null check (games_b >= 0),
+  primary key (match_id, set_number),
+  -- En pádel no hay set empatado -- mismo argumento que `match_sets_no_draw`.
+  constraint casual_sets_no_draw check (games_a <> games_b)
 );
 
--- Mismo par que `friendships` (0070:24-25) y por la misma razón: toda
--- lectura de este historial busca por `player_id`, de un lado o del otro
--- (tarea 2), nunca por `id`.
-create index casual_matches_by_player_a on public.casual_matches (player_a);
-create index casual_matches_by_player_b on public.casual_matches (player_b);
-
-alter table public.casual_matches enable row level security;
+alter table public.casual_matches       enable row level security;
+alter table public.casual_match_players enable row level security;
+alter table public.casual_match_sets    enable row level security;
 
 -- ── permisos ────────────────────────────────────────────────────────────────
 -- Las dos cosas de siempre, y este repo ya se comió las dos por separado
 -- (0002, 0009 -- detalle completo en 0070:29-49): el `grant` porque el CLI
 -- de Supabase no le da DML a los roles de la API solo, y el `revoke` de
 -- `anon` porque la nube alguna vez otorgó DML por defecto a tabla nueva.
-grant select, insert, delete on public.casual_matches to authenticated;
-grant all on public.casual_matches to service_role;
-revoke all on public.casual_matches from anon;
+grant select, delete on public.casual_matches to authenticated;
+-- INSERT por columna, SIN `created_at` ni `updated_at`: las dos salen del
+-- default `now()`, y `created_at` es además la llave del "plantel fijo" de
+-- `casual_match_players_insert` (0090: sólo se suman jugadores en la misma
+-- transacción que creó el partido, `created_at = now()`). Si el cliente
+-- pudiera mandarla, la fijaría en el futuro y esa ventana no se cerraría
+-- nunca. `id` sí está: la RPC (0092) lo genera antes de insertar.
+grant insert (id, sport, played_on, winner_side, score_a, score_b, team_a, team_b, created_by, updated_by)
+  on public.casual_matches to authenticated;
+-- Jugadores: sin update ni delete -- el plantel es fijo una vez cargado. Se
+-- van sólo con el partido (`on delete cascade`, y las acciones referenciales
+-- no pasan por RLS ni por grants).
+grant select, insert on public.casual_match_players to authenticated;
+-- Sets: sin update -- editar el resultado es reemplazarlos (borrar e
+-- insertar, en la misma transacción de la RPC, 0092).
+grant select, insert, delete on public.casual_match_sets to authenticated;
+grant all on public.casual_matches, public.casual_match_players, public.casual_match_sets to service_role;
+revoke all on public.casual_matches, public.casual_match_players, public.casual_match_sets from anon;
 
 -- Sólo estas columnas son escribibles por un UPDATE de `authenticated`.
--- `player_a`, `player_b`, `created_by` y `created_at` son identidad de la
--- fila y se fijan al cargar el partido: un `with check` no puede comparar
--- la fila nueva contra la vieja (misma lección que 0069:59 y 0070:58), así
--- que lo que de verdad las congela es no darles permiso de UPDATE -- sin
--- él, ni llegan a evaluarse contra una política.
+-- `created_by` y `created_at` son identidad de la fila y se fijan al cargar
+-- el partido: un `with check` no puede comparar la fila nueva contra la vieja
+-- (misma lección que 0069:59 y 0070:58), así que lo que de verdad las congela
+-- es no darles permiso de UPDATE -- sin él, ni llegan a evaluarse contra una
+-- política. Los jugadores ya no son columnas de esta tabla: los congela que
+-- `casual_match_players` no tenga grant de update/delete.
 --
--- `updated_at` sale de esta lista por un motivo DISTINTO al de las cuatro de
+-- `updated_at` sale de esta lista por un motivo DISTINTO al de las de
 -- arriba: no es identidad, es la prueba de que algo cambió (§3.2 -- "que
 -- puedan ver que algo cambió"). Si el cliente pudiera mandarla, un update
 -- podría pisarla con cualquier fecha, incluso una pasada, y "tocado último
--- por Juan" (que sí queda forzado por el `with check` de abajo) mentiría
--- sobre CUÁNDO. La escribe el trigger de acá abajo, siempre -- así ningún
--- camino de escritura, ni uno futuro (Tarea 4) que se olvide de setearla a
--- mano, puede dejarla mintiendo.
-grant update (sport, played_on, winner, score_a, score_b, team_a, team_b, updated_by)
+-- por Juan" (que sí queda forzado por el `with check` de
+-- `casual_matches_update`, 0090) mentiría sobre CUÁNDO. La escribe el trigger
+-- de acá abajo, siempre -- así ningún camino de escritura, ni uno futuro que
+-- se olvide de setearla a mano, puede dejarla mintiendo.
+grant update (sport, played_on, winner_side, score_a, score_b, team_a, team_b, updated_by)
   on public.casual_matches to authenticated;
 
 -- El trigger, no la aplicación: mismo argumento que
@@ -116,87 +175,3 @@ create trigger casual_matches_touch_updated_at
 -- el mismo reflejo que el resto del repo exige para TODA función nueva, sin
 -- excepción para "esta no se puede llamar directo".
 revoke execute on function public.casual_matches_touch_updated_at() from public, anon;
-
--- ── políticas ───────────────────────────────────────────────────────────────
--- Terreno nuevo: toda política de este repo hasta acá se apoya en la
--- temporada (`is_participant`, `is_season_admin`, 0002_rls.sql) -- acá no
--- hay ninguna.
---
--- ESTA política y el `using` de `casual_matches_update`/`_delete` de más
--- abajo están acoplados, y quien toque cualquiera de las tres tiene que
--- saberlo: ningún camino de escritura real de esta app puede invocar un
--- UPDATE/DELETE sin `WHERE` -- `safeupdate`, una librería precargada en el
--- rol `authenticator` de Supabase (`session_preload_libraries=supautils,
--- safeupdate` en `pg_roles.rolconfig` de ese rol), lo rechaza con SQLSTATE
--- 21000 (`cardinality_violation`) DENTRO de Postgres antes de que la
--- sentencia corra -- y todo UPDATE/DELETE con `WHERE` sobre esta tabla
--- ANDea el `using` de la política de SELECT junto con el de su propio
--- comando (verificado en vivo, incluso con un filtro que no apunta a una
--- fila puntual). Como resultado, `casual_matches_update.using` y
--- `casual_matches_delete.using` NUNCA actúan solos hoy: EL DÍA QUE ESTA
--- política se ensanche, esos dos `using` pasan de redundantes a única
--- puerta -- y ningún test de este repo los aísla, sólo los ejercita en
--- combinación con ésta. Repetir esta advertencia si se toca cualquiera de
--- las tres.
-create policy casual_matches_read on public.casual_matches
-  for select to authenticated
-  using (public.my_player_id() in (player_a, player_b));
-
--- El insert exige las tres cosas a la vez, y la tercera es la que de verdad
--- importa -- éste es el párrafo más importante del archivo (§4.5).
---
--- Leer el historial NO chequea amistad, y está bien: la RLS de `matches` ya
--- acota todo a temporadas donde el que consulta participa, así que pedir
--- el historial de un desconocido devuelve cero filas ahí -- el partido de
--- torneo tiene esa RLS aguas arriba respaldándolo. EL CASUAL NO TIENE
--- NINGUNA. Si este insert sólo pidiera "soy uno de los dos", cualquiera
--- fabrica "le gané 5-0 a [player_id de cualquiera]" contra un desconocido,
--- y esa persona lo ve en su propio historial, porque la lectura está
--- abierta a propósito. La condición 3 no es una formalidad: es un canal de
--- acoso, y esto lo cierra. Sin una amistad ACEPTADA entre los dos, no hay
--- insert, sin importar qué digan las otras dos condiciones.
-create policy casual_matches_insert on public.casual_matches
-  for insert to authenticated
-  with check (
-    public.my_player_id() in (player_a, player_b)
-    and created_by = public.my_player_id()
-    and updated_by = public.my_player_id()
-    and exists (
-      select 1
-        from public.friendships f
-       where f.player_a = casual_matches.player_a
-         and f.player_b = casual_matches.player_b
-         and f.accepted_at is not null
-    )
-  );
-
--- El `exists` de arriba compara sin ordenar de nuevo el par: funciona
--- porque `friendships` (0070) y esta tabla comparten el MISMO criterio de
--- orden canónico (`player_a < player_b`), así que dos UUID cualesquiera
--- ordenan igual en las dos tablas -- no hace falta un `or` con el par al
--- revés. Y `casual_matches.player_a`/`.player_b`, calificados, son
--- necesarios y no cosméticos: dentro del `exists`, un `player_a` sin
--- calificar resolvería contra el alias `f` (la subconsulta lo tapa), no
--- contra la fila que se está insertando -- y la puerta quedaría
--- comparando `f.player_a` contra sí mismo, siempre cierto.
---
--- Actualizar: cualquiera de los dos puede editar (§3.1), y el `with check`
--- sólo exige dejar asentado quién tocó último -- no repite la membresía
--- porque `player_a`/`player_b` ya están congelados por el grant de columna
--- de arriba. Y NO repite la condición 3 del insert: la puerta de amistad
--- aceptada (§4.5) es de alta, no de por vida. Un miembro cuya amistad se
--- borró después de cargar el partido lo sigue pudiendo editar -- es §4.5
--- funcionando como se diseñó ("dejar de ser amigos no borra los partidos ya
--- cargados. Es historia."), sólo que ese párrafo nunca dice que la puerta
--- es sólo de insert, y acá queda dicho.
-create policy casual_matches_update on public.casual_matches
-  for update to authenticated
-  using (public.my_player_id() in (player_a, player_b))
-  with check (updated_by = public.my_player_id());
-
--- Borrar: cualquiera de los dos, en cualquier momento (§3.3) -- si tu
--- amigo te borra los partidos que perdió, es un problema de amigo, no de
--- software.
-create policy casual_matches_delete on public.casual_matches
-  for delete to authenticated
-  using (public.my_player_id() in (player_a, player_b));

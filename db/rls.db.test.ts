@@ -4,6 +4,7 @@ import type { Database, Json } from './database.types'
 import { adminClient } from './test/admin'
 import { createTestUser } from './test/users'
 import { createSeason } from './test/factories'
+import { createCasualMatch } from './friends'
 import { defaultConfig } from '../core/config'
 
 const TABLES = [
@@ -25,6 +26,12 @@ const TABLES = [
   // la ejercitaba, así que su RLS quedó fuera de esta suite desde que la
   // tabla existe.
   'season_seed_order',
+  // Review final de amigos-2v2: las tres tablas del partido casual (0072)
+  // tampoco entraban acá. El loop del extraño las ejercita con un partido
+  // sembrado de verdad (más abajo), no sobre tablas vacías.
+  'casual_matches',
+  'casual_match_players',
+  'casual_match_sets',
 ] as const
 
 // `match_participants` (0071) va en un array aparte, no adentro de `TABLES`:
@@ -209,7 +216,7 @@ describe('RLS — lectura', () => {
     expect(error?.code).toBe('42501')
   })
 
-  it('anon no ve una sola fila de ninguna de las quince tablas', async () => {
+  it('anon no ve una sola fila de ninguna de las tablas', async () => {
     const anon = anonClient()
 
     for (const table of TABLES) {
@@ -241,6 +248,26 @@ describe('RLS — lectura', () => {
       .from('match_sets')
       .insert({ match_id: matchId, set_number: 1, games_a: 6, games_b: 3 })
     if (setError) throw new Error(setError.message)
+
+    // Un partido casual PADEL (con un set) de un tercero contra un invitado, para
+    // que el loop de abajo vea filas que existen y la RLS las esconde.
+    const jugador = await createTestUser()
+    await createCasualMatch(
+      jugador.client,
+      [{ side: 'theirs', playerId: null, guestName: 'Tano' }],
+      {
+        sport: 'PADEL',
+        playedOn: '2026-08-30',
+        outcome: '',
+        scoreMine: '',
+        scoreTheirs: '',
+        teamMine: '',
+        teamTheirs: '',
+        setsToWin: '1',
+        gamesPerSet: '6',
+        sets: JSON.stringify([{ mine: 6, theirs: 3 }]),
+      },
+    )
 
     // `players` queda afuera a propósito: `players_read` es `using (true)`
     // (Task 7), así que cualquier autenticado ve el plantel global sin ser

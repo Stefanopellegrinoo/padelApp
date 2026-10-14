@@ -8,10 +8,12 @@ import {
   createCasualMatch,
   updateCasualMatch,
   deleteCasualMatch,
-  type CasualMatchInput,
+  casualParticipantIds,
 } from '@/db/friends'
 import { EdgeError } from '@/db/errors'
 import { serverClient } from '@/db/server'
+import { playersFromJson } from './[playerId]/cargar-state'
+import { assertFriendPlays, casualInputFrom, redirectTarget } from './casual-form-data'
 
 /**
  * Las escrituras de Amigos que NO tienen estado de cliente que muestre un
@@ -65,30 +67,11 @@ export interface CasualFormState {
 }
 
 /**
- * Los siete campos del formulario tal cual llegan de `FormData` -- ni un
- * `Number()` ni un `.trim()` acá: `parseCasualInput` (`db/friends.ts`) es el
- * único lugar que valida, para que `createCasualMatch`/`updateCasualMatch` se
- * puedan probar sin pasar por esta capa (ver los tests de
- * `db/friends.db.test.ts`).
- */
-function casualInputFrom(formData: FormData): CasualMatchInput {
-  return {
-    sport: String(formData.get('sport') ?? ''),
-    playedOn: String(formData.get('playedOn') ?? ''),
-    outcome: String(formData.get('outcome') ?? ''),
-    scoreMine: String(formData.get('scoreMine') ?? ''),
-    scoreTheirs: String(formData.get('scoreTheirs') ?? ''),
-    teamMine: String(formData.get('teamMine') ?? ''),
-    teamTheirs: String(formData.get('teamTheirs') ?? ''),
-  }
-}
-
-/**
  * Carga un partido casual nuevo. Firma de `useActionState`
  * (`(prevState, formData) => nextState`) en vez del patrón sin-JS de arriba:
  * a diferencia de pedir/aceptar amistad (un solo campo, nada que validar en
- * el borde), este formulario tiene siete campos y una validación real
- * (`parseCasualInput`) que puede rechazar -- mostrar el error SIN perder lo
+ * el borde), este formulario tiene varios campos y una validación real
+ * (`parseCasualResult`) que puede rechazar -- mostrar el error SIN perder lo
  * ya tipeado, en la misma pantalla, es lo que `registro-form.tsx` ya resuelve
  * con este hook. `friendPlayerId` viaja en un input oculto, no en un
  * argumento -- mismo criterio que `next` en `registro-form.tsx`: este repo no
@@ -98,7 +81,11 @@ export async function loadCasualMatch(_state: CasualFormState, formData: FormDat
   const friendPlayerId = String(formData.get('friendPlayerId') ?? '')
   try {
     const supabase = await serverClient()
-    await createCasualMatch(supabase, friendPlayerId, casualInputFrom(formData))
+    // `players` es un borde de confianza: `playersFromJson` valida la forma.
+    // Yo no viajo en el plantel -- la base me pone del lado A.
+    const players = playersFromJson(String(formData.get('players') ?? ''))
+    assertFriendPlays(friendPlayerId, players)
+    await createCasualMatch(supabase, players, casualInputFrom(formData))
   } catch (error) {
     if (!(error instanceof EdgeError)) throw error
     return { error: error.message }
@@ -111,27 +98,27 @@ export async function loadCasualMatch(_state: CasualFormState, formData: FormDat
 /**
  * Edita un partido casual existente -- mismo patrón que `loadCasualMatch`.
  *
- * El redirect usa el `friendPlayerId` que DEVUELVE `updateCasualMatch`, no el
- * del `<form>` (que igual viaja, para el hidden field que comparte con
- * `loadCasualMatch`, pero esta action no lo lee): son dos fuentes para el
- * mismo dato, una para escribir y otra para redirigir, y un formulario
- * armado a mano podría hacerlas divergir -- consecuencia menor (redirect a
- * la página equivocada después de una escritura correcta), pero evitable
- * leyendo una sola vez.
+ * El redirect (`redirectTarget`) vuelve a la pantalla del `<form>` si ese amigo
+ * es parte del partido (`casualParticipantIds`, verificado en la base -- un formulario armado a
+ * mano no puede mandar a cualquier página); si no, al `friendPlayerId` que
+ * DEVUELVE `updateCasualMatch`.
  */
 export async function editCasualMatch(_state: CasualFormState, formData: FormData): Promise<CasualFormState> {
   const matchId = String(formData.get('matchId') ?? '')
-  let friendPlayerId: string
+  const submitted = String(formData.get('friendPlayerId') ?? '')
+  let path: string
   try {
     const supabase = await serverClient()
-    friendPlayerId = await updateCasualMatch(supabase, matchId, casualInputFrom(formData))
+    const ids = await casualParticipantIds(supabase, matchId)
+    const fromDb = await updateCasualMatch(supabase, matchId, casualInputFrom(formData))
+    path = redirectTarget(submitted, ids, fromDb)
   } catch (error) {
     if (!(error instanceof EdgeError)) throw error
     return { error: error.message }
   }
 
-  revalidatePath(`/amigos/${friendPlayerId}`)
-  redirect(`/amigos/${friendPlayerId}`)
+  revalidatePath(path)
+  redirect(path)
 }
 
 /**
@@ -139,29 +126,26 @@ export async function editCasualMatch(_state: CasualFormState, formData: FormDat
  * borde ni un campo que mantener tipeado tras un error -- un botón que puede
  * fallar y volver con `?error=...`, igual que `accept`.
  *
- * En éxito, el redirect usa el `friendPlayerId` que DEVUELVE
- * `deleteCasualMatch` -- no el del `<form>` -- mismo argumento que
- * `editCasualMatch` de arriba (fix round 1): son dos fuentes para el mismo
- * dato, y un formulario armado a mano podría hacerlas divergir. Review final
- * de 2b, Minor 4: acá tenía el mismo defecto y se había quedado sin
- * corregir. En error no hay fila que leer (el borrado no llegó a pasar), así
+ * En éxito, mismo criterio de redirect que `editCasualMatch`. En error no hay fila que leer (el borrado no llegó a pasar), así
  * que ahí sí se usa el del `<form>` -- es el único valor disponible para
  * saber a qué pantalla volver, y errar ese destino no es un problema de
  * permisos (el prefijo `/amigos/` sigue siendo same-origin).
  */
 export async function removeCasualMatch(formData: FormData): Promise<void> {
   const matchId = String(formData.get('matchId') ?? '')
-  let friendPlayerId = String(formData.get('friendPlayerId') ?? '')
+  const submitted = String(formData.get('friendPlayerId') ?? '')
+  let path = `/amigos/${submitted}`
   let problem: string | null = null
   try {
     const supabase = await serverClient()
-    friendPlayerId = await deleteCasualMatch(supabase, matchId)
+    const ids = await casualParticipantIds(supabase, matchId)
+    const fromDb = await deleteCasualMatch(supabase, matchId)
+    path = redirectTarget(submitted, ids, fromDb)
   } catch (error) {
     if (!(error instanceof EdgeError)) throw error
     problem = error.message
   }
 
-  const path = `/amigos/${friendPlayerId}`
   revalidatePath(path)
   redirect(problem === null ? path : `${path}?error=${encodeURIComponent(problem)}`)
 }

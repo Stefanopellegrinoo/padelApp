@@ -39,6 +39,10 @@ function partidoCasual(overrides: Partial<CasualMatch> = {}): SharedMatch {
     matchId: 'c1',
     playedOn: '2026-08-23',
     sport: 'FIFA',
+    together: false,
+    partners: [],
+    rivals: [],
+    sets: null,
     outcome: 'lost',
     score: { mine: 2, theirs: 1 },
     teams: { mine: 'Boca', theirs: null },
@@ -56,6 +60,11 @@ describe('Historial', () => {
   // -- Torneo: "deporte-en-la-fila" (cierre de 2b) le agrega el deporte a la
   // fila -- antes de esto, la torneo era la única fila del historial que no
   // decía qué se jugó (§4.4: la casual sí lo decía desde Task 3). --
+
+  it('no dibuja el título: el encabezado del amigo vive en la página', () => {
+    const html = renderToStaticMarkup(Historial({ nombre: 'Juan', friendPlayerId: 'amigo-1', partidos: [] }))
+    expect(html).not.toContain('<h1')
+  })
 
   it('lista cada partido con su fecha, su deporte, su torneo y su marcador', () => {
     const html = renderToStaticMarkup(Historial({ nombre: 'Juan', friendPlayerId: 'amigo-1', partidos: [partido()] }))
@@ -265,5 +274,96 @@ describe('Historial', () => {
     expect(html).toContain('2-2')
     expect(html).toContain('Ganó Juan')
     expect(html).not.toContain('penales')
+  })
+  // -- Casual con lados (plan amigos-deporte-y-2v2, Task 3). --
+  // Texto EXACTO de cada <p> de la fila: una línea de más o un reordenamiento
+  // rompe la comparación (un `toContain` los dejaría pasar).
+
+  const lineas = (p: SharedMatch): string[] =>
+    [...renderToStaticMarkup(Historial({ nombre: 'Juan', friendPlayerId: 'amigo-1', partidos: [p] })).matchAll(/<p [^>]*>(.*?)<\/p>/g)].map(
+      (m) => m[1] ?? '',
+    )
+
+  it('2v2 juntos con invitado: fecha y deporte, resultado, nombres, autoría', () => {
+    expect(
+      lineas(
+        partidoCasual({
+          together: true,
+          outcome: 'won',
+          score: { mine: 4, theirs: 2 },
+          teams: { mine: null, theirs: null },
+          partners: ['Juan'],
+          rivals: ['Ana', 'Beto'],
+        }),
+      ),
+    ).toEqual([
+      `${matchdayDay('2026-08-23')} · FIFA`,
+      'Juntos: Ganaron 4-2',
+      'con Juan · vs Ana, Beto',
+      'Cargó Fede',
+    ])
+  })
+
+  it('1v1 en contra FIFA con marcador empatado nombra al ganador y omite "con"', () => {
+    expect(lineas(partidoCasual({ outcome: 'won', score: { mine: 2, theirs: 2 }, rivals: ['Juan'] }))).toEqual([
+      `${matchdayDay('2026-08-23')} · FIFA`,
+      'En contra: 2-2 · Ganaste, jugaste con Boca',
+      'vs Juan',
+      'Cargó Fede',
+    ])
+  })
+
+  it('2v2 en contra con marcador empatado y el otro lado ganando nombra a los dos rivales', () => {
+    const l = lineas(
+      partidoCasual({
+        outcome: 'lost',
+        score: { mine: 2, theirs: 2 },
+        teams: { mine: null, theirs: null },
+        partners: ['Cami'],
+        rivals: ['Juan', 'Beto'],
+      }),
+    )
+    expect(l[1]).toBe('En contra: 2-2 · Ganaron Juan, Beto')
+  })
+
+  it('together + marcador empatado + perdieron: "Perdieron", sin "Ganó"', () => {
+    const l = lineas(
+      partidoCasual({
+        together: true,
+        outcome: 'lost',
+        score: { mine: 2, theirs: 2 },
+        teams: { mine: null, theirs: null },
+        partners: ['Juan'],
+        rivals: ['Ana', 'Beto'],
+      }),
+    )
+    expect(l[1]).toBe('Juntos: 2-2 · Perdieron')
+    expect(l.join('|')).not.toContain('Ganó')
+  })
+
+  it('PADEL muestra el deporte y los sets en mi orientación', () => {
+    expect(
+      lineas(
+        partidoCasual({
+          sport: 'PADEL',
+          outcome: 'won',
+          score: null,
+          teams: { mine: null, theirs: null },
+          sets: [
+            { mine: 6, theirs: 3 },
+            { mine: 4, theirs: 6 },
+            { mine: 6, theirs: 5 },
+          ],
+          rivals: ['Juan'],
+        }),
+      ),
+    ).toEqual([`${matchdayDay('2026-08-23')} · Pádel`, 'En contra: Ganaste 6-3 4-6 6-5', 'vs Juan', 'Cargó Fede'])
+  })
+
+  it('la fila de torneo queda idéntica a la de hoy', () => {
+    expect(lineas(partido())).toEqual([
+      `${matchdayDay('2026-08-14')} · Pádel · torneo Los Jueves`,
+      'En contra: Ganaste 6-3',
+    ])
   })
 })

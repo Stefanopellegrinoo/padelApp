@@ -199,6 +199,10 @@ distintos.
 
 ### 4.1 El deporte es texto, y la pantalla lo normaliza
 
+> **Reemplazado** por `docs/plan-amigos-deporte-y-2v2.md`: el deporte pasó a ser
+> `PADEL | FIFA` con un CHECK en `casual_matches.sport` (0072 reescrita; RLS,
+> forma y RPC partidas en 0090–0092 por "una función por migración").
+
 Hoy la app conoce dos deportes y viven colgados de una temporada
 (`disciplines.kind`, `check (kind in ('PADEL','FIFA'))`), así que no se pueden
 referenciar desde afuera. Y el historial casual es justamente donde entra el
@@ -226,7 +230,7 @@ guardarse aparte.
 |---|---|---|
 | **quién ganó, o empate** | sí | no se puede deducir; ver arriba |
 | **marcador**, dos números | no | a veces sólo te acordás de que perdiste |
-| **equipo de cada uno**, texto | no | "Boca", "Real Madrid". Sirve para FIFA, no molesta en pádel |
+| **equipo de cada uno**, texto | no | "Boca", "Real Madrid". Sirve para FIFA, no molesta en pádel (**reemplazado** por `docs/plan-amigos-deporte-y-2v2.md`: ahora sólo FIFA) |
 
 ### 4.3 No hay campo "por penales"
 
@@ -285,6 +289,8 @@ cada fila** en vez del criterio que parte la pantalla. Un partido casual es
 siempre "en contra", porque son dos personas (§7).
 
 ### 4.5 Cargar un partido casual exige una amistad ACEPTADA
+
+> **Reemplazado** en lo de "los dos" por `docs/plan-amigos-deporte-y-2v2.md`: el partido tiene 2 o 4 jugadores, y la puerta de amistad corre contra cada jugador con cuenta.
 
 Esto no estaba en el diseño y **es un agujero de acoso**, encontrado explorando
 el plan 2.
@@ -407,7 +413,10 @@ rankings**, así que no hay nada que agregarle. Los helpers de `core/side.ts`
 - **No toca `season_public_rules`**, que está viva en producción.
 - **No detecta duplicados** (§3.4).
 - **No fusiona nada automáticamente** (§2.2).
-- **No resuelve el pádel casual de a cuatro.** Todo lo diseñado es un partido
+- ~~**No resuelve el pádel casual de a cuatro.**~~ Resuelto por
+  `docs/plan-amigos-deporte-y-2v2.md`: el casual es 1v1 o 2v2, con lados A/B e
+  invitados (0072 reescrita + 0090–0092). Texto original:
+  Todo lo diseñado es un partido
   entre vos y **un** amigo. Cuatro personas y dos lados abren una pregunta que
   todavía no tiene respuesta —¿en el historial de quién va?— y multiplican el
   modelo por una duda de producto sin resolver. El modelo no se cierra en contra

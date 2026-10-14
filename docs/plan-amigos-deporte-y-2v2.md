@@ -61,7 +61,7 @@ de jugadores. Los sets de pádel van a `casual_match_sets` (espejo de
 | `db/friends.unit.test.ts` | 1, 2 | parser + mocks de la lectura casual |
 | `supabase/migrations/0072_casual_matches.sql` | 2 | reescrita |
 | `db/friends.db.test.ts`, `db/database.types.ts` | 2 | suite casual reescrita, tipos regenerados |
-| `app/amigos/actions.ts` | 2, 4a, 4b | `casualInputFrom` |
+| `app/amigos/casual-form-data.ts` | 2, 4a, 4b | `casualInputFrom` |
 | `app/amigos/historial.tsx` (+ `.unit.test.ts`) | 3 | fila casual: juntos/en contra, nombres, deporte |
 | `app/amigos/[playerId]/cargar-state.ts` (nuevo, + `.unit.test.ts`) | 4a, 4b | estado puro del formulario |
 | `app/amigos/[playerId]/cargar.tsx` (+ `.unit.test.ts`) | 4a, 4b, 5 | formulario |
@@ -218,7 +218,7 @@ La fila de `casual_match_players_insert` **es la puerta §4.5**, movida de tabla
 - `deleteCasualMatch`: igual de lectura previa; mismo retorno.
 - **Borrar `sportsUsedBy`** y `parseCasualInput` (reemplazado por `parseCasualResult`).
 
-**Pegamento para que la pantalla siga andando en 1v1:** `casualInputFrom` (`actions.ts`) arma `players = [{ side: 'theirs', playerId: friendPlayerId, guestName: null }]` y, si es PADEL, convierte los dos números viejos en UN set (`sets = [{mine, theirs}]`, `setsToWin: '1'`, `gamesPerSet: max(mine, theirs)`); `page.tsx` deja de pedir/pasar `sportsUsedBy`. El input de deporte sigue siendo texto hasta la Tarea 4a (escribir `PADEL`/`FIFA` funciona).
+**Pegamento para que la pantalla siga andando en 1v1:** `casualInputFrom` (`app/amigos/casual-form-data.ts`) arma `players = [{ side: 'theirs', playerId: friendPlayerId, guestName: null }]` y, si es PADEL, convierte los dos números viejos en UN set (`sets = [{mine, theirs}]`, `setsToWin: '1'`, `gamesPerSet: max(mine, theirs)`); `page.tsx` deja de pedir/pasar `sportsUsedBy`. El input de deporte sigue siendo texto hasta la Tarea 4a (escribir `PADEL`/`FIFA` funciona).
 
 - [ ] **Step 0:** `git log main -- supabase/migrations/0072_casual_matches.sql` → vacío. Si no, PARAR.
 - [ ] **Step 1: tests que fallan** (`db/friends.db.test.ts`, la suite casual se reescribe; clientes autenticados):
@@ -332,7 +332,7 @@ Pádel en esta tarea sigue con el pegamento de la Tarea 2 (un set, dos números)
 5. **2v2 se multiplica** — el mismo partido aparece en la pantalla de cada amigo que jugó; borrarlo (cualquier participante con cuenta) lo saca para todos. Es §3.3 aplicado a más gente; decirlo en el JSDoc de `deleteCasualMatch`.
 6. **Editar en 2v2** — cualquier participante con cuenta edita el resultado (continúa §3.1) y queda en `updated_by`; el plantel NO se edita (decisión arriba). Si el usuario quiere "sólo quien cargó", cambia una línea por política (`using (created_by = my_player_id())`).
 7. **Tipos generados** — `supabase gen types` no lee grants por columna: `updated_at`/`created_by` aparecen escribibles en el update; mandarlos da 42501 en ejecución (ya documentado en `updateCasualMatch`).
-8. **Cuenta borrada** — `on delete cascade` en `player_id` deja un partido desparejo (el trigger no corre en deletes). Aceptado; la lectura no asume lados parejos.
+8. **Cuenta borrada** — `casual_match_players.player_id` es `on delete cascade` y dejaría un partido desparejo (el trigger no corre en deletes; la lectura no asume lados parejos). Pero `created_by`/`updated_by` NO tienen `on delete`: borrar al creador o al último que editó queda bloqueado por la FK. Hoy no hay camino de borrado de cuenta, así que no se manifiesta; si aparece uno, tendrá que decidir qué hacer con esos partidos.
 9. **Sets incoherentes por POST directo** — la base no conoce el formato (no se guarda), así que no puede decir si los sets cierran el partido; sólo `parseCasualResult` lo hace. Acotado a los partidos propios del que lo hace a mano (ver `ponytail:` de la Tarea 2).
 
 ## Lo que este plan NO hace

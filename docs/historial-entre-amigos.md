@@ -230,7 +230,7 @@ guardarse aparte.
 |---|---|---|
 | **quién ganó, o empate** | sí | no se puede deducir; ver arriba |
 | **marcador**, dos números | no | a veces sólo te acordás de que perdiste |
-| **equipo de cada uno**, texto | no | "Boca", "Real Madrid". Sirve para FIFA, no molesta en pádel |
+| **equipo de cada uno**, texto | no | "Boca", "Real Madrid". Sirve para FIFA, no molesta en pádel (**reemplazado** por `docs/plan-amigos-deporte-y-2v2.md`: ahora sólo FIFA) |
 
 ### 4.3 No hay campo "por penales"
 
@@ -289,6 +289,8 @@ cada fila** en vez del criterio que parte la pantalla. Un partido casual es
 siempre "en contra", porque son dos personas (§7).
 
 ### 4.5 Cargar un partido casual exige una amistad ACEPTADA
+
+> **Reemplazado** en lo de "los dos" por `docs/plan-amigos-deporte-y-2v2.md`: el partido tiene 2 o 4 jugadores, y la puerta de amistad corre contra cada jugador con cuenta.
 
 Esto no estaba en el diseño y **es un agujero de acoso**, encontrado explorando
 el plan 2.

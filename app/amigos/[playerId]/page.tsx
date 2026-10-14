@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation'
-import { historyWith } from '@/db/friends'
+import { friendsOf, historyWith } from '@/db/friends'
 import { playerNames } from '@/db/read'
 import { serverClient } from '@/db/server'
 import { loadCasualMatch } from '../actions'
@@ -36,9 +36,10 @@ export default async function AmigoPage({ params, searchParams }: PageProps) {
   const { error } = await searchParams
   const supabase = await serverClient()
 
-  const [nombres, partidos] = await Promise.all([
+  const [nombres, partidos, amigos] = await Promise.all([
     playerNames(supabase, [playerId]),
     historyWith(supabase, playerId),
+    friendsOf(supabase),
   ])
 
   const nombre = nombres.get(playerId)
@@ -52,7 +53,7 @@ export default async function AmigoPage({ params, searchParams }: PageProps) {
       <Historial nombre={nombre} friendPlayerId={playerId} partidos={partidos} />
       <CasualForm
         friendPlayerId={playerId}
-        friendName={nombre}
+        friends={amigos.filter((amigo) => amigo.accepted)}
         action={loadCasualMatch}
         submitLabel="Cargar partido"
       />

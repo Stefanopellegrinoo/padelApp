@@ -57,8 +57,24 @@ afterEach(() => {
   root = null
 })
 
+const selectValueDescriptor = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')
+if (selectValueDescriptor?.set === undefined) {
+  throw new Error('No se encontró el setter nativo de HTMLSelectElement.value.')
+}
+const nativeSelectValueSetter = selectValueDescriptor.set
+
+function elegir(select: HTMLSelectElement, valor: string): void {
+  nativeSelectValueSetter.call(select, valor)
+  select.dispatchEvent(new Event('change', { bubbles: true }))
+}
+
+const AMIGOS = [
+  { playerId: 'amigo-1', displayName: 'Fede' },
+  { playerId: 'amigo-2', displayName: 'Lucas' },
+]
+
 describe('CasualForm', () => {
-  it('conserva lo tipeado cuando la action vuelve con un error', async () => {
+  it('conserva lo tipeado en un 2v2 FIFA con invitado cuando la action vuelve con un error', async () => {
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
@@ -67,24 +83,33 @@ describe('CasualForm', () => {
       root?.render(
         createElement(CasualForm, {
           friendPlayerId: 'amigo-1',
-          friendName: 'Fede',
+          friends: AMIGOS,
           action: fallaSiempre,
           submitLabel: 'Cargar partido',
         }),
       )
     })
 
-    const sportInput = container.querySelector('input[name="sport"]') as HTMLInputElement
-    const teamInput = container.querySelector('input[name="teamMine"]') as HTMLInputElement
+    const radio = (name: string, value: string) =>
+      container?.querySelector(`input[name="${name}"][value="${value}"]`) as HTMLInputElement
+    const slot = (key: string) => container?.querySelector(`select[data-slot="${key}"]`) as HTMLSelectElement
 
-    // Lo que tipeó una persona -- no un valor puesto por props, para que
-    // nada de lo que se vea después pueda venir de `initial`.
+    // Lo que tipeó una persona -- no un valor puesto por props.
     await act(async () => {
-      escribir(sportInput, 'Ping pong')
+      radio('sport', 'FIFA').click()
+      radio('mode', '2v2').click()
+    })
+    await act(async () => {
+      elegir(slot('partner'), 'amigo-2')
+      elegir(slot('rival2'), '__guest__')
+    })
+    const guestInput = container.querySelector('input[data-slot-name="rival2"]') as HTMLInputElement
+    const teamInput = container.querySelector('input[name="teamMine"]') as HTMLInputElement
+    await act(async () => {
+      escribir(guestInput, 'Beto')
       escribir(teamInput, 'Los Pibes')
     })
-    expect(sportInput.value).toBe('Ping pong')
-    expect(teamInput.value).toBe('Los Pibes')
+    expect(slot('rival1').value).toBe('amigo-1') // el amigo de la pantalla viene preseleccionado
 
     const form = container.querySelector('form') as HTMLFormElement
     await act(async () => {
@@ -95,7 +120,18 @@ describe('CasualForm', () => {
     // probaron el camino que existe (una action que nunca se ejecutó no
     // dispara el reset que este test viene a agarrar).
     expect(container.textContent).toContain('Elegí una fecha real.')
-    expect(sportInput.value).toBe('Ping pong')
+    expect(radio('sport', 'FIFA').checked).toBe(true)
+    expect(radio('mode', '2v2').checked).toBe(true)
+    expect(slot('partner').value).toBe('amigo-2')
+    expect(slot('rival1').value).toBe('amigo-1')
+    expect(slot('rival2').value).toBe('__guest__')
+    expect((container.querySelector('input[data-slot-name="rival2"]') as HTMLInputElement).value).toBe('Beto')
     expect(teamInput.value).toBe('Los Pibes')
+    const players = container.querySelector('input[name="players"]') as HTMLInputElement
+    expect(JSON.parse(players.value)).toEqual([
+      { side: 'mine', playerId: 'amigo-2', guestName: null },
+      { side: 'theirs', playerId: 'amigo-1', guestName: null },
+      { side: 'theirs', playerId: null, guestName: 'Beto' },
+    ])
   })
 })

@@ -161,7 +161,6 @@ export function Historial({ nombre, friendPlayerId, partidos }: HistorialProps) 
               <CasualMatchRow
                 key={partido.matchId}
                 friendPlayerId={friendPlayerId}
-                friendName={nombre}
                 partido={partido}
               >
                 <p className="text-[13.5px] font-[550] text-muted">

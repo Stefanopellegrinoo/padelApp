@@ -61,6 +61,11 @@ describe('Historial', () => {
   // fila -- antes de esto, la torneo era la única fila del historial que no
   // decía qué se jugó (§4.4: la casual sí lo decía desde Task 3). --
 
+  it('no dibuja el título: el encabezado del amigo vive en la página', () => {
+    const html = renderToStaticMarkup(Historial({ nombre: 'Juan', friendPlayerId: 'amigo-1', partidos: [] }))
+    expect(html).not.toContain('<h1')
+  })
+
   it('lista cada partido con su fecha, su deporte, su torneo y su marcador', () => {
     const html = renderToStaticMarkup(Historial({ nombre: 'Juan', friendPlayerId: 'amigo-1', partidos: [partido()] }))
     expect(html).toContain(matchdayDay('2026-08-14'))

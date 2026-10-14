@@ -13,6 +13,7 @@ import {
 } from '@/app/torneo/[id]/[disciplina]/fechas/[n]/carga-state'
 import { Stepper } from '@/app/torneos/nuevo/wizard'
 import { DISCIPLINE_KINDS, DISCIPLINE_LABELS, STEPPERS, type DisciplineKind } from '@/app/torneos/nuevo/wizard-state'
+import { SubmitButton } from '@/app/submit-button'
 import { editCasualMatch, removeCasualMatch, type CasualFormState } from '../actions'
 import {
   formatFromSets,
@@ -107,8 +108,8 @@ function slotOf({ choice, name }: SlotChoice): Slot | null {
  * que dispara su escritura desde un `startTransition` y no desde `<form
  * action>`. Sólo el `players` oculto viaja en el FormData, armado del estado.
  *
- * El "quién ganó" es SIEMPRE un radio obligatorio con las tres opciones
- * (ruling del orquestador, task-4-brief.md).
+ * Fuera de pádel, el "quién ganó" es un radio obligatorio con las tres
+ * opciones (ruling del orquestador, task-4-brief.md).
  *
  * Pádel no tiene "quién ganó" ni marcador de texto: elige su formato con dos
  * `Stepper` y carga N sets con la máquina de dos toques de la carga de fechas
@@ -179,6 +180,10 @@ export function CasualForm({
     rival1: slotOf(slots.rival1),
     rival2: slotOf(slots.rival2),
   }
+  // En 1v1 con un amigo de rival, "el otro lado" es ese amigo; en 2v2 es una pareja.
+  const rival1Name =
+    mode === '1v1' ? friends.find((friend) => friend.playerId === slots.rival1.choice)?.displayName : undefined
+  const otherSide = rival1Name ?? 'el otro lado'
   const slotProblem = initial === undefined ? slotsError(mode, slotValues) : null
   const problem =
     slotProblem ?? (isPadel && !isComplete(load, format) ? 'Cargá los sets hasta cerrar el partido.' : null)
@@ -316,7 +321,7 @@ export function CasualForm({
               </div>
             )
           })}
-          <PadelSets load={load} format={format} onChange={setLoad} />
+          <PadelSets load={load} format={format} otherSide={otherSide} onChange={setLoad} />
         </>
       )}
 
@@ -326,7 +331,7 @@ export function CasualForm({
           {(
             [
               ['won', 'Ganó tu lado'],
-              ['lost', 'Ganó el otro lado'],
+              ['lost', `Ganó ${otherSide}`],
               ['drew', 'Empataron'],
             ] as const
           ).map(([value, label]) => (
@@ -363,7 +368,7 @@ export function CasualForm({
           </div>
           <div className="flex flex-1 flex-col gap-1">
             <label htmlFor={`${uid}-scoreTheirs`} className={LABEL}>
-              Goles del otro lado
+              {rival1Name !== undefined ? `Goles de ${rival1Name}` : 'Goles del otro lado'}
             </label>
             <input
               id={`${uid}-scoreTheirs`}
@@ -437,10 +442,13 @@ const TAP = 'min-h-[44px] flex-1 rounded-field bg-chip px-3 text-[14px] font-ext
 function PadelSets({
   load,
   format,
+  otherSide,
   onChange,
 }: {
   load: LoadState
   format: MatchFormat
+  /** Cómo se llama el otro lado en los botones ("el otro lado" o el nombre del amigo). */
+  otherSide: string
   onChange: (next: LoadState) => void
 }) {
   const complete = isComplete(load, format)
@@ -458,7 +466,7 @@ function PadelSets({
             Ganó mi lado
           </button>
           <button type="button" className={TAP} onClick={() => onChange(chooseWinner(load, 'B'))}>
-            Ganó el otro lado
+            Ganó {otherSide}
           </button>
         </div>
       )}
@@ -479,7 +487,7 @@ function PadelSets({
           </div>
         </>
       )}
-      {load.sets.length > 0 && (
+      {(load.sets.length > 0 || load.pendingWinner !== null) && (
         <button
           type="button"
           className="self-start text-[12px] font-extrabold text-accent-link"
@@ -504,9 +512,8 @@ function PadelSets({
  * pura que ya prueba `historial.unit.test.ts` llamándola directo (sin JSX) --
  * mover el hook a `Historial` mismo rompería esa forma de probarla.
  *
- * Borrar NO pide confirmación (task-4-brief.md, "Editar y borrar" -- "no
- * construyas ninguna protección"): un botón de menos es la fricción que el
- * diseño pide sacar, no agregar.
+ * Borrar pide confirmación en dos pasos inline (`Borrar` -> `¿Borrar? Sí / No`):
+ * el borrado saca el partido para todos los participantes (§3.3) y no se deshace.
  */
 export function CasualMatchRow({
   friendPlayerId,
@@ -518,6 +525,7 @@ export function CasualMatchRow({
   children: ReactNode
 }) {
   const [editing, setEditing] = useState(false)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
 
   if (editing) {
     return (
@@ -549,13 +557,29 @@ export function CasualMatchRow({
         <button type="button" onClick={() => setEditing(true)} className="text-[12px] font-extrabold text-accent-link">
           Editar
         </button>
-        <form action={removeCasualMatch}>
-          <input type="hidden" name="friendPlayerId" value={friendPlayerId} />
-          <input type="hidden" name="matchId" value={partido.matchId} />
-          <button type="submit" className="text-[12px] font-extrabold text-live">
+        {confirmingDelete ? (
+          <form action={removeCasualMatch} className="flex items-center gap-3">
+            <input type="hidden" name="friendPlayerId" value={friendPlayerId} />
+            <input type="hidden" name="matchId" value={partido.matchId} />
+            <span className="text-[12px] font-extrabold text-live">¿Borrar?</span>
+            <SubmitButton className="text-[12px] font-extrabold text-live">Sí</SubmitButton>
+            <button
+              type="button"
+              onClick={() => setConfirmingDelete(false)}
+              className="text-[12px] font-extrabold text-muted"
+            >
+              No
+            </button>
+          </form>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setConfirmingDelete(true)}
+            className="text-[12px] font-extrabold text-live"
+          >
             Borrar
           </button>
-        </form>
+        )}
       </div>
     </div>
   )

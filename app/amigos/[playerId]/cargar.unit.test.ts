@@ -10,9 +10,13 @@
 // necesitan uno.
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { afterEach, describe, expect, it } from 'vitest'
-import type { CasualFormState } from '../actions'
-import { CasualForm, type CasualFormInitial } from './cargar'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { removeCasualMatch, type CasualFormState } from '../actions'
+import type { CasualMatch } from '@/db/friends'
+import { CasualForm, CasualMatchRow, type CasualFormInitial } from './cargar'
+
+// Las actions reales pegan a Supabase; acá sólo importa si se las llama.
+vi.mock('../actions', () => ({ editCasualMatch: vi.fn(), removeCasualMatch: vi.fn() }))
 
 // React exige esta bandera para no advertir que un `act()` corre "fuera de
 // un entorno de test" -- jsdom no la prende sola, y sin ella la salida se
@@ -174,7 +178,7 @@ describe('CasualForm', () => {
 
       await tocar(f.boton('Ganó mi lado'))
       await tocar(f.boton('2'))
-      await tocar(f.boton('Ganó el otro lado'))
+      await tocar(f.boton('Ganó Fede'))
       await tocar(f.boton('0'))
       expect(f.submit().disabled).toBe(true) // 1-1: falta el desempate
       await tocar(f.boton('Ganó mi lado'))
@@ -219,6 +223,82 @@ describe('CasualForm', () => {
       expect(f.hidden('gamesPerSet')).toBe('6')
       expect(JSON.parse(f.hidden('sets'))).toHaveLength(3)
       expect(f.submit().disabled).toBe(false)
+    })
+
+    it('equivocarse de ganador sin sets cargados tiene vuelta atrás', async () => {
+      const f = await montar()
+      expect(f.boton('Volver a cargar')).toBeUndefined()
+      await tocar(f.boton('Ganó mi lado'))
+      await tocar(f.boton('Volver a cargar'))
+      expect(f.boton('Ganó mi lado')).toBeDefined()
+    })
+
+    it('en 1v1 con un amigo rival nombra al amigo; en 2v2 queda genérico', async () => {
+      const f = await montar()
+      expect(f.boton('Ganó Fede')).toBeDefined()
+      await tocar(
+        Array.from(document.querySelectorAll('label')).find((l) => l.textContent === '2 vs 2')
+          ?.querySelector('input') as HTMLButtonElement,
+      )
+      expect(f.boton('Ganó el otro lado')).toBeDefined()
+    })
+  })
+
+  it('el <details> que envuelve al formulario sigue abierto cuando la action vuelve con error', async () => {
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    await act(async () => {
+      root?.render(
+        createElement(
+          'details',
+          null,
+          createElement('summary', null, 'Cargar partido'),
+          createElement(CasualForm, {
+            friendPlayerId: 'amigo-1',
+            friends: AMIGOS,
+            action: fallaSiempre,
+            submitLabel: 'Enviar',
+          }),
+        ),
+      )
+    })
+    const details = container.querySelector('details') as HTMLDetailsElement
+    details.open = true
+    const form = container.querySelector('form') as HTMLFormElement
+    await act(async () => {
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    })
+    expect(container.textContent).toContain('Elegí una fecha real.')
+    expect(details.open).toBe(true)
+  })
+
+  describe('CasualMatchRow: Borrar pide confirmación', () => {
+    const partido = { matchId: 'm1' } as unknown as CasualMatch
+
+    it('el primer toque no envía; Sí envía el borrado y No lo cancela', async () => {
+      container = document.createElement('div')
+      document.body.appendChild(container)
+      root = createRoot(container)
+      await act(async () => {
+        root?.render(createElement(CasualMatchRow, { friendPlayerId: 'amigo-1', partido, children: 'fila' }))
+      })
+      const el = container
+      vi.mocked(removeCasualMatch).mockClear()
+      const boton = (t: string) =>
+        Array.from(el.querySelectorAll('button')).find((b) => b.textContent === t) as HTMLButtonElement
+
+      await act(async () => boton('Borrar').click())
+      expect(removeCasualMatch).not.toHaveBeenCalled()
+      expect(el.textContent).toContain('¿Borrar?')
+
+      await act(async () => boton('No').click())
+      expect(el.textContent).not.toContain('¿Borrar?')
+      expect(boton('Borrar')).toBeDefined()
+
+      await act(async () => boton('Borrar').click())
+      await act(async () => boton('Sí').click())
+      expect(removeCasualMatch).toHaveBeenCalledTimes(1)
     })
   })
 })

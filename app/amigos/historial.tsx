@@ -120,9 +120,7 @@ function autoriaDe(partido: CasualMatch): string {
  */
 export function Historial({ nombre, friendPlayerId, partidos }: HistorialProps) {
   return (
-    <div className="flex flex-col gap-4 pt-4">
-      <h1 className="text-[26px] font-extrabold tracking-[-.03em]">{nombre}</h1>
-
+    <div className="flex flex-col gap-4">
       {partidos.length === 0 ? (
         // Estado vacío: dice qué falta, no dibuja una tabla sin filas.
         <p className="text-pretty text-[13.5px] leading-[1.5] font-[550] text-muted">

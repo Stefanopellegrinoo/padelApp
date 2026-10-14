@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { initials } from '@/app/format'
+import { SubmitButton } from '@/app/submit-button'
 import { friendsOf } from '@/db/friends'
 import { serverClient } from '@/db/server'
 import { accept, sendFriendRequest } from './actions'
@@ -37,7 +38,7 @@ export default async function AmigosPage({ searchParams }: PageProps) {
       <header className="flex flex-col gap-[3px] pt-4">
         <h1 className="text-[26px] font-extrabold tracking-[-.03em]">Amigos</h1>
         <p className="text-pretty text-[13.5px] leading-[1.5] font-[550] text-muted">
-          El historial de torneo con cada uno.
+          Torneos y partidos casuales con cada uno.
         </p>
       </header>
 
@@ -46,7 +47,7 @@ export default async function AmigosPage({ searchParams }: PageProps) {
           <h2 className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
             Te pidieron ser amigos
           </h2>
-          <div className="overflow-hidden rounded-[14px] border border-line bg-surface">
+          <div className="overflow-hidden rounded-card border border-line bg-surface">
             {recibidas.map((amigo, index) => (
               <div key={amigo.friendshipId} className={`${ROW} ${index > 0 ? 'border-t border-line' : ''}`}>
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-chip text-[11px] font-extrabold text-muted">
@@ -55,12 +56,9 @@ export default async function AmigosPage({ searchParams }: PageProps) {
                 <span className="flex-1 truncate text-[14px] font-bold">{amigo.displayName}</span>
                 <form action={accept}>
                   <input type="hidden" name="friendshipId" value={amigo.friendshipId} />
-                  <button
-                    type="submit"
-                    className="shrink-0 rounded-field bg-accent px-3 py-2 text-[12.5px] font-extrabold text-accent-text"
-                  >
+                  <SubmitButton className="shrink-0 rounded-field bg-accent px-3 py-2 text-[12.5px] font-extrabold text-accent-text disabled:opacity-60">
                     Aceptar
-                  </button>
+                  </SubmitButton>
                 </form>
               </div>
             ))}
@@ -75,7 +73,7 @@ export default async function AmigosPage({ searchParams }: PageProps) {
             Todavía no tenés amigos agregados.
           </p>
         ) : (
-          <div className="overflow-hidden rounded-[14px] border border-line bg-surface">
+          <div className="overflow-hidden rounded-card border border-line bg-surface">
             {aceptados.map((amigo, index) => (
               <Link
                 key={amigo.friendshipId}
@@ -98,7 +96,7 @@ export default async function AmigosPage({ searchParams }: PageProps) {
           <h2 className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
             Solicitudes enviadas
           </h2>
-          <div className="overflow-hidden rounded-[14px] border border-line bg-surface">
+          <div className="overflow-hidden rounded-card border border-line bg-surface">
             {enviadas.map((amigo, index) => (
               <div key={amigo.friendshipId} className={`${ROW} ${index > 0 ? 'border-t border-line' : ''}`}>
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-chip text-[11px] font-extrabold text-muted">
@@ -126,12 +124,9 @@ export default async function AmigosPage({ searchParams }: PageProps) {
               error === undefined ? 'border-line' : 'border-live'
             }`}
           />
-          <button
-            type="submit"
-            className="rounded-field bg-accent p-3.5 text-center text-[14.5px] font-extrabold text-accent-text"
-          >
+          <SubmitButton className="rounded-field bg-accent p-3.5 text-center text-[14.5px] font-extrabold text-accent-text disabled:opacity-60">
             Pedir amistad
-          </button>
+          </SubmitButton>
         </form>
         {error !== undefined && (
           <p className="rounded-field bg-live-bg px-3 py-2.5 text-[12.5px] font-bold text-live">{error}</p>

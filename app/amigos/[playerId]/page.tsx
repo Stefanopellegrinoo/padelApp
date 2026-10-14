@@ -1,4 +1,6 @@
+import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { initials } from '@/app/format'
 import { friendsOf, historyWith } from '@/db/friends'
 import { playerNames } from '@/db/read'
 import { serverClient } from '@/db/server'
@@ -50,13 +52,33 @@ export default async function AmigoPage({ params, searchParams }: PageProps) {
       {error !== undefined && (
         <p className="rounded-field bg-live-bg px-3 py-2.5 text-[12.5px] font-bold text-live">{error}</p>
       )}
+      <header className="flex flex-col gap-3 pt-4">
+        <Link href="/amigos" className="text-[12.5px] font-extrabold text-accent-link">
+          ← Amigos
+        </Link>
+        <div className="flex items-center gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-chip text-[11px] font-extrabold text-muted">
+            {initials(nombre)}
+          </span>
+          <h1 className="min-w-0 truncate text-[26px] font-extrabold tracking-[-.03em]">{nombre}</h1>
+        </div>
+      </header>
+      {/* `<details>` nativo: cero estado de React. `open` lo maneja el DOM y el
+          formulario no se desmonta cuando la action vuelve con error. */}
+      <details className="flex flex-col gap-3">
+        <summary className="cursor-pointer rounded-field bg-accent p-3 text-center text-[14px] font-extrabold text-accent-text">
+          Cargar partido
+        </summary>
+        <div className="pt-3">
+          <CasualForm
+            friendPlayerId={playerId}
+            friends={amigos.filter((amigo) => amigo.accepted)}
+            action={loadCasualMatch}
+            submitLabel="Cargar partido"
+          />
+        </div>
+      </details>
       <Historial nombre={nombre} friendPlayerId={playerId} partidos={partidos} />
-      <CasualForm
-        friendPlayerId={playerId}
-        friends={amigos.filter((amigo) => amigo.accepted)}
-        action={loadCasualMatch}
-        submitLabel="Cargar partido"
-      />
     </main>
   )
 }

@@ -1,5 +1,7 @@
+import type { MatchFormat } from '@/core'
 import { EdgeError } from '@/db/errors'
 import type { CasualPlayerInput } from '@/db/friends'
+import type { LoadState } from '@/app/torneo/[id]/[disciplina]/fechas/[n]/carga-state'
 
 /** Quién ocupa un lugar del partido: un amigo con cuenta o un invitado con nombre. */
 export type Slot = { kind: 'friend'; playerId: string } | { kind: 'guest'; name: string }
@@ -74,4 +76,25 @@ export function playersFromJson(raw: string): CasualPlayerInput[] {
   const ids = players.flatMap((player) => (player.playerId === null ? [] : [player.playerId]))
   if (new Set(ids).size !== ids.length) throw new EdgeError('No podés elegir al mismo amigo dos veces.')
   return players
+}
+
+type PadelSet = { mine: number; theirs: number }
+
+/**
+ * El formato que dejó un partido ya guardado (el que ganó cada set tiene
+ * `gamesPerSet` games; `setsToWin` = los sets del ganador), para prellenar los
+ * steppers al editar. La base no guarda el formato aparte.
+ */
+export function formatFromSets(sets: readonly PadelSet[]): Pick<MatchFormat, 'setsToWin' | 'gamesPerSet'> {
+  const mine = sets.filter((set) => set.mine > set.theirs).length
+  const theirs = sets.filter((set) => set.theirs > set.mine).length
+  return {
+    setsToWin: Math.max(mine, theirs),
+    gamesPerSet: Math.max(...sets.map((set) => Math.max(set.mine, set.theirs))),
+  }
+}
+
+/** Los sets cargados como los lee `parseCasualResult`: JSON en mi orientación (A = mío). */
+export function setsField(state: LoadState): string {
+  return JSON.stringify(state.sets.map((set) => ({ mine: set.gamesA, theirs: set.gamesB })))
 }

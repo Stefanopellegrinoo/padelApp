@@ -1590,4 +1590,56 @@ describe('partido casual — lo que manda el formulario', () => {
     expect(deRival.teams).toEqual({ mine: 'Boca', theirs: 'River' })
     expect(deRival.partners).toEqual(['Tano'])
   })
+
+  it('2v2 PADEL a 2 sets de 6 y la otra cuenta lo edita a 1 set de 4: casual_match_sets sigue cada edición', async () => {
+    const yo = await createTestUser()
+    const compa = await createTestUser()
+    const rival1 = await createTestUser()
+    const rival2 = await createTestUser()
+    for (const amigo of [compa, rival1, rival2]) await amistadAceptada(yo.playerId, amigo.playerId)
+
+    const form = (sets: Array<[number, number]>, setsToWin: string, gamesPerSet: string) => {
+      const formData = new FormData()
+      formData.set('sport', 'PADEL')
+      formData.set('playedOn', '2026-08-30')
+      formData.set('setsToWin', setsToWin)
+      formData.set('gamesPerSet', gamesPerSet)
+      formData.set('sets', JSON.stringify(sets.map(([mine, theirs]) => ({ mine, theirs }))))
+      return formData
+    }
+    const filasDeSets = async (matchId: string) => {
+      const { data, error } = await adminClient()
+        .from('casual_match_sets')
+        .select('set_number, games_a, games_b')
+        .eq('match_id', matchId)
+        .order('set_number')
+      expect(error).toBeNull()
+      return data
+    }
+
+    const creado = form([[6, 3], [4, 6], [6, 5]], '2', '6')
+    creado.set(
+      'players',
+      JSON.stringify(
+        playersFrom('2v2', {
+          partner: { kind: 'friend', playerId: compa.playerId },
+          rival1: { kind: 'friend', playerId: rival1.playerId },
+          rival2: { kind: 'friend', playerId: rival2.playerId },
+        }),
+      ),
+    )
+    const matchId = await createCasualMatch(yo.client, playersFromJson(String(creado.get('players'))), casualInputFrom(creado))
+    expect(await filasDeSets(matchId)).toEqual([
+      { set_number: 1, games_a: 6, games_b: 3 },
+      { set_number: 2, games_a: 4, games_b: 6 },
+      { set_number: 3, games_a: 6, games_b: 5 },
+    ])
+
+    // Un rival lo edita desde su lado: ganó un set a 4 (4-1 suyo).
+    await updateCasualMatch(rival1.client, matchId, casualInputFrom(form([[4, 1]], '1', '4')))
+    expect(await filasDeSets(matchId)).toEqual([{ set_number: 1, games_a: 1, games_b: 4 }])
+    const { data: fila } = await adminClient().from('casual_matches').select('winner_side').eq('id', matchId).single()
+    expect(fila?.winner_side).toBe('B')
+  })
 })
+

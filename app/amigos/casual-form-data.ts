@@ -5,16 +5,10 @@ import type { CasualResultInput } from '@/db/friends'
  * (`db/friends.ts`) es el único lugar que valida, para que
  * `createCasualMatch`/`updateCasualMatch` se puedan probar sin pasar por esta
  * capa (ver los tests de `db/friends.db.test.ts`).
- *
- * Pegamento hasta la Tarea 4b (plan-amigos-deporte-y-2v2): el formulario
- * todavía es el viejo, con dos números de marcador. En PADEL esos dos números
- * pasan a ser UN set a un set, con `gamesPerSet` = el mayor de los dos -- el
- * resultado sale igual de validado por `matchError`, sólo que con el formato
- * más permisivo que el formulario viejo puede expresar.
  */
 export function casualInputFrom(formData: FormData): CasualResultInput {
   const campo = (name: string) => String(formData.get(name) ?? '')
-  const input: CasualResultInput = {
+  return {
     sport: campo('sport'),
     playedOn: campo('playedOn'),
     outcome: campo('outcome'),
@@ -22,20 +16,9 @@ export function casualInputFrom(formData: FormData): CasualResultInput {
     scoreTheirs: campo('scoreTheirs'),
     teamMine: campo('teamMine'),
     teamTheirs: campo('teamTheirs'),
-    setsToWin: '',
-    gamesPerSet: '',
-    sets: '',
-  }
-  if (input.sport !== 'PADEL') return input
-  const mine = Number(input.scoreMine)
-  const theirs = Number(input.scoreTheirs)
-  return {
-    ...input,
-    scoreMine: '',
-    scoreTheirs: '',
-    setsToWin: '1',
-    gamesPerSet: String(Math.max(mine, theirs)),
-    sets: JSON.stringify([{ mine, theirs }]),
+    setsToWin: campo('setsToWin'),
+    gamesPerSet: campo('gamesPerSet'),
+    sets: campo('sets'),
   }
 }
 

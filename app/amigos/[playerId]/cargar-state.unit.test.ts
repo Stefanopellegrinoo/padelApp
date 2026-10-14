@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { EdgeError } from '@/db/errors'
-import { playersFrom, playersFromJson, slotsError, slotsFor } from './cargar-state'
+import { formatFromSets, playersFrom, playersFromJson, setsField, slotsError, slotsFor } from './cargar-state'
 
 const amigo = (playerId: string) => ({ kind: 'friend', playerId }) as const
 const invitado = (name: string) => ({ kind: 'guest', name }) as const
@@ -72,5 +72,39 @@ describe('playersFromJson (borde de confianza)', () => {
     ['elemento que no es objeto', '[null]'],
   ])('rechaza %s', (_caso, raw) => {
     expect(() => playersFromJson(raw)).toThrow(EdgeError)
+  })
+})
+
+describe('formatFromSets', () => {
+  it('un set 4-2 es un formato de 1 set a 4 games', () => {
+    expect(formatFromSets([{ mine: 4, theirs: 2 }])).toEqual({ setsToWin: 1, gamesPerSet: 4 })
+  })
+  it('6-3 4-6 6-5 es a 2 sets de 6 games', () => {
+    expect(
+      formatFromSets([
+        { mine: 6, theirs: 3 },
+        { mine: 4, theirs: 6 },
+        { mine: 6, theirs: 5 },
+      ]),
+    ).toEqual({ setsToWin: 2, gamesPerSet: 6 })
+  })
+})
+
+describe('setsField', () => {
+  it('serializa los sets en mi orientación (A = mío)', () => {
+    expect(
+      JSON.parse(
+        setsField({
+          sets: [
+            { gamesA: 6, gamesB: 3 },
+            { gamesA: 4, gamesB: 6 },
+          ],
+          pendingWinner: null,
+        }),
+      ),
+    ).toEqual([
+      { mine: 6, theirs: 3 },
+      { mine: 4, theirs: 6 },
+    ])
   })
 })

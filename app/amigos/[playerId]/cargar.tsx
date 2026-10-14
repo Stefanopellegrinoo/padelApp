@@ -1,10 +1,29 @@
 'use client'
 
 import { useActionState, useId, useState, useTransition, type ReactNode } from 'react'
+import { defaultConfig, type MatchFormat } from '@/core'
 import type { CasualMatch } from '@/db/friends'
-import { DISCIPLINE_KINDS, DISCIPLINE_LABELS, type DisciplineKind } from '@/app/torneos/nuevo/wizard-state'
+import {
+  chooseLoserGames,
+  chooseWinner,
+  isComplete,
+  loserGamesOptions,
+  startLoad,
+  type LoadState,
+} from '@/app/torneo/[id]/[disciplina]/fechas/[n]/carga-state'
+import { Stepper } from '@/app/torneos/nuevo/wizard'
+import { DISCIPLINE_KINDS, DISCIPLINE_LABELS, STEPPERS, type DisciplineKind } from '@/app/torneos/nuevo/wizard-state'
 import { editCasualMatch, removeCasualMatch, type CasualFormState } from '../actions'
-import { playersFrom, slotsError, slotsFor, type Mode, type Slot, type SlotKey } from './cargar-state'
+import {
+  formatFromSets,
+  playersFrom,
+  setsField,
+  slotsError,
+  slotsFor,
+  type Mode,
+  type Slot,
+  type SlotKey,
+} from './cargar-state'
 
 const INITIAL_STATE: CasualFormState = { error: null }
 
@@ -20,7 +39,11 @@ const MODES: { value: Mode; label: string }[] = [
   { value: '1v1', label: '1 vs 1' },
   { value: '2v2', label: '2 vs 2' },
 ]
-const SLOT_LABELS: Record<SlotKey, string> = { partner: 'Tu compañero', rival1: 'Rival 1', rival2: 'Rival 2' }
+const SLOT_LABELS: Record<SlotKey, string> = {
+  partner: 'Tu compañero',
+  rival1: 'Rival 1',
+  rival2: 'Rival 2',
+}
 
 /**
  * Los campos de texto plano con los que se prellena el formulario al editar
@@ -39,6 +62,8 @@ export interface CasualFormInitial {
   teamMine: string
   teamTheirs: string
   roster: string
+  /** Sólo PADEL: los sets guardados, en mi orientación. */
+  sets?: ReadonlyArray<{ mine: number; theirs: number }>
 }
 
 export interface CasualFormFriend {
@@ -85,8 +110,11 @@ function slotOf({ choice, name }: SlotChoice): Slot | null {
  * El "quién ganó" es SIEMPRE un radio obligatorio con las tres opciones
  * (ruling del orquestador, task-4-brief.md).
  *
- * Pádel sigue con el pegamento de la Tarea 2 (dos números → un set, ver
- * `casualInputFrom`); los sets de verdad son la Tarea 4b.
+ * Pádel no tiene "quién ganó" ni marcador de texto: elige su formato con dos
+ * `Stepper` y carga N sets con la máquina de dos toques de la carga de fechas
+ * (`carga-state.ts`, A = mi lado). El ganador sale de los sets
+ * (`parseCasualResult`). Cambiar un stepper vacía los sets: pueden dejar de
+ * ser válidos y es más simple que revalidarlos.
  */
 export function CasualForm({
   friendPlayerId,
@@ -129,15 +157,36 @@ export function CasualForm({
   const [scoreTheirs, setScoreTheirs] = useState(initial?.scoreTheirs ?? '')
   const [teamMine, setTeamMine] = useState(initial?.teamMine ?? '')
   const [teamTheirs, setTeamTheirs] = useState(initial?.teamTheirs ?? '')
+  const [format, setFormat] = useState<MatchFormat>(() => ({
+    ...defaultConfig(4).matchFormat,
+    ...(initial?.sets !== undefined && initial.sets.length > 0 ? formatFromSets(initial.sets) : {}),
+  }))
+  const [load, setLoad] = useState<LoadState>(() => ({
+    sets: (initial?.sets ?? []).map((set) => ({
+      gamesA: set.mine,
+      gamesB: set.theirs,
+    })),
+    pendingWinner: null,
+  }))
+  const isPadel = sport === 'PADEL'
+  const setFormatKey = (key: 'setsToWin' | 'gamesPerSet', value: number) => {
+    setFormat((current) => ({ ...current, [key]: value }))
+    setLoad(startLoad())
+  }
 
   const slotValues = {
     partner: slotOf(slots.partner),
     rival1: slotOf(slots.rival1),
     rival2: slotOf(slots.rival2),
   }
-  const problem = initial === undefined ? slotsError(mode, slotValues) : null
+  const slotProblem = initial === undefined ? slotsError(mode, slotValues) : null
+  const problem =
+    slotProblem ?? (isPadel && !isComplete(load, format) ? 'Cargá los sets hasta cerrar el partido.' : null)
   const setSlot = (key: SlotKey, next: Partial<SlotChoice>) =>
-    setSlots((current) => ({ ...current, [key]: { ...current[key], ...next } }))
+    setSlots((current) => ({
+      ...current,
+      [key]: { ...current[key], ...next },
+    }))
 
   return (
     <form
@@ -248,58 +297,85 @@ export function CasualForm({
         />
       </div>
 
-      <fieldset className="flex flex-col gap-1.5">
-        <legend className={LEGEND}>¿Quién ganó?</legend>
-        {(
-          [
-            ['won', 'Ganó tu lado'],
-            ['lost', 'Ganó el otro lado'],
-            ['drew', 'Empataron'],
-          ] as const
-        ).map(([value, label]) => (
-          <label key={value} className="flex min-h-[38px] items-center gap-2 text-[13.5px] font-bold">
-            <input
-              type="radio"
-              name="outcome"
-              value={value}
-              required
-              checked={outcome === value}
-              onChange={() => setOutcome(value)}
-              className="h-4 w-4 shrink-0 accent-accent"
-            />
-            {label}
-          </label>
-        ))}
-      </fieldset>
+      {isPadel && (
+        <>
+          <input type="hidden" name="setsToWin" value={format.setsToWin} />
+          <input type="hidden" name="gamesPerSet" value={format.gamesPerSet} />
+          <input type="hidden" name="sets" value={setsField(load)} />
+          {STEPPERS.filter((stepper) => stepper.key === 'setsToWin' || stepper.key === 'gamesPerSet').map((stepper) => {
+            const key = stepper.key as 'setsToWin' | 'gamesPerSet'
+            return (
+              <div key={key} data-stepper={key} className="flex items-center justify-between gap-3">
+                <span className={LABEL}>{stepper.label}</span>
+                <Stepper
+                  value={format[key]}
+                  min={stepper.min}
+                  max={stepper.max}
+                  onChange={(next) => setFormatKey(key, next)}
+                />
+              </div>
+            )
+          })}
+          <PadelSets load={load} format={format} onChange={setLoad} />
+        </>
+      )}
 
-      <div className="flex gap-2">
-        <div className="flex flex-1 flex-col gap-1">
-          <label htmlFor={`${uid}-scoreMine`} className={LABEL}>
-            {sport === 'FIFA' ? 'Goles de tu lado' : 'Games de tu lado'}
-          </label>
-          <input
-            id={`${uid}-scoreMine`}
-            name="scoreMine"
-            type="number"
-            value={scoreMine}
-            onChange={(e) => setScoreMine(e.target.value)}
-            className={INPUT}
-          />
+      {!isPadel && (
+        <fieldset className="flex flex-col gap-1.5">
+          <legend className={LEGEND}>¿Quién ganó?</legend>
+          {(
+            [
+              ['won', 'Ganó tu lado'],
+              ['lost', 'Ganó el otro lado'],
+              ['drew', 'Empataron'],
+            ] as const
+          ).map(([value, label]) => (
+            <label key={value} className="flex min-h-[38px] items-center gap-2 text-[13.5px] font-bold">
+              <input
+                type="radio"
+                name="outcome"
+                value={value}
+                required
+                checked={outcome === value}
+                onChange={() => setOutcome(value)}
+                className="h-4 w-4 shrink-0 accent-accent"
+              />
+              {label}
+            </label>
+          ))}
+        </fieldset>
+      )}
+
+      {!isPadel && (
+        <div className="flex gap-2">
+          <div className="flex flex-1 flex-col gap-1">
+            <label htmlFor={`${uid}-scoreMine`} className={LABEL}>
+              Goles de tu lado
+            </label>
+            <input
+              id={`${uid}-scoreMine`}
+              name="scoreMine"
+              type="number"
+              value={scoreMine}
+              onChange={(e) => setScoreMine(e.target.value)}
+              className={INPUT}
+            />
+          </div>
+          <div className="flex flex-1 flex-col gap-1">
+            <label htmlFor={`${uid}-scoreTheirs`} className={LABEL}>
+              Goles del otro lado
+            </label>
+            <input
+              id={`${uid}-scoreTheirs`}
+              name="scoreTheirs"
+              type="number"
+              value={scoreTheirs}
+              onChange={(e) => setScoreTheirs(e.target.value)}
+              className={INPUT}
+            />
+          </div>
         </div>
-        <div className="flex flex-1 flex-col gap-1">
-          <label htmlFor={`${uid}-scoreTheirs`} className={LABEL}>
-            {sport === 'FIFA' ? 'Goles del otro lado' : 'Games del otro lado'}
-          </label>
-          <input
-            id={`${uid}-scoreTheirs`}
-            name="scoreTheirs"
-            type="number"
-            value={scoreTheirs}
-            onChange={(e) => setScoreTheirs(e.target.value)}
-            className={INPUT}
-          />
-        </div>
-      </div>
+      )}
 
       {sport === 'FIFA' && (
         <div className="flex gap-2">
@@ -355,6 +431,67 @@ export function CasualForm({
   )
 }
 
+const TAP = 'min-h-[44px] flex-1 rounded-field bg-chip px-3 text-[14px] font-extrabold'
+
+/** Los sets ya cargados y los dos toques del set en curso (A = mi lado). */
+function PadelSets({
+  load,
+  format,
+  onChange,
+}: {
+  load: LoadState
+  format: MatchFormat
+  onChange: (next: LoadState) => void
+}) {
+  const complete = isComplete(load, format)
+  return (
+    <div className="flex flex-col gap-2">
+      <span className={LEGEND}>Sets</span>
+      <p className="text-[14px] font-bold">
+        {load.sets.length === 0
+          ? 'Todavía no cargaste ninguno.'
+          : load.sets.map((set) => `${set.gamesA}-${set.gamesB}`).join(' · ')}
+      </p>
+      {!complete && load.pendingWinner === null && (
+        <div className="flex gap-2">
+          <button type="button" className={TAP} onClick={() => onChange(chooseWinner(load, 'A'))}>
+            Ganó mi lado
+          </button>
+          <button type="button" className={TAP} onClick={() => onChange(chooseWinner(load, 'B'))}>
+            Ganó el otro lado
+          </button>
+        </div>
+      )}
+      {!complete && load.pendingWinner !== null && (
+        <>
+          <span className={LABEL}>¿Cuántos games hizo el que perdió?</span>
+          <div className="flex flex-wrap gap-2">
+            {loserGamesOptions(format).map((games) => (
+              <button
+                key={games}
+                type="button"
+                className={TAP}
+                onClick={() => onChange(chooseLoserGames(load, games, format))}
+              >
+                {games}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+      {load.sets.length > 0 && (
+        <button
+          type="button"
+          className="self-start text-[12px] font-extrabold text-accent-link"
+          onClick={() => onChange(startLoad())}
+        >
+          Volver a cargar
+        </button>
+      )}
+    </div>
+  )
+}
+
 /**
  * Una fila casual de `Historial` (`app/amigos/historial.tsx`), con Editar y
  * Borrar (§3.1, §3.3 -- los dos pueden). `children` es el contenido de
@@ -381,7 +518,6 @@ export function CasualMatchRow({
   children: ReactNode
 }) {
   const [editing, setEditing] = useState(false)
-  const marcador = partido.score ?? partido.sets?.[0] ?? null
 
   if (editing) {
     return (
@@ -395,10 +531,9 @@ export function CasualMatchRow({
           sport: partido.sport,
           playedOn: partido.playedOn,
           outcome: partido.outcome,
-          // Pegamento hasta la Tarea 4b: en PADEL el formulario viejo edita el
-          // primer set como si fuera el marcador (ver `casualInputFrom`).
-          scoreMine: marcador !== null ? String(marcador.mine) : '',
-          scoreTheirs: marcador !== null ? String(marcador.theirs) : '',
+          scoreMine: partido.score !== null ? String(partido.score.mine) : '',
+          scoreTheirs: partido.score !== null ? String(partido.score.theirs) : '',
+          sets: partido.sets ?? undefined,
           teamMine: partido.teams.mine ?? '',
           teamTheirs: partido.teams.theirs ?? '',
           roster: `${partido.partners.length > 0 ? `con ${partido.partners.join(', ')} · ` : ''}vs ${partido.rivals.join(', ')}`,
@@ -411,11 +546,7 @@ export function CasualMatchRow({
     <div className="flex flex-col gap-1 rounded-field border-[1.5px] border-line p-[14px]">
       {children}
       <div className="flex gap-3 pt-1">
-        <button
-          type="button"
-          onClick={() => setEditing(true)}
-          className="text-[12px] font-extrabold text-accent-link"
-        >
+        <button type="button" onClick={() => setEditing(true)} className="text-[12px] font-extrabold text-accent-link">
           Editar
         </button>
         <form action={removeCasualMatch}>

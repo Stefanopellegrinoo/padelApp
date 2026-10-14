@@ -12,7 +12,7 @@ import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { CasualFormState } from '../actions'
-import { CasualForm } from './cargar'
+import { CasualForm, type CasualFormInitial } from './cargar'
 
 // React exige esta bandera para no advertir que un `act()` corre "fuera de
 // un entorno de test" -- jsdom no la prende sola, y sin ella la salida se
@@ -133,5 +133,92 @@ describe('CasualForm', () => {
       { side: 'theirs', playerId: 'amigo-1', guestName: null },
       { side: 'theirs', playerId: null, guestName: 'Beto' },
     ])
+  })
+
+  describe('pádel: formato y sets en dos toques', () => {
+    async function montar(initial?: CasualFormInitial) {
+      container = document.createElement('div')
+      document.body.appendChild(container)
+      root = createRoot(container)
+      await act(async () => {
+        root?.render(
+          createElement(CasualForm, {
+            friendPlayerId: 'amigo-1',
+            friends: AMIGOS,
+            action: fallaSiempre,
+            submitLabel: 'Cargar partido',
+            initial,
+          }),
+        )
+      })
+      const el = container
+      return {
+        hidden: (name: string) => (el.querySelector(`input[name="${name}"]`) as HTMLInputElement).value,
+        boton: (texto: string) =>
+          Array.from(el.querySelectorAll('button')).find((b) => b.textContent === texto) as HTMLButtonElement,
+        stepper: (key: string, texto: '+' | '−') =>
+          Array.from(el.querySelectorAll(`[data-stepper="${key}"] button`)).find(
+            (b) => b.textContent === texto,
+          ) as HTMLButtonElement,
+        submit: () => el.querySelector('button[type="submit"]') as HTMLButtonElement,
+      }
+    }
+    const tocar = (b: HTMLButtonElement) => act(async () => b.click())
+
+    it('arma 3 sets con dos toques cada uno y habilita el envío recién al completarse', async () => {
+      const f = await montar()
+      expect(f.hidden('setsToWin')).toBe('1')
+      expect(f.hidden('gamesPerSet')).toBe('4')
+      await tocar(f.stepper('setsToWin', '+')) // 2 sets a ganar, a 4 games
+      expect(f.submit().disabled).toBe(true)
+
+      await tocar(f.boton('Ganó mi lado'))
+      await tocar(f.boton('2'))
+      await tocar(f.boton('Ganó el otro lado'))
+      await tocar(f.boton('0'))
+      expect(f.submit().disabled).toBe(true) // 1-1: falta el desempate
+      await tocar(f.boton('Ganó mi lado'))
+      await tocar(f.boton('1'))
+
+      expect(JSON.parse(f.hidden('sets'))).toEqual([
+        { mine: 4, theirs: 2 },
+        { mine: 0, theirs: 4 },
+        { mine: 4, theirs: 1 },
+      ])
+      expect(f.submit().disabled).toBe(false)
+    })
+
+    it('cambiar los games por set vacía los sets cargados', async () => {
+      const f = await montar()
+      await tocar(f.boton('Ganó mi lado'))
+      await tocar(f.boton('2'))
+      expect(JSON.parse(f.hidden('sets'))).toHaveLength(1)
+      await tocar(f.stepper('gamesPerSet', '+'))
+      expect(f.hidden('gamesPerSet')).toBe('5')
+      expect(JSON.parse(f.hidden('sets'))).toEqual([])
+    })
+
+    it('al editar un partido de 3 sets prellena los steppers y los sets', async () => {
+      const f = await montar({
+        matchId: 'm1',
+        sport: 'PADEL',
+        playedOn: '2026-08-30',
+        outcome: 'won',
+        scoreMine: '',
+        scoreTheirs: '',
+        teamMine: '',
+        teamTheirs: '',
+        roster: 'vs Fede',
+        sets: [
+          { mine: 6, theirs: 3 },
+          { mine: 4, theirs: 6 },
+          { mine: 6, theirs: 5 },
+        ],
+      })
+      expect(f.hidden('setsToWin')).toBe('2')
+      expect(f.hidden('gamesPerSet')).toBe('6')
+      expect(JSON.parse(f.hidden('sets'))).toHaveLength(3)
+      expect(f.submit().disabled).toBe(false)
+    })
   })
 })

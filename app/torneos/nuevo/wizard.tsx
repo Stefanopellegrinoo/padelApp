@@ -256,7 +256,7 @@ function SalirDelPlantel({ onConfirm, onCancel }: { onConfirm: () => void; onCan
   )
 }
 
-function Stepper({
+export function Stepper({
   value,
   min,
   max,

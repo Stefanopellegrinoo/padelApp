@@ -1,6 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import { EdgeError } from '@/db/errors'
-import { formatFromSets, playersFrom, playersFromJson, setsField, slotsError, slotsFor } from './cargar-state'
+import { SPORTS } from '@/core'
+import { chooseWinner, startLoad } from '@/app/torneo/[id]/[disciplina]/fechas/[n]/carga-state'
+import { setError } from '@/db/validate'
+import {
+  chooseDeuce,
+  deuceOptions,
+  formatForSport,
+  formatFromSets,
+  playersFrom,
+  playersFromJson,
+  setsField,
+  slotsError,
+  slotsFor,
+} from './cargar-state'
 
 const amigo = (playerId: string) => ({ kind: 'friend', playerId }) as const
 const invitado = (name: string) => ({ kind: 'guest', name }) as const
@@ -104,6 +117,27 @@ describe('formatFromSets', () => {
   })
 })
 
+describe('formatForSport', () => {
+  it('pádel 4-2 es a 1 set de 4 games', () => {
+    expect(formatForSport(SPORTS.PADEL, [{ mine: 4, theirs: 2 }])).toEqual({
+      ...SPORTS.PADEL.format,
+      setsToWin: 1,
+      gamesPerSet: 4,
+    })
+  })
+  it('lo fijo del deporte manda: un deuce 12-10 en ping pong sigue siendo a 11', () => {
+    const format = formatForSport(SPORTS.PING_PONG, [
+      { mine: 12, theirs: 10 },
+      { mine: 11, theirs: 5 },
+    ])
+    expect(format.gamesPerSet).toBe(11)
+    expect(format.setsToWin).toBe(2)
+  })
+  it('sin sets es el formato por defecto del deporte', () => {
+    expect(formatForSport(SPORTS.PADEL, [])).toEqual(SPORTS.PADEL.format)
+  })
+})
+
 describe('setsField', () => {
   it('serializa los sets en mi orientación (A = mío)', () => {
     expect(
@@ -120,5 +154,43 @@ describe('setsField', () => {
       { mine: 6, theirs: 3 },
       { mine: 4, theirs: 6 },
     ])
+  })
+})
+
+describe('deuceOptions / chooseDeuce', () => {
+  const PING = SPORTS.PING_PONG.format
+
+  it('pádel (con tie-break) no tiene deuce', () => {
+    expect(deuceOptions(SPORTS.PADEL.format)).toEqual([])
+  })
+  it('marcador abierto no tiene deuce', () => {
+    expect(deuceOptions({ ...PING, openScore: true })).toEqual([])
+  })
+  it('ping pong ofrece del 12-10 al 16-14', () => {
+    expect(deuceOptions(PING)).toEqual([10, 11, 12, 13, 14])
+  })
+  it('cada opción, de cada lado, arma un set legal ganado por dos', () => {
+    for (const winner of ['A', 'B'] as const) {
+      for (const loser of deuceOptions(PING)) {
+        const set = chooseDeuce(chooseWinner(startLoad(), winner), loser, PING).sets[0]
+        expect(set).toBeDefined()
+        expect(setError(set!, PING, false)).toBeNull()
+        expect(winner === 'A' ? set!.gamesA : set!.gamesB).toBe(loser + 2)
+      }
+    }
+  })
+  it('sin ganador elegido no hace nada', () => {
+    const state = startLoad()
+    expect(chooseDeuce(state, 10, PING)).toBe(state)
+  })
+  it('un partido cerrado no crece', () => {
+    const closed = {
+      sets: [
+        { gamesA: 12, gamesB: 10 },
+        { gamesA: 11, gamesB: 5 },
+      ],
+      pendingWinner: 'A' as const,
+    }
+    expect(chooseDeuce(closed, 10, PING)).toBe(closed)
   })
 })

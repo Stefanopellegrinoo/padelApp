@@ -504,6 +504,52 @@ describe('historyWith — tripwire de truncamiento de PostgREST', () => {
     })
   })
 
+  it('un deporte fuera del registro (TEJO) con sets sale con los sets orientados; sin sets, con sets null', async () => {
+    const completo = casualCompleto()
+    const casualMatches = {
+      rows: completo.casualMatches.rows.map((fila) =>
+        fila.id === 'c1' ? { ...fila, sport: 'TEJO', team_a: null, team_b: null } : { ...fila, sport: 'TEJO' },
+      ),
+      count: 2,
+    }
+    // c2 (TEJO, con sets, ME+AMIGO lado A) y c1 (TEJO, sin sets).
+    const historia = await historyWith(fakeClient({ ...completo, casualMatches }), AMIGO)
+    const c1 = historia.find((m) => m.matchId === 'c1')
+    const c2 = historia.find((m) => m.matchId === 'c2')
+    expect(c1).toMatchObject({ sport: 'TEJO', sets: null })
+    expect(c2).toMatchObject({
+      sport: 'TEJO',
+      sets: [
+        { mine: 6, theirs: 3 },
+        { mine: 4, theirs: 6 },
+        { mine: 6, theirs: 4 },
+      ],
+    })
+  })
+
+  it('PING_PONG (familia sets del registro) sale con sus sets', async () => {
+    const completo = casualCompleto()
+    const casualMatches = {
+      rows: completo.casualMatches.rows.map((fila) => (fila.id === 'c2' ? { ...fila, sport: 'PING_PONG' } : fila)),
+      count: 2,
+    }
+    const c2 = (await historyWith(fakeClient({ ...completo, casualMatches }), AMIGO)).find((m) => m.matchId === 'c2')
+    expect(c2).toMatchObject({ sport: 'PING_PONG', sets: [{ mine: 6, theirs: 3 }, { mine: 4, theirs: 6 }, { mine: 6, theirs: 4 }] })
+  })
+
+  it('un historial sólo-FIFA también consulta casual_match_sets (la consulta es sobre todos los casuales)', async () => {
+    const completo = casualCompleto()
+    // Sets truncados: si la consulta no se hiciera, el tripwire no saltaría.
+    const client = fakeClient({
+      ...completo,
+      casualOfFriend: { rows: [{ match_id: 'c1' }], count: 1 },
+      casualMatches: { rows: [completo.casualMatches.rows[0]!], count: 1 },
+      casualPlayers: { rows: completo.casualPlayers.rows.filter((f) => f.match_id === 'c1'), count: 2 },
+      casualSets: { rows: [], count: 3 },
+    })
+    await expect(historyWith(client, AMIGO)).rejects.toThrow(/completo de sets casuales/)
+  })
+
   it('un torneo sin jugar (playedOn null) queda al final, mezclado con un casual que sí tiene fecha', async () => {
     // El caso que la unión introduce de nuevo: el lado casual NUNCA llega
     // con `playedOn: null` (`0072`, columna `not null`), sólo el de torneo
@@ -719,8 +765,62 @@ describe('parseCasualResult', () => {
     expect(() => parseCasualResult(fifa({ scoreMine: '-1', scoreTheirs: '0', outcome: 'lost' }))).toThrow(EdgeError)
   })
 
-  it('deporte fuera de PADEL/FIFA', () => {
-    expect(() => parseCasualResult(fifa({ sport: 'Fifa', outcome: 'won' }))).toThrow('Elegí Pádel o FIFA.')
+  it('deporte fuera del registro', () => {
+    for (const sport of ['Fifa', 'TEJO', 'toString']) {
+      expect(() => parseCasualResult(fifa({ sport, outcome: 'won' }))).toThrow('Elegí un deporte de la lista.')
+    }
+  })
+
+  const pingPong = (over: Partial<CasualResultInput>) =>
+    ({ ...base, sport: 'PING_PONG', setsToWin: '2', gamesPerSet: '11', ...over })
+  const goals = (sport: string, over: Partial<CasualResultInput>) => ({ ...base, sport, ...over })
+
+  it('ping pong a 2 sets de 11: deriva won', () => {
+    const sets = '[{"mine":11,"theirs":9},{"mine":9,"theirs":11},{"mine":12,"theirs":10}]'
+    const r = parseCasualResult(pingPong({ sets }))
+    expect(r).toMatchObject({ sport: 'PING_PONG', outcome: 'won', scoreMine: null, teamMine: null })
+  })
+
+  it('ping pong: 11-10 no se gana por dos', () => {
+    expect(() => parseCasualResult(pingPong({ setsToWin: '1', sets: '[{"mine":11,"theirs":10}]' }))).toThrow(
+      /por dos/,
+    )
+  })
+
+  it('ping pong: gamesPerSet fijo en 11', () => {
+    expect(() => parseCasualResult(pingPong({ gamesPerSet: '12', sets: '[]' }))).toThrow(
+      'Los puntos por set tiene que ser un entero entre 11 y 11.',
+    )
+  })
+
+  it('ping pong: rechaza goles', () => {
+    expect(() => parseCasualResult(pingPong({ scoreMine: '1', scoreTheirs: '0' }))).toThrow(
+      'Los equipos son sólo para FIFA.',
+    )
+  })
+
+  it('básquet 81-77 con won, sin equipos', () => {
+    const r = parseCasualResult(goals('BASQUET', { scoreMine: '81', scoreTheirs: '77', outcome: 'won' }))
+    expect(r).toMatchObject({ sport: 'BASQUET', outcome: 'won', scoreMine: 81, teamMine: null, sets: null })
+  })
+
+  it('básquet: no admite empates', () => {
+    expect(() =>
+      parseCasualResult(goals('BASQUET', { scoreMine: '80', scoreTheirs: '80', outcome: 'won' })),
+    ).toThrow(/empate/)
+    expect(() => parseCasualResult(goals('BASQUET', { outcome: 'drew' }))).toThrow('Decinos quién ganó.')
+  })
+
+  it('básquet: rechaza equipos', () => {
+    expect(() => parseCasualResult(goals('BASQUET', { outcome: 'won', teamMine: 'Lakers' }))).toThrow(
+      'Los equipos son sólo para FIFA.',
+    )
+  })
+
+  it('fútbol 2-2 con drew es válido; con equipo se rechaza', () => {
+    const r = parseCasualResult(goals('FUTBOL', { scoreMine: '2', scoreTheirs: '2', outcome: 'drew' }))
+    expect(r).toMatchObject({ sport: 'FUTBOL', outcome: 'drew', scoreMine: 2, teamMine: null })
+    expect(() => parseCasualResult(goals('FUTBOL', { outcome: 'won', teamTheirs: 'Boca' }))).toThrow(EdgeError)
   })
 
   it('fecha inexistente', () => {

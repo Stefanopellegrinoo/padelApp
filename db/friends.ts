@@ -1,4 +1,7 @@
-import { defaultConfig, disciplineProfile, tallySets, type MatchFormat, type SetScore } from '@/core'
+import {
+  defaultConfig, disciplineProfile, isSportId, SPORT_IDS, sportFamily, sportLabel, sportOf, tallySets,
+  type GoalsSport, type MatchFormat, type SetScore, type SetsSport, type SportId, type TournamentSport,
+} from '@/core'
 import { EdgeError } from './errors'
 import { matchError } from './validate'
 import type { Client } from './client'
@@ -89,7 +92,7 @@ export interface TournamentMatch {
    * backfill, pero ese estado no sobrevivió a la migración siguiente) --
    * mismo patrón que `CasualMatch.playedOn` más abajo.
    */
-  sport: 'PADEL' | 'FIFA'
+  sport: TournamentSport
   /** El nombre del torneo, para que la fila diga de dónde salió. */
   seasonName: string
   /**
@@ -108,8 +111,12 @@ export interface CasualMatch {
   /** `casual_matches.played_on` -- `not null` en la tabla (0072): a diferencia
    * del torneo, un casual nunca sale sin fecha. */
   playedOn: string
-  /** Literal respaldado por el CHECK de `casual_matches.sport` (0072). */
-  sport: 'PADEL' | 'FIFA'
+  /**
+   * El id tal cual vino de la fila. Sin CHECK de lista en `casual_matches.sport`
+   * (0093) puede ser un deporte que el registro ya no tiene: quien lo muestra
+   * usa `sportLabel`, que devuelve el id si no lo conoce.
+   */
+  sport: string
   /**
    * `true` si el amigo de la pantalla jugó de TU lado; `false` si en contra.
    * Un casual puede ser 2v2 (0072), así que como en el torneo los dos casos
@@ -363,7 +370,7 @@ export async function historyWith(
     // (0015_disciplines.sql:15): mismo criterio que `toDisciplineHeader`
     // (`db/read.ts:270-285`), que castea en el mismo punto por el mismo motivo.
     const disciplineKindById = new Map(
-      disciplineRows.map((row) => [row.id, row.kind as 'PADEL' | 'FIFA']),
+      disciplineRows.map((row) => [row.id, row.kind as TournamentSport]),
     )
 
     // Consulta 5: los sets de los partidos compartidos. Sin sets, el partido
@@ -532,20 +539,17 @@ async function casualesEntre(supabase: Client, me: string, friendPlayerId: strin
     assertComplete(nombresResult, 'nombres').map((row) => [row.id, row.display_name] as const),
   )
 
-  const padelIds = partidos.filter((row) => row.sport === 'PADEL').map((row) => row.id)
   const setsPorPartido = new Map<string, Array<{ games_a: number; games_b: number }>>()
-  if (padelIds.length > 0) {
-    const setsResult = await supabase
-      .from('casual_match_sets')
-      .select('match_id, games_a, games_b', { count: 'exact' })
-      .in('match_id', padelIds)
-      .order('match_id', { ascending: true })
-      .order('set_number', { ascending: true })
-    for (const set of assertComplete(setsResult, 'sets casuales')) {
-      const bucket = setsPorPartido.get(set.match_id)
-      if (bucket === undefined) setsPorPartido.set(set.match_id, [set])
-      else bucket.push(set)
-    }
+  const setsResult = await supabase
+    .from('casual_match_sets')
+    .select('match_id, games_a, games_b', { count: 'exact' })
+    .in('match_id', ids)
+    .order('match_id', { ascending: true })
+    .order('set_number', { ascending: true })
+  for (const set of assertComplete(setsResult, 'sets casuales')) {
+    const bucket = setsPorPartido.get(set.match_id)
+    if (bucket === undefined) setsPorPartido.set(set.match_id, [set])
+    else bucket.push(set)
   }
 
   return partidos.map((row) => {
@@ -559,15 +563,16 @@ async function casualesEntre(supabase: Client, me: string, friendPlayerId: strin
       throw new EdgeError(`No se pudo leer de qué lado jugó cada uno en el partido ${row.id}.`)
     }
     const soyA = miLado === 'A'
+    // Un id fuera del registro no tiene familia: la forma de los datos decide
+    // (si tiene sets, se leen como sets).
+    const family = sportFamily(row.sport) ?? (setsPorPartido.has(row.id) ? 'sets' : 'goals')
     const nombre = (fila: CasualPlayerRow) => nombreDeJugador(nombrePorId, fila)
 
     return {
       kind: 'casual',
       matchId: row.id,
       playedOn: row.played_on,
-      // Cast respaldado por el CHECK de `casual_matches.sport` (0072) -- mismo
-      // criterio que `disciplineKindById` arriba.
-      sport: row.sport as 'PADEL' | 'FIFA',
+      sport: row.sport,
       together: suLado === miLado,
       partners: filas.filter((fila) => fila.side === miLado && fila.player_id !== me).map(nombre),
       rivals: filas.filter((fila) => fila.side !== miLado).map(nombre),
@@ -584,7 +589,7 @@ async function casualesEntre(supabase: Client, me: string, friendPlayerId: strin
             : { mine: row.score_b, theirs: row.score_a },
       teams: soyA ? { mine: row.team_a, theirs: row.team_b } : { mine: row.team_b, theirs: row.team_a },
       sets:
-        row.sport === 'PADEL'
+        family === 'sets'
           ? (setsPorPartido.get(row.id) ?? []).map((set) =>
               soyA ? { mine: set.games_a, theirs: set.games_b } : { mine: set.games_b, theirs: set.games_a },
             )
@@ -768,12 +773,13 @@ function normalizeTeam(raw: string): string | null {
   return trimmed.length === 0 ? null : trimmed
 }
 
-// Rangos de los steppers de formato. Copia de `STEPPERS`
-// (app/torneos/nuevo/wizard-state.ts:30): db/ no importa de app/.
-const SETS_TO_WIN_RANGE = { min: 1, max: 3 }
-const GAMES_PER_SET_RANGE = { min: 3, max: 9 }
-
-export const CASUAL_PADEL_DEFAULT: MatchFormat = disciplineProfile('PADEL', defaultConfig(4)).config.matchFormat
+// El formato con el que se valida un marcador de goles/puntos: la expresión de siempre, con nombre.
+const GOALS_FORMAT = disciplineProfile('FIFA', defaultConfig(4)).config.matchFormat
+const TEAM_SPORTS = SPORT_IDS.filter((id) => {
+  const s = sportOf(id)
+  return s.family === 'goals' && s.teams
+})
+const TEAMS_ONLY = `Los equipos son sólo para ${TEAM_SPORTS.map(sportLabel).join(', ')}.`
 
 /** Los campos del formulario del resultado casual, en crudo y en "mío/suyo". */
 export interface CasualResultInput {
@@ -792,14 +798,14 @@ export interface CasualResultInput {
 }
 
 export interface CasualResult {
-  sport: 'PADEL' | 'FIFA'
+  sport: SportId
   playedOn: string
   outcome: 'won' | 'lost' | 'drew'
   scoreMine: number | null
   scoreTheirs: number | null
   teamMine: string | null
   teamTheirs: string | null
-  /** PADEL, sólo para validar: no se guarda. */
+  /** Familia sets, sólo para validar: no se guarda. */
   format: MatchFormat | null
   sets: Array<{ mine: number; theirs: number }> | null
 }
@@ -830,17 +836,17 @@ function parseSets(raw: string): Array<{ mine: number; theirs: number }> {
   return (value as Array<{ mine: number; theirs: number }>).map(({ mine, theirs }) => ({ mine, theirs }))
 }
 
-function parsePadelResult(input: CasualResultInput) {
+function parseSetsResult(sport: SetsSport, input: CasualResultInput) {
   if (
     input.scoreMine.trim() !== '' || input.scoreTheirs.trim() !== '' ||
     normalizeTeam(input.teamMine) !== null || normalizeTeam(input.teamTheirs) !== null
   ) {
-    throw new EdgeError('Los equipos son sólo para FIFA.')
+    throw new EdgeError(TEAMS_ONLY)
   }
   const format: MatchFormat = {
-    ...CASUAL_PADEL_DEFAULT,
-    setsToWin: intInRange(input.setsToWin, SETS_TO_WIN_RANGE, 'Los sets por partido'),
-    gamesPerSet: intInRange(input.gamesPerSet, GAMES_PER_SET_RANGE, 'Los games por set'),
+    ...sport.format,
+    setsToWin: intInRange(input.setsToWin, sport.setsToWin, 'Los sets por partido'),
+    gamesPerSet: intInRange(input.gamesPerSet, sport.gamesPerSet, `Los ${sport.unit} por set`),
   }
   const sets = parseSets(input.sets)
   const problem = matchError(sets.map((s) => ({ gamesA: s.mine, gamesB: s.theirs })), format, false)
@@ -850,54 +856,53 @@ function parsePadelResult(input: CasualResultInput) {
   return { outcome: mine > theirs ? ('won' as const) : ('lost' as const), format, sets }
 }
 
-function parseFifaResult(input: CasualResultInput): {
-  outcome: CasualOutcome
-  scoreMine: number | null
-  scoreTheirs: number | null
-} {
-  const outcome = input.outcome
-  if (outcome !== 'won' && outcome !== 'lost' && outcome !== 'drew') {
-    throw new EdgeError('Decinos quién ganó, o si empataron.')
+function parseGoalsResult(sport: GoalsSport, input: CasualResultInput) {
+  const raw = input.outcome
+  if (raw !== 'won' && raw !== 'lost' && !(raw === 'drew' && sport.allowsDraw)) {
+    throw new EdgeError(sport.allowsDraw ? 'Decinos quién ganó, o si empataron.' : 'Decinos quién ganó.')
   }
+  const outcome: CasualOutcome = raw
   const mineRaw = input.scoreMine.trim()
   const theirsRaw = input.scoreTheirs.trim()
   if ((mineRaw === '') !== (theirsRaw === '')) {
     throw new EdgeError('Cargá los dos números del marcador, o dejalos los dos vacíos.')
   }
-  if (mineRaw === '') return { outcome, scoreMine: null, scoreTheirs: null }
+  const teamMine = normalizeTeam(input.teamMine)
+  const teamTheirs = normalizeTeam(input.teamTheirs)
+  if (!sport.teams && (teamMine !== null || teamTheirs !== null)) throw new EdgeError(TEAMS_ONLY)
+  const teams = { teamMine, teamTheirs }
+  if (mineRaw === '') return { outcome, scoreMine: null, scoreTheirs: null, ...teams }
   const scoreMine = Number(mineRaw)
   const scoreTheirs = Number(theirsRaw)
-  const problem = matchError(
-    [{ gamesA: scoreMine, gamesB: scoreTheirs }],
-    disciplineProfile('FIFA', defaultConfig(4)).config.matchFormat,
-    true,
-  )
+  const problem = matchError([{ gamesA: scoreMine, gamesB: scoreTheirs }], GOALS_FORMAT, sport.allowsDraw)
   if (problem !== null) throw new EdgeError(problem)
   // Con marcador empatado cualquier `outcome` vale (penales).
   const derived = scoreMine > scoreTheirs ? 'won' : scoreMine < scoreTheirs ? 'lost' : null
   if (derived !== null && derived !== outcome) {
     throw new EdgeError('El marcador dice otra cosa sobre quién ganó.')
   }
-  return { outcome, scoreMine, scoreTheirs }
+  return { outcome, scoreMine, scoreTheirs, ...teams }
 }
 
-/** Valida el resultado de un partido casual según su deporte (PADEL con sets, FIFA con goles). */
+/** Valida el resultado de un partido casual según la familia de marcador de su deporte. */
 export function parseCasualResult(input: CasualResultInput): CasualResult {
-  if (input.sport !== 'PADEL' && input.sport !== 'FIFA') throw new EdgeError('Elegí Pádel o FIFA.')
+  if (!isSportId(input.sport)) throw new EdgeError('Elegí un deporte de la lista.')
   if (!esFechaReal(input.playedOn)) throw new EdgeError('Elegí una fecha real.')
-
-  if (input.sport === 'PADEL') {
-    const { outcome, format, sets } = parsePadelResult(input)
-    return {
-      sport: 'PADEL', playedOn: input.playedOn, outcome,
-      scoreMine: null, scoreTheirs: null, teamMine: null, teamTheirs: null, format, sets,
+  const sport = sportOf(input.sport)
+  switch (sport.family) {
+    case 'sets': {
+      const { outcome, format, sets } = parseSetsResult(sport, input)
+      return {
+        sport: input.sport, playedOn: input.playedOn, outcome,
+        scoreMine: null, scoreTheirs: null, teamMine: null, teamTheirs: null, format, sets,
+      }
     }
-  }
-  const { outcome, scoreMine, scoreTheirs } = parseFifaResult(input)
-  return {
-    sport: 'FIFA', playedOn: input.playedOn, outcome, scoreMine, scoreTheirs,
-    teamMine: normalizeTeam(input.teamMine), teamTheirs: normalizeTeam(input.teamTheirs),
-    format: null, sets: null,
+    case 'goals':
+      return { sport: input.sport, playedOn: input.playedOn, format: null, sets: null, ...parseGoalsResult(sport, input) }
+    default: {
+      const never: never = sport
+      throw new Error(`familia desconocida: ${String(never)}`)
+    }
   }
 }
 
@@ -921,7 +926,7 @@ type CasualPlayerArg = { side: 'A' | 'B'; player_id: string | null; guest_name: 
  */
 interface SaveCasualMatchArgs {
   p_id: string | null
-  p_sport: 'PADEL' | 'FIFA'
+  p_sport: SportId
   p_played_on: string
   p_winner_side: 'A' | 'B' | null
   p_score_a: number | null

@@ -25,13 +25,17 @@ export function MiId({ playerId }: { playerId: string }) {
         void navigator.clipboard.writeText(playerId)
         setCopied(true)
       }}
-      className="flex items-center justify-between gap-3 rounded-field border-[1.5px] border-line p-[13px] text-left"
+      className="flex min-h-[56px] items-center justify-between gap-3 rounded-field border-[1.5px] border-dashed border-line bg-bg px-[13px] py-2.5 text-left"
     >
       <span className="min-w-0 flex-1">
         <span className="block text-[11.5px] font-extrabold text-muted">Tu ID</span>
-        <span className="block truncate text-[12.5px] font-[600] text-muted">{playerId}</span>
+        <span className="block truncate text-[12.5px] font-[600] text-text">{playerId}</span>
       </span>
-      <span className="shrink-0 text-[12.5px] font-[750] text-accent-link">
+      <span
+        className={`shrink-0 rounded-full px-3 py-1.5 text-[12px] font-extrabold ${
+          copied ? 'bg-ok-bg text-up' : 'bg-chip text-accent-link'
+        }`}
+      >
         {copied ? 'Copiado ✓' : 'Copiar'}
       </span>
     </button>

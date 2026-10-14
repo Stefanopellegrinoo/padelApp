@@ -235,6 +235,10 @@ export { tallyPlayers, partnerRecords, bestPair } from './playerstats'
 // millones con veinte jugadores. Quien la llame pone su propio techo antes.
 export { allMatchings } from './matchings'
 
+//── El registro de deportes: un deporte es dato, la familia de marcador es la estrategia ──
+export type { ScoringFamily, Range, SetsSport, GoalsSport, Sport, SportId, TournamentSport } from './sports'
+export { SPORTS, SPORT_IDS, TOURNAMENT_SPORTS, isSportId, sportOf, sportLabel, sportFamily } from './sports'
+
 /*
  * Deliberately NOT exported — internal to the modules above:
  *

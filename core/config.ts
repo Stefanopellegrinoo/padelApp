@@ -1,4 +1,5 @@
 import { minSquadFor } from './constants'
+import { SPORTS, type TournamentSport } from './sports'
 import type { SeasonConfig, SideSize } from './types'
 
 /**
@@ -117,8 +118,8 @@ export function defaultConfig(squadSize: number, sideSize: SideSize = 2): Season
  * pádel. Una liga de FIFA nacía siendo pádel con otro nombre: sin marcador
  * abierto y sin empates, o sea sin poder cargar ni un `3-1` ni un `0-0`.
  *
- * Se DERIVA del `kind`, y ésa es la diferencia con `pair_size`: un lado de
- * FIFA puede ser de uno o de dos (decisión de producto #5, ver `SideSize`),
+ * Se DERIVA del `kind` vía el registro (`SPORTS`), y ésa es la diferencia con `pair_size`: un lado
+ * de FIFA puede ser de uno o de dos (decisión de producto #5, ver `SideSize`),
  * pero un partido de FIFA se cuenta en goles siempre. No hay FIFA por sets.
  *
  * El empate viaja aparte del marcador —son dos ejes ortogonales, D1— porque
@@ -130,15 +131,16 @@ export function defaultConfig(squadSize: number, sideSize: SideSize = 2): Season
  * siempre.
  */
 export function disciplineProfile(
-  kind: 'PADEL' | 'FIFA',
+  kind: TournamentSport,
   config: SeasonConfig,
 ): { config: SeasonConfig; allowsDraw: boolean } {
-  const goals = kind === 'FIFA'
+  const sport = SPORTS[kind]
+  const goals = sport.family === 'goals'
   return {
     // Los dos sentidos, no sólo el de encender: así el resultado depende del
     // `kind` y no de lo que traía la config que entró.
     config: { ...config, matchFormat: { ...config.matchFormat, openScore: goals } },
-    allowsDraw: goals,
+    allowsDraw: sport.allowsDraw,
   }
 }
 

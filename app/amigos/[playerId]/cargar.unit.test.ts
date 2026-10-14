@@ -273,10 +273,218 @@ describe('CasualForm', () => {
     expect(details.open).toBe(true)
   })
 
-  describe('CasualMatchRow: Borrar pide confirmación', () => {
-    const partido = { matchId: 'm1' } as unknown as CasualMatch
+  describe('el resultado sale de la familia del deporte', () => {
+    async function editar(sport: string) {
+      container = document.createElement('div')
+      document.body.appendChild(container)
+      root = createRoot(container)
+      await act(async () => {
+        root?.render(
+          createElement(CasualForm, {
+            friendPlayerId: 'amigo-1',
+            friends: AMIGOS,
+            action: fallaSiempre,
+            submitLabel: 'Guardar cambios',
+            initial: {
+              matchId: 'm1',
+              sport,
+              playedOn: '2026-08-30',
+              outcome: 'won',
+              scoreMine: '80',
+              scoreTheirs: '70',
+              teamMine: '',
+              teamTheirs: '',
+              roster: 'vs Fede',
+            },
+          }),
+        )
+      })
+      return container
+    }
 
-    it('el primer toque no envía; Sí envía el borrado y No lo cancela', async () => {
+    it('básquet no tiene empate y cuenta puntos', async () => {
+      const el = await editar('BASQUET')
+      expect(el.querySelector('input[name="outcome"][value="drew"]')).toBeNull()
+      expect(el.querySelector('input[name="outcome"][value="won"]')).not.toBeNull()
+      expect(el.textContent).toContain('Puntos de tu lado')
+      expect(el.querySelector('input[name="teamMine"]')).toBeNull()
+    })
+
+    it('FIFA tiene empate, cuenta goles y pide equipos', async () => {
+      const el = await editar('FIFA')
+      expect(el.querySelector('input[name="outcome"][value="drew"]')).not.toBeNull()
+      expect(el.textContent).toContain('Goles de tu lado')
+      expect(el.querySelector('input[name="teamMine"]')).not.toBeNull()
+    })
+  })
+
+  describe('los cinco deportes del registro', () => {
+    let enviado: FormData | null = null
+    async function guardar(_state: CasualFormState, formData: FormData): Promise<CasualFormState> {
+      enviado = formData
+      return { error: null }
+    }
+    async function montar(initial?: CasualFormInitial) {
+      enviado = null
+      container = document.createElement('div')
+      document.body.appendChild(container)
+      root = createRoot(container)
+      await act(async () => {
+        root?.render(
+          createElement(CasualForm, {
+            friendPlayerId: 'amigo-1',
+            friends: AMIGOS,
+            action: guardar,
+            submitLabel: 'Cargar partido',
+            initial,
+          }),
+        )
+      })
+      const el = container
+      return {
+        el,
+        radio: (name: string, value: string) =>
+          el.querySelector(`input[name="${name}"][value="${value}"]`) as HTMLInputElement,
+        hidden: (name: string) => (el.querySelector(`input[name="${name}"]`) as HTMLInputElement | null)?.value,
+        boton: (texto: string) =>
+          Array.from(el.querySelectorAll('button')).find((b) => b.textContent === texto) as HTMLButtonElement,
+        pastillas: () => Array.from(el.querySelectorAll('[aria-label^="Set "]')).map((p) => p.textContent),
+        enviar: () =>
+          act(async () => {
+            el.querySelector('form')?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+          }),
+      }
+    }
+    const tocar = (b: HTMLElement) => act(async () => b.click())
+    const editando = (sport: string, sets?: CasualFormInitial['sets']): CasualFormInitial => ({
+      matchId: 'm1',
+      sport,
+      playedOn: '2026-08-30',
+      outcome: 'won',
+      scoreMine: '',
+      scoreTheirs: '',
+      teamMine: '',
+      teamTheirs: '',
+      roster: 'vs Fede',
+      sets,
+    })
+
+    it('hay un chip por deporte, en el orden del registro', async () => {
+      const f = await montar()
+      const radios = Array.from(f.el.querySelectorAll('input[name="sport"]')) as HTMLInputElement[]
+      expect(radios.map((r) => r.value)).toEqual(['PADEL', 'PING_PONG', 'FIFA', 'FUTBOL', 'BASQUET'])
+      expect(radios.map((r) => r.closest('label')?.textContent)).toEqual([
+        'Pádel',
+        'Ping pong',
+        'FIFA',
+        'Fútbol',
+        'Básquet',
+      ])
+    })
+
+    it('pasar de pádel a ping pong vacía los sets y toma el formato del ping pong', async () => {
+      const f = await montar()
+      await tocar(f.boton('Ganó mi lado'))
+      await tocar(f.boton('2'))
+      expect(f.pastillas()).toEqual(['4-2'])
+      await tocar(f.radio('sport', 'PING_PONG'))
+      expect(f.pastillas()).toEqual([])
+      expect(f.hidden('gamesPerSet')).toBe('11')
+      expect(f.hidden('setsToWin')).toBe('2')
+    })
+
+    it('volver de ping pong a pádel vuelve al formato del pádel', async () => {
+      const f = await montar()
+      await tocar(f.radio('sport', 'PING_PONG'))
+      await tocar(f.boton('Ganó mi lado'))
+      await tocar(f.boton('5'))
+      expect(f.pastillas()).toEqual(['11-5'])
+      await tocar(f.radio('sport', 'PADEL'))
+      expect(f.pastillas()).toEqual([])
+      expect(f.hidden('gamesPerSet')).toBe('4')
+      expect(f.hidden('setsToWin')).toBe('1')
+    })
+
+    it('en ping pong un deuce 12-10 se carga en dos toques', async () => {
+      const f = await montar()
+      await tocar(f.radio('sport', 'PING_PONG'))
+      await tocar(f.boton('Ganó mi lado'))
+      expect(f.boton('16-14')).toBeTruthy()
+      const deuce = f.boton('12-10')
+      expect(deuce.getAttribute('aria-label') ?? deuce.textContent).toContain('12-10')
+      await tocar(deuce)
+      expect(f.pastillas()).toEqual(['12-10'])
+      expect(JSON.parse(f.hidden('sets')!)).toEqual([{ mine: 12, theirs: 10 }])
+    })
+
+    it('pádel no ofrece deuce', async () => {
+      const f = await montar()
+      await tocar(f.boton('Ganó mi lado'))
+      expect(f.el.querySelector('button[aria-label$=" a 2"]')).toBeNull()
+    })
+
+    it('editar un ping pong con un deuce prellena las dos pastillas y sigue siendo a 11', async () => {
+      const f = await montar(
+        editando('PING_PONG', [
+          { mine: 12, theirs: 10 },
+          { mine: 11, theirs: 5 },
+        ]),
+      )
+      expect(f.pastillas()).toEqual(['12-10', '11-5'])
+      expect(f.hidden('gamesPerSet')).toBe('11')
+    })
+
+    it('cambiar de deporte no arrastra el resultado de goles del anterior', async () => {
+      const f = await montar()
+      await tocar(f.radio('sport', 'FIFA'))
+      await tocar(f.radio('outcome', 'drew'))
+      await act(async () => {
+        escribir(f.el.querySelector('input[name="scoreMine"]') as HTMLInputElement, '2')
+        escribir(f.el.querySelector('input[name="teamMine"]') as HTMLInputElement, 'Boca')
+      })
+      await tocar(f.radio('sport', 'BASQUET'))
+      await f.enviar()
+      expect(enviado?.get('sport')).toBe('BASQUET')
+      expect(enviado?.get('outcome')).toBeNull()
+      expect(enviado?.get('scoreMine')).toBe('')
+      expect(enviado?.has('teamMine')).toBe(false)
+
+      // Y volver a FIFA no revive el empate ni el equipo escondidos.
+      await tocar(f.radio('sport', 'FIFA'))
+      expect(f.radio('outcome', 'drew').checked).toBe(false)
+      expect((f.el.querySelector('input[name="teamMine"]') as HTMLInputElement).value).toBe('')
+    })
+
+    it('editar un deporte fuera del registro no elige chip ni muestra resultado, y lo pide', async () => {
+      const f = await montar(editando('TEJO'))
+      const radios = Array.from(f.el.querySelectorAll('input[name="sport"]')) as HTMLInputElement[]
+      expect(radios.some((r) => r.checked)).toBe(false)
+      expect(f.el.textContent).not.toContain('Resultado')
+      expect(f.el.querySelector('input[name="outcome"]')).toBeNull()
+      expect(f.el.textContent).toContain('Elegí el deporte para cargar el resultado.')
+      expect((f.el.querySelector('button[type="submit"]') as HTMLButtonElement).disabled).toBe(true)
+    })
+  })
+
+  describe('CasualMatchRow: menú ⋯ y Borrar con confirmación', () => {
+    const partido: CasualMatch = {
+      matchId: 'm1',
+      playedOn: '2026-08-23',
+      sport: 'FIFA',
+      together: false,
+      partners: [],
+      rivals: ['Fede'],
+      sets: null,
+      outcome: 'lost',
+      score: { mine: 1, theirs: 2 },
+      teams: { mine: null, theirs: null },
+      createdBy: 'Fede',
+      updatedBy: 'Fede',
+      createdById: 'fede-id',
+      updatedById: 'fede-id',
+    }
+
+    async function montarFila() {
       container = document.createElement('div')
       document.body.appendChild(container)
       root = createRoot(container)
@@ -284,23 +492,55 @@ describe('CasualForm', () => {
         root?.render(createElement(CasualMatchRow, { friendPlayerId: 'amigo-1', partido, children: 'fila' }))
       })
       const el = container
+      return {
+        el,
+        boton: (t: string) =>
+          Array.from(el.querySelectorAll('button')).find((b) => b.textContent === t) as HTMLButtonElement | undefined,
+        menu: () => el.querySelector('button[aria-label="Opciones del partido"]') as HTMLButtonElement,
+      }
+    }
+
+    it('el menú arranca cerrado y al abrirlo muestra Editar y Borrar; volver a tocarlo lo cierra', async () => {
+      const f = await montarFila()
+      expect(f.menu().getAttribute('aria-expanded')).toBe('false')
+      expect(f.boton('Editar')).toBeUndefined()
+      expect(f.boton('Borrar')).toBeUndefined()
+
+      await act(async () => f.menu().click())
+      expect(f.menu().getAttribute('aria-expanded')).toBe('true')
+      expect(f.boton('Editar')).toBeDefined()
+      expect(f.boton('Borrar')).toBeDefined()
+
+      await act(async () => f.menu().click())
+      expect(f.boton('Editar')).toBeUndefined()
+    })
+
+    it('Editar desde el menú abre el formulario de edición', async () => {
+      const f = await montarFila()
+      await act(async () => f.menu().click())
+      await act(async () => f.boton('Editar')?.click())
+      expect(f.boton('Guardar cambios')).toBeDefined()
+      expect(f.boton('Cancelar')).toBeDefined()
+    })
+
+    it('el primer toque de Borrar no envía; Sí envía el borrado y No lo cancela', async () => {
+      const f = await montarFila()
       vi.mocked(removeCasualMatch).mockClear()
-      const boton = (t: string) =>
-        Array.from(el.querySelectorAll('button')).find((b) => b.textContent === t) as HTMLButtonElement
+      await act(async () => f.menu().click())
 
-      await act(async () => boton('Borrar').click())
+      await act(async () => f.boton('Borrar')?.click())
       expect(removeCasualMatch).not.toHaveBeenCalled()
-      expect(el.textContent).toContain('¿Borrar?')
+      expect(f.el.textContent).toContain('¿Borrar?')
       // Borrar se desmonta: el foco va al "No" (default seguro), no al body.
-      expect(document.activeElement).toBe(boton('No'))
-      expect(el.querySelector('[role="group"]')?.getAttribute('aria-label')).toBe('Confirmar borrado')
+      expect(document.activeElement).toBe(f.boton('No'))
+      expect(f.el.querySelector('[role="group"]')?.getAttribute('aria-label')).toBe('Confirmar borrado')
 
-      await act(async () => boton('No').click())
-      expect(el.textContent).not.toContain('¿Borrar?')
-      expect(boton('Borrar')).toBeDefined()
+      await act(async () => f.boton('No')?.click())
+      expect(f.el.textContent).not.toContain('¿Borrar?')
+      expect(f.boton('Borrar')).toBeDefined()
 
-      await act(async () => boton('Borrar').click())
-      await act(async () => boton('Sí').click())
+      await act(async () => f.boton('Borrar')?.click())
+      await act(async () => f.boton('Sí')?.click())
       expect(removeCasualMatch).toHaveBeenCalledTimes(1)
     })
   })

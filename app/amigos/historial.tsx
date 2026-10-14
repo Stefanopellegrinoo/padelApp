@@ -65,10 +65,35 @@ export function leyendaDe(partido: SharedMatch, nombreAmigo: string): string {
   return verbo
 }
 
-// "con Juan vs Ana, Beto"; en 1v1 no hay compañero y se omite el "con".
-function nombresDe(partido: CasualMatch): string {
-  const con = partido.partners.length > 0 ? `con ${partido.partners.join(', ')} ` : ''
-  return `${con}vs ${partido.rivals.join(', ')}`
+/** `nombres` sin UNA aparición de `nombre` -- la del amigo de la pantalla. */
+function sinElAmigo(nombres: readonly string[], nombre: string): string[] {
+  const index = nombres.indexOf(nombre)
+  return index === -1 ? [...nombres] : [...nombres.slice(0, index), ...nombres.slice(index + 1)]
+}
+
+/**
+ * Con quién más jugaron, SIN el amigo de la pantalla: su nombre ya está en el
+ * encabezado, repetirlo en cada tarjeta es ruido. Juntos: "vs Lucas, Nico".
+ * En contra: tu pareja y la suya, sólo si existen ("con Ana · su pareja
+ * Beto"); un 1v1 en contra no agrega nada y queda vacío.
+ *
+ * `CasualMatch` trae nombres, no ids, de los jugadores. Sacar UNA aparición
+ * del nombre del lado donde jugó el amigo (`together` dice cuál) es correcto
+ * aunque haya otro jugador homónimo en ese lado: lo que queda se lee igual.
+ */
+export function quienesDe(partido: CasualMatch, nombreAmigo: string): string {
+  if (partido.together) {
+    const otros = sinElAmigo(partido.partners, nombreAmigo)
+    const con = otros.length > 0 ? `con ${otros.join(', ')} ` : ''
+    return `${con}vs ${partido.rivals.join(', ')}`
+  }
+  const suPareja = sinElAmigo(partido.rivals, nombreAmigo)
+  return [
+    partido.partners.length > 0 ? `con ${partido.partners.join(', ')}` : null,
+    suPareja.length > 0 ? `su pareja ${suPareja.join(' y ')}` : null,
+  ]
+    .filter((parte) => parte !== null)
+    .join(' · ')
 }
 
 // El equipo con el que jugaste VOS (§4.4: "jugaste con Boca"); el del amigo
@@ -279,6 +304,7 @@ export function Historial({ nombre, friendPlayerId, partidos }: HistorialProps) 
             }
 
             const equipo = partido.sport === 'FIFA' ? equipoDe(partido) : null
+            const quienes = quienesDe(partido, nombre)
             return (
               <CasualMatchRow key={partido.matchId} friendPlayerId={friendPlayerId} partido={partido}>
                 <Tarjeta
@@ -292,7 +318,8 @@ export function Historial({ nombre, friendPlayerId, partidos }: HistorialProps) 
                   }
                 >
                   <p className={TITULAR}>
-                    {ladoDe(partido)} <span className={QUIENES}>{nombresDe(partido)}</span>
+                    {ladoDe(partido)}
+                    {quienes !== '' && <span className={QUIENES}> {quienes}</span>}
                   </p>
                   {equipo !== null && <p className={DETALLE}>{equipo}</p>}
                   <p className={AUTORIA}>{autoriaDe(partido)}</p>

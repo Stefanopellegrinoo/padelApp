@@ -307,7 +307,8 @@ describe('Historial', () => {
       ),
     ).toEqual([
       `${matchdayDay('2026-08-23')} FIFA`,
-      'Juntos con Juan vs Ana, Beto',
+      // Juan es el amigo de la pantalla: ya está en el encabezado, no se repite.
+      'Juntos vs Ana, Beto',
       'Cargó Fede',
       '4-2',
       'Ganaron',
@@ -317,7 +318,7 @@ describe('Historial', () => {
   it('1v1 en contra FIFA con marcador empatado nombra al ganador y omite "con"', () => {
     expect(lineas(partidoCasual({ outcome: 'won', score: { mine: 2, theirs: 2 }, rivals: ['Juan'] }))).toEqual([
       `${matchdayDay('2026-08-23')} FIFA`,
-      'En contra vs Juan',
+      'En contra',
       'con Boca',
       'Cargó Fede',
       '2-2',
@@ -335,7 +336,7 @@ describe('Historial', () => {
         rivals: ['Juan', 'Beto'],
       }),
     )
-    expect(l.slice(1)).toEqual(['En contra con Cami vs Juan, Beto', 'Cargó Fede', '2-2', 'Ganaron Juan, Beto'])
+    expect(l.slice(1)).toEqual(['En contra con Cami · su pareja Beto', 'Cargó Fede', '2-2', 'Ganaron Juan, Beto'])
   })
 
   it('together + marcador empatado + perdieron: "Perdieron", sin "Ganó"', () => {
@@ -351,6 +352,16 @@ describe('Historial', () => {
     )
     expect(l.slice(-2)).toEqual(['2-2', 'Perdieron'])
     expect(l.join('|')).not.toContain('Ganó')
+  })
+
+  it('el amigo se saca una sola vez: un invitado homónimo del otro lado sigue apareciendo', () => {
+    const l = lineas(partidoCasual({ partners: ['Cami'], rivals: ['Juan', 'Juan'], teams: { mine: null, theirs: null } }))
+    expect(l[1]).toBe('En contra con Cami · su pareja Juan')
+  })
+
+  it('2v2 en contra sin pareja tuya cargada nombra sólo la suya', () => {
+    const l = lineas(partidoCasual({ partners: [], rivals: ['Juan', 'Nico'], teams: { mine: null, theirs: null } }))
+    expect(l[1]).toBe('En contra su pareja Nico')
   })
 
   it('PADEL muestra el deporte y los sets en mi orientación', () => {
@@ -369,7 +380,7 @@ describe('Historial', () => {
           rivals: ['Juan'],
         }),
       ),
-    ).toEqual([`${matchdayDay('2026-08-23')} Pádel`, 'En contra vs Juan', 'Cargó Fede', '6-3 4-6 6-5', 'Ganaste'])
+    ).toEqual([`${matchdayDay('2026-08-23')} Pádel`, 'En contra', 'Cargó Fede', '6-3 4-6 6-5', 'Ganaste'])
   })
 
   it('la fila de torneo tiene la misma forma, sin nombres ni autoría', () => {

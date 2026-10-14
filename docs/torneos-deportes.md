@@ -172,7 +172,7 @@ armado, se muestra "Automático → 2 grupos + llave (vienen 8)", calculado con
 `suggestFormat(headcount, sideSize, maxMatches)` (`core/knockout.ts:421`), que
 es lo que hoy la pantalla muestra como "Sugerido". Se puede elegir otro, como
 hoy. Al confirmar el armado se guarda el formato **concreto**: una fecha nunca
-sale de armado en `AUTO`.
+sale de armado en `AUTO`. Con 6 jugadores individuales, Automático elige 2 grupos + llave (10 partidos); para jugar todos contra todos se elige al armar esa fecha.
 
 **A cuánto se juega esta fecha (nuevo).**
 - Cada fecha tiene un formato de partido **propio y opcional**; si no tiene,

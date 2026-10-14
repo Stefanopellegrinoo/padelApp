@@ -564,19 +564,21 @@ function PadelSets({
   )
 }
 
-const ROW_ACTION = '-mx-2 min-h-[40px] rounded-field px-2 text-[12.5px] font-extrabold'
+const ROW_ACTION = 'min-h-[40px] flex-1 rounded-field bg-chip px-4 text-[13px] font-extrabold'
 
 /**
  * Una fila casual de `Historial` (`app/amigos/historial.tsx`), con Editar y
- * Borrar (§3.1, §3.3 -- los dos pueden). `children` es el contenido de
- * lectura que `Historial` ya sabe armar (fecha, resultado, autoría); este
- * componente sólo agrega el borde de la tarjeta y los dos controles, para no
- * duplicar `resultadoCasualDe`/`autoriaDe` acá.
+ * Borrar (§3.1, §3.3 -- los dos pueden). `children` es la tarjeta de lectura
+ * que `Historial` ya sabe armar (fecha, lados, marcador, autoría); este
+ * componente pone el borde y los controles, para no duplicar el copy acá.
  *
- * El toggle de edición es un `useState` LOCAL, sin levantarlo a `Historial`:
- * cada fila decide su propio estado, y `Historial` sigue siendo la función
- * pura que ya prueba `historial.unit.test.ts` llamándola directo (sin JSX) --
- * mover el hook a `Historial` mismo rompería esa forma de probarla.
+ * Los controles viven detrás de un "⋯" (arriba a la derecha): la tarjeta es
+ * para leer el partido, y dos botones de colores en cada fila competían con
+ * el marcador. Tocarlo despliega Editar / Borrar dentro de la misma tarjeta.
+ *
+ * Todo el estado es `useState` LOCAL, sin levantarlo a `Historial`: cada
+ * fila decide el suyo, y `Historial` sigue siendo la función pura que prueba
+ * `historial.unit.test.ts` llamándola directo (sin JSX).
  *
  * Borrar pide confirmación en dos pasos inline (`Borrar` -> `¿Borrar? Sí / No`):
  * el borrado saca el partido para todos los participantes (§3.3) y no se deshace.
@@ -590,6 +592,7 @@ export function CasualMatchRow({
   partido: CasualMatch
   children: ReactNode
 }) {
+  const [menuOpen, setMenuOpen] = useState(false)
   const [editing, setEditing] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
 
@@ -599,7 +602,10 @@ export function CasualMatchRow({
         friendPlayerId={friendPlayerId}
         action={editCasualMatch}
         submitLabel="Guardar cambios"
-        onCancel={() => setEditing(false)}
+        onCancel={() => {
+          setEditing(false)
+          setMenuOpen(false)
+        }}
         initial={{
           matchId: partido.matchId,
           sport: partido.sport,
@@ -617,20 +623,29 @@ export function CasualMatchRow({
   }
 
   return (
-    <div className="flex flex-col gap-1 rounded-[14px] border border-line bg-surface p-[14px]">
+    <div className="relative flex flex-col gap-2 rounded-[14px] border border-line bg-surface p-[14px]">
       {children}
-      <div className="-mb-2 mt-2 flex items-center gap-2 border-t border-line pt-1.5">
-        {!confirmingDelete && (
-          <button type="button" onClick={() => setEditing(true)} className={`${ROW_ACTION} text-accent-link`}>
-            Editar
-          </button>
-        )}
-        {confirmingDelete ? (
+      <button
+        type="button"
+        aria-label="Opciones del partido"
+        aria-expanded={menuOpen}
+        onClick={() => {
+          setMenuOpen(!menuOpen)
+          setConfirmingDelete(false)
+        }}
+        className={`absolute top-1.5 right-1.5 flex h-10 w-10 items-center justify-center rounded-full text-[18px] leading-none font-extrabold text-muted ${
+          menuOpen ? 'bg-chip text-text' : ''
+        }`}
+      >
+        ⋯
+      </button>
+      {menuOpen &&
+        (confirmingDelete ? (
           <form
             action={removeCasualMatch}
             role="group"
             aria-label="Confirmar borrado"
-            className="flex flex-1 items-center gap-2 rounded-field bg-live-bg py-1 pr-1 pl-3"
+            className="flex items-center gap-2 rounded-field bg-live-bg py-1 pr-1 pl-3"
           >
             <input type="hidden" name="friendPlayerId" value={friendPlayerId} />
             <input type="hidden" name="matchId" value={partido.matchId} />
@@ -648,15 +663,15 @@ export function CasualMatchRow({
             </button>
           </form>
         ) : (
-          <button
-            type="button"
-            onClick={() => setConfirmingDelete(true)}
-            className={`${ROW_ACTION} ml-auto text-live`}
-          >
-            Borrar
-          </button>
-        )}
-      </div>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => setEditing(true)} className={`${ROW_ACTION} text-accent-link`}>
+              Editar
+            </button>
+            <button type="button" onClick={() => setConfirmingDelete(true)} className={`${ROW_ACTION} text-live`}>
+              Borrar
+            </button>
+          </div>
+        ))}
     </div>
   )
 }

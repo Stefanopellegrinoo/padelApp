@@ -1,7 +1,7 @@
 import type { CasualMatch, SharedMatch, TournamentMatch } from '@/db/friends'
 import { matchdayDay } from '@/app/format'
 import { DISCIPLINE_LABELS } from '@/app/torneos/nuevo/wizard-state'
-import type { ReactNode } from 'react'
+import { Fragment, type ReactNode } from 'react'
 import { CasualMatchRow } from './[playerId]/cargar'
 
 export interface HistorialProps {
@@ -27,91 +27,64 @@ export interface HistorialProps {
 
 type Resultado = NonNullable<TournamentMatch['outcome']>
 
-// De compañeros el resultado es el de LA PAREJA ("ganaron"); enfrentados es
-// el TUYO contra él ("ganaste") -- diseño §4.4, y es lo que separa un
+
+// De compañeros el resultado es el de LA PAREJA ("Ganaron"); enfrentados es
+// el TUYO contra él ("Ganaste") -- diseño §4.4, y es lo que separa un
 // partido de dobles de uno 1v1 sin necesitar un campo aparte.
 const VERBOS_JUNTOS: Record<Resultado, string> = { won: 'Ganaron', lost: 'Perdieron', drew: 'Empataron' }
 const VERBOS_CONTRA: Record<Resultado, string> = { won: 'Ganaste', lost: 'Perdiste', drew: 'Empataste' }
 
 // Reusa `matchdayDay` (`app/format.ts`), la misma fecha que ya se lee en
-// Fechas, la tarjeta de próxima fecha y Mis torneos -- no hay motivo para que
-// el historial invente un cuarto formato de fecha en la app.
+// Fechas, la tarjeta de próxima fecha y Mis torneos.
 function fechaDe(partido: TournamentMatch): string {
   return partido.playedOn !== null ? matchdayDay(partido.playedOn) : `Fecha ${partido.matchdayNumber}`
 }
 
-// El copy dice el hecho ("Juntos: Ganaron 6-3"), nunca la forma cruda del
-// dato ("outcome: won") -- es para quien juega, no para quien programa.
-function resultadoDe(partido: TournamentMatch): string {
-  const quien = partido.together ? 'Juntos' : 'En contra'
-  if (partido.outcome === null) return `${quien}: todavía sin resultado`
-  const verbo = (partido.together ? VERBOS_JUNTOS : VERBOS_CONTRA)[partido.outcome]
-  const marcador = partido.score !== null ? ` ${partido.score.mine}-${partido.score.theirs}` : ''
-  return `${quien}: ${verbo}${marcador}`
+/** El titular corto de la tarjeta: de qué lado jugaron. */
+function ladoDe(partido: SharedMatch): string {
+  return partido.together ? 'Juntos' : 'En contra'
 }
 
 /**
- * El resultado de un partido casual, con el mismo prefijo que el torneo:
- * "Juntos: Ganaron 4-2" si el amigo jugó de TU lado (verbos de pareja), "En
- * contra: Perdiste 1-3" si no (verbos en segunda persona). El marcador son los
- * sets (PADEL, separados por espacio) o los goles (FIFA), en tu orientación.
- * §4.3 manda mostrar el HECHO: `winner_side` no se deduce del marcador, así
- * que con el marcador empatado y un ganador se lo nombra en vez de "Ganaste
- * 2-2": "En contra: 2-2 · Ganó Juan". Juntos no hay a quién nombrar, el verbo
- * de pareja alcanza: "Juntos: 2-2 · Perdieron".
+ * La línea de debajo del marcador: el HECHO, en el color del resultado.
+ * Siempre el verbo de la persona que corresponde ("Ganaron" juntos,
+ * "Ganaste" enfrentados) -- salvo un caso, §4.3: `winner_side` no se deduce
+ * del marcador, así que con el marcador empatado, un ganador y vos del lado
+ * que perdió, se NOMBRA a quien ganó ("Ganó Juan"; en un 2v2 el otro lado son
+ * dos y nombrar a uno solo sería afirmar de más: "Ganaron Juan, Beto"). Nunca
+ * "por penales": la app no sabe que FIFA es fútbol.
  */
-function resultadoCasualDe(partido: CasualMatch, nombreAmigo: string): string {
-  const quien = partido.together ? 'Juntos' : 'En contra'
+export function leyendaDe(partido: SharedMatch, nombreAmigo: string): string {
+  if (partido.outcome === null) return 'Sin resultado'
   const verbo = (partido.together ? VERBOS_JUNTOS : VERBOS_CONTRA)[partido.outcome]
-  // PADEL: los sets en mi orientación; FIFA: los goles. Nunca los dos.
-  const marcador =
-    partido.sets !== null
-      ? partido.sets.map((set) => `${set.mine}-${set.theirs}`).join(' ')
-      : partido.score !== null
-        ? `${partido.score.mine}-${partido.score.theirs}`
-        : ''
+  if (partido.kind === 'tournament') return verbo
   const marcadorEmpatado = partido.score !== null && partido.score.mine === partido.score.theirs
-  if (marcadorEmpatado && partido.outcome !== 'drew') {
-    // En un 2v2 el otro lado son dos: nombrar a uno solo sería afirmar de más.
-    const rivales = partido.rivals.length > 1 ? `Ganaron ${partido.rivals.join(', ')}` : `Ganó ${nombreAmigo}`
-    const ganador = partido.outcome === 'won' || partido.together ? verbo : rivales
-    return `${quien}: ${marcador} · ${ganador}`
+  if (marcadorEmpatado && partido.outcome === 'lost' && !partido.together) {
+    return partido.rivals.length > 1 ? `Ganaron ${partido.rivals.join(', ')}` : `Ganó ${nombreAmigo}`
   }
-  return `${quien}: ${marcador !== '' ? `${verbo} ${marcador}` : verbo}`
+  return verbo
 }
 
-// "con Juan · vs Ana, Beto"; en 1v1 no hay compañero y se omite el "con".
+// "con Juan vs Ana, Beto"; en 1v1 no hay compañero y se omite el "con".
 function nombresDe(partido: CasualMatch): string {
-  const con = partido.partners.length > 0 ? `con ${partido.partners.join(', ')} · ` : ''
+  const con = partido.partners.length > 0 ? `con ${partido.partners.join(', ')} ` : ''
   return `${con}vs ${partido.rivals.join(', ')}`
 }
 
-// El equipo con el que jugaste VOS -- el ejemplo del diseño (§4.4) sólo
-// muestra ese lado ("jugaste con Boca"); el del amigo se guarda
-// (`CasualMatch.teams.theirs`) pero no hace falta para leer el partido en tu
-// propio historial.
+// El equipo con el que jugaste VOS (§4.4: "jugaste con Boca"); el del amigo
+// se guarda (`CasualMatch.teams.theirs`) pero no hace falta en tu historial.
 function equipoDe(partido: CasualMatch): string | null {
-  return partido.teams.mine !== null ? `jugaste con ${partido.teams.mine}` : null
+  return partido.teams.mine !== null ? `con ${partido.teams.mine}` : null
 }
 
-// §3.2: dos datos y una línea, no un log de auditoría ni un historial de
-// versiones -- eso sí sería sobreconstruir, dice el diseño con esas palabras.
-// Si cargó y editó la misma persona, se dice una sola vez: dos líneas iguales
-// apiladas es ruido, no información.
-//
-// La comparación es por ID (`createdById`/`updatedById`), NUNCA por nombre --
-// review final de 2b, Important 2: `display_name` es texto libre sin
-// `unique` (`players`, 0001_schema.sql), así que dos amigos DISTINTOS pueden
-// compartir nombre. Comparar `createdBy === updatedBy` (los nombres)
-// colapsaba ese caso exactamente en el momento en que §3.2 existe para
-// evitarlo: "Juan cargó, editó Juan" (dos Juanes distintos) leía como que
-// nadie tocó nada.
+// §3.2: dos datos y una línea, no un log de auditoría. La comparación es por
+// ID, NUNCA por nombre -- `display_name` no es único (review final de 2b,
+// Important 2): dos Fede distintos no pueden leerse como "nadie editó".
 function autoriaDe(partido: CasualMatch): string {
   if (partido.createdById === partido.updatedById) return `Cargó ${partido.createdBy}`
   return `Cargó ${partido.createdBy} · editó ${partido.updatedBy}`
 }
 
-/** Ganados, perdidos y empatados de un lado del cara a cara. */
 export interface Registro {
   won: number
   lost: number
@@ -170,40 +143,84 @@ function porMes(partidos: readonly SharedMatch[]): { mes: string; partidos: Shar
   }, [])
 }
 
-// Las clases de cada línea de la tarjeta. Tamaños del registro de la casa:
-// kicker 12px, resultado como el nombre de una tarjeta de Mis torneos, el
-// resto en el gris de los subtítulos.
-const KICKER = 'min-w-0 text-[12px] font-bold text-muted'
-const RESULTADO = 'text-[15.5px] leading-[1.3] font-extrabold tracking-[-.02em]'
-const DETALLE = 'text-[13px] font-semibold text-muted'
+
+const CARD = 'relative flex flex-col gap-2 rounded-[14px] border border-line bg-surface p-[14px]'
+const META = 'flex min-w-0 items-center gap-1.5 text-[12px] font-bold text-muted'
+const CHIP = 'shrink-0 rounded-full bg-chip px-2 py-0.5 text-[10.5px] font-extrabold text-text'
+const TITULAR = 'text-[15px] leading-[1.3] font-extrabold tracking-[-.02em]'
+const QUIENES = 'font-semibold text-muted'
+const DETALLE = 'text-[12.5px] font-semibold text-muted'
 const AUTORIA = 'text-[11.5px] font-semibold text-muted'
 
-const INSIGNIA: Record<Resultado, { texto: string; clase: string }> = {
-  won: { texto: 'Ganado', clase: 'bg-ok-bg text-up' },
-  lost: { texto: 'Perdido', clase: 'bg-warn-bg text-down' },
-  drew: { texto: 'Empate', clase: 'bg-chip text-muted' },
-}
+/** El color del resultado: los de la Tabla y Stats. Empate y sin resultado no toman partido. */
+const TONO: Record<Resultado, string> = { won: 'text-up', lost: 'text-down', drew: 'text-text' }
 
 /**
- * La pastilla de resultado, en los colores con que la app ya dice "bien" y
- * "mal" (Tabla, Stats). Es un `<span>`: el texto del partido sigue entero en
- * los `<p>` y esto sólo lo deja leer de un vistazo.
+ * El marcador, que es lo que uno viene a mirar: grande y a la derecha, como
+ * los números de `PartidoRow` en `/rapido`. Pádel son pastillas por set
+ * (verde llena si el set fue de tu lado, como las marcas de la ficha del
+ * jugador); FIFA y torneo, un número. Debajo, el hecho en palabras -- el color
+ * solo no alcanza para quien no lo ve.
+ *
+ * Los `{' '}` entre pastillas no se dibujan (son hijos de un flex) pero dejan
+ * el texto legible para un lector de pantalla: "6-3 4-6 6-5", no "6-34-66-5".
  */
-function Insignia({ outcome }: { outcome: Resultado | null }) {
-  if (outcome === null) return null
-  const { texto, clase } = INSIGNIA[outcome]
+function Marcador({ partido, leyenda }: { partido: SharedMatch; leyenda: string }) {
+  const tono = partido.outcome === null ? 'text-muted' : TONO[partido.outcome]
+  const sets = partido.kind === 'casual' ? partido.sets : null
   return (
-    <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10.5px] font-extrabold ${clase}`}>{texto}</span>
+    <div className="flex shrink-0 flex-col items-end gap-1 text-right">
+      {sets !== null ? (
+        <p className="flex flex-wrap justify-end gap-1">
+          {sets.map((set, index) => (
+            <Fragment key={index}>
+              {index > 0 ? ' ' : ''}
+              <span
+                className={`inline-flex h-[30px] min-w-[38px] items-center justify-center rounded-[8px] px-1.5 text-[15px] font-extrabold tabular-nums ${
+                  set.mine > set.theirs ? 'bg-accent text-accent-text' : 'bg-chip text-muted'
+                }`}
+              >
+                {set.mine}-{set.theirs}
+              </span>
+            </Fragment>
+          ))}
+        </p>
+      ) : (
+        <p className={`text-[26px] leading-none font-extrabold tracking-[-.02em] tabular-nums ${tono}`}>
+          {partido.score !== null ? `${partido.score.mine}-${partido.score.theirs}` : '–'}
+        </p>
+      )}
+      <p className={`text-[11.5px] font-extrabold ${partido.outcome === 'drew' ? 'text-muted' : tono}`}>{leyenda}</p>
+    </div>
   )
 }
 
-/** La primera línea de cada tarjeta: fecha y deporte a la izquierda, la pastilla a la derecha. */
-function Encabezado({ outcome, children }: { outcome: Resultado | null; children: ReactNode }) {
+/**
+ * La tarjeta de un partido, igual para torneo y casual: a la izquierda qué
+ * fue (fecha, deporte, de qué lado, con quién), a la derecha cómo salió.
+ * `conMenu` le deja lugar al "⋯" de `CasualMatchRow`, que va arriba a la derecha.
+ */
+function Tarjeta({
+  partido,
+  nombre,
+  meta,
+  conMenu,
+  children,
+}: {
+  partido: SharedMatch
+  nombre: string
+  meta: ReactNode
+  conMenu: boolean
+  children?: ReactNode
+}) {
   return (
-    <div className="flex items-start justify-between gap-3">
-      <p className={KICKER}>{children}</p>
-      <Insignia outcome={outcome} />
-    </div>
+    <>
+      <p className={`${META} ${conMenu ? 'pr-9' : ''}`}>{meta}</p>
+      <div className="flex items-start gap-3">
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">{children}</div>
+        <Marcador partido={partido} leyenda={leyendaDe(partido, nombre)} />
+      </div>
+    </>
   )
 }
 
@@ -213,10 +230,8 @@ function Encabezado({ outcome, children }: { outcome: Resultado | null; children
  * Mismo reparto que `rules-body.tsx`: la página lee, esto dibuja.
  *
  * Una lista agrupada por mes (diseño §4.4: *"un historial para acordarte
- * bien de cada partido que jugaste"*). Cada tarjeta trae su propio detalle.
- *
- * Los textos de cada `<p>` los fija `historial.unit.test.ts` línea por línea:
- * todo lo decorativo (separador de mes, pastilla) va en `<span>`/`<h3>`.
+ * bien de cada partido que jugaste"*); cada tarjeta, una fila de marcador.
+ * `historial.unit.test.ts` fija el texto de cada `<p>` línea por línea.
  */
 export function Historial({ nombre, friendPlayerId, partidos }: HistorialProps) {
   if (partidos.length === 0) {
@@ -240,35 +255,48 @@ export function Historial({ nombre, friendPlayerId, partidos }: HistorialProps) 
             <span className="h-px flex-1 bg-line" />
           </div>
           {grupo.partidos.map((partido) => {
+            // La etiqueta del deporte la traduce la PANTALLA con
+            // `DISCIPLINE_LABELS`; `db/` sólo tipa `'PADEL' | 'FIFA'`.
+            const deporte = <span className={CHIP}>{DISCIPLINE_LABELS[partido.sport]}</span>
             if (partido.kind === 'tournament') {
               return (
-                <div
-                  key={partido.matchId}
-                  className="flex flex-col gap-1 rounded-[14px] border border-line bg-surface p-[14px]"
-                >
-                  {/* La etiqueta del deporte la traduce la PANTALLA con
-                      `DISCIPLINE_LABELS`, como el resto de la app; `db/` sólo
-                      tipa el literal `'PADEL' | 'FIFA'`. */}
-                  <Encabezado outcome={partido.outcome}>
-                    {fechaDe(partido)} · {DISCIPLINE_LABELS[partido.sport]} · torneo {partido.seasonName}
-                  </Encabezado>
-                  <p className={RESULTADO}>{resultadoDe(partido)}</p>
+                <div key={partido.matchId} className={CARD}>
+                  <Tarjeta
+                    partido={partido}
+                    nombre={nombre}
+                    conMenu={false}
+                    meta={
+                      <>
+                        {fechaDe(partido)} {deporte}
+                        <span className="truncate"> torneo {partido.seasonName}</span>
+                      </>
+                    }
+                  >
+                    <p className={TITULAR}>{ladoDe(partido)}</p>
+                  </Tarjeta>
                 </div>
               )
             }
 
-            const equipo = equipoDe(partido)
+            const equipo = partido.sport === 'FIFA' ? equipoDe(partido) : null
             return (
               <CasualMatchRow key={partido.matchId} friendPlayerId={friendPlayerId} partido={partido}>
-                <Encabezado outcome={partido.outcome}>
-                  {matchdayDay(partido.playedOn)} · {DISCIPLINE_LABELS[partido.sport]}
-                </Encabezado>
-                <p className={RESULTADO}>
-                  {resultadoCasualDe(partido, nombre)}
-                  {equipo !== null ? `, ${equipo}` : ''}
-                </p>
-                <p className={DETALLE}>{nombresDe(partido)}</p>
-                <p className={AUTORIA}>{autoriaDe(partido)}</p>
+                <Tarjeta
+                  partido={partido}
+                  nombre={nombre}
+                  conMenu
+                  meta={
+                    <>
+                      {matchdayDay(partido.playedOn)} {deporte}
+                    </>
+                  }
+                >
+                  <p className={TITULAR}>
+                    {ladoDe(partido)} <span className={QUIENES}>{nombresDe(partido)}</span>
+                  </p>
+                  {equipo !== null && <p className={DETALLE}>{equipo}</p>}
+                  <p className={AUTORIA}>{autoriaDe(partido)}</p>
+                </Tarjeta>
               </CasualMatchRow>
             )
           })}

@@ -273,10 +273,25 @@ describe('CasualForm', () => {
     expect(details.open).toBe(true)
   })
 
-  describe('CasualMatchRow: Borrar pide confirmación', () => {
-    const partido = { matchId: 'm1' } as unknown as CasualMatch
+  describe('CasualMatchRow: menú ⋯ y Borrar con confirmación', () => {
+    const partido: CasualMatch = {
+      matchId: 'm1',
+      playedOn: '2026-08-23',
+      sport: 'FIFA',
+      together: false,
+      partners: [],
+      rivals: ['Fede'],
+      sets: null,
+      outcome: 'lost',
+      score: { mine: 1, theirs: 2 },
+      teams: { mine: null, theirs: null },
+      createdBy: 'Fede',
+      updatedBy: 'Fede',
+      createdById: 'fede-id',
+      updatedById: 'fede-id',
+    }
 
-    it('el primer toque no envía; Sí envía el borrado y No lo cancela', async () => {
+    async function montarFila() {
       container = document.createElement('div')
       document.body.appendChild(container)
       root = createRoot(container)
@@ -284,23 +299,55 @@ describe('CasualForm', () => {
         root?.render(createElement(CasualMatchRow, { friendPlayerId: 'amigo-1', partido, children: 'fila' }))
       })
       const el = container
+      return {
+        el,
+        boton: (t: string) =>
+          Array.from(el.querySelectorAll('button')).find((b) => b.textContent === t) as HTMLButtonElement | undefined,
+        menu: () => el.querySelector('button[aria-label="Opciones del partido"]') as HTMLButtonElement,
+      }
+    }
+
+    it('el menú arranca cerrado y al abrirlo muestra Editar y Borrar; volver a tocarlo lo cierra', async () => {
+      const f = await montarFila()
+      expect(f.menu().getAttribute('aria-expanded')).toBe('false')
+      expect(f.boton('Editar')).toBeUndefined()
+      expect(f.boton('Borrar')).toBeUndefined()
+
+      await act(async () => f.menu().click())
+      expect(f.menu().getAttribute('aria-expanded')).toBe('true')
+      expect(f.boton('Editar')).toBeDefined()
+      expect(f.boton('Borrar')).toBeDefined()
+
+      await act(async () => f.menu().click())
+      expect(f.boton('Editar')).toBeUndefined()
+    })
+
+    it('Editar desde el menú abre el formulario de edición', async () => {
+      const f = await montarFila()
+      await act(async () => f.menu().click())
+      await act(async () => f.boton('Editar')?.click())
+      expect(f.boton('Guardar cambios')).toBeDefined()
+      expect(f.boton('Cancelar')).toBeDefined()
+    })
+
+    it('el primer toque de Borrar no envía; Sí envía el borrado y No lo cancela', async () => {
+      const f = await montarFila()
       vi.mocked(removeCasualMatch).mockClear()
-      const boton = (t: string) =>
-        Array.from(el.querySelectorAll('button')).find((b) => b.textContent === t) as HTMLButtonElement
+      await act(async () => f.menu().click())
 
-      await act(async () => boton('Borrar').click())
+      await act(async () => f.boton('Borrar')?.click())
       expect(removeCasualMatch).not.toHaveBeenCalled()
-      expect(el.textContent).toContain('¿Borrar?')
+      expect(f.el.textContent).toContain('¿Borrar?')
       // Borrar se desmonta: el foco va al "No" (default seguro), no al body.
-      expect(document.activeElement).toBe(boton('No'))
-      expect(el.querySelector('[role="group"]')?.getAttribute('aria-label')).toBe('Confirmar borrado')
+      expect(document.activeElement).toBe(f.boton('No'))
+      expect(f.el.querySelector('[role="group"]')?.getAttribute('aria-label')).toBe('Confirmar borrado')
 
-      await act(async () => boton('No').click())
-      expect(el.textContent).not.toContain('¿Borrar?')
-      expect(boton('Borrar')).toBeDefined()
+      await act(async () => f.boton('No')?.click())
+      expect(f.el.textContent).not.toContain('¿Borrar?')
+      expect(f.boton('Borrar')).toBeDefined()
 
-      await act(async () => boton('Borrar').click())
-      await act(async () => boton('Sí').click())
+      await act(async () => f.boton('Borrar')?.click())
+      await act(async () => f.boton('Sí')?.click())
       expect(removeCasualMatch).toHaveBeenCalledTimes(1)
     })
   })

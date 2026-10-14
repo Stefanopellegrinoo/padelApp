@@ -199,6 +199,10 @@ distintos.
 
 ### 4.1 El deporte es texto, y la pantalla lo normaliza
 
+> **Reemplazado** por `docs/plan-amigos-deporte-y-2v2.md`: el deporte pasó a ser
+> `PADEL | FIFA` con un CHECK en `casual_matches.sport` (0072 reescrita; RLS,
+> forma y RPC partidas en 0090–0092 por "una función por migración").
+
 Hoy la app conoce dos deportes y viven colgados de una temporada
 (`disciplines.kind`, `check (kind in ('PADEL','FIFA'))`), así que no se pueden
 referenciar desde afuera. Y el historial casual es justamente donde entra el
@@ -407,7 +411,10 @@ rankings**, así que no hay nada que agregarle. Los helpers de `core/side.ts`
 - **No toca `season_public_rules`**, que está viva en producción.
 - **No detecta duplicados** (§3.4).
 - **No fusiona nada automáticamente** (§2.2).
-- **No resuelve el pádel casual de a cuatro.** Todo lo diseñado es un partido
+- ~~**No resuelve el pádel casual de a cuatro.**~~ Resuelto por
+  `docs/plan-amigos-deporte-y-2v2.md`: el casual es 1v1 o 2v2, con lados A/B e
+  invitados (0072 reescrita + 0090–0092). Texto original:
+  Todo lo diseñado es un partido
   entre vos y **un** amigo. Cuatro personas y dos lados abren una pregunta que
   todavía no tiene respuesta —¿en el historial de quién va?— y multiplican el
   modelo por una duda de producto sin resolver. El modelo no se cierra en contra

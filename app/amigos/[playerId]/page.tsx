@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation'
-import { historyWith, sportsUsedBy } from '@/db/friends'
+import { historyWith } from '@/db/friends'
 import { playerNames } from '@/db/read'
 import { serverClient } from '@/db/server'
 import { loadCasualMatch } from '../actions'
@@ -22,28 +22,23 @@ interface PageProps {
  * El historial (torneo + casual) con un amigo. `historyWith` no chequea que
  * sean amigos (comentario en `db/friends.ts`): del lado de torneo, la RLS de
  * `matches` ya acota esto a las temporadas donde el caller participa; del
- * lado casual, `casual_matches_read` acota igual a ser uno de los dos
- * jugadores de la fila, y la puerta de amistad ACEPTADA (diseño §4.5) sólo
- * corre al insertar, no al leer. Cualquier `playerId` es entonces seguro de
+ * lado casual, la RLS (0090) acota igual a los partidos que el caller jugó,
+ * y la puerta de amistad ACEPTADA (diseño §4.5) sólo corre al insertar, no al
+ * leer. Cualquier `playerId` es entonces seguro de
  * pedir -- en el peor caso, cero partidos compartidos.
  *
  * `notFound()` cuando `playerId` no es un jugador real: `players_read` está
  * abierta (diseño §5.5), así que no encontrar el nombre es un link roto, no
  * un problema de permisos.
- *
- * `sportsUsedBy` (Task 4) es del CALLER, no de `playerId` -- las sugerencias
- * del `datalist` de "Cargar partido" son para quien está tipeando, no para el
- * amigo que se está mirando.
  */
 export default async function AmigoPage({ params, searchParams }: PageProps) {
   const { playerId } = await params
   const { error } = await searchParams
   const supabase = await serverClient()
 
-  const [nombres, partidos, sports] = await Promise.all([
+  const [nombres, partidos] = await Promise.all([
     playerNames(supabase, [playerId]),
     historyWith(supabase, playerId),
-    sportsUsedBy(supabase),
   ])
 
   const nombre = nombres.get(playerId)
@@ -58,7 +53,6 @@ export default async function AmigoPage({ params, searchParams }: PageProps) {
       <CasualForm
         friendPlayerId={playerId}
         friendName={nombre}
-        sports={sports}
         action={loadCasualMatch}
         submitLabel="Cargar partido"
       />

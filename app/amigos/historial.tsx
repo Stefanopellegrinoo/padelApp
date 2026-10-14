@@ -32,10 +32,10 @@ type Resultado = NonNullable<TournamentMatch['outcome']>
 const VERBOS_JUNTOS: Record<Resultado, string> = { won: 'Ganaron', lost: 'Perdieron', drew: 'Empataron' }
 const VERBOS_CONTRA: Record<Resultado, string> = { won: 'Ganaste', lost: 'Perdiste', drew: 'Empataste' }
 
-// Un partido casual es SIEMPRE "en contra" -- son dos personas, nunca dobles
-// (diseño §7) -- así que reusa el mismo verbo en primera persona que el
-// torneo enfrentado, sin el prefijo "En contra:" que ahí distingue del caso
-// de compañeros: acá ese caso no existe y no hay campo `together` que lo diga.
+// Un partido casual se lee en primera persona, como el torneo enfrentado.
+// `CasualMatch.together` ya existe (el casual puede ser 2v2, 0072), pero la
+// pantalla sólo carga 1v1 hasta la Tarea 4b de plan-amigos-deporte-y-2v2 --
+// el caso "juntos" del casual lo dibuja esa tarea.
 const VERBOS_CASUAL = VERBOS_CONTRA
 
 // Reusa `matchdayDay` (`app/format.ts`), la misma fecha que ya se lee en
@@ -57,7 +57,7 @@ function resultadoDe(partido: TournamentMatch): string {
 
 /**
  * El resultado de un partido casual, en primera persona. §4.3 manda mostrar
- * el HECHO, no la interpretación: `winner` es un dato propio que no se
+ * el HECHO, no la interpretación: `winner_side` es un dato propio que no se
  * deduce del marcador (un 2-2 puede cerrar empatado o resolverse aparte --
  * por penales en FIFA, pero la app no sabe que "FIFA" es fútbol y no lo
  * nombra). Cuando el marcador queda empatado y sin embargo hay un ganador

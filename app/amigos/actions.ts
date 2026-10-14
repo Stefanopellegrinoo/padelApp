@@ -8,7 +8,7 @@ import {
   createCasualMatch,
   updateCasualMatch,
   deleteCasualMatch,
-  type CasualMatchInput,
+  type CasualResultInput,
 } from '@/db/friends'
 import { EdgeError } from '@/db/errors'
 import { serverClient } from '@/db/server'
@@ -65,21 +65,41 @@ export interface CasualFormState {
 }
 
 /**
- * Los siete campos del formulario tal cual llegan de `FormData` -- ni un
- * `Number()` ni un `.trim()` acá: `parseCasualInput` (`db/friends.ts`) es el
- * único lugar que valida, para que `createCasualMatch`/`updateCasualMatch` se
- * puedan probar sin pasar por esta capa (ver los tests de
- * `db/friends.db.test.ts`).
+ * Los campos del formulario tal cual llegan de `FormData`: `parseCasualResult`
+ * (`db/friends.ts`) es el único lugar que valida, para que
+ * `createCasualMatch`/`updateCasualMatch` se puedan probar sin pasar por esta
+ * capa (ver los tests de `db/friends.db.test.ts`).
+ *
+ * Pegamento hasta las Tareas 4a/4b (plan-amigos-deporte-y-2v2): el formulario
+ * todavía es el viejo, con dos números de marcador. En PADEL esos dos números
+ * pasan a ser UN set a un set, con `gamesPerSet` = el mayor de los dos -- el
+ * resultado sale igual de validado por `matchError`, sólo que con el formato
+ * más permisivo que el formulario viejo puede expresar.
  */
-function casualInputFrom(formData: FormData): CasualMatchInput {
+function casualInputFrom(formData: FormData): CasualResultInput {
+  const campo = (name: string) => String(formData.get(name) ?? '')
+  const input: CasualResultInput = {
+    sport: campo('sport'),
+    playedOn: campo('playedOn'),
+    outcome: campo('outcome'),
+    scoreMine: campo('scoreMine'),
+    scoreTheirs: campo('scoreTheirs'),
+    teamMine: campo('teamMine'),
+    teamTheirs: campo('teamTheirs'),
+    setsToWin: '',
+    gamesPerSet: '',
+    sets: '',
+  }
+  if (input.sport !== 'PADEL') return input
+  const mine = Number(input.scoreMine)
+  const theirs = Number(input.scoreTheirs)
   return {
-    sport: String(formData.get('sport') ?? ''),
-    playedOn: String(formData.get('playedOn') ?? ''),
-    outcome: String(formData.get('outcome') ?? ''),
-    scoreMine: String(formData.get('scoreMine') ?? ''),
-    scoreTheirs: String(formData.get('scoreTheirs') ?? ''),
-    teamMine: String(formData.get('teamMine') ?? ''),
-    teamTheirs: String(formData.get('teamTheirs') ?? ''),
+    ...input,
+    scoreMine: '',
+    scoreTheirs: '',
+    setsToWin: '1',
+    gamesPerSet: String(Math.max(mine, theirs)),
+    sets: JSON.stringify([{ mine, theirs }]),
   }
 }
 
@@ -87,8 +107,8 @@ function casualInputFrom(formData: FormData): CasualMatchInput {
  * Carga un partido casual nuevo. Firma de `useActionState`
  * (`(prevState, formData) => nextState`) en vez del patrón sin-JS de arriba:
  * a diferencia de pedir/aceptar amistad (un solo campo, nada que validar en
- * el borde), este formulario tiene siete campos y una validación real
- * (`parseCasualInput`) que puede rechazar -- mostrar el error SIN perder lo
+ * el borde), este formulario tiene varios campos y una validación real
+ * (`parseCasualResult`) que puede rechazar -- mostrar el error SIN perder lo
  * ya tipeado, en la misma pantalla, es lo que `registro-form.tsx` ya resuelve
  * con este hook. `friendPlayerId` viaja en un input oculto, no en un
  * argumento -- mismo criterio que `next` en `registro-form.tsx`: este repo no
@@ -98,7 +118,12 @@ export async function loadCasualMatch(_state: CasualFormState, formData: FormDat
   const friendPlayerId = String(formData.get('friendPlayerId') ?? '')
   try {
     const supabase = await serverClient()
-    await createCasualMatch(supabase, friendPlayerId, casualInputFrom(formData))
+    // Pegamento 1v1 hasta la Tarea 4b: el amigo de la pantalla, del otro lado.
+    await createCasualMatch(
+      supabase,
+      [{ side: 'theirs', playerId: friendPlayerId, guestName: null }],
+      casualInputFrom(formData),
+    )
   } catch (error) {
     if (!(error instanceof EdgeError)) throw error
     return { error: error.message }
@@ -121,7 +146,7 @@ export async function loadCasualMatch(_state: CasualFormState, formData: FormDat
  */
 export async function editCasualMatch(_state: CasualFormState, formData: FormData): Promise<CasualFormState> {
   const matchId = String(formData.get('matchId') ?? '')
-  let friendPlayerId: string
+  let friendPlayerId: string | null
   try {
     const supabase = await serverClient()
     friendPlayerId = await updateCasualMatch(supabase, matchId, casualInputFrom(formData))
@@ -130,8 +155,11 @@ export async function editCasualMatch(_state: CasualFormState, formData: FormDat
     return { error: error.message }
   }
 
-  revalidatePath(`/amigos/${friendPlayerId}`)
-  redirect(`/amigos/${friendPlayerId}`)
+  // `null`: todos los demás jugadores eran invitados -- no hay pantalla de
+  // amigo a la que volver.
+  const path = friendPlayerId === null ? '/amigos' : `/amigos/${friendPlayerId}`
+  revalidatePath(path)
+  redirect(path)
 }
 
 /**
@@ -151,17 +179,18 @@ export async function editCasualMatch(_state: CasualFormState, formData: FormDat
  */
 export async function removeCasualMatch(formData: FormData): Promise<void> {
   const matchId = String(formData.get('matchId') ?? '')
-  let friendPlayerId = String(formData.get('friendPlayerId') ?? '')
+  let path = `/amigos/${String(formData.get('friendPlayerId') ?? '')}`
   let problem: string | null = null
   try {
     const supabase = await serverClient()
-    friendPlayerId = await deleteCasualMatch(supabase, matchId)
+    const friendPlayerId = await deleteCasualMatch(supabase, matchId)
+    // `null`: todos los demás eran invitados -- se vuelve a `/amigos`.
+    path = friendPlayerId === null ? '/amigos' : `/amigos/${friendPlayerId}`
   } catch (error) {
     if (!(error instanceof EdgeError)) throw error
     problem = error.message
   }
 
-  const path = `/amigos/${friendPlayerId}`
   revalidatePath(path)
   redirect(problem === null ? path : `${path}?error=${encodeURIComponent(problem)}`)
 }

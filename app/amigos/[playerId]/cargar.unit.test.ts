@@ -19,7 +19,7 @@ import { CasualForm } from './cargar'
 // llena de warnings que no aportan nada (el test igual corre bien).
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
-// Simula cualquiera de las tres validaciones de `parseCasualInput`
+// Simula cualquiera de las validaciones de `parseCasualResult`
 // (`db/friends.ts`) que pueden rechazar el submit -- cuál mensaje da es
 // indiferente acá: lo que se prueba es que los CAMPOS sobreviven al rechazo,
 // no el mensaje (eso ya lo prueba `db/friends.db.test.ts`).

@@ -37,7 +37,7 @@ export interface CasualFormInitial {
  * `useActionState`, no el patrón `<form action={fn}>` sin estado de
  * `app/amigos/actions.ts`: ese patrón le sirve a pedir/aceptar amistad (un
  * campo, nada que rechazar en el borde) pero acá hay siete campos y una
- * validación real (`parseCasualInput`, `db/friends.ts`) que puede fallar.
+ * validación real (`parseCasualResult`, `db/friends.ts`) que puede fallar.
  *
  * Los siete campos son CONTROLADOS -- cada uno con su propio `useState`,
  * seedeado desde `initial` --, y NO por lo que arma el hook de arriba.
@@ -80,9 +80,10 @@ export function CasualForm({
   friendPlayerId: string
   friendName: string
   /**
-   * Los deportes que el caller ya usó (`sportsUsedBy`, `db/friends.ts`), para
-   * el `datalist` de §4.1 -- la normalización la hace esta pantalla, no un
-   * catálogo nuevo.
+   * Sugerencias para el `datalist` del deporte. Ya nadie la pasa: el deporte
+   * es `PADEL | FIFA` desde la Tarea 2 de plan-amigos-deporte-y-2v2 (se borró
+   * `sportsUsedBy`), y la Tarea 4a cambia este input de texto por la elección
+   * entre los dos.
    *
    * ponytail: sin sugerencias al editar (`CasualMatchRow` más abajo no pasa
    * esta prop) -- el valor que se está editando ya es un string bien escrito,
@@ -306,6 +307,7 @@ export function CasualMatchRow({
   children: ReactNode
 }) {
   const [editing, setEditing] = useState(false)
+  const marcador = partido.score ?? partido.sets?.[0] ?? null
 
   if (editing) {
     return (
@@ -320,8 +322,10 @@ export function CasualMatchRow({
           sport: partido.sport,
           playedOn: partido.playedOn,
           outcome: partido.outcome,
-          scoreMine: partido.score !== null ? String(partido.score.mine) : '',
-          scoreTheirs: partido.score !== null ? String(partido.score.theirs) : '',
+          // Pegamento hasta la Tarea 4a: en PADEL el formulario viejo edita el
+          // primer set como si fuera el marcador (ver `casualInputFrom`).
+          scoreMine: marcador !== null ? String(marcador.mine) : '',
+          scoreTheirs: marcador !== null ? String(marcador.theirs) : '',
           teamMine: partido.teams.mine ?? '',
           teamTheirs: partido.teams.theirs ?? '',
         }}

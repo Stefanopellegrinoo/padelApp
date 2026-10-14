@@ -2,6 +2,7 @@ import { defaultConfig, disciplineProfile, tallySets, type MatchFormat, type Set
 import { EdgeError } from './errors'
 import { matchError } from './validate'
 import type { Client } from './client'
+import type { Database } from './database.types'
 
 /**
  * Postgres genera todas las columnas de una VISTA como nullable, sin
@@ -33,13 +34,12 @@ function requireName(nombrePorId: Map<string, string>, playerId: string): string
 }
 
 /**
- * El guard de truncado de `historyWith`, UNA vez para sus siete consultas
- * en vez de catorce bloques casi idénticos (uno por error y uno por corte, por
- * consulta). `consulta` nombra CUÁL de las siete fue -- sin eso, un corte
- * real en `seasons` o `match_sets` decía sólo "el historial", indistinguible
- * de un corte en `matchdays`, en `match_participants`, en `disciplines` (el
- * deporte de la fila de torneo), o en las dos de la parte casual (`casuales`,
- * `autores`).
+ * El guard de truncado de `historyWith`, UNA vez para todas sus consultas en
+ * vez de dos bloques casi idénticos por consulta (uno por error y uno por
+ * corte). `consulta` nombra CUÁL fue -- sin eso, un corte real en `seasons` o
+ * `match_sets` decía sólo "el historial", indistinguible de un corte en
+ * `matchdays`, en `match_participants`, en `disciplines` (el deporte de la
+ * fila de torneo), o en cualquiera de las cinco de la parte casual.
  *
  * `count: 'exact'` y este guard son el mismo tripwire que `mySeasons`
  * (`db/read.ts:341-374`): PostgREST corta cada select en `PGRST_DB_MAX_ROWS`
@@ -108,16 +108,30 @@ export interface CasualMatch {
   /** `casual_matches.played_on` -- `not null` en la tabla (0072): a diferencia
    * del torneo, un casual nunca sale sin fecha. */
   playedOn: string
-  sport: string
+  /** Literal respaldado por el CHECK de `casual_matches.sport` (0072). */
+  sport: 'PADEL' | 'FIFA'
   /**
-   * Qué te pasó A VOS. `casual_matches.winner` no se deduce del marcador
-   * (diseño §4.2/§4.3): `null` en la fila es empate, no "sin resultado
-   * todavía" -- un casual siempre se carga con su resultado puesto.
+   * `true` si el amigo de la pantalla jugó de TU lado; `false` si en contra.
+   * Un casual puede ser 2v2 (0072), así que como en el torneo los dos casos
+   * existen.
+   */
+  together: boolean
+  /** Tu lado, sin vos: nombre de cuenta o del invitado (`guest_name`). */
+  partners: string[]
+  /** El otro lado, mismos nombres. */
+  rivals: string[]
+  /**
+   * Qué le pasó a TU lado. `casual_matches.winner_side` no se deduce del
+   * marcador (diseño §4.2/§4.3): `null` en la fila es empate, no "sin
+   * resultado todavía" -- un casual siempre se carga con su resultado puesto.
    */
   outcome: 'won' | 'lost' | 'drew'
+  /** Goles (sólo FIFA), orientados por tu lado. `null` si no se cargaron. */
   score: { mine: number; theirs: number } | null
-  /** Con qué equipo jugó cada uno ("Boca", "Real Madrid"). `null` si no se cargó. */
+  /** Con qué equipo jugó cada lado ("Boca", "Real Madrid"). `null` si no se cargó. */
   teams: { mine: string | null; theirs: string | null }
+  /** Los sets (sólo PADEL), en orden de `set_number`, orientados por tu lado. */
+  sets: Array<{ mine: number; theirs: number }> | null
   /** Nombres, para que la pantalla los muestre (diseño §3.2). */
   createdBy: string
   updatedBy: string
@@ -136,10 +150,9 @@ export interface CasualMatch {
 
 /**
  * Un partido compartido, de cualquiera de las dos fuentes que `historyWith`
- * mezcla. `together` sólo existe en el de torneo a propósito: un casual son
- * SIEMPRE dos personas enfrentadas (diseño §7) -- un `together: false` fijo
- * ahí sería un campo que nunca cambia de valor, ruido que alguien después lee
- * como si dijera algo.
+ * mezcla. Las dos tienen `together`: desde que el casual puede ser 2v2
+ * (plan-amigos-deporte-y-2v2, 0072), el amigo de la pantalla también puede
+ * haber jugado de tu lado en un casual.
  */
 export type SharedMatch =
   | ({ kind: 'tournament' } & TournamentMatch)
@@ -197,8 +210,9 @@ export function porFechaDescendente(a: SharedMatch, b: SharedMatch): number {
  * agregarlos en dos contadores. El resultado sale ya mezclado y ordenado por
  * fecha descendente entre las dos fuentes (`porFechaDescendente`, arriba).
  *
- * SIETE consultas, no una por partido: participantes → fechas → temporadas →
- * disciplinas → sets (torneo), casuales → autores (casual). `pairsAndMatchesOf`
+ * Hasta DIEZ consultas, no una por partido: participantes → fechas →
+ * temporadas → disciplinas → sets (torneo), y las cinco de `casualesEntre`
+ * (casual, ver ahí). `pairsAndMatchesOf`
  * (db/read.ts:985) se llama hoy adentro de un loop por fecha; acá eso sería un
  * N+1 que crece con cada temporada que jugaron juntos.
  *
@@ -211,13 +225,11 @@ export function porFechaDescendente(a: SharedMatch, b: SharedMatch): number {
  * disciplinas jugaron juntos, como mucho una o dos por temporada compartida
  * (este branch ya admite más de una disciplina por temporada, `0018` bajó el
  * tripwire `disciplines_one_per_season`) -- mucho más lento que
- * `matchIds`/`matchdayIds`. Las dos de casual comparten el mismo argumento,
- * pero a otra escala: `casuales` no tiene ningún `.in()` (es un `.eq()` sobre
- * el par exacto), y `autores` crece a lo sumo dos ids por partido casual --
- * mucho más lento que `matchIds`/`matchdayIds`, que crecen con toda una
- * temporada de torneo por vez.
+ * `matchIds`/`matchdayIds`. Las de casual crecen un id por partido casual
+ * compartido -- cargado de a uno, a mano, nunca en el volumen de un torneo
+ * entero.
  *
- * Fechas, temporadas, disciplinas y autores van por IN + Map, no por un embed
+ * Fechas, temporadas, disciplinas y nombres van por IN + Map, no por un embed
  * (`.select('..., seasons(name)')`): ningún `db/*.ts` de este repo arma un
  * embed con hint de FK, por el mismo motivo que ya explica `friendsOf` más
  * abajo -- es más aparato que una IN y un Map para el mismo resultado.
@@ -230,11 +242,11 @@ export function porFechaDescendente(a: SharedMatch, b: SharedMatch): number {
  * `disciplines_read`, `match_sets_read` -- las cuatro sobre
  * `is_participant(season_id)` o equivalente, 0002_rls.sql y
  * 0015_disciplines.sql), así que esas cuatro consultas heredan el mismo
- * límite sin pedirlo. Del lado casual, `casual_matches_read` (0072) acota
- * igual a `my_player_id() in (player_a, player_b)` -- tampoco hace falta
- * repetir el chequeo acá.
+ * límite sin pedirlo. Del lado casual, la RLS de las tres tablas (0090) acota
+ * igual a los partidos que el caller jugó -- tampoco hace falta repetir el
+ * chequeo acá.
  *
- * Las siete pasan por `assertComplete` (arriba, con el porqué del guard). La
+ * Todas pasan por `assertComplete` (arriba, con el porqué del guard). La
  * de participantes es la más delicada de las cinco de torneo: sin `.order()`
  * no había ningún criterio para decidir qué filas sobreviven un corte -- era
  * arbitrario, corrida a corrida -- y el filtro de abajo
@@ -439,85 +451,150 @@ export async function historyWith(
     })
   }
 
-  // Consulta 6: los partidos casuales entre el caller y el amigo -- TODOS los
-  // que jugaron, no uno solo: `0072` no tiene ningún unique (ni índice ni
-  // constraint) sobre `(player_a, player_b)`, sólo el CHECK `casual_ordered`
-  // -- es un historial, muchas filas por par son el caso normal, no una
-  // excepción. Lo que SÍ da `casual_ordered` es que cualquier par de uuids
-  // tiene un ÚNICO arreglo posible de columnas (nunca las dos): por eso dos
-  // `.eq()` alcanzan para traer las filas de ese par, sin un `.or()` sobre
-  // las dos combinaciones -- mismo cálculo de orden canónico que ya hace
-  // `requestFriendship` más abajo. El filtro queda de tamaño constante
-  // (a diferencia de `matchIds`/`matchdayIds` arriba, esta consulta no
-  // agrega ningún `.in()` nuevo) sin importar cuántas filas devuelva. No hace
-  // falta chequear amistad ni membresía acá: `casual_matches_read` (0072) ya
-  // acota la lectura a `my_player_id() in (player_a, player_b)`.
-  const [ladoA, ladoB] = me < friendPlayerId ? [me, friendPlayerId] : [friendPlayerId, me]
-  const casualesResult = await supabase
+  const casuales = await casualesEntre(supabase, me, friendPlayerId)
+
+  return [...torneo, ...casuales].sort(porFechaDescendente)
+}
+
+type CasualPlayerRow = { match_id: string; side: string; player_id: string | null; guest_name: string | null }
+
+/** Nombre de cuenta o de invitado -- `casual_player_xor` (0072) garantiza uno de los dos. */
+function nombreDeJugador(nombrePorId: Map<string, string>, fila: CasualPlayerRow): string {
+  if (fila.player_id !== null) return requireName(nombrePorId, fila.player_id)
+  if (fila.guest_name !== null) return fila.guest_name
+  throw new EdgeError(`Un jugador del partido ${fila.match_id} no tiene cuenta ni nombre.`)
+}
+
+/**
+ * La parte casual de `historyWith`: hasta cinco consultas, todas por
+ * `assertComplete`. Sin chequeo de amistad ni de membresía: la RLS de las tres
+ * tablas (0090) ya acota todo a partidos que el caller jugó.
+ *
+ * 6. `casual_match_players` donde juega el amigo -- con la RLS, eso ES "los
+ *    partidos casuales donde jugamos los dos". Vacío: no hay casuales.
+ * 7. `casual_matches` de esos ids.
+ * 8. `casual_match_players` de esos ids: todos los jugadores, para saber de
+ *    qué lado jugó cada uno y nombrar compañeros y rivales.
+ * 9. `players.display_name` de los jugadores con cuenta y de los autores.
+ * 10. `casual_match_sets` de los que fueron PADEL -- sólo si hay alguno.
+ */
+async function casualesEntre(supabase: Client, me: string, friendPlayerId: string): Promise<SharedMatch[]> {
+  const delAmigoResult = await supabase
+    .from('casual_match_players')
+    .select('match_id', { count: 'exact' })
+    .eq('player_id', friendPlayerId)
+    .order('match_id', { ascending: true })
+  const ids = assertComplete(delAmigoResult, 'partidos casuales del amigo').map((fila) => fila.match_id)
+  if (ids.length === 0) return []
+
+  const partidosResult = await supabase
     .from('casual_matches')
     .select(
-      'id, played_on, sport, winner, score_a, score_b, team_a, team_b, created_by, updated_by',
+      'id, played_on, sport, winner_side, score_a, score_b, team_a, team_b, created_by, updated_by',
       { count: 'exact' },
     )
-    .eq('player_a', ladoA)
-    .eq('player_b', ladoB)
+    .in('id', ids)
     .order('id', { ascending: true })
-  const casualRows = assertComplete(casualesResult, 'casuales')
-  const meEsA = me === ladoA
+  const partidos = assertComplete(partidosResult, 'casuales')
 
-  // Consulta 7: los nombres de quien cargó y quien tocó último cada partido
-  // casual -- MISMO camino que ya usa `friendsOf` más abajo para
-  // `display_name` (una consulta a `players` + Map), no un segundo camino ni
-  // un embed. Este `.in()` sí puede crecer, pero mucho más lento que
-  // `matchIds` arriba: como mucho dos autores por partido casual, deduplicados
-  // -- y un casual se carga de a uno, a mano, nunca en el volumen de un
-  // torneo entero. Sólo corre si hay algo que nombrar.
-  const autorIds = [...new Set(casualRows.flatMap((row) => [row.created_by, row.updated_by]))]
-  const nombrePorId = new Map<string, string>()
-  if (autorIds.length > 0) {
-    const autoresResult = await supabase
-      .from('players')
-      .select('id, display_name', { count: 'exact' })
-      .in('id', autorIds)
-      .order('id', { ascending: true })
-    const autores = assertComplete(autoresResult, 'autores')
-    for (const autor of autores) nombrePorId.set(autor.id, autor.display_name)
+  // El `.order()` sólo hace que un corte, si lo hay, sea el mismo en cada
+  // corrida; y que compañeros y rivales salgan siempre en el mismo orden.
+  const jugadoresResult = await supabase
+    .from('casual_match_players')
+    .select('match_id, side, player_id, guest_name', { count: 'exact' })
+    .in('match_id', ids)
+    .order('match_id', { ascending: true })
+    .order('side', { ascending: true })
+    .order('player_id', { ascending: true })
+    .order('guest_name', { ascending: true })
+  const jugadores: CasualPlayerRow[] = assertComplete(jugadoresResult, 'jugadores casuales')
+  const jugadoresPorPartido = new Map<string, CasualPlayerRow[]>()
+  for (const fila of jugadores) {
+    const bucket = jugadoresPorPartido.get(fila.match_id)
+    if (bucket === undefined) jugadoresPorPartido.set(fila.match_id, [fila])
+    else bucket.push(fila)
   }
 
-  const casuales: SharedMatch[] = casualRows.map((row) => {
-    // `winner` es un dato PROPIO (diseño §4.2), no algo que se calcule de
-    // lado A/B como el torneo -- por eso compara contra `me` directamente y
-    // no contra `ladoA`/`ladoB`.
-    const outcome: CasualMatch['outcome'] =
-      row.winner === null ? 'drew' : row.winner === me ? 'won' : 'lost'
-    // `casual_score_pair` (0072) garantiza que los dos números son null
-    // juntos -- chequear uno alcanza.
-    const score: CasualMatch['score'] =
-      row.score_a === null || row.score_b === null
-        ? null
-        : meEsA
-          ? { mine: row.score_a, theirs: row.score_b }
-          : { mine: row.score_b, theirs: row.score_a }
-    const teams: CasualMatch['teams'] = meEsA
-      ? { mine: row.team_a, theirs: row.team_b }
-      : { mine: row.team_b, theirs: row.team_a }
+  // `players_read` está abierta (0002_rls.sql), así que todo id real tiene
+  // nombre: si falta, es un corte o una inconsistencia, y `requireName` lo dice.
+  const nombreIds = [
+    ...new Set([
+      ...jugadores.flatMap((fila) => (fila.player_id === null ? [] : [fila.player_id])),
+      ...partidos.flatMap((row) => [row.created_by, row.updated_by]),
+    ]),
+  ]
+  const nombresResult = await supabase
+    .from('players')
+    .select('id, display_name', { count: 'exact' })
+    .in('id', nombreIds)
+    .order('id', { ascending: true })
+  const nombrePorId = new Map(
+    assertComplete(nombresResult, 'nombres').map((row) => [row.id, row.display_name] as const),
+  )
+
+  const padelIds = partidos.filter((row) => row.sport === 'PADEL').map((row) => row.id)
+  const setsPorPartido = new Map<string, Array<{ games_a: number; games_b: number }>>()
+  if (padelIds.length > 0) {
+    const setsResult = await supabase
+      .from('casual_match_sets')
+      .select('match_id, games_a, games_b', { count: 'exact' })
+      .in('match_id', padelIds)
+      .order('match_id', { ascending: true })
+      .order('set_number', { ascending: true })
+    for (const set of assertComplete(setsResult, 'sets casuales')) {
+      const bucket = setsPorPartido.get(set.match_id)
+      if (bucket === undefined) setsPorPartido.set(set.match_id, [set])
+      else bucket.push(set)
+    }
+  }
+
+  return partidos.map((row) => {
+    const filas = jugadoresPorPartido.get(row.id) ?? []
+    const miLado = filas.find((fila) => fila.player_id === me)?.side
+    const suLado = filas.find((fila) => fila.player_id === friendPlayerId)?.side
+    // Inalcanzable salvo inconsistencia: el partido salió de la consulta 6
+    // (juega el amigo) filtrada por la RLS (juego yo), y la 8 trae TODOS sus
+    // jugadores -- mismo criterio que `requireColumn`.
+    if (miLado === undefined || suLado === undefined) {
+      throw new EdgeError(`No se pudo leer de qué lado jugó cada uno en el partido ${row.id}.`)
+    }
+    const soyA = miLado === 'A'
+    const nombre = (fila: CasualPlayerRow) => nombreDeJugador(nombrePorId, fila)
 
     return {
       kind: 'casual',
       matchId: row.id,
       playedOn: row.played_on,
-      sport: row.sport,
-      outcome,
-      score,
-      teams,
+      // Cast respaldado por el CHECK de `casual_matches.sport` (0072) -- mismo
+      // criterio que `disciplineKindById` arriba.
+      sport: row.sport as 'PADEL' | 'FIFA',
+      together: suLado === miLado,
+      partners: filas.filter((fila) => fila.side === miLado && fila.player_id !== me).map(nombre),
+      rivals: filas.filter((fila) => fila.side !== miLado).map(nombre),
+      // `winner_side` es un dato PROPIO (diseño §4.2), no algo que se calcule
+      // de los goles o los sets.
+      outcome: row.winner_side === null ? 'drew' : row.winner_side === miLado ? 'won' : 'lost',
+      // `casual_score_pair` (0072) garantiza que los dos números son null
+      // juntos -- chequear uno alcanza.
+      score:
+        row.score_a === null || row.score_b === null
+          ? null
+          : soyA
+            ? { mine: row.score_a, theirs: row.score_b }
+            : { mine: row.score_b, theirs: row.score_a },
+      teams: soyA ? { mine: row.team_a, theirs: row.team_b } : { mine: row.team_b, theirs: row.team_a },
+      sets:
+        row.sport === 'PADEL'
+          ? (setsPorPartido.get(row.id) ?? []).map((set) =>
+              soyA ? { mine: set.games_a, theirs: set.games_b } : { mine: set.games_b, theirs: set.games_a },
+            )
+          : null,
       createdBy: requireName(nombrePorId, row.created_by),
       updatedBy: requireName(nombrePorId, row.updated_by),
       createdById: row.created_by,
       updatedById: row.updated_by,
     }
   })
-
-  return [...torneo, ...casuales].sort(porFechaDescendente)
 }
 
 // Un caso que este código maneja y conviene no "simplificar" después: con
@@ -682,40 +759,6 @@ function esFechaReal(value: string): boolean {
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value
 }
 
-/**
- * Los siete campos del formulario de cargar/editar un partido casual, tal
- * cual los entrega `FormData.get()` -- todo texto, incluidos los números y el
- * marcador vacío (`''`, no `null`). La validación vive en `parseCasualInput`
- * de acá abajo, no en `app/amigos/actions.ts`: mismo reparto que el resto de
- * este archivo (`requestFriendship` valida "no podés agregarte a vos mismo"
- * acá, no en la action), para que un test pueda ejercitar el camino completo
- * sin pasar por `FormData` ni por Next.
- *
- * `outcome` es `string`, no `CasualOutcome`: un valor fuera de las tres
- * opciones (un formulario manipulado a mano, no el radio real) tiene que dar
- * un `EdgeError` legible en tiempo de ejecución, y este archivo no puede
- * exigírselo al tipo de un string que viene de un `<form>`.
- */
-export interface CasualMatchInput {
-  sport: string
-  playedOn: string
-  outcome: string
-  scoreMine: string
-  scoreTheirs: string
-  teamMine: string
-  teamTheirs: string
-}
-
-interface ParsedCasualInput {
-  sport: string
-  playedOn: string
-  outcome: CasualOutcome
-  scoreMine: number | null
-  scoreTheirs: number | null
-  teamMine: string | null
-  teamTheirs: string | null
-}
-
 // `''` → `null`: mismo criterio que el CHECK de la base (`team_a is null or
 // length(trim(team_a)) > 0`, 0072) -- "sin equipo" tiene una sola forma de
 // decirse. Sin esto, el caso MÁS común del formulario (nadie carga equipo en
@@ -723,52 +766,6 @@ interface ParsedCasualInput {
 function normalizeTeam(raw: string): string | null {
   const trimmed = raw.trim()
   return trimmed.length === 0 ? null : trimmed
-}
-
-/**
- * Valida en el borde (task-4-brief.md, "Server actions"): deporte no vacío,
- * fecha real, marcador con los dos números o ninguno. La tabla (0072) ya
- * exige lo mismo con sus CHECK, pero un `23514` crudo en la cara de quien
- * carga un partido no es manejo de errores -- éste es el único lugar que
- * traduce esas reglas a un mensaje para una persona, para `createCasualMatch`
- * y `updateCasualMatch` por igual.
- */
-function parseCasualInput(input: CasualMatchInput): ParsedCasualInput {
-  const sport = input.sport.trim()
-  if (sport.length === 0) throw new EdgeError('Escribí qué deporte jugaron.')
-
-  if (!esFechaReal(input.playedOn)) throw new EdgeError('Elegí una fecha real.')
-
-  if (input.outcome !== 'won' && input.outcome !== 'lost' && input.outcome !== 'drew') {
-    throw new EdgeError('Decinos quién ganó, o si empataron.')
-  }
-
-  const scoreMineRaw = input.scoreMine.trim()
-  const scoreTheirsRaw = input.scoreTheirs.trim()
-  if ((scoreMineRaw === '') !== (scoreTheirsRaw === '')) {
-    throw new EdgeError('Cargá los dos números del marcador, o dejalos los dos vacíos.')
-  }
-  let scoreMine: number | null = null
-  let scoreTheirs: number | null = null
-  if (scoreMineRaw !== '') {
-    scoreMine = Number(scoreMineRaw)
-    scoreTheirs = Number(scoreTheirsRaw)
-    // `Number.isFinite` dejaba pasar `3.5` hacia una columna `int` (0072) --
-    // `Number.isInteger` es el mismo chequeo, sin ese agujero.
-    if (!Number.isInteger(scoreMine) || !Number.isInteger(scoreTheirs)) {
-      throw new EdgeError('El marcador tiene que ser un número entero.')
-    }
-  }
-
-  return {
-    sport,
-    playedOn: input.playedOn,
-    outcome: input.outcome,
-    scoreMine,
-    scoreTheirs,
-    teamMine: normalizeTeam(input.teamMine),
-    teamTheirs: normalizeTeam(input.teamTheirs),
-  }
 }
 
 // Rangos de los steppers de formato. Copia de `STEPPERS`
@@ -904,265 +901,218 @@ export function parseCasualResult(input: CasualResultInput): CasualResult {
   }
 }
 
+/** Un jugador más del partido, visto desde quien carga: de su lado o del otro. */
+export interface CasualPlayerInput {
+  side: 'mine' | 'theirs'
+  /** Con cuenta: su `players.id`. Invitado: `null`. */
+  playerId: string | null
+  /** Invitado: sólo un nombre. Con cuenta: `null`. */
+  guestName: string | null
+}
+
+type CasualPlayerArg = { side: 'A' | 'B'; player_id: string | null; guest_name: string | null }
+
 /**
- * Carga un partido casual con `friendPlayerId` (docs/historial-entre-amigos.md
- * §4). La identidad de quien carga se DERIVA de `my_player_id()`, nunca se
- * recibe -- mismo argumento que `historyWith` arriba: recibirla por parámetro
- * es el agujero que la RLS de `casual_matches_insert` (0072) ya cierra del
- * lado de la base, pero esta función no se apoya en eso para decidir quién es
- * el caller, lo deriva igual.
- *
- * `outcome`/`score`/`team` llegan en la MISMA convención "mío/suyo" que
- * `CasualMatch` en lectura (`historyWith`) -- así que lo que el caller ve al
- * volver a leer el partido es exactamente lo que acaba de escribir, sin una
- * segunda traducción. `winner` se calcula desde `outcome` relativo al CALLER,
- * no desde `player_a`/`player_b`: si se calculara al revés, "ganaste vos"
- * grabaría el ganador equivocado la mitad de las veces (cuando el caller
- * resulta ser `player_b`).
- *
- * Devuelve el id de la fila creada -- no lo necesita ningún camino de la
- * pantalla (la redirección post-carga vuelve a `historyWith`), pero sí los
- * tests: sin él, pinchar `updated_by`/`created_by` de la fila recién creada
- * exigiría un segundo query por un campo no-único.
+ * Los argumentos de `save_casual_match` (0092) con sus nulls de verdad.
+ * `supabase gen types` tipa TODO argumento de una función como no-nulo
+ * (`p_id: string`), aunque Postgres acepte `null` en cualquiera -- sin
+ * defaults no hay forma de que el generador lo sepa. Este tipo dice lo cierto,
+ * y el único cast (en `saveCasualMatch`, abajo) vive en un solo lugar.
  */
-export async function createCasualMatch(
-  supabase: Client,
-  friendPlayerId: string,
-  input: CasualMatchInput,
-): Promise<string> {
-  const { data: me, error: idError } = await supabase.rpc('my_player_id')
-  if (idError !== null) throw new EdgeError(`No se pudo identificar tu cuenta: ${idError.message}`)
-  if (me === null) throw new EdgeError('Entrá con tu cuenta para cargar un partido.')
-  // Mismo guard que `requestFriendship` más arriba, y por el mismo motivo:
-  // sin esto, `/amigos/{miPropioId}` -- una URL que cualquiera puede tipear,
-  // y donde `page.tsx` monta este formulario igual -- falla contra la base
-  // (`casual_ordered` o la falta de amistad con uno mismo) con un mensaje que
-  // no describe lo que pasó.
-  if (me === friendPlayerId) throw new EdgeError('No podés cargar un partido con vos mismo.')
-
-  const parsed = parseCasualInput(input)
-  // Mismo cálculo de orden canónico que `requestFriendship` más arriba --
-  // `casual_ordered` (0072) exige `player_a < player_b`, y comparar los uuid
-  // como texto da el mismo orden que Postgres.
-  const [a, b] = me < friendPlayerId ? [me, friendPlayerId] : [friendPlayerId, me]
-  const meEsA = me === a
-  const winner = parsed.outcome === 'drew' ? null : parsed.outcome === 'won' ? me : friendPlayerId
-
-  const { data, error } = await supabase
-    .from('casual_matches')
-    .insert({
-      player_a: a,
-      player_b: b,
-      sport: parsed.sport,
-      played_on: parsed.playedOn,
-      winner,
-      score_a: meEsA ? parsed.scoreMine : parsed.scoreTheirs,
-      score_b: meEsA ? parsed.scoreTheirs : parsed.scoreMine,
-      team_a: meEsA ? parsed.teamMine : parsed.teamTheirs,
-      team_b: meEsA ? parsed.teamTheirs : parsed.teamMine,
-      created_by: me,
-      updated_by: me,
-    })
-    .select('id')
-    .single()
-  if (error !== null) {
-    // 42501: la política de insert (0072) exige una amistad ACEPTADA entre
-    // los dos (§4.5) -- el caso más probable acá no es un ataque, es que
-    // todavía no se aceptó la solicitud.
-    if (error.code === '42501') {
-      throw new EdgeError('Para cargar un partido con esta persona, tienen que ser amigos aceptados.')
-    }
-    // 22P02: `friendPlayerId` no castea a uuid -- mismo caso que
-    // `requestFriendship` más arriba, verificado igual acá (`friendPlayerId`
-    // viaja en un input oculto, así que sólo llega por un POST armado a
-    // mano, no por el flujo real). NO se traduce `23503` (uuid bien formado
-    // sin jugador): verificado en vivo que un `friendPlayerId` inexistente
-    // da 42501 primero, nunca 23503 -- no puede existir una amistad
-    // aceptada con un jugador que no existe, así que esa rama de la política
-    // de arriba ya lo frena antes de llegar al FK.
-    if (error.code === '22P02') throw new EdgeError('Ese ID no es válido.')
-    throw new EdgeError(`No se pudo cargar el partido: ${error.message}`)
-  }
-  if (data === null) throw new EdgeError('No se pudo cargar el partido: no llegó ninguna fila.')
-  return data.id
+interface SaveCasualMatchArgs {
+  p_id: string | null
+  p_sport: 'PADEL' | 'FIFA'
+  p_played_on: string
+  p_winner_side: 'A' | 'B' | null
+  p_score_a: number | null
+  p_score_b: number | null
+  p_team_a: string | null
+  p_team_b: string | null
+  p_players: CasualPlayerArg[]
+  p_sets: Array<{ set_number: number; games_a: number; games_b: number }>
 }
 
 /**
- * Edita un partido casual que YA existe. Cualquiera de los dos jugadores
+ * Traduce un resultado en "mío/suyo" (`parseCasualResult`) a lados A/B, con
+ * `miLado` como el lado de quien escribe. Goles, equipos, el ganador y los
+ * games de CADA set se orientan juntos acá, en un solo lugar.
+ */
+function saveArgs(
+  id: string | null,
+  miLado: 'A' | 'B',
+  result: CasualResult,
+  players: CasualPlayerArg[],
+): SaveCasualMatchArgs {
+  const soyA = miLado === 'A'
+  const otroLado = soyA ? 'B' : 'A'
+  return {
+    p_id: id,
+    p_sport: result.sport,
+    p_played_on: result.playedOn,
+    p_winner_side: result.outcome === 'drew' ? null : result.outcome === 'won' ? miLado : otroLado,
+    p_score_a: soyA ? result.scoreMine : result.scoreTheirs,
+    p_score_b: soyA ? result.scoreTheirs : result.scoreMine,
+    p_team_a: soyA ? result.teamMine : result.teamTheirs,
+    p_team_b: soyA ? result.teamTheirs : result.teamMine,
+    p_players: players,
+    p_sets: (result.sets ?? []).map((set, i) => ({
+      set_number: i + 1,
+      games_a: soyA ? set.mine : set.theirs,
+      games_b: soyA ? set.theirs : set.mine,
+    })),
+  }
+}
+
+type SaveCasualMatchGenerated = Database['public']['Functions']['save_casual_match']['Args']
+
+function saveCasualMatch(supabase: Client, args: SaveCasualMatchArgs) {
+  // El cast es sobre los nulls que el tipo generado no sabe expresar (ver
+  // `SaveCasualMatchArgs`), no sobre datos sin validar.
+  return supabase.rpc('save_casual_match', args as SaveCasualMatchGenerated)
+}
+
+async function myPlayerId(supabase: Client, paraQue: string): Promise<string> {
+  const { data: me, error } = await supabase.rpc('my_player_id')
+  if (error !== null) throw new EdgeError(`No se pudo identificar tu cuenta: ${error.message}`)
+  if (me === null) throw new EdgeError(`Entrá con tu cuenta para ${paraQue}.`)
+  return me
+}
+
+/**
+ * Carga un partido casual (docs/historial-entre-amigos.md §4): 1v1 o 2v2, con
+ * amigos o invitados. `players` son los OTROS jugadores -- quien carga se suma
+ * acá, nunca lo manda la pantalla, y su identidad se DERIVA de
+ * `my_player_id()`: recibirla por parámetro es el agujero que la RLS (0090)
+ * cierra del lado de la base, pero esta función no se apoya en eso para
+ * decidir quién es el caller.
+ *
+ * Quien carga es SIEMPRE el lado A -- ya no hay orden canónico entre los
+ * jugadores --, así que "mío" es A y "suyo" es B sin traducción.
+ *
+ * Devuelve el id del partido -- lo usan los tests para releer la fila.
+ */
+export async function createCasualMatch(
+  supabase: Client,
+  players: CasualPlayerInput[],
+  input: CasualResultInput,
+): Promise<string> {
+  const me = await myPlayerId(supabase, 'cargar un partido')
+  // Sin esto, `/amigos/{miPropioId}` -- una URL que cualquiera puede tipear --
+  // choca contra el `unique (match_id, player_id)` con un mensaje crudo.
+  if (players.some((player) => player.playerId === me)) {
+    throw new EdgeError('No podés cargar un partido con vos mismo.')
+  }
+  const filas: CasualPlayerArg[] = [
+    { side: 'A', player_id: me, guest_name: null },
+    ...players.map((player): CasualPlayerArg => {
+      const guestName = player.playerId === null ? normalizeTeam(player.guestName ?? '') : null
+      if (player.playerId === null && guestName === null) {
+        throw new EdgeError('Cada invitado necesita un nombre.')
+      }
+      return { side: player.side === 'mine' ? 'A' : 'B', player_id: player.playerId, guest_name: guestName }
+    }),
+  ]
+  const result = parseCasualResult(input)
+
+  const { data, error } = await saveCasualMatch(supabase, saveArgs(null, 'A', result, filas))
+  if (error !== null) {
+    // 42501: `casual_match_players_insert` (0090) exige amistad ACEPTADA con
+    // cada jugador con cuenta (§4.5) -- lo más probable no es un ataque, es
+    // una solicitud sin aceptar. Un uuid bien formado que no es de nadie
+    // también cae acá: no hay amistad posible con un jugador que no existe.
+    if (error.code === '42501') {
+      throw new EdgeError('Para cargar un partido con alguien, tienen que ser amigos aceptados.')
+    }
+    // 23514: el trigger de forma (0091) -- su mensaje ya es para una persona.
+    if (error.code === '23514') throw new EdgeError(error.message)
+    // 22P02: un id que ni castea a uuid -- sólo un POST armado a mano.
+    if (error.code === '22P02') throw new EdgeError('Ese ID no es válido.')
+    throw new EdgeError(`No se pudo cargar el partido: ${error.message}`)
+  }
+  return data
+}
+
+/**
+ * Los jugadores de un partido, para editar o borrar: de ahí sale MI lado (con
+ * qué orientar lo que escribo) y el amigo al que vuelve la pantalla. La misma
+ * lectura hace de chequeo de pertenencia: `casual_match_players_read` (0090)
+ * le devuelve cero filas a quien no jugó, ANTES de intentar ninguna escritura.
+ */
+async function miLadoEn(
+  supabase: Client,
+  matchId: string,
+  verbo: string,
+): Promise<{ miLado: 'A' | 'B'; friendPlayerId: string | null }> {
+  const me = await myPlayerId(supabase, `${verbo} un partido`)
+  const result = await supabase
+    .from('casual_match_players')
+    .select('side, player_id', { count: 'exact' })
+    .eq('match_id', matchId)
+    .order('side', { ascending: true })
+    .order('player_id', { ascending: true })
+  // 22P02: `matchId` llega en un input oculto -- sólo un POST armado a mano
+  // lo manda mal formado.
+  if (result.error !== null && result.error.code === '22P02') throw new EdgeError('Ese ID no es válido.')
+  const filas = assertComplete(result, 'jugadores del partido')
+
+  const mia = filas.find((fila) => fila.player_id === me)
+  if (mia === undefined) {
+    throw new EdgeError(`No se pudo ${verbo}: el partido no existe o no te corresponde.`)
+  }
+  // El amigo al que vuelve la pantalla: el primer otro jugador CON cuenta.
+  // `null` si todos los demás eran invitados -- la action vuelve a `/amigos`.
+  const otro = filas.find((fila) => fila.player_id !== null && fila.player_id !== me)
+  return { miLado: mia.side === 'A' ? 'A' : 'B', friendPlayerId: otro?.player_id ?? null }
+}
+
+/**
+ * Edita el resultado de un partido casual. Cualquiera de los que jugaron
  * puede (§3.1) -- no sólo quien lo cargó -- y quien edita queda asentado en
- * `updated_by` (§3.2), el riesgo entero de esta tarea.
+ * `updated_by` (§3.2): la RPC lo pone desde `my_player_id()`. El plantel no
+ * se toca (es fijo): sólo deporte, fecha, resultado y equipos.
  *
- * A diferencia de `createCasualMatch`, NO recibe `friendPlayerId`: en vez de
- * pedírselo al caller (que tendría que pasarlo de memoria, sin que la base lo
- * valide), lo LEE de la propia fila -- `player_a`/`player_b` están congelados
- * por el grant de columna (0072: no están en el `update (...)`), así que leer
- * esta fila y creer lo que dice nunca puede quedar desalineado con lo que el
- * UPDATE de abajo puede escribir. La misma lectura además hace de chequeo de
- * pertenencia: `casual_matches_read` (0072) ya acota a
- * `my_player_id() in (player_a, player_b)`, así que un tercero recibe cero
- * filas ACÁ, antes de intentar ningún UPDATE.
- *
- * Devuelve el `friendPlayerId` que dedujo -- lo necesita `editCasualMatch`
- * (`app/amigos/actions.ts`) para el redirect: usar el valor del `<form>` ahí
- * en vez de éste sería tener DOS fuentes para el mismo dato (una para
- * escribir, otra para redirigir), y las dos podrían divergir con un formulario
- * armado a mano -- consecuencia menor (redirect a la página equivocada
- * después de una escritura correcta) pero evitable con esto.
+ * Devuelve el amigo al que vuelve la pantalla (`miLadoEn`) -- leído de la
+ * base, no del `<form>`: dos fuentes para el mismo dato podrían divergir con
+ * un formulario armado a mano.
  */
 export async function updateCasualMatch(
   supabase: Client,
   matchId: string,
-  input: CasualMatchInput,
-): Promise<string> {
-  const { data: me, error: idError } = await supabase.rpc('my_player_id')
-  if (idError !== null) throw new EdgeError(`No se pudo identificar tu cuenta: ${idError.message}`)
-  if (me === null) throw new EdgeError('Entrá con tu cuenta para editar un partido.')
+  input: CasualResultInput,
+): Promise<string | null> {
+  const { miLado, friendPlayerId } = await miLadoEn(supabase, matchId, 'editar')
+  const result = parseCasualResult(input)
 
-  const { data: fila, error: filaError } = await supabase
-    .from('casual_matches')
-    .select('player_a, player_b')
-    .eq('id', matchId)
-    .maybeSingle()
-  // 22P02: `matchId` no castea a uuid -- llega en un input oculto, así que
-  // sólo un POST armado a mano lo manda mal formado (verificado igual que en
-  // `createCasualMatch`: mismo código, mismo mensaje).
-  if (filaError !== null) {
-    if (filaError.code === '22P02') throw new EdgeError('Ese ID no es válido.')
-    throw new EdgeError(`No se pudo leer el partido: ${filaError.message}`)
-  }
-  if (fila === null) {
-    throw new EdgeError('No se pudo editar: el partido no existe o no te corresponde.')
-  }
-
-  const parsed = parseCasualInput(input)
-  const meEsA = fila.player_a === me
-  const friendPlayerId = meEsA ? fila.player_b : fila.player_a
-  const winner = parsed.outcome === 'drew' ? null : parsed.outcome === 'won' ? me : friendPlayerId
-
-  // `count: 'exact'` para distinguir "no tocó ninguna fila" de un éxito
-  // silencioso -- mismo registro que `acceptFriendship` más arriba. En la
-  // práctica, con el `fila` de arriba ya filtrando a un no-miembro, esta
-  // rama sólo se alcanza si el partido se borró ENTRE esa lectura y este
-  // update (una carrera, no el caso normal) -- pero es la misma cobertura
-  // barata que ya paga `acceptFriendship`, no una construida de más para
-  // esta función.
-  //
-  // NO manda `updated_at`: la escribe el trigger de la base (0072), nunca el
-  // cliente -- el tipo generado (`db/database.types.ts`) todavía la ofrece
-  // como escribible porque `supabase gen types` no lee el `grant` por
-  // columna, y mandarla acá daría un 42501 en tiempo de ejecución sin ningún
-  // aviso de `tsc`.
-  const { error, count } = await supabase
-    .from('casual_matches')
-    .update(
-      {
-        sport: parsed.sport,
-        played_on: parsed.playedOn,
-        winner,
-        score_a: meEsA ? parsed.scoreMine : parsed.scoreTheirs,
-        score_b: meEsA ? parsed.scoreTheirs : parsed.scoreMine,
-        team_a: meEsA ? parsed.teamMine : parsed.teamTheirs,
-        team_b: meEsA ? parsed.teamTheirs : parsed.teamMine,
-        updated_by: me,
-      },
-      { count: 'exact' },
-    )
-    .eq('id', matchId)
-  if (error !== null) throw new EdgeError(`No se pudo editar el partido: ${error.message}`)
-  if (count === 0) {
-    throw new EdgeError('No se pudo editar: el partido no existe o no te corresponde.')
+  const { error } = await saveCasualMatch(supabase, saveArgs(matchId, miLado, result, []))
+  if (error !== null) {
+    // 42501: la RPC no tocó ninguna fila -- el partido se borró entre la
+    // lectura de arriba y esta escritura (una carrera, no el caso normal).
+    if (error.code === '42501') {
+      throw new EdgeError('No se pudo editar: el partido no existe o no te corresponde.')
+    }
+    throw new EdgeError(`No se pudo editar el partido: ${error.message}`)
   }
   return friendPlayerId
 }
 
 /**
- * Borra un partido casual. Cualquiera de los dos puede, en cualquier momento
- * (§3.3) -- "si tu amigo te borra los partidos que perdió, tenés un problema
- * de amigo, no de software".
+ * Borra un partido casual. Cualquiera de los que jugaron, en cualquier
+ * momento (§3.3) -- "si tu amigo te borra los partidos que perdió, tenés un
+ * problema de amigo, no de software". Jugadores y sets se van con él
+ * (`on delete cascade`, 0072).
  *
- * Devuelve el `friendPlayerId`, leído de la fila ANTES de borrarla -- mismo
- * argumento y misma forma que `updateCasualMatch` de arriba (leer primero,
- * escribir después): `removeCasualMatch` (`app/amigos/actions.ts`) lo
- * necesita para el redirect, y usar el valor del `<form>` en vez de éste es
- * la misma segunda fuente para el mismo dato que ya se sacó de editar (fix
- * round 1) -- review final de 2b, Minor 4, la repone acá. La lectura previa
- * hace además de chequeo de pertenencia, como en `updateCasualMatch`:
- * `casual_matches_read` (0072) ya acota a `my_player_id() in (player_a,
- * player_b)`, así que un tercero recibe `null` ACÁ, antes de intentar ningún
- * DELETE.
+ * Devuelve el amigo al que vuelve la pantalla, leído ANTES de borrar -- mismo
+ * argumento que `updateCasualMatch`.
  */
-export async function deleteCasualMatch(supabase: Client, matchId: string): Promise<string> {
-  const { data: me, error: idError } = await supabase.rpc('my_player_id')
-  if (idError !== null) throw new EdgeError(`No se pudo identificar tu cuenta: ${idError.message}`)
-  if (me === null) throw new EdgeError('Entrá con tu cuenta para borrar un partido.')
+export async function deleteCasualMatch(supabase: Client, matchId: string): Promise<string | null> {
+  const { friendPlayerId } = await miLadoEn(supabase, matchId, 'borrar')
 
-  const { data: fila, error: filaError } = await supabase
-    .from('casual_matches')
-    .select('player_a, player_b')
-    .eq('id', matchId)
-    .maybeSingle()
-  // 22P02: mismo caso que en `updateCasualMatch` -- `matchId` mal formado,
-  // sólo alcanzable por un POST armado a mano.
-  if (filaError !== null) {
-    if (filaError.code === '22P02') throw new EdgeError('Ese ID no es válido.')
-    throw new EdgeError(`No se pudo leer el partido: ${filaError.message}`)
-  }
-  if (fila === null) {
-    throw new EdgeError('No se pudo borrar: el partido no existe o no te corresponde.')
-  }
-  const friendPlayerId = fila.player_a === me ? fila.player_b : fila.player_a
-
+  // `count: 'exact'`: un DELETE que no toca ninguna fila no es un error en
+  // PostgREST -- sin esto, una carrera con otro borrado sería un éxito mudo.
   const { error, count } = await supabase.from('casual_matches').delete({ count: 'exact' }).eq('id', matchId)
   if (error !== null) throw new EdgeError(`No se pudo borrar el partido: ${error.message}`)
   if (count === 0) {
     throw new EdgeError('No se pudo borrar: el partido no existe o no te corresponde.')
   }
   return friendPlayerId
-}
-
-/**
- * Los deportes de TODOS los partidos casuales que jugó el caller, para
- * sugerirlos en el `datalist` de "Cargar partido" (diseño §4.1) -- la
- * normalización la hace la PANTALLA, no un catálogo nuevo: sin esta
- * sugerencia, "Fifa" y "FIFA" parten el historial en dos sin que nadie lo
- * note.
- *
- * Dos cosas que el nombre de la función no dice, y que importa dejar
- * escritas:
- *
- * 1. **No es "lo que el caller ESCRIBIÓ"**, es "lo que aparece en un partido
- *    donde el caller jugó". El brief decía "los `sport` que ya CARGÓ quien
- *    escribe" -- pero un deporte que el AMIGO cargó, en un partido donde el
- *    caller también participa, sale igual acá. Es defendible (la consistencia
- *    de nombre entre partidos es justamente el problema que esto evita) y es
- *    la lectura más simple de la tabla, pero es una interpretación, no lo que
- *    decía el brief textualmente.
- * 2. Alcance: CUALQUIER amigo, no sólo `friendPlayerId` de la pantalla en la
- *    que está parado -- es lo que "ya usaste" quiere decir en la frase del
- *    diseño.
- *
- * ponytail: pasa TODAS las filas casuales del caller por `assertComplete`
- * (el guard de truncado, `db/friends.ts` arriba) antes de dedup+`sort` en JS
- * -- no hay `distinct` de PostgREST. El techo real es el mismo 1000 de
- * siempre (`PGRST_DB_MAX_ROWS`), heredado de `assertComplete`, no nuevo de
- * esta función. Pasado eso, la página del amigo entera revienta al pedir
- * `sportsUsedBy` en vez de degradar (sin sugerencias). Si un caller llega a
- * mil partidos casuales cargados: `select distinct sport` del lado de
- * Postgres, o cortar la consulta con un `.limit()`.
- *
- * Mismo `.or()` que ya usa este archivo en los tests (`friends.db.test.ts`)
- * para "amistades donde soy cualquiera de los dos lados" -- PostgREST no
- * tiene una forma de decir "esta columna O esta otra" sin él.
- */
-export async function sportsUsedBy(supabase: Client): Promise<string[]> {
-  const { data: me, error: idError } = await supabase.rpc('my_player_id')
-  if (idError !== null) throw new EdgeError(`No se pudo identificar tu cuenta: ${idError.message}`)
-  if (me === null) return []
-
-  const result = await supabase
-    .from('casual_matches')
-    .select('sport', { count: 'exact' })
-    .or(`player_a.eq.${me},player_b.eq.${me}`)
-  const rows = assertComplete(result, 'deportes ya usados')
-  return [...new Set(rows.map((row) => row.sport))].sort()
 }

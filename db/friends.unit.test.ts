@@ -22,9 +22,10 @@ import {
  * Task 2 (plan-historial-entre-amigos-2a) pasó `historyWith` de UNA consulta
  * a CUATRO (participantes, fechas, temporadas, sets): el fake creció con
  * ella, una tabla configurable por vez, para poder probar el guard de cada
- * una por separado sin tocar las otras tres. Task 2 de 2b sumó dos más
- * (casuales, autores) -- mismo criterio. "deporte-en-la-fila" (cierre de 2b)
- * sumó una séptima (`disciplines`, para el deporte de la fila de torneo).
+ * una por separado sin tocar las otras tres. "deporte-en-la-fila" (cierre de
+ * 2b) sumó `disciplines`. La parte casual son cinco más desde
+ * plan-amigos-deporte-y-2v2 (Tarea 2): partidos del amigo, casuales,
+ * jugadores, nombres y sets -- mismo criterio, una tabla configurable por vez.
  */
 interface FakeTable<T> {
   rows: T[]
@@ -46,7 +47,7 @@ type CasualMatchRow = {
   id: string
   played_on: string
   sport: string
-  winner: string | null
+  winner_side: string | null
   score_a: number | null
   score_b: number | null
   team_a: string | null
@@ -55,6 +56,9 @@ type CasualMatchRow = {
   updated_by: string
 }
 type PlayerRow = { id: string; display_name: string }
+type CasualOfFriendRow = { match_id: string }
+type CasualPlayerRow = { match_id: string; side: string; player_id: string | null; guest_name: string | null }
+type CasualSetRow = { match_id: string; games_a: number; games_b: number }
 
 function fakeClient(options: {
   me: string
@@ -63,19 +67,31 @@ function fakeClient(options: {
   seasons?: FakeTable<SeasonRow>
   disciplines?: FakeTable<DisciplineRow>
   matchSets?: FakeTable<MatchSetRow>
+  /** Consulta 6: `casual_match_players` filtrada con `.eq('player_id', amigo)`. */
+  casualOfFriend?: FakeTable<CasualOfFriendRow>
   casualMatches?: FakeTable<CasualMatchRow>
+  /** Consulta 8: `casual_match_players` filtrada con `.in('match_id', ids)`. */
+  casualPlayers?: FakeTable<CasualPlayerRow>
   players?: FakeTable<PlayerRow>
+  casualSets?: FakeTable<CasualSetRow>
 }): Client {
   // Una tabla no configurada sólo importa si `historyWith` de verdad llega a
   // consultarla -- en los tests de truncamiento de acá abajo, el guard de la
   // consulta ANTERIOR corta antes de eso, así que las tablas siguientes
   // pueden quedar sin definir sin que ningún test las note.
-  function builderFor<T>(table: FakeTable<T> | undefined, name: string) {
+  //
+  // `casual_match_players` se consulta DOS veces (6 y 8) con filtros
+  // distintos: `onEq` es la tabla que responde si la consulta usa `.eq()`.
+  function builderFor<T>(
+    table: FakeTable<T> | undefined,
+    name: string,
+    onEq?: { table: FakeTable<unknown> | undefined; name: string },
+  ): object {
     return {
-      select: () => builderFor(table, name),
-      in: () => builderFor(table, name),
-      eq: () => builderFor(table, name),
-      order: () => builderFor(table, name),
+      select: () => builderFor(table, name, onEq),
+      in: () => builderFor(table, name, onEq),
+      eq: () => (onEq === undefined ? builderFor(table, name) : builderFor(onEq.table, onEq.name)),
+      order: () => builderFor(table, name, onEq),
       then: (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) => {
         const result =
           table === undefined
@@ -93,6 +109,13 @@ function fakeClient(options: {
     if (table === 'disciplines') return builderFor(options.disciplines, table)
     if (table === 'match_sets') return builderFor(options.matchSets, table)
     if (table === 'casual_matches') return builderFor(options.casualMatches, table)
+    if (table === 'casual_match_players') {
+      return builderFor(options.casualPlayers, 'casual_match_players (todos)', {
+        table: options.casualOfFriend,
+        name: 'casual_match_players (del amigo)',
+      })
+    }
+    if (table === 'casual_match_sets') return builderFor(options.casualSets, table)
     if (table === 'players') return builderFor(options.players, table)
     throw new Error(`fakeClient: tabla no soportada en este test: ${table}`)
   }
@@ -142,8 +165,86 @@ function unPartidoCompleto(mySide: 'A' | 'B' = 'A') {
       count: 1,
     },
     // Vacía por default: la mayoría de los tests de acá abajo no vienen a
-    // probar el lado casual -- `autores` ni se consulta con cero casuales.
-    casualMatches: { rows: [], count: 0 } satisfies FakeTable<CasualMatchRow>,
+    // probar el lado casual -- sin partidos del amigo, las otras cuatro
+    // consultas casuales ni corren.
+    casualOfFriend: { rows: [], count: 0 } satisfies FakeTable<CasualOfFriendRow>,
+  }
+}
+
+/**
+ * El torneo de `unPartidoCompleto` más dos casuales con todo cargado, para
+ * los tests de la parte casual. 'c1' (1/2) cae DESPUÉS del torneo (15/1) y
+ * 'c2' (1/1) ANTES -- sólo con los dos, en ese orden, la mezcla por fecha es
+ * distinguible de una concatenación.
+ *
+ * - c1: FIFA 1v1, `AMIGO` lado A y `ME` lado B; ganó A 5-2 (números
+ *   distintos, para que un swap mine/theirs se note).
+ * - c2: PADEL 2v2, `ME` + `AMIGO` lado A contra los invitados Pepe y Tano
+ *   (lado B); ganó A, 6-3 4-6 6-4.
+ */
+function casualCompleto() {
+  return {
+    me: ME,
+    ...unPartidoCompleto(),
+    casualOfFriend: {
+      rows: [{ match_id: 'c1' }, { match_id: 'c2' }] satisfies CasualOfFriendRow[],
+      count: 2,
+    },
+    casualMatches: {
+      rows: [
+        {
+          id: 'c1',
+          played_on: '2026-02-01',
+          sport: 'FIFA',
+          winner_side: 'A',
+          score_a: 5,
+          score_b: 2,
+          team_a: 'River',
+          team_b: 'Boca',
+          created_by: AMIGO,
+          updated_by: ME,
+        },
+        {
+          id: 'c2',
+          played_on: '2026-01-01',
+          sport: 'PADEL',
+          winner_side: 'A',
+          score_a: null,
+          score_b: null,
+          team_a: null,
+          team_b: null,
+          created_by: ME,
+          updated_by: ME,
+        },
+      ] satisfies CasualMatchRow[],
+      count: 2,
+    },
+    casualPlayers: {
+      rows: [
+        { match_id: 'c1', side: 'A', player_id: AMIGO, guest_name: null },
+        { match_id: 'c1', side: 'B', player_id: ME, guest_name: null },
+        { match_id: 'c2', side: 'A', player_id: AMIGO, guest_name: null },
+        { match_id: 'c2', side: 'A', player_id: ME, guest_name: null },
+        { match_id: 'c2', side: 'B', player_id: null, guest_name: 'Pepe' },
+        { match_id: 'c2', side: 'B', player_id: null, guest_name: 'Tano' },
+      ] satisfies CasualPlayerRow[],
+      count: 6,
+    },
+    players: {
+      rows: [
+        { id: ME, display_name: 'Yo' },
+        { id: AMIGO, display_name: 'El amigo' },
+      ] satisfies PlayerRow[],
+      count: 2,
+    },
+    casualSets: {
+      rows: [
+        { match_id: 'c2', games_a: 6, games_b: 3 },
+        { match_id: 'c2', games_a: 4, games_b: 6 },
+        { match_id: 'c2', games_a: 6, games_b: 4 },
+      ] satisfies CasualSetRow[],
+      count: 3,
+    },
   }
 }
 
@@ -226,7 +327,7 @@ describe('historyWith — tripwire de truncamiento de PostgREST', () => {
     await expect(historyWith(client, AMIGO)).rejects.toThrow(/completo de sets/)
   })
 
-  it('con las siete consultas completas, arma el historial normal con su detalle', async () => {
+  it('con todas las consultas completas, arma el historial normal con su detalle', async () => {
     const client = fakeClient({ me: ME, ...unPartidoCompleto() })
 
     await expect(historyWith(client, AMIGO)).resolves.toEqual([
@@ -280,7 +381,7 @@ describe('historyWith — tripwire de truncamiento de PostgREST', () => {
       // Cero sets es una respuesta COMPLETA -- una fecha abierta no tiene
       // ninguno todavía --, no un corte: `count` coincide con `rows.length`.
       matchSets: { rows: [], count: 0 },
-      casualMatches: completo.casualMatches,
+      casualOfFriend: completo.casualOfFriend,
     })
 
     await expect(historyWith(client, AMIGO)).resolves.toEqual([
@@ -299,127 +400,41 @@ describe('historyWith — tripwire de truncamiento de PostgREST', () => {
     ])
   })
 
-  it('casuales: falla ruidoso si el select de casual_matches viene truncado', async () => {
-    const completo = unPartidoCompleto()
-    const client = fakeClient({
-      me: ME,
-      participants: completo.participants,
-      matchdays: completo.matchdays,
-      seasons: completo.seasons,
-      disciplines: completo.disciplines,
-      matchSets: completo.matchSets,
-      // Debería traer un casual; llega vacío -- mismo bug que las cinco de
-      // torneo, ahora en la sexta consulta.
-      casualMatches: { rows: [], count: 1 },
-    })
+  // Los cinco guards de la parte casual (`casualesEntre`, db/friends.ts): cada
+  // test deja completas las consultas ANTERIORES y trunca sólo la suya.
+  it('partidos casuales del amigo: falla ruidoso si el select viene truncado', async () => {
+    const client = fakeClient({ me: ME, ...unPartidoCompleto(), casualOfFriend: { rows: [], count: 1 } })
+    await expect(historyWith(client, AMIGO)).rejects.toThrow(/completo de partidos casuales del amigo/)
+  })
 
+  it('casuales: falla ruidoso si el select de casual_matches viene truncado', async () => {
+    const client = fakeClient({ ...casualCompleto(), casualMatches: { rows: [], count: 2 } })
     await expect(historyWith(client, AMIGO)).rejects.toThrow(/completo de casuales/)
   })
 
-  it('autores: falla ruidoso si el select de nombres viene truncado', async () => {
-    const completo = unPartidoCompleto()
+  it('jugadores casuales: falla ruidoso si el select viene truncado', async () => {
+    const completo = casualCompleto()
     const client = fakeClient({
-      me: ME,
-      participants: completo.participants,
-      matchdays: completo.matchdays,
-      seasons: completo.seasons,
-      disciplines: completo.disciplines,
-      matchSets: completo.matchSets,
-      casualMatches: {
-        rows: [
-          {
-            id: 'c1',
-            played_on: '2026-01-20',
-            sport: 'FIFA',
-            winner: null,
-            score_a: null,
-            score_b: null,
-            team_a: null,
-            team_b: null,
-            created_by: ME,
-            updated_by: ME,
-          },
-        ],
-        count: 1,
-      },
-      // Debería traer al menos el nombre de `ME`; llega vacío -- mismo bug,
-      // ahora en la séptima consulta. Sólo corre porque el casual de arriba
-      // tiene autores que nombrar.
-      players: { rows: [], count: 1 },
+      ...completo,
+      // Falta una fila: sin el guard, un compañero o un rival desaparecería
+      // de la fila sin ningún error.
+      casualPlayers: { rows: completo.casualPlayers.rows.slice(1), count: completo.casualPlayers.rows.length },
     })
-
-    await expect(historyWith(client, AMIGO)).rejects.toThrow(/completo de autores/)
+    await expect(historyWith(client, AMIGO)).rejects.toThrow(/completo de jugadores casuales/)
   })
 
-  it('arma el casual con su outcome/orientación propios y lo mezcla con el de torneo por fecha', async () => {
-    // `historyWith` calcula el par canónico comparando texto (`me < friendId`,
-    // mismo criterio que `requestFriendship`): 'jugador-amigo' < 'jugador-yo'
-    // (la 'a' de "amigo" ordena antes que la 'y' de "yo"), así que `AMIGO` es
-    // `ladoA` y `ME` es `ladoB` acá -- fijado con una aserción, no a ojo, para
-    // que si algún día se cambian las constantes ME/AMIGO el test explote acá
-    // y no en un `toEqual` silenciosamente mal derivado.
-    expect(AMIGO < ME).toBe(true)
+  it('nombres: falla ruidoso si el select de players viene truncado', async () => {
+    const client = fakeClient({ ...casualCompleto(), players: { rows: [], count: 2 } })
+    await expect(historyWith(client, AMIGO)).rejects.toThrow(/completo de nombres/)
+  })
 
-    const completo = unPartidoCompleto()
-    const client = fakeClient({
-      me: ME,
-      participants: completo.participants,
-      matchdays: completo.matchdays,
-      seasons: completo.seasons,
-      disciplines: completo.disciplines,
-      matchSets: completo.matchSets,
-      // Dos casuales a propósito, uno de cada lado del torneo (15/1): 'c1'
-      // DESPUÉS (1/2) y 'c2' ANTES (1/1). Sólo con los dos, en ese orden, la
-      // mezcla es distinguible de una concatenación -- `[...casuales,
-      // ...torneo]` (sin `porFechaDescendente`) pondría a 'c2' ANTES del
-      // torneo igual, por casualidad de qué lado se concatena primero, y
-      // este mismo test seguiría en verde. Con 'c2' fechado ANTES del
-      // torneo pero esperado DESPUÉS en la lista, sólo un sort real por
-      // fecha entre las dos fuentes lo deja en el lugar que se assertea
-      // abajo -- ver fix round 1, Important 2.
-      casualMatches: {
-        rows: [
-          {
-            id: 'c1',
-            played_on: '2026-02-01',
-            sport: 'FIFA',
-            // `winner` compara contra `ME` directamente, no contra un lado
-            // A/B como el torneo -- ver el comentario de `db/friends.ts`.
-            winner: AMIGO,
-            // `score_a` es de `ladoA` (`AMIGO`), `score_b` de `ladoB` (`ME`):
-            // números distintos entre sí para que un swap mine/theirs se note.
-            score_a: 5,
-            score_b: 2,
-            team_a: 'River',
-            team_b: 'Boca',
-            created_by: AMIGO,
-            updated_by: ME,
-          },
-          {
-            id: 'c2',
-            played_on: '2026-01-01',
-            sport: 'PADEL',
-            winner: ME,
-            score_a: 1,
-            score_b: 3,
-            team_a: null,
-            team_b: null,
-            created_by: ME,
-            updated_by: ME,
-          },
-        ],
-        count: 2,
-      },
-      players: {
-        rows: [
-          { id: ME, display_name: 'Yo' },
-          { id: AMIGO, display_name: 'El amigo' },
-        ],
-        count: 2,
-      },
-    })
+  it('sets casuales: falla ruidoso si el select de casual_match_sets viene truncado', async () => {
+    const client = fakeClient({ ...casualCompleto(), casualSets: { rows: [], count: 3 } })
+    await expect(historyWith(client, AMIGO)).rejects.toThrow(/completo de sets casuales/)
+  })
 
-    const historia = await historyWith(client, AMIGO)
+  it('arma cada casual desde el lado del caller y lo mezcla con el de torneo por fecha', async () => {
+    const historia = await historyWith(fakeClient(casualCompleto()), AMIGO)
 
     expect(historia).toHaveLength(3)
     // Orden esperado por fecha descendente ENTRE las dos fuentes:
@@ -427,68 +442,87 @@ describe('historyWith — tripwire de truncamiento de PostgREST', () => {
     // (`[...casuales, ...torneo]` o al revés) nunca produce este orden,
     // porque intercala una fuente en el medio de la otra.
     expect(historia.map((m) => m.matchId)).toEqual(['c1', 'm1', 'c2'])
-    expect(historia[0]?.kind).toBe('casual')
-    expect(historia[1]?.kind).toBe('tournament')
-    expect(historia[2]?.kind).toBe('casual')
 
-    const casual = historia[0]
-    if (casual?.kind !== 'casual') throw new Error('El primer partido no salió casual.')
-    expect(casual.outcome).toBe('lost')
-    // `ME` es `ladoB`: mío es `score_b`/`team_b`, suyo es `score_a`/`team_a`.
-    expect(casual.score).toEqual({ mine: 2, theirs: 5 })
-    expect(casual.teams).toEqual({ mine: 'Boca', theirs: 'River' })
-    expect(casual.createdBy).toBe('El amigo')
-    expect(casual.updatedBy).toBe('Yo')
-    // Review final de 2b, Important 2: `historyWith` ya tenía los dos ids en
-    // mano acá (`row.created_by`/`row.updated_by`) para armar `nombrePorId`
-    // -- sólo hacía falta llevarlos también al `CasualMatch` de salida, para
-    // que `autoriaDe` (`app/amigos/historial.tsx`) compare por id y no por
-    // nombre.
-    expect(casual.createdById).toBe(AMIGO)
-    expect(casual.updatedById).toBe(ME)
+    // c1: FIFA 1v1, `ME` del lado B -- mío es `score_b`/`team_b`.
+    expect(historia[0]).toEqual({
+      kind: 'casual',
+      matchId: 'c1',
+      playedOn: '2026-02-01',
+      sport: 'FIFA',
+      together: false,
+      partners: [],
+      rivals: ['El amigo'],
+      outcome: 'lost',
+      score: { mine: 2, theirs: 5 },
+      teams: { mine: 'Boca', theirs: 'River' },
+      sets: null,
+      createdBy: 'El amigo',
+      updatedBy: 'Yo',
+      // Por id, no por nombre: `autoriaDe` (`app/amigos/historial.tsx`) compara
+      // estos dos (review final de 2b, Important 2).
+      createdById: AMIGO,
+      updatedById: ME,
+    })
+
+    // c2: PADEL 2v2, `ME` y `AMIGO` juntos del lado A contra dos invitados --
+    // los sets salen en orden y desde el lado A, sin goles.
+    expect(historia[2]).toMatchObject({
+      matchId: 'c2',
+      sport: 'PADEL',
+      together: true,
+      partners: ['El amigo'],
+      rivals: ['Pepe', 'Tano'],
+      outcome: 'won',
+      score: null,
+      sets: [
+        { mine: 6, theirs: 3 },
+        { mine: 4, theirs: 6 },
+        { mine: 6, theirs: 4 },
+      ],
+    })
+  })
+
+  it('con el caller del lado B, los sets de pádel se leen al revés', async () => {
+    const completo = casualCompleto()
+    const client = fakeClient({
+      ...completo,
+      casualPlayers: {
+        rows: completo.casualPlayers.rows.map((fila) =>
+          fila.match_id === 'c2' ? { ...fila, side: fila.side === 'A' ? 'B' : 'A' } : fila,
+        ),
+        count: completo.casualPlayers.count,
+      },
+    })
+    const c2 = (await historyWith(client, AMIGO)).find((m) => m.matchId === 'c2')
+    expect(c2).toMatchObject({
+      outcome: 'lost',
+      sets: [
+        { mine: 3, theirs: 6 },
+        { mine: 6, theirs: 4 },
+        { mine: 4, theirs: 6 },
+      ],
+    })
   })
 
   it('un torneo sin jugar (playedOn null) queda al final, mezclado con un casual que sí tiene fecha', async () => {
     // El caso que la unión introduce de nuevo: el lado casual NUNCA llega
     // con `playedOn: null` (`0072`, columna `not null`), sólo el de torneo
     // puede -- una fecha abierta todavía sin `played_on` cargado.
-    const completo = unPartidoCompleto()
+    const completo = casualCompleto()
     const client = fakeClient({
-      me: ME,
-      participants: completo.participants,
+      ...completo,
       matchdays: {
         rows: [{ id: 'f1', number: 3, played_on: null, season_id: 's1', discipline_id: 'd1' }],
         count: 1,
       },
-      seasons: completo.seasons,
-      disciplines: completo.disciplines,
-      matchSets: completo.matchSets,
-      casualMatches: {
-        rows: [
-          {
-            id: 'c1',
-            played_on: '2026-01-01',
-            sport: 'FIFA',
-            winner: null,
-            score_a: null,
-            score_b: null,
-            team_a: null,
-            team_b: null,
-            created_by: ME,
-            updated_by: ME,
-          },
-        ],
-        count: 1,
-      },
-      players: { rows: [{ id: ME, display_name: 'Yo' }], count: 1 },
     })
 
     const historia = await historyWith(client, AMIGO)
 
-    // El casual (con fecha) primero; el torneo sin jugar, al final -- nunca
-    // al revés, sin importar que su `matchId` ('m1') ordene antes en texto.
-    expect(historia.map((m) => m.matchId)).toEqual(['c1', 'm1'])
-    expect(historia[1]?.playedOn).toBeNull()
+    // Los casuales (con fecha) primero; el torneo sin jugar, al final --
+    // nunca al revés, sin importar que su `matchId` ('m1') ordene antes en texto.
+    expect(historia.map((m) => m.matchId)).toEqual(['c1', 'c2', 'm1'])
+    expect(historia[2]?.playedOn).toBeNull()
   })
 
   it('dos fechas de torneo compartidas, las dos sin jugar, desempatan por matchdayNumber descendente', async () => {
@@ -520,7 +554,7 @@ describe('historyWith — tripwire de truncamiento de PostgREST', () => {
       seasons: { rows: [{ id: 's1', name: 'Liga de test' }], count: 1 },
       disciplines: { rows: [{ id: 'd1', kind: 'PADEL' }], count: 1 },
       matchSets: { rows: [], count: 0 },
-      casualMatches: { rows: [], count: 0 },
+      casualOfFriend: { rows: [], count: 0 },
     })
 
     const historia = await historyWith(client, AMIGO)
@@ -563,6 +597,10 @@ function casualFixture(overrides: Partial<CasualMatch>): SharedMatch {
     matchId: 'default',
     playedOn: '2026-01-01',
     sport: 'FIFA',
+    together: false,
+    partners: [],
+    rivals: [],
+    sets: null,
     outcome: 'drew',
     score: null,
     teams: { mine: null, theirs: null },

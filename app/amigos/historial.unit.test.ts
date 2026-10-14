@@ -276,7 +276,7 @@ describe('Historial', () => {
 
   const lineas = (p: SharedMatch): string[] =>
     [...renderToStaticMarkup(Historial({ nombre: 'Juan', friendPlayerId: 'amigo-1', partidos: [p] })).matchAll(/<p [^>]*>(.*?)<\/p>/g)].map(
-      (m) => m[1],
+      (m) => m[1] ?? '',
     )
 
   it('2v2 juntos con invitado: fecha y deporte, resultado, nombres, autoría', () => {

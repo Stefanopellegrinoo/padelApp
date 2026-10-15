@@ -20,7 +20,6 @@ import {
   PHASE_ORDER,
   previousContext,
   resolveDisciplineBySlug,
-  resolveFormato,
   sameSide,
   sideWords,
   snapshotForMatchday,
@@ -58,6 +57,7 @@ import { MastersDraft, type QualifierVM } from './masters'
 import { SumarInvitado, type GuestPromoteVM, type SumarSeatVM } from './sumar'
 import { guestsToPromote } from './sumar-state'
 import { frozenTableRows, orderMoved } from './tabla-congelada'
+import { formatoNotice, matchdayShape } from './armado-state'
 
 interface PageProps {
   params: Promise<{ id: string; disciplina: string; n: string }>
@@ -146,6 +146,10 @@ export default async function FechaDetailPage({ params }: PageProps) {
 
   // El vocabulario de la disciplina: un lado de uno no es "una pareja".
   const sideWord = sideWords(discipline.pairSize).many
+
+  // "Fecha 3 · 1 set a 6 games" en la cabecera de una fecha fuera del armado
+  // que se juega distinto que el deporte (§7). Lo calcula la rama no-DRAFT.
+  let notice: string | null = null
 
   let body: ReactNode = (
     <div className="rounded-card bg-chip p-4 text-center text-[13px] font-[550] text-muted">
@@ -293,14 +297,18 @@ export default async function FechaDetailPage({ params }: PageProps) {
     // mismo. Sin nada armable todavía no hay nada que previsualizar: mejor
     // ninguna vista previa que una pantalla rota.
     let groupPreview: GroupPreviewVM[] | null = null
-    // `AUTO` (§7) se resuelve con los lados ya sorteados; sin sorteo todavía
-    // son 0 lados y da `ROUND_ROBIN`, sólo para la vista previa.
-    const formatoDraft = resolveFormato(
-      matchday.formato,
-      detail.sides.length * discipline.pairSize,
-      discipline.pairSize,
-      maxMatchesOf(discipline.config, discipline.pairSize),
-    )
+    // `AUTO` (§7) se resuelve con los que VIENEN —la misma cuenta que
+    // `Armado` y que `generatePairs`—, no con los lados ya sorteados: antes
+    // del sorteo son 0, y daba "todos contra todos" sin vista previa mientras
+    // `generatePairs` iba a armar grupos.
+    const formatoDraft = matchdayShape({
+      confirmed: seats.filter((seat) => seat.playing).length,
+      looseGuests: looseGuests.length,
+      guestPairs: guestPairs.length,
+      sideSize: discipline.pairSize,
+      maxMatches: maxMatchesOf(discipline.config, discipline.pairSize),
+      formato: matchday.formato,
+    }).formato
 
     // S94 (verify-report-pre-contract #4026): mismo estado divergido que
     // C32/W86 — `changeMatchdayFormat` puede tocar `formato` DESPUÉS de que
@@ -359,7 +367,10 @@ export default async function FechaDetailPage({ params }: PageProps) {
         // los saca del pool antes de sortear, así que no acompañan a nadie.
         defenders={effectiveDefenders}
         loadedResults={detail.matches.filter((match) => match.sets.length > 0).length}
-        formato={formatoDraft}
+        formato={matchday.formato}
+        kind={discipline.kind}
+        matchFormat={effectiveMatchFormat(discipline.config.matchFormat, matchday.matchFormat)}
+        ownMatchFormat={matchday.matchFormat}
         formatDrifted={formatDrifted}
         groupPreview={groupPreview}
       />
@@ -375,6 +386,8 @@ export default async function FechaDetailPage({ params }: PageProps) {
     const config = { ...base, matchFormat: effectiveMatchFormat(base.matchFormat, matchday.matchFormat) }
     // La unidad es del deporte, no del formato (§8): games, goles, puntos.
     const unit = unitOf(discipline.kind, config.matchFormat)
+    // El Masters no se llama "Fecha N" en ningún lado de la app.
+    notice = isMasters ? null : formatoNotice(matchday.number, config.matchFormat, base.matchFormat, unit)
     const seedOrder = entries
       .filter((entry) => entry.kind === 'SQUAD')
       .sort((a, b) => a.seedPosition - b.seedPosition)
@@ -974,6 +987,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
         <h1 className="text-[26px] font-extrabold tracking-[-.03em]">
           {isMasters ? 'Masters' : `Fecha ${matchday.number}`}
         </h1>
+        {notice !== null && <p className="text-[12.5px] font-bold text-muted">{notice}</p>}
       </header>
 
       {/* El día se elegía una sola vez, al abrir la fecha, y quedaba para

@@ -6,6 +6,7 @@
 
 import {
   defaultMaxMatches,
+  formatsLabel,
   MAX_PAIRING_POOL,
   matchCountForFormat,
   minSquadFor,
@@ -13,6 +14,7 @@ import {
   suggestFormat,
   type MatchdayFormat,
   type MatchdayFormatSetting,
+  type MatchFormat,
   type Duo,
   type SideSize,
 } from '@/core'
@@ -60,6 +62,8 @@ export interface MatchdayShape {
   sides: number
   /** El techo de partidos de esta disciplina — el selector ofrece su menú, no el de un techo global. */
   maxMatches: number
+  /** El formato que se va a armar: el guardado, o `AUTO` resuelto con `eventualSize` (§7). */
+  formato: MatchdayFormat
   /**
    * Los partidos reales de la fecha, según el `formato` GUARDADO — round
    * robin completo (`C(sides, 2)`) si es `ROUND_ROBIN`, grupos + llave si es
@@ -161,10 +165,12 @@ export function matchdayShape({
   const needsLooseGuest = sideSize === 2 && confirmed % 2 !== 0 && looseGuests === 0
   const eventualSize = size + (needsLooseGuest ? 1 : 0)
   const sides = Math.floor(size / sideSize)
+  const resolved = resolveFormato(formato, eventualSize, sideSize, maxMatches)
   return {
     size,
     sides,
-    matches: matchCountForFormat(resolveFormato(formato, eventualSize, sideSize, maxMatches), sides),
+    formato: resolved,
+    matches: matchCountForFormat(resolved, sides),
     complete: size % sideSize === 0,
     needsLooseGuest,
     eventualSize,
@@ -176,6 +182,21 @@ export function matchdayShape({
     maxMatches,
   }
 }
+
+/**
+ * "1 set a 6 games". `formatLabel` no sale del barrel de `core/` (S77): un solo
+ * formato va por `formatsLabel`, que con uno devuelve la frase sin prefijo.
+ */
+export function matchFormatLabel(format: MatchFormat, unit: string): string {
+  return formatsLabel([{ label: '', matchFormat: format, unit }])
+}
+
+/** "Fecha 3 · 1 set a 6 games", o null si la fecha se juega igual que el deporte hoy (§7). */
+export function formatoNotice(number: number, effective: MatchFormat, discipline: MatchFormat, unit: string): string | null {
+  const label = matchFormatLabel(effective, unit)
+  return label === matchFormatLabel(discipline, unit) ? null : `Fecha ${number} · ${label}`
+}
+
 /** Lo que el sorteo tiene para repartir en esta fecha. */
 export interface DrawRoom {
   /** Invitados sueltos librados al sorteo: sin compañero elegido a mano. */

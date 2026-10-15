@@ -28,6 +28,7 @@ import { championRecord, sideNames } from './campeon-de-la-fecha'
 // cruzando un segmento dinámico (mismo criterio que ya documentaba esta
 // pantalla en PR 10, cuando vivía un nivel más arriba).
 import { ArmarMasters } from '@/app/torneo/[id]/[disciplina]/fechas/[n]/masters'
+import { formatoNotice } from '@/app/torneo/[id]/[disciplina]/fechas/[n]/armado-state'
 
 interface PageProps {
   params: Promise<{ id: string; disciplina: string }>
@@ -209,6 +210,9 @@ export default async function FechasPage({ params }: PageProps) {
               ? 'bg-chip text-muted'
               : 'text-muted'
           const tagLabel = played ? 'Jugada' : inProgress ? 'En juego' : 'Armando'
+          // "Fecha 3 · 1 set a 6 games" cuando se juega distinto que el deporte (§7).
+          const effective = effectiveMatchFormat(tournamentFormat, matchday.matchFormat)
+          const notice = formatoNotice(matchday.number, effective, tournamentFormat, unitOf(sportKind, effective))
 
           return (
             <Link
@@ -224,7 +228,7 @@ export default async function FechasPage({ params }: PageProps) {
                     live ? 'opacity-75' : 'text-muted'
                   }`}
                 >
-                  Fecha {matchday.number}
+                  {notice ?? `Fecha ${matchday.number}`}
                   {matchday.playedOn !== null ? ` · ${matchdayDay(matchday.playedOn)}` : ''}
                 </p>
                 <span className={`shrink-0 rounded-full px-[10px] py-[6px] text-[10.5px] font-extrabold ${tagClass}`}>

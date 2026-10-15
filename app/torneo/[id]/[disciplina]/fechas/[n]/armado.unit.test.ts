@@ -2,8 +2,8 @@ import { createElement } from 'react'
 import { defaultMaxMatches } from '@/core'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import type { MatchdayFormat } from '@/core'
-import { SelectorDeFormato } from './armado'
+import type { MatchdayFormat, MatchdayFormatSetting, MatchFormat } from '@/core'
+import { EstaFechaSeJuegaA, SelectorDeFormato } from './armado'
 
 /**
  * El selector de formato de la fecha (REQ-D8-1), RENDERIZADO — no la lógica
@@ -28,14 +28,24 @@ import { SelectorDeFormato } from './armado'
 // importa si salieron de un plantel de a uno o del doble en parejas.
 const TECHO_DE_A_UNO = defaultMaxMatches(1)
 
+/** `resolved` es lo que elegiría "Automático"; sin pasarlo, lo mismo que el `formato` guardado. */
 function html(
-  formato: MatchdayFormat,
+  formato: MatchdayFormatSetting,
   sides: number,
-  suggested: MatchdayFormat = formato,
+  resolved?: MatchdayFormat,
   maxMatches: number = TECHO_DE_A_UNO,
+  headcount: number = sides,
 ): string {
   return renderToStaticMarkup(
-    createElement(SelectorDeFormato, { formato, sides, maxMatches, suggested, pending: false, onChange: () => {} }),
+    createElement(SelectorDeFormato, {
+      formato,
+      sides,
+      maxMatches,
+      resolved: resolved ?? (formato as MatchdayFormat),
+      headcount,
+      pending: false,
+      onChange: () => {},
+    }),
   )
 }
 
@@ -151,50 +161,91 @@ describe('SelectorDeFormato', () => {
 
   /**
    * W77 (verify-report-pr21-cierre, #4016) / decisión #4022: el selector
-   * marca cuál formato SUGIERE la app — `suggestFormat` (`core/knockout.ts`)
-   * se había quedado sin ningún consumidor de producción, y con eso
-   * desaparecía de la pantalla toda noción de "sugerido" (REQ-D8-1, primer
-   * GIVEN). Acá se pincha el TEXTO de la marca, no sólo que `suggested`
+   * dice qué formato elegiría la app — `suggestFormat` (`core/knockout.ts`).
+   * Desde §7 eso es la segunda línea del botón "Automático" (antes, la
+   * leyenda "Sugerido: …"). Acá se pincha el TEXTO, no sólo que `resolved`
    * exista como prop (#3957).
    */
-  describe('la marca de "sugerido" (W77, decisión #4022)', () => {
-    it('nombra el formato sugerido en una leyenda propia, separada de los botones', () => {
+  describe('lo que elegiría "Automático" (W77, decisión #4022, §7)', () => {
+    it('nombra el formato que elegiría en la línea de Automático, separada de los botones', () => {
       const markup = html(ROUND_ROBIN, 6, GROUPS_2)
-      expect(markup).toContain('Sugerido: 2 grupos + llave')
+      expect(markup).toContain('→ 2 grupos + llave')
     })
 
-    it('también marca "todos contra todos" cuando es lo sugerido', () => {
+    it('también nombra "todos contra todos" cuando es lo que elegiría', () => {
       const markup = html(GROUPS_2, 4, ROUND_ROBIN)
-      expect(markup).toContain('Sugerido: Todos contra todos')
+      expect(markup).toContain('→ Todos contra todos')
     })
 
     /**
      * S81 (verify-report-pr21 #4004) no puede volver por la puerta de atrás:
-     * la marca de "sugerido" es una leyenda de texto, nunca una clase ni un
-     * `aria-checked` sobre el botón — así que un botón puede estar
-     * SUGERIDO sin estar SELECCIONADO (y viceversa) sin que las dos señales
-     * se confundan. Acá `formato` (seleccionado) es "todos contra todos" y
-     * `suggested` es "2 grupos": el botón de 2 grupos queda con
-     * `aria-checked="false"` igual, y la leyenda nombra la sugerencia aparte.
+     * lo que elegiría Automático es texto, nunca una clase ni un
+     * `aria-checked` sobre el botón de ese formato — así que un botón puede
+     * ser lo AUTOMÁTICO sin estar SELECCIONADO (y viceversa) sin que las dos
+     * señales se confundan. Acá `formato` (seleccionado) es "todos contra
+     * todos" y `resolved` es "2 grupos": el botón de 2 grupos queda con
+     * `aria-checked="false"` igual, y la línea de Automático lo nombra aparte.
      */
-    it('sugerido y seleccionado son señales independientes: uno no pisa al otro', () => {
+    it('automático y seleccionado son señales independientes: uno no pisa al otro', () => {
       const markup = html(ROUND_ROBIN, 6, GROUPS_2)
       const btnGrupos2 = /<button[^>]*>2 grupos \+ llave<\/button>/.exec(markup)?.[0] ?? ''
-      expect(btnGrupos2).toContain('aria-checked="false"') // sugerido, no elegido
-      expect(markup).toContain('Sugerido: 2 grupos + llave')
+      expect(btnGrupos2).toContain('aria-checked="false"') // lo automático, no lo elegido
+      expect(markup).toContain('→ 2 grupos + llave')
     })
 
     /**
-     * El caso que expuso la contradicción original (W77): antes del fix,
-     * `matchdayShape.suggestedFormat` podía calcular una sugerencia que
-     * `offerableFormats` YA NO cruzaba (`eventualSize` cuenta al invitado
-     * suelto que todavía no está sentado; `sides` acá no). En vez de
-     * mentir mostrando un botón que no está, sin marca ninguna es mejor que
-     * una marca falsa.
+     * El caso que expuso la contradicción original (W77): `resolved` sale de
+     * `eventualSize` (cuenta al invitado suelto que todavía no está sentado),
+     * `sides` acá no. En vez de nombrar un botón que no está, la línea calla.
      */
-    it('si lo sugerido no está entre lo ofrecido ni es el guardado, no dibuja ninguna leyenda', () => {
+    it('si lo que elegiría no está entre lo ofrecido ni es el guardado, la línea calla', () => {
       const markup = html(ROUND_ROBIN, 4, GROUPS_4)
-      expect(markup).not.toContain('Sugerido:')
+      expect(markup).not.toContain('→')
     })
+  })
+})
+
+/**
+ * "Automático" (§7): arriba de la fila de hoy, con lo que elegiría con los que
+ * vienen. Es una opción más del radiogroup: marcada cuando el guardado es `AUTO`.
+ */
+describe('SelectorDeFormato — Automático (§7)', () => {
+  const AUTO: MatchdayFormatSetting = { kind: 'AUTO' }
+  const botonAutomatico = (markup: string) => /<button[^>]*>Automático/.exec(markup)?.[0] ?? ''
+
+  it('con AUTO guardado, Automático está marcado y dice qué elegiría con los que vienen', () => {
+    const markup = html(AUTO, 8, GROUPS_2, TECHO_DE_A_UNO, 8)
+
+    expect(markup).toContain('Automático')
+    expect(markup).toContain('→ 2 grupos + llave (vienen 8)')
+    expect(botonAutomatico(markup)).toContain('aria-checked="true"')
+    // La fila de hoy sigue, sin marcar: Automático no es ninguno de los dos.
+    const btnGrupos2 = /<button[^>]*>2 grupos \+ llave<\/button>/.exec(markup)?.[0] ?? ''
+    expect(btnGrupos2).toContain('aria-checked="false"')
+  })
+
+  it('con ROUND_ROBIN guardado, Automático no está marcado', () => {
+    const markup = html(ROUND_ROBIN, 8, GROUPS_2, TECHO_DE_A_UNO, 8)
+
+    expect(botonAutomatico(markup)).toContain('aria-checked="false"')
+  })
+})
+
+describe('EstaFechaSeJuegaA (§7)', () => {
+  const aCuatro: MatchFormat = { setsToWin: 1, gamesPerSet: 4, tieBreak: false, openScore: false }
+  const render = (kind: string, effective: MatchFormat) =>
+    renderToStaticMarkup(
+      createElement(EstaFechaSeJuegaA, { kind, effective, own: null, unit: 'games', pending: false, onSave: () => {} }),
+    )
+
+  it('dice a cuánto se juega la fecha y ofrece cambiarlo', () => {
+    const markup = render('PADEL', aCuatro)
+
+    expect(markup).toContain('Esta fecha se juega a: 1 set a 4 games')
+    expect(markup).toContain('Cambiar')
+  })
+
+  it('en un deporte de goles no se dibuja: no hay a cuánto jugar', () => {
+    expect(render('FIFA', { ...aCuatro, openScore: true })).toBe('')
   })
 })

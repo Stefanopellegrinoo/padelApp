@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { pair, type MatchdayFormat } from '@/core'
+import { pair, type MatchdayFormat, type MatchFormat } from '@/core'
 import {
   applySeatTick,
   armadoWords,
   drawRoom,
+  formatoNotice,
   guestPartnerAbsent,
   guestsOutnumberNote,
   matchdayShape,
@@ -471,5 +472,19 @@ describe('armadoWords', () => {
     expect(words.guestPartner).toBe(true)
     expect(words.sides).toBe('parejas')
     expect(words.addGuest).toBe('+ Agregar pareja invitada')
+  })
+})
+
+// Fuera del armado, una fecha que se juega distinto que el deporte lo dice (§7).
+describe('formatoNotice', () => {
+  const aCuatro: MatchFormat = { setsToWin: 1, gamesPerSet: 4, tieBreak: false, openScore: false }
+  const aSeis: MatchFormat = { ...aCuatro, gamesPerSet: 6 }
+
+  it('nombra la fecha y a cuánto se juega cuando no es lo del deporte', () => {
+    expect(formatoNotice(3, aSeis, aCuatro, 'games')).toBe('Fecha 3 · 1 set a 6 games')
+  })
+
+  it('calla cuando la fecha se juega igual que el deporte', () => {
+    expect(formatoNotice(3, aCuatro, { ...aCuatro }, 'games')).toBeNull()
   })
 })

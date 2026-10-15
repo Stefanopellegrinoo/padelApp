@@ -1,12 +1,26 @@
 'use client'
 
 import { useOptimistic, useState, useTransition } from 'react'
-import { MAX_PAIRING_POOL, minSquadFor, offerableFormats, type MatchdayFormat, type Duo, type SideSize } from '@/core'
+import {
+  MAX_PAIRING_POOL,
+  minSquadFor,
+  offerableFormats,
+  unitOf,
+  type MatchdayFormat,
+  type MatchdayFormatSetting,
+  type MatchFormat,
+  type MatchFormatOwn,
+  type Duo,
+  type SideSize,
+} from '@/core'
 import { initials, matchdayFormatLabel } from '@/app/format'
+import { BloquePartido } from '@/app/deporte/personalizar-reglas'
+import { setsSportOf } from '@/app/deporte/personalizar-reglas-state'
 import {
   addGuestPair,
   addLooseGuest,
   changeMatchdayFormat,
+  changeMatchFormat,
   confirmMatchday,
   drawPairs,
   removeGuestPair,
@@ -23,6 +37,7 @@ import {
   guestPartnerAbsent,
   guestsOutnumberNote,
   matchdayShape,
+  matchFormatLabel,
   parityGuestSeat,
   partnersTakenBy,
   type SeatVM,
@@ -111,8 +126,19 @@ interface ArmadoProps {
    * realmente se pierde.
    */
   loadedResults: number
-  /** El `matchdays.formato` guardado hoy (REQ-D8-1) — `ROUND_ROBIN` por default hasta que se elija otro. */
-  formato: MatchdayFormat
+  /**
+   * El `matchdays.formato` GUARDADO (REQ-D8-1), `AUTO` incluido (§7): es el
+   * estado del selector. Lo que se va a armar lo resuelve `matchdayShape` con
+   * los que vienen, nunca `page.tsx` con los lados ya sorteados — antes del
+   * sorteo son 0 y `AUTO` leía "todos contra todos".
+   */
+  formato: MatchdayFormatSetting
+  /** El deporte de la disciplina: decide si hay "a cuánto se juega" (sets) y en qué unidad. */
+  kind: string
+  /** A cuánto se juega ESTA fecha (§7): el propio de la fecha, o el del deporte en el torneo. */
+  matchFormat: MatchFormat
+  /** `matchdays.match_format`: el propio de la fecha, o `null` si va como el torneo. */
+  ownMatchFormat: MatchFormatOwn | null
   /**
    * `true` cuando `formato` es `GROUPS_KNOCKOUT` pero el fixture YA
    * sorteado no lo cubre (S94, verify-report-pre-contract #4026) — mismo
@@ -159,6 +185,9 @@ export function Armado({
   defenders,
   loadedResults,
   formato,
+  kind,
+  matchFormat,
+  ownMatchFormat,
   formatDrifted,
   groupPreview,
 }: ArmadoProps) {
@@ -242,7 +271,9 @@ export function Armado({
   })
   const { size, sides, matches, complete, needsLooseGuest, eventualSize, tooFew, tooManyToPair, suggestedFormat } =
     shape
-  const label = armadoWords(sideSize, formato, formatDrifted)
+  // Lo que se va a armar, `AUTO` resuelto con los que vienen: las notas
+  // describen eso, no el `AUTO` guardado.
+  const label = armadoWords(sideSize, shape.formato, formatDrifted)
   const guestUnnamed = [
     ...looseGuests.map((guest) => guest.name),
     ...guestPairs.flatMap((pair) => [pair.a.name, pair.b.name]),
@@ -340,9 +371,19 @@ export function Armado({
         // exactamente lo mismo que antes de settear.
         sides={sizeSettled ? shape.sides : 0}
         maxMatches={shape.maxMatches}
-        suggested={suggestedFormat}
+        resolved={suggestedFormat}
+        headcount={eventualSize}
         pending={pending}
         onChange={(next) => run(() => changeMatchdayFormat(seasonId, matchdayId, matchdayNumber, next))}
+      />
+
+      <EstaFechaSeJuegaA
+        kind={kind}
+        effective={matchFormat}
+        own={ownMatchFormat}
+        unit={unitOf(kind, matchFormat)}
+        pending={pending}
+        onSave={(own) => run(() => changeMatchFormat(seasonId, matchdayId, matchdayNumber, own))}
       />
 
       {/* S83 (verify-report-pr21 #4004): entre elegir "2 grupos + llave" y
@@ -650,7 +691,7 @@ export function Armado({
  *   apoyarse sólo en la clase.
  * - **Acortar el texto** ("Todos vs. todos"): sí baja la fila a dos líneas
  *   (medido: 71px → 56px), pero `matchdayFormatLabel` (`app/format.ts`) es
- *   el MISMO texto para este botón, la leyenda "Sugerido:" (línea de arriba)
+ *   el MISMO texto para este botón, la línea de "Automático" (arriba)
  *   Y el radio de `FormatoDefault` en Ajustes (`ajustes/formato-default.tsx`,
  *   §2.5) — cambiarlo tocaría asserts en tres archivos de test
  *   (`armado.unit.test.ts`, `page.unit.test.ts`,
@@ -699,39 +740,42 @@ const FORMATO_LIBRE = 'border-line'
  * excluyentes, sobre `<button>` en vez de `<input type="radio">` porque acá
  * no hay un `<form>` que serialice el valor — el estado lo maneja `onChange`.
  *
- * `suggested` (W77, verify-report-pr21-cierre #4016 / decisión #4022):
- * `suggestFormat` (`core/knockout.ts`) se había quedado sin consumidor de
- * producción, y con eso desaparecía de la pantalla el primer GIVEN de
- * REQ-D8-1 ("propone 2 grupos de 4"). La marca es una LEYENDA de texto
- * aparte (`Sugerido: …`), nunca una clase ni un `aria-checked` sobre el
- * botón — a propósito, para que no repita el error de S81: "sugerido" y
- * "elegido" son preguntas distintas y un lector de pantalla (o un test) no
- * tiene por qué confundirlas.
+ * "Automático" (§7) va arriba, a lo ancho: es una opción más del radiogroup
+ * (`aria-checked` con `AUTO` guardado) y su segunda línea dice lo que
+ * elegiría con los que vienen, `→ 2 grupos + llave (vienen 8)`. Esa línea es
+ * lo que antes era la leyenda "Sugerido: …" (W77, decisión #4022): sigue
+ * siendo TEXTO, nunca un `aria-checked` sobre el botón de ese formato, para
+ * que no repita el error de S81 — "lo que elegiría Automático" y "lo
+ * elegido" son preguntas distintas.
  *
- * La leyenda sólo se dibuja si `suggested` es de verdad una de las opciones
- * que este selector está mostrando (ofrecida hoy, o el `formato` guardado
- * como huérfano de W73) — nunca nombra un botón que no existe. `suggested`
- * llega con `eventualSize` (cuenta al invitado suelto que todavía no está
- * sentado, `armado-state.ts`) mientras que `sides` acá es el tamaño de HOY;
- * en el hueco donde los dos difieren, la leyenda calla en vez de mentir.
+ * La línea sólo se dibuja si `resolved` es de verdad una de las opciones que
+ * este selector está mostrando (ofrecida hoy, o el `formato` guardado como
+ * huérfano de W73) — nunca nombra un botón que no existe. `resolved` llega
+ * con `eventualSize` (cuenta al invitado suelto que todavía no está sentado,
+ * `armado-state.ts`) mientras que `sides` acá es el tamaño de HOY; en el
+ * hueco donde los dos difieren, la línea calla en vez de mentir.
  */
 export function SelectorDeFormato({
   formato,
   sides,
   maxMatches,
-  suggested,
+  resolved,
+  headcount,
   pending,
   onChange,
 }: {
-  formato: MatchdayFormat
+  /** El GUARDADO, `AUTO` incluido. */
+  formato: MatchdayFormatSetting
   /** Lados de HOY: de acá sale qué botones de grupos se ofrecen (`offerableFormats`), no de una sugerencia. */
   sides: number
   /** El techo de partidos de ESTA disciplina (`config.maxMatches`): con él se arma el menú. */
   maxMatches: number
-  /** El formato que `suggestFormat` propone (REQ-D8-1) — se marca con una leyenda, no reemplaza los botones de #4014. */
-  suggested: MatchdayFormat
+  /** Lo que elegiría "Automático" con los que vienen (`suggestFormat`, REQ-D8-1). */
+  resolved: MatchdayFormat
+  /** Los que vienen: personas, no lados. */
+  headcount: number
   pending: boolean
-  onChange: (formato: MatchdayFormat) => void
+  onChange: (formato: MatchdayFormatSetting) => void
 }) {
   const menu = offerableFormats(sides, maxMatches)
   const ofertados = menu.filter(
@@ -755,43 +799,137 @@ export function SelectorDeFormato({
     formato.kind === 'GROUPS_KNOCKOUT' && !ofertados.some((candidato) => candidato.groups === formato.groups)
       ? [...ofertados, formato]
       : ofertados
-  const suggestedIsShown =
-    suggested.kind === 'ROUND_ROBIN' || grupos.some((candidato) => candidato.groups === suggested.groups)
+  const resolvedIsShown =
+    resolved.kind === 'ROUND_ROBIN'
+      ? ofreceRoundRobin
+      : grupos.some((candidato) => candidato.groups === resolved.groups)
+  const automatico = formato.kind === 'AUTO'
   return (
     <section className="flex flex-col gap-2">
       <h2 className={`${STEP_TITLE} border-b border-line pb-2`}>Formato de la fecha</h2>
-      {suggestedIsShown && (
-        <p className="text-[11.5px] font-[600] text-muted">Sugerido: {matchdayFormatLabel(suggested)}</p>
-      )}
-      <div className="flex gap-2" role="radiogroup" aria-label="Formato de la fecha">
-        {ofreceRoundRobin && (
-          <button
-            type="button"
-            role="radio"
-            aria-checked={formato.kind === 'ROUND_ROBIN'}
-            disabled={pending}
-            onClick={() => onChange({ kind: 'ROUND_ROBIN' })}
-            className={`${FORMATO_BOTON} ${formato.kind === 'ROUND_ROBIN' ? FORMATO_ELEGIDO : FORMATO_LIBRE}`}
-          >
-            {matchdayFormatLabel({ kind: 'ROUND_ROBIN' })}
-          </button>
-        )}
-        {grupos.map((candidato) => (
-          <button
-            key={candidato.groups}
-            type="button"
-            role="radio"
-            aria-checked={formato.kind === 'GROUPS_KNOCKOUT' && formato.groups === candidato.groups}
-            disabled={pending}
-            onClick={() => onChange(candidato)}
-            className={`${FORMATO_BOTON} ${
-              formato.kind === 'GROUPS_KNOCKOUT' && formato.groups === candidato.groups ? FORMATO_ELEGIDO : FORMATO_LIBRE
-            }`}
-          >
-            {matchdayFormatLabel(candidato)}
-          </button>
-        ))}
+      <div className="flex flex-col gap-2" role="radiogroup" aria-label="Formato de la fecha">
+        <button
+          type="button"
+          role="radio"
+          aria-checked={automatico}
+          disabled={pending}
+          onClick={() => onChange({ kind: 'AUTO' })}
+          className={`${FORMATO_BOTON} ${automatico ? FORMATO_ELEGIDO : FORMATO_LIBRE}`}
+        >
+          Automático
+          {resolvedIsShown && (
+            <span className="mt-0.5 block text-[11.5px] font-semibold opacity-80">
+              {`→ ${matchdayFormatLabel(resolved)} (vienen ${headcount})`}
+            </span>
+          )}
+        </button>
+        <div className="flex gap-2">
+          {ofreceRoundRobin && (
+            <button
+              type="button"
+              role="radio"
+              aria-checked={formato.kind === 'ROUND_ROBIN'}
+              disabled={pending}
+              onClick={() => onChange({ kind: 'ROUND_ROBIN' })}
+              className={`${FORMATO_BOTON} ${formato.kind === 'ROUND_ROBIN' ? FORMATO_ELEGIDO : FORMATO_LIBRE}`}
+            >
+              {matchdayFormatLabel({ kind: 'ROUND_ROBIN' })}
+            </button>
+          )}
+          {grupos.map((candidato) => (
+            <button
+              key={candidato.groups}
+              type="button"
+              role="radio"
+              aria-checked={formato.kind === 'GROUPS_KNOCKOUT' && formato.groups === candidato.groups}
+              disabled={pending}
+              onClick={() => onChange(candidato)}
+              className={`${FORMATO_BOTON} ${
+                formato.kind === 'GROUPS_KNOCKOUT' && formato.groups === candidato.groups ? FORMATO_ELEGIDO : FORMATO_LIBRE
+              }`}
+            >
+              {matchdayFormatLabel(candidato)}
+            </button>
+          ))}
+        </div>
       </div>
+    </section>
+  )
+}
+
+/**
+ * "Esta fecha se juega a: 1 set a 4 games · Cambiar" (§7): el formato de
+ * partido propio de ESTA fecha, sólo en armado (la base lo traba fuera de
+ * DRAFT). "Cambiar" despliega los mismos controles que el bloque "El partido"
+ * de "Personalizar reglas", arrancando del efectivo; "Como el torneo" vuelve a
+ * `null`. Un deporte de goles o un marcador abierto no tienen a cuánto jugar:
+ * no se dibuja.
+ */
+export function EstaFechaSeJuegaA({
+  kind,
+  effective,
+  own,
+  unit,
+  pending,
+  onSave,
+}: {
+  kind: string
+  effective: MatchFormat
+  own: MatchFormatOwn | null
+  unit: string
+  pending: boolean
+  onSave: (own: MatchFormatOwn | null) => void
+}) {
+  // El borrador mientras se edita; `null` es cerrado.
+  const [draft, setDraft] = useState<MatchFormat | null>(null)
+  if (setsSportOf(kind) === null || effective.openScore) return null
+
+  const save = (next: MatchFormatOwn | null) => {
+    setDraft(null)
+    onSave(next)
+  }
+
+  return (
+    <section className="flex flex-col gap-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[13.5px] font-bold">{`Esta fecha se juega a: ${matchFormatLabel(effective, unit)}`}</p>
+        {/* Es su propio cancelar, como "Cargar resultado": volver a tocarlo
+            cierra los controles y tira el borrador. */}
+        <button
+          type="button"
+          disabled={pending}
+          aria-expanded={draft !== null}
+          onClick={() => setDraft(draft === null ? effective : null)}
+          className="min-h-11 shrink-0 px-1 text-[13.5px] font-extrabold text-accent-link"
+        >
+          Cambiar
+        </button>
+      </div>
+      {draft !== null && (
+        <>
+          <BloquePartido kind={kind} format={draft} disabled={pending} onChange={setDraft} />
+          <div className="flex gap-2">
+            {own !== null && (
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => save(null)}
+                className="min-h-11 flex-1 rounded-field border-[1.5px] border-line p-3 text-[13.5px] font-extrabold"
+              >
+                Como el torneo
+              </button>
+            )}
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => save({ setsToWin: draft.setsToWin, gamesPerSet: draft.gamesPerSet })}
+              className="min-h-11 flex-1 rounded-field bg-accent p-3 text-[13.5px] font-extrabold text-accent-text"
+            >
+              Guardar
+            </button>
+          </div>
+        </>
+      )}
     </section>
   )
 }

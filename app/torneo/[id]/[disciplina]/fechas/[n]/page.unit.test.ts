@@ -993,3 +993,34 @@ describe('el armado en DRAFT — tooManyToPair apaga el botón de sortear (Impor
     expect(boton).toContain('disabled')
   })
 })
+
+describe('el armado en DRAFT — Automático antes de sortear (§7, hallazgo de la Task 4)', () => {
+  /**
+   * `page.tsx` le pasaba a `Armado` el `AUTO` ya resuelto con los lados
+   * SORTEADOS: antes del sorteo son 0 y daba `ROUND_ROBIN`. Con 12 de a uno la
+   * pantalla marcaba "Todos contra todos", contaba 66 partidos y no mostraba el
+   * reparto, mientras `generatePairs` iba a armar grupos con los presentes.
+   * `suggestFormat(12, 1, 36)` es 4 grupos (20 partidos): 2 grupos (34) también
+   * entra, y gana el de más grupos.
+   */
+  it('con 12 de a uno y AUTO guardado: Automático marcado, 4 grupos + llave, 20 partidos y el reparto', async () => {
+    escena.status = 'DRAFT'
+    escena.isAdmin = true
+    escena.pairSize = 1
+    escena.maxMatches = undefined
+    escena.formato = { kind: 'AUTO' } as unknown as MatchdayFormat
+    escena.sides = []
+    escena.matches = []
+    escena.squadCount = 12
+    escena.guestEntries = []
+
+    const html = await render()
+
+    const btnAutomatico = /<button[^>]*>Automático/.exec(html)?.[0] ?? ''
+    expect(btnAutomatico).toContain('aria-checked="true"')
+    expect(html).toContain('→ 4 grupos + llave (vienen 12)')
+    expect(html).toContain('20 partidos')
+    expect(html).not.toContain('66 partidos')
+    expect(html).toContain('Cómo quedan los grupos')
+  })
+})

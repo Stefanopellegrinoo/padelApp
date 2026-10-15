@@ -21,6 +21,7 @@ import {
   armadoWords,
   drawRoom,
   guestPartnerAbsent,
+  guestsOutnumberNote,
   matchdayShape,
   parityGuestSeat,
   partnersTakenBy,
@@ -250,7 +251,7 @@ export function Armado({
   // El asiento que la paridad EXIGE, y por eso el único sin cruz. La cuenta
   // vive en `armado-state.ts` y tiene test propio: decide qué se puede sacar y
   // qué no, y acá adentro no la podía tener.
-  const requiredGuestSeat = parityGuestSeat(optimisticSeats, looseGuests.length)
+  const requiredGuestSeat = parityGuestSeat(optimisticSeats, looseGuests.length, sideSize)
 
   // Los jugadores del torneo que ya están trabados con un invitado. Ofrecerlos
   // en el `<select>` de OTRO invitado es ofrecer algo que siempre rebota
@@ -587,9 +588,7 @@ export function Armado({
           barato, un cartel rojo que miente no. */}
       {sizeSettled && guestsOutnumberSquad && (
         <p role="alert" className="rounded-field bg-live-bg px-3 py-2.5 text-[12.5px] font-bold text-live">
-          Hay {toTheDraw} invitados al sorteo y quedan {freeSquad} jugadores del torneo libres para
-          acompañarlos. Elegiles compañero en “Juega con”, poné a los que sobran en una pareja
-          invitada, o sacalos.
+          {guestsOutnumberNote(sideSize, toTheDraw, freeSquad)}
         </p>
       )}
       {guestUnnamed && pairs.length > 0 && (

@@ -5,6 +5,7 @@ import {
   armadoWords,
   drawRoom,
   guestPartnerAbsent,
+  guestsOutnumberNote,
   matchdayShape,
   parityGuestSeat,
   type SeatVM,
@@ -391,6 +392,39 @@ describe('parityGuestSeat', () => {
     // `squad` son tres asientos con uno ausente: dos confirmados, par.
     expect(squad).toHaveLength(3)
     expect(parityGuestSeat(squad, 1)).toBe(false)
+  })
+
+  // De a uno no hay parejas que armar (§8) y el servidor no repone ningún
+  // asiento (`syncGuestSeat` sólo corre con pair_size 2): un asiento "exigido
+  // por la paridad" no existe, y marcarlo así dejaba al único invitado sin cruz
+  // y con un cartel de parejas.
+  it('de a uno no exige ningún asiento: plantel impar y un solo suelto', () => {
+    expect(parityGuestSeat(impar, 1, 1)).toBe(false)
+  })
+
+  it('de a dos, pasarle el tamaño del lado explícito no cambia nada', () => {
+    expect(parityGuestSeat(impar, 1, 2)).toBe(true)
+  })
+})
+
+/**
+ * El aviso de "más invitados al sorteo que jugadores libres". El servidor
+ * (`assertSquadCoversLooseGuests`) lo hace cumplir también de a uno, pero el
+ * texto de las parejas manda a controles que de a uno no existen.
+ */
+describe('guestsOutnumberNote', () => {
+  it('de a dos dice lo de siempre, letra por letra', () => {
+    expect(guestsOutnumberNote(2, 3, 2)).toBe(
+      'Hay 3 invitados al sorteo y quedan 2 jugadores del torneo libres para acompañarlos. Elegiles compañero en “Juega con”, poné a los que sobran en una pareja invitada, o sacalos.',
+    )
+  })
+
+  it('de a uno no manda a "Juega con" ni a una pareja invitada', () => {
+    const note = guestsOutnumberNote(1, 3, 2)
+
+    expect(note).toContain('3 invitados')
+    expect(note).toContain('2 jugadores del torneo')
+    expect(note).not.toMatch(/juega con|pareja|compañero/i)
   })
 })
 

@@ -232,6 +232,19 @@ export function drawRoom(
 }
 
 /**
+ * El aviso de "más invitados al sorteo que jugadores del torneo libres". El
+ * borde (`assertSquadCoversLooseGuests`) lo hace cumplir también de a uno, pero
+ * el texto de las parejas manda a "Juega con" y a la pareja invitada, que de a
+ * uno no existen (§8): ahí sólo queda sacar a los que sobran.
+ */
+export function guestsOutnumberNote(sideSize: SideSize, toTheDraw: number, freeSquad: number): string {
+  if (sideSize === 1) {
+    return `Hay ${toTheDraw} invitados y quedan ${freeSquad} jugadores del torneo libres: no puede haber más invitados que jugadores. Sacá a los que sobran.`
+  }
+  return `Hay ${toTheDraw} invitados al sorteo y quedan ${freeSquad} jugadores del torneo libres para acompañarlos. Elegiles compañero en “Juega con”, poné a los que sobran en una pareja invitada, o sacalos.`
+}
+
+/**
  * El asiento de invitado que la paridad EXIGE, y por eso el único sin cruz: con
  * el plantel impar y un solo suelto, sacarlo es un no-op —`removeLooseGuestSeat`
  * cierra con `syncGuestSeat`, que lo repone en el acto— y una cruz que no hace
@@ -240,10 +253,20 @@ export function drawRoom(
  *
  * Vivía inline en `armado.tsx` y decide qué se puede sacar y qué no, que es
  * exactamente la clase de decisión que tiene que poder testearse.
+ *
+ * Sólo de a dos (`sideSize === 2`): es donde `syncGuestSeat` repone el asiento.
+ * De a uno el servidor no sincroniza nada (un plantel impar se juega tal cual),
+ * así que no hay asiento "exigido" y el invitado se tiene que poder sacar.
+ * `sideSize` default 2 —el caso de siempre— porque el único llamador lo pasa
+ * siempre; sin default, cada test de parejas tendría que repetirlo.
  */
-export function parityGuestSeat(seats: readonly SeatVM[], looseGuestCount: number): boolean {
+export function parityGuestSeat(
+  seats: readonly SeatVM[],
+  looseGuestCount: number,
+  sideSize: SideSize = 2,
+): boolean {
   const confirmed = seats.filter((seat) => seat.playing).length
-  return confirmed % 2 !== 0 && looseGuestCount === 1
+  return sideSize === 2 && confirmed % 2 !== 0 && looseGuestCount === 1
 }
 
 /**

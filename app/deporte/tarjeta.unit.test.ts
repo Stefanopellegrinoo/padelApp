@@ -128,6 +128,25 @@ describe('TarjetaDeporte', () => {
     expect(html).toMatch(/<button[^>]*aria-pressed="false"[^>]*>Al azar<span/)
   })
 
+  /** El grupo de botones de "Primera fecha", recortado del HTML por su `aria-labelledby`. */
+  const grupoPrimeraFecha = (html: string) => {
+    const id = /<span id="([^"]+)"[^>]*>Primera fecha<\/span>/.exec(html)?.[1]
+    return new RegExp(`<div role="group" aria-labelledby="${id}" class="([^"]*)"`).exec(html)?.[1] ?? ''
+  }
+
+  it('con cuatro opciones de primera fecha (tres deportes) van en dos columnas: a 390px no entran en una fila', () => {
+    const IGUAL_QUE_FIFA: Option = { value: { igualQue: 'FIFA' }, label: 'Igual que FIFA', sub: null }
+    const html = card('PING_PONG', 6, 'INDIVIDUAL', { primeraFechaOptions: [POR_NIVEL, AL_AZAR, IGUAL_QUE_PADEL, IGUAL_QUE_FIFA] })
+    expect(grupoPrimeraFecha(html).split(' ')).toEqual(expect.arrayContaining(['grid', 'grid-cols-2']))
+  })
+
+  it('con tres o menos siguen en una fila, como siempre', () => {
+    for (const options of [[POR_NIVEL, AL_AZAR], [POR_NIVEL, AL_AZAR, IGUAL_QUE_PADEL]]) {
+      const clase = grupoPrimeraFecha(card('PING_PONG', 6, 'INDIVIDUAL', { primeraFechaOptions: options }))
+      expect(clase).toBe('flex gap-2')
+    }
+  })
+
   it('la ficha va en una línea, la misma que arma fichaLine', () => {
     const seed = fichaSeed('PADEL', 6, 'ROTAN')
     const line = fichaLine({

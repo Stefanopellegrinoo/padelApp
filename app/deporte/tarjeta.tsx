@@ -118,7 +118,12 @@ export function TarjetaDeporte({
         <span id={fechaId} className={ROTULO}>
           Primera fecha
         </span>
-        <div role="group" aria-labelledby={fechaId} className="flex gap-2">
+        {/* Con tres deportes son cuatro opciones, y a 390px no entran en una fila: dos columnas. */}
+        <div
+          role="group"
+          aria-labelledby={fechaId}
+          className={primeraFechaOptions.length > 3 ? 'grid grid-cols-2 gap-2' : 'flex gap-2'}
+        >
           {primeraFechaOptions.map(({ value, label, sub }) => (
             <Opcion
               key={primeraFechaKey(value)}

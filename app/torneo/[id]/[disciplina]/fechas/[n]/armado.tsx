@@ -372,7 +372,9 @@ export function Armado({
         sides={sizeSettled ? shape.sides : 0}
         maxMatches={shape.maxMatches}
         resolved={suggestedFormat}
-        headcount={eventualSize}
+        // Mismo gate: `eventualSize` mezcla el `confirmed` optimista con los
+        // invitados viejos, y la línea de Automático lo imprime.
+        headcount={sizeSettled ? eventualSize : null}
         pending={pending}
         onChange={(next) => run(() => changeMatchdayFormat(seasonId, matchdayId, matchdayNumber, next))}
       />
@@ -706,6 +708,7 @@ export function Armado({
 const FORMATO_BOTON = 'flex-1 rounded-field border-[1.5px] p-3 text-[13.5px] font-extrabold'
 const FORMATO_ELEGIDO = 'border-accent bg-accent text-accent-text'
 const FORMATO_LIBRE = 'border-line'
+const AUTOMATICO_LINEA = 'mt-0.5 block text-[11.5px] font-semibold opacity-80'
 
 /**
  * El selector de formato de la fecha (REQ-D8-1): "todos contra todos"
@@ -772,8 +775,8 @@ export function SelectorDeFormato({
   maxMatches: number
   /** Lo que elegiría "Automático" con los que vienen (`suggestFormat`, REQ-D8-1). */
   resolved: MatchdayFormat
-  /** Los que vienen: personas, no lados. */
-  headcount: number
+  /** Los que vienen: personas, no lados. `null` mientras el tilde vuela: la línea se tapa en vez de mentir. */
+  headcount: number | null
   pending: boolean
   onChange: (formato: MatchdayFormatSetting) => void
 }) {
@@ -817,10 +820,14 @@ export function SelectorDeFormato({
           className={`${FORMATO_BOTON} ${automatico ? FORMATO_ELEGIDO : FORMATO_LIBRE}`}
         >
           Automático
-          {resolvedIsShown && (
-            <span className="mt-0.5 block text-[11.5px] font-semibold opacity-80">
-              {`→ ${matchdayFormatLabel(resolved)} (vienen ${headcount})`}
-            </span>
+          {/* Sin la cuenta asentada, un renglón vacío e `invisible` guarda la
+              altura: el botón no salta bajo el dedo entre tilde y tilde. */}
+          {headcount === null ? (
+            <span className={`${AUTOMATICO_LINEA} invisible`}>{'\u00a0'}</span>
+          ) : (
+            resolvedIsShown && (
+              <span className={AUTOMATICO_LINEA}>{`→ ${matchdayFormatLabel(resolved)} (vienen ${headcount})`}</span>
+            )
           )}
         </button>
         <div className="flex gap-2">

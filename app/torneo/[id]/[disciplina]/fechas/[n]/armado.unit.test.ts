@@ -34,7 +34,7 @@ function html(
   sides: number,
   resolved?: MatchdayFormat,
   maxMatches: number = TECHO_DE_A_UNO,
-  headcount: number = sides,
+  headcount: number | null = sides,
 ): string {
   return renderToStaticMarkup(
     createElement(SelectorDeFormato, {
@@ -222,6 +222,20 @@ describe('SelectorDeFormato — Automático (§7)', () => {
     // La fila de hoy sigue, sin marcar: Automático no es ninguno de los dos.
     const btnGrupos2 = /<button[^>]*>2 grupos \+ llave<\/button>/.exec(markup)?.[0] ?? ''
     expect(btnGrupos2).toContain('aria-checked="false"')
+  })
+
+  /**
+   * Mientras el tilde vuela, `eventualSize` mezcla el `confirmed` optimista con
+   * los invitados viejos: 7 confirmados + el invitado de paridad, se tilda al 8°
+   * y por un instante daría "vienen 9". `Armado` manda `headcount: null` hasta
+   * que el servidor confirme, y la línea no dice ningún número.
+   */
+  it('sin la cuenta asentada (headcount null), la línea no dice cuántos vienen', () => {
+    const markup = html(AUTO, 0, ROUND_ROBIN, TECHO_DE_A_UNO, null)
+
+    expect(markup).not.toContain('vienen')
+    expect(markup).not.toContain('→')
+    expect(botonAutomatico(markup)).toContain('aria-checked="true"')
   })
 
   it('con ROUND_ROBIN guardado, Automático no está marcado', () => {

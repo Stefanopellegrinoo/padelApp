@@ -737,8 +737,11 @@ export default async function FechaDetailPage({ params }: PageProps) {
     // `computeStandings` sobre el orden vivo, así que sobre el congelado estaría
     // explicando una comparación que nunca ocurrió. Cuando el orden no se movió,
     // que es el caso normal, el pie se ve igual que siempre.
+    //
+    // Con llave, nunca (R1): el puesto lo decide la llave, y el desempate de la tabla de grupos
+    // podía decir "quedó 2°" de quien perdió la final aunque el orden congelado no se moviera.
     const note =
-      status === 'CLOSED' && !orderMoved(standings, tableRows)
+      status === 'CLOSED' && !isGroupsKnockout && !orderMoved(standings, tableRows)
         ? tiebreakNote(standings, config, nameOf, discipline.pairSize, unit)
         : null
 
@@ -750,8 +753,8 @@ export default async function FechaDetailPage({ params }: PageProps) {
     // el borde raro que `tiebreakNote` ya cubre— y el pie se queda mudo justo
     // donde más hace falta: medido, dos lados con el mismo `PG` y la misma
     // diferencia en un orden que ninguna columna explica. Mutuamente
-    // excluyente con `note`: cuando el orden no se movió, `tiebreakNote` ya lo
-    // explica y esto no hace falta. `config.matchFormat`, no un "games" fijo:
+    // excluyente con `note`, que con llave ya no sale (R1): con el orden sin
+    // mover no hay nada que explicar. `config.matchFormat`, no un "games" fijo:
     // la llave existe sobre todo en FIFA, donde eso es gol, no games —mismo
     // argumento de `tiebreakNote` dos líneas arriba.
     const bracketNote =

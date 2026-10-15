@@ -1161,3 +1161,40 @@ describe('el armado en DRAFT — con parejas fijas la nota no promete defensores
     expect(html).not.toContain('Los defensores quedan fijos')
   })
 })
+
+describe('la fecha GROUPS_KNOCKOUT cerrada — sin pie de desempate de la tabla de grupos (R1)', () => {
+  /**
+   * Con el orden congelado igual al vivo (`frozenPoints` vacío), `tiebreakNote` explicaba la tabla
+   * de GRUPOS: "quedó 2° por …" sobre un lado que pudo perder la final. El puesto de una fecha con
+   * llave lo decide la llave, no ese desempate.
+   */
+  it('no dice "quedó N° por …" aunque la tabla de grupos tenga un empate', async () => {
+    escena.status = 'CLOSED'
+    escena.isAdmin = true
+    escena.pairSize = 1
+    escena.formato = { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 }
+    escena.sides = ALL_SIDES
+    escena.frozenPoints = new Map()
+    // Los dos grupos salen calcados: 1 y 5 ganan los tres, empatados en todo.
+    const grupo = (g: number, [a, b, c, d]: number[]) => [
+      playedMatch('GRUPO', g, 1, a!, b!),
+      playedMatch('GRUPO', g, 1, c!, d!),
+      playedMatch('GRUPO', g, 2, a!, c!),
+      playedMatch('GRUPO', g, 2, b!, d!),
+      playedMatch('GRUPO', g, 3, a!, d!),
+      playedMatch('GRUPO', g, 3, b!, c!),
+    ]
+    escena.matches = [
+      ...grupo(1, [1, 2, 3, 4]),
+      ...grupo(2, [5, 6, 7, 8]),
+      playedMatch('SEMI', 1, 1, 1, 6),
+      playedMatch('SEMI', 1, 1, 5, 2),
+      playedMatch('FINAL', 1, 1, 5, 1),
+      unplayedMatch('TERCER_PUESTO', 1, 1, 6, 2),
+    ]
+
+    const html = await render()
+
+    expect(html).not.toMatch(/quedó \d+° por/)
+  })
+})

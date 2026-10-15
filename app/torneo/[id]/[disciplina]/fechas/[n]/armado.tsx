@@ -317,11 +317,12 @@ export function Armado({
   // dejaba la fecha impar de a un asiento, porque la pareja invitada suma dos.
   // "+ Agregar invitado" suma UNO, así que un plantel par más un invitado da 11
   // y el botón tiene que apagarse en vez de rebotar con el mismo texto que la
-  // banda ya muestra arriba.
+  // banda ya muestra arriba. Sólo en parejas: de a uno cada persona es su lado
+  // y la base acepta impares (`assertMatchdaySize`).
   const canDraw =
     !tooFew &&
     !tooManyToPair &&
-    eventualSize % 2 === 0 &&
+    (sideSize === 1 || eventualSize % 2 === 0) &&
     !guestsOutnumberSquad &&
     !someGuestPartnerAbsent &&
     !pending

@@ -1086,3 +1086,41 @@ describe('la tarjeta del partido: con más de un set cuenta SETS, con uno solo l
     expect(scoreOf(html, 'Jugador 4')).toBe('2')
   })
 })
+
+describe('el armado en DRAFT — la paridad sólo apaga el sorteo en parejas (assertMatchdaySize)', () => {
+  it('7 confirmados de a uno: "Ordenar jugadores" se puede tocar', async () => {
+    escena.status = 'DRAFT'
+    escena.isAdmin = true
+    escena.pairSize = 1
+    escena.maxMatches = undefined
+    escena.formato = { kind: 'ROUND_ROBIN' }
+    escena.sides = []
+    escena.matches = []
+    escena.squadCount = 7
+    escena.guestEntries = []
+
+    const html = await render()
+
+    const boton = /<button[^>]*>Ordenar jugadores<\/button>/.exec(html)?.[0] ?? ''
+    expect(boton).not.toBe('')
+    expect(boton).not.toContain('disabled')
+  })
+
+  it('7 en parejas (6 del plantel y un invitado suelto): "Generar parejas" sigue apagado', async () => {
+    escena.status = 'DRAFT'
+    escena.isAdmin = true
+    escena.pairSize = 2
+    escena.maxMatches = undefined
+    escena.formato = { kind: 'ROUND_ROBIN' }
+    escena.sides = []
+    escena.matches = []
+    escena.squadCount = 6
+    escena.guestEntries = [{ id: 'g1', displayName: 'Invitado 1', seedPosition: 6 }]
+
+    const html = await render()
+
+    const boton = /<button[^>]*>Generar parejas<\/button>/.exec(html)?.[0] ?? ''
+    expect(boton).not.toBe('')
+    expect(boton).toContain('disabled')
+  })
+})

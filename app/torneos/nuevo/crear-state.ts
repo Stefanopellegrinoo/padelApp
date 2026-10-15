@@ -191,15 +191,17 @@ export function parejasCompletas(card: DeporteElegido, seats: number): boolean {
   return members.length === seats && new Set(members).size === seats && members.every((at) => Number.isInteger(at) && at >= 0 && at < seats)
 }
 
-/** El orden de una tarjeta por nivel: con FIJAS el orden es de parejas, y a la base le llega aplanado. */
-function seedOrderOf(card: DeporteElegido): number[] {
-  return card.modality === 'FIJAS' ? card.order.flatMap((pair) => card.pairs[pair] ?? []) : [...card.order]
+/** El orden de una tarjeta por nivel, el que se mostró (`ordenInicial`): con FIJAS es de parejas, y a la base le llega aplanado. */
+function seedOrderOf(card: DeporteElegido, seats: number): number[] {
+  const order = ordenInicial(card, seats)
+  return card.modality === 'FIJAS' ? order.flatMap((pair) => card.pairs[pair] ?? []) : order
 }
 
 /** El modo de la primera fecha (el de la otra tarjeta si copia) y cómo se manda el orden. */
 function primeraFechaOf(
   card: DeporteElegido,
   cards: readonly DeporteElegido[],
+  seats: number,
 ): { firstFecha: FirstFecha; order: Pick<NewSeasonDiscipline, 'seedOrder' | 'shuffle' | 'sameOrderAs'> } {
   if (isIgualQue(card.primeraFecha)) {
     const { igualQue } = card.primeraFecha
@@ -211,7 +213,10 @@ function primeraFechaOf(
     return { firstFecha: target.primeraFecha, order: { sameOrderAs: at } }
   }
   if (card.primeraFecha === 'SORTEO') return { firstFecha: 'SORTEO', order: { shuffle: true } }
-  return { firstFecha: 'NIVEL', order: card.order.length === 0 ? {} : { seedOrder: seedOrderOf(card) } }
+  // Sin tocar el orden, la base usa el del plantel. Con parejas fijas eso NO es lo que se mostró
+  // (las parejas en su orden), así que ahí se manda igual.
+  const shownIsSquadOrder = card.order.length === 0 && !(card.modality === 'FIJAS' && card.pairs.length > 0)
+  return { firstFecha: 'NIVEL', order: shownIsSquadOrder ? {} : { seedOrder: seedOrderOf(card, seats) } }
 }
 
 /** Lo que se manda a crear, con todo lo que `reglamento` necesita para contarlo (el paso 4 cuenta esto mismo). */
@@ -219,7 +224,7 @@ type DisciplinaACrear = NewSeasonDiscipline & ReglamentoInput
 
 function disciplineOf(card: DeporteElegido, cards: readonly DeporteElegido[], squadSize: number): DisciplinaACrear {
   const { pairSize, fixedTeams } = modalityShape(card.modality)
-  const { firstFecha, order } = primeraFechaOf(card, cards)
+  const { firstFecha, order } = primeraFechaOf(card, cards, squadSize)
   return {
     kind: card.kind,
     config: { ...resizeConfig(card.rules.config, squadSize, pairSize), firstFecha },

@@ -347,6 +347,13 @@ describe('crearPayload', () => {
     })
   })
 
+  it('parejas fijas por nivel sin tocar el orden: manda el que se mostró (el de las parejas), no el del plantel', () => {
+    const padel = card('PADEL', 'FIJAS', 4, { primeraFecha: 'NIVEL', pairs: [[0, 3], [1, 2]], order: [] })
+    const [d] = crearPayload('Liga', squad, [padel]).disciplines
+    expect(ordenInicial(padel, 4)).toEqual([0, 1])
+    expect(d).toMatchObject({ teams: [[0, 3], [1, 2]], seedOrder: [0, 3, 1, 2] })
+  })
+
   it('parejas fijas al azar: manda las parejas y el sorteo, y ningún orden', () => {
     const padel = card('PADEL', 'FIJAS', 4, { primeraFecha: 'SORTEO', pairs: [[0, 3], [1, 2]] })
     const [d] = crearPayload('Liga', squad, [padel]).disciplines

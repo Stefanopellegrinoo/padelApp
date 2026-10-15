@@ -9,6 +9,7 @@ import {
   seasonMatchdaysOf,
   seasonSquadMembersOf,
 } from '@/db/read'
+import { squadSeedOrder } from '@/db/season'
 import { serverClient } from '@/db/server'
 import { renameTournament } from './actions'
 import { CargaDeJugadores } from './carga-jugadores'
@@ -119,12 +120,23 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
   // un elemento y el resultado sale idéntico al de antes de esta Task.
   // `[disciplina]/ajustes` repite el mismo aviso sin prefijo, para quien
   // entra directo a esa pantalla sin pasar por acá.
-  const mismatchMessages = header.disciplines.flatMap((candidate) => {
-    if (seats.length === candidate.config.squadSize) return []
+  //
+  // La cuenta es la de QUIEN JUEGA cada disciplina (`squadSeedOrder`, la misma que
+  // `[disciplina]/ajustes`), no el plantel entero: un deporte sumado para 5 de los 6 tiene 5
+  // valores de puntos y está bien. Con una sola disciplina las dos cuentas coinciden (ver
+  // `squadSizeHere` en `[disciplina]/ajustes`) y no se paga la consulta.
+  const seatsByDiscipline = single
+    ? [seats.length]
+    : (await Promise.all(header.disciplines.map((candidate) => squadSeedOrder(supabase, candidate.id)))).map(
+        (players) => players.length,
+      )
+  const mismatchMessages = header.disciplines.flatMap((candidate, position) => {
+    const seatsHere = seatsByDiscipline[position] ?? seats.length
+    if (seatsHere === candidate.config.squadSize) return []
     const label = single ? null : sportLabel(candidate.kind)
     // `candidate.pairSize` real desde W30: `DisciplineHeader` ya trae
     // `pair_size` del mismo select que `config`.
-    return validateConfig({ ...candidate.config, squadSize: seats.length }, candidate.pairSize).map(
+    return validateConfig({ ...candidate.config, squadSize: seatsHere }, candidate.pairSize).map(
       (message, index) => ({
         key: `${candidate.id}-${index}`,
         text: label === null ? message : `${label}: ${message}`,

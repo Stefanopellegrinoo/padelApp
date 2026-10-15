@@ -74,6 +74,10 @@ const escena = vi.hoisted(() => ({
   // El texto libre de CADA disciplina para Ajustes (`disciplineRulesOf`).
   // Reglas ya no lo lee: su texto sale de `publicFormats[].rulesText`.
   rulesByDiscipline: new Map<DisciplineId, string>(),
+  // El plantel de la temporada (`seasonSquadMembersOf`) y quién juega cada disciplina
+  // (`squadSeedOrder`): vacíos salvo en el aviso de puntos de Ajustes.
+  squad: [] as { id: string; displayName: string; playerId: string | null }[],
+  playersByDiscipline: new Map<string, string[]>(),
 }))
 
 vi.mock('@/db/server', () => ({
@@ -126,7 +130,7 @@ vi.mock('@/db/read', async (importOriginal) => {
     // `seasonMatchdaysOf` (temporada entera) para que `playedCount` del
     // modal de borrar cubra TODAS las disciplinas, no sólo la primera.
     seasonMatchdaysOf: async () => [],
-    seasonSquadMembersOf: async () => [],
+    seasonSquadMembersOf: async () => escena.squad,
     playerNames: async () => new Map<string, string>(),
   }
 })
@@ -137,6 +141,11 @@ vi.mock('@/db/read', async (importOriginal) => {
 vi.mock('@/db/discipline', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/db/discipline')>()),
   disciplineConfig: async () => ({ fixedTeams: false }),
+}))
+
+vi.mock('@/db/season', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/db/season')>()),
+  squadSeedOrder: async (_supabase: unknown, disciplineId: string) => escena.playersByDiscipline.get(disciplineId) ?? [],
 }))
 
 const PADEL = defaultConfig(8)
@@ -473,5 +482,34 @@ describe('Reglas SIN SESIÓN — la mitad pública, que es la que faltaba', () =
     escena.publicFormats = []
     const html = await reglas([])
     expect(html).toContain('necesitás el link que te pasó tu grupo')
+  })
+})
+
+describe('Ajustes — el aviso de puntos cuenta los asientos de CADA deporte, no el plantel entero', () => {
+  const ids = (n: number) => Array.from({ length: n }, (_, index) => `e${index + 1}`)
+  const PADEL_6 = disciplina('d1', 'PADEL', defaultConfig(6))
+  const fifa = (squadSize: number) =>
+    disciplina('d2', 'FIFA', { ...defaultConfig(squadSize, 1), matchFormat: { ...PADEL.matchFormat, openScore: true } })
+
+  function plantel(seats: number, players: Record<string, number>): void {
+    escena.squad = ids(seats).map((id) => ({ id, displayName: id, playerId: null }))
+    escena.playersByDiscipline = new Map(Object.entries(players).map(([id, n]) => [id, ids(n)]))
+  }
+
+  it('un deporte que juegan 5 de los 6 del plantel, con 5 valores de puntos: sin aviso', async () => {
+    plantel(6, { d1: 6, d2: 5 })
+
+    const html = await ajustes([PADEL_6, fifa(5)])
+
+    expect(html).not.toContain('hacen falta')
+  })
+
+  it('un desajuste de verdad (lo juegan 4 y hay 5 valores de puntos) se sigue avisando', async () => {
+    plantel(6, { d1: 6, d2: 4 })
+
+    const html = await ajustes([PADEL_6, fifa(5)])
+
+    expect(html).toContain('FIFA: Con un plantel de 4 hacen falta 4 valores de puntos, no 5.')
+    expect(html).not.toContain('Pádel:')
   })
 })

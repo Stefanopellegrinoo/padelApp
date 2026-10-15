@@ -104,4 +104,13 @@ describe('botones del perdedor — la unidad del deporte y los de ventaja', () =
     expect(html).toContain('Games del perdedor')
     expect(labels.map((b) => b.text)).toEqual(['0', '1', '2', '3'])
   })
+
+  it('cada botón mide al menos 44px de alto (la regla del dedo), en ping pong y en pádel', () => {
+    for (const [format, unit] of [[PING_PONG, 'puntos'], [PADEL, 'games']] as const) {
+      const { html } = botones(format, unit)
+      const clases = [...html.matchAll(/<button[^>]*class="([^"]*)"/g)].map((m) => m[1] ?? '')
+      expect(clases.length).toBeGreaterThan(0)
+      for (const clase of clases) expect(clase.split(' ')).toContain('min-h-[44px]')
+    }
+  })
 })

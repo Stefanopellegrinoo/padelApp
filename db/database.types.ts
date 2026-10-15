@@ -640,6 +640,7 @@ export type Database = {
           formato: Json
           id: string
           kind: string
+          match_format: Json | null
           number: number
           pair_size: number
           played_on: string | null
@@ -653,6 +654,7 @@ export type Database = {
           formato?: Json
           id?: string
           kind?: string
+          match_format?: Json | null
           number: number
           pair_size?: number
           played_on?: string | null
@@ -666,6 +668,7 @@ export type Database = {
           formato?: Json
           id?: string
           kind?: string
+          match_format?: Json | null
           number?: number
           pair_size?: number
           played_on?: string | null

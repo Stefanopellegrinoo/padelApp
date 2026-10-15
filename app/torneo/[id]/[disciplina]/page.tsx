@@ -50,6 +50,7 @@ export default async function DisciplinaTablaPage({ params }: PageProps) {
       matchdays={seasonMatchdays.filter((matchday) => matchday.disciplineId === discipline.id)}
       awardsByMatchday={awardsByDiscipline.get(discipline.id) ?? new Map()}
       teams={teams}
+      fixedTeams={fixedTeams}
     />
   )
 }

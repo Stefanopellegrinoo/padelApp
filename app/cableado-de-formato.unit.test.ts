@@ -35,7 +35,7 @@ import type { DisciplineHeader } from '@/db/read'
  *    son server components `async`: se los llama, se los renderiza con
  *    `renderToStaticMarkup` y se mira el HTML. Los lectores de `@/db/read`
  *    van mockeados; el resto —`primaryDiscipline`, `formatsLabel`,
- *    `steppersFor`, el JSX entero— corre de verdad. Esto mide COMPORTAMIENTO,
+ *    `reglamento`, el JSX entero— corre de verdad. Esto mide COMPORTAMIENTO,
  *    no texto, así que sobrevive a que alguien refactorice el call site.
  *
  * 2. **El paso 4 del wizard se pincha por FUENTE.** `step` es estado interno
@@ -130,6 +130,14 @@ vi.mock('@/db/read', async (importOriginal) => {
     playerNames: async () => new Map<string, string>(),
   }
 })
+
+// `fixedTeams` no viaja en `DisciplineHeader`: el panel de reglas lo lee con `disciplineConfig`
+// (mismo criterio que `[disciplina]/ajustes`). El cliente de esta suite no tiene `from`, así que
+// se mockea sólo ese lector y el resto de `@/db/discipline` es el de verdad.
+vi.mock('@/db/discipline', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/db/discipline')>()),
+  disciplineConfig: async () => ({ fixedTeams: false }),
+}))
 
 const PADEL = defaultConfig(8)
 const FIFA: SeasonConfig = { ...PADEL, matchFormat: { ...PADEL.matchFormat, openScore: true } }
@@ -290,16 +298,16 @@ describe('Reglas con sesión — la página entera, no el componente suelto', ()
 })
 
 /**
- * El panel que edita el formato, tal cual sale al HTML. Antes de Task 4
- * (docs/plan-arquitectura-de-paginas.md) el contenedor dibujaba uno POR
- * DISCIPLINA acá mismo (C36); ahora sólo lo hace con UNA disciplina --
- * con 2+, este panel se mudó a `[disciplina]/ajustes`
- * (`[disciplina]/ajustes/page.unit.test.ts` prueba ese caso). El `id="formato"`
- * (el ancla de la fila de arriba) sigue en el contenedor, no en cada
- * `<section>`.
+ * El panel que cuenta y edita las reglas de un deporte, tal cual sale al HTML. Antes de Task 4
+ * (docs/plan-arquitectura-de-paginas.md) el contenedor dibujaba uno POR DISCIPLINA acá mismo
+ * (C36); ahora sólo lo hace con UNA disciplina -- con 2+, este panel se mudó a
+ * `[disciplina]/ajustes` (`[disciplina]/ajustes/page.unit.test.ts` prueba ese caso). El
+ * `id="formato"` (el ancla de la fila de arriba) sigue en el contenedor, no en cada `<section>`.
+ * Torneos-deportes, Tarea 14: el panel es `ReglasDeporte` (`data-reglas-deporte`), que reemplaza a
+ * "Formato" y "Formato de las fechas".
  */
-function panelDeFormato(html: string): string {
-  return /<section data-formato="[^"]*"[\s\S]*?<\/section>/.exec(html)?.[0] ?? ''
+function panelDeReglas(html: string): string {
+  return /<section data-reglas-deporte="[^"]*"[\s\S]*?<\/section>/.exec(html)?.[0] ?? ''
 }
 
 describe('Ajustes — la página entera', () => {
@@ -312,7 +320,7 @@ describe('Ajustes — la página entera', () => {
 
   /**
    * PIN de no-regresión: un torneo de UNA sola disciplina —o sea todos los
-   * que existen hoy— sigue mostrando el panel de Formato inline, sin sufijo.
+   * que existen hoy— sigue mostrando el panel de reglas inline, sin sufijo.
    * Es la propiedad que Task 4 exige para el caso simple (§5 del diseño).
    *
    * Este `it` sólo fija el título y que el panel exista, no el documento
@@ -320,8 +328,8 @@ describe('Ajustes — la página entera', () => {
    * la Task contra la de después) se hizo a mano una vez, sin harness en el
    * repo para volver a correrlo.
    */
-  it('con una sola disciplina el panel de Formato sigue inline, sin sufijo', async () => {
-    expect(panelDeFormato(await ajustes(SOLO_PADEL))).toContain('>Formato</h2>')
+  it('con una sola disciplina el panel de reglas sigue inline, sin sufijo', async () => {
+    expect(panelDeReglas(await ajustes(SOLO_PADEL))).toContain('Reglas de Pádel')
   })
 
   /**
@@ -332,10 +340,10 @@ describe('Ajustes — la página entera', () => {
    * no se dibuja, en vez de quedar apuntando a un `#formato` que ya no
    * existe acá (el defecto medido: el ancla siempre caía en la [0]).
    */
-  it('con 2+ disciplinas la fila y el panel de Formato desaparecen del contenedor', async () => {
+  it('con 2+ disciplinas la fila y el panel de reglas desaparecen del contenedor', async () => {
     const html = await ajustes(PADEL_Y_FIFA)
     expect(html).not.toContain('Formato')
-    expect(panelDeFormato(html)).toBe('')
+    expect(panelDeReglas(html)).toBe('')
   })
 
   /**
@@ -402,7 +410,7 @@ describe('el paso 4 del wizard — el cableado que ningún render alcanza', () =
   /**
    * M-A. `picked` es el argumento del que depende W63: con una lista fija el
    * paso 4 vuelve a ofrecer sets y games en una liga de solo FIFA, y los
-   * cuatro tests de `steppersFor` y los tres de `PasoFormato` siguen verdes
+   * cuatro tests de los steppers y los tres de `PasoFormato` siguen verdes
    * porque el módulo está bien y lo que está mal es lo que le entra.
    *
    * Task 5 (docs/plan-arquitectura-de-paginas.md): `PasoFormato` dejó de

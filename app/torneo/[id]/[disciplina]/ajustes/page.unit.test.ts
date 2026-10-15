@@ -5,8 +5,8 @@ import type { DisciplineHeader, SquadMember } from '@/db/read'
 
 /**
  * Task 4 (docs/plan-arquitectura-de-paginas.md; docs/arquitectura-de-paginas.md
- * §2.5/§3.2): con 2+ disciplinas, los paneles de Formato/FormatoDefault/
- * Reglas que el contenedor mostraba por disciplina (`../../ajustes/page.tsx`,
+ * §2.5/§3.2): con 2+ disciplinas, los paneles de reglas del deporte (`ReglasDeporte`, que
+ * reemplaza a Formato/FormatoDefault) y el texto libre que el contenedor mostraba por disciplina (`../../ajustes/page.tsx`,
  * ver `app/cableado-de-formato.unit.test.ts`) se mudan acá, una URL por
  * disciplina -- mismo patrón que Stats (Task 1) y el perfil (Task 2):
  * resolver por slug, `notFound()` si no existe, y acá además la guarda de
@@ -18,8 +18,8 @@ import type { DisciplineHeader, SquadMember } from '@/db/read'
  * prueba acá -- `renderToStaticMarkup` descarta los props de evento -- sino
  * en `quien-juega.unit.test.ts` (jsdom, click de verdad). Lo que ACÁ se pinea
  * es que la página le pasa el `disciplineId` CORRECTO a `QuienJuega`, con el
- * mismo truco que ya usan `Formato`/`FormatoDefault` (`data-formato`,
- * `data-formato-default`): un atributo `data-quien-juega` con el id real.
+ * mismo truco que ya usa `ReglasDeporte` (`data-reglas-deporte`): un atributo
+ * `data-quien-juega` con el id real.
  */
 
 const D_PADEL = 'd-padel' as DisciplineId
@@ -143,26 +143,22 @@ async function render(disciplina: string): Promise<string> {
 }
 
 describe('Ajustes de una disciplina trae los datos de la disciplina de la URL, no la [0]', () => {
-  it('con el slug de la SEGUNDA disciplina (fifa), edita FIFA: nombra el Masters apagado y no dibuja los steppers de sets', async () => {
+  it('con el slug de la SEGUNDA disciplina (fifa), edita FIFA: sin Masters ni sets, y guarda en FIFA', async () => {
     escena.disciplines = PADEL_Y_FIFA
     const html = await render('fifa')
 
     expect(html).toContain('>Ajustes · FIFA</h1>')
-    expect(html).not.toContain('Sets por partido')
-    expect(html).toContain('Una disciplina de a uno no juega Masters')
+    expect(html).toContain('Reglas de FIFA')
+    expect(html).toContain('Partidos a goles; se puede empatar.')
+    expect(html).not.toContain('Masters')
 
-    // El SAVE TARGET, no sólo lo que se lee: `data-formato`/`data-formato-default`
-    // (`ajustes/formato.tsx:95`, `ajustes/formato-default.tsx:104`) llevan el
-    // `disciplineId` real que reciben `Formato`/`FormatoDefault` -- si esta
-    // página mutara los tres props a `disciplines[0]`, seguiría leyéndose y
-    // viéndose bien (FIFA es a uno, sin steppers de sets, igual que arriba)
-    // pero cada `save*` (`ajustes/actions.ts`) guardaría en Pádel. Mismo
-    // defecto que C36 (`app/cableado-de-formato.unit.test.ts`), en el
-    // write path de esta ruta.
-    expect(html).toContain('data-formato="d-fifa"')
-    expect(html).not.toContain('data-formato="d-padel"')
-    expect(html).toContain('data-formato-default="d-fifa"')
-    expect(html).not.toContain('data-formato-default="d-padel"')
+    // El SAVE TARGET, no sólo lo que se lee: `data-reglas-deporte`
+    // (`ajustes/reglas-deporte.tsx`) lleva el `disciplineId` real que recibe `ReglasDeporte` --
+    // si esta página mutara los props a `disciplines[0]`, seguiría leyéndose y viéndose bien
+    // pero "Listo" (`saveDisciplineRules`, `ajustes/actions.ts`) guardaría en Pádel. Mismo
+    // defecto que C36 (`app/cableado-de-formato.unit.test.ts`), en el write path de esta ruta.
+    expect(html).toContain('data-reglas-deporte="d-fifa"')
+    expect(html).not.toContain('data-reglas-deporte="d-padel"')
 
     // Mismo pin, para `QuienJuega` (ronda de fix, BLOQUEA 1 parte 2): sin
     // esto, `page.tsx` pasando `header.disciplines[last].id` en vez de
@@ -181,20 +177,19 @@ describe('Ajustes de una disciplina trae los datos de la disciplina de la URL, n
     expect(html).not.toContain('data-quien-juega-label="Pádel"')
   })
 
-  it('con el slug de la PRIMERA disciplina (padel), edita Pádel: dibuja sus cinco steppers', async () => {
+  it('con el slug de la PRIMERA disciplina (padel), edita Pádel: cuenta sus reglas', async () => {
     escena.disciplines = PADEL_Y_FIFA
     const html = await render('padel')
 
     expect(html).toContain('>Ajustes · Pádel</h1>')
-    expect(html).toContain('Sets por partido')
-    expect(html).not.toContain('Una disciplina de a uno no juega Masters')
+    expect(html).toContain('Reglas de Pádel')
+    expect(html).toContain('Partidos a 1 set de 4 games.')
+    expect(html).toContain('Masters al final con los 4 mejores.')
 
     // Mismo pin que arriba, del otro lado: si la mutación fuera al revés
     // (`disciplines[1]` fijo), esta URL guardaría en FIFA.
-    expect(html).toContain('data-formato="d-padel"')
-    expect(html).not.toContain('data-formato="d-fifa"')
-    expect(html).toContain('data-formato-default="d-padel"')
-    expect(html).not.toContain('data-formato-default="d-fifa"')
+    expect(html).toContain('data-reglas-deporte="d-padel"')
+    expect(html).not.toContain('data-reglas-deporte="d-fifa"')
 
     // Mismo pin que arriba, del otro lado, para `QuienJuega`.
     expect(html).toContain('data-quien-juega="d-padel"')
@@ -226,8 +221,8 @@ describe('Ajustes de una disciplina trae los datos de la disciplina de la URL, n
   })
 })
 
-describe('Ajustes de una disciplina — cada panel guarda SU PROPIO formatoDefault (mismo defecto que C36)', () => {
-  it('con formatoDefault DISTINTO por disciplina, cada URL marca el radio de la SUYA, no el de la otra', async () => {
+describe('Ajustes de una disciplina — cada panel cuenta SU PROPIO formatoDefault (mismo defecto que C36)', () => {
+  it('con formatoDefault DISTINTO por disciplina, cada URL cuenta el de la SUYA, no el de la otra', async () => {
     escena.disciplines = [
       disciplina(D_PADEL, 'PADEL', PADEL_CONFIG),
       disciplina(D_FIFA, 'FIFA', FIFA_CONFIG, { kind: 'GROUPS_KNOCKOUT', groups: 4, qualifiersPerGroup: 2 }),
@@ -237,17 +232,13 @@ describe('Ajustes de una disciplina — cada panel guarda SU PROPIO formatoDefau
     const fifa = await render('fifa')
 
     // Pádel quedó en el default (ROUND_ROBIN).
-    const radiosPadel = [...padel.matchAll(/<input[^>]*type="radio"[^>]*\/>/g)].map((match) => match[0])
-    expect(radiosPadel[0]).toContain('checked')
-    expect(radiosPadel[1]).not.toContain('checked')
-    expect(radiosPadel[2]).not.toContain('checked')
+    expect(padel).toContain('Cada fecha, todos contra todos.')
+    expect(padel).not.toContain('4 grupos + llave')
 
-    // FIFA se armó con "4 grupos + llave": si esta página le pasara el
-    // formatoDefault de Pádel a las dos URLs, acá marcaría el primero.
-    const radiosFifa = [...fifa.matchAll(/<input[^>]*type="radio"[^>]*\/>/g)].map((match) => match[0])
-    expect(radiosFifa[0]).not.toContain('checked')
-    expect(radiosFifa[1]).not.toContain('checked')
-    expect(radiosFifa[2]).toContain('checked')
+    // FIFA se armó con "4 grupos + llave": si esta página le pasara el formatoDefault de Pádel
+    // a las dos URLs, acá diría "todos contra todos".
+    expect(fifa).toContain('Cada fecha, 4 grupos + llave.')
+    expect(fifa).not.toContain('todos contra todos')
   })
 })
 

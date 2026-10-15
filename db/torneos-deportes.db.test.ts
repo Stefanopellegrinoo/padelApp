@@ -1,8 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
-import { defaultConfig, type DisciplineId, type SeasonConfig } from '@/core'
+import { defaultConfig, type DisciplineId, type MatchdayFormatSetting, type SeasonConfig } from '@/core'
 import type { Client } from './client'
 import type { Json } from './database.types'
-import { addDiscipline, updateDisciplineConfig, updateDisciplineFormatoDefault } from './discipline'
+import {
+  addDiscipline,
+  updateDisciplineConfig,
+  updateDisciplineFormatoDefault,
+  writeDisciplineRules,
+} from './discipline'
 import { teamsOf } from './discipline-teams'
 import { EdgeError } from './errors'
 import {
@@ -693,5 +698,107 @@ describe('createSeason: sorteo, "igual que" y parejas se validan antes de escrib
     expect(caught).toBeInstanceOf(EdgeError)
     expect((caught as EdgeError).message).toBe(message)
     expect(await seasonRowsOf(admin.userId)).toBe(0)
+  })
+})
+
+// ── Tarea 14: Ajustes escribe las reglas de un deporte con la misma hoja que el wizard.
+
+/**
+ * `writeDisciplineRules` es lo que hay detrás de "Listo" en Ajustes: compara lo que la hoja
+ * abrió (`before`) con lo que quedó (`next`) y escribe sólo lo que cambió. Un Server Action no
+ * se puede llamar desde acá (`next/headers`), así que se prueba su función por su efecto en la
+ * base, con un cliente autenticado de verdad.
+ */
+describe('writeDisciplineRules: sólo lo que cambió, en orden config → Masters → fecha (§5)', () => {
+  async function rowOf(disciplineId: DisciplineId) {
+    const { data, error } = await adminClient()
+      .from('disciplines')
+      .select('config, has_masters, formato_default')
+      .eq('id', disciplineId)
+      .single()
+    if (error || data === null) throw new Error(error?.message)
+    return data
+  }
+
+  /** Un Pádel de 8 con lo de siempre (ROUND_ROBIN y Masters), y las reglas tal cual las abre la hoja. */
+  async function padelScene() {
+    const admin = await createTestUser()
+    const { disciplineId } = await createSeason({ admin })
+    const row = await rowOf(disciplineId)
+    const before = {
+      config: row.config as unknown as SeasonConfig,
+      hasMasters: row.has_masters,
+      formatoDefault: row.formato_default as unknown as MatchdayFormatSetting,
+    }
+    expect(before).toMatchObject({ hasMasters: true, formatoDefault: { kind: 'ROUND_ROBIN' } })
+    return { admin, disciplineId, before }
+  }
+
+  it('before === next no escribe nada: lo que alguien dejó en la base mientras tanto queda como está', async () => {
+    const { admin, disciplineId, before } = await padelScene()
+    // Un cambio por afuera: si `writeDisciplineRules` escribiera igual, lo pisaría con `before`.
+    const { error } = await adminClient()
+      .from('disciplines')
+      .update({ has_masters: false, formato_default: { kind: 'AUTO' } })
+      .eq('id', disciplineId)
+    expect(error).toBeNull()
+
+    await writeDisciplineRules(admin.client, disciplineId, before, structuredClone(before))
+
+    const row = await rowOf(disciplineId)
+    expect(row.has_masters).toBe(false)
+    expect(row.formato_default).toEqual({ kind: 'AUTO' })
+  })
+
+  it('cambiar hasMasters y formatoDefault a AUTO escribe las dos columnas y deja la config', async () => {
+    const { admin, disciplineId, before } = await padelScene()
+
+    await writeDisciplineRules(admin.client, disciplineId, before, {
+      ...before,
+      hasMasters: false,
+      formatoDefault: { kind: 'AUTO' },
+    })
+
+    const row = await rowOf(disciplineId)
+    expect(row.has_masters).toBe(false)
+    expect(row.formato_default).toEqual({ kind: 'AUTO' })
+    expect(row.config).toEqual(before.config)
+  })
+
+  it('cambiar sólo la config no toca Masters ni la fecha por default', async () => {
+    const { admin, disciplineId, before } = await padelScene()
+    const { error } = await adminClient()
+      .from('disciplines')
+      .update({ has_masters: false, formato_default: { kind: 'AUTO' } })
+      .eq('id', disciplineId)
+    expect(error).toBeNull()
+    const config = { ...before.config, regularMatchdays: 12, countBestOf: 9 }
+
+    await writeDisciplineRules(admin.client, disciplineId, before, { ...before, config })
+
+    const row = await rowOf(disciplineId)
+    expect(row.config).toEqual(config)
+    expect(row.has_masters).toBe(false)
+    expect(row.formato_default).toEqual({ kind: 'AUTO' })
+  })
+
+  it('countBestOf > regularMatchdays: assertValidConfig lo rechaza y no se escribe nada, tampoco lo demás', async () => {
+    const { admin, disciplineId, before } = await padelScene()
+    const config = { ...before.config, regularMatchdays: 6, countBestOf: 7 }
+
+    const caught = await writeDisciplineRules(admin.client, disciplineId, before, {
+      config,
+      hasMasters: false,
+      formatoDefault: { kind: 'AUTO' },
+    }).then(
+      () => undefined,
+      (error: unknown) => error,
+    )
+
+    expect(caught).toBeInstanceOf(EdgeError)
+    const row = await rowOf(disciplineId)
+    expect(row.config).toEqual(before.config)
+    expect(row.has_masters).toBe(true)
+    expect(row.formato_default).toEqual({ kind: 'ROUND_ROBIN' })
   })
 })

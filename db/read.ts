@@ -66,8 +66,8 @@ export interface DisciplineHeader {
    * `disciplines.formato_default` real (0074, docs/tipos-de-torneo.md §2.5)
    * -- mismo select que `pairSize`/`hasMasters`/`allowsDraw`, una columna
    * más. Es el default del que hereda cada fecha nueva (`createMatchday`,
-   * `db/matchday.ts`); Ajustes lo necesita para dibujar el radio que lo
-   * edita (`FormatoDefault`, `app/torneo/[id]/ajustes/formato-default.tsx`).
+   * `db/matchday.ts`); Ajustes lo necesita para contarlo y abrir la hoja que lo
+   * edita (`ReglasDeporte`, `app/torneo/[id]/ajustes/reglas-deporte.tsx`).
    */
   formatoDefault: MatchdayFormatSetting
 }

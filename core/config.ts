@@ -55,7 +55,7 @@ const DEFAULT_POINTS: Record<number, number[]> = {
   // vez, y sin semilla acá `defaultConfig` devolvía `points: []` y
   // `pointsCountError` lo rechazaba. El creador la edita puesto por puesto en
   // el wizard (app/torneos/nuevo/wizard.tsx:311-325) y después en ajustes
-  // (app/torneo/[id]/ajustes/formato.tsx:103-113) — lo único que tiene que
+  // (la hoja "Personalizar reglas", app/deporte/personalizar-reglas.tsx) — lo único que tiene que
   // respetar la semilla es `pointsErrors`, más abajo.
   2: [10, 6],
   3: [10, 6, 3],

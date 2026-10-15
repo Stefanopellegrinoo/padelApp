@@ -1,8 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
 import { resolveDisciplineBySlug, sportLabel, validateConfig } from '@/core'
-import { Formato } from '@/app/torneo/[id]/ajustes/formato'
-import { FormatoDefault } from '@/app/torneo/[id]/ajustes/formato-default'
 import { Reglas } from '@/app/torneo/[id]/ajustes/reglas'
+import { ReglasDeporte } from '@/app/torneo/[id]/ajustes/reglas-deporte'
 import { Volver } from '@/app/torneo/[id]/volver'
 import { disciplineConfig } from '@/db/discipline'
 import { teamsOf } from '@/db/discipline-teams'
@@ -18,9 +17,10 @@ interface PageProps {
 
 /**
  * Ajustes de UNA disciplina (Task 4, docs/plan-arquitectura-de-paginas.md;
- * docs/arquitectura-de-paginas.md §2.5/§3.2). Su config (puntos y steppers),
- * Masters, formato por defecto de las fechas, reglas, y "Quién juega" — las
- * cinco cosas que §3.2 pone del lado de `disciplines`, no de `seasons`. Y
+ * docs/arquitectura-de-paginas.md §2.5/§3.2). Sus reglas (`ReglasDeporte`: config,
+ * Masters y formato por defecto de las fechas, con la hoja "Personalizar reglas"),
+ * el texto de la casa, y "Quién juega" — lo que §3.2 pone del lado de
+ * `disciplines`, no de `seasons`. Y
  * Equipos, que §3.2 no enumera por columna (esa tabla es anterior a
  * `discipline_teams`) pero es igual de "del lado de `disciplines`": el
  * diseño de esa sección vive en `docs/tipos-de-torneo.md` §1, no en §3.2.
@@ -47,16 +47,16 @@ interface PageProps {
  * la ruta funciona igual si se entra por URL directa, mismo criterio que el
  * resto de `[disciplina]/*` (`stats`, `jugador/[entryId]`, `fechas`).
  *
- * Reusa `Formato`/`FormatoDefault`/`Reglas` TAL CUAL: son los mismos paneles
- * que el contenedor ya usaba por disciplina antes de esta Task, con
- * `disciplineLabel: null` porque acá no hace falta desambiguar — el título
- * de la página ya nombra la disciplina cuando hace falta (2+).
+ * Reusa `ReglasDeporte`/`Reglas` TAL CUAL: son los mismos paneles que el
+ * contenedor usa con una sola disciplina; `Reglas` lleva `disciplineLabel: null`
+ * porque acá no hace falta desambiguar — el título de la página ya nombra la
+ * disciplina cuando hace falta (2+).
  *
  * La guarda es `header.isAdmin`, igual que el contenedor
  * (`../../ajustes/page.tsx`) — cortesía de UI, no la guarda de verdad: las
- * cuatro escrituras de estos paneles (`saveConfig`, `saveHasMasters`,
- * `saveFormatoDefault`, `saveRules`, en `../../ajustes/actions.ts`) pasan
- * por `disciplines_write` (`is_season_admin`, RLS) con `count: 'exact'` —
+ * dos escrituras de estos paneles (`saveDisciplineRules`, `saveRules`, en
+ * `../../ajustes/actions.ts`) pasan por `disciplines_write`
+ * (`is_season_admin`, RLS) con `count: 'exact'` —
  * un no-admin que se saltee esta redirección igual se queda sin poder
  * guardar nada. Las dos de "Quién juega" (`addDisciplineMember`,
  * `dropDisciplineMember`) pasan por `discipline_entries_write`
@@ -185,25 +185,19 @@ export default async function DisciplinaAjustesPage({ params }: PageProps) {
         </p>
       ))}
 
-      <Formato
+      <ReglasDeporte
         seasonId={seasonId}
         disciplineId={discipline.id}
-        config={discipline.config}
+        kind={discipline.kind}
         pairSize={discipline.pairSize}
-        hasMasters={discipline.hasMasters}
-        disciplineLabel={null}
+        fixedTeams={fixedTeams}
+        allowsDraw={discipline.allowsDraw}
+        rules={{ config: discipline.config, hasMasters: discipline.hasMasters, formatoDefault: discipline.formatoDefault }}
       />
 
       <p className="text-[11.5px] font-[600] text-muted">
         Cambiar el formato con fechas ya jugadas no recalcula la tabla vieja.
       </p>
-
-      <FormatoDefault
-        seasonId={seasonId}
-        disciplineId={discipline.id}
-        formatoDefault={discipline.formatoDefault}
-        disciplineLabel={null}
-      />
 
       <Reglas
         seasonId={seasonId}

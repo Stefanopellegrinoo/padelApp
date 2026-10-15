@@ -6,7 +6,8 @@ import { renderAdminMarkdown } from '@/app/torneo/[id]/reglas/markdown'
 import { saveRules } from './actions'
 
 /**
- * El texto libre del admin, con vista previa.
+ * "Reglas de la casa": el texto libre del admin (`rules_text`), con vista previa. Las reglas del
+ * juego en sí son de `ReglasDeporte`.
  *
  * La vista previa usa `renderAdminMarkdown`, la MISMA función que la pantalla
  * pública: lo que el admin ve mientras escribe es exactamente lo que va a ver
@@ -24,7 +25,7 @@ export function Reglas({
   seasonId: string
   disciplineId: DisciplineId
   text: string
-  /** `null` con una sola disciplina -- mismo contrato que `Formato.disciplineLabel`. */
+  /** `null` con una sola disciplina: no hay nada que desambiguar. */
   disciplineLabel: string | null
 }) {
   const [draft, setDraft] = useState(text)
@@ -34,7 +35,7 @@ export function Reglas({
   return (
     <section className="flex flex-col gap-2">
       <h2 className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
-        {disciplineLabel === null ? 'Texto de reglas' : `Texto de reglas · ${disciplineLabel}`}
+        {disciplineLabel === null ? 'Reglas de la casa' : `Reglas de la casa · ${disciplineLabel}`}
       </h2>
 
       <textarea

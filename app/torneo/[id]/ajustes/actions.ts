@@ -2,15 +2,10 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import type { DisciplineId, MatchdayFormat, SeasonConfig, SideSize } from '@/core'
+import type { DisciplineId, SideSize } from '@/core'
+import type { DisciplineRules } from '@/app/deporte/personalizar-reglas-state'
 import { type DisciplineKind, newDisciplineSpec } from '@/app/torneos/nuevo/wizard-state'
-import {
-  addDiscipline,
-  updateDisciplineConfig,
-  updateDisciplineFormatoDefault,
-  updateDisciplineHasMasters,
-  updateDisciplineRules,
-} from '@/db/discipline'
+import { addDiscipline, updateDisciplineRules, writeDisciplineRules } from '@/db/discipline'
 import { addToDiscipline, removeFromDiscipline } from '@/db/discipline-entries'
 import { createTeam, deleteTeam } from '@/db/discipline-teams'
 import { addSquadSeat, claimOwnSeat, removeSeat, renameSeat, unlinkSeat } from '@/db/entries'
@@ -129,64 +124,27 @@ export async function dropSeat(seasonId: string, entryId: string): Promise<Write
 }
 
 /**
- * Guarda al toque de cada `−`/`+`. `assertValidConfig` corre adentro y su
- * mensaje se muestra en línea.
+ * "Listo" de la hoja "Personalizar reglas" (docs/torneos-deportes.md §5): escribe sólo lo que
+ * cambió entre lo que la hoja abrió (`before`) y lo que quedó (`next`). El diff y el orden
+ * (config, Masters, fecha por default) viven en `writeDisciplineRules` (`db/discipline.ts`), que
+ * se prueba contra la base; acá va el cliente de la sesión y la revalidación.
  *
- * Escribe `disciplines.config`, no `seasons.config` (PR 5/6): `seasonHeader`
- * ya no lee de la temporada, así que escribir ahí dejaría la pantalla
- * mostrando el valor viejo después de guardar.
- */
-export async function saveConfig(
-  seasonId: string,
-  disciplineId: DisciplineId,
-  config: SeasonConfig,
-): Promise<WriteResult> {
-  return onSeason(seasonId, async (supabase) => {
-    await updateDisciplineConfig(supabase, disciplineId, config)
-  })
-}
-
-/**
- * Decisión #4029, parte 2: el organizador puede cambiar `has_masters` desde
- * Ajustes. El guard de la parte 3 (no encender en una disciplina de a uno)
- * corre adentro de `updateDisciplineHasMasters` y también en la base
- * (`disciplines_has_masters_needs_pair`, 0053) — acá sólo se muestra el
- * mensaje.
- */
-export async function saveHasMasters(
-  seasonId: string,
-  disciplineId: DisciplineId,
-  hasMasters: boolean,
-): Promise<WriteResult> {
-  return onSeason(seasonId, async (supabase) => {
-    await updateDisciplineHasMasters(supabase, disciplineId, hasMasters)
-  })
-}
-
-/**
- * El formato con el que nace cada fecha nueva de esta disciplina (§2.5).
- * `updateDisciplineFormatoDefault` no filtra por ofrecible -- ese guard
- * sigue viviendo en `setMatchdayFormat`, al armar la fecha.
+ * Escribe `disciplines.*`, no `seasons.config` (PR 5/6): `seasonHeader` ya no lee de la
+ * temporada. `assertValidConfig` corre adentro y su mensaje vuelve a la hoja.
  *
- * ponytail: sin guard de FORMA acá antes de escribir (a diferencia de
- * `saveConfig`, que corre `assertValidConfig`). Las tres `OPCIONES` que
- * ofrece `FormatoDefault` (`ajustes/formato-default.tsx`) nunca arman un
- * valor fuera del CHECK `disciplines_formato_default_kind` (0074), y sólo
- * un season admin llega hasta acá (RLS) -- por eso no hace falta hoy. Pero
- * un valor armado a mano por fuera de esas tres opciones SÍ llega hasta
- * acá, y lo que vuelve en el cartel rojo es el mensaje crudo de Postgres
- * (violación del CHECK o de la NOT NULL, en inglés, con el nombre de la
- * tabla) -- no uno pensado para la pantalla. Upgrade si hace falta: un
- * guard de forma en `updateDisciplineFormatoDefault` (`db/discipline.ts`)
- * que tire un `EdgeError` en español antes del `update`.
+ * ponytail: sin guard de FORMA del `formatoDefault` acá. La hoja sólo arma las tres opciones que
+ * acepta el CHECK `disciplines_formato_default_kind` (0074/0095), y sólo quien organiza llega
+ * hasta acá (RLS); un valor armado a mano volvería como el mensaje crudo de Postgres. Si hace
+ * falta: un guard de forma en `updateDisciplineFormatoDefault` que tire un `EdgeError` en español.
  */
-export async function saveFormatoDefault(
+export async function saveDisciplineRules(
   seasonId: string,
   disciplineId: DisciplineId,
-  formato: MatchdayFormat,
+  before: DisciplineRules,
+  next: DisciplineRules,
 ): Promise<WriteResult> {
   return onSeason(seasonId, async (supabase) => {
-    await updateDisciplineFormatoDefault(supabase, disciplineId, formato)
+    await writeDisciplineRules(supabase, disciplineId, before, next)
   })
 }
 

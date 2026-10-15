@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { disciplineSlugs, formatsLabel, sportLabel, unitOf, validateConfig } from '@/core'
+import { disciplineConfig } from '@/db/discipline'
 import {
   disciplineRulesOf,
   myEntryId,
@@ -14,10 +15,9 @@ import { CargaDeJugadores } from './carga-jugadores'
 import { CopiarLink } from './copiar'
 import { Disciplinas } from './disciplinas'
 import { EliminarTorneo } from './eliminar'
-import { Formato } from './formato'
-import { FormatoDefault } from './formato-default'
 import { Plantel, type SeatVM } from './plantel'
 import { Reglas } from './reglas'
+import { ReglasDeporte } from './reglas-deporte'
 import { Volver } from '../volver'
 
 interface PageProps {
@@ -37,8 +37,8 @@ const VALUE = 'shrink-0 text-[13px] font-[750] text-muted'
  * de `disciplines`.
  *
  * Con una sola disciplina —el 100% de los torneos que existen hoy— esta
- * misma pantalla sigue mostrando SUS paneles (Formato, Formato de las
- * fechas, Reglas) inline, como hacía antes de esta Task: partir Ajustes en
+ * misma pantalla sigue mostrando SUS paneles (las reglas del deporte y el
+ * texto de la casa) inline, como hacía antes de esta Task: partir Ajustes en
  * dos para el caso simple sería cobrarle a ese 100% un peaje por el 0% que
  * hoy tiene 2+. Con 2+, esos paneles se mudan a `[disciplina]/ajustes` y
  * acá sólo queda el link de cada una (`<Disciplinas>` más abajo).
@@ -89,7 +89,11 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
   // paneles inline (ver el docblock de arriba); con 2+, se muestran en
   // `[disciplina]/ajustes`.
   const single = header.disciplines.length === 1
+  const only = single ? header.disciplines[0] : undefined
   const slugs = disciplineSlugs(header.disciplines)
+  // `fixedTeams` no viaja en `DisciplineHeader`: se pide con `disciplineConfig`, igual que
+  // `[disciplina]/ajustes`. Sólo con una disciplina; con 2+ las reglas viven allá.
+  const fixedTeams = only === undefined ? false : (await disciplineConfig(supabase, only.id)).fixedTeams
 
   const owners = await playerNames(
     supabase,
@@ -244,54 +248,24 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
       ))}
 
       <Plantel seasonId={seasonId} seats={seats} canTakeSeat={myEntry === null} />
-      {/* Task 4: este bloque sólo se dibuja con una sola disciplina —con
-          2+, `header.disciplines.map` haría un panel POR disciplina acá
-          mismo, que es justo la mezcla de alturas que esta Task saca del
-          contenedor (§2.5 del diseño). Con una, el `.map` de abajo produce
-          exactamente UN panel: mismo componente y mismos props que antes de
-          esta Task, salvo `disciplineLabel` (ver abajo). No hay un harness
-          en el repo para re-verificar el HTML byte a byte -- el único
-          chequeo automatizado de esta rama es
-          `app/cableado-de-formato.unit.test.ts` ("con una sola disciplina
-          el panel de Formato sigue inline, sin sufijo"), que fija el
-          título y que el panel exista, no el documento entero.
+      {/* Task 4: este bloque sólo se dibuja con una sola disciplina —con 2+, una tarjeta por
+          disciplina acá mismo sería la mezcla de alturas que esta Task saca del contenedor
+          (§2.5 del diseño); con 2+ viven en `[disciplina]/ajustes`. Torneos-deportes, Tarea 14:
+          la tarjeta `ReglasDeporte` reemplaza a los paneles "Formato" y "Formato de las fechas".
 
-          `disciplineLabel` es `null` a mano y no la ternaria de antes: con
-          `single` ya sabemos que hay una sola disciplina, así que
-          `header.disciplines.length > 1` siempre daba `null` acá — literal
-          es lo mismo, sin la comparación de más.
-
-          El `id="formato"` va en este `<div>` y no en cada `<section>` de
-          `Formato`: con más de una habría un `id` repetido, y este bloque
-          sólo existe cuando hay una. */}
-      {single && (
-        <div id="formato" className="flex flex-col gap-5 scroll-mt-4">
-          {header.disciplines.map((candidate) => (
-            <Formato
-              key={candidate.id}
-              seasonId={seasonId}
-              disciplineId={candidate.id}
-              config={candidate.config}
-              pairSize={candidate.pairSize}
-              hasMasters={candidate.hasMasters}
-              disciplineLabel={null}
-            />
-          ))}
-        </div>
-      )}
-      {/* Mismo criterio que el bloque de `Formato` de arriba: con 2+ este
-          panel se muestra en `[disciplina]/ajustes`, no acá. */}
-      {single && (
-        <div className="flex flex-col gap-5">
-          {header.disciplines.map((candidate) => (
-            <FormatoDefault
-              key={candidate.id}
-              seasonId={seasonId}
-              disciplineId={candidate.id}
-              formatoDefault={candidate.formatoDefault}
-              disciplineLabel={null}
-            />
-          ))}
+          El `id="formato"` va en este `<div>` y no en la tarjeta: es el ancla de la fila "Formato"
+          de arriba, y este bloque sólo existe cuando hay una disciplina. */}
+      {only !== undefined && (
+        <div id="formato" className="scroll-mt-4">
+          <ReglasDeporte
+            seasonId={seasonId}
+            disciplineId={only.id}
+            kind={only.kind}
+            pairSize={only.pairSize}
+            fixedTeams={fixedTeams}
+            allowsDraw={only.allowsDraw}
+            rules={{ config: only.config, hasMasters: only.hasMasters, formatoDefault: only.formatoDefault }}
+          />
         </div>
       )}
       <Disciplinas
@@ -303,8 +277,8 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
         }))}
         squad={squadMembers.map((member) => ({ entryId: member.id, name: member.displayName }))}
       />
-      {/* Mismo criterio que los dos bloques de arriba: con 2+ el editor de
-          reglas de cada disciplina vive en `[disciplina]/ajustes`, no acá. */}
+      {/* Mismo criterio que el bloque de reglas de arriba: con 2+ el texto de la casa
+          de cada disciplina vive en `[disciplina]/ajustes`, no acá. */}
       {single && (
         <div className="flex flex-col gap-5">
           {header.disciplines.map((candidate) => (

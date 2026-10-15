@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util'
 import { isTournamentSport, sportFormatError } from '@/core'
 import type { DisciplineId, MatchdayFormat, MatchdayFormatSetting, SeasonConfig, SideSize, TournamentSport } from '@/core'
 import type { Client } from './client'
@@ -119,8 +120,8 @@ export async function disciplineConfig(
  *
  * Y NO se arregla comparando la config entera contra `vigente`: la config que
  * llega es la NUEVA, así que cualquier edición legítima difiere. Un lock
- * optimista de verdad necesita saber DE QUÉ PARTIÓ el cliente, y hoy
- * `saveConfig` (`app/torneo/[id]/ajustes/actions.ts`) manda sólo la nueva.
+ * optimista de verdad necesita saber DE QUÉ PARTIÓ el cliente: `writeDisciplineRules`
+ * (más abajo) ya recibe `before`, pero este escritor sólo recibe la nueva.
  *
  * Dos upgrades reales, medidos, el día que haga falta:
  *   · que el cliente mande también la config que leyó y comparar ESA contra
@@ -244,6 +245,45 @@ export async function updateDisciplineFormatoDefault(
   }
   if (count === 0) {
     throw new EdgeError('No se pudo guardar el formato: sólo puede hacerlo quien organiza.')
+  }
+}
+
+/**
+ * Lo que la hoja "Personalizar reglas" edita de una disciplina. Es la misma forma que
+ * `DisciplineRules` (`app/deporte/personalizar-reglas-state.ts`), escrita acá porque `db/` no
+ * importa de `app/`.
+ */
+export interface DisciplineRulesValues {
+  config: SeasonConfig
+  hasMasters: boolean
+  formatoDefault: MatchdayFormatSetting
+}
+
+/**
+ * "Listo" de la hoja en Ajustes (docs/torneos-deportes.md §5): escribe sólo lo que cambió entre
+ * `before` (lo que la hoja abrió) y `next`, con los tres escritores de siempre y en este orden:
+ * config, Masters, fecha por default. Sin cambios no escribe ni lee nada.
+ *
+ * Cada escritor corre sus propias guardas (`assertValidConfig`, el Masters de a uno), y el orden
+ * hace que una config inválida frene antes de tocar lo demás.
+ *
+ * ponytail: tres updates, no una transacción; si falla el segundo, el primero quedó escrito. Si
+ * molesta: una RPC que escriba las tres columnas juntas.
+ */
+export async function writeDisciplineRules(
+  supabase: Client,
+  disciplineId: DisciplineId,
+  before: DisciplineRulesValues,
+  next: DisciplineRulesValues,
+): Promise<void> {
+  if (!isDeepStrictEqual(before.config, next.config)) {
+    await updateDisciplineConfig(supabase, disciplineId, next.config)
+  }
+  if (before.hasMasters !== next.hasMasters) {
+    await updateDisciplineHasMasters(supabase, disciplineId, next.hasMasters)
+  }
+  if (!isDeepStrictEqual(before.formatoDefault, next.formatoDefault)) {
+    await updateDisciplineFormatoDefault(supabase, disciplineId, next.formatoDefault)
   }
 }
 

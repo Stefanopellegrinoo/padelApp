@@ -1,4 +1,5 @@
-import type { DisciplineId, MatchdayFormat, SeasonConfig, SideSize } from '@/core'
+import { isTournamentSport, sportFormatError } from '@/core'
+import type { DisciplineId, MatchdayFormat, SeasonConfig, SideSize, TournamentSport } from '@/core'
 import type { Client } from './client'
 import type { Json } from './database.types'
 import { EdgeError, writeErrorMessage } from './errors'
@@ -320,7 +321,7 @@ export async function updateDisciplineRules(
 
 /** Una disciplina a agregar a un torneo ya en curso — `addDiscipline`, no el wizard. */
 export interface NewDiscipline {
-  kind?: 'PADEL' | 'FIFA'
+  kind?: TournamentSport
   config: SeasonConfig
   /** Mismo contrato que `NewSeasonDiscipline` (db/season.ts): elegido al crear, no derivado de `kind`. Sin especificar, 2. */
   pairSize?: SideSize
@@ -366,6 +367,11 @@ export async function addDiscipline(
   spec: NewDiscipline,
   entryIds?: string[],
 ): Promise<DisciplineId> {
+  // Mismas guardas que `createSeason` (db/season.ts): `kind` viaja del cliente.
+  const kind = spec.kind ?? 'PADEL'
+  if (!isTournamentSport(kind)) throw new EdgeError('Elegí un deporte de la lista.')
+  const formatProblem = sportFormatError(kind, spec.config.matchFormat)
+  if (formatProblem !== null) throw new EdgeError(formatProblem)
   assertValidConfig(spec.config, spec.pairSize ?? 2)
 
   const { data: maxRow, error: maxError } = await supabase
@@ -381,7 +387,7 @@ export async function addDiscipline(
     .from('disciplines')
     .insert({
       season_id: seasonId,
-      kind: spec.kind ?? 'PADEL',
+      kind,
       config: spec.config as unknown as Json,
       position: (maxRow?.position ?? -1) + 1,
       pair_size: spec.pairSize ?? 2,

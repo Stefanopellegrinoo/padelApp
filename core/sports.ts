@@ -162,3 +162,26 @@ export type TournamentSport = (typeof TOURNAMENT_SPORTS)[number]
 export function isTournamentSport(raw: string): raw is TournamentSport {
   return isSportId(raw) && (TOURNAMENT_SPORTS as readonly string[]).includes(raw)
 }
+
+/**
+ * `null` si el formato de partido entra en la ficha. Sólo mira los deportes de sets con `openScore: false`:
+ * los de goles y los marcadores abiertos no tienen perillas (y hay tests que crean FIFA con la config de pádel).
+ */
+export function sportFormatError(
+  kind: string,
+  format: Pick<MatchFormat, 'setsToWin' | 'gamesPerSet' | 'openScore'>,
+): string | null {
+  if (!isSportId(kind)) return 'Elegí un deporte de la lista.'
+  const sport = SPORTS[kind]
+  if (sport.family !== 'sets' || format.openScore) return null
+  const { setsToWin, gamesPerSet } = sport
+  if (format.setsToWin < setsToWin.min || format.setsToWin > setsToWin.max) {
+    return `Los sets para ganar tienen que estar entre ${setsToWin.min} y ${setsToWin.max}.`
+  }
+  if (format.gamesPerSet < gamesPerSet.min || format.gamesPerSet > gamesPerSet.max) {
+    return gamesPerSet.min === gamesPerSet.max
+      ? `Los ${sport.unit} por set son ${gamesPerSet.min}.`
+      : `Los ${sport.unit} por set tienen que estar entre ${gamesPerSet.min} y ${gamesPerSet.max}.`
+  }
+  return null
+}

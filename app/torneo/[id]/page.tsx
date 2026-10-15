@@ -1,9 +1,8 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { computeGlobalRanking, computeRanking, disciplineSlugs, type DisciplineRanking } from '@/core'
+import { computeGlobalRanking, computeRanking, disciplineSlugs, sportLabel, type DisciplineRanking } from '@/core'
 import { seasonAwardsOf, seasonHeader, seasonMatchdaysOf, seasonSquadMembersOf } from '@/db/read'
 import { serverClient } from '@/db/server'
-import { DISCIPLINE_LABELS } from '@/app/torneos/nuevo/wizard-state'
 import { initials } from '@/app/format'
 import { Desempate, type StandingsRow } from './desempate'
 import { singleDisciplineRedirect } from './tabla-state'
@@ -175,7 +174,7 @@ export default async function TablaGlobalPage({ params }: PageProps) {
             href={`/torneo/${seasonId}/${slugOf.get(discipline.id)}`}
             className="flex items-center justify-between rounded-card border border-line bg-surface p-4"
           >
-            <p className="text-[15px] font-extrabold">Tabla de {DISCIPLINE_LABELS[discipline.kind]}</p>
+            <p className="text-[15px] font-extrabold">Tabla de {sportLabel(discipline.kind)}</p>
             <span className="text-muted">{slugOf.get(discipline.id)} ›</span>
           </Link>
         ))}

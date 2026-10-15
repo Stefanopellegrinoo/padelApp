@@ -1,5 +1,14 @@
-import { sideOfRow } from '@/core'
-import type { Award, DisciplineId, EntryId, MatchdayFormat, MatchdayHistory, SeasonConfig, SideSize } from '@/core'
+import { isTournamentSport, sideOfRow, sportFormatError } from '@/core'
+import type {
+  Award,
+  DisciplineId,
+  EntryId,
+  MatchdayFormat,
+  MatchdayHistory,
+  SeasonConfig,
+  SideSize,
+  TournamentSport,
+} from '@/core'
 import type { Database, Json } from './database.types'
 import { EdgeError } from './errors'
 import { assertValidConfig } from './validate'
@@ -232,7 +241,7 @@ function isIndexPermutation(order: readonly number[], length: number): boolean {
 
 /** Una disciplina a crear junto con la temporada. `config` es obligatoria: cada disciplina puede declarar la suya, no hereda de la temporada. */
 export interface NewSeasonDiscipline {
-  kind?: 'PADEL' | 'FIFA'
+  kind?: TournamentSport
   config: SeasonConfig
   /**
    * 1 (lados de a uno) o 2 (parejas), elegido al configurar la disciplina —
@@ -380,6 +389,12 @@ export async function createSeason(
   // por no llegar al piso de a dos (4) — aunque la validación de LA
   // disciplina, la del loop, lo aceptara.
   for (const spec of disciplineSpecs) {
+    // `kind` viaja en el payload del cliente: el CHECK de la base sólo mira la
+    // forma del id (0094), así que un `TEJO` falsificado llega hasta acá.
+    const kind = spec.kind ?? 'PADEL'
+    if (!isTournamentSport(kind)) throw new EdgeError('Elegí un deporte de la lista.')
+    const formatProblem = sportFormatError(kind, spec.config.matchFormat)
+    if (formatProblem !== null) throw new EdgeError(formatProblem)
     assertValidConfig(spec.config, spec.pairSize ?? 2)
     if (squadNames.length !== spec.config.squadSize) {
       throw new EdgeError(

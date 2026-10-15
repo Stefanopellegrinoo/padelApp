@@ -32,7 +32,8 @@ import { defaultDisciplineId } from './season'
 /** Una disciplina, como la necesita un header: sólo lo que una pantalla de config puede llegar a mostrar. */
 export interface DisciplineHeader {
   id: DisciplineId
-  kind: 'PADEL' | 'FIFA'
+  /** Un id del registro de deportes, o uno que ya no esté: se lee igual (`sportLabel` lo muestra tal cual). */
+  kind: string
   config: SeasonConfig
   /**
    * `disciplines.weight` (REQ-D9-1/2, tabla global) — ya `number` desde que
@@ -166,13 +167,12 @@ export interface PublicRules {
 /**
  * Una disciplina vista desde afuera: su tipo y su config, nada más.
  *
- * `kind` va como literal y no como el `DisciplineKind` de `wizard-state`, por
- * lo mismo que `DisciplineHeader.kind` unas líneas más arriba: `db/` no
- * importa de `app/`. La pantalla traduce el literal a etiqueta con
- * `DISCIPLINE_LABELS`, que es donde ese mapa vive.
+ * `kind` va como `string`, igual que `DisciplineHeader.kind` unas líneas más
+ * arriba: cualquier deporte del registro, y un id que no esté se lee igual.
+ * La pantalla lo traduce a etiqueta con `sportLabel`.
  */
 export interface PublicFormat {
-  kind: 'PADEL' | 'FIFA'
+  kind: string
   config: SeasonConfig
   /** `disciplines.rules_text` real (0069) — la prosa libre de ESA disciplina, no la de `seasons`. */
   rulesText: string
@@ -282,7 +282,7 @@ async function currentUserId(supabase: Client): Promise<string | null> {
 export function toDisciplineHeader(row: DisciplineHeaderRow): DisciplineHeader {
   return {
     id: row.id as DisciplineId,
-    kind: row.kind as 'PADEL' | 'FIFA',
+    kind: row.kind,
     config: row.config as unknown as SeasonConfig,
     // Number(...) EN ESTE ÚNICO LUGAR: no convierte nada en la práctica —
     // `row.weight` ya llega `number` (ver DisciplineHeaderRow.weight) — pero
@@ -721,7 +721,7 @@ export async function publicFormats(supabase: Client, seasonId: string): Promise
   if (error !== null) throw new EdgeError(`No se pudieron leer los formatos: ${error.message}`)
 
   return (data ?? []).map((row) => ({
-    kind: row.kind as 'PADEL' | 'FIFA',
+    kind: row.kind,
     config: row.config as unknown as SeasonConfig,
     rulesText: row.rules_text,
     hasMasters: row.has_masters,

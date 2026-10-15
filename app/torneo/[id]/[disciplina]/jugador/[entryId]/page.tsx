@@ -6,13 +6,13 @@ import {
   rankingWithMovement,
   resolveDisciplineBySlug,
   snapshotForMatchday,
+  sportLabel,
   tallyPlayers,
   titleStreaks,
   type Award,
   type EntryId,
   type SeasonConfig,
 } from '@/core'
-import { DISCIPLINE_LABELS } from '@/app/torneos/nuevo/wizard-state'
 import { awardsOf, closedHistoryAll, entriesOf, seasonHeader, seasonSquadMembersOf } from '@/db/read'
 import { serverClient } from '@/db/server'
 import { initials } from '@/app/format'
@@ -206,7 +206,7 @@ export default async function JugadorPage({ params }: PageProps) {
   const discipline = resolveDisciplineBySlug(header.disciplines, disciplina)
   if (discipline === undefined) notFound()
 
-  const disciplineLabel = header.disciplines.length > 1 ? DISCIPLINE_LABELS[discipline.kind] : null
+  const disciplineLabel = header.disciplines.length > 1 ? sportLabel(discipline.kind) : null
 
   // Deliberadamente SIN discipliner: `volverDestination` (`tabla-state.ts`)
   // ya decide esto para la Tabla -- `/torneos` con una sola disciplina,

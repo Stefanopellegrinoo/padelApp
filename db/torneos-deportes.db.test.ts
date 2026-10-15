@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { defaultConfig } from '@/core'
 import type { Json } from './database.types'
+import { addDiscipline } from './discipline'
+import { EdgeError } from './errors'
 import { createMatchday } from './matchday'
+import { seasonHeader } from './read'
+import { createSeason as createSeasonOf } from './season'
 import { adminClient } from './test/admin'
 import { createSeason } from './test/factories'
 import { createTestUser } from './test/users'
@@ -246,5 +250,80 @@ describe('matchdays.match_format — inmutable fuera de DRAFT (0097)', () => {
       .eq('id', matchdayId)
 
     expect(error).toBeNull()
+  })
+})
+
+/**
+ * Task 3 — la app lee cualquier deporte del registro, y una escritura con un id
+ * que NO es de un torneo se rechaza ANTES de tocar la base (el CHECK 0094 sólo
+ * mira la forma del id: `TEJO` o `FUTBOL` la cumplen).
+ */
+describe('un deporte fuera de los de torneo se rechaza antes de escribir', () => {
+  const NOT_IN_LIST = 'Elegí un deporte de la lista.'
+
+  async function seasonsOf(userId: string): Promise<number> {
+    const { count, error } = await adminClient()
+      .from('seasons')
+      .select('id', { count: 'exact', head: true })
+      .eq('created_by', userId)
+    if (error) throw new Error(error.message)
+    return count ?? 0
+  }
+
+  async function disciplinesOf(seasonId: string): Promise<number> {
+    const { count, error } = await adminClient()
+      .from('disciplines')
+      .select('id', { count: 'exact', head: true })
+      .eq('season_id', seasonId)
+    if (error) throw new Error(error.message)
+    return count ?? 0
+  }
+
+  it.each([['TEJO'], ['FUTBOL']])('createSeason con %s tira EdgeError y no crea ninguna temporada', async (kind) => {
+    const admin = await createTestUser()
+    const config = defaultConfig(8)
+
+    const attempt = createSeasonOf(admin.client, {
+      name: `Deporte ajeno ${kind}`,
+      squadNames: Array.from({ length: 8 }, (_, i) => `Jugador ${i + 1}`),
+      config,
+      disciplines: [{ kind: kind as never, config }],
+    })
+
+    await expect(attempt).rejects.toBeInstanceOf(EdgeError)
+    await expect(attempt).rejects.toThrow(NOT_IN_LIST)
+    expect(await seasonsOf(admin.userId)).toBe(0)
+  })
+
+  it('addDiscipline con TEJO tira EdgeError y la temporada no gana ninguna disciplina', async () => {
+    const admin = await createTestUser()
+    const { seasonId } = await createSeason({ admin })
+
+    const attempt = addDiscipline(admin.client, seasonId, { kind: 'TEJO' as never, config: defaultConfig(8) })
+
+    await expect(attempt).rejects.toBeInstanceOf(EdgeError)
+    await expect(attempt).rejects.toThrow(NOT_IN_LIST)
+    expect(await disciplinesOf(seasonId)).toBe(1)
+  })
+
+  it('un formato de partido fuera de la ficha tampoco se escribe', async () => {
+    const admin = await createTestUser()
+    const { seasonId } = await createSeason({ admin })
+    const config = defaultConfig(8)
+    const outOfRange = { ...config, matchFormat: { ...config.matchFormat, setsToWin: 4 } }
+
+    await expect(addDiscipline(admin.client, seasonId, { kind: 'PADEL', config: outOfRange })).rejects.toThrow(
+      'Los sets para ganar tienen que estar entre 1 y 3.',
+    )
+    expect(await disciplinesOf(seasonId)).toBe(1)
+  })
+
+  it('seasonHeader lee una disciplina de un deporte que la app no arma y trae su kind tal cual', async () => {
+    const admin = await createTestUser()
+    const { seasonId } = await createSeason({ admin, disciplines: [{ kind: 'TEJO' }] })
+
+    const header = await seasonHeader(admin.client, seasonId)
+
+    expect(header.disciplines.map((d) => d.kind)).toEqual(['TEJO'])
   })
 })

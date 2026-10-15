@@ -2,14 +2,14 @@
 
 import Link from 'next/link'
 import { useState, useTransition } from 'react'
-import type { SideSize } from '@/core'
+import { sportLabel, type SideSize } from '@/core'
 import { SelectorDeLados } from '@/app/torneos/nuevo/wizard'
 import { DISCIPLINE_KINDS, DISCIPLINE_LABELS, type DisciplineKind } from '@/app/torneos/nuevo/wizard-state'
 import { addDisciplineToSeason, type WriteResult } from './actions'
 
 export interface DisciplineVM {
   id: string
-  kind: DisciplineKind
+  kind: string
   slug: string
 }
 
@@ -205,7 +205,7 @@ export function Disciplinas({
             }
             className={`flex items-center justify-between gap-3 px-3 py-3 ${index > 0 ? 'border-t border-line' : ''}`}
           >
-            <span className="text-[14px] font-bold">{DISCIPLINE_LABELS[discipline.kind]}</span>
+            <span className="text-[14px] font-bold">{sportLabel(discipline.kind)}</span>
             <span className="shrink-0 text-[13px] font-[750] text-muted">{discipline.slug} ›</span>
           </Link>
         ))}

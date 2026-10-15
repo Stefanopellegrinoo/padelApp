@@ -1,6 +1,5 @@
 import { notFound, redirect } from 'next/navigation'
-import { DISCIPLINE_LABELS } from '@/app/torneos/nuevo/wizard-state'
-import { resolveDisciplineBySlug, validateConfig } from '@/core'
+import { resolveDisciplineBySlug, sportLabel, validateConfig } from '@/core'
 import { Formato } from '@/app/torneo/[id]/ajustes/formato'
 import { FormatoDefault } from '@/app/torneo/[id]/ajustes/formato-default'
 import { Reglas } from '@/app/torneo/[id]/ajustes/reglas'
@@ -87,7 +86,7 @@ export default async function DisciplinaAjustesPage({ params }: PageProps) {
   // Sólo se nombra la disciplina con 2+ — mismo criterio que Stats
   // (`[disciplina]/stats/page.tsx`) y que el propio contenedor.
   const multiDiscipline = header.disciplines.length > 1
-  const disciplineLabel = multiDiscipline ? DISCIPLINE_LABELS[discipline.kind] : null
+  const disciplineLabel = multiDiscipline ? sportLabel(discipline.kind) : null
 
   // Sólo se pide con 2+ (`multiDiscipline`): con una sola la sección no se
   // dibuja (§5 del diseño) y no hay motivo para pagar esta consulta — y con
@@ -221,7 +220,7 @@ export default async function DisciplinaAjustesPage({ params }: PageProps) {
         <QuienJuega
           seasonId={seasonId}
           disciplineId={discipline.id}
-          disciplineLabel={DISCIPLINE_LABELS[discipline.kind]}
+          disciplineLabel={sportLabel(discipline.kind)}
           members={quienJuega}
         />
       )}

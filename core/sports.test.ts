@@ -12,6 +12,7 @@ import {
   modalityShape,
   sideWords,
   sportFamily,
+  sportFormatError,
   sportLabel,
   unitOf,
   type Modality,
@@ -141,5 +142,40 @@ describe('la ficha', () => {
     expect(isTournamentSport('FUTBOL')).toBe(false)
     expect(isTournamentSport('toString')).toBe(false)
     expect(isTournamentSport('padel')).toBe(false)
+  })
+})
+
+describe('sportFormatError', () => {
+  it('rechaza los sets para ganar fuera del rango de la ficha', () => {
+    expect(sportFormatError('PADEL', { setsToWin: 4, gamesPerSet: 4, openScore: false })).toBe(
+      'Los sets para ganar tienen que estar entre 1 y 3.',
+    )
+  })
+
+  it('rechaza los games por set fuera del rango de la ficha', () => {
+    expect(sportFormatError('PADEL', { setsToWin: 1, gamesPerSet: 10, openScore: false })).toBe(
+      'Los games por set tienen que estar entre 3 y 9.',
+    )
+  })
+
+  it('dice "son N" cuando los puntos por set son fijos', () => {
+    expect(sportFormatError('PING_PONG', { setsToWin: 2, gamesPerSet: 12, openScore: false })).toBe(
+      'Los puntos por set son 11.',
+    )
+  })
+
+  it('deja pasar un formato que entra en la ficha', () => {
+    expect(sportFormatError('PADEL', { setsToWin: 1, gamesPerSet: 4, openScore: false })).toBeNull()
+  })
+
+  it('no mira los deportes de goles ni los marcadores abiertos: no tienen perillas', () => {
+    expect(sportFormatError('FIFA', { setsToWin: 1, gamesPerSet: 4, openScore: false })).toBeNull()
+    expect(sportFormatError('PADEL', { setsToWin: 9, gamesPerSet: 99, openScore: true })).toBeNull()
+  })
+
+  it('rechaza un id fuera del registro', () => {
+    expect(sportFormatError('TEJO', { setsToWin: 1, gamesPerSet: 4, openScore: false })).toBe(
+      'Elegí un deporte de la lista.',
+    )
   })
 })

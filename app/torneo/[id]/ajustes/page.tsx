@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation'
-import { DISCIPLINE_LABELS } from '@/app/torneos/nuevo/wizard-state'
-import { disciplineSlugs, formatsLabel, validateConfig } from '@/core'
+import { disciplineSlugs, formatsLabel, sportLabel, validateConfig } from '@/core'
 import {
   disciplineRulesOf,
   myEntryId,
@@ -118,7 +117,7 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
   // entra directo a esa pantalla sin pasar por acá.
   const mismatchMessages = header.disciplines.flatMap((candidate) => {
     if (seats.length === candidate.config.squadSize) return []
-    const label = single ? null : DISCIPLINE_LABELS[candidate.kind]
+    const label = single ? null : sportLabel(candidate.kind)
     // `candidate.pairSize` real desde W30: `DisciplineHeader` ya trae
     // `pair_size` del mismo select que `config`.
     return validateConfig({ ...candidate.config, squadSize: seats.length }, candidate.pairSize).map(
@@ -143,7 +142,7 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
   const formatoLabel = single
     ? formatsLabel(
         header.disciplines.map((candidate) => ({
-          label: DISCIPLINE_LABELS[candidate.kind],
+          label: sportLabel(candidate.kind),
           matchFormat: candidate.config.matchFormat,
         })),
       )

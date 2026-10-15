@@ -7,6 +7,7 @@ import {
   rankingWithMovement,
   resolveDisciplineBySlug,
   snapshotForMatchday,
+  sportLabel,
   tallyPlayers,
   titleStreaks,
   type Award,
@@ -15,7 +16,6 @@ import {
   type PartnerRecord,
   type PlayedMatchday,
 } from '@/core'
-import { DISCIPLINE_LABELS } from '@/app/torneos/nuevo/wizard-state'
 import { awardsOf, closedHistoryAll, entriesOf, myEntryId, seasonHeader } from '@/db/read'
 import { serverClient } from '@/db/server'
 
@@ -236,7 +236,7 @@ export default async function StatsPage({ params, searchParams }: PageProps) {
   // Sólo se nombra la disciplina cuando hay más de una — mismo criterio que
   // Ajustes (`[disciplina]/ajustes/page.tsx:61`, `header.disciplines.length
   // > 1 ? ... : null`): con una sola, decirlo es ruido que nadie pidió.
-  const disciplineLabel = header.disciplines.length > 1 ? DISCIPLINE_LABELS[discipline.kind] : null
+  const disciplineLabel = header.disciplines.length > 1 ? sportLabel(discipline.kind) : null
 
   const [entries, history, awardsByMatchday, viewerEntryId] = await Promise.all([
     entriesOf(supabase, seasonId, discipline.id),

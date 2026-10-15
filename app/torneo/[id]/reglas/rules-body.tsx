@@ -156,7 +156,7 @@ export function RulesBody({ seasonId, disciplines, adminName, isAdmin }: RulesBo
         return (
           <Fragment key={index}>
             {showHeadings && (
-              // ponytail: `discipline.label` es `DISCIPLINE_LABELS[kind]` — dos
+              // ponytail: `discipline.label` es `sportLabel(kind)` — dos
               // disciplinas del mismo `kind` (buildable desde PR13) muestran el
               // mismo encabezado dos veces ("Pádel" y "Pádel"). Feo pero
               // honesto: no afirma nada falso, sólo no distingue una de otra.

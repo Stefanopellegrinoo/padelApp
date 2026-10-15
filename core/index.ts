@@ -251,6 +251,7 @@ export {
   sportOf,
   sportLabel,
   sportFamily,
+  sportFormatError,
   modalityOf,
   modalityShape,
   modalityLabel,

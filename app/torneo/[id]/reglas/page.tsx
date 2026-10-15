@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { DISCIPLINE_LABELS } from '@/app/torneos/nuevo/wizard-state'
+import { sportLabel } from '@/core'
 import { disciplineRulesOf, publicFormats, publicRules, seasonAdminName, seasonHeader } from '@/db/read'
 import { serverClient } from '@/db/server'
 import { RulesBody, type RulesBlock } from './rules-body'
@@ -62,7 +62,7 @@ export default async function ReglasPage({ params }: ReglasPageProps) {
     // `disciplines`, así que las dos funciones ven la misma fila o ninguna —
     // no hace falta un `??` para un caso que no puede pasar.
     const disciplines: RulesBlock[] = formats.map((format) => ({
-      label: DISCIPLINE_LABELS[format.kind],
+      label: sportLabel(format.kind),
       config: format.config,
       shape: { hasMasters: format.hasMasters, pairSize: format.pairSize, allowsDraw: format.allowsDraw },
       text: format.rulesText,
@@ -89,7 +89,7 @@ export default async function ReglasPage({ params }: ReglasPageProps) {
   // con su propia config, su propio shape (0069) y su propio `rules_text`
   // (`disciplineRulesOf`, rebanada 1).
   const disciplines: RulesBlock[] = header.disciplines.map((discipline) => ({
-    label: DISCIPLINE_LABELS[discipline.kind],
+    label: sportLabel(discipline.kind),
     config: discipline.config,
     shape: { hasMasters: discipline.hasMasters, pairSize: discipline.pairSize, allowsDraw: discipline.allowsDraw },
     text: rulesByDiscipline.get(discipline.id) ?? '',

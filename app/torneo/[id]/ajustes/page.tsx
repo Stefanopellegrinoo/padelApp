@@ -285,7 +285,8 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
         disciplines={header.disciplines.map((candidate) => ({
           id: candidate.id,
           kind: candidate.kind,
-          slug: slugs.get(candidate.id) ?? candidate.kind.toLowerCase(),
+          // `slugs` sale de esta misma lista: siempre tiene la clave.
+          slug: slugs.get(candidate.id)!,
         }))}
         squad={squadMembers.map((member) => ({ entryId: member.id, name: member.displayName }))}
       />

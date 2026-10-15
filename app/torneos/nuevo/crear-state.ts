@@ -6,6 +6,7 @@ import {
   sportOf,
   type FirstFecha,
   type Modality,
+  type ReglamentoInput,
   type SeasonConfig,
   type SideSize,
   type TournamentSport,
@@ -13,7 +14,7 @@ import {
 import type { NewSeasonDiscipline } from '@/db/season'
 import { rulesFromSeed, type DisciplineRules } from '@/app/deporte/personalizar-reglas-state'
 import type { PrimeraFecha } from '@/app/deporte/tarjeta-state'
-import { resizeConfig, squadWarning, submitSeats, type Squad } from './wizard-state'
+import { effectiveFloor, resizeConfig, squadWarning, submitSeats, type Squad } from './wizard-state'
 
 /**
  * Un deporte elegido en el wizard nuevo (pasos 1 y 3): la ficha copiada más lo que el usuario fue tocando.
@@ -115,10 +116,11 @@ export function plantelCambio(cards: readonly DeporteElegido[], squadSize: numbe
   }))
 }
 
-/** Aviso del paso 3: plantel impar con alguna modalidad de parejas (texto de `squadWarning`), o null. */
+/** Aviso del paso 3 (texto de `squadWarning`), o null: plantel impar con alguna modalidad de parejas, o corto para el piso que piden. */
 export function errorDeModalidades(cards: readonly DeporteElegido[], names: readonly string[]): string | null {
-  // Piso 0: el piso del plantel lo cuida el paso 2; acá sólo queda la paridad.
-  return squadWarning(names, 0, cards.some((card) => sideSizeOf(card) === 2))
+  // Con el piso de las modalidades de AHORA: pasar a parejas en el paso 3 lo sube después del paso 2.
+  const sideSizes = cards.map(sideSizeOf)
+  return squadWarning(names, effectiveFloor(sideSizes), sideSizes.includes(2))
 }
 
 export type Subpaso = 'PAREJAS' | 'NIVEL'
@@ -169,7 +171,10 @@ function primeraFechaOf(
   return { firstFecha: 'NIVEL', order: card.order.length === 0 ? {} : { seedOrder: seedOrderOf(card) } }
 }
 
-function disciplineOf(card: DeporteElegido, cards: readonly DeporteElegido[], squadSize: number): NewSeasonDiscipline {
+/** Lo que se manda a crear, con todo lo que `reglamento` necesita para contarlo (el paso 4 cuenta esto mismo). */
+type DisciplinaACrear = NewSeasonDiscipline & ReglamentoInput
+
+function disciplineOf(card: DeporteElegido, cards: readonly DeporteElegido[], squadSize: number): DisciplinaACrear {
   const { pairSize, fixedTeams } = modalityShape(card.modality)
   const { firstFecha, order } = primeraFechaOf(card, cards)
   return {
@@ -190,7 +195,7 @@ export function crearPayload(
   name: string,
   squad: Squad,
   cards: readonly DeporteElegido[],
-): { name: string; squadNames: string[]; mySeatIndex: number | null; config: SeasonConfig; disciplines: NewSeasonDiscipline[] } {
+): { name: string; squadNames: string[]; mySeatIndex: number | null; config: SeasonConfig; disciplines: DisciplinaACrear[] } {
   if (cards.length === 0) throw new Error('Elegí al menos un deporte.')
   const { squadNames, mySeatIndex } = submitSeats(squad)
   const disciplines = cards.map((card) => disciplineOf(card, cards, squadNames.length))

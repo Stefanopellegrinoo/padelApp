@@ -159,7 +159,7 @@ function Opcion({ elegido, onClick, children }: { elegido: boolean; onClick: () 
       type="button"
       aria-pressed={elegido}
       onClick={onClick}
-      className={`min-h-[44px] flex-1 rounded-field px-1.5 py-3 text-center text-[14px] font-extrabold leading-tight ${
+      className={`min-h-[44px] flex-1 rounded-field p-3 text-center text-[14px] font-extrabold leading-tight disabled:opacity-40 ${
         elegido ? 'bg-accent text-accent-text' : 'bg-chip text-text'
       }`}
     >
@@ -250,7 +250,7 @@ function PuntosPorPosicion({
             aria-pressed={i === index}
             aria-label={`${i + 1}° puesto: ${value === 1 ? '1 punto' : `${value} puntos`}`}
             onClick={() => setSelected(i)}
-            className={`flex min-h-[56px] flex-col items-center justify-center gap-0.5 rounded-field border-2 bg-bg ${
+            className={`flex min-h-[56px] flex-col items-center justify-center gap-0.5 rounded-field border-2 bg-bg disabled:opacity-40 ${
               i === index ? 'border-accent' : 'border-line'
             }`}
           >
@@ -288,7 +288,7 @@ function FilaMasters({ checked, hint, onChange }: { checked: boolean; hint: stri
         aria-checked={checked}
         aria-labelledby={id}
         onClick={() => onChange(!checked)}
-        className="flex h-11 w-14 shrink-0 items-center justify-center"
+        className="flex h-11 w-14 shrink-0 items-center justify-center disabled:opacity-40"
       >
         <span className={`relative h-7 w-12 rounded-full ${checked ? 'bg-accent' : 'bg-chip'}`}>
           <span
@@ -311,9 +311,9 @@ function Aviso({ children }: { children: string }) {
  * y en Ajustes. Controlada: `rules` viene de afuera y cada toque llama `onChange` con las reglas nuevas.
  *
  * Es un `<dialog>` nativo abierto con `showModal()` (como `ConfirmarNuevo` de /rapido): el foco, el
- * trap, el fondo inerte y el Escape los pone la plataforma. `onClose` cubre el Escape, la cruz y
- * tocar el fondo, y quien la monta la DESMONTA ahí: se abre sólo al montarse, así que una hoja
- * cerrada que sigue montada no vuelve a abrir.
+ * trap, el fondo inerte y el Escape los pone la plataforma. `onClose` cubre el Escape y la cruz
+ * (tocar el fondo NO cierra: un toque de más tiraría lo tocado), y quien la monta la DESMONTA ahí:
+ * se abre sólo al montarse, así que una hoja cerrada que sigue montada no vuelve a abrir.
  */
 export function PersonalizarReglas({
   kind,
@@ -369,9 +369,6 @@ export function PersonalizarReglas({
       aria-modal="true"
       aria-labelledby={tituloId}
       onClose={onClose}
-      onClick={(event) => {
-        if (event.target === event.currentTarget) onClose()
-      }}
       className="m-0 mt-auto w-full max-w-none border-0 bg-transparent p-0 text-text backdrop:bg-scrim sm:m-auto sm:max-w-lg"
     >
       <div className="max-h-[92dvh] overflow-y-auto rounded-t-card bg-bg sm:rounded-card">

@@ -1,12 +1,12 @@
 import { redirect } from 'next/navigation'
 import { serverClient } from '@/db/server'
-import { Wizard } from './wizard'
+import { Crear } from './crear'
 
 /**
- * El shell del wizard. Del lado del servidor hace dos cosas: la guarda de sesión
+ * El shell del wizard de 4 pasos (`Crear`). Del lado del servidor hace dos cosas: la guarda de sesión
  * —`createSeason` necesita un `auth.uid()` y la política `seasons_insert` no
  * deja pasar a nadie más— y buscar el nombre del que crea, con el que el paso 2
- * arranca anotándolo en el plantel.
+ * (Jugadores) arranca anotándolo en el plantel.
  *
  * El nombre sale de `players` en dos consultas porque `players.user_id` no tiene
  * SELECT otorgado a `authenticated` a propósito (0002_rls.sql): el mapeo
@@ -25,5 +25,5 @@ export default async function NuevoTorneoPage() {
       ? { data: null }
       : await supabase.from('players').select('display_name').eq('id', playerId).maybeSingle()
 
-  return <Wizard myName={me?.display_name ?? ''} />
+  return <Crear myName={me?.display_name ?? ''} />
 }

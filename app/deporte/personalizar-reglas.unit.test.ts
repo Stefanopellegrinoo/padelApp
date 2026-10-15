@@ -290,6 +290,13 @@ describe('PersonalizarReglas', () => {
     expect(sheet('PADEL', 8, 'ROTAN', { pending: true })).toContain('<fieldset disabled=""')
   })
 
+  it('lo que traba el fieldset se ve trabado: botones de elección, mosaicos y el switch', () => {
+    const html = sheet('PADEL', 8, 'ROTAN', { pending: true })
+    const tags = [...html.matchAll(/<button[^>]*(?:aria-pressed|role="switch")[^>]*>/g)].map((m) => m[0])
+    expect(tags.length).toBeGreaterThan(4)
+    for (const tag of tags) expect(tag).toContain('disabled:opacity-40')
+  })
+
   it('muestra el aviso de Ajustes junto a "Listo" y el error del servidor', () => {
     const html = sheet('PADEL', 8, 'ROTAN', { note: 'Los cambios valen desde la próxima fecha.', error: 'No se pudo guardar.' })
     expect(html).toContain('Los cambios valen desde la próxima fecha.')

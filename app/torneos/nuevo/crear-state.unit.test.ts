@@ -223,6 +223,11 @@ describe('errorDeModalidades', () => {
     expect(errorDeModalidades([card('FIFA', 'INDIVIDUAL')], siete)).toBeNull()
   })
 
+  it('pasar a parejas en el paso 3 sube el piso: dos amigos de FIFA no alcanzan para parejas', () => {
+    expect(errorDeModalidades([card('FIFA', 'INDIVIDUAL', 2)], ['Ana', 'Beto'])).toBeNull()
+    expect(errorDeModalidades([card('FIFA', 'ROTAN', 2)], ['Ana', 'Beto'])).toBe('Faltan 2 nombres. El plantel arranca en 4.')
+  })
+
   it('un plantel par con parejas está bien, y las filas en blanco no cuentan', () => {
     expect(errorDeModalidades([card('PADEL', 'ROTAN')], [...ANA_BETO_CARLA_DANI, '', '  '])).toBeNull()
     expect(errorDeModalidades([card('PADEL', 'ROTAN')], [...siete, ''])).not.toBeNull()

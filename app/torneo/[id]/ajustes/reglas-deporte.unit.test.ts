@@ -184,6 +184,38 @@ describe('ReglasDeporte — la hoja', () => {
     expect(saveDisciplineRules).not.toHaveBeenCalled()
   })
 
+  it('"Volver a las reglas" no pisa la primera fecha guardada: un torneo "Al azar" sigue al azar', async () => {
+    const seed = rulesFromSeed(fichaSeed('PADEL', 8, 'ROTAN'))
+    const alAzar: DisciplineRules = {
+      ...seed,
+      config: { ...seed.config, firstFecha: 'SORTEO' },
+      formatoDefault: { kind: 'ROUND_ROBIN' },
+    }
+    const page = await montar({ rules: alAzar })
+    await tocar(botonDe(page, 'Personalizar reglas'))
+
+    await tocar(botonDe(page, 'Volver a las reglas de Pádel'))
+    await tocar(botonDe(page, 'Listo'))
+
+    expect(saveDisciplineRules).toHaveBeenCalledTimes(1)
+    const next = saveDisciplineRules.mock.calls[0]?.[3] as DisciplineRules
+    expect(next.formatoDefault).toEqual({ kind: 'AUTO' })
+    expect(next.config.firstFecha).toBe('SORTEO')
+  })
+
+  it('"Volver a las reglas" en un torneo sin primera fecha guardada no la inventa', async () => {
+    const page = await montar()
+    await tocar(botonDe(page, 'Personalizar reglas'))
+
+    await tocar(botonDe(page, 'Volver a las reglas de Pádel'))
+    await tocar(botonDe(page, 'Listo'))
+
+    expect(saveDisciplineRules).toHaveBeenCalledTimes(1)
+    const next = saveDisciplineRules.mock.calls[0]?.[3] as DisciplineRules
+    expect(next.formatoDefault).toEqual({ kind: 'AUTO' })
+    expect('firstFecha' in next.config).toBe(false)
+  })
+
   it('un deporte sin ficha no ofrece "Volver a las reglas de"', async () => {
     const page = await montar({ kind: 'TEJO' })
 

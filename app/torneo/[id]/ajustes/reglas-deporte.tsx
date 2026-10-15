@@ -20,10 +20,18 @@ import { saveDisciplineRules } from './actions'
 /** Verdad por el congelado de la fecha: una fecha toma su formato al confirmarse (docs/torneos-deportes.md §7). */
 const NOTE = 'Los cambios valen desde la próxima fecha. Las fechas ya jugadas quedan como se jugaron.'
 
-/** "Volver a las reglas de X": la ficha del deporte, sólo si la tiene y ofrece esta modalidad. Nunca abre la hoja: es un toque explícito. */
-function fichaOf(kind: string, squadSize: number, modality: Modality): DisciplineRules | null {
+/**
+ * "Volver a las reglas de X": la ficha del deporte, sólo si la tiene y ofrece esta modalidad. Nunca abre la hoja: es un toque explícito.
+ * La primera fecha queda la GUARDADA (la hoja no la muestra, y ya se jugó): sin `firstFecha` guardada, no se inventa.
+ */
+function fichaOf(kind: string, saved: DisciplineRules['config'], modality: Modality): DisciplineRules | null {
   if (!isSportId(kind) || !offeredModalities(kind).includes(modality)) return null
-  return rulesFromSeed(fichaSeed(kind, squadSize, modality))
+  const ficha = rulesFromSeed(fichaSeed(kind, saved.squadSize, modality))
+  const { firstFecha: _ficha, ...config } = ficha.config
+  return {
+    ...ficha,
+    config: saved.firstFecha === undefined ? config : { ...config, firstFecha: saved.firstFecha },
+  }
 }
 
 /**
@@ -130,7 +138,7 @@ export function ReglasDeporte({
           modality={modality}
           pairSize={pairSize}
           rules={draft}
-          ficha={fichaOf(kind, rules.config.squadSize, modality)}
+          ficha={fichaOf(kind, rules.config, modality)}
           note={NOTE}
           pending={pending}
           error={error}

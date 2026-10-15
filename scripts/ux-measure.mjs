@@ -43,7 +43,7 @@ function ariaBusyGone(page) {
   })
 }
 
-// textContent, no innerText: varios labels ("¿Quién ganó?", "Paso N de 5")
+// textContent, no innerText: varios labels ("¿Quién ganó?", "Paso N de 4")
 // son CSS text-transform:uppercase, e innerText refleja esa transformación —
 // una búsqueda en minúscula/mayúscula mixta nunca matchearía. textContent
 // ignora el CSS por completo.
@@ -437,14 +437,17 @@ async function main() {
   }
 
   // ================= 9) Wizard de creación de torneo =================
-  // OJO: maneja el wizard de 5 pasos, ya borrado (Tarea 16, torneos-deportes); pendiente de reescribir contra `crear.tsx`.
+  // El wizard de 4 pasos (`app/torneos/nuevo/crear.tsx`). Cada "Paso N de 4" del rótulo es el
+  // destino que se espera después de cada "Continuar".
   await page.goto(`${BASE}/torneos/nuevo`, { waitUntil: 'networkidle' })
-  await page.fill('input[placeholder="Los Jueves 2026"]', `UX Wizard ${Date.now()}`)
+  await page.getByLabel('Nombre', { exact: true }).fill(`UX Wizard ${Date.now()}`)
+  await page.getByRole('button', { name: 'Pádel', exact: true }).click() // el chip del deporte
   await measureInteraction(page, '19-wizard-step0-continuar', async () => {
     await page.locator('button', { hasText: 'Continuar' }).click()
-    await bodyIncludes(page, 'Paso 2 de 5')
+    await bodyIncludes(page, 'Paso 2 de 4')
   })
 
+  // El plantel arranca con el asiento propio y las filas en blanco que pide el piso del pádel.
   const nameInputs = page.locator('input[placeholder="Nombre"]')
   const count = await nameInputs.count()
   for (let i = 0; i < count; i++) {
@@ -452,25 +455,29 @@ async function main() {
   }
   await measureInteraction(page, '20-wizard-step1-continuar', async () => {
     await page.locator('button', { hasText: 'Continuar' }).click()
-    await bodyIncludes(page, 'Paso 3 de 5')
+    await bodyIncludes(page, 'Paso 3 de 4')
   })
 
+  // Sin medir (como el "Usar los defaults" de antes): el pádel nace con primera fecha "Por nivel", que
+  // intercala el subpaso "Ordená por nivel" antes de "Listo". "Al azar" lo saltea y deja los 5 toques de siempre.
+  await page.getByRole('group', { name: 'Primera fecha' }).getByRole('button', { name: 'Al azar' }).click()
   await measureInteraction(page, '21-wizard-step2-continuar', async () => {
     await page.locator('button', { hasText: 'Continuar' }).click()
-    await bodyIncludes(page, 'Paso 4 de 5')
+    await bodyIncludes(page, 'Paso 4 de 4')
   })
 
-  await page.locator('button', { hasText: 'Usar los defaults' }).click()
+  // El submit ya no es un "Continuar": el último paso tiene "Crear torneo". Se mantiene el label por el baseline.
   await measureInteraction(page, '22-wizard-step3-continuar-submit', async () => {
     await Promise.all([
       page.waitForResponse((r) => r.request().method() === 'POST', { timeout: 15000 }),
-      page.locator('button', { hasText: 'Continuar' }).click(),
+      page.getByRole('button', { name: 'Crear torneo' }).click(),
     ])
-    await bodyIncludes(page, 'Link de invitación')
+    await bodyIncludes(page, 'Copiar link de invitación')
   })
 
+  // "Ir al torneo" es un link (`<Link>`), no un botón.
   await measureInteraction(page, '23-wizard-ir-al-torneo', async () => {
-    await page.locator('button', { hasText: 'Ir al torneo' }).click()
+    await page.getByRole('link', { name: 'Ir al torneo' }).click()
     await page.waitForURL(/\/torneo\/[0-9a-f-]+$/, { timeout: 15000 })
     await ariaBusyGone(page)
   })

@@ -102,21 +102,32 @@ async function main() {
   )
 
   // ── 4. Crear un torneo de 8 ────────────────────────────────────────────────
-  // OJO: maneja el wizard de 5 pasos, ya borrado (Tarea 16, torneos-deportes); pendiente de reescribir contra `crear.tsx`.
-  heading('Crear un torneo nuevo de 8, hasta el paso 5')
+  heading('Crear un torneo nuevo de pádel con 8 en el plantel, hasta "Ir al torneo"')
   const seasonName = `Smoke ${new Date().toISOString().slice(11, 19)}`
   const squad = ['Ana', 'Bruno', 'Caro', 'Diego', 'Emi', 'Fede', 'Gaby', 'Hernán']
+  // El wizard de 4 pasos (`app/torneos/nuevo/crear.tsx`). `continuar` es el mismo botón en todos
+  // los pasos menos el último, que es "Crear torneo".
+  const continuar = page.getByRole('button', { name: 'Continuar' })
   await go(page, '/torneos/nuevo')
-  await page.fill('input[placeholder="Los Jueves 2026"]', seasonName)
-  await page.getByRole('button', { name: 'Continuar' }).click()
+  await page.getByLabel('Nombre', { exact: true }).fill(seasonName)
+  await page.getByRole('button', { name: 'Pádel', exact: true }).click() // paso 1: el chip del deporte
+  await continuar.click() // → Jugadores
 
+  // El que arma el torneo ya está anotado en el primer asiento (`vos`): se lo pisa con el primer
+  // nombre, así el asiento propio sigue siendo el 1. Tipear en la última fila agrega la que sigue.
   const seats = page.locator('input[placeholder="Nombre"]')
   for (const [index, name] of squad.entries()) await seats.nth(index).fill(name)
-  await page.getByRole('button', { name: 'Continuar' }).click() // → orden inicial
-  await page.getByRole('button', { name: 'Continuar' }).click() // → formato
-  await page.getByRole('button', { name: 'Continuar' }).click() // → submit
+  await continuar.click() // → Cómo se juega
 
-  await page.getByRole('button', { name: 'Ir al torneo' }).waitFor({ timeout: 15000 })
+  // Pádel nace "Parejas que rotan" + primera fecha "Por nivel": se acepta la ficha tal cual.
+  await continuar.click() // → Ordená por nivel (subpaso; el orden es el del plantel)
+  await page.getByRole('heading', { name: 'Ordená por nivel' }).waitFor({ timeout: 5000 })
+  await continuar.click() // → Listo, así se juega
+  await page.getByRole('button', { name: 'Crear torneo' }).click()
+
+  // "Ir al torneo" es un link (`<Link>`), no un botón: aparece recién cuando `createTournament` contestó.
+  const irAlTorneo = page.getByRole('link', { name: 'Ir al torneo' })
+  await irAlTorneo.waitFor({ timeout: 15000 })
   const seasonId = query(`select id from public.seasons where name = '${seasonName}'`)
   check('la temporada quedó creada en la base', seasonId !== '', 'no hay fila en `seasons`')
   check(
@@ -124,14 +135,20 @@ async function main() {
     query(`select count(*) from public.entries where season_id = '${seasonId}' and kind = 'SQUAD'`) === '8',
     query(`select count(*) from public.entries where season_id = '${seasonId}' and kind = 'SQUAD'`),
   )
+  check(
+    'con una sola disciplina, la de pádel',
+    query(`select string_agg(kind, ',') from public.disciplines where season_id = '${seasonId}'`) === 'PADEL',
+    query(`select string_agg(kind, ',') from public.disciplines where season_id = '${seasonId}'`),
+  )
+  check('y "Ir al torneo" lleva a ese torneo', (await irAlTorneo.getAttribute('href')) === `/torneo/${seasonId}`)
 
   // ── 5. Abrir la fecha 1 ────────────────────────────────────────────────────
   heading('Abrir la fecha 1')
-  //Antes apuntaba al stub sin disciplina —
+  // Antes apuntaba al stub sin disciplina —
   // pasaba (el meta refresh de 1s alcanza a resolver antes de `networkidle`)
   // pero el `200` que `check()` asertaba era el del stub, no el de la lista.
-  // El wizard de este script crea una sola disciplina PADEL (sin picker de
-  // disciplinas), así que el slug es 'padel'.
+  // El wizard de arriba elige sólo el chip de Pádel, así que la única disciplina
+  // del torneo es PADEL y su slug es 'padel'.
   await go(page, `/torneo/${seasonId}/padel/fechas`)
   const openCta = page.getByRole('button', { name: 'Abrir fecha 1' })
   check('el CTA dice el número que va a tener la fecha', (await openCta.count()) === 1)

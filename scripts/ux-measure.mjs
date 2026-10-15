@@ -379,6 +379,10 @@ async function main() {
     .getByText('–', { exact: true })
     .first()
     .locator('xpath=ancestor::div[contains(@class,"rounded-[14px]")][1]')
+  // Se centra la tarjeta ANTES de medir. Los partidos de una ronda salen en el orden de sus ids (uuid
+  // al azar), así que según la escena el botón puede asomar bajo la barra de abajo: el toque anda, pero
+  // el panel se abre fuera de pantalla y no hay nada que ver (T_first_visible_change = null, medido).
+  await openMatchCard.evaluate((card) => card.scrollIntoView({ block: 'center' }))
   await measureInteraction(page, '11-cargar-resultado-open', async () => {
     await openMatchCard.locator('button', { hasText: 'Cargar resultado' }).click()
     await bodyIncludes(page, 'Quién ganó')
@@ -407,30 +411,23 @@ async function main() {
 
   // ================= 8) Pestañas de la nav =================
   await page.goto(closeBase, { waitUntil: 'networkidle' })
-  //"Fechas" ya no es `${closeBase}/fechas` (el
-  // stub) — el href real es discipline-scoped (`${base}/{slug}/fechas`). Se
-  // lee del DOM en vez de asumir el slug: robusto sin importar cuál sea la
-  // disciplina por defecto de la temporada sembrada.
-  const fechasHref = await page.getByRole('link', { name: 'Fechas' }).first().getAttribute('href')
+  // La nav lleva la disciplina en el destino de Tabla, Fechas y Stats (`${base}/{slug}/…`, `navTabs`
+  // en `app/torneo/[id]/nav-state.ts`); sólo Reglas apunta al contenedor. Se leen los hrefs del DOM
+  // en vez de asumir el slug: robusto sin importar cuál sea la disciplina por defecto de la
+  // temporada sembrada.
+  const hrefDe = async (name) =>
+    new URL((await page.getByRole('link', { name }).first().getAttribute('href')) ?? closeBase, closeBase).toString()
   const tabs = [
-    ['Fechas', new URL(fechasHref ?? `${closeBase}/fechas`, closeBase).toString()],
-    ['Stats', `${closeBase}/stats`],
+    ['Fechas', await hrefDe('Fechas')],
+    ['Stats', await hrefDe('Stats')],
     ['Reglas', `${closeBase}/reglas`],
-    ['Tabla', closeBase],
+    ['Tabla', await hrefDe('Tabla')],
   ]
   let navIdx = 15
   for (const [name, url] of tabs) {
     await measureInteraction(page, `${navIdx}-nav-${name.toLowerCase()}`, async () => {
       await page.getByRole('link', { name }).first().click()
-      await page.waitForURL(
-        // "Stats" (Task 1) aterriza en `${closeBase}/{slug}/stats` -- el
-        // `href` de la nav todavía manda al stub sin disciplina (Task 3 lo
-        // scopea), así que a diferencia de "Fechas" arriba no hay un href ya
-        // correcto para leer del DOM. Igualdad exacta contra `url` nunca
-        // matchea acá; alcanza con el sufijo.
-        name === 'Stats' ? (u) => u.pathname.endsWith('/stats') : (u) => u.toString() === url || u.toString() === `${url}/`,
-        { timeout: 10000 },
-      )
+      await page.waitForURL((u) => u.toString() === url || u.toString() === `${url}/`, { timeout: 10000 })
       await ariaBusyGone(page)
     })
     navIdx++

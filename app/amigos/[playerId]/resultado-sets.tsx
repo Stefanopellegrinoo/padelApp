@@ -9,7 +9,7 @@ import {
   startLoad,
   type LoadState,
 } from '@/app/torneo/[id]/[disciplina]/fechas/[n]/carga-state'
-import { Stepper } from '@/app/torneos/nuevo/wizard'
+import { Stepper } from '@/app/stepper'
 import { chooseDeuce, deuceOptions, setsField } from './cargar-state'
 import { LABEL, LEGEND } from './estilos'
 

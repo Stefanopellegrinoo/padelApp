@@ -381,7 +381,12 @@ export interface ArmadoWords {
  * fixture que sigue siendo el de antes es la misma mentira que W86 cerró
  * del otro lado de la pantalla.
  */
-export function armadoWords(sideSize: SideSize, formato: MatchdayFormat, formatDrifted: boolean): ArmadoWords {
+export function armadoWords(
+  sideSize: SideSize,
+  formato: MatchdayFormat,
+  formatDrifted: boolean,
+  fixedTeams = false,
+): ArmadoWords {
   const base: ArmadoWords =
     sideSize === 1
       ? {
@@ -406,8 +411,11 @@ export function armadoWords(sideSize: SideSize, formato: MatchdayFormat, formatD
           guestPairNoun: 'la pareja invitada',
           draw: 'Generar parejas',
           drawn: 'Parejas',
-          drawNote:
-            'Los defensores quedan fijos. El resto se arma cruzando la tabla: 1° con último, 2° con anteúltimo, y así.',
+          // Con parejas fijas no hay defensores ni cruce de tabla (`pairingContextFor`): las parejas
+          // entran resueltas y sólo se arman los partidos. Misma idea que `narrateRules`.
+          drawNote: fixedTeams
+            ? 'Cada pareja juega junta todo el torneo: sólo se arman los cruces.'
+            : 'Los defensores quedan fijos. El resto se arma cruzando la tabla: 1° con último, 2° con anteúltimo, y así.',
           guestPairSection: true,
           guestPartner: true,
         }

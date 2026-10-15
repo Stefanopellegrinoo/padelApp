@@ -146,6 +146,8 @@ interface ArmadoProps {
    * `detail.matches`, no contra `formato` solo.
    */
   formatDrifted: boolean
+  /** `disciplines.fixed_teams`: la pareja es la misma todo el torneo. Cambia la nota del sorteo. */
+  fixedTeams: boolean
   /**
    * El reparto real en grupos (S83, verify-report-pr21 #4004), calculado en
    * `page.tsx` con las MISMAS funciones que `generatePairs` usa para armar
@@ -189,6 +191,7 @@ export function Armado({
   matchFormat,
   ownMatchFormat,
   formatDrifted,
+  fixedTeams,
   groupPreview,
 }: ArmadoProps) {
   const [pending, startTransition] = useTransition()
@@ -273,7 +276,7 @@ export function Armado({
     shape
   // Lo que se va a armar, `AUTO` resuelto con los que vienen: las notas
   // describen eso, no el `AUTO` guardado.
-  const label = armadoWords(sideSize, shape.formato, formatDrifted)
+  const label = armadoWords(sideSize, shape.formato, formatDrifted, fixedTeams)
   const guestUnnamed = [
     ...looseGuests.map((guest) => guest.name),
     ...guestPairs.flatMap((pair) => [pair.a.name, pair.b.name]),

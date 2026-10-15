@@ -42,6 +42,7 @@ import {
   seasonMatchdaysOf,
 } from '@/db/read'
 import { pairingContextFor } from '@/db/matchday'
+import { disciplineConfig } from '@/db/discipline'
 import { sideLabel, tiebreakNote } from './tabla-desempate'
 import { TablaDelDia } from './tabla-del-dia'
 import { awardsBefore, closedHistory, frozenPointsOf, type FrozenAward } from '@/db/season'
@@ -205,12 +206,14 @@ export default async function FechaDetailPage({ params }: PageProps) {
   // `attendances_write` no deja tildar a nadie que no sea admin. Un jugador que
   // llegue a esta URL ve la tarjeta de arriba, que es la verdad para él.
   if (!isMasters && matchday.status === 'DRAFT' && header.isAdmin) {
-    const [attendances, detail, locks, lastHistory, beforeLastHistory] = await Promise.all([
+    const [attendances, detail, locks, lastHistory, beforeLastHistory, { fixedTeams }] = await Promise.all([
       attendancesOf(supabase, matchday.id),
       matchdayDetail(supabase, matchday.id),
       pairLocksOf(supabase, matchday.id),
       closedHistory(supabase, matchday.disciplineId, matchdayNumber - 1),
       closedHistory(supabase, matchday.disciplineId, matchdayNumber - 2),
+      // `fixedTeams` no viaja en `DisciplineHeader`: se pide con `disciplineConfig`, como en Ajustes.
+      disciplineConfig(supabase, matchday.disciplineId),
     ])
 
     const { defenders, defendersAlreadyRepeated } = previousContext(lastHistory, beforeLastHistory)
@@ -375,6 +378,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
         matchFormat={effectiveMatchFormat(discipline.config.matchFormat, matchday.matchFormat)}
         ownMatchFormat={matchday.matchFormat}
         formatDrifted={formatDrifted}
+        fixedTeams={fixedTeams}
         groupPreview={groupPreview}
       />
     )

@@ -70,7 +70,17 @@ const escena = vi.hoisted(() => ({
   // toca.
   squadCount: 8,
   guestEntries: [] as { id: string; displayName: string; seedPosition: number }[],
+  // `disciplines.fixed_teams`: no viaja en `DisciplineHeader`, el armado lo pide con `disciplineConfig`.
+  fixedTeams: false,
 }))
+
+vi.mock('@/db/discipline', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/db/discipline')>()
+  return {
+    ...real,
+    disciplineConfig: async () => ({ fixedTeams: escena.fixedTeams }),
+  }
+})
 
 vi.mock('@/db/matchday', async (importOriginal) => {
   const real = await importOriginal<typeof import('@/db/matchday')>()
@@ -1122,5 +1132,32 @@ describe('el armado en DRAFT — la paridad sólo apaga el sorteo en parejas (as
     const boton = /<button[^>]*>Generar parejas<\/button>/.exec(html)?.[0] ?? ''
     expect(boton).not.toBe('')
     expect(boton).toContain('disabled')
+  })
+})
+
+describe('el armado en DRAFT — con parejas fijas la nota no promete defensores (I4)', () => {
+  it('parejas fijas: "Cada pareja juega junta todo el torneo", no "Los defensores quedan fijos"', async () => {
+    escena.status = 'DRAFT'
+    escena.isAdmin = true
+    escena.pairSize = 2
+    escena.maxMatches = undefined
+    escena.formato = { kind: 'ROUND_ROBIN' }
+    // La nota va debajo de las parejas ya armadas.
+    escena.sides = [
+      { size: 2, a: 'e1', b: 'e2' },
+      { size: 2, a: 'e3', b: 'e4' },
+      { size: 2, a: 'e5', b: 'e6' },
+      { size: 2, a: 'e7', b: 'e8' },
+    ]
+    escena.matches = []
+    escena.squadCount = 8
+    escena.guestEntries = []
+    escena.fixedTeams = true
+
+    const html = await render()
+    escena.fixedTeams = false
+
+    expect(html).toContain('Cada pareja juega junta todo el torneo: sólo se arman los cruces.')
+    expect(html).not.toContain('Los defensores quedan fijos')
   })
 })

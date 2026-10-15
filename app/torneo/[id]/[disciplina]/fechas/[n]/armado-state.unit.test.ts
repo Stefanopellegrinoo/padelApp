@@ -475,6 +475,29 @@ describe('armadoWords', () => {
   })
 })
 
+// Con parejas fijas no hay defensores ni cruce de tabla: la nota no puede prometerlos.
+describe('armadoWords — la nota del armado según la modalidad', () => {
+  const GRUPOS: MatchdayFormat = { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 }
+  const FIJAS = 'Cada pareja juega junta todo el torneo: sólo se arman los cruces.'
+
+  it('parejas fijas: dice que las parejas no cambian, sin defensores ni cruce de tabla', () => {
+    expect(armadoWords(2, ROUND_ROBIN, false, true).drawNote).toBe(FIJAS)
+  })
+
+  it('parejas fijas con grupos: la misma frase, más la de los grupos', () => {
+    expect(armadoWords(2, GRUPOS, false, true).drawNote).toBe(
+      `${FIJAS} Juegan por grupos: todos contra todos adentro de cada grupo, y los 2 primeros de cada uno pasan a la llave.`,
+    )
+  })
+
+  it('parejas que rotan e individual: el texto de siempre, letra por letra', () => {
+    expect(armadoWords(2, ROUND_ROBIN, false, false).drawNote).toBe(
+      'Los defensores quedan fijos. El resto se arma cruzando la tabla: 1° con último, 2° con anteúltimo, y así.',
+    )
+    expect(armadoWords(1, ROUND_ROBIN, false, false).drawNote).toBe('Juegan todos contra todos, en el orden de la tabla.')
+  })
+})
+
 // Fuera del armado, una fecha que se juega distinto que el deporte lo dice (§7).
 describe('formatoNotice', () => {
   const aCuatro: MatchFormat = { setsToWin: 1, gamesPerSet: 4, tieBreak: false, openScore: false }

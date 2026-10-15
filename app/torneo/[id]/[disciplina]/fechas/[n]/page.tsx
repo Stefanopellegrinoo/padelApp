@@ -68,14 +68,17 @@ function sideKey(side: Side): string {
   return [...members(side)].sort().join('~')
 }
 
-function totalGames(match: MatchResult): [number, number] {
-  let a = 0
-  let b = 0
-  for (const set of match.sets) {
-    a += set.gamesA
-    b += set.gamesB
-  }
-  return [a, b]
+/**
+ * Lo que la tarjeta del partido dice de cada lado (R15): con un solo set, sus games/goles/puntos;
+ * con más de uno, los SETS ganados — sumar 11-0, 9-11, 9-11 da 29 a 22 y señala al que perdió.
+ * `['–', '–']` sin resultado.
+ */
+function cardScore(match: MatchResult): [string, string] {
+  if (match.sets.length === 0) return ['–', '–']
+  if (match.sets.length === 1) return [String(match.sets[0]!.gamesA), String(match.sets[0]!.gamesB)]
+  const won = (mine: 'gamesA' | 'gamesB', theirs: 'gamesA' | 'gamesB') =>
+    String(match.sets.filter((set) => set[mine] > set[theirs]).length)
+  return [won('gamesA', 'gamesB'), won('gamesB', 'gamesA')]
 }
 
 /** Ganador del partido por sets, la misma cuenta que usa `computeStandings`. `null` sin resultado. */
@@ -532,7 +535,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
         return a.round - b.round
       })
       .map((match) => {
-        const [gamesA, gamesB] = totalGames(match)
+        const [scoreA, scoreB] = cardScore(match)
         return {
           key: match.id,
           matchId: match.id,
@@ -540,8 +543,8 @@ export default async function FechaDetailPage({ params }: PageProps) {
           grupo: match.grupo,
           sideAName: sideName(match.sideA),
           sideBName: sideName(match.sideB),
-          scoreA: match.sets.length === 0 ? '–' : String(gamesA),
-          scoreB: match.sets.length === 0 ? '–' : String(gamesB),
+          scoreA,
+          scoreB,
           winner: matchWinner(match),
         }
       })
@@ -642,16 +645,15 @@ export default async function FechaDetailPage({ params }: PageProps) {
       const loadedCount = roundMatches.filter((match) => match.sets.length > 0).length
 
       const matches: RoundMatchVM[] = roundMatches.map((match, index) => {
-        const [gamesA, gamesB] = totalGames(match)
-        const winner = matchWinner(match)
+        const [scoreA, scoreB] = cardScore(match)
         return {
           key: `${roundNumber}-${index}`,
           matchId: match.id,
           pairAName: sideName(match.sideA),
           pairBName: sideName(match.sideB),
-          scoreA: match.sets.length === 0 ? '–' : String(gamesA),
-          scoreB: match.sets.length === 0 ? '–' : String(gamesB),
-          winner,
+          scoreA,
+          scoreB,
+          winner: matchWinner(match),
         }
       })
 

@@ -1024,3 +1024,65 @@ describe('el armado en DRAFT — Automático antes de sortear (§7, hallazgo de 
     expect(html).toContain('Cómo quedan los grupos')
   })
 })
+
+describe('la tarjeta del partido: con más de un set cuenta SETS, con uno solo los games (R15)', () => {
+  function withSets(round: number, a: number, b: number, sets: [number, number][], fase: MatchWithId['fase'] = 'GRUPO'): MatchWithId {
+    return {
+      id: `${fase}-${round}-${a}-${b}`,
+      round,
+      fase,
+      grupo: 1,
+      sideA: side(a),
+      sideB: side(b),
+      sets: sets.map(([gamesA, gamesB]) => ({ gamesA, gamesB })),
+    }
+  }
+  /** El puntaje que la tarjeta dibuja al lado del nombre, sólo en la parte de partidos (antes de la tabla). */
+  function scoreOf(html: string, name: string): string | undefined {
+    const partidos = html.slice(0, html.indexOf('Tabla de la fecha'))
+    return new RegExp(`${name}</span><span[^>]*>(\\d+|–)</span>`).exec(partidos)?.[1]
+  }
+
+  it('ping pong 11-0, 9-11, 9-11 dice 1 a 2 (no 29 a 22) y un set de pádel 4-2 sigue diciendo 4 a 2', async () => {
+    escena.status = 'OPEN'
+    escena.isAdmin = true
+    escena.pairSize = 1
+    escena.formato = { kind: 'ROUND_ROBIN' }
+    escena.sides = [1, 2, 3, 4].map(side)
+    escena.matches = [
+      withSets(1, 1, 2, [[11, 0], [9, 11], [9, 11]]),
+      withSets(1, 3, 4, [[4, 2]]),
+      withSets(2, 1, 3, [[6, 11], [11, 9], [11, 5]]),
+      unplayedMatch('GRUPO', 1, 2, 2, 4),
+    ]
+
+    const html = (await render()).replaceAll('<!-- -->', '')
+
+    // La ronda 1, completa, queda en su fila resumen.
+    expect(html).toContain('Jugador 1 1–2 Jugador 2')
+    expect(html).toContain('Jugador 3 4–2 Jugador 4')
+    expect(html).not.toContain('29–22')
+    // La ronda 2 está abierta: la tarjeta.
+    expect(scoreOf(html, 'Jugador 1')).toBe('2')
+    expect(scoreOf(html, 'Jugador 3')).toBe('1')
+  })
+
+  it('en la llave también: sets ganados con más de un set, games con uno', async () => {
+    escena.status = 'OPEN'
+    escena.isAdmin = true
+    escena.pairSize = 1
+    escena.formato = { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 }
+    escena.sides = ALL_SIDES
+    escena.matches = [
+      withSets(1, 1, 2, [[11, 0], [9, 11], [9, 11]]),
+      withSets(1, 3, 4, [[4, 2]]),
+    ]
+
+    const html = await render()
+
+    expect(scoreOf(html, 'Jugador 1')).toBe('1')
+    expect(scoreOf(html, 'Jugador 2')).toBe('2')
+    expect(scoreOf(html, 'Jugador 3')).toBe('4')
+    expect(scoreOf(html, 'Jugador 4')).toBe('2')
+  })
+})

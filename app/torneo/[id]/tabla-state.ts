@@ -6,6 +6,7 @@
  */
 
 import { disciplineSlugs, MASTERS_SIZE, type SideSize, type SluggableDiscipline } from '@/core'
+import type { StandingsRow } from './desempate'
 
 /** Una fecha cerrada con los premios que se congelaron al cerrarla. */
 export interface ClosedMatchdayAwards {
@@ -30,9 +31,93 @@ export interface VolverDestination {
  * propósito —mismo truco que la tabla global (`page.tsx`)— y la línea no se
  * dibuja. Antes la Tabla pasaba `MASTERS_SIZE` siempre y una FIFA individual
  * decía "CLASIFICAN AL MASTERS" sin tener Masters.
+ *
+ * `mastersRows` son las filas que cubren a los `MASTERS_SIZE` primeros
+ * jugadores: `MASTERS_SIZE` cuando cada fila es una persona, y
+ * `pairRows(...).mastersAfter` cuando la tabla va por pareja (con `rowCount`
+ * también en filas de pareja). Con parejas fijas SIN Masters sigue valiendo
+ * `rowCount + 1`: tener parejas no enciende la línea.
  */
-export function mastersCutoffFor(hasMasters: boolean, rowCount: number): number {
-  return hasMasters ? MASTERS_SIZE : rowCount + 1
+export function mastersCutoffFor(hasMasters: boolean, rowCount: number, mastersRows = MASTERS_SIZE): number {
+  return hasMasters ? mastersRows : rowCount + 1
+}
+
+/**
+ * La Tabla de un deporte de parejas fijas: una fila por pareja ("Fede &
+ * Martina"), con los puntos, el movimiento y el lugar del mejor ubicado de los
+ * dos; los sueltos quedan como están. Los puestos se numeran de nuevo, 1..n.
+ * El orden sale de la tabla de entrada (`rows`, ya ordenada), nunca del orden de
+ * `teams`: `teamsOf` devuelve en orden de uuid los equipos que se crearon en
+ * una sola inserción. El nombre sí sigue el orden del equipo (`a & b`), para
+ * que no cambie de lado cuando se cruzan en la tabla.
+ *
+ * `mastersAfter` es cuántas filas cubren a los `MASTERS_SIZE` primeros
+ * jugadores (una pareja son 2): ahí cae la línea "CLASIFICAN AL MASTERS".
+ *
+ * Los empates se marcan de nuevo entre FILAS: los dos de una pareja empatan
+ * siempre entre sí, y el compañero ya no es una fila a la que apuntar. Sólo si
+ * la tabla de entrada marcaba alguno — sin fecha cerrada `tabla-view` los apaga
+ * a propósito, y entre las filas de pareja no puede haber un empate que entre
+ * las personas no hubiera.
+ *
+ * ponytail: si los dos de una pareja tuvieran puntos distintos (una fecha
+ * jugada antes de armar la pareja), la fila muestra los del mejor ubicado.
+ * Un equipo con alguien que no está en `rows` se ignora: el otro queda suelto.
+ */
+export function pairRows(
+  rows: readonly StandingsRow[],
+  teams: readonly { a: string; b: string }[],
+): { rows: StandingsRow[]; mastersAfter: number } {
+  const byEntry = new Map(rows.map((row) => [row.entryId, row]))
+  const teamOf = new Map<string, { first: StandingsRow; second: StandingsRow }>()
+  for (const { a, b } of teams) {
+    const first = byEntry.get(a)
+    const second = byEntry.get(b)
+    if (first === undefined || second === undefined) continue
+    teamOf.set(a, { first, second })
+    teamOf.set(b, { first, second })
+  }
+
+  const merged = new Set<string>()
+  const paired: StandingsRow[] = []
+  let mastersAfter = 0
+  let covered = 0
+  for (const row of rows) {
+    if (merged.has(row.entryId)) continue
+    const team = teamOf.get(row.entryId)
+    if (team !== undefined) {
+      merged.add(team.first.entryId)
+      merged.add(team.second.entryId)
+    }
+    paired.push(
+      team === undefined
+        ? row
+        : {
+            ...row,
+            displayName: `${team.first.displayName} & ${team.second.displayName}`,
+            initials: team.first.initials.slice(0, 1) + team.second.initials.slice(0, 1),
+          },
+    )
+    if (covered < MASTERS_SIZE) {
+      covered += team === undefined ? 1 : 2
+      mastersAfter += 1
+    }
+  }
+
+  const showTies = rows.some((row) => row.tiedWithEntryId !== null)
+  const numbered = paired.map((row, index): StandingsRow => {
+    const previous = paired[index - 1]
+    const next = paired[index + 1]
+    const tied =
+      previous !== undefined && previous.points === row.points
+        ? previous.entryId
+        : next !== undefined && next.points === row.points
+          ? next.entryId
+          : null
+    return { ...row, position: index + 1, tiedWithEntryId: showTies ? tied : null }
+  })
+
+  return { rows: numbered, mastersAfter }
 }
 
 /**

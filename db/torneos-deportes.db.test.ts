@@ -516,7 +516,8 @@ describe('AUTO se resuelve al confirmar la fecha (§7)', () => {
       status: 'OPEN',
       formato: { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 },
     })
-    expect(await matchFormatOf(matchdayId)).toEqual({ setsToWin: 1, gamesPerSet: 4 })
+    // FIFA es de marcador abierto: no hay sets que congelar (R4).
+    expect(await matchFormatOf(matchdayId)).toBeNull()
   })
 
   it('setMatchdayFormat acepta AUTO en armado aunque todos contra todos no entre (12 de a uno)', async () => {
@@ -955,5 +956,30 @@ describe('ping pong en torneos: nace de su ficha y la fecha valida a 11, ganando
       [12, 10],
     ])
     expect(sets?.filter((set) => set.match_id === second!.id)).toEqual([])
+  })
+})
+
+// ── Ronda final de arreglos: el formato propio de una fecha (§7).
+
+describe('setMatchFormat y el congelado al confirmar: sólo formatos de sets, dentro de la ficha', () => {
+  it('un formato propio falsificado con openScore no se saltea los rangos de la ficha (R3)', async () => {
+    const { admin, matchdayId } = await draftMatchday()
+    const forged = { setsToWin: 9, gamesPerSet: 99, openScore: true } as unknown as Parameters<typeof setMatchFormat>[2]
+
+    await expect(setMatchFormat(admin.client, matchdayId, forged)).rejects.toThrow(
+      'Los sets para ganar tienen que estar entre 1 y 3.',
+    )
+    expect(await matchFormatOf(matchdayId)).toBeNull()
+  })
+
+  it('confirmar una fecha de FIFA no congela match_format: no tiene sets (R4)', async () => {
+    const scene = await squadSeason(4, 'FIFA')
+    const matchdayId = await draftWithPresent(scene)
+    await generatePairs(scene.admin.client, matchdayId)
+
+    await openMatchday(scene.admin.client, matchdayId)
+
+    expect((await matchdayRow(matchdayId)).status).toBe('OPEN')
+    expect(await matchFormatOf(matchdayId)).toBeNull()
   })
 })

@@ -150,6 +150,10 @@ export function disciplineProfile(
  *
  * ponytail: con fechas a distinta cantidad de sets, el desempate por diferencia
  * de sets mezcla fechas distintas (spec §7, aceptado). Si molesta: desempatar por fecha.
+ *
+ * ponytail: las fechas cerradas antes de 0096 tienen `match_format` null y se releen
+ * con el formato de HOY de la disciplina (sin backfill, R14). Sólo afecta rótulos: los
+ * puntos ya están guardados. Si molesta: backfill con el formato de cada fecha.
  */
 export function effectiveMatchFormat(base: MatchFormat, own: MatchFormatOwn | null): MatchFormat {
   return own === null ? base : { ...base, setsToWin: own.setsToWin, gamesPerSet: own.gamesPerSet }

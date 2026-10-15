@@ -401,7 +401,9 @@ export async function setMatchFormat(supabase: Client, matchdayId: string, own: 
     if (sportFamily(data.kind) !== 'sets' || base.openScore) {
       throw new EdgeError('Este deporte no tiene sets que cambiar.')
     }
-    const problem = sportFormatError(data.kind, { ...base, ...own })
+    // `effectiveMatchFormat` y no un spread: de `own` sólo valen sus dos números, y un
+    // `openScore` colado en el pedido se saltearía los rangos.
+    const problem = sportFormatError(data.kind, effectiveMatchFormat(base, own))
     if (problem !== null) throw new EdgeError(problem)
   }
   const { matches } = await resultsOf(supabase, matchdayId)
@@ -1334,7 +1336,8 @@ async function freezeMatchdayFormat(supabase: Client, matchday: MatchdayRow, hea
     ...(formato.kind === 'AUTO'
       ? { formato: resolveFormato(formato, headcount, pairSize, maxMatchesOf(config, pairSize)) as unknown as Json }
       : {}),
-    ...(matchday.match_format === null
+    // Un deporte de marcador abierto no tiene sets que congelar.
+    ...(matchday.match_format === null && !config.matchFormat.openScore
       ? { match_format: { setsToWin: config.matchFormat.setsToWin, gamesPerSet: config.matchFormat.gamesPerSet } }
       : {}),
   }

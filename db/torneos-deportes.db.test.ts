@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
-import { defaultConfig, type DisciplineId, type MatchdayFormatSetting, type SeasonConfig } from '@/core'
+import { defaultConfig, shuffled, type DisciplineId, type MatchdayFormatSetting, type SeasonConfig } from '@/core'
 import type { Client } from './client'
 import type { Json } from './database.types'
 import {
   addDiscipline,
+  disciplineConfig,
   updateDisciplineConfig,
   updateDisciplineFormatoDefault,
   writeDisciplineRules,
@@ -800,5 +801,125 @@ describe('writeDisciplineRules: sólo lo que cambió, en orden config → Master
     expect(row.config).toEqual(before.config)
     expect(row.has_masters).toBe(true)
     expect(row.formato_default).toEqual({ kind: 'ROUND_ROBIN' })
+  })
+})
+
+// ── Tarea 15: "Agregar un deporte" a un torneo en curso guarda el sorteo como orden y copia el de otro deporte.
+
+/** Un torneo de 6 con Pádel (primera fecha por nivel) cuyo orden propio es el del plantel al revés. */
+async function torneoConPadelAlReves() {
+  const admin = await createTestUser()
+  const names = playerNames(6)
+  const { seasonId } = await createSeasonOf(admin.client, {
+    name: 'Agregar un deporte',
+    squadNames: names,
+    config: defaultConfig(6),
+    disciplines: [{ kind: 'PADEL', config: { ...defaultConfig(6), firstFecha: 'NIVEL' }, seedOrder: [5, 4, 3, 2, 1, 0] }],
+  })
+  return { admin, seasonId, ids: await seatIds(seasonId, names), padelId: await disciplineIdOf(seasonId, 'PADEL') }
+}
+
+async function disciplinesIn(seasonId: string): Promise<number> {
+  const { count, error } = await adminClient().from('disciplines').select('id', { count: 'exact', head: true }).eq('season_id', seasonId)
+  if (error) throw new Error(error.message)
+  return count ?? 0
+}
+
+describe('addDiscipline: "Al azar" e "Igual que" guardan el orden de quien juega (§4)', () => {
+  it('shuffle: FIFA con 5 de 6 queda con un sorteo de esos 5, no con el orden del torneo', async () => {
+    const { admin, seasonId, ids } = await torneoConPadelAlReves()
+    const playing = ids.slice(0, 5)
+    // `random` en 0 saca al último al frente: el sorteo queda fijo y distinto del orden del torneo.
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0)
+    let fifaId: DisciplineId
+    try {
+      fifaId = await addDiscipline(
+        admin.client,
+        seasonId,
+        { kind: 'FIFA', pairSize: 1, config: fifaConfig(5), shuffle: true },
+        playing,
+      )
+    } finally {
+      random.mockRestore()
+    }
+
+    const order = await squadSeedOrder(admin.client, fifaId)
+    expect(order).toEqual(shuffled(playing, () => 0))
+    expect(order).not.toEqual(playing)
+    expect([...order].sort()).toEqual([...playing].sort())
+  })
+
+  it('sameOrderAs: copia el orden de esa disciplina; quien no la juega va al final, en el orden del torneo', async () => {
+    const { admin, seasonId, ids, padelId } = await torneoConPadelAlReves()
+
+    // Cuatro de seis: el orden de Pádel (5..0) sin los que FIFA no juega.
+    const four = await addDiscipline(
+      admin.client,
+      seasonId,
+      { kind: 'FIFA', pairSize: 1, config: { ...fifaConfig(4), firstFecha: 'SORTEO' }, sameOrderAs: padelId },
+      ids.slice(0, 4),
+    )
+    expect(await squadSeedOrder(admin.client, four)).toEqual([3, 2, 1, 0].map((at) => ids[at]))
+    // "Igual que" también copia cómo se armó la primera fecha: el reglamento no puede decir otra cosa.
+    expect(((await disciplineConfig(admin.client, four)).config).firstFecha).toBe('NIVEL')
+
+    // Los seis "igual que" esa de cuatro: los 4 en su orden y, después, los 2 que no la juegan.
+    const six = await addDiscipline(
+      admin.client,
+      seasonId,
+      { kind: 'FIFA', pairSize: 1, config: fifaConfig(6), sameOrderAs: four },
+      ids,
+    )
+    expect(await squadSeedOrder(admin.client, six)).toEqual([3, 2, 1, 0, 4, 5].map((at) => ids[at]))
+  })
+})
+
+describe('addDiscipline: sorteo e "igual que" se validan antes de escribir (la disciplina no queda creada)', () => {
+  const ONE_FORM = 'Cada deporte arma su primera fecha de una sola forma.'
+  const SAME_SEASON = 'Igual que tiene que ser otro deporte de este torneo.'
+
+  const cases: Array<[string, string, (own: { padelId: DisciplineId; other: DisciplineId }) => Record<string, unknown>]> = [
+    ['shuffle y sameOrderAs a la vez', ONE_FORM, ({ padelId }) => ({ shuffle: true, sameOrderAs: padelId })],
+    ['sameOrderAs de una disciplina de OTRA temporada', SAME_SEASON, ({ other }) => ({ sameOrderAs: other })],
+    ['sameOrderAs de una disciplina que no existe', SAME_SEASON, () => ({ sameOrderAs: '00000000-0000-0000-0000-000000000000' })],
+    ['sameOrderAs que ni es un uuid', SAME_SEASON, () => ({ sameOrderAs: 'padel' })],
+    ['sameOrderAs numérico', SAME_SEASON, () => ({ sameOrderAs: 5 })],
+    ['sameOrderAs null (lo que cruza el JSON de un NaN)', SAME_SEASON, () => ({ sameOrderAs: null })],
+  ]
+
+  it.each(cases)('%s: rebota con su mensaje y Pádel sigue siendo la única disciplina', async (_label, message, forge) => {
+    const { admin, seasonId, ids, padelId } = await torneoConPadelAlReves()
+    const { disciplineId: other } = await createSeason({ admin })
+
+    const caught = await addDiscipline(
+      admin.client,
+      seasonId,
+      { kind: 'FIFA', pairSize: 1, config: fifaConfig(6), ...forge({ padelId, other }) } as never,
+      ids,
+    ).then(
+      () => undefined,
+      (error: unknown) => error,
+    )
+
+    expect(caught).toBeInstanceOf(EdgeError)
+    expect((caught as EdgeError).message).toBe(message)
+    expect(await disciplinesIn(seasonId)).toBe(1)
+  })
+
+  it('un entryId que no es un uuid (JSON de cliente) rebota y tampoco deja la disciplina', async () => {
+    const { admin, seasonId, ids } = await torneoConPadelAlReves()
+
+    const caught = await addDiscipline(
+      admin.client,
+      seasonId,
+      { kind: 'FIFA', pairSize: 1, config: fifaConfig(5), shuffle: true },
+      [...ids.slice(0, 4), 'no-soy-un-uuid'],
+    ).then(
+      () => undefined,
+      (error: unknown) => error,
+    )
+
+    expect(caught).toBeInstanceOf(EdgeError)
+    expect(await disciplinesIn(seasonId)).toBe(1)
   })
 })

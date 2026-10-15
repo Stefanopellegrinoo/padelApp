@@ -2,9 +2,9 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import type { DisciplineId, SideSize } from '@/core'
+import { isTournamentSport, type DisciplineId } from '@/core'
 import type { DisciplineRules } from '@/app/deporte/personalizar-reglas-state'
-import { type DisciplineKind, newDisciplineSpec } from '@/app/torneos/nuevo/wizard-state'
+import { offeredModalities } from '@/app/deporte/tarjeta-state'
 import { addDiscipline, updateDisciplineRules, writeDisciplineRules } from '@/db/discipline'
 import { addToDiscipline, removeFromDiscipline } from '@/db/discipline-entries'
 import { createTeam, deleteTeam } from '@/db/discipline-teams'
@@ -12,6 +12,7 @@ import { addSquadSeat, claimOwnSeat, removeSeat, renameSeat, unlinkSeat } from '
 import { EdgeError } from '@/db/errors'
 import { deleteSeason, renameSeason, updateSeasonPlayersCanScore } from '@/db/season'
 import { serverClient } from '@/db/server'
+import { newSportOf, type NewSportInput } from './nuevo-deporte-state'
 
 export type WriteResult = { ok: true } | { ok: false; error: string }
 
@@ -149,41 +150,26 @@ export async function saveDisciplineRules(
 }
 
 /**
- * Suma una disciplina a un torneo YA EN CURSO (REQ-D1-2). A diferencia del
- * wizard —una fila por `kind`, decisión #3823— acá NO se filtra el `kind` ya
- * presente: un segundo PADEL es exactamente el caso que habilita el ordinal
- * de `core/discipline-slug.ts` (`padel`, `padel-2`).
+ * "+ Agregar un deporte" a un torneo YA EN CURSO (REQ-D1-2, docs/torneos-deportes.md §5): la misma
+ * tarjeta del paso 3 del wizard. A diferencia del wizard —una fila por `kind`, decisión #3823— acá NO
+ * se filtra el `kind` ya presente: un segundo PADEL es exactamente el caso que habilita el ordinal de
+ * `core/discipline-slug.ts` (`padel`, `padel-2`).
  *
- * `config` sale de `defaultConfig(entryIds.length)`: el tamaño real del
- * plantel elegido, no el de la temporada entera si el admin destildó a
- * alguien (REQ-D1-4, solape parcial). Si queda impar o por debajo del
- * mínimo, `assertValidConfig` (adentro de `addDiscipline`) lo rechaza con el
- * mismo mensaje en español que ya usa Formato — no hace falta duplicar esa
- * validación acá.
+ * `input` es JSON de cliente (Server Action): `kind` y `modality` se miran antes de `fichaSeed`, que
+ * tira un Error común —bug del llamador— si el deporte no ofrece esa modalidad. El resto lo valida
+ * `addDiscipline` antes de escribir (config, "Al azar" / "Igual que", plantel), y por eso la config
+ * llega del tamaño de `entryIds`: acá no se rehace, o un cliente torcido cambiaría los puntos en silencio.
  *
- * `newDisciplineSpec` es lo que le pone la FORMA DEL MARCADOR (PR20 rebanada
- * D2) y, desde PR21 Rebanada F, los LADOS (`pairSize`): sin él, `defaultConfig`
- * nace en pádel de a dos y una FIFA agregada desde acá no podía cargar ni un
- * `3-1` ni un `0-0`, ni nacer de a uno. Es la misma función que usa el wizard
- * por dentro (`buildDisciplines`) — los dos caminos que crean una disciplina
- * escriben lo mismo o el torneo depende de por dónde entraste.
- *
- * `pairSize` es OBLIGATORIO acá (a diferencia de `newDisciplineSpec`, que sí
- * lo deja opcional para quedar general): el único caller de producción
- * (`Disciplinas`) SIEMPRE tiene un `pairSize` —el radio "Lados" nace en 2—,
- * así que dejarlo opcional acá sólo abriría la puerta a olvidarlo en el
- * sitio del submit sin que nada lo marque. Con el parámetro obligatorio,
- * olvidarlo es un error de `tsc`, no un test que haya que escribir y
- * mantener — mismo criterio que `newTournamentPayload` (`wizard-state.ts`).
+ * ponytail: sin guard de FORMA del `formatoDefault`, igual que `saveDisciplineRules`; un valor armado a
+ * mano vuelve como el mensaje crudo del CHECK de Postgres, y no deja nada creado.
  */
-export async function addDisciplineToSeason(
-  seasonId: string,
-  kind: DisciplineKind,
-  entryIds: string[],
-  pairSize: SideSize,
-): Promise<WriteResult> {
+export async function addSportToSeason(seasonId: string, input: NewSportInput): Promise<WriteResult> {
   return onSeason(seasonId, async (supabase) => {
-    await addDiscipline(supabase, seasonId, newDisciplineSpec(kind, entryIds.length, pairSize), entryIds)
+    const { kind, modality, entryIds } = input
+    if (!isTournamentSport(kind) || !offeredModalities(kind).includes(modality) || !Array.isArray(entryIds)) {
+      throw new EdgeError('Elegí un deporte y una modalidad de la lista.')
+    }
+    await addDiscipline(supabase, seasonId, newSportOf(input), entryIds)
   })
 }
 

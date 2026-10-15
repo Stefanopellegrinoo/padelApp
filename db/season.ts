@@ -253,6 +253,9 @@ function isTeamsShape(teams: unknown, squadLength: number): boolean {
   return true
 }
 
+/** Sorteo, orden propio e "igual que" son tres formas de armar la primera fecha: una sola por deporte (también en `addDiscipline`). */
+export const ONE_FIRST_FECHA_FORM = 'Cada deporte arma su primera fecha de una sola forma.'
+
 /**
  * Lo que el wizard nuevo le suma a una disciplina (sorteo, "igual que",
  * parejas), o el mensaje de por qué no cierra. Es JSON de cliente sin schema en
@@ -265,7 +268,7 @@ function firstFechaError(
   squadLength: number,
 ): string | null {
   const forms = [spec.seedOrder !== undefined, spec.shuffle === true, spec.sameOrderAs !== undefined]
-  if (forms.filter(Boolean).length > 1) return 'Cada deporte arma su primera fecha de una sola forma.'
+  if (forms.filter(Boolean).length > 1) return ONE_FIRST_FECHA_FORM
   const source = spec.sameOrderAs
   if (
     source !== undefined &&

@@ -1,11 +1,11 @@
 import { isDeepStrictEqual } from 'node:util'
-import { isTournamentSport, sportFormatError } from '@/core'
-import type { DisciplineId, MatchdayFormat, MatchdayFormatSetting, SeasonConfig, SideSize, TournamentSport } from '@/core'
+import { isTournamentSport, shuffled, sportFormatError } from '@/core'
+import type { DisciplineId, MatchdayFormatSetting, SeasonConfig, SideSize, TournamentSport } from '@/core'
 import type { Client } from './client'
 import type { Json } from './database.types'
 import { EdgeError, writeErrorMessage } from './errors'
 import { seasonSeedOrder } from './read'
-import { defaultDisciplineId } from './season'
+import { ONE_FIRST_FECHA_FORM, defaultDisciplineId, squadSeedOrder } from './season'
 import { assertValidConfig } from './validate'
 
 /** `disciplineConfig`'s return: la config Y el `pair_size`/`allows_draw` reales, del mismo select. */
@@ -359,6 +359,36 @@ export async function updateDisciplineRules(
   }
 }
 
+/**
+ * De dónde copia el orden "Igual que": cómo se armó su primera fecha y la posición de cada asiento que juega.
+ * `sameOrderAs` es JSON de cliente sin schema en runtime: tiene que ser el id de una disciplina de ESTA
+ * temporada, o rebota sin crear nada (RLS sola dejaría pasar a quien organiza las dos).
+ */
+async function sameOrderSource(
+  supabase: Client,
+  seasonId: string,
+  sameOrderAs: unknown,
+): Promise<{ firstFecha: SeasonConfig['firstFecha']; rank: Map<string, number> }> {
+  const notHere = new EdgeError('Igual que tiene que ser otro deporte de este torneo.')
+  if (typeof sameOrderAs !== 'string') throw notHere
+  const { data, error } = await supabase
+    .from('disciplines')
+    .select('config')
+    .eq('id', sameOrderAs)
+    .eq('season_id', seasonId)
+    .maybeSingle()
+  // 22P02: ni siquiera castea a uuid -- un pedido armado a mano, no una falla de lectura.
+  if (error !== null && error.code !== '22P02') {
+    throw new EdgeError(`No se pudo leer la disciplina de la que se copia el orden: ${error.message}`)
+  }
+  if (data === null) throw notHere
+  const order = await squadSeedOrder(supabase, sameOrderAs as DisciplineId)
+  return {
+    firstFecha: (data.config as unknown as SeasonConfig).firstFecha,
+    rank: new Map(order.map((entryId, at) => [entryId, at])),
+  }
+}
+
 /** Una disciplina a agregar a un torneo ya en curso — `addDiscipline`, no el wizard. */
 export interface NewDiscipline {
   kind?: TournamentSport
@@ -370,9 +400,17 @@ export interface NewDiscipline {
   /** Mismo contrato que `NewSeasonDiscipline`. Sin especificar, el automático de decisión #4029 (`false` con `pairSize: 1`, `true` si no). */
   hasMasters?: boolean
   /** Mismo contrato que `NewSeasonDiscipline`. Sin especificar, el default de columna (`ROUND_ROBIN`, 0074). */
-  formatoDefault?: MatchdayFormat
+  formatoDefault?: MatchdayFormatSetting
   /** Mismo contrato que `NewSeasonDiscipline` (db/season.ts): sin especificar, `false`. Sólo tiene sentido con `pairSize: 2`; `disciplines_fixed_teams_needs_pair` (0077) rechaza `true` con `pairSize: 1`. */
   fixedTeams?: boolean
+  /** "Al azar": se sortea el orden de quienes juegan y se guarda como orden (docs/torneos-deportes.md §4). Sin esto ni `sameOrderAs`, el orden del torneo ("Por nivel"). */
+  shuffle?: boolean
+  /**
+   * "Igual que": el orden de esa disciplina (`squadSeedOrder`); quien no la juega va al final, en el orden del torneo.
+   * Tiene que ser de la MISMA temporada, y trae consigo cómo se armó su primera fecha (`config.firstFecha`).
+   * A lo sumo uno de `shuffle` / `sameOrderAs`.
+   */
+  sameOrderAs?: DisciplineId
 }
 
 /**
@@ -412,7 +450,11 @@ export async function addDiscipline(
   if (!isTournamentSport(kind)) throw new EdgeError('Elegí un deporte de la lista.')
   const formatProblem = sportFormatError(kind, spec.config.matchFormat)
   if (formatProblem !== null) throw new EdgeError(formatProblem)
+  // `shuffle` y `sameOrderAs` viajan del cliente: se miran, y se lee el origen de "Igual que", ANTES
+  // de crear nada.
+  if (spec.shuffle === true && spec.sameOrderAs !== undefined) throw new EdgeError(ONE_FIRST_FECHA_FORM)
   assertValidConfig(spec.config, spec.pairSize ?? 2)
+  const source = spec.sameOrderAs === undefined ? null : await sameOrderSource(supabase, seasonId, spec.sameOrderAs)
 
   const { data: maxRow, error: maxError } = await supabase
     .from('disciplines')
@@ -428,7 +470,7 @@ export async function addDiscipline(
     .insert({
       season_id: seasonId,
       kind,
-      config: spec.config as unknown as Json,
+      config: (source === null ? spec.config : { ...spec.config, firstFecha: source.firstFecha }) as unknown as Json,
       position: (maxRow?.position ?? -1) + 1,
       pair_size: spec.pairSize ?? 2,
       allows_draw: spec.allowsDraw ?? false,
@@ -477,7 +519,11 @@ export async function addDiscipline(
     .order('id', { ascending: true })
   if (entryIds !== undefined) seatQuery = seatQuery.in('id', entryIds)
   const { data: seats, error: seatsReadError } = await seatQuery
-  if (seatsReadError) throw new EdgeError(`No se pudo leer el plantel: ${seatsReadError.message}`)
+  if (seatsReadError) {
+    // Un `entryIds` armado a mano (no uuid) llega hasta acá: la disciplina ya está insertada.
+    await supabase.from('disciplines').delete().eq('id', disciplineId)
+    throw new EdgeError(`No se pudo leer el plantel: ${seatsReadError.message}`)
+  }
 
   // Misma guarda que createSeason (season.ts:240)
   // — sin esto, la config podía describir un plantel que no era el sembrado.
@@ -509,10 +555,13 @@ export async function addDiscipline(
     // debería pasar nunca, ver el docblock de `seasonSeedOrder`—, mismo
     // criterio que esa función.
     const rank = await seasonSeedOrder(supabase, seasonId)
-    const ordered = [...seats].sort(
-      (left, right) =>
-        (rank.get(left.id) ?? Number.MAX_SAFE_INTEGER) - (rank.get(right.id) ?? Number.MAX_SAFE_INTEGER),
-    )
+    const byRank = (ranks: ReadonlyMap<string, number>) => (left: { id: string }, right: { id: string }) =>
+      (ranks.get(left.id) ?? Number.MAX_SAFE_INTEGER) - (ranks.get(right.id) ?? Number.MAX_SAFE_INTEGER)
+    let ordered = [...seats].sort(byRank(rank))
+    // "Al azar" guarda el sorteo como orden (el motor sólo conoce órdenes); "Igual que" reordena por el de
+    // la otra disciplina, y `sort` es estable: quien ella no juega queda al final, en el orden del torneo.
+    if (spec.shuffle === true) ordered = shuffled(ordered, Math.random)
+    else if (source !== null) ordered.sort(byRank(source.rank))
     const { error: seatsError } = await supabase.from('discipline_entries').insert(
       ordered.map((seat, index) => ({
         discipline_id: disciplineId,

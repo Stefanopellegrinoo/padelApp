@@ -1079,6 +1079,8 @@ export type Database = {
         Returns: {
           allows_draw: boolean
           config: Json
+          fixed_teams: boolean
+          formato_default: Json
           has_masters: boolean
           kind: string
           pair_size: number

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
-import { defaultConfig, type DisciplineId, type MatchdayFormat, type SeasonConfig } from '@/core'
+import { defaultConfig, type DisciplineId, type MatchdayFormat, type MatchdayFormatSetting, type SeasonConfig } from '@/core'
 import type { DisciplineHeader } from '@/db/read'
 
 /**
@@ -58,16 +58,21 @@ const escena = vi.hoisted(() => ({
   // Rebanada 3a de "reglas por disciplina": `hasMasters`/`pairSize`/
   // `allowsDraw` reales (0069), mismo criterio que `disciplina()` abajo — sin
   // esto la rama anónima le pasaría `undefined` a `RulesBody.shape`.
+  // Torneos-deportes, Tarea 7: Reglas lee de acá en LAS DOS ramas (con y sin
+  // sesión) — es la única fuente de `fixedTeams`/`formatoDefault`/`rulesText`
+  // de cada bloque; `seasonHeader` sólo aporta `isAdmin`.
   publicFormats: [] as {
-    kind: 'PADEL' | 'FIFA'
+    kind: string
     config: unknown
     hasMasters: boolean
     pairSize: 1 | 2
     allowsDraw: boolean
+    fixedTeams: boolean
+    formatoDefault: MatchdayFormatSetting
     rulesText: string
   }[],
-  // Rebanada 3b: el texto libre de CADA disciplina, para probar que el bloque
-  // de Pádel muestra el suyo y el de FIFA el suyo — nunca el del otro.
+  // El texto libre de CADA disciplina para Ajustes (`disciplineRulesOf`).
+  // Reglas ya no lo lee: su texto sale de `publicFormats[].rulesText`.
   rulesByDiscipline: new Map<DisciplineId, string>(),
 }))
 
@@ -94,11 +99,8 @@ vi.mock('@/db/read', async (importOriginal) => {
       disciplines: escena.disciplines,
     }),
     // Rebanada 2 de "reglas por disciplina": Ajustes lee esto para armar un
-    // editor por disciplina (`disciplineId -> rules_text`). Rebanada 3b:
-    // Reglas CON SESIÓN también lo lee, un bloque por disciplina —
-    // `escena.rulesByDiscipline` vacío por default, lo que hace que ningún
-    // bloque muestre texto libre (caso válido, ya cubierto por los tests que
-    // sólo miran el panel de Formato).
+    // editor por disciplina (`disciplineId -> rules_text`). Reglas, con o sin
+    // sesión, lee el texto de `publicFormats` (torneos-deportes, Tarea 7).
     disciplineRulesOf: async () => escena.rulesByDiscipline,
     // La rama SIN SESIÓN. `season_public_rules` (0022) devuelve la config de
     // UNA disciplina —la de por defecto— y ni su `kind`, así que sola no
@@ -161,16 +163,26 @@ function disciplina(
 const SOLO_PADEL = [disciplina('d1', 'PADEL', PADEL)]
 const PADEL_Y_FIFA = [disciplina('d1', 'PADEL', PADEL), disciplina('d2', 'FIFA', FIFA)]
 
-/** El equivalente de `disciplina()` para la rama SIN SESIÓN: mismo criterio de `hasMasters`/`allowsDraw` por `kind`. */
-function publicFormat(kind: 'PADEL' | 'FIFA', config: unknown, rulesText = '') {
+/**
+ * Lo que devuelve `season_public_formats` para una disciplina: mismo criterio de
+ * `hasMasters`/`allowsDraw` por `kind` que `disciplina()`, y por defecto parejas
+ * que rotan con `ROUND_ROBIN` (lo de siempre). `fixedTeams` y `formatoDefault`
+ * se pasan sólo cuando el test los necesita.
+ */
+function publicFormat(
+  kind: 'PADEL' | 'FIFA' | 'PING_PONG',
+  config: unknown,
+  rulesText = '',
+  { fixedTeams = false, formatoDefault = { kind: 'ROUND_ROBIN' } as MatchdayFormatSetting } = {},
+) {
   const pairSize = kind === 'PADEL' ? (2 as const) : (1 as const)
-  return { kind, config, pairSize, hasMasters: pairSize === 2, allowsDraw: kind === 'FIFA', rulesText }
+  return { kind, config, pairSize, hasMasters: pairSize === 2, allowsDraw: kind === 'FIFA', fixedTeams, formatoDefault, rulesText }
 }
 
 /**
  * El bloque de UNA disciplina, recortado del HTML de la página entera:
- * desde su encabezado `<h2>` (rebanada 3b: sólo aparece con más de una
- * disciplina) hasta el próximo `<h2>` o el final del documento. Mismo
+ * desde su título `<h2>` (siempre aparece, uno por deporte) hasta el próximo
+ * `<h2>` o el final del documento. Mismo
  * espíritu que `panelesDeFormato` de más abajo para Ajustes, pero por texto
  * de encabezado en vez de por atributo — Reglas no tiene `disciplineId` en
  * la rama SIN SESIÓN (0069 lo deja afuera a propósito), así que no hay un
@@ -197,16 +209,27 @@ async function ajustes(disciplines: DisciplineHeader[]): Promise<string> {
 
 describe('Reglas con sesión — la página entera, no el componente suelto', () => {
   /**
-   * M-C, rebanada 3b. Volver a construir `disciplines` sólo con
-   * `primaryDiscipline(header)` reintroduce W64: FIFA desaparece de la
-   * pantalla entera, no sólo de una frase. Con esto se pone rojo.
+   * M-C. Volver a construir los bloques sólo con `primaryDiscipline(header)`
+   * reintroduce W64: FIFA desaparece de la pantalla entera, no sólo de una
+   * frase. Con esto se pone rojo. Torneos-deportes Tarea 7: cada bloque trae
+   * su reglamento arriba y su acordeón de siempre en "Más detalle".
    */
-  it('dibuja un bloque por disciplina, cada uno con su propio formato', async () => {
+  it('dibuja un bloque por disciplina: el reglamento arriba, su acordeón en "Más detalle"', async () => {
+    escena.user = { id: 'admin' }
+    escena.publicFormats = [publicFormat('PADEL', PADEL), publicFormat('FIFA', FIFA)]
     const html = await reglas(PADEL_Y_FIFA)
     expect(html).toContain('>Pádel</h2>')
     expect(html).toContain('>FIFA</h2>')
-    expect(bloqueDe(html, 'Pádel')).toContain('1 set a 4 games')
-    expect(bloqueDe(html, 'FIFA')).toContain('Marcador de goles')
+
+    const padel = bloqueDe(html, 'Pádel')
+    expect(padel).toContain('Parejas que rotan.')
+    expect(padel.indexOf('Parejas que rotan.')).toBeLessThan(padel.indexOf('<details'))
+    expect(padel.slice(padel.indexOf('<details'))).toContain('1 set a 4 games')
+
+    const fifa = bloqueDe(html, 'FIFA')
+    expect(fifa).toContain('Partidos a goles; se puede empatar.')
+    expect(fifa.indexOf('Partidos a goles')).toBeLessThan(fifa.indexOf('<details'))
+    expect(fifa.slice(fifa.indexOf('<details'))).toContain('Marcador de goles')
     // La frase combinada de antes de 3b ya no existe en ningún lado.
     expect(html).not.toContain('Pádel: 1 set a 4 games · FIFA: Marcador de goles')
   })
@@ -218,10 +241,11 @@ describe('Reglas con sesión — la página entera, no el componente suelto', ()
    * texto libre y nunca el del otro.
    */
   it('cada bloque narra su propia disciplina y su propio texto libre', async () => {
-    escena.rulesByDiscipline = new Map([
-      ['d1' as DisciplineId, 'Traer pelotas nuevas.'],
-      ['d2' as DisciplineId, 'Se juega con barro.'],
-    ])
+    escena.user = { id: 'admin' }
+    escena.publicFormats = [
+      publicFormat('PADEL', PADEL, 'Traer pelotas nuevas.'),
+      publicFormat('FIFA', FIFA, 'Se juega con barro.'),
+    ]
     const html = await reglas(PADEL_Y_FIFA)
     const padel = bloqueDe(html, 'Pádel')
     const fifa = bloqueDe(html, 'FIFA')
@@ -236,13 +260,32 @@ describe('Reglas con sesión — la página entera, no el componente suelto', ()
     expect(fifa).not.toContain('Traer pelotas nuevas.')
   })
 
-  /** PIN de no-regresión (R10): un torneo de una sola disciplina dice lo de siempre, sin encabezado. */
-  it('con una sola disciplina dice exactamente lo de siempre, sin encabezado', async () => {
-    escena.rulesByDiscipline = new Map()
+  /** Las dos reglas de juego que suma `season_public_formats` (0099) llegan hasta el reglamento. */
+  it('parejas fijas y fecha AUTO: el reglamento lo dice y no hay fila de armado de parejas', async () => {
+    escena.user = { id: 'admin' }
+    escena.publicFormats = [publicFormat('PADEL', PADEL, '', { fixedTeams: true, formatoDefault: { kind: 'AUTO' } })]
     const html = await reglas(SOLO_PADEL)
+    expect(html).toContain('Parejas fijas.')
+    expect(html).toContain('Cada fecha se arma sola, según cuántos vengan.')
+    expect(html).not.toContain('Cómo se arman las parejas')
+  })
+
+  it('quien organiza ve "Editar reglas"; la línea fija sale una sola vez', async () => {
+    escena.user = { id: 'admin' }
+    escena.publicFormats = [publicFormat('PADEL', PADEL), publicFormat('FIFA', FIFA)]
+    const html = await reglas(PADEL_Y_FIFA)
+    expect(html).toContain('Editar reglas')
+    expect(html.split('Alguna fecha puede jugarse a otra cosa: se avisa en esa fecha.')).toHaveLength(2)
+  })
+
+  /** Con una sola disciplina el título igual aparece (§6: siempre con su título). */
+  it('con una sola disciplina el título también sale', async () => {
+    escena.user = { id: 'admin' }
+    escena.publicFormats = [publicFormat('PADEL', PADEL)]
+    const html = await reglas(SOLO_PADEL)
+    expect(html).toContain('>Pádel</h2>')
     expect(html).toContain('1 set a 4 games')
     expect(html).not.toContain('Pádel: 1 set a 4 games')
-    expect(html).not.toContain('<h2')
   })
 })
 
@@ -682,13 +725,18 @@ describe('el submit del wizard -- newTournamentPayload como objeto nombrado, no 
 // Estos tests montan la PÁGINA con `user: null`, que es la rama que ningún
 // test tocaba nunca.
 describe('Reglas SIN SESIÓN — la mitad pública, que es la que faltaba', () => {
-  it('dibuja un bloque por disciplina cuando el torneo tiene dos', async () => {
+  it('dibuja un bloque por disciplina: el reglamento arriba, su acordeón en "Más detalle"', async () => {
     escena.user = null
     escena.publicFormats = [publicFormat('PADEL', PADEL), publicFormat('FIFA', FIFA)]
     const html = await reglas(PADEL_Y_FIFA)
-    expect(bloqueDe(html, 'Pádel')).toContain('1 set a 4 games')
-    expect(bloqueDe(html, 'FIFA')).toContain('Marcador de goles')
+    const padel = bloqueDe(html, 'Pádel')
+    const fifa = bloqueDe(html, 'FIFA')
+    expect(padel.indexOf('Parejas que rotan.')).toBeLessThan(padel.indexOf('<details'))
+    expect(padel.slice(padel.indexOf('<details'))).toContain('1 set a 4 games')
+    expect(fifa.indexOf('Partidos a goles')).toBeLessThan(fifa.indexOf('<details'))
+    expect(fifa.slice(fifa.indexOf('<details'))).toContain('Marcador de goles')
     expect(html).not.toContain('Pádel: 1 set a 4 games · FIFA: Marcador de goles')
+    expect(html).not.toContain('Editar reglas')
   })
 
   /** R11, rama anónima: mismo criterio que la rama con sesión — cada bloque narra su propia disciplina y su propio texto. */
@@ -709,13 +757,37 @@ describe('Reglas SIN SESIÓN — la mitad pública, que es la que faltaba', () =
     expect(fifa).not.toContain('Traer pelotas nuevas.')
   })
 
-  it('y con UNA sola sigue diciendo exactamente lo de siempre, sin prefijo ni encabezado', async () => {
+  it('parejas fijas y fecha AUTO llegan al reglamento también sin sesión', async () => {
+    escena.user = null
+    escena.publicFormats = [publicFormat('PADEL', PADEL, '', { fixedTeams: true, formatoDefault: { kind: 'AUTO' } })]
+    const html = await reglas(SOLO_PADEL)
+    expect(html).toContain('Parejas fijas.')
+    expect(html).toContain('Cada fecha se arma sola, según cuántos vengan.')
+    expect(html).not.toContain('Cómo se arman las parejas')
+  })
+
+  /** La unidad sale del deporte (`unitOf`), no de un "games" fijo: el ping pong se juega a puntos, en el reglamento Y en el detalle. */
+  it('cada bloque cuenta en la unidad de SU deporte: el ping pong, a puntos', async () => {
+    escena.user = null
+    const pingPong = { ...PADEL, matchFormat: { setsToWin: 2, gamesPerSet: 11, tieBreak: false, openScore: false } }
+    escena.publicFormats = [publicFormat('PADEL', PADEL), publicFormat('PING_PONG', pingPong)]
+    const html = await reglas(PADEL_Y_FIFA)
+    const padel = bloqueDe(html, 'Pádel')
+    const ping = bloqueDe(html, 'Ping pong')
+    expect(padel).toContain('de 4 games')
+    expect(ping).toContain('de 11 puntos')
+    expect(ping.slice(ping.indexOf('<details'))).toContain('mejor de 3 sets a 11 puntos')
+    expect(ping).not.toContain('games')
+  })
+
+  it('y con UNA sola sigue diciendo lo de siempre, con su título', async () => {
     escena.user = null
     escena.publicFormats = [publicFormat('PADEL', PADEL)]
     const html = await reglas(SOLO_PADEL)
+    expect(html).toContain('>Pádel</h2>')
     expect(html).toContain('1 set a 4 games')
     expect(html).not.toContain('Pádel: 1 set a 4 games')
-    expect(html).not.toContain('<h2')
+    expect(html).toContain('Ir al inicio')
   })
 
   it('un link muerto sigue mostrando la frase de link muerto, no un error', async () => {

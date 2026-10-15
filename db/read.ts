@@ -183,6 +183,10 @@ export interface PublicFormat {
   pairSize: SideSize
   /** `disciplines.allows_draw` real (0069) — mismo dato que `DisciplineHeader.allowsDraw`. */
   allowsDraw: boolean
+  /** `disciplines.fixed_teams` real (0099): la pareja es fija todo el torneo, o rota. */
+  fixedTeams: boolean
+  /** `disciplines.formato_default` real (0099): cómo se arma cada fecha por defecto (`AUTO` incluido). */
+  formatoDefault: MatchdayFormatSetting
 }
 
 /** A row of `pair_locks`: the same `{ a, b }` the draw uses, plus the id `unlockPair` deletes by. */
@@ -718,10 +722,10 @@ export async function publicRules(supabase: Client, seasonId: string): Promise<P
  * replace`— y el drop se lleva los grants, dejando sin superficie pública la
  * única pantalla que se comparte por link.
  *
- * Devuelve `kind`, `config`, `rules_text`, `has_masters`, `pair_size` y
- * `allows_draw` y NADA más (0069) — fijado por test
- * (`db/public-formats.db.test.ts`): un `id` de más le regalaría a `anon`
- * claves primarias, y `anon` hoy lee **cero** tablas.
+ * Devuelve `kind`, `config`, `rules_text`, `has_masters`, `pair_size`,
+ * `allows_draw`, `fixed_teams` y `formato_default` y NADA más (0069, 0099) —
+ * fijado por test (`db/public-formats.db.test.ts`): un `id` de más le regalaría
+ * a `anon` claves primarias, y `anon` hoy lee **cero** tablas.
  *
  * Array vacío en vez de excepción para un link muerto, mismo criterio que
  * `publicRules`.
@@ -739,6 +743,9 @@ export async function publicFormats(supabase: Client, seasonId: string): Promise
     // diferencia del `row.kind as …` de arriba.
     pairSize: row.pair_size === 1 ? 1 : 2,
     allowsDraw: row.allows_draw,
+    fixedTeams: row.fixed_teams,
+    // `disciplines_formato_default_kind` (0095) fija la forma de este jsonb.
+    formatoDefault: row.formato_default as unknown as MatchdayFormatSetting,
   }))
 }
 

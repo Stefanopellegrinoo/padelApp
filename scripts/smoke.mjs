@@ -333,7 +333,7 @@ async function main() {
     'el script del admin llegó crudo al DOM anónimo',
   )
   // La prosa generada es lo que prueba que `season_public_formats` sirvió las
-  // seis columnas: sin `has_masters`/`pair_size`/`allows_draw` el `shape` llega
+  // ocho columnas: sin `has_masters`/`pair_size`/`fixed_teams`/`allows_draw` el `shape` llega
   // incompleto y `narrateRules` no puede armar estas filas.
   check(
     'y la prosa generada llega entera, no sólo el texto libre',

@@ -1,11 +1,28 @@
-import { createElement } from 'react'
+// @vitest-environment jsdom
+//
+// `renderToStaticMarkup` descarta el estado de React: con él se mira todo lo
+// que sale al HTML (títulos, orden, `<details>` cerrado), pero no se puede
+// ABRIR una fila del acordeón. Un solo test monta de verdad (`createRoot`)
+// para eso, y por eso el archivo corre en jsdom.
+import { act, createElement } from 'react'
+import { createRoot } from 'react-dom/client'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { describe, expect, it, vi } from 'vitest'
-import { defaultConfig, type DisciplineShape, type SeasonConfig } from '@/core'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import {
+  defaultConfig,
+  reglamento,
+  unitOf,
+  SPORTS,
+  type DisciplineShape,
+  type MatchdayFormatSetting,
+  type SeasonConfig,
+} from '@/core'
 import { RulesBody, type RulesBlock } from './rules-body'
 
+;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
 // El mock envuelve la `narrateRules` real (no la reemplaza): todos los tests
-// de este archivo, salvo el que arma a propósito una sección faltante (3a.9),
+// de este archivo, salvo el que arma a propósito una sección faltante,
 // corren contra el comportamiento de verdad.
 vi.mock('@/core', async (importOriginal) => {
   const real = await importOriginal<typeof import('@/core')>()
@@ -16,29 +33,42 @@ const { narrateRules } = await import('@/core')
 const mockedNarrateRules = vi.mocked(narrateRules)
 
 /**
- * Reglas es la pantalla que se comparte con el grupo. Rebanada 3b de
- * "reglas por disciplina": `RulesBody` deja de recibir una config y un
- * `formats: FormatRow[]` compartidos, y pasa a recibir `disciplines`, un
- * bloque completo (config + shape + texto libre) por disciplina — la fila
- * "Formato de partido" que W64 encontró mintiendo ya no se arregla agrupando
- * formatos, se arregla porque cada bloque narra SU PROPIA config.
+ * La página Reglas (docs/torneos-deportes.md §6): un bloque por deporte con el
+ * reglamento en criollo ARRIBA y, cerrado bajo "Más detalle", el acordeón de
+ * siempre. `RulesBody` no calcula nada: recibe las líneas del reglamento y la
+ * unidad ya resueltas por la página, así que acá se arman igual que ella.
  */
-const PADEL_CONFIG = defaultConfig(8)
+const PADEL_CONFIG: SeasonConfig = { ...defaultConfig(8), firstFecha: 'NIVEL' }
 const FIFA_CONFIG: SeasonConfig = {
-  ...PADEL_CONFIG,
-  matchFormat: { ...PADEL_CONFIG.matchFormat, openScore: true },
+  ...defaultConfig(8),
+  matchFormat: { ...defaultConfig(8).matchFormat, openScore: true },
+  firstFecha: 'SORTEO',
 }
-const TODAY_SHAPE: DisciplineShape = { hasMasters: true, pairSize: 2, allowsDraw: true }
-const FIFA_SHAPE: DisciplineShape = { hasMasters: false, pairSize: 1, allowsDraw: true }
+const PADEL_SHAPE: DisciplineShape = { hasMasters: true, pairSize: 2, fixedTeams: false, allowsDraw: false }
+const FIJAS_SHAPE: DisciplineShape = { ...PADEL_SHAPE, fixedTeams: true }
+const FIFA_SHAPE: DisciplineShape = { hasMasters: false, pairSize: 1, fixedTeams: false, allowsDraw: true }
+const ROUND_ROBIN: MatchdayFormatSetting = { kind: 'ROUND_ROBIN' }
 
 function bloque(
+  kind: string,
   label: string,
-  config: SeasonConfig = PADEL_CONFIG,
-  shape: DisciplineShape = TODAY_SHAPE,
+  config: SeasonConfig,
+  shape: DisciplineShape,
   text = '',
+  formatoDefault: MatchdayFormatSetting = ROUND_ROBIN,
 ): RulesBlock {
-  return { label, config, shape, text }
+  return {
+    label,
+    lines: reglamento({ kind, ...shape, formatoDefault, config }),
+    config,
+    shape,
+    unit: unitOf(kind, config.matchFormat),
+    text,
+  }
 }
+
+const PADEL = (text = '') => bloque('PADEL', 'Pádel', PADEL_CONFIG, PADEL_SHAPE, text)
+const FIFA = (text = '') => bloque('FIFA', 'FIFA', FIFA_CONFIG, FIFA_SHAPE, text)
 
 function html(disciplines: RulesBlock[], adminName = 'Marce', isAdmin = false): string {
   return renderToStaticMarkup(
@@ -46,96 +76,194 @@ function html(disciplines: RulesBlock[], adminName = 'Marce', isAdmin = false): 
   )
 }
 
-/**
- * PIN de byte-identidad literal: capturado con `renderToStaticMarkup` contra
- * el `RulesBody` de ANTES de esta rebanada (props `config`/`shape`/`formats`
- * compartidos, un solo bloque siempre), con una sola disciplina — el caso de
- * TODOS los torneos que existen hoy. Si esta cadena cambia un solo carácter,
- * la rebanada 3b dejó de ser un cambio de pantalla puro.
- */
-const SIN_TEXTO_LIBRE =
-  '<div class="flex flex-col gap-4 pt-4"><h1 class="text-[26px] font-extrabold tracking-[-.03em]">Reglas</h1><p class="text-pretty text-[13.5px] leading-[1.5] font-[550] text-muted">Las reglas de este torneo, como quedaron cuando Marce lo creó.</p><div><div class="border-b border-line"><button type="button" class="flex w-full items-center justify-between gap-3 py-[15px] text-left"><span class="flex-1"><span class="block text-[14.5px] font-[750]">Formato de partido</span><span class="block text-[12.5px] font-bold text-accent-link">1 set a 4 games</span></span><span class="text-[13px] font-extrabold text-muted">+</span></button></div><div class="border-b border-line"><button type="button" class="flex w-full items-center justify-between gap-3 py-[15px] text-left"><span class="flex-1"><span class="block text-[14.5px] font-[750]">Cómo se arman las parejas</span><span class="block text-[12.5px] font-bold text-accent-link">Cruzando el orden de desempate</span></span><span class="text-[13px] font-extrabold text-muted">+</span></button></div><div class="border-b border-line"><button type="button" class="flex w-full items-center justify-between gap-3 py-[15px] text-left"><span class="flex-1"><span class="block text-[14.5px] font-[750]">Puntos por posición</span><span class="block text-[12.5px] font-bold text-accent-link">10 · 6 · 3 · 1</span></span><span class="text-[13px] font-extrabold text-muted">+</span></button></div><div class="border-b border-line"><button type="button" class="flex w-full items-center justify-between gap-3 py-[15px] text-left"><span class="flex-1"><span class="block text-[14.5px] font-[750]">Orden de desempate</span><span class="block text-[12.5px] font-bold text-accent-link">Se refresca cada 3 fechas</span></span><span class="text-[13px] font-extrabold text-muted">+</span></button></div><div class="border-b border-line"><button type="button" class="flex w-full items-center justify-between gap-3 py-[15px] text-left"><span class="flex-1"><span class="block text-[14.5px] font-[750]">Fechas que cuentan</span><span class="block text-[12.5px] font-bold text-accent-link">Las mejores 8 de 10</span></span><span class="text-[13px] font-extrabold text-muted">+</span></button></div><div class="border-b border-line"><button type="button" class="flex w-full items-center justify-between gap-3 py-[15px] text-left"><span class="flex-1"><span class="block text-[14.5px] font-[750]">Masters</span><span class="block text-[12.5px] font-bold text-accent-link">Los 4 primeros</span></span><span class="text-[13px] font-extrabold text-muted">+</span></button></div></div></div>'
+/** Un bloque recortado del HTML: desde su título `<h2>` hasta el próximo `<h2>` o el final. */
+function bloqueDe(out: string, label: string): string {
+  return new RegExp(`<h2[^>]*>${label}</h2>([\\s\\S]*?)(?=<h2[^>]*>|$)`).exec(out)?.[1] ?? ''
+}
 
-const CON_TEXTO_LIBRE_Y_ADMIN =
-  '<div class="flex flex-col gap-4 pt-4"><h1 class="text-[26px] font-extrabold tracking-[-.03em]">Reglas</h1><p class="text-pretty text-[13.5px] leading-[1.5] font-[550] text-muted">Las reglas de este torneo, como quedaron cuando Marce lo creó.</p><div><div class="border-b border-line"><button type="button" class="flex w-full items-center justify-between gap-3 py-[15px] text-left"><span class="flex-1"><span class="block text-[14.5px] font-[750]">Formato de partido</span><span class="block text-[12.5px] font-bold text-accent-link">1 set a 4 games</span></span><span class="text-[13px] font-extrabold text-muted">+</span></button></div><div class="border-b border-line"><button type="button" class="flex w-full items-center justify-between gap-3 py-[15px] text-left"><span class="flex-1"><span class="block text-[14.5px] font-[750]">Cómo se arman las parejas</span><span class="block text-[12.5px] font-bold text-accent-link">Cruzando el orden de desempate</span></span><span class="text-[13px] font-extrabold text-muted">+</span></button></div><div class="border-b border-line"><button type="button" class="flex w-full items-center justify-between gap-3 py-[15px] text-left"><span class="flex-1"><span class="block text-[14.5px] font-[750]">Puntos por posición</span><span class="block text-[12.5px] font-bold text-accent-link">10 · 6 · 3 · 1</span></span><span class="text-[13px] font-extrabold text-muted">+</span></button></div><div class="border-b border-line"><button type="button" class="flex w-full items-center justify-between gap-3 py-[15px] text-left"><span class="flex-1"><span class="block text-[14.5px] font-[750]">Orden de desempate</span><span class="block text-[12.5px] font-bold text-accent-link">Se refresca cada 3 fechas</span></span><span class="text-[13px] font-extrabold text-muted">+</span></button></div><div class="border-b border-line"><button type="button" class="flex w-full items-center justify-between gap-3 py-[15px] text-left"><span class="flex-1"><span class="block text-[14.5px] font-[750]">Fechas que cuentan</span><span class="block text-[12.5px] font-bold text-accent-link">Las mejores 8 de 10</span></span><span class="text-[13px] font-extrabold text-muted">+</span></button></div><div class="border-b border-line"><button type="button" class="flex w-full items-center justify-between gap-3 py-[15px] text-left"><span class="flex-1"><span class="block text-[14.5px] font-[750]">Masters</span><span class="block text-[12.5px] font-bold text-accent-link">Los 4 primeros</span></span><span class="text-[13px] font-extrabold text-muted">+</span></button></div></div><div class="space-y-2 text-pretty text-[13.5px] leading-[1.5] font-[550] text-text [&amp;_li]:mt-1 [&amp;_strong]:font-extrabold [&amp;_ul]:list-disc [&amp;_ul]:pl-5"><p>Traer pelotas nuevas.</p></div><a class="rounded-field border-[1.5px] border-line p-4 text-center text-[14px] font-extrabold" href="/torneo/season-1/ajustes">Editar reglas</a></div>'
+const LINEA_FIJA = 'Alguna fecha puede jugarse a otra cosa: se avisa en esa fecha.'
 
-describe('Reglas — con una sola disciplina, byte a byte como antes de esta rebanada (R10)', () => {
-  it('sin texto libre y sin admin', () => {
-    expect(html([bloque('Pádel')])).toBe(SIN_TEXTO_LIBRE)
+describe('Reglas — un bloque por deporte, con el reglamento arriba', () => {
+  it('Pádel + FIFA: un título por deporte', () => {
+    const out = html([PADEL(), FIFA()])
+    expect(out).toMatch(/<h2 class="text-\[17px\] font-extrabold[^"]*">Pádel<\/h2>/)
+    expect(out).toMatch(/<h2 class="text-\[17px\] font-extrabold[^"]*">FIFA<\/h2>/)
   })
 
-  it('con texto libre y con sesión de admin', () => {
-    expect(html([bloque('Pádel', PADEL_CONFIG, TODAY_SHAPE, 'Traer pelotas nuevas.')], 'Marce', true)).toBe(
-      CON_TEXTO_LIBRE_Y_ADMIN,
-    )
-  })
-})
-
-describe('Reglas — la fila de formato, por bloque', () => {
-  /** PIN de no-regresión: con una sola disciplina la pantalla dice EXACTAMENTE lo de siempre. */
-  it('con una sola disciplina, el formato sale sin prefijo', () => {
-    expect(html([bloque('Pádel')])).toContain('1 set a 4 games')
-    expect(html([bloque('Pádel')])).not.toContain('Pádel: 1 set a 4 games')
+  it('con un solo deporte el título igual aparece', () => {
+    expect(html([PADEL()])).toContain('>Pádel</h2>')
   })
 
-  /**
-   * W64/rebanada 3b: ya no hay una fila compartida que agrupe formatos — cada
-   * bloque tiene su PROPIA fila "Formato de partido", así que dos disciplinas
-   * de formato distinto quedan una al lado de la otra, cada una con lo suyo.
-   */
-  it('con dos disciplinas, cada bloque nombra su PROPIO formato', () => {
-    const out = html([bloque('Pádel', PADEL_CONFIG, TODAY_SHAPE), bloque('FIFA', FIFA_CONFIG, FIFA_SHAPE)])
-    expect(out).toContain('1 set a 4 games')
-    expect(out).toContain('Marcador de goles')
-    expect(out).not.toContain('Pádel: 1 set a 4 games · FIFA: Marcador de goles')
+  it('el reglamento sale como UN párrafo con las líneas unidas, antes de "Más detalle"', () => {
+    const out = html([PADEL()])
+    const parrafo = reglamento({ kind: 'PADEL', ...PADEL_SHAPE, formatoDefault: ROUND_ROBIN, config: PADEL_CONFIG })
+      .map((line) => line.text)
+      .join(' ')
+    expect(out).toContain(`>${parrafo}</p>`)
+    expect(parrafo).toContain('se arma por nivel')
+    expect(out.indexOf('se arma por nivel')).toBeLessThan(out.indexOf('<details'))
   })
 
-  /**
-   * `formatsLabel` agrupa por FORMATO para no repetir la frase en un resumen
-   * de una línea (design §Q3) — pero acá no hay una línea, hay un bloque por
-   * disciplina, y ese dedup deja de tener sentido: dos disciplinas son dos
-   * bloques aunque compartan formato. Invierte a propósito el test que esta
-   * pantalla tenía antes de la rebanada 3b (el mismo comportamiento que sigue
-   * siendo correcto en Ajustes y en el wizard, que SÍ sacan una sola línea).
-   */
-  it('dos disciplinas del MISMO formato ya no se funden en una frase: cada bloque repite la suya', () => {
-    const out = html([bloque('Pádel', PADEL_CONFIG, TODAY_SHAPE), bloque('Pádel', PADEL_CONFIG, TODAY_SHAPE)])
-    expect(out.match(/1 set a 4 games/g)).toHaveLength(2)
+  it('en Pádel + FIFA cada bloque dice SU reglamento, antes de SU "Más detalle"', () => {
+    const out = html([PADEL(), FIFA()])
+    const padel = bloqueDe(out, 'Pádel')
+    const fifa = bloqueDe(out, 'FIFA')
+    expect(padel).toContain('Parejas que rotan.')
+    expect(padel).toContain('Masters al final')
+    expect(fifa).toContain('Individual.')
+    expect(fifa).toContain('Partidos a goles; se puede empatar.')
+    expect(fifa).not.toContain('Masters al final')
+    for (const bloqueHtml of [padel, fifa]) {
+      expect(bloqueHtml.indexOf('Gana 10')).toBeLessThan(bloqueHtml.indexOf('<details'))
+    }
+  })
+
+  it('un torneo anterior a la ficha (sin `firstFecha`) no inventa cómo se armó la primera fecha', () => {
+    const existente = bloque('PADEL', 'Pádel', defaultConfig(8), PADEL_SHAPE)
+    const out = html([existente])
+    expect(out).toContain('Parejas que rotan. Partidos a 1 set de 4 games.')
+    expect(out).toContain('Cada fecha, todos contra todos.')
+    expect(out).not.toContain('primera fecha')
+  })
+
+  it('la línea fija sale una sola vez, con uno o con dos deportes', () => {
+    expect(html([PADEL()]).split(LINEA_FIJA)).toHaveLength(2)
+    expect(html([PADEL(), FIFA()]).split(LINEA_FIJA)).toHaveLength(2)
+  })
+
+  it('dos deportes iguales son dos bloques: cada uno repite lo suyo', () => {
+    const out = html([PADEL(), PADEL()])
     expect(out.match(/>Pádel<\/h2>/g)).toHaveLength(2)
+    expect(out.match(/<details/g)).toHaveLength(2)
+  })
+
+  it('la intro nombra a quien organiza, y "Editar reglas" sólo aparece para el admin', () => {
+    expect(html([PADEL()], 'Marce')).toContain('Las reglas de este torneo, como quedaron cuando Marce lo creó.')
+    expect(html([PADEL()])).not.toContain('Editar reglas')
+    expect(html([PADEL()], 'Marce', true)).toContain('href="/torneo/season-1/ajustes"')
   })
 })
 
-/**
- * Tarea 3a.9 (reglas-por-disciplina): `rulesRowsOf` filtra el acordeón con el
- * MISMO predicado que `narrateRules` usa para omitir la sección (design §Q4,
- * "both, from one shared predicate") — así que las dos obligaciones (no
- * PRODUCIR la sección y no PEDIRLA) no pueden divergir. Reescrito en 3b con la
- * API de `disciplines`, mismo comportamiento.
- */
-describe('Reglas — filas condicionales del acordeón', () => {
-  it('sin Masters, la fila Masters no aparece y no explota', () => {
-    const out = html([bloque('Pádel', PADEL_CONFIG, { hasMasters: false, pairSize: 2, allowsDraw: true })])
-    expect(out).not.toContain('>Masters<')
+describe('Reglas — "Más detalle", cerrado, con el acordeón de siempre', () => {
+  it('es un <details> sin `open` con el <summary> "Más detalle"', () => {
+    const out = html([PADEL(), FIFA()])
+    const abiertos = out.match(/<details[^>]*>/g) ?? []
+    expect(abiertos).toHaveLength(2)
+    for (const tag of abiertos) expect(tag).not.toMatch(/\sopen[\s=>]/)
+    expect(out.match(/<summary[^>]*>/g)).toHaveLength(2)
+    expect(out).toMatch(/<summary[^>]*><span>Más detalle<\/span>/)
   })
 
-  it('con lados de uno, ni Masters ni "Cómo se arman las parejas" aparecen y no explota', () => {
-    const out = html([bloque('FIFA', FIFA_CONFIG, { hasMasters: false, pairSize: 1, allowsDraw: true })])
-    expect(out).not.toContain('>Masters<')
+  it('el summary mide 44px, es link de acento, y tiene foco visible y marcador propio', () => {
+    const summary = /<summary[^>]*>/.exec(html([PADEL()]))?.[0] ?? ''
+    expect(summary).toContain('min-h-[44px]')
+    expect(summary).toContain('text-accent-link')
+    expect(summary).toContain('font-extrabold')
+    expect(summary).toContain('focus-visible:ring-2')
+    // El `&` sale escapado del HTML (`&amp;`): se mira lo que sigue.
+    expect(summary).toContain('::-webkit-details-marker]:hidden')
+  })
+
+  it('adentro están las filas de hoy: Pádel que rota, con "Cómo se arman las parejas" y Masters', () => {
+    const padel = bloqueDe(html([PADEL(), FIFA()]), 'Pádel')
+    for (const fila of ['Formato de partido', 'Cómo se arman las parejas', 'Puntos por posición', 'Orden de desempate', 'Fechas que cuentan', 'Masters']) {
+      expect(padel).toContain(`>${fila}<`)
+    }
+  })
+
+  it('FIFA individual no tiene ni "Cómo se arman las parejas" ni Masters', () => {
+    const fifa = bloqueDe(html([PADEL(), FIFA()]), 'FIFA')
+    expect(fifa).toContain('>Orden de desempate<')
+    expect(fifa).not.toContain('Cómo se arman las parejas')
+    expect(fifa).not.toContain('>Masters<')
+  })
+
+  it('en parejas fijas la fila "Cómo se arman las parejas" tampoco aparece', () => {
+    const fijas = bloque('PADEL', 'Pádel', PADEL_CONFIG, FIJAS_SHAPE)
+    const out = html([fijas])
+    expect(out).toContain('Parejas fijas.')
+    expect(out).toContain('>Orden de desempate<')
     expect(out).not.toContain('Cómo se arman las parejas')
   })
 
+  it('cada fila cuenta en la unidad de SU deporte', () => {
+    const pingPong = bloque('PING_PONG', 'Ping pong', { ...PADEL_CONFIG, matchFormat: SPORTS.PING_PONG.format }, FIFA_SHAPE)
+    const out = html([PADEL(), FIFA(), pingPong])
+    expect(bloqueDe(out, 'Pádel')).toContain('>1 set a 4 games<')
+    expect(bloqueDe(out, 'FIFA')).toContain('>Marcador de goles<')
+    expect(bloqueDe(out, 'Ping pong')).toContain('>mejor de 3 sets a 11 puntos<')
+  })
+
+  it('`narrateRules` recibe la unidad del bloque y su forma, con `fixedTeams`', () => {
+    mockedNarrateRules.mockClear()
+    html([PADEL(), FIFA()])
+    expect(mockedNarrateRules).toHaveBeenCalledWith(PADEL_CONFIG, PADEL_SHAPE, 'games')
+    expect(mockedNarrateRules).toHaveBeenCalledWith(FIFA_CONFIG, FIFA_SHAPE, 'goles')
+  })
+
   /**
-   * El filtro sólo perdona las DOS secciones que `narrateRules` puede omitir
-   * por diseño. Si `narrateRules` alguna vez deja de producir OTRA sección
-   * que el acordeón sigue pidiendo, el `throw` de `rules-body.tsx` tiene que
-   * seguir vivo — R7, "genuine bug still caught".
+   * El filtro sólo perdona las secciones que `narrateRules` puede omitir por
+   * diseño. Si `narrateRules` alguna vez deja de producir OTRA sección que el
+   * acordeón sigue pidiendo, el `throw` de `rules-body.tsx` tiene que seguir
+   * vivo: un bug de verdad no se tapa.
    */
   it('una sección realmente faltante sigue tirando el error: el filtro no la tapa', () => {
     const real = mockedNarrateRules.getMockImplementation()
     if (real === undefined) throw new Error('narrateRules no está mockeada como se esperaba')
-    mockedNarrateRules.mockImplementationOnce((config, shape) =>
-      real(config, shape).filter((section) => section.title !== 'Los puntos'),
+    mockedNarrateRules.mockImplementationOnce((config, shape, unit) =>
+      real(config, shape, unit).filter((section) => section.title !== 'Los puntos'),
     )
-    expect(() => html([bloque('Pádel')])).toThrow(/no tiene la sección "Los puntos"/)
+    expect(() => html([PADEL()])).toThrow(/no tiene la sección "Los puntos"/)
+  })
+})
+
+describe('Reglas — las reglas de la casa, el texto libre de cada deporte', () => {
+  it('sin texto no hay rótulo; con texto sale entre el reglamento y "Más detalle"', () => {
+    expect(html([PADEL()])).not.toContain('Reglas de la casa')
+    const out = html([PADEL('Traer pelotas nuevas.')])
+    expect(out).toContain('Traer pelotas nuevas.')
+    expect(out.indexOf('Gana 10')).toBeLessThan(out.indexOf('Reglas de la casa'))
+    expect(out.indexOf('Reglas de la casa')).toBeLessThan(out.indexOf('<details'))
+  })
+
+  it('cada deporte muestra el suyo y nunca el del otro', () => {
+    const out = html([PADEL('Traer pelotas nuevas.'), FIFA('Se juega con barro.')])
+    expect(bloqueDe(out, 'Pádel')).toContain('Traer pelotas nuevas.')
+    expect(bloqueDe(out, 'Pádel')).not.toContain('Se juega con barro.')
+    expect(bloqueDe(out, 'FIFA')).toContain('Se juega con barro.')
+    expect(bloqueDe(out, 'FIFA')).not.toContain('Traer pelotas nuevas.')
+  })
+
+  it('escapa el texto libre: un <script> no pasa', () => {
+    const out = html([PADEL('<script>alert(1)</script>')])
+    expect(out).not.toContain('<script>')
+    expect(out).toContain('&lt;script&gt;')
+  })
+})
+
+describe('Reglas — el acordeón de "Más detalle" sigue abriendo', () => {
+  let container: HTMLDivElement | null = null
+  afterEach(() => {
+    container?.remove()
+    container = null
+  })
+
+  it('tocar una fila abre su cuerpo, con la cláusula de invitados de las parejas', async () => {
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    await act(async () => {
+      root.render(createElement(RulesBody, { seasonId: 's1', disciplines: [PADEL()], adminName: 'Marce', isAdmin: false }))
+    })
+    expect(container.textContent).not.toContain('se suma un invitado')
+
+    const fila = [...container.querySelectorAll('button')].find((button) => button.textContent?.includes('Formato de partido'))
+    expect(fila).toBeDefined()
+    await act(async () => fila?.click())
+
+    expect(container.textContent).toContain('Se arman parejas con todos.')
+    expect(container.textContent).toContain('se suma un invitado')
+    expect(container.textContent).not.toContain('juegan todos contra todos')
+    await act(async () => root.unmount())
   })
 })

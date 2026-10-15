@@ -82,9 +82,9 @@ export interface SeasonConfig {
 export type SideSize = 1 | 2
 
 /**
- * Los tres hechos de una disciplina que `narrateRules` no puede leer de
+ * Los cuatro hechos de una disciplina que `narrateRules` no puede leer de
  * `SeasonConfig`: viven en columnas de `disciplines` (`has_masters`,
- * `pair_size`, `allows_draw`), no en su jsonb. Copiarlos AL jsonb crearía una
+ * `pair_size`, `fixed_teams`, `allows_draw`), no en su jsonb. Copiarlos AL jsonb crearía una
  * segunda fuente de verdad para columnas que la base ya vigila con FKs
  * compuestas (`disciplines_size_anchor`, `disciplines_draw_anchor`,
  * `0015_disciplines.sql:25-26`) — el mismo problema que `seasons.config`
@@ -98,6 +98,8 @@ export type SideSize = 1 | 2
 export interface DisciplineShape {
   hasMasters: boolean
   pairSize: SideSize
+  /** La pareja es la misma todo el torneo (`pairSize: 2`); de a uno nunca. Decide si hay "Cómo se arman las parejas". */
+  fixedTeams: boolean
   allowsDraw: boolean
 }
 

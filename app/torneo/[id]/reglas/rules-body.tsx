@@ -4,6 +4,7 @@ import {
   MASTERS_SIZE,
   formatsLabel,
   narrateRules,
+  unitOf,
   type DisciplineShape,
   type SeasonConfig,
 } from '@/core'
@@ -27,7 +28,7 @@ function introOf(adminName: string): string {
 const ROWS: Array<{
   title: string
   section: string
-  value: (config: SeasonConfig, label: string) => string
+  value: (config: SeasonConfig, label: string, unit: string) => string
 }> = [
   // La ÚNICA fila que lee algo más que `config`: `formatsLabel` con un
   // arreglo de UN elemento (el de este bloque) es byte a byte lo mismo que
@@ -44,7 +45,7 @@ const ROWS: Array<{
   {
     title: 'Formato de partido',
     section: 'La fecha',
-    value: (config, label) => formatsLabel([{ label, matchFormat: config.matchFormat }]),
+    value: (config, label, unit) => formatsLabel([{ label, matchFormat: config.matchFormat, unit }]),
   },
   {
     title: 'Cómo se arman las parejas',
@@ -79,14 +80,14 @@ function sectionApplies(section: string, shape: DisciplineShape): boolean {
   return true
 }
 
-function rulesRowsOf(config: SeasonConfig, shape: DisciplineShape, label: string): RuleRow[] {
+function rulesRowsOf(config: SeasonConfig, shape: DisciplineShape, label: string, unit: string): RuleRow[] {
   const sections = narrateRules(config, shape)
   return ROWS.filter((row) => sectionApplies(row.section, shape)).map((row) => {
     const section = sections.find((candidate) => candidate.title === row.section)
     if (section === undefined) {
       throw new Error(`narrateRules no tiene la sección "${row.section}". Esto es un bug.`)
     }
-    return { title: row.title, value: row.value(config, label), body: section.body }
+    return { title: row.title, value: row.value(config, label, unit), body: section.body }
   })
 }
 
@@ -103,6 +104,12 @@ function rulesRowsOf(config: SeasonConfig, shape: DisciplineShape, label: string
  */
 export interface RulesBlock {
   label: string
+  /**
+   * Lo que se cuenta en un partido de este deporte (`unitOf(kind, format)`).
+   * Opcional sólo por los fixtures de test que arman bloques a mano: sin ella
+   * sale la del formato (`goles` con marcador abierto, `games` si no).
+   */
+  unit?: string
   config: SeasonConfig
   shape: DisciplineShape
   text: string
@@ -165,7 +172,14 @@ export function RulesBody({ seasonId, disciplines, adminName, isAdmin }: RulesBo
                 {discipline.label}
               </h2>
             )}
-            <RulesAccordion rows={rulesRowsOf(discipline.config, discipline.shape, discipline.label)} />
+            <RulesAccordion
+              rows={rulesRowsOf(
+                discipline.config,
+                discipline.shape,
+                discipline.label,
+                discipline.unit ?? unitOf('', discipline.config.matchFormat),
+              )}
+            />
             {hasText && (
               <div
                 className="space-y-2 text-pretty text-[13.5px] leading-[1.5] font-[550] text-text [&_li]:mt-1 [&_strong]:font-extrabold [&_ul]:list-disc [&_ul]:pl-5"

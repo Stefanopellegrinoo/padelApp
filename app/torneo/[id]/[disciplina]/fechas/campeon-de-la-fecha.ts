@@ -11,7 +11,7 @@
  * tres; y llamaba `games` a lo que en FIFA son goles.
  */
 
-import { members, sameSide, scoreUnit, type MatchFormat, type MatchResult, type Side } from '@/core'
+import { members, sameSide, type MatchFormat, type MatchResult, type Side } from '@/core'
 
 /**
  * Partidos ganados–(empatados)–perdidos y diferencia de la unidad que
@@ -26,12 +26,18 @@ import { members, sameSide, scoreUnit, type MatchFormat, type MatchResult, type 
  * lo que pasó esa tarde: si dependiera de si hubo empates, dos fechas de la
  * misma liga se leerían distinto. Es el mismo valor congelado que ya gobierna
  * la tabla del día.
+ *
+ * `unit` lo pone quien llama (`unitOf(kind, format)`): la unidad es del
+ * deporte —games, goles, puntos—, no se adivina del formato.
  */
 export function championRecord(
   matches: readonly MatchResult[],
   champion: Side,
-  format: MatchFormat,
+  // ponytail: ya no se lee —la unidad viene aparte—; sigue en la firma porque la
+  // pantalla y su test de cableado la nombran. Sacarla con ellos si molesta.
+  _format: MatchFormat,
   allowsDraw: boolean,
+  unit: string,
 ): string {
   let won = 0
   let drawn = 0
@@ -69,7 +75,7 @@ export function championRecord(
   const diff = scoreFor - scoreAgainst
   const sign = diff >= 0 ? '+' : ''
   const partidos = allowsDraw ? `${won}–${drawn}–${lost}` : `${won}–${lost}`
-  return `${partidos} · ${sign}${diff} ${scoreUnit(format)}`
+  return `${partidos} · ${sign}${diff} ${unit}`
 }
 
 /** Los nombres del lado unidos con `&`: uno solo cuando la disciplina es de a uno. */

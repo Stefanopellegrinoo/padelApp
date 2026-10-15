@@ -4,18 +4,23 @@ import { usesSetsDiff } from './standings'
 import type { DisciplineShape, MatchFormat, MatchResult, SeasonConfig, SideSize } from './types'
 
 /**
- * La etiqueta corta del formato: "1 set a 4 games", "3 sets a 4 games",
- * "Marcador de goles".
+ * La etiqueta corta del formato: "1 set a 4 games", "mejor de 3 sets a 11
+ * puntos", "Marcador de goles".
  *
  * La misma frase la mostraban tres pantallas con tres copias —Reglas, Ajustes
  * y el resumen del wizard—, y las tres decían "1 set a 4 games" sobre una
  * disciplina que se juega a goles. La de Ajustes además escribía "set" en
  * singular siempre, así que con `setsToWin: 3` decía "3 set a 4".
+ *
+ * `unit` lo pone quien llama (`unitOf(kind, format)`, la unidad del deporte):
+ * acá adentro no vive qué se cuenta en cada deporte. `setsToWin` son los sets
+ * que hay que GANAR: con más de uno la frase dice "mejor de N", con N = 2 ×
+ * `setsToWin` − 1 los que se juegan como máximo.
  */
-export function formatLabel(format: MatchFormat): string {
+export function formatLabel(format: MatchFormat, unit: string): string {
   if (format.openScore) return 'Marcador de goles'
-  const setWord = format.setsToWin === 1 ? '1 set' : `${format.setsToWin} sets`
-  return `${setWord} a ${format.gamesPerSet} games`
+  const setWord = format.setsToWin === 1 ? '1 set' : `mejor de ${2 * format.setsToWin - 1} sets`
+  return `${setWord} a ${format.gamesPerSet} ${unit}`
 }
 
 /**
@@ -39,9 +44,9 @@ export function formatLabel(format: MatchFormat): string {
  * nombre que la UI le da a un `kind`.
  */
 export function formatsLabel(
-  disciplines: readonly { label: string; matchFormat: MatchFormat }[],
+  disciplines: readonly { label: string; matchFormat: MatchFormat; unit: string }[],
 ): string {
-  const rows = disciplines.map((row) => ({ label: row.label, format: formatLabel(row.matchFormat) }))
+  const rows = disciplines.map((row) => ({ label: row.label, format: formatLabel(row.matchFormat, row.unit) }))
   const distinct = [...new Set(rows.map((row) => row.format))]
   if (distinct.length <= 1) return distinct[0] ?? ''
   return rows.map((row) => `${row.label}: ${row.format}`).join(' · ')
@@ -184,28 +189,17 @@ export function narrateRules(config: SeasonConfig, shape: DisciplineShape): Rule
 }
 
 /**
- * Cómo se llama lo que se cuenta adentro de un partido: **goles** con marcador
- * abierto, **games** cuando hay sets.
- *
- * Exportada porque no la usa sólo esta narración: la marca del campeón en la
- * lista de fechas (`championRecord`) cuenta la misma unidad. Eran dos copias
- * del mismo ternario y `championRecord` iba a ser la tercera — exactamente lo
- * que pasó con `setsToWin > 1` antes de que existiera `usesSetsDiff`.
- */
-export function scoreUnit(format: MatchFormat): 'goles' | 'games' {
-  return format.openScore ? 'goles' : 'games'
-}
-
-/**
  * El nombre del desempate, dicho como lo dice la cancha: *"diferencia de gol"*
- * en fútbol, *"diferencia de games"* en pádel.
+ * en fútbol, *"diferencia de games"* en pádel, *"diferencia de puntos"* en ping
+ * pong.
  *
- * NO sale de `scoreUnit`: es "diferencia de **gol**", singular, y no
- * "diferencia de goles". Dos funciones y no una porque son dos frases
- * distintas, no una con un sustantivo adentro.
+ * `unit` lo pone quien llama (`unitOf(kind, format)`). "goles" es el único que
+ * no se copia tal cual: es "diferencia de **gol**", singular, y no "diferencia
+ * de goles". Una sola función con la excepción adentro: las pantallas no
+ * repiten el ternario.
  */
-export function scoreDiffLabel(format: MatchFormat): string {
-  return format.openScore ? 'diferencia de gol' : 'diferencia de games'
+export function scoreDiffLabel(unit: string): string {
+  return unit === 'goles' ? 'diferencia de gol' : `diferencia de ${unit}`
 }
 
 /**
@@ -228,7 +222,7 @@ function describeTiebreak(format: MatchFormat, snapshotEvery: number, pairSize: 
   const setStep = usesSetsDiff(format) ? `corta la diferencia de sets, después ` : ''
   // Con marcador abierto los "games" son goles y no hay escalón de sets que
   // narrar: es el MISMO criterio que corre `computeStandings`, contado.
-  const scoreDiff = scoreDiffLabel(format)
+  const scoreDiff = scoreDiffLabel(format.openScore ? 'goles' : 'games')
   const subject = pairSize === 1 ? 'dos jugadores' : 'dos parejas'
   const pronoun = pairSize === 1 ? 'ellos' : 'ellas'
   return (
@@ -322,7 +316,7 @@ export function thirdPlaceNote(matches: readonly MatchResult[]): string | null {
  * empatados en `PG` y en esa diferencia pueden terminar en un orden que esas
  * dos columnas no explican.
  *
- * `scoreDiffLabel(format)`, no un "games" fijo: la llave existe sobre todo en
+ * `scoreDiffLabel(unit)`, no un "games" fijo: la llave existe sobre todo en
  * FIFA (`pair_size=1`, `openScore=true`), donde eso es "diferencia de gol" y
  * no "diferencia de games" — mismo criterio que `tiebreakNote`
  * (tabla-desempate.ts) ya usa para la MISMA frase en la tabla de pádel/FIFA.
@@ -336,15 +330,15 @@ export function thirdPlaceNote(matches: readonly MatchResult[]): string | null {
  * así que las dos frases son mutuamente excluyentes y ninguna reemplaza a la
  * otra: completa el pie donde el otro se calla.
  */
-export function bracketOrderNote(format: MatchFormat): string {
-  return `El orden sale del resultado de la llave, no sólo de la fase de grupos: por eso puede haber lados con el mismo PG y la misma ${scoreDiffLabel(format)} en un orden distinto.`
+export function bracketOrderNote(unit: string): string {
+  return `El orden sale del resultado de la llave, no sólo de la fase de grupos: por eso puede haber lados con el mismo PG y la misma ${scoreDiffLabel(unit)} en un orden distinto.`
 }
 
 /**
  * "el 1º", "el 2º"... La única fuente de este nombre: `computeAwards`
  * (core/awards.ts) la reusa para el `reason` de `AwardLine` en vez de
  * reimplementar la misma tabla — sería la tercera copia, el mismo patrón que
- * ya se cerró para `scoreDiffLabel`/`scoreUnit` (HIGIENE, championRecord).
+ * ya se cerró para `scoreDiffLabel` (HIGIENE, championRecord).
  */
 export function ordinal(position: number): string {
   const words: Record<number, string> = {

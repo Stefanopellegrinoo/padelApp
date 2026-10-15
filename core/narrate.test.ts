@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { bracketOrderNote, formatLabel, formatsLabel, narrateRules, thirdPlaceNote } from './narrate'
+import { bracketOrderNote, formatLabel, formatsLabel, narrateRules, scoreDiffLabel, thirdPlaceNote } from './narrate'
+import { SPORTS } from './sports'
 import { MASTERS_MATCHES, MASTERS_SIZE } from './constants'
 import { defaultConfig } from './config'
 import { pair } from './side'
@@ -355,15 +356,36 @@ describe('narrateRules con marcador abierto', () => {
 // marcador abierto.
 describe('formatLabel', () => {
   it('nombra el set y los games del pádel', () => {
-    expect(formatLabel(CONFIG.matchFormat)).toBe('1 set a 4 games')
+    expect(formatLabel(CONFIG.matchFormat, 'games')).toBe('1 set a 4 games')
   })
 
   it('pluraliza cuando el partido se define a más de un set', () => {
-    expect(formatLabel({ ...CONFIG.matchFormat, setsToWin: 3 })).toBe('3 sets a 4 games')
+    expect(formatLabel({ ...CONFIG.matchFormat, setsToWin: 3 }, 'games')).toBe('mejor de 5 sets a 4 games')
   })
 
   it('no nombra ningún set cuando el marcador es abierto', () => {
-    expect(formatLabel({ ...CONFIG.matchFormat, openScore: true })).toBe('Marcador de goles')
+    expect(formatLabel({ ...CONFIG.matchFormat, openScore: true }, 'goles')).toBe('Marcador de goles')
+  })
+
+  it('habla con la unidad que le pasan: el ping pong se juega a puntos', () => {
+    expect(formatLabel(SPORTS.PING_PONG.format, 'puntos')).toBe('mejor de 3 sets a 11 puntos')
+  })
+
+  it('pádel a dos sets de 6: mejor de 3 sets a 6 games', () => {
+    expect(formatLabel({ ...SPORTS.PADEL.format, setsToWin: 2, gamesPerSet: 6 }, 'games')).toBe(
+      'mejor de 3 sets a 6 games',
+    )
+  })
+})
+
+describe('scoreDiffLabel', () => {
+  it('con la unidad "goles" es "diferencia de gol", en singular', () => {
+    expect(scoreDiffLabel('goles')).toBe('diferencia de gol')
+  })
+
+  it('con cualquier otra unidad la nombra tal cual', () => {
+    expect(scoreDiffLabel('puntos')).toBe('diferencia de puntos')
+    expect(scoreDiffLabel('games')).toBe('diferencia de games')
   })
 })
 
@@ -378,14 +400,14 @@ describe('formatsLabel', () => {
   const FIFA = { ...CONFIG.matchFormat, openScore: true }
 
   it('con un solo formato dice lo de siempre, sin prefijo', () => {
-    expect(formatsLabel([{ label: 'Pádel', matchFormat: PADEL }])).toBe('1 set a 4 games')
+    expect(formatsLabel([{ label: 'Pádel', matchFormat: PADEL, unit: 'games' }])).toBe('1 set a 4 games')
   })
 
   it('con dos formatos nombra los dos y de quién es cada uno', () => {
     expect(
       formatsLabel([
-        { label: 'Pádel', matchFormat: PADEL },
-        { label: 'FIFA', matchFormat: FIFA },
+        { label: 'Pádel', matchFormat: PADEL, unit: 'games' },
+        { label: 'FIFA', matchFormat: FIFA, unit: 'goles' },
       ]),
     ).toBe('Pádel: 1 set a 4 games · FIFA: Marcador de goles')
   })
@@ -393,10 +415,19 @@ describe('formatsLabel', () => {
   it('dos disciplinas del mismo formato no son dos cosas que nombrar', () => {
     expect(
       formatsLabel([
-        { label: 'Pádel', matchFormat: PADEL },
-        { label: 'Pádel', matchFormat: PADEL },
+        { label: 'Pádel', matchFormat: PADEL, unit: 'games' },
+        { label: 'Pádel', matchFormat: PADEL, unit: 'games' },
       ]),
     ).toBe('1 set a 4 games')
+  })
+
+  it('cada fila cuenta en la unidad de su deporte', () => {
+    expect(
+      formatsLabel([
+        { label: 'Pádel', matchFormat: PADEL, unit: 'games' },
+        { label: 'Ping pong', matchFormat: SPORTS.PING_PONG.format, unit: 'puntos' },
+      ]),
+    ).toBe('Pádel: 1 set a 4 games · Ping pong: mejor de 3 sets a 11 puntos')
   })
 
   it('sin disciplinas no inventa una frase', () => {
@@ -440,18 +471,19 @@ describe('thirdPlaceNote', () => {
 // que esas columnas no explican, porque el orden real lo arma la llave
 // (`knockoutPositions`), no la fase de grupos sola.
 describe('bracketOrderNote', () => {
-  const PADEL = CONFIG.matchFormat
-  const FIFA = { ...CONFIG.matchFormat, openScore: true }
-
   it('pádel: cuenta la diferencia de games', () => {
-    expect(bracketOrderNote(PADEL)).toBe(
+    expect(bracketOrderNote('games')).toBe(
       'El orden sale del resultado de la llave, no sólo de la fase de grupos: por eso puede haber lados con el mismo PG y la misma diferencia de games en un orden distinto.',
     )
   })
 
   it('FIFA (marcador abierto): cuenta la diferencia de GOL, no de games', () => {
-    expect(bracketOrderNote(FIFA)).toBe(
+    expect(bracketOrderNote('goles')).toBe(
       'El orden sale del resultado de la llave, no sólo de la fase de grupos: por eso puede haber lados con el mismo PG y la misma diferencia de gol en un orden distinto.',
     )
+  })
+
+  it('ping pong: cuenta la diferencia de puntos', () => {
+    expect(bracketOrderNote('puntos')).toContain('diferencia de puntos')
   })
 })

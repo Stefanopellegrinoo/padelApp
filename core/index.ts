@@ -202,7 +202,7 @@ export type { RulesSection } from './narrate'
 // narrar un torneo de dos formatos con uno solo — que es literalmente lo que
 // fue W64. Sigue exportada de `./narrate`, para su test y para `formatsLabel`,
 // que es su único llamador.
-export { formatsLabel, narrateRules, scoreDiffLabel, scoreUnit } from './narrate'
+export { formatsLabel, narrateRules, scoreDiffLabel } from './narrate'
 // `thirdPlaceNote` (decisión #3990, PR21 D2): la fecha de la [id]/[disciplina]/
 // fechas/[n]/page.tsx CERRADA es su primer consumidor real.
 export { thirdPlaceNote } from './narrate'

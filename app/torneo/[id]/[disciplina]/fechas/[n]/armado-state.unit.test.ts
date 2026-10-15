@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { pair, type MatchdayFormat } from '@/core'
 import {
   applySeatTick,
+  armadoWords,
   drawRoom,
   guestPartnerAbsent,
   matchdayShape,
@@ -415,5 +416,26 @@ describe('guestPartnerAbsent', () => {
 
   it('es verdadero cuando el compañero no está en el plantel dibujado', () => {
     expect(guestPartnerAbsent(squad, { partnerId: 'fantasma' })).toBe(true)
+  })
+})
+
+// Las palabras del armado siguen a la modalidad (`sideSize`), no al deporte: de a
+// uno no hay "parejas invitadas" ni un compañero con quien jugar.
+describe('armadoWords', () => {
+  it('de a uno no hay sección de parejas invitadas ni "Juega con"', () => {
+    const words = armadoWords(1, ROUND_ROBIN, false)
+
+    expect(words.guestPairSection).toBe(false)
+    expect(words.guestPartner).toBe(false)
+    expect(words.sides).toBe('jugadores')
+  })
+
+  it('de a dos conserva el texto de siempre, con parejas invitadas y "Juega con"', () => {
+    const words = armadoWords(2, ROUND_ROBIN, false)
+
+    expect(words.guestPairSection).toBe(true)
+    expect(words.guestPartner).toBe(true)
+    expect(words.sides).toBe('parejas')
+    expect(words.addGuest).toBe('+ Agregar pareja invitada')
   })
 })

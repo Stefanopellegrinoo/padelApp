@@ -7,6 +7,7 @@ import {
   members,
   resolveDisciplineBySlug,
   sameSide,
+  unitOf,
   type Award,
   type MatchResult,
   type Side,
@@ -75,6 +76,7 @@ export default async function FechasPage({ params }: PageProps) {
   // Levantado afuera de `championOf`: es una función ANIDADA y el narrowing
   // del `notFound()` de arriba no la cruza.
   const tournamentFormat = discipline.config.matchFormat
+  const sportKind = discipline.kind
   // El Masters no se dibuja como fila: esta pantalla sólo lista fechas REGULAR
   // y muestra el Masters como el bloque bloqueado del final (Task 7, Plan 3).
   const disciplineMatchdays = seasonMatchdays.filter((matchday) => matchday.disciplineId === discipline.id)
@@ -124,6 +126,7 @@ export default async function FechasPage({ params }: PageProps) {
         // hoy: una fecha vieja se lee con la regla con la que se jugó. Mismo
         // criterio que la tabla del día y que `closeMatchday`.
         matchday.allowsDraw,
+        unitOf(sportKind, matchFormat),
       ),
     }
   }

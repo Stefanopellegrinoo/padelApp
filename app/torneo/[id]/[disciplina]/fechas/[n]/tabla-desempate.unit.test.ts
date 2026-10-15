@@ -60,7 +60,7 @@ describe('tiebreakNote', () => {
       fila(A, 1, { won: 3, dayPoints: 3, gamesDiff: 6 }),
       fila(B, 2, { won: 1, dayPoints: 1, gamesDiff: 1 }),
     ]
-    expect(tiebreakNote(standings, PADEL, NOMBRES, 2)).toBeNull()
+    expect(tiebreakNote(standings, PADEL, NOMBRES, 2, 'games')).toBeNull()
   })
 
   it('nombra la diferencia de games cuando cortó ella, y a los dos lados', () => {
@@ -68,7 +68,7 @@ describe('tiebreakNote', () => {
       fila(A, 1, { won: 2, dayPoints: 2, gamesDiff: 6 }),
       fila(B, 2, { won: 2, dayPoints: 2, gamesDiff: 2 }),
     ]
-    expect(tiebreakNote(standings, PADEL, NOMBRES, 2)).toBe(
+    expect(tiebreakNote(standings, PADEL, NOMBRES, 2, 'games')).toBe(
       'Bruno & Bea quedaron 2° por diferencia de games: empataron en partidos ganados con Ana & Aldo.',
     )
   })
@@ -78,7 +78,17 @@ describe('tiebreakNote', () => {
       fila(A, 1, { won: 2, dayPoints: 6, gamesDiff: 6 }),
       fila(B, 2, { won: 2, dayPoints: 6, gamesDiff: 2 }),
     ]
-    expect(tiebreakNote(standings, FIFA, NOMBRES, 2)).toContain('por diferencia de gol')
+    expect(tiebreakNote(standings, FIFA, NOMBRES, 2, 'goles')).toContain('por diferencia de gol')
+  })
+
+  it('con la unidad "puntos" (ping pong) la nota dice diferencia de puntos', () => {
+    const standings = [
+      fila(A, 1, { won: 2, dayPoints: 2, gamesDiff: 6 }),
+      fila(B, 2, { won: 2, dayPoints: 2, gamesDiff: 2 }),
+    ]
+    expect(tiebreakNote(standings, PADEL, NOMBRES, 2, 'puntos')).toBe(
+      'Bruno & Bea quedaron 2° por diferencia de puntos: empataron en partidos ganados con Ana & Aldo.',
+    )
   })
 
   it('habla en singular cuando la disciplina se juega de a uno', () => {
@@ -86,7 +96,7 @@ describe('tiebreakNote', () => {
       fila(single('a1'), 1, { won: 2, dayPoints: 2, gamesDiff: 6 }),
       fila(single('b1'), 2, { won: 2, dayPoints: 2, gamesDiff: 2 }),
     ]
-    const note = tiebreakNote(standings, PADEL, NOMBRES, 1)
+    const note = tiebreakNote(standings, PADEL, NOMBRES, 1, 'games')
     expect(note).toContain('Bruno quedó 2°')
     expect(note).toContain('empató en partidos ganados')
   })
@@ -100,7 +110,7 @@ describe('tiebreakNote', () => {
       fila(A, 1, { won: 3, drawn: 0, dayPoints: 9, gamesDiff: 6 }),
       fila(B, 2, { won: 2, drawn: 3, dayPoints: 9, gamesDiff: 2 }),
     ]
-    expect(tiebreakNote(standings, FIFA, NOMBRES, 2)).toBe(
+    expect(tiebreakNote(standings, FIFA, NOMBRES, 2, 'goles')).toBe(
       'Bruno & Bea quedaron 2° por diferencia de gol: empataron en puntos de la fecha con Ana & Aldo.',
     )
   })
@@ -113,7 +123,7 @@ describe('tiebreakNote', () => {
       fila(A, 1, { won: 1, drawn: 1, dayPoints: 4, gamesDiff: 0 }),
       fila(B, 2, { won: 1, drawn: 0, dayPoints: 3, gamesDiff: 9 }),
     ]
-    expect(tiebreakNote(standings, FIFA, NOMBRES, 2)).toBeNull()
+    expect(tiebreakNote(standings, FIFA, NOMBRES, 2, 'goles')).toBeNull()
   })
 
   it('el pádel a dos sets sigue cortando por diferencia de sets antes que por games', () => {
@@ -127,6 +137,6 @@ describe('tiebreakNote', () => {
     ]
     // Cortó la diferencia de SETS, que esta frase no narra: sin esta rama diría
     // que cortó la de games, y la de games la tiene GANADA el que quedó abajo.
-    expect(tiebreakNote(standings, dosSets, NOMBRES, 2)).toBeNull()
+    expect(tiebreakNote(standings, dosSets, NOMBRES, 2, 'games')).toBeNull()
   })
 })

@@ -1,9 +1,9 @@
 import Link from 'next/link'
-import { MASTERS_SIZE, rankingWithMovement, snapshotForMatchday, type Award, type EntryId } from '@/core'
+import { rankingWithMovement, snapshotForMatchday, type Award, type EntryId } from '@/core'
 import type { DisciplineHeader, EntryRow, MatchdaySummary, SeasonHeader } from '@/db/read'
 import { initials, matchdayDay } from '@/app/format'
 import { Desempate, type StandingsRow, type TiebreakEntry } from './desempate'
-import { defendersOf, volverDestination } from './tabla-state'
+import { defendersOf, mastersCutoffFor, volverDestination } from './tabla-state'
 import { Volver } from './volver'
 
 interface TablaViewProps {
@@ -148,7 +148,7 @@ export function TablaView({ header, discipline, disciplina, entries, matchdays, 
       <Desempate
         base={`/torneo/${header.id}/${disciplina}`}
         rows={rows}
-        mastersCutoff={MASTERS_SIZE}
+        mastersCutoff={mastersCutoffFor(discipline.hasMasters, rows.length)}
         tiebreakOrder={tiebreakOrder}
         tiebreakSnapshotEvery={config.tiebreakSnapshotEvery}
         asOfMatchday={asOfMatchday}

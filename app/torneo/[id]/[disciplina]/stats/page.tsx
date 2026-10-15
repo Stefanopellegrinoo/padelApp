@@ -10,12 +10,14 @@ import {
   sportLabel,
   tallyPlayers,
   titleStreaks,
+  unitOf,
   type Award,
   type EntryId,
   type MatchResult,
   type PartnerRecord,
   type PlayedMatchday,
 } from '@/core'
+import { disciplineConfig } from '@/db/discipline'
 import { awardsOf, closedHistoryAll, entriesOf, myEntryId, seasonHeader } from '@/db/read'
 import { serverClient } from '@/db/server'
 
@@ -38,6 +40,10 @@ interface BarRow {
 
 function pct(numerator: number, denominator: number): number {
   return denominator > 0 ? Math.round((numerator / denominator) * 100) : 0
+}
+
+function cap(word: string): string {
+  return word.charAt(0).toUpperCase() + word.slice(1)
 }
 
 function formatSigned(value: number): string {
@@ -175,7 +181,16 @@ function Duplas({ title, rows, base, nameOf }: { title: string; rows: PartnerRec
   )
 }
 
-function InsufficientData({ closedCount, disciplineLabel }: { closedCount: number; disciplineLabel: string | null }) {
+function InsufficientData({
+  closedCount,
+  disciplineLabel,
+  showPairs,
+}: {
+  closedCount: number
+  disciplineLabel: string | null
+  /** "La mejor dupla" y "con quién te va bien" sólo existen con parejas que rotan. */
+  showPairs: boolean
+}) {
   const missing = MIN_CLOSED_MATCHDAYS_FOR_STATS - closedCount
   return (
     <div className="flex flex-col gap-3 pt-4">
@@ -188,8 +203,8 @@ function InsufficientData({ closedCount, disciplineLabel }: { closedCount: numbe
       </p>
       <p className="text-pretty text-[13.5px] leading-[1.5] font-[550] text-muted">
         Cuando cierre {missing === 1 ? 'la próxima fecha' : `${missing} fechas más`} vas a ver acá el % de partidos
-        ganados de todo el plantel, la mejor dupla del torneo, con quién te va bien, las rachas de títulos y el
-        presentismo.
+        ganados de todo el plantel, {showPairs ? 'la mejor dupla del torneo, con quién te va bien, ' : ''}las rachas
+        de títulos y el presentismo.
       </p>
     </div>
   )
@@ -238,16 +253,22 @@ export default async function StatsPage({ params, searchParams }: PageProps) {
   // > 1 ? ... : null`): con una sola, decirlo es ruido que nadie pidió.
   const disciplineLabel = header.disciplines.length > 1 ? sportLabel(discipline.kind) : null
 
-  const [entries, history, awardsByMatchday, viewerEntryId] = await Promise.all([
+  const [entries, history, awardsByMatchday, viewerEntryId, { fixedTeams }] = await Promise.all([
     entriesOf(supabase, seasonId, discipline.id),
     closedHistoryAll(supabase, seasonId, discipline.id),
     awardsOf(supabase, seasonId, discipline.id),
     myEntryId(supabase, seasonId),
+    disciplineConfig(supabase, discipline.id),
   ])
   const { config } = discipline
+  // Lo que se cuenta en un partido es del deporte (§8): games, goles, puntos.
+  const unit = unitOf(discipline.kind, config.matchFormat)
+  // "Dupla" sólo tiene sentido con parejas que ROTAN: de a uno no hay con quién
+  // jugar, y con parejas fijas la dupla es siempre la misma.
+  const showPairs = discipline.pairSize === 2 && !fixedTeams
 
   if (history.length < MIN_CLOSED_MATCHDAYS_FOR_STATS) {
-    return <InsufficientData closedCount={history.length} disciplineLabel={disciplineLabel} />
+    return <InsufficientData closedCount={history.length} disciplineLabel={disciplineLabel} showPairs={showPairs} />
   }
 
   const nameOf: NameOf = new Map(entries.map((entry) => [entry.id, entry.displayName]))
@@ -361,7 +382,7 @@ export default async function StatsPage({ params, searchParams }: PageProps) {
         <>
           <div className="grid grid-cols-2 gap-3">
             <StatCard label="Partidos jugados" value={totalMatches} />
-            <StatCard label="Games totales" value={totalGames} />
+            <StatCard label={`${cap(unit)} totales`} value={totalGames} />
             <StatCard label="Fecha más pareja" value={evenestMatchdayNumber !== null ? `Fecha ${evenestMatchdayNumber}` : '—'} />
             <StatCard
               label="Racha más larga"
@@ -406,18 +427,18 @@ export default async function StatsPage({ params, searchParams }: PageProps) {
 
           <BarRanking title="% de partidos ganados" rows={winPctRows} base={base} nameOf={nameOf} />
           <BarRanking title="Presentismo" rows={presentismoRows} base={base} nameOf={nameOf} />
-          <Duplas title="Mejor dupla del torneo" rows={duplasRows} base={base} nameOf={nameOf} />
+          {showPairs && <Duplas title="Mejor dupla del torneo" rows={duplasRows} base={base} nameOf={nameOf} />}
         </>
       ) : (
         <>
           <div className="grid grid-cols-2 gap-3">
             <StatCard label="Partidos" value={myMatchesPlayed} />
             <StatCard label="Efectividad" value={`${myEffectiveness}%`} />
-            <StatCard label="Games a favor" value={formatSigned(myNetGames)} />
+            <StatCard label={`${cap(unit)} a favor`} value={formatSigned(myNetGames)} />
             <StatCard label="Mejor fecha" value={myBestMatchday !== null ? `Fecha ${myBestMatchday}` : '—'} />
           </div>
 
-          <BarRanking title="Con quién te va bien" rows={myPartners} base={base} nameOf={nameOf} />
+          {showPairs && <BarRanking title="Con quién te va bien" rows={myPartners} base={base} nameOf={nameOf} />}
         </>
       )}
     </div>

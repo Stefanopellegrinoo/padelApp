@@ -5,7 +5,7 @@
  * `sumar-state.ts`.
  */
 
-import { disciplineSlugs, type SideSize, type SluggableDiscipline } from '@/core'
+import { disciplineSlugs, MASTERS_SIZE, type SideSize, type SluggableDiscipline } from '@/core'
 
 /** Una fecha cerrada con los premios que se congelaron al cerrarla. */
 export interface ClosedMatchdayAwards {
@@ -21,6 +21,18 @@ export interface Defenders {
 export interface VolverDestination {
   href: string
   label: string
+}
+
+/**
+ * Dónde cae el corte "CLASIFICAN AL MASTERS" de la Tabla (`Desempate`
+ * dibuja la línea después de la fila `mastersCutoff`). Sólo existe con
+ * `has_masters`: sin Masters devuelve `rowCount + 1`, fuera de rango a
+ * propósito —mismo truco que la tabla global (`page.tsx`)— y la línea no se
+ * dibuja. Antes la Tabla pasaba `MASTERS_SIZE` siempre y una FIFA individual
+ * decía "CLASIFICAN AL MASTERS" sin tener Masters.
+ */
+export function mastersCutoffFor(hasMasters: boolean, rowCount: number): number {
+  return hasMasters ? MASTERS_SIZE : rowCount + 1
 }
 
 /**

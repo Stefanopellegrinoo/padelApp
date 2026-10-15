@@ -14,6 +14,7 @@ import {
   pointsErrors,
   SPORTS,
   TOURNAMENT_SPORTS,
+  unitOf,
   type MatchdayFormat,
   type MatchFormat,
   type SeasonConfig,
@@ -1208,7 +1209,11 @@ export function summaryOf(
     {
       key: 'Formato',
       value: formatsLabel(
-        picked.map((kind) => ({ label: DISCIPLINE_LABELS[kind], matchFormat: configs[kind].matchFormat })),
+        picked.map((kind) => ({
+          label: DISCIPLINE_LABELS[kind],
+          matchFormat: configs[kind].matchFormat,
+          unit: unitOf(kind, configs[kind].matchFormat),
+        })),
       ),
     },
     { key: 'Puntos', value: perDisciplineValue((config) => config.points.join(' · ')) },

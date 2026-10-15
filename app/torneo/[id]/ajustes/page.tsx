@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import { disciplineSlugs, formatsLabel, sportLabel, validateConfig } from '@/core'
+import { disciplineSlugs, formatsLabel, sportLabel, unitOf, validateConfig } from '@/core'
 import {
   disciplineRulesOf,
   myEntryId,
@@ -144,6 +144,7 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
         header.disciplines.map((candidate) => ({
           label: sportLabel(candidate.kind),
           matchFormat: candidate.config.matchFormat,
+          unit: unitOf(candidate.kind, candidate.config.matchFormat),
         })),
       )
     : null

@@ -75,6 +75,12 @@ vi.mock('@/db/server', () => ({
   serverClient: async () => ({}),
 }))
 
+// `fixedTeams` decide si "Mejor dupla" tiene sentido (parejas que rotan); lo lee
+// `disciplineConfig`, no el header. Acá: parejas que rotan.
+vi.mock('@/db/discipline', () => ({
+  disciplineConfig: async () => ({ fixedTeams: false }),
+}))
+
 vi.mock('@/db/read', async (importOriginal) => {
   const real = await importOriginal<typeof import('@/db/read')>()
   return {
@@ -144,5 +150,22 @@ describe('Stats trae los datos de la disciplina de la URL, no la [0] de la tempo
 
     await expect(render('handball')).rejects.toThrow('NEXT_NOT_FOUND')
     expect(notFound).toHaveBeenCalled()
+  })
+})
+
+describe('Stats habla con la unidad y las palabras del deporte', () => {
+  it('FIFA de a uno: cuenta goles y no tiene "Mejor dupla del torneo"', async () => {
+    const html = await render('fifa')
+
+    expect(html).toContain('Goles totales')
+    expect(html).not.toContain('Games totales')
+    expect(html).not.toContain('Mejor dupla del torneo')
+  })
+
+  it('pádel: sigue contando games', async () => {
+    const html = await render('padel')
+
+    expect(html).toContain('Games totales')
+    expect(html).not.toContain('Goles totales')
   })
 })

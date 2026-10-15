@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { sportLabel } from '@/core'
+import { sportLabel, unitOf } from '@/core'
 import { disciplineRulesOf, publicFormats, publicRules, seasonAdminName, seasonHeader } from '@/db/read'
 import { serverClient } from '@/db/server'
 import { RulesBody, type RulesBlock } from './rules-body'
@@ -63,6 +63,7 @@ export default async function ReglasPage({ params }: ReglasPageProps) {
     // no hace falta un `??` para un caso que no puede pasar.
     const disciplines: RulesBlock[] = formats.map((format) => ({
       label: sportLabel(format.kind),
+      unit: unitOf(format.kind, format.config.matchFormat),
       config: format.config,
       shape: { hasMasters: format.hasMasters, pairSize: format.pairSize, allowsDraw: format.allowsDraw },
       text: format.rulesText,
@@ -90,6 +91,7 @@ export default async function ReglasPage({ params }: ReglasPageProps) {
   // (`disciplineRulesOf`, rebanada 1).
   const disciplines: RulesBlock[] = header.disciplines.map((discipline) => ({
     label: sportLabel(discipline.kind),
+    unit: unitOf(discipline.kind, discipline.config.matchFormat),
     config: discipline.config,
     shape: { hasMasters: discipline.hasMasters, pairSize: discipline.pairSize, allowsDraw: discipline.allowsDraw },
     text: rulesByDiscipline.get(discipline.id) ?? '',

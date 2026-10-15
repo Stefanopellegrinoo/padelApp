@@ -9,6 +9,7 @@ import {
   sportLabel,
   tallyPlayers,
   titleStreaks,
+  unitOf,
   type Award,
   type EntryId,
   type SeasonConfig,
@@ -303,6 +304,8 @@ export default async function JugadorPage({ params }: PageProps) {
   const efectividad =
     tally.matchesPlayed === 0 ? 0 : Math.round((tally.matchesWon / tally.matchesPlayed) * 100)
   const difGames = tally.gamesFor - tally.gamesAgainst
+  // El sufijo es del deporte (§8): goles en FIFA, games en pádel, puntos en ping pong.
+  const unit = unitOf(discipline.kind, config.matchFormat)
   const matchesLost = tally.matchesPlayed - tally.matchesWon
 
   const marks = markMatchdays(
@@ -362,7 +365,7 @@ export default async function JugadorPage({ params }: PageProps) {
           <p className="mt-1 text-[20px] font-extrabold">{fechasGanadas}</p>
         </div>
         <div className="rounded-[14px] border border-line bg-surface p-[14px]">
-          <p className="text-[9.5px] font-extrabold uppercase tracking-[.13em] text-muted">Dif. games</p>
+          <p className="text-[9.5px] font-extrabold uppercase tracking-[.13em] text-muted">{`Dif. ${unit}`}</p>
           <p className="mt-1 text-[20px] font-extrabold">{formatSigned(difGames)}</p>
         </div>
         <div className="rounded-[14px] border border-line bg-surface p-[14px]">

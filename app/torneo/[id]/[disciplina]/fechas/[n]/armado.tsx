@@ -18,6 +18,7 @@ import {
 } from './actions'
 import {
   applySeatTick,
+  armadoWords,
   drawRoom,
   guestPartnerAbsent,
   matchdayShape,
@@ -63,79 +64,6 @@ export interface DraftPairVM {
 export interface GroupPreviewVM {
   number: number
   names: string[]
-}
-
-/**
- * El vocabulario de la disciplina. Un lado de uno no es "una pareja" y su
- * fecha no tiene "parejas invitadas": son jugadores invitados que juegan
- * solos, igual que todos.
- *
- * `drawNote` (W80, verify-report-pr21-cierre #4016): antes dependía SÓLO de
- * `sideSize`, nunca del `formato` elegido — con "N grupos + llave" elegido,
- * la vista previa de S83 ("Cómo quedan los grupos") dibujaba arriba un
- * reparto en grupos y esta nota, dos pantallazos más abajo, seguía
- * prometiendo "todos contra todos, en el orden de la tabla" (o el cruce de
- * defensores del pádel): la misma clase de contradicción que W55-W57.
- * `formato.qualifiersPerGroup` es literal en el texto — no un "2" fijo — para
- * que la nota se rompa sola si algún día deja de ser siempre 2 (`core/knockout.ts`,
- * `knockoutMatchups` hoy sólo arma cruces con 2 clasificados por grupo).
- *
- * S93 (verify-report-pre-contract #4026): el fix de W80 de arriba
- * REEMPLAZABA `base.drawNote` entero al elegir grupos. Para pádel
- * (`sideSize === 2`) esa nota base no habla de grupos: dice CÓMO SE ARMARON
- * las parejas que la lista de arriba muestra (defensores fijos, cruce de
- * tabla) — una pregunta distinta de CÓMO SE VAN A JUGAR, que es lo que la
- * nota de grupos contesta. Perder la primera al elegir grupos dejaba la
- * lista de parejas sin ninguna explicación. Para singles (`sideSize === 1`)
- * no hay paso de "armar parejas": la nota base y la de grupos contestan la
- * MISMA pregunta (cómo se arman los partidos), así que ahí sigue
- * reemplazando, como antes.
- *
- * S94 (verify-report-pre-contract #4026): `formato` puede cambiar DESPUÉS
- * de que el fixture YA se sorteó, sin volver a sortear (mismo estado
- * divergido que vigila C32 y que W86 cierra en la tabla del día) —
- * `formatDrifted` (calculado en `page.tsx` contra `detail.matches`, no
- * contra `formato` solo) dice si eso pasó. Prometer grupos sobre un
- * fixture que sigue siendo el de antes es la misma mentira que W86 cerró
- * del otro lado de la pantalla.
- */
-function words(sideSize: SideSize, formato: MatchdayFormat, formatDrifted: boolean) {
-  const base =
-    sideSize === 1
-      ? {
-          sides: 'jugadores',
-          guestSection: 'Jugadores invitados',
-          guestNote:
-            'Juegan solos, como todos, y no suman puntos para el campeonato. Entran de a dos.',
-          addGuest: '+ Agregar 2 invitados',
-          guestPairNoun: 'los dos invitados',
-          draw: 'Ordenar jugadores',
-          drawn: 'Orden de la fecha',
-          drawNote: 'Juegan todos contra todos, en el orden de la tabla.',
-        }
-      : {
-          sides: 'parejas',
-          guestSection: 'Parejas invitadas',
-          guestNote:
-            'Juegan juntos y no suman puntos para el campeonato: es un amistoso adentro de la fecha.',
-          addGuest: '+ Agregar pareja invitada',
-          guestPairNoun: 'la pareja invitada',
-          draw: 'Generar parejas',
-          drawn: 'Parejas',
-          drawNote:
-            'Los defensores quedan fijos. El resto se arma cruzando la tabla: 1° con último, 2° con anteúltimo, y así.',
-        }
-
-  if (formato.kind !== 'GROUPS_KNOCKOUT') return base
-
-  const groupsNote = formatDrifted
-    ? 'El formato cambió después de sortear: para jugar por grupos hay que volver a sortear la fecha.'
-    : `Juegan por grupos: todos contra todos adentro de cada grupo, y los ${formato.qualifiersPerGroup} primeros de cada uno pasan a la llave.`
-
-  return {
-    ...base,
-    drawNote: sideSize === 2 ? `${base.drawNote} ${groupsNote}` : groupsNote,
-  }
 }
 
 interface ArmadoProps {
@@ -313,7 +241,7 @@ export function Armado({
   })
   const { size, sides, matches, complete, needsLooseGuest, eventualSize, tooFew, tooManyToPair, suggestedFormat } =
     shape
-  const label = words(sideSize, formato, formatDrifted)
+  const label = armadoWords(sideSize, formato, formatDrifted)
   const guestUnnamed = [
     ...looseGuests.map((guest) => guest.name),
     ...guestPairs.flatMap((pair) => [pair.a.name, pair.b.name]),
@@ -504,6 +432,7 @@ export function Armado({
             position={looseGuests.length === 1 ? null : index + 1}
             required={requiredGuestSeat}
             partnerAbsent={guestPartnerAbsent(optimisticSeats, guest)}
+            partner={label.guestPartner}
             toTheDraw={toTheDraw}
             pending={pending}
             onName={(name) =>
@@ -532,53 +461,54 @@ export function Armado({
         </button>
       </section>
 
-      <section className="flex flex-col gap-2">
-        <h2 className={`${STEP_TITLE} border-b border-line pb-2`}>{label.guestSection}</h2>
+      {/* De a uno no hay parejas que invitar (§8). Una fecha que ya trae parejas
+          invitadas de antes las sigue viendo y pudiendo sacar —cuentan en
+          `size`, esconderlas dejaría lugares invisibles—; lo que no se ofrece
+          es sumar más. */}
+      {(label.guestPairSection || guestPairs.length > 0) && (
+        <section className="flex flex-col gap-2">
+          <h2 className={`${STEP_TITLE} border-b border-line pb-2`}>{label.guestSection}</h2>
 
-        {guestPairs.map((pair, index) => (
-          <ParejaInvitada
-            key={pair.lockId}
-            pair={pair}
-            position={guestPairs.length === 1 ? null : index + 1}
-            pending={pending}
-            pairNoun={label.guestPairNoun}
-            onName={(entryId, name) =>
-              run(() => saveGuestName(seasonId, matchdayId, matchdayNumber, entryId, name))
-            }
-            onRemove={() =>
-              run(() =>
-                removeGuestPair(
-                  seasonId,
-                  matchdayId,
-                  matchdayNumber,
-                  pair.a.entryId,
-                  pair.b.entryId,
-                ),
-              )
-            }
-          />
-        ))}
+          {guestPairs.map((pair, index) => (
+            <ParejaInvitada
+              key={pair.lockId}
+              pair={pair}
+              position={guestPairs.length === 1 ? null : index + 1}
+              pending={pending}
+              pairNoun={label.guestPairNoun}
+              onName={(entryId, name) =>
+                run(() => saveGuestName(seasonId, matchdayId, matchdayNumber, entryId, name))
+              }
+              onRemove={() =>
+                run(() =>
+                  removeGuestPair(
+                    seasonId,
+                    matchdayId,
+                    matchdayNumber,
+                    pair.a.entryId,
+                    pair.b.entryId,
+                  ),
+                )
+              }
+            />
+          ))}
 
-        {/* ponytail: `addGuestPair` no tiene guard de `pairSize` y suma los
-            invitados de a DOS incluso donde no hay parejas — con `sideSize=1`
-            el lock que los traba lo ignora `buildSides` entero (su propio
-            comentario: "a constraint on a pairing that never happens
-            constrains nothing"), así que quedan dos invitados jugando solos.
-            No revienta y hoy es el ÚNICO camino para sumar un invitado a una
-            fecha de a uno, así que el copy lo dice en vez de esconderlo. El
-            arreglo real es una action de un invitado suelto; va en su propia
-            rebanada, no acá. */}
-        <p className="text-[11.5px] font-[600] text-muted">{label.guestNote}</p>
+          {label.guestPairSection && (
+            <>
+              <p className="text-[11.5px] font-[600] text-muted">{label.guestNote}</p>
 
-        <button
-          type="button"
-          disabled={pending}
-          onClick={() => run(() => addGuestPair(seasonId, matchdayId, matchdayNumber))}
-          className="min-h-11 rounded-field border-[1.5px] border-line p-3 text-[13.5px] font-extrabold"
-        >
-          {label.addGuest}
-        </button>
-      </section>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => run(() => addGuestPair(seasonId, matchdayId, matchdayNumber))}
+                className="min-h-11 rounded-field border-[1.5px] border-line p-3 text-[13.5px] font-extrabold"
+              >
+                {label.addGuest}
+              </button>
+            </>
+          )}
+        </section>
+      )}
 
       {pairs.length > 0 && (
         <section className="flex flex-col gap-2">
@@ -962,6 +892,8 @@ interface GuestCardProps {
   required: boolean
   /** El compañero elegido a mano no juega esta fecha: la fecha no se puede sortear así. */
   partnerAbsent: boolean
+  /** Se puede elegir con quién juega. Falso de a uno: no hay compañero, el invitado juega solo. */
+  partner: boolean
   /** Cuántos invitados van al sorteo en total, este incluido. Decide si "va último" o va al fondo con otros. */
   toTheDraw: number
   pending: boolean
@@ -997,6 +929,7 @@ function GuestCard({
   position,
   required,
   partnerAbsent,
+  partner,
   toTheDraw,
   pending,
   onName,
@@ -1062,46 +995,55 @@ function GuestCard({
             sorteo. La consecuencia de puntos va DEBAJO porque cambia con lo que
             se elija acá — leerla antes es leerla sobre una elección que todavía
             no se hizo. */}
-        <label className="flex items-center gap-2 text-[12.5px] font-bold">
-          Juega con
-          <select
-            value={guest.partnerId ?? ''}
-            disabled={pending}
-            onChange={(event) => onPartner(event.target.value === '' ? null : event.target.value)}
-            // Empieza con el texto visible de la etiqueta y sigue con quién es
-            // esta tarjeta: así el nombre accesible contiene al visible (WCAG
-            // 2.5.3) y además distingue un `<select>` del de al lado.
-            aria-label={`Juega con — ${who}`}
-            className="min-h-11 flex-1 rounded-field border border-line bg-surface p-[10px] text-[13.5px] font-bold outline-none"
-          >
-            {/* Es la opción "al sorteo", y tiene que decir qué va a pasar:
-                "El que toque" no se leía como una opción, se leía como que
-                todavía no se eligió nada. */}
-            <option value="">El que salga en el sorteo</option>
-            {seats
-              // El que ya está trabado con OTRO invitado no se ofrece: elegirlo
-              // rebota en el acto con "Alguien está fijado en dos parejas a la
-              // vez". El compañero propio sí se ofrece, o el select no podría
-              // mostrar su propio valor.
-              .filter(
-                (seat) =>
-                  seat.playing &&
-                  (seat.entryId === guest.partnerId || !partnersTaken.has(seat.entryId)),
-              )
-              .map((seat) => (
-                <option key={seat.entryId} value={seat.entryId}>
-                  {seat.name}
-                </option>
-              ))}
-          </select>
-        </label>
+        {partner && (
+          <label className="flex items-center gap-2 text-[12.5px] font-bold">
+            Juega con
+            <select
+              value={guest.partnerId ?? ''}
+              disabled={pending}
+              onChange={(event) => onPartner(event.target.value === '' ? null : event.target.value)}
+              // Empieza con el texto visible de la etiqueta y sigue con quién es
+              // esta tarjeta: así el nombre accesible contiene al visible (WCAG
+              // 2.5.3) y además distingue un `<select>` del de al lado.
+              aria-label={`Juega con — ${who}`}
+              className="min-h-11 flex-1 rounded-field border border-line bg-surface p-[10px] text-[13.5px] font-bold outline-none"
+            >
+              {/* Es la opción "al sorteo", y tiene que decir qué va a pasar:
+                  "El que toque" no se leía como una opción, se leía como que
+                  todavía no se eligió nada. */}
+              <option value="">El que salga en el sorteo</option>
+              {seats
+                // El que ya está trabado con OTRO invitado no se ofrece: elegirlo
+                // rebota en el acto con "Alguien está fijado en dos parejas a la
+                // vez". El compañero propio sí se ofrece, o el select no podría
+                // mostrar su propio valor.
+                .filter(
+                  (seat) =>
+                    seat.playing &&
+                    (seat.entryId === guest.partnerId || !partnersTaken.has(seat.entryId)),
+                )
+                .map((seat) => (
+                  <option key={seat.entryId} value={seat.entryId}>
+                    {seat.name}
+                  </option>
+                ))}
+            </select>
+          </label>
+        )}
 
         {/* El compañero trabado que después avisó que no va. El `<select>` de
             arriba filtra por `seat.playing`, así que muestra "El que salga en
             el sorteo" mientras este párrafo —que busca en `seats`, ausentes
             incluidos— afirmaba que los puntos los cobra alguien que no viene.
             La fecha además rebota: el lock sobrevive al destilde. */}
-        {partnerAbsent ? (
+        {!partner ? (
+          // Sin pareja el invitado no cobra ni le hace cobrar a nadie, y el
+          // sorteo de a uno lo manda al final: esta nota reemplaza a las tres de
+          // abajo (puntos de la pareja, "va último", "elegile compañero").
+          <p className="text-[11.5px] font-[600] text-muted">
+            Juega solo y no suma puntos para el campeonato. Va al final del orden: nadie sabe cómo juega.
+          </p>
+        ) : partnerAbsent ? (
           <p
             role="alert"
             className="rounded-field bg-live-bg px-3 py-2.5 text-[11.5px] font-bold text-live"
@@ -1133,7 +1075,7 @@ function GuestCard({
             "Va último" es de a uno. Con varios al sorteo los tres decían lo
             mismo y sólo uno lo es: el ÚLTIMO de la lista es el que cae con el
             líder de la tabla (ver `PairingInput.guestIds`). */}
-        {guest.partnerId === null && (
+        {partner && guest.partnerId === null && (
           <p className="text-[11.5px] font-[600] text-muted">
             {toTheDraw > 1
               ? 'Va al fondo del sorteo, con los otros invitados: nadie sabe cómo juegan. Si lo conocés, elegile compañero.'

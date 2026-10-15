@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { DisciplineId } from '@/core'
-import { defendersOf, singleDisciplineRedirect, volverDestination, type ClosedMatchdayAwards } from './tabla-state'
+import { defendersOf, mastersCutoffFor, singleDisciplineRedirect, volverDestination, type ClosedMatchdayAwards } from './tabla-state'
 
 const nameOf = new Map([
   ['a1', 'Ana'],
@@ -90,5 +90,15 @@ describe('singleDisciplineRedirect', () => {
       { id: 'd2' as DisciplineId, kind: 'FIFA' },
     ])
     expect(target).toBeNull()
+  })
+})
+
+describe('mastersCutoffFor', () => {
+  it('con Masters el corte cae después de los MASTERS_SIZE primeros', () => {
+    expect(mastersCutoffFor(true, 8)).toBe(4)
+  })
+
+  it('sin Masters el corte queda fuera de rango: no se dibuja', () => {
+    expect(mastersCutoffFor(false, 8)).toBe(9)
   })
 })

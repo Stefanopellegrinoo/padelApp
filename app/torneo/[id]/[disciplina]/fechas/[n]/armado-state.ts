@@ -280,3 +280,102 @@ export function partnersTakenBy(
     looseGuests.flatMap((guest) => (guest.partnerId === null ? [] : [guest.partnerId])),
   )
 }
+
+/** El vocabulario del armado: lo que `armadoWords` le devuelve a la pantalla. */
+export interface ArmadoWords {
+  sides: string
+  guestSection: string
+  guestNote: string
+  addGuest: string
+  guestPairNoun: string
+  draw: string
+  drawn: string
+  drawNote: string
+  /** Se dibuja la sección de invitados EN PAREJA y su botón. Falso de a uno. */
+  guestPairSection: boolean
+  /** El invitado suelto puede elegir con quién juega ("Juega con"). Falso de a uno. */
+  guestPartner: boolean
+}
+
+/**
+ * El vocabulario de la disciplina. Un lado de uno no es "una pareja" y su
+ * fecha no tiene "parejas invitadas": son jugadores invitados que juegan
+ * solos, igual que todos.
+ *
+ * `drawNote` (W80, verify-report-pr21-cierre #4016): antes dependía SÓLO de
+ * `sideSize`, nunca del `formato` elegido — con "N grupos + llave" elegido,
+ * la vista previa de S83 ("Cómo quedan los grupos") dibujaba arriba un
+ * reparto en grupos y esta nota, dos pantallazos más abajo, seguía
+ * prometiendo "todos contra todos, en el orden de la tabla" (o el cruce de
+ * defensores del pádel): la misma clase de contradicción que W55-W57.
+ * `formato.qualifiersPerGroup` es literal en el texto — no un "2" fijo — para
+ * que la nota se rompa sola si algún día deja de ser siempre 2 (`core/knockout.ts`,
+ * `knockoutMatchups` hoy sólo arma cruces con 2 clasificados por grupo).
+ *
+ * S93 (verify-report-pre-contract #4026): el fix de W80 de arriba
+ * REEMPLAZABA `base.drawNote` entero al elegir grupos. Para pádel
+ * (`sideSize === 2`) esa nota base no habla de grupos: dice CÓMO SE ARMARON
+ * las parejas que la lista de arriba muestra (defensores fijos, cruce de
+ * tabla) — una pregunta distinta de CÓMO SE VAN A JUGAR, que es lo que la
+ * nota de grupos contesta. Perder la primera al elegir grupos dejaba la
+ * lista de parejas sin ninguna explicación. Para singles (`sideSize === 1`)
+ * no hay paso de "armar parejas": la nota base y la de grupos contestan la
+ * MISMA pregunta (cómo se arman los partidos), así que ahí sigue
+ * reemplazando, como antes.
+ *
+ * `guestPairSection` y `guestPartner` (§8): de a uno no hay pareja que invitar
+ * ni compañero que elegir. `addGuestPair` no tiene guard de `pairSize` y sumaba
+ * dos invitados que el sorteo de a uno ignora (el lock "a constraint on a
+ * pairing that never happens constrains nothing"): ahora la pantalla no ofrece
+ * ese camino ni el "Juega con" del invitado suelto, que tampoco ata a nadie.
+ *
+ * S94 (verify-report-pre-contract #4026): `formato` puede cambiar DESPUÉS
+ * de que el fixture YA se sorteó, sin volver a sortear (mismo estado
+ * divergido que vigila C32 y que W86 cierra en la tabla del día) —
+ * `formatDrifted` (calculado en `page.tsx` contra `detail.matches`, no
+ * contra `formato` solo) dice si eso pasó. Prometer grupos sobre un
+ * fixture que sigue siendo el de antes es la misma mentira que W86 cerró
+ * del otro lado de la pantalla.
+ */
+export function armadoWords(sideSize: SideSize, formato: MatchdayFormat, formatDrifted: boolean): ArmadoWords {
+  const base: ArmadoWords =
+    sideSize === 1
+      ? {
+          sides: 'jugadores',
+          guestSection: 'Jugadores invitados',
+          guestNote:
+            'Juegan solos, como todos, y no suman puntos para el campeonato. Entran de a dos.',
+          addGuest: '+ Agregar 2 invitados',
+          guestPairNoun: 'los dos invitados',
+          draw: 'Ordenar jugadores',
+          drawn: 'Orden de la fecha',
+          drawNote: 'Juegan todos contra todos, en el orden de la tabla.',
+          guestPairSection: false,
+          guestPartner: false,
+        }
+      : {
+          sides: 'parejas',
+          guestSection: 'Parejas invitadas',
+          guestNote:
+            'Juegan juntos y no suman puntos para el campeonato: es un amistoso adentro de la fecha.',
+          addGuest: '+ Agregar pareja invitada',
+          guestPairNoun: 'la pareja invitada',
+          draw: 'Generar parejas',
+          drawn: 'Parejas',
+          drawNote:
+            'Los defensores quedan fijos. El resto se arma cruzando la tabla: 1° con último, 2° con anteúltimo, y así.',
+          guestPairSection: true,
+          guestPartner: true,
+        }
+
+  if (formato.kind !== 'GROUPS_KNOCKOUT') return base
+
+  const groupsNote = formatDrifted
+    ? 'El formato cambió después de sortear: para jugar por grupos hay que volver a sortear la fecha.'
+    : `Juegan por grupos: todos contra todos adentro de cada grupo, y los ${formato.qualifiersPerGroup} primeros de cada uno pasan a la llave.`
+
+  return {
+    ...base,
+    drawNote: sideSize === 2 ? `${base.drawNote} ${groupsNote}` : groupsNote,
+  }
+}

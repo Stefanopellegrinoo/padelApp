@@ -22,8 +22,10 @@ import {
   resolveDisciplineBySlug,
   resolveFormato,
   sameSide,
+  sideWords,
   snapshotForMatchday,
   thirdPlaceNote,
+  unitOf,
   usesSetsDiff,
   type MatchResult,
   type SeasonConfig,
@@ -143,7 +145,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
         : `Cerrada${matchday.playedOn !== null ? ` · ${matchdayFull(matchday.playedOn)}` : ''}`
 
   // El vocabulario de la disciplina: un lado de uno no es "una pareja".
-  const sideWord = discipline.pairSize === 1 ? 'jugadores' : 'parejas'
+  const sideWord = sideWords(discipline.pairSize).many
 
   let body: ReactNode = (
     <div className="rounded-card bg-chip p-4 text-center text-[13px] font-[550] text-muted">
@@ -371,6 +373,8 @@ export default async function FechaDetailPage({ params }: PageProps) {
     // (§7): la tabla, la carga y las notas leen el efectivo, no el del torneo.
     const base = disciplineOf(header, matchday.disciplineId).config
     const config = { ...base, matchFormat: effectiveMatchFormat(base.matchFormat, matchday.matchFormat) }
+    // La unidad es del deporte, no del formato (§8): games, goles, puntos.
+    const unit = unitOf(discipline.kind, config.matchFormat)
     const seedOrder = entries
       .filter((entry) => entry.kind === 'SQUAD')
       .sort((a, b) => a.seedPosition - b.seedPosition)
@@ -716,7 +720,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
     // que es el caso normal, el pie se ve igual que siempre.
     const note =
       status === 'CLOSED' && !orderMoved(standings, tableRows)
-        ? tiebreakNote(standings, config, nameOf, discipline.pairSize)
+        ? tiebreakNote(standings, config, nameOf, discipline.pairSize, unit)
         : null
 
     // W70 (verify-report-pr21 #4004), decisión #3962 respetada: el orden NO
@@ -733,7 +737,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
     // argumento de `tiebreakNote` dos líneas arriba.
     const bracketNote =
       status === 'CLOSED' && isGroupsKnockout && orderMoved(standings, tableRows)
-        ? bracketOrderNote(config.matchFormat)
+        ? bracketOrderNote(unit)
         : null
 
     // Decisión #3990: el costo que quedó vivo de #3979 ("se puede cerrar sin

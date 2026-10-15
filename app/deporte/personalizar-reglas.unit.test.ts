@@ -270,6 +270,21 @@ describe('PersonalizarReglas', () => {
     expect(html).toContain('Partidos por fecha')
   })
 
+  it('"Fechas" baja hasta 1: un torneo de un solo día', () => {
+    const rules = rulesOf('PADEL', 8, 'ROTAN')
+    /** El botón "−" de la fila "Fechas" con ese número de fechas. */
+    const menos = (regularMatchdays: number) => {
+      const html = sheet('PADEL', 8, 'ROTAN', {
+        rules: { ...rules, config: { ...rules.config, regularMatchdays, countBestOf: 1 } },
+      })
+      const fila = html.slice(html.indexOf('data-stepper="regularMatchdays"'))
+      return /<button[^>]*>−<\/button>/.exec(fila)?.[0] ?? ''
+    }
+    expect(menos(2)).not.toBe('')
+    expect(menos(2)).not.toContain('disabled=""')
+    expect(menos(1)).toContain('disabled=""')
+  })
+
   it('sin ficha no hay a qué volver', () => {
     expect(sheet('PADEL', 8, 'ROTAN', { ficha: null })).not.toContain('Volver a las reglas')
   })

@@ -1,15 +1,16 @@
 import {
   fichaSeed,
   modalityShape,
+  shuffled,
   sportLabel,
   sportOf,
   type FirstFecha,
-  type MatchdayFormatSetting,
   type Modality,
   type SeasonConfig,
   type SideSize,
   type TournamentSport,
 } from '@/core'
+import type { NewSeasonDiscipline } from '@/db/season'
 import { rulesFromSeed, type DisciplineRules } from '@/app/deporte/personalizar-reglas-state'
 import type { PrimeraFecha } from '@/app/deporte/tarjeta-state'
 import { resizeConfig, squadWarning, submitSeats, type Squad } from './wizard-state'
@@ -131,21 +132,11 @@ export function subpasos(cards: readonly DeporteElegido[]): Subpaso[] {
   return needed.filter(([, isNeeded]) => isNeeded).map(([subpaso]) => subpaso)
 }
 
-// ponytail: Fisher-Yates local; la Tarea 11 suma `shuffled` a core/order.ts y esto pasa a usarlo.
-function shuffle<T>(items: readonly T[], random: () => number): T[] {
-  const out = [...items]
-  for (let i = out.length - 1; i > 0; i--) {
-    const j = Math.floor(random() * (i + 1))
-    ;[out[i], out[j]] = [out[j]!, out[i]!]
-  }
-  return out
-}
-
 /** Shuffled + de a dos: índices de asiento. */
 export function sortearParejas(seats: number, random: () => number): Array<[number, number]> {
   if (seats % 2 !== 0) throw new Error('Sortear parejas necesita un plantel par.')
-  const shuffled = shuffle(Array.from({ length: seats }, (_, at) => at), random)
-  return Array.from({ length: seats / 2 }, (_, pair) => [shuffled[2 * pair]!, shuffled[2 * pair + 1]!])
+  const order = shuffled(Array.from({ length: seats }, (_, at) => at), random)
+  return Array.from({ length: seats / 2 }, (_, pair) => [order[2 * pair]!, order[2 * pair + 1]!])
 }
 
 /** Con FIJAS, cada asiento en una sola pareja. Sin parejas fijas no hay nada que armar. */
@@ -153,26 +144,6 @@ export function parejasCompletas(card: DeporteElegido, seats: number): boolean {
   if (card.modality !== 'FIJAS') return true
   const members = card.pairs.flat()
   return members.length === seats && new Set(members).size === seats && members.every((at) => Number.isInteger(at) && at >= 0 && at < seats)
-}
-
-/**
- * Una disciplina a crear, con los campos que la Tarea 11 le suma a `NewSeasonDiscipline`
- * (`seedOrder` ya existe). A lo sumo uno de `seedOrder` / `shuffle` / `sameOrderAs`.
- * La Tarea 11 reemplaza este tipo por `NewSeasonDiscipline`.
- */
-export interface CrearDiscipline {
-  kind: TournamentSport
-  config: SeasonConfig
-  pairSize: SideSize
-  fixedTeams: boolean
-  allowsDraw: boolean
-  hasMasters: boolean
-  formatoDefault: MatchdayFormatSetting
-  seedOrder?: number[]
-  shuffle?: true
-  /** Índice en `disciplines` de la disciplina cuyo orden se copia. */
-  sameOrderAs?: number
-  teams?: Array<[number, number]>
 }
 
 /** El orden de una tarjeta por nivel: con FIJAS el orden es de parejas, y a la base le llega aplanado. */
@@ -184,7 +155,7 @@ function seedOrderOf(card: DeporteElegido): number[] {
 function primeraFechaOf(
   card: DeporteElegido,
   cards: readonly DeporteElegido[],
-): { firstFecha: FirstFecha; order: Pick<CrearDiscipline, 'seedOrder' | 'shuffle' | 'sameOrderAs'> } {
+): { firstFecha: FirstFecha; order: Pick<NewSeasonDiscipline, 'seedOrder' | 'shuffle' | 'sameOrderAs'> } {
   if (isIgualQue(card.primeraFecha)) {
     const { igualQue } = card.primeraFecha
     const at = cards.findIndex((other) => other.kind === igualQue)
@@ -198,7 +169,7 @@ function primeraFechaOf(
   return { firstFecha: 'NIVEL', order: card.order.length === 0 ? {} : { seedOrder: seedOrderOf(card) } }
 }
 
-function disciplineOf(card: DeporteElegido, cards: readonly DeporteElegido[], squadSize: number): CrearDiscipline {
+function disciplineOf(card: DeporteElegido, cards: readonly DeporteElegido[], squadSize: number): NewSeasonDiscipline {
   const { pairSize, fixedTeams } = modalityShape(card.modality)
   const { firstFecha, order } = primeraFechaOf(card, cards)
   return {
@@ -219,7 +190,7 @@ export function crearPayload(
   name: string,
   squad: Squad,
   cards: readonly DeporteElegido[],
-): { name: string; squadNames: string[]; mySeatIndex: number | null; config: SeasonConfig; disciplines: CrearDiscipline[] } {
+): { name: string; squadNames: string[]; mySeatIndex: number | null; config: SeasonConfig; disciplines: NewSeasonDiscipline[] } {
   if (cards.length === 0) throw new Error('Elegí al menos un deporte.')
   const { squadNames, mySeatIndex } = submitSeats(squad)
   const disciplines = cards.map((card) => disciplineOf(card, cards, squadNames.length))

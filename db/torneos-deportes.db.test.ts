@@ -1,8 +1,9 @@
-import { describe, expect, it } from 'vitest'
-import { defaultConfig, type SeasonConfig } from '@/core'
+import { describe, expect, it, vi } from 'vitest'
+import { defaultConfig, type DisciplineId, type SeasonConfig } from '@/core'
 import type { Client } from './client'
 import type { Json } from './database.types'
 import { addDiscipline, updateDisciplineConfig, updateDisciplineFormatoDefault } from './discipline'
+import { teamsOf } from './discipline-teams'
 import { EdgeError } from './errors'
 import {
   closeMatchday,
@@ -16,7 +17,7 @@ import {
   setMatchFormat,
 } from './matchday'
 import { seasonHeader } from './read'
-import { createSeason as createSeasonOf } from './season'
+import { createSeason as createSeasonOf, squadSeedOrder } from './season'
 import { adminClient } from './test/admin'
 import { createSeason } from './test/factories'
 import { createTestUser } from './test/users'
@@ -520,5 +521,177 @@ describe('AUTO se resuelve al confirmar la fecha (§7)', () => {
     await setMatchdayFormat(scene.admin.client, matchdayId, { kind: 'AUTO' })
 
     expect((await matchdayRow(matchdayId)).formato).toEqual({ kind: 'AUTO' })
+  })
+})
+
+// ── Tarea 11: createSeason guarda el sorteo como orden, arma las parejas fijas
+// y copia el orden de otro deporte (§4 "Por dentro").
+
+const playerNames = (count: number) => Array.from({ length: count }, (_, i) => `Jugador ${i + 1}`)
+
+/** Los `entries.id` del plantel, en el orden de `names` (el índice de asiento). */
+async function seatIds(seasonId: string, names: string[]): Promise<string[]> {
+  const { data, error } = await adminClient()
+    .from('entries')
+    .select('id, display_name')
+    .eq('season_id', seasonId)
+    .eq('kind', 'SQUAD')
+  if (error || data === null) throw new Error(error?.message)
+  return names.map((name) => data.find((row) => row.display_name === name)!.id)
+}
+
+async function disciplineIdOf(seasonId: string, kind: string): Promise<DisciplineId> {
+  const { data, error } = await adminClient().from('disciplines').select('id').eq('season_id', seasonId).eq('kind', kind).single()
+  if (error || data === null) throw new Error(error?.message)
+  return data.id as DisciplineId
+}
+
+async function seasonRowsOf(userId: string): Promise<number> {
+  const { count, error } = await adminClient().from('seasons').select('id', { count: 'exact', head: true }).eq('created_by', userId)
+  if (error) throw new Error(error.message)
+  return count ?? 0
+}
+
+describe('createSeason: parejas fijas, sorteo guardado como orden, "igual que" (§4)', () => {
+  it('FIJAS + "Al azar": nacen las parejas, el sorteo queda como orden de parejas y season_seed_order sigue al plantel', async () => {
+    const admin = await createTestUser()
+    const names = playerNames(6)
+    // `random` en 0 mueve siempre la última unidad al frente: [01][23][4][5] -> [23][4][5][01].
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0)
+    let seasonId: string
+    try {
+      ;({ seasonId } = await createSeasonOf(admin.client, {
+        name: 'Fijas al azar',
+        squadNames: names,
+        config: defaultConfig(6),
+        disciplines: [
+          { kind: 'FIFA', pairSize: 1, config: fifaConfig(6) },
+          { kind: 'PADEL', config: defaultConfig(6), fixedTeams: true, shuffle: true, teams: [[0, 1], [2, 3]] },
+        ],
+      }))
+    } finally {
+      random.mockRestore()
+    }
+    const ids = await seatIds(seasonId, names)
+    const padelId = await disciplineIdOf(seasonId, 'PADEL')
+
+    const pairs = (await teamsOf(admin.client, padelId))
+      .map((team) => [ids.indexOf(team.entryA), ids.indexOf(team.entryB)])
+      .sort((left, right) => left[0]! - right[0]!)
+    expect(pairs).toEqual([[0, 1], [2, 3]])
+    expect(await squadSeedOrder(admin.client, padelId)).toEqual([2, 3, 4, 5, 0, 1].map((at) => ids[at]))
+    // El otro deporte sigue el plantel y no se llevó las parejas del vecino.
+    expect(await teamsOf(admin.client, await disciplineIdOf(seasonId, 'FIFA'))).toEqual([])
+    expect(await squadSeedOrder(admin.client, await disciplineIdOf(seasonId, 'FIFA'))).toEqual(ids)
+    const { data: seasonOrder } = await adminClient()
+      .from('season_seed_order')
+      .select('entry_id')
+      .eq('season_id', seasonId)
+      .order('seed_position', { ascending: true })
+    expect(seasonOrder?.map((row) => row.entry_id)).toEqual(ids)
+  })
+
+  it('"Por nivel" (seedOrder) en pádel e "Igual que" en FIFA individual: los dos órdenes iguales', async () => {
+    const admin = await createTestUser()
+    const names = playerNames(4)
+
+    const { seasonId } = await createSeasonOf(admin.client, {
+      name: 'Igual que',
+      squadNames: names,
+      config: defaultConfig(4),
+      disciplines: [
+        { kind: 'PADEL', config: defaultConfig(4), seedOrder: [3, 2, 1, 0] },
+        { kind: 'FIFA', pairSize: 1, config: fifaConfig(4), sameOrderAs: 0 },
+      ],
+    })
+
+    const ids = await seatIds(seasonId, names)
+    const padel = await squadSeedOrder(admin.client, await disciplineIdOf(seasonId, 'PADEL'))
+    const fifa = await squadSeedOrder(admin.client, await disciplineIdOf(seasonId, 'FIFA'))
+    expect(padel).toEqual([3, 2, 1, 0].map((at) => ids[at]))
+    expect(fifa).toEqual(padel)
+  })
+
+  it('el formato por default AUTO (el de la ficha) se guarda tal cual', async () => {
+    const admin = await createTestUser()
+
+    const { seasonId } = await createSeasonOf(admin.client, {
+      name: 'Default AUTO',
+      squadNames: playerNames(4),
+      config: defaultConfig(4),
+      disciplines: [{ kind: 'PADEL', config: defaultConfig(4), formatoDefault: { kind: 'AUTO' } }],
+    })
+
+    const { data } = await adminClient().from('disciplines').select('formato_default').eq('season_id', seasonId).single()
+    expect(data?.formato_default).toEqual({ kind: 'AUTO' })
+  })
+})
+
+/**
+ * Review Focus 1: el payload de `createTournament` es JSON de cliente sin schema
+ * en runtime. Cada forma falsificada se rechaza con SU mensaje y antes de
+ * escribir: el usuario no gana ninguna fila en `seasons`.
+ */
+describe('createSeason: sorteo, "igual que" y parejas se validan antes de escribir', () => {
+  const ONE_FORM = 'Cada deporte arma su primera fecha de una sola forma.'
+  const SAME_AS = '"Igual que" tiene que apuntar a otro deporte del torneo.'
+  const FIXED_ONLY = 'Las parejas fijas sólo van en un deporte de parejas fijas.'
+  const BAD_TEAMS = 'Las parejas tienen que ser de dos personas distintas del plantel, cada una en una sola pareja.'
+
+  type Forged = Record<string, unknown>
+  const padel = (extra: Forged = {}): Forged => ({ kind: 'PADEL', config: defaultConfig(4), ...extra })
+  const fixed = (extra: Forged = {}): Forged => padel({ fixedTeams: true, ...extra })
+  const fifa = (extra: Forged = {}): Forged => ({ kind: 'FIFA', pairSize: 1, config: fifaConfig(4), ...extra })
+
+  const cases: Array<[string, string, Forged[]]> = [
+    ['seedOrder y shuffle', ONE_FORM, [padel({ seedOrder: [0, 1, 2, 3], shuffle: true })]],
+    ['seedOrder y sameOrderAs', ONE_FORM, [padel(), fifa({ seedOrder: [0, 1, 2, 3], sameOrderAs: 0 })]],
+    ['shuffle y sameOrderAs', ONE_FORM, [padel(), fifa({ shuffle: true, sameOrderAs: 0 })]],
+    ['las tres formas juntas', ONE_FORM, [padel(), fifa({ seedOrder: [0, 1, 2, 3], shuffle: true, sameOrderAs: 0 })]],
+
+    ['sameOrderAs no entero (0.5)', SAME_AS, [padel(), fifa({ sameOrderAs: 0.5 })]],
+    ['sameOrderAs de texto ("0")', SAME_AS, [padel(), fifa({ sameOrderAs: '0' })]],
+    ['sameOrderAs null (lo que cruza el JSON de un NaN)', SAME_AS, [padel(), fifa({ sameOrderAs: null })]],
+    ['sameOrderAs fuera de rango (2 con dos deportes)', SAME_AS, [padel(), fifa({ sameOrderAs: 2 })]],
+    ['sameOrderAs negativo', SAME_AS, [padel(), fifa({ sameOrderAs: -1 })]],
+    ['sameOrderAs igual a su propio índice', SAME_AS, [padel(), fifa({ sameOrderAs: 1 })]],
+    ['sameOrderAs a un único deporte', SAME_AS, [padel({ sameOrderAs: 0 })]],
+    ['sameOrderAs a otra que a su vez copia', SAME_AS, [padel(), fifa({ sameOrderAs: 0 }), fifa({ sameOrderAs: 1 })]],
+    ['dos que se copian entre sí', SAME_AS, [padel({ sameOrderAs: 1 }), fifa({ sameOrderAs: 0 })]],
+
+    ['teams sin fixedTeams', FIXED_ONLY, [padel({ teams: [[0, 1]] })]],
+    ['teams con fixedTeams en false', FIXED_ONLY, [padel({ fixedTeams: false, teams: [[0, 1]] })]],
+    ['teams en un deporte de a uno', FIXED_ONLY, [fifa({ fixedTeams: true, teams: [[0, 1]] })]],
+
+    ['índice de pareja no entero', BAD_TEAMS, [fixed({ teams: [[0.5, 1]] })]],
+    ['índice de pareja de texto', BAD_TEAMS, [fixed({ teams: [['0', 1]] })]],
+    ['índice de pareja null', BAD_TEAMS, [fixed({ teams: [[null, 1]] })]],
+    ['índice de pareja fuera del plantel (4 de 4)', BAD_TEAMS, [fixed({ teams: [[0, 4]] })]],
+    ['índice de pareja negativo', BAD_TEAMS, [fixed({ teams: [[-1, 1]] })]],
+    ['pareja de la misma persona', BAD_TEAMS, [fixed({ teams: [[1, 1]] })]],
+    ['alguien en dos parejas', BAD_TEAMS, [fixed({ teams: [[0, 1], [1, 2]] })]],
+    ['la misma pareja dada vuelta', BAD_TEAMS, [fixed({ teams: [[0, 1], [1, 0]] })]],
+    ['pareja de tres', BAD_TEAMS, [fixed({ teams: [[0, 1, 2]] })]],
+    ['pareja que no es una lista', BAD_TEAMS, [fixed({ teams: [5] })]],
+    ['teams que no es una lista', BAD_TEAMS, [fixed({ teams: 'abc' })]],
+    ['teams null', BAD_TEAMS, [fixed({ teams: null })]],
+  ]
+
+  it.each(cases)('%s: rebota con su mensaje y no deja ninguna temporada', async (_label, message, disciplines) => {
+    const admin = await createTestUser()
+
+    const caught = await createSeasonOf(admin.client, {
+      name: 'Payload falsificado',
+      squadNames: playerNames(4),
+      config: defaultConfig(4),
+      disciplines: disciplines as never,
+    }).then(
+      () => undefined,
+      (error: unknown) => error,
+    )
+
+    expect(caught).toBeInstanceOf(EdgeError)
+    expect((caught as EdgeError).message).toBe(message)
+    expect(await seasonRowsOf(admin.userId)).toBe(0)
   })
 })

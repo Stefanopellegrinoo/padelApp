@@ -269,6 +269,10 @@ export {
   unitOf,
 } from './sports'
 
+// ── Un sorteo reproducible ───────────────────────────────────────────────────
+// Fisher-Yates con el `random` inyectado: `core/` no tiene `Math.random`.
+export { shuffled } from './order'
+
 /*
  * Deliberately NOT exported — internal to the modules above:
  *

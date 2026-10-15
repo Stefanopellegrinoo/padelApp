@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { orderByPoints } from './order'
+import { orderByPoints, shuffled } from './order'
 
 const snapshot = ['juan', 'stefano', 'marce', 'nico', 'pablo', 'leo']
 
@@ -46,5 +46,29 @@ describe('orderByPoints', () => {
     const first = orderByPoints(input, points, snapshot)
     const second = orderByPoints([...input].reverse(), points, snapshot)
     expect(first).toEqual(second)
+  })
+})
+
+describe('shuffled', () => {
+  it('returns a permutation of its input and leaves the input alone', () => {
+    const input = [1, 2, 3, 4]
+    const out = shuffled(input, () => 0)
+    expect([...out].sort()).toEqual([1, 2, 3, 4])
+    expect(out).not.toBe(input)
+    expect(input).toEqual([1, 2, 3, 4])
+  })
+
+  it('gives a fixed order for a fixed random sequence', () => {
+    const sequence = [0.99, 0.5, 0]
+    let next = 0
+    expect(shuffled([1, 2, 3, 4], () => sequence[next++]!)).toEqual([3, 1, 2, 4])
+  })
+
+  it('never asks for a number when there is nothing to swap', () => {
+    const never = () => {
+      throw new Error('random was called')
+    }
+    expect(shuffled([], never)).toEqual([])
+    expect(shuffled(['solo'], never)).toEqual(['solo'])
   })
 })

@@ -286,8 +286,9 @@ function firstFechaError(
  * El orden final de cada disciplina (índices sobre `squadNames`), o `undefined`
  * = el global de siempre. `seedOrder` va tal cual; `shuffle` sortea unidades
  * (cada pareja de `teams` y cada suelto) y las aplana, así las parejas quedan
- * contiguas; `sameOrderAs` copia el ya resuelto de la otra. Pura: `random` viene
- * de afuera, y los specs ya pasaron `firstFechaError`.
+ * contiguas; `sameOrderAs` copia el ya resuelto de la otra (con `teams`
+ * propios, reagrupado: `groupPairs`). Pura: `random` viene de afuera, y los
+ * specs ya pasaron `firstFechaError`.
  */
 export function resolveSeedOrders(
   specs: readonly NewSeasonDiscipline[],
@@ -303,8 +304,28 @@ export function resolveSeedOrders(
     return shuffled([...teams, ...loose.map((at) => [at])], random).flat()
   })
   return own.map((order, index) => {
-    const source = specs[index]!.sameOrderAs
-    return source === undefined ? order : (own[source] ?? Array.from({ length: squadLength }, (_, at) => at))
+    const { sameOrderAs: source, teams } = specs[index]!
+    if (source === undefined) return order
+    const copied = own[source] ?? Array.from({ length: squadLength }, (_, at) => at)
+    return teams === undefined ? copied : groupPairs(copied, teams)
+  })
+}
+
+/**
+ * Con parejas fijas el orden es de parejas (docs/torneos-deportes.md §4): un
+ * orden copiado de otra disciplina puede separarlas. Cada pareja va junta donde
+ * aparece primero cualquiera de los dos (ése primero); los sueltos no se mueven
+ * entre sí.
+ */
+function groupPairs(order: readonly number[], teams: ReadonlyArray<readonly [number, number]>): number[] {
+  const mateOf = new Map(teams.flatMap(([a, b]) => [[a, b], [b, a]] as const))
+  const placed = new Set<number>()
+  return order.flatMap((at) => {
+    if (placed.has(at)) return []
+    const mate = mateOf.get(at)
+    const unit = mate === undefined ? [at] : [at, mate]
+    for (const seat of unit) placed.add(seat)
+    return unit
   })
 }
 

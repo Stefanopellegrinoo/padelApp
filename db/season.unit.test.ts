@@ -158,6 +158,27 @@ describe('resolveSeedOrders — el orden final de cada disciplina', () => {
   })
 })
 
+describe('resolveSeedOrders — "igual que" con parejas fijas (R10)', () => {
+  const config = defaultConfig(6)
+  const fijas = (teams: Array<[number, number]>) => ({ config, sameOrderAs: 0, pairSize: 2 as const, fixedTeams: true, teams })
+
+  it('copia el orden pero junta cada pareja donde aparece primero cualquiera de los dos; los sueltos no se mueven entre sí', () => {
+    const [, copy] = resolveSeedOrders([{ config, seedOrder: [0, 1, 2, 3, 4, 5] }, fijas([[0, 3], [5, 1]])], 6, () => 0)
+
+    expect(copy).toEqual([0, 3, 1, 5, 2, 4])
+  })
+
+  it('el que aparece primero va primero en su pareja', () => {
+    const [, copy] = resolveSeedOrders([{ config, seedOrder: [4, 3, 2, 1, 0, 5] }, fijas([[0, 3]])], 6, () => 0)
+
+    expect(copy).toEqual([4, 3, 0, 2, 1, 5])
+  })
+
+  it('de una disciplina sin orden propio, junta las parejas sobre el orden del plantel', () => {
+    expect(resolveSeedOrders([{ config }, fijas([[0, 2], [1, 3]])], 4, () => 0)[1]).toEqual([0, 2, 1, 3])
+  })
+})
+
 describe('createSeason — las parejas fijas se escriben todas juntas, con rollback', () => {
   const teamsSpec = { kind: 'PADEL' as const, config: defaultConfig(4), fixedTeams: true, teams: [[0, 1], [2, 3]] as Array<[number, number]> }
   const names = ['Ana', 'Beto', 'Caro', 'Dani']

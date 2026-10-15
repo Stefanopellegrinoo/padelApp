@@ -7,13 +7,19 @@ import {
   cambiarReglas,
   crearPayload,
   elegirDeporte,
+  cambiarParejas,
   errorDeModalidades,
+  filaDestino,
+  moverEnOrden,
   opcionesPrimeraFecha,
+  ordenInicial,
   parejasCompletas,
   plantelCambio,
   reglasDeFicha,
+  sorteaLaApp,
   sortearParejas,
   subpasos,
+  tocarSortear,
   type DeporteElegido,
 } from './crear-state'
 
@@ -397,5 +403,92 @@ describe('crearPayload', () => {
     const rotan = card('PADEL', 'ROTAN', 4, { primeraFecha: 'NIVEL', order })
     expect(crearPayload('Liga', squad, [padel]).disciplines[0]?.teams).not.toBe(pairs)
     expect(crearPayload('Liga', squad, [rotan]).disciplines[0]?.seedOrder).not.toBe(order)
+  })
+})
+
+describe('moverEnOrden', () => {
+  it('mueve, no intercambia: el último al primer lugar corre a los demás un lugar', () => {
+    expect(moverEnOrden([0, 1, 2, 3], 3, 0)).toEqual([3, 0, 1, 2])
+  })
+
+  it('hacia abajo también, sin mutar el que recibe', () => {
+    const order = [0, 1, 2, 3]
+    expect(moverEnOrden(order, 0, 2)).toEqual([1, 2, 0, 3])
+    expect(order).toEqual([0, 1, 2, 3])
+  })
+})
+
+describe('ordenInicial', () => {
+  it('sin orden armado, el del plantel: una persona por asiento', () => {
+    expect(ordenInicial(card('FIFA', 'INDIVIDUAL', 4), 4)).toEqual([0, 1, 2, 3])
+  })
+
+  it('con parejas fijas el orden es de parejas', () => {
+    expect(ordenInicial(card('PADEL', 'FIJAS', 4, { pairs: [[0, 3], [1, 2]] }), 4)).toEqual([0, 1])
+  })
+
+  it('el orden ya armado manda', () => {
+    expect(ordenInicial(card('FIFA', 'INDIVIDUAL', 3, { order: [2, 0, 1] }), 3)).toEqual([2, 0, 1])
+  })
+})
+
+describe('cambiarParejas', () => {
+  it('rearmar las parejas vacía el orden de esa tarjeta (era de parejas) y no toca las otras', () => {
+    const padel = card('PADEL', 'FIJAS', 4, { primeraFecha: 'NIVEL', pairs: [[0, 3], [1, 2]], order: [1, 0] })
+    const fifa = card('FIFA', 'INDIVIDUAL', 4, { primeraFecha: 'NIVEL', order: [3, 2, 1, 0] })
+    const [nextPadel, nextFifa] = cambiarParejas([padel, fifa], 'PADEL', [[0, 1]])
+    expect(nextPadel).toMatchObject({ pairs: [[0, 1]], order: [] })
+    expect(nextFifa).toBe(fifa)
+    expect(padel.order).toEqual([1, 0])
+  })
+})
+
+describe('tocarSortear', () => {
+  const flat = (pairs: Array<[number, number]>) => pairs.flat().sort((a, b) => a - b)
+
+  it('sin nada armado sortea a todos', () => {
+    expect(tocarSortear([], 6, () => 0)).toEqual(sortearParejas(6, () => 0))
+  })
+
+  it('deja las parejas armadas a mano y sortea sólo a los sueltos', () => {
+    const pairs = tocarSortear([[0, 3], [1, 5]], 6, () => 0)
+    expect(pairs.slice(0, 2)).toEqual([[0, 3], [1, 5]])
+    expect(pairs).toHaveLength(3)
+    expect(flat(pairs.slice(2))).toEqual([2, 4])
+  })
+
+  it('con todas armadas, sortea todo de nuevo', () => {
+    expect(tocarSortear([[0, 1], [2, 3], [4, 5]], 6, () => 0)).toEqual(sortearParejas(6, () => 0))
+  })
+})
+
+describe('sorteaLaApp', () => {
+  it('"Mejor que lo sortee la app": las que iban por nivel pasan a al azar, las otras quedan como estaban', () => {
+    const padel = card('PADEL', 'ROTAN', 4, { primeraFecha: 'NIVEL' })
+    const fifa = card('FIFA', 'INDIVIDUAL', 4, { primeraFecha: { igualQue: 'PADEL' } })
+    const [nextPadel, nextFifa] = sorteaLaApp([padel, fifa])
+    expect(nextPadel?.primeraFecha).toBe('SORTEO')
+    expect(nextFifa).toBe(fifa)
+    expect(subpasos([nextPadel!, nextFifa!])).toEqual([])
+  })
+})
+
+describe('filaDestino', () => {
+  // Filas de 52px cada 60px: las mitades caen en 26, 86, 146 y 206.
+  const rows = [0, 1, 2, 3].map((at) => ({ top: at * 60, height: 52 }))
+
+  it('el último soltado arriba de la mitad del primero queda primero', () => {
+    expect(filaDestino(rows, 3, 10)).toBe(0)
+  })
+
+  it('sin pasar la mitad de la vecina no se mueve', () => {
+    expect(filaDestino(rows, 1, 100)).toBe(1)
+    expect(filaDestino(rows, 1, 30)).toBe(1)
+    expect(filaDestino(rows, 1, 20)).toBe(0)
+  })
+
+  it('el primero bajado más allá de la mitad del tercero queda tercero, y más abajo de todo, último', () => {
+    expect(filaDestino(rows, 0, 150)).toBe(2)
+    expect(filaDestino(rows, 0, 999)).toBe(3)
   })
 })

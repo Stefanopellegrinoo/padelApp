@@ -141,6 +141,46 @@ export function sortearParejas(seats: number, random: () => number): Array<[numb
   return Array.from({ length: seats / 2 }, (_, pair) => [order[2 * pair]!, order[2 * pair + 1]!])
 }
 
+/** "Sortear parejas": sortea a los sueltos y deja las armadas a mano; con todas armadas, sortea todo de nuevo. */
+export function tocarSortear(pairs: Array<[number, number]>, seats: number, random: () => number): Array<[number, number]> {
+  const paired = new Set(pairs.flat())
+  const loose = Array.from({ length: seats }, (_, at) => at).filter((at) => !paired.has(at))
+  if (loose.length === 0) return sortearParejas(seats, random)
+  return [...pairs, ...sortearParejas(loose.length, random).map(([a, b]): [number, number] => [loose[a]!, loose[b]!])]
+}
+
+/** Las parejas de esa tarjeta, rearmadas (tocar, sortear, deshacer): su orden era de parejas y ya no significa nada. */
+export function cambiarParejas(
+  cards: readonly DeporteElegido[],
+  kind: TournamentSport,
+  pairs: Array<[number, number]>,
+): DeporteElegido[] {
+  return mapCard(cards, kind, (card) => ({ ...card, pairs, order: [] }))
+}
+
+/** "Mejor que lo sortee la app": las que iban por nivel pasan a al azar (las "igual que" las siguen solas). */
+export function sorteaLaApp(cards: readonly DeporteElegido[]): DeporteElegido[] {
+  return cards.map((card) => (card.primeraFecha === 'NIVEL' ? { ...card, primeraFecha: 'SORTEO' } : card))
+}
+
+/** El orden que se muestra para ordenar: el armado o, vacío, el del plantel (de personas, o de parejas con FIJAS). */
+export function ordenInicial(card: DeporteElegido, seats: number): number[] {
+  if (card.order.length > 0) return [...card.order]
+  return Array.from({ length: card.modality === 'FIJAS' ? card.pairs.length : seats }, (_, at) => at)
+}
+
+/** Mueve (no intercambia): saca el de `from` y lo pone en `to`. Para el arrastre y para ↑/↓. */
+export function moverEnOrden(order: readonly number[], from: number, to: number): number[] {
+  const next = order.filter((_, at) => at !== from)
+  next.splice(to, 0, order[from]!)
+  return next
+}
+
+/** Arrastre: el lugar de la fila `from` soltada en `y` = cuántas de las otras tienen la mitad más arriba (alturas medidas al agarrarla). */
+export function filaDestino(rows: readonly { top: number; height: number }[], from: number, y: number): number {
+  return rows.filter((row, at) => at !== from && row.top + row.height / 2 < y).length
+}
+
 /** Con FIJAS, cada asiento en una sola pareja. Sin parejas fijas no hay nada que armar. */
 export function parejasCompletas(card: DeporteElegido, seats: number): boolean {
   if (card.modality !== 'FIJAS') return true

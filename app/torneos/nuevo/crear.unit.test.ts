@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { TOURNAMENT_SPORTS, reglamento, sportLabel } from '@/core'
 import { cambiarModalidad, cambiarPrimeraFecha, crearPayload, elegirDeporte, type DeporteElegido } from './crear-state'
-import { PasoComoSeJuega, PasoListo, PasoNuevo } from './crear'
+import { PasoComoSeJuega, PasoListo, PasoNuevo, copiarLink, encabezado } from './crear'
 
 /**
  * Los pasos del wizard nuevo, RENDERIZADOS (sin clicks no se llega a cada paso: entran con props).
@@ -145,5 +145,43 @@ describe('PasoListo', () => {
 
   it('muestra el error del servidor', () => {
     expect(listo(PADEL_FIFA, { error: 'No se pudo crear.' })).toContain('No se pudo crear.')
+  })
+})
+
+describe('encabezado', () => {
+  it('los cuatro pasos, con su número y su título', () => {
+    expect(encabezado(0)).toEqual({ paso: 0, rotulo: 'Paso 1 de 4', titulo: 'Nuevo torneo' })
+    expect(encabezado(3)).toEqual({ paso: 3, rotulo: 'Paso 4 de 4', titulo: 'Listo, así se juega' })
+  })
+
+  it('los subpasos son parte del paso 3 y dicen por qué aparecen', () => {
+    expect(encabezado('PAREJAS')).toEqual({
+      paso: 2,
+      rotulo: 'Paso 3 de 4 · Sólo si elegiste "parejas fijas"',
+      titulo: 'Armá las parejas',
+    })
+    expect(encabezado('NIVEL')).toEqual({
+      paso: 2,
+      rotulo: 'Paso 3 de 4 · Sólo si elegiste "por nivel"',
+      titulo: 'Ordená por nivel',
+    })
+  })
+})
+
+describe('copiarLink', () => {
+  it('copia el link y dice que pudo', async () => {
+    const copied: string[] = []
+    const ok = await copiarLink('http://x/unirse/abc', {
+      writeText: async (text) => {
+        copied.push(text)
+      },
+    })
+    expect(ok).toBe(true)
+    expect(copied).toEqual(['http://x/unirse/abc'])
+  })
+
+  it('si el portapapeles rechaza, o no hay portapapeles, dice que no pudo', async () => {
+    expect(await copiarLink('http://x', { writeText: () => Promise.reject(new Error('NotAllowedError')) })).toBe(false)
+    expect(await copiarLink('http://x', undefined)).toBe(false)
   })
 })

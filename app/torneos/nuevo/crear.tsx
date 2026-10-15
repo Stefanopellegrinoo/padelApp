@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useId, useState, useTransition } from 'react'
+import { useEffect, useId, useState, useTransition } from 'react'
 import {
   TOURNAMENT_SPORTS,
   modalityShape,
@@ -15,19 +15,29 @@ import { PersonalizarReglas } from '@/app/deporte/personalizar-reglas'
 import { rulesErrors, type DisciplineRules } from '@/app/deporte/personalizar-reglas-state'
 import { TarjetaDeporte } from '@/app/deporte/tarjeta'
 import type { PrimeraFecha } from '@/app/deporte/tarjeta-state'
+import { tocarJugador } from '@/app/rapido/armar-state'
 import { createTournament } from './actions'
 import {
   cambiarModalidad,
+  cambiarParejas,
   cambiarPrimeraFecha,
   cambiarReglas,
   crearPayload,
   elegirDeporte,
   errorDeModalidades,
+  moverEnOrden,
   opcionesPrimeraFecha,
+  ordenInicial,
+  parejasCompletas,
   plantelCambio,
   reglasDeFicha,
+  sorteaLaApp,
+  subpasos,
+  tocarSortear,
   type DeporteElegido,
+  type Subpaso,
 } from './crear-state'
+import { ArmarParejas, OrdenarPorNivel } from './subpasos'
 import {
   addBlankSeat,
   addMySeat,
@@ -36,12 +46,39 @@ import {
   namesAfterEdit,
   removeSeatAt,
   squadWarning,
+  submitSeats,
   type Squad,
 } from './wizard-state'
 
 const ROTULO = 'text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted'
 const AYUDA = 'text-pretty text-[13.5px] font-[550] leading-[1.5] text-muted'
 const TITLES = ['Nuevo torneo', 'Jugadores', 'Cómo se juega', 'Listo, así se juega']
+const LINK = 'min-h-[44px] text-center text-[14px] font-extrabold text-accent-link'
+
+/** Una pantalla del wizard: los 4 pasos (0..3) y, entre el 3 y "Listo", los subpasos que hagan falta. */
+type Pantalla = 0 | 1 | 2 | Subpaso | 3
+
+const SUBPASO: Record<Subpaso, { rotulo: string; titulo: string }> = {
+  PAREJAS: { rotulo: 'Paso 3 de 4 · Sólo si elegiste "parejas fijas"', titulo: 'Armá las parejas' },
+  NIVEL: { rotulo: 'Paso 3 de 4 · Sólo si elegiste "por nivel"', titulo: 'Ordená por nivel' },
+}
+
+/** El rótulo y el título de una pantalla, y qué paso marca la barra (los subpasos son parte del 3). */
+export function encabezado(pantalla: Pantalla): { paso: number; rotulo: string; titulo: string } {
+  if (typeof pantalla === 'string') return { paso: 2, ...SUBPASO[pantalla] }
+  return { paso: pantalla, rotulo: `Paso ${pantalla + 1} de ${TITLES.length}`, titulo: TITLES[pantalla]! }
+}
+
+/** Copia el link de invitación; false si no hay portapapeles o lo rechaza (y entonces se muestra el link). */
+export async function copiarLink(url: string, clipboard: Pick<Clipboard, 'writeText'> | undefined): Promise<boolean> {
+  if (clipboard === undefined) return false
+  try {
+    await clipboard.writeText(url)
+    return true
+  } catch {
+    return false
+  }
+}
 
 function Progress({ step }: { step: number }) {
   return (
@@ -72,7 +109,7 @@ function Vos() {
  */
 function SalirDelPlantel({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/55 px-6 pb-[26px]">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-scrim px-6 pb-[26px]">
       <div className="w-full max-w-lg rounded-card border border-line bg-surface p-5">
         <h2 className="text-[19px] font-extrabold tracking-[-.02em]">¿No jugás el torneo?</h2>
         <p className="mt-2 text-pretty text-[13.5px] font-[550] leading-[1.5] text-muted">
@@ -218,7 +255,7 @@ export function PasoListo({
   error: string | null
   onCreate: () => void
 }) {
-  const [copied, setCopied] = useState(false)
+  const [copia, setCopia] = useState<'nada' | 'copiado' | 'fallo'>('nada')
   return (
     <>
       {disciplines.map((discipline) => (
@@ -257,14 +294,23 @@ export function PasoListo({
             </Link>
             <button
               type="button"
-              onClick={() => {
-                void navigator.clipboard.writeText(created.inviteUrl)
-                setCopied(true)
+              onClick={async () => {
+                // `navigator.clipboard` no existe fuera de https/localhost: el tipo dice que sí.
+                const clipboard = (navigator as { clipboard?: Clipboard }).clipboard
+                setCopia((await copiarLink(created.inviteUrl, clipboard)) ? 'copiado' : 'fallo')
               }}
-              className="min-h-[44px] text-center text-[14px] font-extrabold text-accent-link"
+              className={LINK}
             >
-              {copied ? 'Copiado ✓' : 'Copiar link de invitación'}
+              {copia === 'copiado' ? 'Copiado ✓' : 'Copiar link de invitación'}
             </button>
+            {copia === 'fallo' && (
+              <p className="flex flex-col gap-1 text-[12.5px] font-bold text-muted">
+                No se pudo copiar. Copialo de acá:
+                <span className="select-all break-all rounded-field bg-surface p-3 text-[13.5px] text-text">
+                  {created.inviteUrl}
+                </span>
+              </p>
+            )}
           </>
         )}
       </div>
@@ -280,7 +326,7 @@ const sideSizeOf = (card: DeporteElegido) => modalityShape(card.modality).pairSi
  */
 export function Crear({ myName }: { myName: string }) {
   const [pending, startTransition] = useTransition()
-  const [step, setStep] = useState(0)
+  const [pantalla, setPantalla] = useState<Pantalla>(0)
   const [name, setName] = useState('')
   // El que arma el torneo arranca adentro del plantel, en el primer asiento; el que sólo organiza se saca.
   const [squad, setSquadState] = useState<Squad>(() => ({
@@ -293,8 +339,24 @@ export function Crear({ myName }: { myName: string }) {
   const [leaving, setLeaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [created, setCreated] = useState<{ inviteUrl: string; href: string } | null>(null)
+  // Sólo en "Armá las parejas": quién espera su pareja, y de qué deporte.
+  const [pendiente, setPendiente] = useState<{ kind: TournamentSport; at: number } | null>(null)
 
+  // Cada pantalla arranca de arriba: el botón de seguir queda abajo de todo y la siguiente se leería por la mitad.
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [pantalla])
+
+  const { paso, rotulo, titulo } = encabezado(pantalla)
+  // "← Volver" desanda esta misma secuencia: los subpasos aparecen sólo si hacen falta.
+  const secuencia: Pantalla[] = [0, 1, 2, ...subpasos(cards), 3]
+  const go = (next: Pantalla | undefined) => {
+    if (next === undefined) return
+    setPantalla(next)
+    setPendiente(null)
+  }
   const { names, mySeat } = squad
+  const { squadNames } = submitSeats(squad)
   const filled = filledCount(names)
   const sideSizes = cards.map(sideSizeOf)
   const floor = effectiveFloor(sideSizes)
@@ -310,16 +372,23 @@ export function Crear({ myName }: { myName: string }) {
   const removeSeat = (index: number) => setSquad(removeSeatAt(squad, index))
 
   const blocked =
-    (step === 0 && (name.trim().length === 0 || cards.length === 0)) ||
-    (step === 1 && plantelWarning !== null) ||
-    (step === 2 && (modalidadesError !== null || cards.some((card) => rulesErrors(card.rules, sideSizeOf(card)).length > 0)))
+    (pantalla === 0 && (name.trim().length === 0 || cards.length === 0)) ||
+    (pantalla === 1 && plantelWarning !== null) ||
+    (pantalla === 2 && (modalidadesError !== null || cards.some((card) => rulesErrors(card.rules, sideSizeOf(card)).length > 0))) ||
+    (pantalla === 'PAREJAS' && cards.some((card) => !parejasCompletas(card, squadNames.length)))
 
   const advance = () => {
     // Al entrar al plantel, tantas filas como pide el piso: se ve cuántos faltan antes de tipear.
-    if (step === 0 && names.length < floor) {
+    if (pantalla === 0 && names.length < floor) {
       setSquadState({ ...squad, names: [...names, ...Array<string>(floor - names.length).fill('')] })
     }
-    setStep(step + 1)
+    go(secuencia[secuencia.indexOf(pantalla) + 1])
+  }
+
+  const tocar = (card: DeporteElegido, at: number) => {
+    const tocado = tocarJugador(card.pairs, pendiente?.kind === card.kind ? pendiente.at : null, at)
+    setCards(cambiarParejas(cards, card.kind, tocado.pares))
+    setPendiente(tocado.pendiente === null ? null : { kind: card.kind, at: tocado.pendiente })
   }
 
   const submit = () => {
@@ -338,7 +407,7 @@ export function Crear({ myName }: { myName: string }) {
   }
 
   const help =
-    step === 1
+    pantalla === 1
       ? mySeat !== null
         ? 'Ya estás anotado en el plantel: agregá al resto del grupo. Después compartís un link y cada uno elige el suyo.'
         : `Tipeá los nombres del grupo, al menos ${floor}. Después compartís un link y cada uno elige el suyo. No hace falta que vayan todos a todas las fechas.`
@@ -347,15 +416,16 @@ export function Crear({ myName }: { myName: string }) {
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-lg flex-col gap-4 bg-bg px-6 pt-4 pb-[26px] text-text">
       <div className="flex items-center justify-between">
-        {step === 0 ? (
+        {pantalla === 0 ? (
           <Link href="/torneos" className="rounded-full bg-chip px-[14px] py-2 text-[12.5px] font-bold">
             ← Volver
           </Link>
         ) : created === null ? (
           <button
             type="button"
-            onClick={() => setStep(step - 1)}
-            className="rounded-full bg-chip px-[14px] py-2 text-[12.5px] font-bold"
+            disabled={pending}
+            onClick={() => go(secuencia[secuencia.indexOf(pantalla) - 1])}
+            className="rounded-full bg-chip px-[14px] py-2 text-[12.5px] font-bold disabled:opacity-40"
           >
             ← Volver
           </button>
@@ -364,15 +434,15 @@ export function Crear({ myName }: { myName: string }) {
         )}
       </div>
 
-      <Progress step={step} />
+      <Progress step={paso} />
 
       <header className="flex flex-col gap-[3px]">
-        <p className={ROTULO}>{`Paso ${step + 1} de ${TITLES.length}`}</p>
-        <h1 className="text-[30px] font-extrabold tracking-[-.03em]">{TITLES[step]}</h1>
+        <p className={ROTULO}>{rotulo}</p>
+        <h1 className="text-[30px] font-extrabold tracking-[-.03em]">{titulo}</h1>
       </header>
 
       <div className="flex flex-1 flex-col gap-3">
-        {step === 0 && (
+        {pantalla === 0 && (
           <PasoNuevo
             name={name}
             picked={cards.map((card) => card.kind)}
@@ -382,7 +452,7 @@ export function Crear({ myName }: { myName: string }) {
           />
         )}
 
-        {step === 1 && (
+        {pantalla === 1 && (
           <>
             <div className="flex items-center justify-between">
               <p className="text-[11.5px] font-extrabold uppercase tracking-[.14em] text-muted">El plantel</p>
@@ -436,7 +506,7 @@ export function Crear({ myName }: { myName: string }) {
           </>
         )}
 
-        {step === 2 && (
+        {pantalla === 2 && (
           <PasoComoSeJuega
             cards={cards}
             squadSize={filled}
@@ -452,7 +522,42 @@ export function Crear({ myName }: { myName: string }) {
           />
         )}
 
-        {step === 3 && (
+        {pantalla === 'PAREJAS' &&
+          cards
+            .filter((card) => card.modality === 'FIJAS')
+            .map((card) => (
+              <ArmarParejas
+                key={card.kind}
+                card={card}
+                names={squadNames}
+                pendiente={pendiente?.kind === card.kind ? pendiente.at : null}
+                onTocar={(at) => tocar(card, at)}
+                onSortear={() => {
+                  setCards(cambiarParejas(cards, card.kind, tocarSortear(card.pairs, squadNames.length, Math.random)))
+                  setPendiente(null)
+                }}
+              />
+            ))}
+
+        {pantalla === 'NIVEL' &&
+          cards
+            .filter((card) => card.primeraFecha === 'NIVEL')
+            .map((card) => (
+              <OrdenarPorNivel
+                key={card.kind}
+                card={card}
+                names={squadNames}
+                onMover={(from, to) =>
+                  setCards(
+                    cards.map((other) =>
+                      other === card ? { ...card, order: moverEnOrden(ordenInicial(card, squadNames.length), from, to) } : other,
+                    ),
+                  )
+                }
+              />
+            ))}
+
+        {pantalla === 3 && (
           <PasoListo
             disciplines={crearPayload(name, squad, cards).disciplines}
             created={created}
@@ -465,7 +570,7 @@ export function Crear({ myName }: { myName: string }) {
         {help !== null && <p className={AYUDA}>{help}</p>}
       </div>
 
-      {step < 3 && (
+      {pantalla !== 3 && (
         <button
           type="button"
           disabled={blocked}
@@ -475,6 +580,19 @@ export function Crear({ myName }: { myName: string }) {
           }`}
         >
           Continuar
+        </button>
+      )}
+
+      {pantalla === 'NIVEL' && (
+        <button
+          type="button"
+          onClick={() => {
+            setCards(sorteaLaApp(cards))
+            go(3)
+          }}
+          className={`${LINK} -mt-2`}
+        >
+          Mejor que lo sortee la app
         </button>
       )}
 

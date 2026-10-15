@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from 'react-dom/server'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { buildFixture, defaultConfig, type DisciplineId, type MatchdayFormat, type Side } from '@/core'
 import type { DisciplineHeader, MatchdaySummary, MatchWithId } from '@/db/read'
 import type { PairingContext } from '@/db/matchday'
@@ -72,6 +72,9 @@ const escena = vi.hoisted(() => ({
   guestEntries: [] as { id: string; displayName: string; seedPosition: number }[],
   // `disciplines.fixed_teams`: no viaja en `DisciplineHeader`, el armado lo pide con `disciplineConfig`.
   fixedTeams: false,
+  // Historia cerrada por número de fecha (`closedHistory`): vacía salvo en los tests de defensores.
+  histories: {} as Record<number, unknown>,
+  number: 1,
 }))
 
 vi.mock('@/db/discipline', async (importOriginal) => {
@@ -107,7 +110,8 @@ vi.mock('@/db/season', async (importOriginal) => {
   return {
     ...real,
     awardsBefore: async () => new Map(),
-    closedHistory: async () => null,
+    closedHistory: async (_supabase: unknown, _disciplineId: unknown, number: number) =>
+      escena.histories[number] ?? null,
     frozenPointsOf: async () => escena.frozenPoints,
   }
 })
@@ -165,7 +169,7 @@ vi.mock('@/db/read', async (importOriginal) => {
   function matchdaySummary(): MatchdaySummary {
     return {
       id: 'm1',
-      number: 1,
+      number: escena.number,
       kind: 'REGULAR',
       status: escena.status,
       playedOn: '2026-03-05',
@@ -1159,6 +1163,58 @@ describe('el armado en DRAFT — con parejas fijas la nota no promete defensores
 
     expect(html).toContain('Cada pareja juega junta todo el torneo: sólo se arman los cruces.')
     expect(html).not.toContain('Los defensores quedan fijos')
+  })
+})
+
+describe('con parejas fijas no hay pareja "Defensora" (R17)', () => {
+  /** La fecha 1 la ganaron e1 y e2; la fecha 2 los vuelve a tener juntos. */
+  function fecha2(status: 'DRAFT' | 'OPEN', fixedTeams: boolean) {
+    escena.status = status
+    escena.isAdmin = true
+    escena.pairSize = 2
+    escena.maxMatches = undefined
+    escena.formato = { kind: 'ROUND_ROBIN' }
+    escena.sides = [
+      { size: 2, a: 'e1', b: 'e2' },
+      { size: 2, a: 'e3', b: 'e4' },
+      { size: 2, a: 'e5', b: 'e6' },
+      { size: 2, a: 'e7', b: 'e8' },
+    ]
+    escena.matches = []
+    escena.squadCount = 8
+    escena.guestEntries = []
+    escena.fixedTeams = fixedTeams
+    escena.number = 2
+    escena.histories = {
+      1: {
+        sides: escena.sides,
+        awards: [
+          { entryId: 'e1', position: 1, points: 10, lines: [] },
+          { entryId: 'e2', position: 1, points: 10, lines: [] },
+        ],
+      },
+    }
+  }
+
+  afterEach(() => {
+    escena.fixedTeams = false
+    escena.number = 1
+    escena.histories = {}
+  })
+
+  it('control: con parejas que rotan, la campeona de la fecha anterior sale "Defensora" en el armado', async () => {
+    fecha2('DRAFT', false)
+    expect(await render('2')).toContain('Defensora')
+  })
+
+  it('parejas fijas: el armado no marca ninguna "Defensora" (el sorteo no tiene defensores)', async () => {
+    fecha2('DRAFT', true)
+    expect(await render('2')).not.toContain('Defensora')
+  })
+
+  it('parejas fijas: la fecha abierta tampoco resalta a la campeona anterior como defensora', async () => {
+    fecha2('OPEN', true)
+    expect(await render('2')).not.toContain('font-[750] bg-ok-bg text-up')
   })
 })
 

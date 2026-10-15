@@ -217,7 +217,8 @@ export default async function FechaDetailPage({ params }: PageProps) {
     ])
 
     const { defenders, defendersAlreadyRepeated } = previousContext(lastHistory, beforeLastHistory)
-    const effectiveDefenders = defenders !== null && !defendersAlreadyRepeated ? defenders : null
+    // Con parejas fijas el sorteo no tiene defensores (`pairingContextFor` los anula): no se dibuja ninguno.
+    const effectiveDefenders = !fixedTeams && defenders !== null && !defendersAlreadyRepeated ? defenders : null
     // Los defensores ya llegan como `Side` (PR19): `previousContext` devuelve
     // `null` en una disciplina de a uno —no hay con quién repetir— así que
     // ningún lado se marca como defensor ahí. Antes esto los subía de `Pair` a
@@ -401,7 +402,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
       .map((entry) => entry.id)
 
     const canPromote = header.isAdmin && status === 'CLOSED' && !isMasters
-    const [detail, awardsByMatchday, lastHistory, beforeLastHistory, frozenPoints] = await Promise.all([
+    const [detail, awardsByMatchday, lastHistory, beforeLastHistory, frozenPoints, { fixedTeams }] = await Promise.all([
       matchdayDetail(supabase, matchday.id),
       awardsBefore(supabase, matchday.disciplineId, matchdayNumber),
       closedHistory(supabase, matchday.disciplineId, matchdayNumber - 1),
@@ -417,6 +418,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
       status === 'CLOSED' && !isMasters
         ? frozenPointsOf(supabase, matchday.id)
         : Promise.resolve(new Map<string, FrozenAward>()),
+      disciplineConfig(supabase, matchday.disciplineId),
     ])
 
     // La fase y la llave (REQ-D8-1, decisión #3979): `matchday.formato` es lo
@@ -554,7 +556,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
       })
 
     const { defenders, defendersAlreadyRepeated } = previousContext(lastHistory, beforeLastHistory)
-    const effectiveDefenders = defenders !== null && !defendersAlreadyRepeated ? defenders : null
+    const effectiveDefenders = !fixedTeams && defenders !== null && !defendersAlreadyRepeated ? defenders : null
     const defendingSide = effectiveDefenders
     const isDefendingSide = (side: Side) => defendingSide !== null && sameSide(side, defendingSide)
 

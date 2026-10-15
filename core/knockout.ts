@@ -10,6 +10,7 @@ import {
   PHASE_ORDER,
   type MatchResult,
   type MatchdayFormat,
+  type MatchdayFormatSetting,
   type Phase,
   type Side,
   type SideSize,
@@ -428,6 +429,16 @@ export function suggestFormat(headcount: number, sideSize: SideSize, maxMatches:
     null,
   )
   return mostGroups ?? { kind: 'ROUND_ROBIN' }
+}
+
+/** `AUTO` (docs/torneos-deportes.md §7) es lo que `suggestFormat` diría con estos presentes; un formato concreto vuelve tal cual. */
+export function resolveFormato(
+  setting: MatchdayFormatSetting,
+  headcount: number,
+  sideSize: SideSize,
+  maxMatches: number,
+): MatchdayFormat {
+  return setting.kind === 'AUTO' ? suggestFormat(headcount, sideSize, maxMatches) : setting
 }
 
 /**

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import type { DisciplineId, MatchdayFormat, SetScore } from '@/core'
+import type { DisciplineId, MatchdayFormatSetting, MatchFormatOwn, SetScore } from '@/core'
 import { EdgeError } from '@/db/errors'
 import { promoteGuest } from '@/db/entries'
 import {
@@ -27,6 +27,7 @@ import {
   setAttendance,
   setMatchdayDate,
   setMatchdayFormat,
+  setMatchFormat,
   syncGuestSeat,
   unlockPair,
 } from '@/db/matchday'
@@ -421,10 +422,22 @@ export async function changeMatchdayFormat(
   seasonId: string,
   matchdayId: string,
   matchdayNumber: number,
-  formato: MatchdayFormat,
+  formato: MatchdayFormatSetting,
 ): Promise<WriteResult> {
   return inDraft(seasonId, matchdayId, matchdayNumber, async (supabase) => {
     await setMatchdayFormat(supabase, matchdayId, formato)
+  })
+}
+
+/** A cuánto se juega esta fecha (§7), o `null` para volver al del torneo. `setMatchFormat` rechaza fuera de DRAFT. */
+export async function changeMatchFormat(
+  seasonId: string,
+  matchdayId: string,
+  matchdayNumber: number,
+  own: MatchFormatOwn | null,
+): Promise<WriteResult> {
+  return inDraft(seasonId, matchdayId, matchdayNumber, async (supabase) => {
+    await setMatchFormat(supabase, matchdayId, own)
   })
 }
 

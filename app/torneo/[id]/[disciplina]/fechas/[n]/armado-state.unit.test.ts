@@ -275,6 +275,11 @@ describe('matchdayShape', () => {
       expect(shape.eventualSize).toBe(8)
       expect(shape.suggestedFormat).toEqual({ kind: 'ROUND_ROBIN' })
     })
+
+    it('con la fecha en Automático cuenta los partidos de lo que se va a armar: 8 de a uno son 2 grupos + llave', () => {
+      const shape = matchdayShape({ confirmed: 8, looseGuests: 0, guestPairs: 0, sideSize: 1, formato: { kind: 'AUTO' } })
+      expect(shape.matches).toBe(16)
+    })
   })
 })
 

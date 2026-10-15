@@ -9,8 +9,10 @@ import {
   MAX_PAIRING_POOL,
   matchCountForFormat,
   minSquadFor,
+  resolveFormato,
   suggestFormat,
   type MatchdayFormat,
+  type MatchdayFormatSetting,
   type Duo,
   type SideSize,
 } from '@/core'
@@ -149,8 +151,8 @@ export function matchdayShape({
   sideSize: SideSize
   /** El techo de partidos de ESTA disciplina. Sin pasarlo rige el default de su `sideSize`. */
   maxMatches?: number
-  /** El `matchdays.formato` GUARDADO hoy — no la sugerencia. */
-  formato: MatchdayFormat
+  /** El `matchdays.formato` GUARDADO hoy — no la sugerencia. `AUTO` cuenta lo que se armaría con estos presentes. */
+  formato: MatchdayFormatSetting
 }): MatchdayShape {
   const size = confirmed + looseGuests + guestPairs * 2
   // La línea de "son impares" describe al suelto que `syncGuestSeat` agrega, y
@@ -162,7 +164,7 @@ export function matchdayShape({
   return {
     size,
     sides,
-    matches: matchCountForFormat(formato, sides),
+    matches: matchCountForFormat(resolveFormato(formato, eventualSize, sideSize, maxMatches), sides),
     complete: size % sideSize === 0,
     needsLooseGuest,
     eventualSize,

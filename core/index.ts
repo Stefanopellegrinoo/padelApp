@@ -45,6 +45,7 @@ export type {
   Phase,
   MatchdayFormat,
   MatchdayFormatSetting,
+  MatchFormatOwn,
   FirstFecha,
   MatchResult,
   SideStanding,
@@ -78,7 +79,7 @@ export type { Duo } from './side'
 // `defaultConfig` y hacían nacer una liga de FIFA siendo pádel con otro nombre.
 // `fichaSeed` es la ÚNICA lectura de la ficha de un deporte al crear una disciplina.
 export type { DisciplineSeed } from './config'
-export { validateConfig, defaultConfig, disciplineProfile, fichaSeed, pointsCountError, pointsErrors } from './config'
+export { validateConfig, defaultConfig, disciplineProfile, effectiveMatchFormat, fichaSeed, pointsCountError, pointsErrors } from './config'
 
 // ── Building a matchday ──────────────────────────────────────────────────────
 // `buildSides` (PR16, design PUNTO 5) is the Side-native entry point: with
@@ -152,8 +153,11 @@ export { computeAwards } from './awards'
 // (db/matchday.ts) y `fechas/[n]/page.tsx`, y faltaba en `fechas/page.tsx` —
 // el récord del campeón salía distinto en las dos pantallas para la misma
 // fecha con llave.
+// `resolveFormato` sale ahora (docs/torneos-deportes.md §7): `generatePairs`/
+// `openMatchday` (`db/matchday.ts`) y el armado resuelven `AUTO` con ella.
 export {
   suggestFormat,
+  resolveFormato,
   groupSides,
   currentPhase,
   phaseIsComplete,

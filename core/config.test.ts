@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { disciplineProfile, validateConfig, defaultConfig, fichaSeed } from './config'
+import { disciplineProfile, validateConfig, defaultConfig, effectiveMatchFormat, fichaSeed } from './config'
 import { minSquadFor } from './constants'
 import { SPORTS, SPORT_IDS, type Modality } from './sports'
 import type { SeasonConfig, SideSize } from './types'
@@ -498,5 +498,23 @@ describe('validateConfig con la primera fecha', () => {
     expect(validateConfig({ ...defaultConfig(8), firstFecha: 'NIVEL' }, 2)).not.toContain(ERROR)
     expect(validateConfig({ ...defaultConfig(8), firstFecha: 'SORTEO' }, 2)).not.toContain(ERROR)
     expect(validateConfig(defaultConfig(8), 2)).not.toContain(ERROR)
+  })
+})
+
+/** docs/torneos-deportes.md §7: la ÚNICA regla de "a cuánto se juega esta fecha". */
+describe('effectiveMatchFormat', () => {
+  const PADEL = SPORTS.PADEL.format
+
+  it('sin formato propio, la fecha se juega al del deporte en el torneo', () => {
+    expect(effectiveMatchFormat(PADEL, null)).toBe(PADEL)
+  })
+
+  it('con formato propio, pisa sets y games y deja el resto del torneo', () => {
+    expect(effectiveMatchFormat(PADEL, { setsToWin: 2, gamesPerSet: 6 })).toEqual({
+      setsToWin: 2,
+      gamesPerSet: 6,
+      tieBreak: true,
+      openScore: false,
+    })
   })
 })

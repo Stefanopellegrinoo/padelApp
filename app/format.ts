@@ -1,4 +1,4 @@
-import type { MatchdayFormat } from '@/core'
+import type { MatchdayFormatSetting } from '@/core'
 
 /**
  * El día de una fecha, como lo escribe el handoff.
@@ -64,6 +64,7 @@ export function initials(name: string): string {
  * avisa de no repetir (ahí es sobre el NOMBRE DE COLUMNA, `formato_default`
  * vs `formato`; acá es el mismo principio aplicado al nombre de la función).
  */
-export function matchdayFormatLabel(formato: MatchdayFormat): string {
+export function matchdayFormatLabel(formato: MatchdayFormatSetting): string {
+  if (formato.kind === 'AUTO') return 'Automático'
   return formato.kind === 'ROUND_ROBIN' ? 'Todos contra todos' : `${formato.groups} grupos + llave`
 }

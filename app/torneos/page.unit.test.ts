@@ -57,6 +57,7 @@ function closedMatchday(): MatchdaySummary {
     disciplineId: D_PADEL,
     allowsDraw: false,
     formato: { kind: 'ROUND_ROBIN' },
+    matchFormat: null,
   }
 }
 

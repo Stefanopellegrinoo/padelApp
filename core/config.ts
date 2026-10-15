@@ -1,6 +1,6 @@
 import { minSquadFor } from './constants'
 import { SPORTS, modalityShape, sportOf, type Modality, type SportId, type TournamentSport } from './sports'
-import type { MatchdayFormatSetting, SeasonConfig, SideSize } from './types'
+import type { MatchFormat, MatchFormatOwn, MatchdayFormatSetting, SeasonConfig, SideSize } from './types'
 
 /**
  * Los seis puestos que pagan. Es la tabla de un torneo de seis parejas, y
@@ -142,6 +142,17 @@ export function disciplineProfile(
     config: { ...config, matchFormat: { ...config.matchFormat, openScore: goals } },
     allowsDraw: sport.allowsDraw,
   }
+}
+
+/**
+ * A cuánto se juega una fecha (docs/torneos-deportes.md §7): LA regla. Nadie lee
+ * el formato de la disciplina directo para una fecha; todo pasa por acá.
+ *
+ * ponytail: con fechas a distinta cantidad de sets, el desempate por diferencia
+ * de sets mezcla fechas distintas (spec §7, aceptado). Si molesta: desempatar por fecha.
+ */
+export function effectiveMatchFormat(base: MatchFormat, own: MatchFormatOwn | null): MatchFormat {
+  return own === null ? base : { ...base, setsToWin: own.setsToWin, gamesPerSet: own.gamesPerSet }
 }
 
 /** Lo que escribe una disciplina nueva, sembrada desde la ficha de su deporte. */

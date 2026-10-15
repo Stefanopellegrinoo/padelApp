@@ -8,6 +8,7 @@ import {
   computeRanking,
   computeStandings,
   currentPhase,
+  effectiveMatchFormat,
   groupPhaseMatches,
   groupSides,
   includes,
@@ -19,6 +20,7 @@ import {
   PHASE_ORDER,
   previousContext,
   resolveDisciplineBySlug,
+  resolveFormato,
   sameSide,
   snapshotForMatchday,
   thirdPlaceNote,
@@ -289,7 +291,14 @@ export default async function FechaDetailPage({ params }: PageProps) {
     // mismo. Sin nada armable todavía no hay nada que previsualizar: mejor
     // ninguna vista previa que una pantalla rota.
     let groupPreview: GroupPreviewVM[] | null = null
-    const formatoDraft = matchday.formato
+    // `AUTO` (§7) se resuelve con los lados ya sorteados; sin sorteo todavía
+    // son 0 lados y da `ROUND_ROBIN`, sólo para la vista previa.
+    const formatoDraft = resolveFormato(
+      matchday.formato,
+      detail.sides.length * discipline.pairSize,
+      discipline.pairSize,
+      maxMatchesOf(discipline.config, discipline.pairSize),
+    )
 
     // S94 (verify-report-pre-contract #4026): mismo estado divergido que
     // C32/W86 — `changeMatchdayFormat` puede tocar `formato` DESPUÉS de que
@@ -348,7 +357,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
         // los saca del pool antes de sortear, así que no acompañan a nadie.
         defenders={effectiveDefenders}
         loadedResults={detail.matches.filter((match) => match.sets.length > 0).length}
-        formato={matchday.formato}
+        formato={formatoDraft}
         formatDrifted={formatDrifted}
         groupPreview={groupPreview}
       />
@@ -358,8 +367,10 @@ export default async function FechaDetailPage({ params }: PageProps) {
   if (matchday.status !== 'DRAFT') {
     const status = matchday.status
     // Mismo cierre que arriba (Masters): la config es de la disciplina de
-    // ESTA fecha, no la [0] de la temporada.
-    const config = disciplineOf(header, matchday.disciplineId).config
+    // ESTA fecha, no la [0] de la temporada. Y a cuánto se juega ESTA fecha
+    // (§7): la tabla, la carga y las notas leen el efectivo, no el del torneo.
+    const base = disciplineOf(header, matchday.disciplineId).config
+    const config = { ...base, matchFormat: effectiveMatchFormat(base.matchFormat, matchday.matchFormat) }
     const seedOrder = entries
       .filter((entry) => entry.kind === 'SQUAD')
       .sort((a, b) => a.seedPosition - b.seedPosition)

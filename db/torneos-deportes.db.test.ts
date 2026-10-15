@@ -1,9 +1,20 @@
 import { describe, expect, it } from 'vitest'
-import { defaultConfig } from '@/core'
+import { defaultConfig, type SeasonConfig } from '@/core'
+import type { Client } from './client'
 import type { Json } from './database.types'
-import { addDiscipline } from './discipline'
+import { addDiscipline, updateDisciplineConfig, updateDisciplineFormatoDefault } from './discipline'
 import { EdgeError } from './errors'
-import { createMatchday } from './matchday'
+import {
+  closeMatchday,
+  createMatchday,
+  generatePairs,
+  openMatchday,
+  redraftMatchday,
+  saveResult,
+  setAttendance,
+  setMatchdayFormat,
+  setMatchFormat,
+} from './matchday'
 import { seasonHeader } from './read'
 import { createSeason as createSeasonOf } from './season'
 import { adminClient } from './test/admin'
@@ -325,5 +336,189 @@ describe('un deporte fuera de los de torneo se rechaza antes de escribir', () =>
     const header = await seasonHeader(admin.client, seasonId)
 
     expect(header.disciplines.map((d) => d.kind)).toEqual(['TEJO'])
+  })
+})
+
+// ── Tarea 4: AUTO y "a cuánto se juega esta fecha" del lado del servidor (§7).
+// Mismo andamiaje que `db/matchday-format.db.test.ts`: plantel, fecha y asistencia.
+
+async function fillerPlayers(count: number): Promise<string[]> {
+  const ids: string[] = []
+  for (let i = 0; i < count; i++) {
+    const { data, error } = await adminClient()
+      .from('players')
+      .insert({ display_name: `Relleno de test ${Date.now()}-${i}-${Math.random()}` })
+      .select('id')
+      .single()
+    if (error || data === null) throw new Error(error?.message)
+    ids.push(data.id)
+  }
+  return ids
+}
+
+function fifaConfig(squadSize: number): SeasonConfig {
+  return { ...defaultConfig(squadSize, 1), matchFormat: { setsToWin: 1, gamesPerSet: 4, tieBreak: true, openScore: true } }
+}
+
+/** Un torneo con `count` en el plantel: Pádel en pareja (1 set a 4), o FIFA de a uno. */
+async function squadSeason(count: number, sport: 'PADEL' | 'FIFA') {
+  const admin = await createTestUser()
+  const { seasonId, disciplineId, entryIds } = await createSeason({
+    admin,
+    config: defaultConfig(count),
+    squad: await fillerPlayers(count),
+    disciplines: [sport === 'FIFA' ? { kind: 'FIFA', pairSize: 1, allowsDraw: true, config: fifaConfig(count) } : {}],
+  })
+  return { admin, seasonId, disciplineId, entryIds }
+}
+
+/** La fecha siguiente de ese torneo, en DRAFT, con todo el plantel confirmado. */
+async function draftWithPresent(scene: Awaited<ReturnType<typeof squadSeason>>): Promise<string> {
+  const matchdayId = await createMatchday(scene.admin.client, scene.seasonId, MATCHDAY_PLAYED_ON, scene.disciplineId)
+  for (const entryId of scene.entryIds) await setAttendance(scene.admin.client, matchdayId, entryId, 'PLAYING')
+  return matchdayId
+}
+
+async function matchdayRow(matchdayId: string) {
+  const { data, error } = await adminClient()
+    .from('matchdays')
+    .select('status, formato')
+    .eq('id', matchdayId)
+    .single()
+  if (error || data === null) throw new Error(error?.message)
+  return data
+}
+
+async function matchesOf(matchdayId: string): Promise<{ id: string; grupo: number }[]> {
+  const { data, error } = await adminClient().from('matches').select('id, grupo').eq('matchday_id', matchdayId)
+  if (error || data === null) throw new Error(error?.message)
+  return data
+}
+
+async function loadAll(client: Client, matchdayId: string, gamesA: number, gamesB: number): Promise<void> {
+  for (const match of await matchesOf(matchdayId)) await saveResult(client, match.id, [{ gamesA, gamesB }])
+}
+
+describe('a cuánto se juega esta fecha: setMatchFormat (§7)', () => {
+  it('una fecha de Pádel a 6 games valida y cierra a 6, aunque el torneo juegue a 4', async () => {
+    const scene = await squadSeason(8, 'PADEL')
+    const matchdayId = await draftWithPresent(scene)
+    await setMatchFormat(scene.admin.client, matchdayId, { setsToWin: 1, gamesPerSet: 6 })
+    await generatePairs(scene.admin.client, matchdayId)
+    await openMatchday(scene.admin.client, matchdayId)
+    const [first, second] = await matchesOf(matchdayId)
+
+    await saveResult(scene.admin.client, first!.id, [{ gamesA: 6, gamesB: 4 }])
+    await expect(saveResult(scene.admin.client, second!.id, [{ gamesA: 4, gamesB: 2 }])).rejects.toThrow(
+      'En un set a 6 games con tie-break, 4-2 no es un resultado posible.',
+    )
+    await loadAll(scene.admin.client, matchdayId, 6, 4)
+    await closeMatchday(scene.admin.client, matchdayId)
+
+    expect((await matchdayRow(matchdayId)).status).toBe('CLOSED')
+  })
+
+  it('null la vuelve a jugar al formato del torneo', async () => {
+    const { admin, matchdayId } = await draftMatchday()
+    await setMatchFormat(admin.client, matchdayId, { setsToWin: 1, gamesPerSet: 6 })
+
+    await setMatchFormat(admin.client, matchdayId, null)
+
+    expect(await matchFormatOf(matchdayId)).toBeNull()
+  })
+
+  it('rechaza games fuera de la ficha del deporte y no escribe', async () => {
+    const { admin, matchdayId } = await draftMatchday()
+
+    await expect(setMatchFormat(admin.client, matchdayId, { setsToWin: 1, gamesPerSet: 10 })).rejects.toThrow(
+      'Los games por set tienen que estar entre 3 y 9.',
+    )
+    expect(await matchFormatOf(matchdayId)).toBeNull()
+  })
+
+  it('rechaza un deporte sin sets (FIFA)', async () => {
+    const admin = await createTestUser()
+    const { seasonId, disciplineId } = await createSeason({
+      admin,
+      disciplines: [{ kind: 'FIFA', pairSize: 1, allowsDraw: true, config: fifaConfig(8) }],
+    })
+    const matchdayId = await createMatchday(admin.client, seasonId, MATCHDAY_PLAYED_ON, disciplineId)
+
+    await expect(setMatchFormat(admin.client, matchdayId, { setsToWin: 1, gamesPerSet: 4 })).rejects.toThrow(
+      'Este deporte no tiene sets que cambiar.',
+    )
+  })
+
+  it('rechaza con la fecha en juego', async () => {
+    const { admin, matchdayId } = await draftMatchday()
+    await moveTo(matchdayId, 'OPEN')
+
+    await expect(setMatchFormat(admin.client, matchdayId, { setsToWin: 1, gamesPerSet: 6 })).rejects.toThrow(
+      'A cuánto se juega la fecha sólo se cambia con la fecha en armado.',
+    )
+  })
+
+  it('rechaza con resultados cargados después de volver a armado', async () => {
+    const scene = await squadSeason(8, 'PADEL')
+    const matchdayId = await draftWithPresent(scene)
+    await generatePairs(scene.admin.client, matchdayId)
+    await openMatchday(scene.admin.client, matchdayId)
+    const [first] = await matchesOf(matchdayId)
+    await saveResult(scene.admin.client, first!.id, [{ gamesA: 4, gamesB: 2 }])
+    await redraftMatchday(scene.admin.client, matchdayId)
+
+    await expect(setMatchFormat(scene.admin.client, matchdayId, { setsToWin: 1, gamesPerSet: 6 })).rejects.toThrow(
+      'Hay resultados cargados: volvé a sortear la fecha antes de cambiar a cuánto se juega.',
+    )
+  })
+
+  it('cambiar el formato del torneo con la fecha en juego no la toca: vale desde la próxima', async () => {
+    const scene = await squadSeason(8, 'PADEL')
+    const matchdayId = await draftWithPresent(scene)
+    await generatePairs(scene.admin.client, matchdayId)
+    await openMatchday(scene.admin.client, matchdayId)
+    expect(await matchFormatOf(matchdayId)).toEqual({ setsToWin: 1, gamesPerSet: 4 })
+    const config = defaultConfig(8)
+
+    await updateDisciplineConfig(scene.admin.client, scene.disciplineId, {
+      ...config,
+      matchFormat: { ...config.matchFormat, gamesPerSet: 6 },
+    })
+    await loadAll(scene.admin.client, matchdayId, 4, 2)
+    await closeMatchday(scene.admin.client, matchdayId)
+
+    expect((await matchdayRow(matchdayId)).status).toBe('CLOSED')
+  })
+})
+
+describe('AUTO se resuelve al confirmar la fecha (§7)', () => {
+  it('se arma con lo sugerido y al confirmar quedan el formato concreto y el partido del torneo congelados', async () => {
+    const scene = await squadSeason(8, 'FIFA')
+    await updateDisciplineFormatoDefault(scene.admin.client, scene.disciplineId, { kind: 'AUTO' })
+    const matchdayId = await draftWithPresent(scene)
+    expect((await matchdayRow(matchdayId)).formato).toEqual({ kind: 'AUTO' })
+
+    await generatePairs(scene.admin.client, matchdayId)
+    expect([...new Set((await matchesOf(matchdayId)).map((match) => match.grupo))].sort()).toEqual([1, 2])
+    // Sortear resuelve en memoria: la fecha sigue en Automático hasta confirmarla.
+    expect((await matchdayRow(matchdayId)).formato).toEqual({ kind: 'AUTO' })
+
+    await openMatchday(scene.admin.client, matchdayId)
+
+    expect(await matchdayRow(matchdayId)).toEqual({
+      status: 'OPEN',
+      formato: { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 },
+    })
+    expect(await matchFormatOf(matchdayId)).toEqual({ setsToWin: 1, gamesPerSet: 4 })
+  })
+
+  it('setMatchdayFormat acepta AUTO en armado aunque todos contra todos no entre (12 de a uno)', async () => {
+    const scene = await squadSeason(12, 'FIFA')
+    const matchdayId = await draftWithPresent(scene)
+    await expect(setMatchdayFormat(scene.admin.client, matchdayId, { kind: 'ROUND_ROBIN' })).rejects.toThrow(/12 lados/)
+
+    await setMatchdayFormat(scene.admin.client, matchdayId, { kind: 'AUTO' })
+
+    expect((await matchdayRow(matchdayId)).formato).toEqual({ kind: 'AUTO' })
   })
 })

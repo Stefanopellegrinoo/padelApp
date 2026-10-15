@@ -39,6 +39,12 @@ export interface MatchFormat {
   openScore: boolean
 }
 
+/** `matchdays.match_format`: a cuánto se juega UNA fecha, si no es al del deporte en el torneo. */
+export interface MatchFormatOwn {
+  readonly setsToWin: number
+  readonly gamesPerSet: number
+}
+
 /** Cómo se armó la primera fecha de un torneo: por nivel o al azar. */
 export type FirstFecha = 'NIVEL' | 'SORTEO'
 

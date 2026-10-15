@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import {
   MASTERS_SIZE,
+  effectiveMatchFormat,
   groupPhaseMatches,
   members,
   resolveDisciplineBySlug,
@@ -73,7 +74,7 @@ export default async function FechasPage({ params }: PageProps) {
   const nameById = new Map(entries.map((entry) => [entry.id, entry.displayName]))
   // Levantado afuera de `championOf`: es una función ANIDADA y el narrowing
   // del `notFound()` de arriba no la cruza.
-  const matchFormat = discipline.config.matchFormat
+  const tournamentFormat = discipline.config.matchFormat
   // El Masters no se dibuja como fila: esta pantalla sólo lista fechas REGULAR
   // y muestra el Masters como el bloque bloqueado del final (Task 7, Plan 3).
   const disciplineMatchdays = seasonMatchdays.filter((matchday) => matchday.disciplineId === discipline.id)
@@ -105,6 +106,8 @@ export default async function FechasPage({ params }: PageProps) {
     if (championSide === undefined) return null
 
     const names = sideNames(championSide, nameById)
+    // A cuánto se jugó ESA fecha (§7), no el formato de hoy del torneo.
+    const matchFormat = effectiveMatchFormat(tournamentFormat, matchday.matchFormat)
     return {
       names,
       record: championRecord(

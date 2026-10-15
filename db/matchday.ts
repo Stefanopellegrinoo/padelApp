@@ -6,6 +6,7 @@ import {
   computeStandings,
   currentPhase,
   drawIsLegal,
+  effectiveMatchFormat,
   faseForCount,
   groupPhaseMatches,
   groupSides,
@@ -22,14 +23,19 @@ import {
   phaseIsComplete,
   previousContext,
   pair,
+  resolveFormato,
   sameSide,
   sideOfRow,
   snapshotForMatchday,
+  sportFamily,
+  sportFormatError,
   type Award,
   type DisciplineId,
   type EntryId,
   type MatchdayFormat,
+  type MatchdayFormatSetting,
   type MatchFormat,
+  type MatchFormatOwn,
   type MatchResult,
   type PairingInput,
   type Phase,
@@ -75,7 +81,11 @@ type RawMatchdayRow = Database['public']['Tables']['matchdays']['Row']
  * ya es `DisciplineId` y `matchday.season_id` sigue siendo `string` a secas,
  * así que confundirlos es error de compilación en el call site.
  */
-type MatchdayRow = Omit<RawMatchdayRow, 'discipline_id'> & { discipline_id: DisciplineId }
+type MatchdayRow = Omit<RawMatchdayRow, 'discipline_id' | 'match_format'> & {
+  discipline_id: DisciplineId
+  /** `matchdays_match_format_shape` (0096/0098) garantiza la forma: dos números o `null`. */
+  match_format: MatchFormatOwn | null
+}
 
 /**
  * What every operation on a matchday needs, whatever it is going to do with it.
@@ -112,8 +122,11 @@ export async function matchdayContextFor(
   matchdayId: string,
 ): Promise<MatchdayContext> {
   const matchday = await requireMatchday(supabase, matchdayId)
-  const { config, pairSize, fixedTeams } = await disciplineConfig(supabase, matchday.discipline_id)
-  assertValidConfig(config, pairSize)
+  const { config: base, pairSize, fixedTeams } = await disciplineConfig(supabase, matchday.discipline_id)
+  assertValidConfig(base, pairSize)
+  // A cuánto se juega ESTA fecha (§7), en un solo lugar para todo el servidor:
+  // sortear, avanzar de fase y cerrar leen este `config`.
+  const config = { ...base, matchFormat: effectiveMatchFormat(base.matchFormat, matchday.match_format) }
 
   // The seed order is also the squad, and it must be stable: buildPairs falls
   // back to the order it is given when two players are missing from the
@@ -300,7 +313,7 @@ export async function setMatchdayDate(
 export async function setMatchdayFormat(
   supabase: Client,
   matchdayId: string,
-  formato: MatchdayFormat,
+  formato: MatchdayFormatSetting,
 ): Promise<void> {
   const matchday = await requireMatchday(supabase, matchdayId)
   if (matchday.status !== 'DRAFT') {
@@ -334,7 +347,10 @@ export async function setMatchdayFormat(
   // que más produce — 12 lados de a uno son 66, contra los 15 del peor caso de
   // pádel. Mientras este `if` preguntaba por `GROUPS_KNOCKOUT`, el formato más
   // caro era el único que entraba sin que nadie lo mirara.
-  {
+  //
+  // `AUTO` no pasa por acá: se resuelve con los presentes de cada momento
+  // (`resolveFormato`), y `suggestFormat` ya sólo propone lo ofrecible.
+  if (formato.kind !== 'AUTO') {
     const { config, pairSize } = await disciplineConfig(supabase, matchday.discipline_id)
     const present = [
       ...(await playingEntryIds(supabase, matchdayId, matchday.discipline_id)),
@@ -357,6 +373,52 @@ export async function setMatchdayFormat(
   if (error !== null) throw new EdgeError(`No se pudo cambiar el formato: ${error.message}`)
   if (count === 0) {
     throw new EdgeError('No se pudo cambiar el formato: sólo puede hacerlo quien organiza.')
+  }
+}
+
+/**
+ * Escribe o borra (`null` = "como el torneo") el formato propio de una fecha en DRAFT (§7).
+ *
+ * El rango es el de la ficha del deporte (`sportFormatError`); la base sólo
+ * conoce la forma (`matchdays_match_format_shape`) y que fuera de DRAFT no se
+ * toca (0097). Con resultados cargados (una vuelta a armado con
+ * `redraft_matchday`), cambiarlo dejaría resultados que ya no valen.
+ */
+export async function setMatchFormat(supabase: Client, matchdayId: string, own: MatchFormatOwn | null): Promise<void> {
+  const matchday = await requireMatchday(supabase, matchdayId)
+  if (matchday.status !== 'DRAFT') {
+    throw new EdgeError('A cuánto se juega la fecha sólo se cambia con la fecha en armado.')
+  }
+  if (own !== null) {
+    const { data, error } = await supabase
+      .from('disciplines')
+      .select('kind, config')
+      .eq('id', matchday.discipline_id)
+      .maybeSingle()
+    if (error) throw new EdgeError(`No se pudo leer la disciplina: ${error.message}`)
+    if (data === null) throw new EdgeError('La disciplina no existe.')
+    const base = (data.config as unknown as SeasonConfig).matchFormat
+    if (sportFamily(data.kind) !== 'sets' || base.openScore) {
+      throw new EdgeError('Este deporte no tiene sets que cambiar.')
+    }
+    const problem = sportFormatError(data.kind, { ...base, ...own })
+    if (problem !== null) throw new EdgeError(problem)
+  }
+  const { matches } = await resultsOf(supabase, matchdayId)
+  if (matches.some((match) => match.sets.length > 0)) {
+    throw new EdgeError('Hay resultados cargados: volvé a sortear la fecha antes de cambiar a cuánto se juega.')
+  }
+
+  const { error, count } = await supabase
+    .from('matchdays')
+    .update(
+      { match_format: own === null ? null : { setsToWin: own.setsToWin, gamesPerSet: own.gamesPerSet } },
+      { count: 'exact' },
+    )
+    .eq('id', matchdayId)
+  if (error !== null) throw new EdgeError(`No se pudo cambiar a cuánto se juega la fecha: ${error.message}`)
+  if (count === 0) {
+    throw new EdgeError('No se pudo cambiar: sólo puede hacerlo quien organiza.')
   }
 }
 
@@ -790,7 +852,15 @@ export async function generatePairs(supabase: Client, matchdayId: string): Promi
   // `knockoutMatchups` sabe armar (G∈{1,2,4}, P=2) — una fila que llega hasta
   // acá no puede tener la forma incompleta que reventaba `groupSides` con
   // `groups=undefined` DESPUÉS de haber borrado y reinsertado las parejas.
-  const formato = matchday.formato as unknown as MatchdayFormat
+  //
+  // `AUTO` (§7) se resuelve acá, en memoria, con los presentes de hoy: la fila
+  // sigue en `AUTO` hasta que `openMatchday` guarda el concreto.
+  const formato = resolveFormato(
+    matchday.formato as unknown as MatchdayFormatSetting,
+    input.present.length,
+    pairSize,
+    maxMatchesOf(config, pairSize),
+  )
 
   // W84 (verify-report-pre-contract #4026): el guard de `setMatchdayFormat`
   // (más arriba en este archivo) es de MOMENTO DE ESCRITURA — valida contra
@@ -1219,12 +1289,13 @@ export async function openMatchday(supabase: Client, matchdayId: string): Promis
   // verificar acá ya lo verifica `open_matchday`: que existan parejas.
   const masters = await requireMatchday(supabase, matchdayId)
   if (masters.kind === 'MASTERS') {
+    await freezeMatchdayFormat(supabase, masters, (await pairEntryIds(supabase, matchdayId)).flat().length)
     const { error } = await supabase.rpc('open_matchday', { p_matchday: matchdayId })
     if (error !== null) throw new EdgeError(error.message)
     return
   }
 
-  const { input, guests } = await pairingContextFor(supabase, matchdayId)
+  const { input, guests, matchday } = await pairingContextFor(supabase, matchdayId)
   assertGuestsNamed(guests)
 
   // Las asistencias se pueden seguir tocando mientras la fecha está en DRAFT,
@@ -1240,8 +1311,40 @@ export async function openMatchday(supabase: Client, matchdayId: string): Promis
     throw new EdgeError('Cambió quién viene desde que armaste las parejas. Volvé a generarlas.')
   }
 
+  await freezeMatchdayFormat(supabase, matchday, present.size)
   const { error } = await supabase.rpc('open_matchday', { p_matchday: matchdayId })
   if (error !== null) throw new EdgeError(error.message)
+}
+
+/**
+ * Lo que una fecha deja fijo al confirmarse (§7), en UN update antes de
+ * `open_matchday`: el formato concreto si seguía en `AUTO`
+ * (`matchdays_formato_auto_draft` no la deja salir de DRAFT así) y a cuánto se
+ * juega, si seguía siendo "como el torneo" — así un cambio posterior del
+ * torneo vale desde la próxima fecha y no reescribe ésta.
+ *
+ * ponytail: dos escrituras sin transacción; si `open_matchday` rebota, la
+ * fecha queda en DRAFT con esto ya fijo, que se sigue pudiendo cambiar en el
+ * armado. Upgrade: moverlo adentro de `open_matchday` (migración propia).
+ */
+async function freezeMatchdayFormat(supabase: Client, matchday: MatchdayRow, headcount: number): Promise<void> {
+  const formato = matchday.formato as unknown as MatchdayFormatSetting
+  const { config, pairSize } = await disciplineConfig(supabase, matchday.discipline_id)
+  const patch = {
+    ...(formato.kind === 'AUTO'
+      ? { formato: resolveFormato(formato, headcount, pairSize, maxMatchesOf(config, pairSize)) as unknown as Json }
+      : {}),
+    ...(matchday.match_format === null
+      ? { match_format: { setsToWin: config.matchFormat.setsToWin, gamesPerSet: config.matchFormat.gamesPerSet } }
+      : {}),
+  }
+  if (Object.keys(patch).length === 0) return
+
+  // Sin `count`: a quien no organiza, RLS le deja esto en 0 filas y el que lo
+  // rechaza es `open_matchday`, con su propio mensaje — mismo predicado
+  // (`is_season_admin`), así que no hay fecha que se abra sin esto escrito.
+  const { error } = await supabase.from('matchdays').update(patch).eq('id', matchday.id)
+  if (error !== null) throw new EdgeError(`No se pudo confirmar la fecha: ${error.message}`)
 }
 
 /**
@@ -1725,7 +1828,7 @@ export async function resultsOf(
 }
 
 /**
- * El `matchFormat` de la configuración de la disciplina dueña de este partido,
+ * A cuánto se juega la fecha de este partido (`effectiveMatchFormat`, §7),
  * MÁS su `allows_draw` y su `fase`.
  *
  * `allows_draw` sale de la fila de `matches`, no de la disciplina, y es a
@@ -1753,5 +1856,9 @@ async function matchFormatOf(
 
   const matchday = await requireMatchday(supabase, match.matchday_id)
   const { config } = await disciplineConfig(supabase, matchday.discipline_id)
-  return { format: config.matchFormat, allowsDraw: match.allows_draw, fase: match.fase as Phase }
+  return {
+    format: effectiveMatchFormat(config.matchFormat, matchday.match_format),
+    allowsDraw: match.allows_draw,
+    fase: match.fase as Phase,
+  }
 }

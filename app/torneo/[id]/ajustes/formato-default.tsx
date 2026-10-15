@@ -1,7 +1,7 @@
 'use client'
 
 import { useOptimistic, useState, useTransition } from 'react'
-import type { DisciplineId, MatchdayFormat } from '@/core'
+import type { DisciplineId, MatchdayFormat, MatchdayFormatSetting } from '@/core'
 import { matchdayFormatLabel } from '@/app/format'
 import {
   FORMATO_DEFAULT_OPTIONS as OPCIONES,
@@ -59,7 +59,7 @@ export function FormatoDefault({
 }: {
   seasonId: string
   disciplineId: DisciplineId
-  formatoDefault: MatchdayFormat
+  formatoDefault: MatchdayFormatSetting
   /** `null` con una sola disciplina -- mismo contrato que `Formato.disciplineLabel`/`Reglas.disciplineLabel`. */
   disciplineLabel: string | null
 }) {
@@ -67,7 +67,7 @@ export function FormatoDefault({
   const [error, setError] = useState<string | null>(null)
   const [optimisticFormato, setOptimisticFormato] = useOptimistic(
     formatoDefault,
-    (_current: MatchdayFormat, next: MatchdayFormat) => next,
+    (_current: MatchdayFormatSetting, next: MatchdayFormat) => next,
   )
 
   const save = (next: MatchdayFormat) => {
@@ -104,7 +104,7 @@ export function FormatoDefault({
               type="radio"
               name={`formato-default-${disciplineId}`}
               disabled={pending}
-              checked={esElMismo(optimisticFormato, candidato)}
+              checked={optimisticFormato.kind !== 'AUTO' && esElMismo(optimisticFormato, candidato)}
               onChange={() => save(candidato)}
               className="h-5 w-5 shrink-0 accent-accent"
             />

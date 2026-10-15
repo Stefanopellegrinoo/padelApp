@@ -162,6 +162,7 @@ vi.mock('@/db/read', async (importOriginal) => {
       disciplineId: D1,
       allowsDraw: false,
       formato: escena.formato,
+      matchFormat: null,
     }
   }
 

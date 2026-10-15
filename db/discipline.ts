@@ -1,5 +1,5 @@
 import { isTournamentSport, sportFormatError } from '@/core'
-import type { DisciplineId, MatchdayFormat, SeasonConfig, SideSize, TournamentSport } from '@/core'
+import type { DisciplineId, MatchdayFormat, MatchdayFormatSetting, SeasonConfig, SideSize, TournamentSport } from '@/core'
 import type { Client } from './client'
 import type { Json } from './database.types'
 import { EdgeError, writeErrorMessage } from './errors'
@@ -30,7 +30,7 @@ export interface DisciplineConfigRow {
    * de la fecha nueva; la fecha lo sigue pudiendo pisar después con
    * `setMatchdayFormat`.
    */
-  formatoDefault: MatchdayFormat
+  formatoDefault: MatchdayFormatSetting
 }
 
 /**
@@ -66,7 +66,7 @@ export async function disciplineConfig(
     pairSize: data.pair_size as SideSize,
     allowsDraw: data.allows_draw,
     fixedTeams: data.fixed_teams,
-    formatoDefault: data.formato_default as unknown as MatchdayFormat,
+    formatoDefault: data.formato_default as unknown as MatchdayFormatSetting,
   }
 }
 
@@ -233,7 +233,7 @@ export async function updateDisciplineHasMasters(
 export async function updateDisciplineFormatoDefault(
   supabase: Client,
   disciplineId: DisciplineId,
-  formato: MatchdayFormat,
+  formato: MatchdayFormatSetting,
 ): Promise<void> {
   const { error, count } = await supabase
     .from('disciplines')

@@ -9,6 +9,7 @@ import {
   losingMatchup,
   knockoutPositions,
   suggestFormat,
+  resolveFormato,
   formatoOfrecible,
   isUnplayedThirdPlace,
   thirdPlaceByGroupTable,
@@ -20,7 +21,7 @@ import {
 } from './knockout'
 import { defaultMaxMatches, minSquadFor } from './constants'
 import { pair, single } from './side'
-import type { MatchdayFormat, MatchResult, Phase, Side, SideStanding } from './types'
+import type { MatchdayFormat, MatchdayFormatSetting, MatchResult, Phase, Side, SideSize, SideStanding } from './types'
 
 const A = pair('a1', 'a2')
 const B = pair('b1', 'b2')
@@ -684,5 +685,32 @@ describe('el techo de una fecha se mide en PARTIDOS y es de CADA disciplina', ()
     const menu = offerableFormats(12, 1)
     expect(menu).toHaveLength(1)
     expect(matchCountForFormat(menu[0]!, 12)).toBe(20) // 4 grupos, el más barato de los tres
+  })
+})
+
+/** `AUTO` (docs/torneos-deportes.md §7): mientras se arma, la fecha se juega a lo que `suggestFormat` diría. */
+describe('resolveFormato', () => {
+  const AUTO: MatchdayFormatSetting = { kind: 'AUTO' }
+
+  it('AUTO con 8 de a uno es 2 grupos + llave', () => {
+    expect(resolveFormato(AUTO, 8, 1, 36)).toEqual({ kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 })
+  })
+
+  it('AUTO con 8 en pareja (4 lados) es todos contra todos', () => {
+    expect(resolveFormato(AUTO, 8, 2, 15)).toEqual({ kind: 'ROUND_ROBIN' })
+  })
+
+  it('un formato concreto vuelve tal cual, la misma referencia', () => {
+    const groups: MatchdayFormat = { kind: 'GROUPS_KNOCKOUT', groups: 4, qualifiersPerGroup: 2 }
+    expect(resolveFormato(groups, 8, 1, 36)).toBe(groups)
+  })
+
+  const casos = [1, 2].flatMap((sideSize) =>
+    Array.from({ length: 23 }, (_, index) => [index + 2, sideSize as SideSize] as const),
+  )
+  it.each(casos)('AUTO con %i presentes de a %i siempre resuelve a un formato ofrecible', (headcount, sideSize) => {
+    const techo = defaultMaxMatches(sideSize)
+    const sides = Math.floor(headcount / sideSize)
+    expect(formatoOfrecible(resolveFormato(AUTO, headcount, sideSize, techo), sides, techo)).toBe(true)
   })
 })

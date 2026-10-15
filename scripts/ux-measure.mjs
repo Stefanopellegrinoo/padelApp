@@ -416,7 +416,7 @@ async function main() {
   // en vez de asumir el slug: robusto sin importar cuál sea la disciplina por defecto de la
   // temporada sembrada.
   const hrefDe = async (name) =>
-    new URL((await page.getByRole('link', { name }).first().getAttribute('href')) ?? closeBase, closeBase).toString()
+    new URL(await page.getByRole('navigation').getByRole('link', { name }).getAttribute('href'), closeBase).toString()
   const tabs = [
     ['Fechas', await hrefDe('Fechas')],
     ['Stats', await hrefDe('Stats')],
@@ -426,7 +426,7 @@ async function main() {
   let navIdx = 15
   for (const [name, url] of tabs) {
     await measureInteraction(page, `${navIdx}-nav-${name.toLowerCase()}`, async () => {
-      await page.getByRole('link', { name }).first().click()
+      await page.getByRole('navigation').getByRole('link', { name }).click()
       await page.waitForURL((u) => u.toString() === url || u.toString() === `${url}/`, { timeout: 10000 })
       await ariaBusyGone(page)
     })
@@ -475,7 +475,8 @@ async function main() {
   // "Ir al torneo" es un link (`<Link>`), no un botón.
   await measureInteraction(page, '23-wizard-ir-al-torneo', async () => {
     await page.getByRole('link', { name: 'Ir al torneo' }).click()
-    await page.waitForURL(/\/torneo\/[0-9a-f-]+$/, { timeout: 15000 })
+    // `/torneo/<id>` con una sola disciplina redirige a su Tabla: se espera el destino final.
+    await page.waitForURL(/\/torneo\/[0-9a-f-]+\/padel$/, { timeout: 15000 })
     await ariaBusyGone(page)
   })
 

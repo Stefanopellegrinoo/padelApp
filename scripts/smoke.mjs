@@ -119,7 +119,9 @@ async function main() {
   for (const [index, name] of squad.entries()) await seats.nth(index).fill(name)
   await continuar.click() // → Cómo se juega
 
-  // Pádel nace "Parejas que rotan" + primera fecha "Por nivel": se acepta la ficha tal cual.
+  // Pádel nace "Parejas que rotan" + primera fecha "Por nivel"; se la elige igual, explícita, para que
+  // el smoke no dependa de la ficha por defecto y siempre pase por el subpaso.
+  await page.getByRole('group', { name: 'Primera fecha' }).getByRole('button', { name: 'Por nivel' }).click()
   await continuar.click() // → Ordená por nivel (subpaso; el orden es el del plantel)
   await page.getByRole('heading', { name: 'Ordená por nivel' }).waitFor({ timeout: 5000 })
   await continuar.click() // → Listo, así se juega

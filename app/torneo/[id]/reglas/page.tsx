@@ -1,6 +1,6 @@
 import Link from 'next/link'
-import { DISCIPLINE_LABELS } from '@/app/torneos/nuevo/wizard-state'
-import { disciplineRulesOf, publicFormats, publicRules, seasonAdminName, seasonHeader } from '@/db/read'
+import { reglamento, sportLabel, unitOf } from '@/core'
+import { publicFormats, publicRules, seasonAdminName, seasonHeader, type PublicFormat } from '@/db/read'
 import { serverClient } from '@/db/server'
 import { RulesBody, type RulesBlock } from './rules-body'
 
@@ -9,12 +9,38 @@ interface ReglasPageProps {
 }
 
 /**
+ * Un bloque por deporte, desde lo que devuelve `season_public_formats`: es la
+ * única fuente de las dos ramas, así que con y sin sesión dicen lo mismo. El
+ * reglamento sale de `reglamento` —la misma función que el wizard— y el
+ * acordeón de "Más detalle" de `narrateRules`, con la unidad del deporte.
+ */
+function blocksOf(formats: PublicFormat[]): RulesBlock[] {
+  return formats.map((format) => {
+    const shape = {
+      hasMasters: format.hasMasters,
+      pairSize: format.pairSize,
+      fixedTeams: format.fixedTeams,
+      allowsDraw: format.allowsDraw,
+    }
+    return {
+      label: sportLabel(format.kind),
+      lines: reglamento({ kind: format.kind, ...shape, formatoDefault: format.formatoDefault, config: format.config }),
+      config: format.config,
+      shape,
+      unit: unitOf(format.kind, format.config.matchFormat),
+      text: format.rulesText,
+    }
+  })
+}
+
+/**
  * Reglas es la única pantalla pública del torneo (`ui-screens.md` §11: "Rol:
  * público. Es la misma pantalla que se comparte por link sin login").
  *
  * Sin sesión no se puede leer `seasons`: RLS pide ser participante, y está bien
- * que así sea. Por eso la rama anónima va por `season_public_rules`, la función
- * `security definer` que devuelve los cinco campos de esta pantalla y nada más.
+ * que así sea. Por eso la rama anónima va por dos funciones `security definer`
+ * que devuelven lo de esta pantalla y nada más: `season_public_rules` (quién
+ * organiza) y `season_public_formats` (las reglas de cada deporte).
  *
  * El Plan 3 dejó esta rama construida y correcta, pero **inalcanzable**: el
  * layout llamaba a `seasonHeader()` sin condición y tiraba antes de que la
@@ -30,10 +56,8 @@ export default async function ReglasPage({ params }: ReglasPageProps) {
 
   if (user === null) {
     // Dos RPC y no uno, y es la forma BARATA (S76): `season_public_rules`
-    // (0022) trae los cinco campos de la pantalla pero de UNA sola disciplina,
-    // y cambiarle la firma para que traiga todas pedía `drop function` —que se
-    // lleva los grants de la única superficie pública del sistema—. Así que
-    // `season_public_formats` (0038) va al lado, aditiva. En paralelo: son dos
+    // (0022) trae quién organiza y su `null` es el link roto; los deportes
+    // vienen de `season_public_formats` (0038/0099). En paralelo: son dos
     // viajes independientes.
     const [rules, formats] = await Promise.all([
       publicRules(supabase, id),
@@ -55,22 +79,12 @@ export default async function ReglasPage({ params }: ReglasPageProps) {
       )
     }
 
-    // Rebanada 3b de "reglas por disciplina": un bloque por disciplina, en el
-    // orden que ya trae `season_public_formats` (`position, created_at`,
-    // 0069/0038). `formats` no puede estar vacío acá: `season_public_rules`
-    // (que ya devolvió `rules !== null`) es un INNER JOIN contra
-    // `disciplines`, así que las dos funciones ven la misma fila o ninguna —
-    // no hace falta un `??` para un caso que no puede pasar.
-    const disciplines: RulesBlock[] = formats.map((format) => ({
-      label: DISCIPLINE_LABELS[format.kind],
-      config: format.config,
-      shape: { hasMasters: format.hasMasters, pairSize: format.pairSize, allowsDraw: format.allowsDraw },
-      text: format.rulesText,
-    }))
-
+    // `formats` no puede estar vacío acá: `season_public_rules` (que ya devolvió
+    // `rules !== null`) es un INNER JOIN contra `disciplines`, así que las dos
+    // funciones ven la misma fila o ninguna.
     return (
       <>
-        <RulesBody seasonId={id} disciplines={disciplines} adminName={rules.adminName} isAdmin={false} />
+        <RulesBody seasonId={id} disciplines={blocksOf(formats)} adminName={rules.adminName} isAdmin={false} />
         {/* Sin nav de torneo: quien llega por el link no tiene a dónde ir. */}
         <Link href="/" className="mt-4 text-[12.5px] font-bold text-accent-link">
           Ir al inicio
@@ -79,23 +93,15 @@ export default async function ReglasPage({ params }: ReglasPageProps) {
     )
   }
 
-  const [header, rulesByDiscipline, adminName] = await Promise.all([
+  // Con sesión se sigue leyendo lo mismo que sin ella (`publicFormats` está
+  // abierta a `authenticated`); `seasonHeader` sólo aporta si es admin.
+  const [header, formats, adminName] = await Promise.all([
     seasonHeader(supabase, id),
-    disciplineRulesOf(supabase, id),
+    publicFormats(supabase, id),
     seasonAdminName(supabase, id),
   ])
 
-  // Rebanada 3b: un bloque por disciplina, ya no sólo la primaria — cada uno
-  // con su propia config, su propio shape (0069) y su propio `rules_text`
-  // (`disciplineRulesOf`, rebanada 1).
-  const disciplines: RulesBlock[] = header.disciplines.map((discipline) => ({
-    label: DISCIPLINE_LABELS[discipline.kind],
-    config: discipline.config,
-    shape: { hasMasters: discipline.hasMasters, pairSize: discipline.pairSize, allowsDraw: discipline.allowsDraw },
-    text: rulesByDiscipline.get(discipline.id) ?? '',
-  }))
-
   return (
-    <RulesBody seasonId={id} disciplines={disciplines} adminName={adminName} isAdmin={header.isAdmin} />
+    <RulesBody seasonId={id} disciplines={blocksOf(formats)} adminName={adminName} isAdmin={header.isAdmin} />
   )
 }

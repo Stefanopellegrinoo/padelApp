@@ -3,7 +3,8 @@ import type { DisciplineId } from './types'
 /** Lo mínimo de una disciplina que hace falta para calcular su slug de URL. */
 export interface SluggableDiscipline {
   id: DisciplineId
-  kind: 'PADEL' | 'FIFA'
+  /** Cualquier id del registro, o uno que no esté (se lee igual). */
+  kind: string
 }
 
 /**
@@ -28,7 +29,8 @@ export function disciplineSlugs<T extends SluggableDiscipline>(
   const ordinalByKind = new Map<string, number>()
   const slugs = new Map<DisciplineId, string>()
   for (const discipline of disciplines) {
-    const kind = discipline.kind.toLowerCase()
+    // `PING_PONG` -> `ping-pong`: el slug es de URL, el guion bajo es del id.
+    const kind = discipline.kind.toLowerCase().replaceAll('_', '-')
     const ordinal = (ordinalByKind.get(kind) ?? 0) + 1
     ordinalByKind.set(kind, ordinal)
     slugs.set(discipline.id, ordinal === 1 ? kind : `${kind}-${ordinal}`)

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { defaultConfig, groupPhaseMatches, pair, type MatchFormat, type MatchResult, type Side } from '@/core'
+import { defaultConfig, groupPhaseMatches, pair, SPORTS, type MatchFormat, type MatchResult, type Side } from '@/core'
 import { championRecord } from './campeon-de-la-fecha'
 
 /**
@@ -28,16 +28,22 @@ function partido(izq: Side, der: Side, golesA: number, golesB: number): MatchRes
 describe('championRecord en pádel — no se mueve', () => {
   it('dice ganados–perdidos y cuenta games', () => {
     const matches = [partido(A, B, 4, 1), partido(A, C, 2, 4)]
-    expect(championRecord(matches, A, PADEL, false)).toBe('1–1 · +1 games')
+    expect(championRecord(matches, A, PADEL, false, 'games')).toBe('1–1 · +1 games')
   })
 
   it('el signo + sólo va cuando la diferencia es positiva', () => {
-    expect(championRecord([partido(A, B, 0, 4)], A, PADEL, false)).toBe('0–1 · -4 games')
+    expect(championRecord([partido(A, B, 0, 4)], A, PADEL, false, 'games')).toBe('0–1 · -4 games')
   })
 
   it('ignora los partidos que el campeón no jugó', () => {
     const matches = [partido(A, B, 4, 0), partido(B, C, 4, 0)]
-    expect(championRecord(matches, A, PADEL, false)).toBe('1–0 · +4 games')
+    expect(championRecord(matches, A, PADEL, false, 'games')).toBe('1–0 · +4 games')
+  })
+})
+
+describe('championRecord habla con la unidad que le pasan', () => {
+  it('ping pong: la diferencia se cuenta en puntos', () => {
+    expect(championRecord([partido(A, B, 11, 5)], A, SPORTS.PING_PONG.format, false, 'puntos')).toBe('1–0 · +6 puntos')
   })
 })
 
@@ -46,19 +52,19 @@ describe('championRecord donde el empate es legal', () => {
     // 2 ganados, 1 empatado, 0 perdidos. Hoy esto sale `2–0`: la fecha parece
     // de dos partidos cuando fueron tres.
     const matches = [partido(A, B, 3, 1), partido(A, C, 1, 0), partido(C, A, 2, 2)]
-    expect(championRecord(matches, A, FIFA, true)).toBe('2–1–0 · +3 goles')
+    expect(championRecord(matches, A, FIFA, true, 'goles')).toBe('2–1–0 · +3 goles')
   })
 
   it('cuenta GOLES y no games', () => {
-    expect(championRecord([partido(A, B, 3, 1)], A, FIFA, true)).toContain('goles')
-    expect(championRecord([partido(A, B, 3, 1)], A, FIFA, true)).not.toContain('games')
+    expect(championRecord([partido(A, B, 3, 1)], A, FIFA, true, 'goles')).toContain('goles')
+    expect(championRecord([partido(A, B, 3, 1)], A, FIFA, true, 'goles')).not.toContain('games')
   })
 
   it('sin ningún empate jugado sigue mostrando la columna del medio en cero', () => {
     // La forma la manda la DISCIPLINA, no lo que pasó esa tarde: si cambiara
     // fecha a fecha, dos fechas de la misma liga se leerían distinto.
     const matches = [partido(A, B, 3, 1), partido(A, C, 0, 1)]
-    expect(championRecord(matches, A, FIFA, true)).toBe('1–0–1 · +1 goles')
+    expect(championRecord(matches, A, FIFA, true, 'goles')).toBe('1–0–1 · +1 goles')
   })
 })
 
@@ -80,9 +86,9 @@ describe('championRecord sobre una fecha con llave — sólo cuenta lo que se ju
     ]
 
     // El bug de W85: contar la fecha entera suma la llave.
-    expect(championRecord(bracketMatches, A, FIFA, false)).toBe('4–0 · +12 goles')
+    expect(championRecord(bracketMatches, A, FIFA, false, 'goles')).toBe('4–0 · +12 goles')
     // Lo que de verdad decidió los puntos (standingsFromBracket): sólo grupo.
-    expect(championRecord(groupPhaseMatches(bracketMatches), A, FIFA, false)).toBe('2–0 · +4 goles')
+    expect(championRecord(groupPhaseMatches(bracketMatches), A, FIFA, false, 'goles')).toBe('2–0 · +4 goles')
   })
 })
 
@@ -116,9 +122,9 @@ describe('el cableado de la marca del campeón', () => {
   // sumaba la llave al récord del campeón. El primer argumento tiene que ser
   // `groupPhaseMatches(detail.matches)` — el mismo criterio que ya usa
   // `standingsFromBracket` (db/matchday.ts) y `fechas/[n]/page.tsx`.
-  it('le pasa SÓLO los partidos de grupo, el formato de la disciplina y el allows_draw CONGELADO de la fecha', () => {
+  it('le pasa SÓLO los partidos de grupo, el formato de la disciplina, el allows_draw CONGELADO de la fecha y la unidad de su deporte', () => {
     expect(ejecutable).toMatch(
-      /championRecord\(\s*groupPhaseMatches\(detail\.matches\)\s*,\s*championSide\s*,\s*matchFormat\s*,\s*matchday\.allowsDraw\s*,?\s*\)/,
+      /championRecord\(\s*groupPhaseMatches\(detail\.matches\)\s*,\s*championSide\s*,\s*matchFormat\s*,\s*matchday\.allowsDraw\s*,\s*unitOf\(\s*sportKind\s*,\s*matchFormat\s*\)\s*,?\s*\)/,
     )
   })
 

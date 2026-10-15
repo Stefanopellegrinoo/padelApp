@@ -39,6 +39,15 @@ export interface MatchFormat {
   openScore: boolean
 }
 
+/** `matchdays.match_format`: a cuánto se juega UNA fecha, si no es al del deporte en el torneo. */
+export interface MatchFormatOwn {
+  readonly setsToWin: number
+  readonly gamesPerSet: number
+}
+
+/** Cómo se armó la primera fecha de un torneo: por nivel o al azar. */
+export type FirstFecha = 'NIVEL' | 'SORTEO'
+
 export interface SeasonConfig {
   /**
    * Squad size, not matchday size. At least `minSquadFor(sideSize)`
@@ -61,6 +70,8 @@ export interface SeasonConfig {
    * partidos de a dos y 66 de a uno.
    */
   maxMatches?: number
+  /** Cómo se armó la primera fecha. Ausente = torneo anterior a este plan. Sólo lo narra Reglas. */
+  firstFecha?: FirstFecha
 }
 
 /**
@@ -71,9 +82,9 @@ export interface SeasonConfig {
 export type SideSize = 1 | 2
 
 /**
- * Los tres hechos de una disciplina que `narrateRules` no puede leer de
+ * Los cuatro hechos de una disciplina que `narrateRules` no puede leer de
  * `SeasonConfig`: viven en columnas de `disciplines` (`has_masters`,
- * `pair_size`, `allows_draw`), no en su jsonb. Copiarlos AL jsonb crearía una
+ * `pair_size`, `fixed_teams`, `allows_draw`), no en su jsonb. Copiarlos AL jsonb crearía una
  * segunda fuente de verdad para columnas que la base ya vigila con FKs
  * compuestas (`disciplines_size_anchor`, `disciplines_draw_anchor`,
  * `0015_disciplines.sql:25-26`) — el mismo problema que `seasons.config`
@@ -87,6 +98,8 @@ export type SideSize = 1 | 2
 export interface DisciplineShape {
   hasMasters: boolean
   pairSize: SideSize
+  /** La pareja es la misma todo el torneo (`pairSize: 2`); de a uno nunca. Decide si hay "Cómo se arman las parejas". */
+  fixedTeams: boolean
   allowsDraw: boolean
 }
 
@@ -123,6 +136,9 @@ export type Phase = (typeof PHASE_ORDER)[number]
 export type MatchdayFormat =
   | { readonly kind: 'ROUND_ROBIN' }
   | { readonly kind: 'GROUPS_KNOCKOUT'; readonly groups: number; readonly qualifiersPerGroup: number }
+
+/** Lo que guarda `disciplines.formato_default` y, mientras la fecha está en DRAFT, `matchdays.formato`. */
+export type MatchdayFormatSetting = MatchdayFormat | { readonly kind: 'AUTO' }
 
 export interface SetScore {
   gamesA: number

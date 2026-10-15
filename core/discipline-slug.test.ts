@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { disciplineSlugs, resolveDisciplineBySlug, type SluggableDiscipline } from './discipline-slug'
 import type { DisciplineId } from './types'
 
-function discipline(id: string, kind: 'PADEL' | 'FIFA'): SluggableDiscipline {
+function discipline(id: string, kind: string): SluggableDiscipline {
   return { id: id as DisciplineId, kind }
 }
 
@@ -32,6 +32,16 @@ describe('disciplineSlugs', () => {
     ])
     expect(slugs.get('c' as DisciplineId)).toBe('padel-3')
   })
+
+  it('pasa el guion bajo del id a guion en la URL (PING_PONG -> ping-pong)', () => {
+    const slugs = disciplineSlugs([
+      discipline('a', 'PADEL'),
+      discipline('b', 'PING_PONG'),
+      discipline('c', 'PING_PONG'),
+      discipline('d', 'FIFA'),
+    ])
+    expect([...slugs.values()]).toEqual(['padel', 'ping-pong', 'ping-pong-2', 'fifa'])
+  })
 })
 
 describe('resolveDisciplineBySlug', () => {
@@ -48,5 +58,17 @@ describe('resolveDisciplineBySlug', () => {
   it('returns undefined for a slug belonging to a different season (wrong-season slug)', () => {
     const otherSeason = [discipline('c', 'FIFA')]
     expect(resolveDisciplineBySlug(otherSeason, 'padel')).toBeUndefined()
+  })
+})
+
+describe('resolveDisciplineBySlug con ids con guion bajo', () => {
+  const disciplines = [discipline('a', 'PADEL'), discipline('b', 'PING_PONG'), discipline('c', 'PING_PONG')]
+
+  it('encuentra la primera por su slug con guion', () => {
+    expect(resolveDisciplineBySlug(disciplines, 'ping-pong')?.id).toBe('b')
+  })
+
+  it('no entiende el id crudo con guion bajo', () => {
+    expect(resolveDisciplineBySlug(disciplines, 'ping_pong')).toBeUndefined()
   })
 })

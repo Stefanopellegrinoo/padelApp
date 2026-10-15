@@ -1,7 +1,7 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import { PanelGoles } from './carga'
+import { BotonesDelPerdedor, PanelGoles } from './carga'
 
 /**
  * El panel de marcador abierto, RENDERIZADO.
@@ -65,5 +65,52 @@ describe('panel de goles — el foco se ve', () => {
   it('los dos campos de goles traen un anillo de foco', () => {
     const anillos = html('', '').match(/focus-visible:ring-2/g) ?? []
     expect(anillos).toHaveLength(2)
+  })
+})
+
+describe('botones del perdedor — la unidad del deporte y los de ventaja', () => {
+  const PING_PONG = { setsToWin: 2, gamesPerSet: 11, tieBreak: false, openScore: false }
+  const PADEL = { setsToWin: 1, gamesPerSet: 4, tieBreak: true, openScore: false }
+
+  function botones(format: typeof PADEL, unit: string) {
+    const html = renderToStaticMarkup(
+      createElement(BotonesDelPerdedor, { format, unit, pending: false, onLoser: () => {}, onDeuce: () => {} }),
+    )
+    const labels = [...html.matchAll(/<button([^>]*)>([^<]*)<\/button>/g)].map((m) => ({
+      text: m[2] ?? '',
+      aria: /aria-label="([^"]*)"/.exec(m[1] ?? '')?.[1] ?? null,
+    }))
+    return { html, labels }
+  }
+
+  it('ping pong: "Puntos del perdedor", 0 a 9 y después 12-10 … 16-14 con su nombre para el lector', () => {
+    const { html, labels } = botones(PING_PONG, 'puntos')
+    expect(html).toContain('Puntos del perdedor')
+    expect(labels.map((b) => b.text)).toEqual([
+      ...['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'],
+      ...['12-10', '13-11', '14-12', '15-13', '16-14'],
+    ])
+    expect(labels.filter((b) => b.text.includes('-')).map((b) => b.aria)).toEqual([
+      '12 a 10',
+      '13 a 11',
+      '14 a 12',
+      '15 a 13',
+      '16 a 14',
+    ])
+  })
+
+  it('pádel, igual que siempre: "Games del perdedor", 0 a 3 y ningún botón de ventaja', () => {
+    const { html, labels } = botones(PADEL, 'games')
+    expect(html).toContain('Games del perdedor')
+    expect(labels.map((b) => b.text)).toEqual(['0', '1', '2', '3'])
+  })
+
+  it('cada botón mide al menos 44px de alto (la regla del dedo), en ping pong y en pádel', () => {
+    for (const [format, unit] of [[PING_PONG, 'puntos'], [PADEL, 'games']] as const) {
+      const { html } = botones(format, unit)
+      const clases = [...html.matchAll(/<button[^>]*class="([^"]*)"/g)].map((m) => m[1] ?? '')
+      expect(clases.length).toBeGreaterThan(0)
+      for (const clase of clases) expect(clase.split(' ')).toContain('min-h-[44px]')
+    }
   })
 })

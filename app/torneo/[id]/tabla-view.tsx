@@ -1,9 +1,9 @@
 import Link from 'next/link'
-import { MASTERS_SIZE, rankingWithMovement, snapshotForMatchday, type Award, type EntryId } from '@/core'
+import { rankingWithMovement, snapshotForMatchday, type Award, type EntryId } from '@/core'
 import type { DisciplineHeader, EntryRow, MatchdaySummary, SeasonHeader } from '@/db/read'
 import { initials, matchdayDay } from '@/app/format'
 import { Desempate, type StandingsRow, type TiebreakEntry } from './desempate'
-import { defendersOf, volverDestination } from './tabla-state'
+import { defendersOf, mastersCutoffFor, pairRows, volverDestination } from './tabla-state'
 import { Volver } from './volver'
 
 interface TablaViewProps {
@@ -14,6 +14,12 @@ interface TablaViewProps {
   entries: EntryRow[]
   matchdays: MatchdaySummary[]
   awardsByMatchday: Map<number, Award[]>
+  /**
+   * Las parejas armadas de un deporte de parejas fijas (`teamsOf`): con alguna,
+   * la tabla va por pareja. `[]` sin parejas fijas — la tabla queda por persona,
+   * y el desempate (`tiebreakOrder`) va por persona en los dos casos.
+   */
+  teams: readonly { a: EntryId; b: EntryId }[]
 }
 
 /**
@@ -31,7 +37,15 @@ interface TablaViewProps {
  * equivocado. `discipline.config.regularMatchdays` es la fuente correcta
  * para cualquiera de las dos.
  */
-export function TablaView({ header, discipline, disciplina, entries, matchdays, awardsByMatchday }: TablaViewProps) {
+export function TablaView({
+  header,
+  discipline,
+  disciplina,
+  entries,
+  matchdays,
+  awardsByMatchday,
+  teams,
+}: TablaViewProps) {
   const config = discipline.config
 
   const squadEntries = entries
@@ -50,7 +64,7 @@ export function TablaView({ header, discipline, disciplina, entries, matchdays, 
 
   const hasClosedMatchday = closedRegular.length > 0
 
-  const rows: StandingsRow[] = ranking.map((row, index) => {
+  const personRows: StandingsRow[] = ranking.map((row, index) => {
     const previous = ranking[index - 1]
     const next = ranking[index + 1]
     const tiedWithEntryId =
@@ -68,6 +82,9 @@ export function TablaView({ header, discipline, disciplina, entries, matchdays, 
       tiedWithEntryId: hasClosedMatchday ? tiedWithEntryId : null,
     }
   })
+
+  const paired = teams.length > 0 ? pairRows(personRows, teams) : null
+  const rows = paired === null ? personRows : paired.rows
 
   const tiebreakOrder: TiebreakEntry[] = snapshot.map((entryId) => ({
     entryId,
@@ -148,7 +165,7 @@ export function TablaView({ header, discipline, disciplina, entries, matchdays, 
       <Desempate
         base={`/torneo/${header.id}/${disciplina}`}
         rows={rows}
-        mastersCutoff={MASTERS_SIZE}
+        mastersCutoff={mastersCutoffFor(discipline.hasMasters, rows.length, paired?.mastersAfter)}
         tiebreakOrder={tiebreakOrder}
         tiebreakSnapshotEvery={config.tiebreakSnapshotEvery}
         asOfMatchday={asOfMatchday}

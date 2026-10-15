@@ -1,10 +1,10 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { defaultConfig, disciplineProfile, type SeasonConfig } from '@/core'
+import { defaultConfig, disciplineProfile, type DisciplineId, type SeasonConfig } from '@/core'
 import { buildDisciplines } from '@/app/torneos/nuevo/wizard-state'
 import type { Database } from './database.types'
 import { publicFormats, publicRules } from './read'
-import { addDiscipline } from './discipline'
+import { addDiscipline, updateDisciplineFormatoDefault } from './discipline'
 import { createSeason } from './season'
 import { adminClient } from './test/admin'
 import { createTestUser, type TestUser } from './test/users'
@@ -126,15 +126,20 @@ describe('lo que la función NO expone', () => {
    * calla lo único que existe para publicar. Ver `0069_discipline_rules.sql`
    * para el argumento completo, columna por columna.
    *
+   * 0099 (torneos-deportes) suma dos reglas de juego más, `fixed_teams` y
+   * `formato_default`: si la pareja rota o es fija y cómo se arma cada fecha,
+   * que es lo que la página Reglas cuenta "en criollo". Siguen afuera `id`,
+   * `season_id`, `status`, `weight`, `position` y `created_at`.
+   *
    * Esto no es un comentario: es el assert.
    */
-  it('devuelve SEIS columnas y nada más, post drop+recreate de 0069', async () => {
+  it('devuelve OCHO columnas y nada más, post drop+recreate de 0099', async () => {
     const { data, error } = await anonReadClient().rpc('season_public_formats', {
       p_season: seasonId,
     })
     // El drop se lleva los grants (Postgres rechaza cambiar el `returns
     // table` de una función con `create or replace`, medido en 0038): si
-    // `0069` se olvidara el re-`grant`, este `error` dejaría de ser `null`
+    // `0099` se olvidara el re-`grant`, este `error` dejaría de ser `null`
     // con "permission denied for function season_public_formats" — la única
     // superficie pública del sistema, rota.
     expect(error).toBeNull()
@@ -143,11 +148,41 @@ describe('lo que la función NO expone', () => {
     expect(Object.keys(fila as object).sort()).toEqual([
       'allows_draw',
       'config',
+      'fixed_teams',
+      'formato_default',
       'has_masters',
       'kind',
       'pair_size',
       'rules_text',
     ])
+  })
+
+  it('una disciplina de parejas fijas con formato AUTO se las devuelve así a `anon`', async () => {
+    const user = await createTestUser()
+    const config = defaultConfig(8)
+    const { seasonId: id } = await createSeason(user.client, {
+      name: `Fijas AUTO ${Date.now()}`,
+      squadNames: nombres(8),
+      config,
+      disciplines: [{ kind: 'PADEL', config, fixedTeams: true }],
+    })
+    const { data: disciplina } = await adminClient()
+      .from('disciplines')
+      .select('id')
+      .eq('season_id', id)
+      .single()
+    await updateDisciplineFormatoDefault(user.client, disciplina?.id as DisciplineId, { kind: 'AUTO' })
+
+    const { data } = await anonReadClient().rpc('season_public_formats', { p_season: id })
+    expect(data?.[0]).toMatchObject({ fixed_teams: true, formato_default: { kind: 'AUTO' } })
+
+    const [format] = await publicFormats(anonReadClient(), id)
+    expect(format).toMatchObject({ fixedTeams: true, formatoDefault: { kind: 'AUTO' } })
+  })
+
+  it('y una de pádel que rota, con el formato de siempre, devuelve false y ROUND_ROBIN', async () => {
+    const [padel] = await publicFormats(anonReadClient(), seasonId)
+    expect(padel).toMatchObject({ fixedTeams: false, formatoDefault: { kind: 'ROUND_ROBIN' } })
   })
 
   it('y `anon` sigue sin poder leer la tabla disciplines de frente', async () => {

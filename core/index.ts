@@ -44,6 +44,9 @@ export type {
   SetScore,
   Phase,
   MatchdayFormat,
+  MatchdayFormatSetting,
+  MatchFormatOwn,
+  FirstFecha,
   MatchResult,
   SideStanding,
   Award,
@@ -74,7 +77,9 @@ export type { Duo } from './side'
 // disciplina de este tipo": la usan los dos caminos que crean una (el wizard y
 // "+ Agregar disciplina" de Ajustes), que antes armaban los dos su config con
 // `defaultConfig` y hacían nacer una liga de FIFA siendo pádel con otro nombre.
-export { validateConfig, defaultConfig, disciplineProfile, pointsCountError, pointsErrors } from './config'
+// `fichaSeed` es la ÚNICA lectura de la ficha de un deporte al crear una disciplina.
+export type { DisciplineSeed } from './config'
+export { validateConfig, defaultConfig, disciplineProfile, effectiveMatchFormat, fichaSeed, pointsCountError, pointsErrors } from './config'
 
 // ── Building a matchday ──────────────────────────────────────────────────────
 // `buildSides` (PR16, design PUNTO 5) is the Side-native entry point: with
@@ -148,8 +153,11 @@ export { computeAwards } from './awards'
 // (db/matchday.ts) y `fechas/[n]/page.tsx`, y faltaba en `fechas/page.tsx` —
 // el récord del campeón salía distinto en las dos pantallas para la misma
 // fecha con llave.
+// `resolveFormato` sale ahora (docs/torneos-deportes.md §7): `generatePairs`/
+// `openMatchday` (`db/matchday.ts`) y el armado resuelven `AUTO` con ella.
 export {
   suggestFormat,
+  resolveFormato,
   groupSides,
   currentPhase,
   phaseIsComplete,
@@ -194,7 +202,7 @@ export type { RulesSection } from './narrate'
 // narrar un torneo de dos formatos con uno solo — que es literalmente lo que
 // fue W64. Sigue exportada de `./narrate`, para su test y para `formatsLabel`,
 // que es su único llamador.
-export { formatsLabel, narrateRules, scoreDiffLabel, scoreUnit } from './narrate'
+export { formatsLabel, narrateRules, scoreDiffLabel } from './narrate'
 // `thirdPlaceNote` (decisión #3990, PR21 D2): la fecha de la [id]/[disciplina]/
 // fechas/[n]/page.tsx CERRADA es su primer consumidor real.
 export { thirdPlaceNote } from './narrate'
@@ -203,6 +211,12 @@ export { thirdPlaceNote } from './narrate'
 // qué el orden no lo explican `PG` ni la diferencia de games cuando el pie de
 // siempre (`tiebreakNote`) se apaga por `orderMoved`.
 export { bracketOrderNote } from './narrate'
+
+//── El reglamento en criollo de UNA disciplina (docs/torneos-deportes.md §6) ──
+// Una sola función para el paso 4 del wizard, el "Así queda" de "Personalizar
+// reglas" y la página Reglas: nunca dicen cosas distintas.
+export type { ReglamentoInput, ReglamentoKey, ReglamentoLine } from './reglamento'
+export { reglamento, desempateLine, fichaLine } from './reglamento'
 
 // ── Reading the season back ──────────────────────────────────────────────────
 // What the read-only screens need on top of the ranking. All derived, nothing
@@ -236,8 +250,28 @@ export { tallyPlayers, partnerRecords, bestPair } from './playerstats'
 export { allMatchings } from './matchings'
 
 //── El registro de deportes: un deporte es dato, la familia de marcador es la estrategia ──
-export type { ScoringFamily, Range, SetsSport, GoalsSport, Sport, SportId, TournamentSport } from './sports'
-export { SPORTS, SPORT_IDS, TOURNAMENT_SPORTS, isSportId, sportOf, sportLabel, sportFamily } from './sports'
+export type { ScoringFamily, Range, SetsSport, GoalsSport, Sport, SportId, TournamentSport, Modality, TournamentFicha } from './sports'
+export {
+  SPORTS,
+  SPORT_IDS,
+  TOURNAMENT_SPORTS,
+  MODALITY_ORDER,
+  isSportId,
+  isTournamentSport,
+  sportOf,
+  sportLabel,
+  sportFamily,
+  sportFormatError,
+  modalityOf,
+  modalityShape,
+  modalityLabel,
+  sideWords,
+  unitOf,
+} from './sports'
+
+// ── Un sorteo reproducible ───────────────────────────────────────────────────
+// Fisher-Yates con el `random` inyectado: `core/` no tiene `Math.random`.
+export { shuffled } from './order'
 
 /*
  * Deliberately NOT exported — internal to the modules above:

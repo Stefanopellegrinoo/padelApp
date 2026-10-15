@@ -1,138 +1,38 @@
 /**
- * La lógica del wizard, sin React.
+ * La lógica de plantel y payload del alta de torneo, sin React.
  *
- * Vive aparte de `wizard.tsx` para poder testearla en la suite unitaria, sin
- * DOM y sin base. Es la única parte del paso a paso donde se puede equivocar
- * algo: el resto es dibujar.
+ * Vive aparte de la pantalla (`crear.tsx`) para poder testearla en la suite
+ * unitaria, sin DOM y sin base. Es lo que quedó del wizard de cinco pasos
+ * (borrado): lo que usa el wizard de hoy y lo que ejercitan los tests de base.
  */
 import {
   defaultConfig,
   disciplineProfile,
-  formatsLabel,
   minSquadFor,
   pointsCountError,
   pointsErrors,
   SPORTS,
-  TOURNAMENT_SPORTS,
   type MatchdayFormat,
-  type MatchFormat,
   type SeasonConfig,
   type SideSize,
-  type TournamentSport,
 } from '@/core'
 
-/** Los rangos son medidas del handoff (§6 paso 4), no decisiones de este código. */
-export interface Stepper {
-  key: 'setsToWin' | 'gamesPerSet' | 'regularMatchdays' | 'countBestOf' | 'tiebreakSnapshotEvery'
-  label: string
-  hint: string
-  min: number
-  max: number
-}
-
-export const STEPPERS: Stepper[] = [
-  {
-    key: 'setsToWin',
-    label: 'Sets por partido',
-    hint: 'Con 1 set la fecha entra en una tarde.',
-    min: 1,
-    max: 3,
-  },
-  {
-    key: 'gamesPerSet',
-    label: 'Games por set',
-    hint: 'A 4 games el resultado se carga en dos toques.',
-    min: 3,
-    max: 9,
-  },
-  {
-    key: 'regularMatchdays',
-    label: 'Fechas del año',
-    hint: 'Sin contar el Masters, que va al final.',
-    min: 1,
-    max: 24,
-  },
-  {
-    key: 'countBestOf',
-    label: 'Cuentan las mejores',
-    hint: 'Las peores se descartan, así se puede faltar sin quedar afuera.',
-    min: 1,
-    max: 24,
-  },
-  {
-    key: 'tiebreakSnapshotEvery',
-    label: 'Refresco del orden',
-    hint: 'Cada cuántas fechas se actualiza el orden que corta los empates.',
-    min: 1,
-    max: 6,
-  },
-]
-
 /**
- * Los steppers que gobiernan algo para ESTE conjunto de formatos.
+ * Las disciplinas del payload del wizard anterior: `PADEL` y `FIFA`, literal.
  *
- * Con marcador abierto "Sets por partido" y "Games por set" no deciden nada
- * —`setError` los ignora, `matchError` no los exige y `usesSetsDiff` los
- * apaga— y encima el segundo se anuncia con "A 4 games el resultado se carga
- * en dos toques", que es JUSTO la máquina que esa disciplina no monta. Es la
- * misma clase de mentira que el copy que decía "1 set a 4 games" en una liga de
- * goles (W47, W51, W56, W63).
- *
- * Toma una lista de formatos y no un `openScore` suelto porque Ajustes
- * (`formato.tsx`) llama con un array de UNO -- la config es de UNA disciplina
- * ahí. Desde la Task 5 (docs/plan-arquitectura-de-paginas.md) el paso 4 del
- * wizard hace exactamente lo mismo: cada disciplina marcada tiene su PROPIA
- * config, así que también llama con un array de uno, por disciplina — nunca
- * con las de todas juntas. Antes de esa Task el wizard mandaba las de TODAS
- * las marcadas a la vez (una config compartida por la temporada entera), y
- * por eso el chequeo "alcanza con que UNA use sets" existe: hoy es
- * defensivo, sin un caller vivo que pase más de un elemento, pero la firma
- * se queda en array porque Ajustes ya llama así y esta Task no la toca.
- *
- * Una función y no dos filtros: W63 nació exactamente de que Ajustes
- * filtrara y el wizard no.
- *
- * Sin disciplinas se dibujan los cinco: "nadie usa sets" no es cierto cuando no
- * hay nadie, y el paso 1 no deja continuar sin marcar al menos una.
+ * Congelada a propósito, ya NO es `TOURNAMENT_SPORTS`: los tests de base la
+ * usan (vía `buildDisciplines`/`newTournamentPayload`) como constructor de
+ * `createSeason` -- `db/season-multi-discipline.db.test.ts`,
+ * `db/public-formats.db.test.ts`, `db/open-score-screens.db.test.ts`. Si
+ * siguiera al registro, sumar un deporte (PING_PONG) volvería obligatorio
+ * `Record<DisciplineKind, …>` en esos tests, que ejercitan `createSeason` y no
+ * se tocan. Los deportes nuevos se arman desde la ficha, no desde acá.
  */
-export function steppersFor(formats: readonly MatchFormat[]): Stepper[] {
-  const usesSets = formats.length === 0 || formats.some((format) => !format.openScore)
-  if (usesSets) return STEPPERS
-  return STEPPERS.filter((row) => row.key !== 'setsToWin' && row.key !== 'gamesPerSet')
-}
-
-/**
- * Las disciplinas que el paso 1 puede marcar. REQ-D1-1: checkboxes por kind,
- * 1 o más — no hay "+ agregar otra disciplina" acá. Dos disciplinas del MISMO
- * kind (dos Pádel) sólo se arman después, desde Ajustes (PR13): este paso
- * pregunta "qué juega el torneo", no "cuántas mesas de cada juego".
- *
- * Salen del registro de deportes (`core/sports.ts`); el literal de dos claves
- * en `DISCIPLINE_LABELS` es a propósito: conserva la exhaustividad del Record.
- */
-export const DISCIPLINE_KINDS = TOURNAMENT_SPORTS
-export type DisciplineKind = TournamentSport
+export const DISCIPLINE_KINDS = ['PADEL', 'FIFA'] as const
+export type DisciplineKind = (typeof DISCIPLINE_KINDS)[number]
 export const DISCIPLINE_LABELS: Record<DisciplineKind, string> = {
   PADEL: SPORTS.PADEL.label,
   FIFA: SPORTS.FIFA.label,
-}
-
-/**
- * Suma o saca un kind del marcado, sin ordenar: el orden en que se TOCAN los
- * checkboxes es el que después se vuelve `position` (`createSeason`, PR11b) y
- * de ahí el ordinal del slug (`padel`, `padel-2`, PR10). Ordenar acá por kind
- * o alfabético cambiaría esa URL sin que nadie lo haya pedido.
- */
-export function toggleDiscipline(
-  picked: readonly DisciplineKind[],
-  kind: DisciplineKind,
-): DisciplineKind[] {
-  return picked.includes(kind) ? picked.filter((k) => k !== kind) : [...picked, kind]
-}
-
-/** El aviso del paso 1 si no se marcó ninguna disciplina, o `null`. REQ-D1-1: 1 o más. */
-export function disciplinesWarning(picked: readonly DisciplineKind[]): string | null {
-  return picked.length === 0 ? 'Elegí al menos una disciplina para el torneo.' : null
 }
 
 /**
@@ -184,27 +84,6 @@ export function buildDisciplines(
   }))
 }
 
-/**
- * La fila que arma "+ Agregar disciplina" (Ajustes, REQ-D1-2): la misma forma
- * que una fila de `buildDisciplines`, para UNA sola disciplina y con la
- * config del tamaño de SU plantel elegido (`headcount`, no el de toda la
- * temporada — REQ-D1-4, solape parcial).
- *
- * Vive acá y no en `ajustes/actions.ts` por lo mismo que el resto de este
- * archivo: `actions.ts` es `'use server'` y no se puede importar en la suite
- * unitaria sin arrastrar `next/headers` (mismo precedente que
- * `SelectorDeFormato`, PR21 D2 — un pedazo se saca a un archivo sin ese
- * import para poder testearlo). El único tramo que queda sin test es la línea
- * de una sola llamada que le reenvía este resultado a `addDiscipline`.
- */
-export function newDisciplineSpec(
-  kind: DisciplineKind,
-  headcount: number,
-  pairSize?: SideSize,
-): { kind: DisciplineKind; config: SeasonConfig; allowsDraw: boolean; pairSize?: SideSize } {
-  return buildDisciplines([kind], defaultConfig(headcount, pairSize), pairSize)[0]!
-}
-
 /** Cuántos nombres del plantel están cargados de verdad. */
 export function filledCount(names: readonly string[]): number {
   return names.filter((name) => name.trim().length > 0).length
@@ -225,7 +104,7 @@ export function filledCount(names: readonly string[]): number {
  * solo: con `sideSizes` vacío, `Math.max()` sin argumentos da `-Infinity`.
  * Hoy ningún caller del wizard llega acá con el array vacío en la pantalla
  * donde el valor se MUESTRA (`blocked` no deja salir del paso 0 sin marcar
- * ninguna disciplina) — pero `wizard.tsx:405` llama a esta función en CADA
+ * ninguna disciplina) — pero el wizard llama a esta función en CADA
  * render, no sólo al cambiar de paso, así que destildar las dos disciplinas
  * en el paso 0 sí la ejecuta con `[]`. Con la base puesta, esa llamada da 2
  * en vez de `-Infinity` y la función queda total en vez de depender de que
@@ -345,7 +224,7 @@ export function namesAfterEdit(names: readonly string[], index: number, value: s
  * Corta sólo desde la COLA, no filtra el array entero: una fila en blanco en
  * el medio (la deja "+ Agregar jugador" sin llenar, o vaciarla a mano) sigue
  * ahí — filtrar todo correría el ÍNDICE de las filas que sobreviven, y el
- * paso 3 usa ese índice tal cual para `moveSeat`. Cortando sólo la cola, el
+ * paso 3 usaba ese índice tal cual para mover filas. Cortando sólo la cola, el
  * índice de cada fila visible es EXACTAMENTE el mismo que en `names`.
  */
 export function withoutTrailingBlanks(names: readonly string[]): string[] {
@@ -371,323 +250,11 @@ export function addMySeat({ names }: Squad, myName: string): Squad {
 }
 
 /**
- * Swapea `from`/`to` de `arr`, o lo devuelve intacto si cualquiera de los dos
- * cae afuera de rango. Pieza compartida entre `moveSeat` (el plantel global,
- * que además arrastra `mySeat`) y `moveInOrder` (el orden propio de una
- * disciplina, que no arrastra nada más): antes de esta tarea (F1/minors)
- * reimplementaban el mismo swap cada una por su lado, y `moveInOrder` sólo
- * guardaba `to` -- un `from` fuera de rango la rompía en silencio.
- */
-function swapAt<T>(arr: readonly T[], from: number, to: number): T[] {
-  if (from < 0 || from >= arr.length || to < 0 || to >= arr.length) return [...arr]
-  const next = [...arr]
-  next[from] = arr[to]!
-  next[to] = arr[from]!
-  return next
-}
-
-/** Sube o baja una fila del orden inicial, arrastrando el asiento propio si es una de las dos. */
-export function moveSeat({ names, mySeat }: Squad, from: number, to: number): Squad {
-  if (from < 0 || from >= names.length || to < 0 || to >= names.length) return { names, mySeat }
-  return { names: swapAt(names, from, to), mySeat: mySeat === from ? to : mySeat === to ? from : mySeat }
-}
-
-/**
- * Agrega una fila en blanco al final del plantel -- "+ Agregar jugador"
- * (paso 1). No toca `orders`: una fila en blanco todavía no es un asiento
- * (`addToOrders` corre recién en `editSeatState`, más abajo, cuando esa fila
- * deja de estarlo).
- *
- * WU2 (ronda 2 de revisión): antes era un `setSquad({...squad, names:
- * [...names, '']})` a mano, adentro del JSX de `wizard.tsx` -- la única de
- * las mutaciones de plantel que no pasaba por una función con nombre acá.
- * Hoy es inofensiva (agregar SIEMPRE un blanco no corre ningún índice), pero
- * es la forma del próximo bug: cualquiera que la toque después hereda el
- * mismo riesgo que `editSeatName`/`joinSquad`/`removeSeat`/`moveGlobalSeat`
- * ya tenían antes de esta tarea. Ruteada por el mismo camino que las demás
- * desde acá.
+ * Agrega una fila en blanco al final del plantel -- "+ Agregar jugador".
+ * Una fila en blanco todavía no es un asiento: no corre ningún índice.
  */
 export function addBlankSeat(squad: Squad): Squad {
   return { ...squad, names: [...squad.names, ''] }
-}
-
-/**
- * Sube o baja una fila del orden PROPIO de una disciplina -- igual que
- * `moveSeat`, pero sin `mySeat` que arrastrar: esta lista es de ÍNDICES de
- * asiento (F1, ver el docblock de `Squad` más arriba), y la marca "vos" que
- * sí dibuja el orden global no la dibuja ésta (vive en el plantel, no en la
- * copia por disciplina).
- */
-export function moveInOrder(order: readonly number[], from: number, to: number): number[] {
-  return swapAt(order, from, to)
-}
-
-/**
- * Los índices de `names` que de verdad tienen alguien -- sin las filas en
- * blanco del MEDIO. `withoutTrailingBlanks` (arriba) sólo saca las del
- * FINAL, así que una fila vaciada a mano en el medio del plantel sigue
- * presente ahí. Es lo que arranca el orden propio de una disciplina
- * (`toggleOwnOrder`, abajo): copiar TODOS los índices, blancos incluidos,
- * dejaba una fila sin nombre con flechas que sí funcionan y un
- * `aria-label="Subir a  en FIFA"` (minor de esta tarea).
- */
-export function filledSeatIndices(names: readonly string[]): number[] {
-  return names.flatMap((name, index) => (name.trim().length > 0 ? [index] : []))
-}
-
-/**
- * Las POSICIONES de `order` (no los `at` que guarda) cuyo asiento sigue
- * teniendo nombre -- WU3/WU4 (ronda 3 de revisión), la fila fantasma: un
- * `at` que ya no señala a un asiento con nombre (una fila del MEDIO vaciada
- * a mano, sin pasar por `removeSeat`) queda afuera.
- *
- * Reusa `filledSeatIndices` -- no una copia del mismo filtro -- aplicada a
- * los NOMBRES que `order` señala, en el orden en que `order` los trae: el
- * orden GLOBAL del paso "Orden inicial" es, en el fondo, este mismo cálculo
- * con un `order` implícito `[0, 1, ..., n)` (`at === position` siempre ahí,
- * así que `filledSeatIndices(names)` de una alcanza para ese caso -- las dos
- * listas de `wizard.tsx` terminan rutéandose por la MISMA función, en vez de
- * cada una con su propio filtro a medida).
- *
- * Devuelve POSICIONES, no los `at` que `order` guarda -- lo que
- * `onMoveGlobal`/`onMoveOwn` necesitan para swapear (`moveSeat`/
- * `moveInOrder` operan sobre posiciones de la lista, no sobre los índices
- * de asiento que esas posiciones guardan, F1).
- */
-export function visibleOrderPositions(order: readonly number[], names: readonly string[]): number[] {
-  return filledSeatIndices(order.map((at) => names[at] ?? ''))
-}
-
-/**
- * El estado de `orders` después de tocar el checkbox "orden propio" de una
- * disciplina (`FormatoDeUnaDisciplina`, wizard.tsx, sólo con `label !==
- * null` -- ver su docblock): prender COPIA el orden GLOBAL de este instante,
- * apagar BORRA la entrada entera -- nunca la deja en `[]`, que es un
- * `seedOrder` que no calza con NADA de permutación (`isIndexPermutation`,
- * `db/season.ts`).
- *
- * F1 (dos jueces ciegos, `37b225b..d33377a`): la copia es de ÍNDICES de
- * asiento (`filledSeatIndices(orderedNames)`), no de nombres. La versión
- * anterior copiaba texto y lo reconciliaba por VALOR (`reconcileOrder`,
- * borrada en esta tarea) -- reconciliar por valor es exactamente lo que
- * rompía con una renombrada a mitad de tipeo: un `setSquad` corre en CADA
- * tecla, y el string intermedio ("Ca" mientras se retipea "Caro") no
- * matcheaba contra el `order` viejo, así que ese asiento se caía a la cola
- * y no volvía a subir aunque el nombre final calzara de nuevo -- medido,
- * `[Caro,Dani,Ana,Beto]` terminaba en `[Dani,Ana,Beto,Caro]` con el plantel
- * BYTE A BYTE igual al de arranque. Un índice no tiene ese problema: la
- * posición de un asiento no cambia mientras se lo renombra (`Squad.mySeat`
- * ya vive de esta misma garantía), así que no hace falta reconciliar NADA
- * por una renombrada, ocurra en un solo tecleo o en veinte. De paso cierra
- * F2 (nombres duplicados): dos "Juan" son dos ÍNDICES distintos, nunca el
- * mismo casillero.
- *
- * Copiar y no referenciar el array global en vivo sigue siendo la decisión:
- * desde que se prende, la lista de la disciplina se edita SOLA (`moveInOrder`,
- * arriba, más `swapInOrders`/`removeFromOrders`/`addToOrders` de abajo
- * cuando el plantel cambia) -- si el admin reordena el plantel GLOBAL
- * después de prender el toggle, esa edición no tiene por qué pisar lo que ya
- * se armó para ESTA disciplina en particular. Son dos preguntas distintas:
- * "¿en qué orden entran las disciplinas SIN toggle propio?" (el global) vs.
- * "¿en qué orden entra ÉSTA?" (la suya).
- */
-export function toggleOwnOrder(
-  orders: Partial<Record<DisciplineKind, number[]>>,
-  kind: DisciplineKind,
-  next: boolean,
-  orderedNames: readonly string[],
-): Partial<Record<DisciplineKind, number[]>> {
-  const { [kind]: _current, ...rest } = orders
-  return next ? { ...rest, [kind]: filledSeatIndices(orderedNames) } : rest
-}
-
-/**
- * El orden propio de cada disciplina, con el asiento `removed` sacado --
- * MISMA fórmula que `removeSeatAt` (arriba) ya aplica a `mySeat`: el que
- * apuntaba exactamente a `removed` desaparece de la lista, y todo el que
- * apuntaba a uno de más atrás se corre un lugar para adelante. Generalizada
- * a una lista entera porque acá no hay un único "asiento propio" que seguir,
- * sino tantos como la disciplina tenga ordenados.
- */
-export function removeFromOrder(order: readonly number[], removed: number): number[] {
-  return order.flatMap((at) => (at === removed ? [] : at > removed ? [at - 1] : [at]))
-}
-
-/** `removeFromOrder` aplicado a cada disciplina que tiene su propia lista -- las que no, ni se tocan. */
-export function removeFromOrders(
-  orders: Partial<Record<DisciplineKind, number[]>>,
-  removed: number,
-): Partial<Record<DisciplineKind, number[]>> {
-  const next: Partial<Record<DisciplineKind, number[]>> = {}
-  for (const kind of DISCIPLINE_KINDS) {
-    const order = orders[kind]
-    if (order !== undefined) next[kind] = removeFromOrder(order, removed)
-  }
-  return next
-}
-
-/**
- * El orden propio de una disciplina, con el asiento `at` agregado al final
- * si todavía no estaba -- el lugar donde entra cualquier asiento nuevo
- * (`addMySeat`, o la fila que `namesAfterEdit` deja de estar en blanco). Si
- * `at` ya estaba en la lista, no hace nada: una renombrada no agrega ningún
- * asiento nuevo, el índice sigue señalando al mismo de siempre (F1).
- */
-export function addToOrder(order: readonly number[], at: number): number[] {
-  return order.includes(at) ? [...order] : [...order, at]
-}
-
-/** `addToOrder` aplicado a cada disciplina que tiene su propia lista -- las que no, ni se tocan. */
-export function addToOrders(
-  orders: Partial<Record<DisciplineKind, number[]>>,
-  at: number,
-): Partial<Record<DisciplineKind, number[]>> {
-  const next: Partial<Record<DisciplineKind, number[]>> = {}
-  for (const kind of DISCIPLINE_KINDS) {
-    const order = orders[kind]
-    if (order !== undefined) next[kind] = addToOrder(order, at)
-  }
-  return next
-}
-
-/**
- * El orden propio de una disciplina, con `from`/`to` swapeados -- MISMA
- * fórmula que `moveSeat` (arriba) usa para `mySeat`: cuando el orden GLOBAL
- * (paso "Orden inicial", lista de arriba) swapea dos asientos, cualquier
- * lista propia que ya los tuviera anotados tiene que seguir señalando a la
- * MISMA persona, no a la que quedó parada en ese índice después del swap.
- */
-export function swapInOrder(order: readonly number[], from: number, to: number): number[] {
-  return order.map((at) => (at === from ? to : at === to ? from : at))
-}
-
-/** `swapInOrder` aplicado a cada disciplina que tiene su propia lista -- las que no, ni se tocan. */
-export function swapInOrders(
-  orders: Partial<Record<DisciplineKind, number[]>>,
-  from: number,
-  to: number,
-): Partial<Record<DisciplineKind, number[]>> {
-  const next: Partial<Record<DisciplineKind, number[]>> = {}
-  for (const kind of DISCIPLINE_KINDS) {
-    const order = orders[kind]
-    if (order !== undefined) next[kind] = swapInOrder(order, from, to)
-  }
-  return next
-}
-
-/**
- * El estado combinado del plantel -- `squad` + `orders` juntos, en UN solo
- * lugar (WU1, ronda 3 de revisión).
- *
- * Antes de esta tarea las cuatro funciones de acá abajo devolvían un
- * `{ squad, orders }` anónimo, y `wizard.tsx` lo aplicaba con DOS `useState`
- * y DOS setters sueltos (`setSquad(next.squad)` + `setOrdersState(next.orders)`).
- * Esa forma dejaba una mutación de una sola palabra indistinguible: pisar
- * `next.orders` por el `orders` VIEJO del closure (`setOrdersState(orders)`)
- * seguía siendo `Partial<Record<DisciplineKind, number[]>>` -- el mismo tipo
- * que `next.orders` -- así que `tsc` no la veía, y los cuatro pins de
- * `app/cableado-de-formato.unit.test.ts` eran una regexp que cualquier
- * mutación futura le iba a ganar tarde o temprano (medido: sobrevivía en las
- * cuatro variantes, `removeSeat` neutralizado corría cada índice un lugar y
- * `moveGlobalSeat` neutralizado invertía en silencio el orden propio).
- *
- * Con las dos mitades en UN solo tipo con nombre y un ÚNICO setter que las
- * exige juntas (`setSquad`, `wizard.tsx`), "aplicar una mitad y tirar la
- * otra" deja de ser una asignación que `tsc` acepte: pasarle sólo un `Squad`
- * o sólo un `Partial<Record<DisciplineKind, number[]>>` donde se espera un
- * `SquadOrders` es un error de compilación, no un test que haya que escribir
- * y mantener -- mismo criterio que ya fijaron los `Record` obligatorios de
- * `newTournamentPayload` (ver su docblock, más abajo).
- */
-export interface SquadOrders {
-  squad: Squad
-  orders: Partial<Record<DisciplineKind, number[]>>
-}
-
-/**
- * El estado combinado (`squad` + `orders`) después de tipear `value` en la
- * fila `index` del plantel (paso 1).
- *
- * WU2 (ronda 2 de revisión): antes vivía partido en dos llamadas sueltas
- * adentro de `editSeatName` (`wizard.tsx`), sin ningún test que las
- * ejercitara juntas -- esta suite no tiene runner de clicks/tecleo, así que
- * la lógica que sólo existía adentro de un handler de `.tsx` quedaba
- * estructuralmente fuera de su alcance (mismo defecto que
- * `app/cableado-de-formato.unit.test.ts` ya documenta para el punto de
- * unión del paso 4 -- "extraer a un módulo puro MUEVE el riesgo al punto de
- * unión, y ahí no queda nada"). Acá la lógica entera queda adentro del
- * módulo puro, testeable sin DOM; `wizard.tsx` sólo aplica el resultado
- * COMPLETO con un único `setSquad` (WU1, pin de ese cableado en
- * `app/cableado-de-formato.unit.test.ts`).
- *
- * Un asiento en blanco que pasa a tener contenido es un asiento NUEVO --
- * entra al final de cada orden propio que ya exista (`addToOrders`); uno que
- * ya tenía nombre es una renombrada y no hace falta tocar `orders` (F1: el
- * índice sigue señalando al mismo asiento, se llame como se llame).
- */
-export function editSeatState(
-  squad: Squad,
-  orders: Partial<Record<DisciplineKind, number[]>>,
-  index: number,
-  value: string,
-): SquadOrders {
-  const wasBlank = (squad.names[index] ?? '').trim().length === 0
-  const nextSquad = { ...squad, names: namesAfterEdit(squad.names, index, value) }
-  const nextOrders = wasBlank && value.trim().length > 0 ? addToOrders(orders, index) : orders
-  return { squad: nextSquad, orders: nextOrders }
-}
-
-/**
- * El estado combinado tras "Participar en el torneo" (WU2): el organizador
- * entra al plantel en un asiento NUEVO, al final -- mismo criterio que
- * `editSeatState` para un asiento que aparece, así que también entra a cada
- * orden propio que ya exista.
- */
-export function joinSquadState(
-  squad: Squad,
-  orders: Partial<Record<DisciplineKind, number[]>>,
-  myName: string,
-): SquadOrders {
-  return { squad: addMySeat(squad, myName), orders: addToOrders(orders, squad.names.length) }
-}
-
-/**
- * El estado combinado tras sacar la fila `index` del plantel (WU2): la cruz
- * de paso 1, o "Sacame del plantel" para la propia. `removeFromOrders` corre
- * la MISMA fórmula que `removeSeatAt` ya aplica a `mySeat`, generalizada a
- * cada orden propio.
- */
-export function removeSeatState(
-  squad: Squad,
-  orders: Partial<Record<DisciplineKind, number[]>>,
-  index: number,
-): SquadOrders {
-  return { squad: removeSeatAt(squad, index), orders: removeFromOrders(orders, index) }
-}
-
-/**
- * El estado combinado tras el swap del orden GLOBAL (paso "Orden inicial",
- * WU2): `swapInOrders` sigue la MISMA fórmula que `moveSeat` ya aplica a
- * `mySeat` -- si un orden propio ya tenía anotado alguno de los dos
- * asientos, tiene que seguir señalando a la MISMA persona después del swap.
- *
- * WU5 (ronda 2 de revisión): el guard de rango es UNO SOLO para las dos
- * mitades -- antes `moveSeat` se negaba a mover fuera de rango (dejaba
- * `squad` intacto) pero `swapInOrders`, llamada suelta, swapeaba igual;
- * inalcanzable hoy porque las flechas de `wizard.tsx` salen `disabled` en
- * los bordes, pero las dos mitades de UNA sola acción de usuario no tienen
- * por qué discrepar sobre qué es "fuera de rango".
- */
-export function moveGlobalSeatState(
-  squad: Squad,
-  orders: Partial<Record<DisciplineKind, number[]>>,
-  from: number,
-  to: number,
-): SquadOrders {
-  if (from < 0 || from >= squad.names.length || to < 0 || to >= squad.names.length) {
-    return { squad, orders }
-  }
-  return { squad: moveSeat(squad, from, to), orders: swapInOrders(orders, from, to) }
 }
 
 /**
@@ -712,7 +279,7 @@ export function moveGlobalSeatState(
  * `db/season.ts`.
  *
  * Cualquier índice que ya no señale a un asiento con nombre (uno sacado sin
- * pasar por `removeFromOrders`, uno vaciado a mano, o uno fuera de rango) se
+ * pasar por la baja del asiento, uno vaciado a mano, o uno fuera de rango) se
  * descarta -- mismo espíritu que la vieja `reconcileOrder` con un nombre que
  * ya no está. Y cualquier asiento del plantel que `order` no llegó a anotar
  * se agrega al final, en el orden del plantel -- así el resultado es
@@ -724,11 +291,10 @@ export function seedOrderFrom(order: readonly number[], names: readonly string[]
     .map((name, at) => ({ name: name.trim(), at }))
     .filter((seat) => seat.name.length > 0)
   // WU5 (ronda 2 de revisión): `usedAt` es defensa contra un `order` con un
-  // índice repetido -- hoy inalcanzable, `orders[kind]` sólo se arma con
-  // `addToOrders`/`removeFromOrders`/`swapInOrders`/`moveInOrder`, y las
-  // cuatro preservan la unicidad por construcción. Se queda como red barata
-  // para cualquier otro caller de esta función exportada, no porque haya un
-  // camino de producción que hoy la dispare.
+  // índice repetido -- hoy inalcanzable, el orden propio sólo se arma con
+  // altas, bajas y swaps que preservan la unicidad por construcción. Se queda
+  // como red barata para cualquier otro caller de esta función exportada, no
+  // porque haya un camino de producción que hoy la dispare.
   const positionOf = new Map(filled.map((seat, position) => [seat.at, position]))
   const usedAt = new Set<number>()
   const kept: number[] = []
@@ -765,101 +331,29 @@ export function submitSeats({ names, mySeat }: Squad): {
 }
 
 /**
- * El payload exacto que espera `createTournament` (`./actions`), armado a
- * partir de lo que el wizard fue juntando en sus cinco pasos.
+ * El payload que armaba el wizard de cinco pasos para `createTournament`
+ * (`./actions`). El wizard de hoy (`crear.tsx`) ya no lo usa; queda porque los
+ * tests de base lo ejercitan como constructor de `createSeason`
+ * (`db/season-multi-discipline.db.test.ts`).
  *
- * Vivía inline adentro del `startTransition` del submit de `Wizard` —puro
- * salvo el `await` final— e intestable ahí por eso: mismo motivo por el que
- * `wizard-state.ts`/`armado-state.ts`/`carga-state.ts`/`sumar-state.ts`
- * existen, sacar la lógica del `.tsx` para poder probarla sin DOM y sin base.
+ * `squadSize` sale del plantel REALMENTE cargado (`submitSeats(squad)`), no del
+ * que traía cada `configs[kind]`: `resizeConfig` (por disciplina) lo pone al
+ * día antes de construir la fila.
  *
- * `squadSize` sale del plantel REALMENTE cargado (`submitSeats(squad)`), no
- * del que traía cada `configs[kind]`: el paso 4 puede quedar desactualizado
- * si el admin agrega o saca nombres después de tocarlo, y `resizeConfig`
- * (por disciplina, acá abajo) es quien lo pone al día antes de construir la
- * fila — mismo criterio que ya usaba `setSquad` (`wizard.tsx`) mientras se
- * edita, esto es la red de seguridad para el instante del submit.
+ * `hasMasters`/`formatoDefault`/`seedOrder` sólo se agregan a la fila cuando
+ * hay 2+ disciplinas (`picked.length > 1`): con una sola el payload es
+ * EXACTAMENTE el de siempre y `createSeason` cae al automático (decisión
+ * #4029) y al default de columna (ROUND_ROBIN, 0074). `fixedTeams` viaja
+ * siempre. `effectiveHasMasters`/`effectiveFixedTeams` son las puertas de
+ * salida reales: una disciplina de a uno no puede tener Masters
+ * (`disciplines_has_masters_needs_pair`, 0053) ni equipos fijos
+ * (`disciplines_fixed_teams_needs_pair`, 0077) pase lo que diga el control.
  *
- * `pairSize` es el punto de unión de la Rebanada F: viaja tal cual hasta
- * `buildDisciplines`, así que elegir "Individual" llega hasta ACÁ, en el
- * payload real que cruza al server action (#3957 — se pinchan los
- * argumentos, no que la función interna acepte el parámetro).
- *
- * OBLIGATORIOS acá y no opcionales como en `buildDisciplines`/`newDisciplineSpec`:
- * este único caller (`Wizard`) SIEMPRE tiene un valor por disciplina para
- * `pairSizes`, `hasMasters` y `formatoDefault` (nacen en un `Record` con las
- * dos claves puestas, el `useState` no es `undefined` nunca), así que
- * dejarlos opcionales sólo abriría la puerta a olvidarlos en el sitio del
- * submit sin que nada lo marque. Con los parámetros obligatorios, olvidarlos
- * es un error de `tsc`, no un test que haya que escribir y mantener — mismo
- * criterio que ya fijó `pairSizes` (verificado con mutación: sacar un
- * argumento en `wizard.tsx` rompe `npm run typecheck`).
- *
- * Task 5 (docs/plan-arquitectura-de-paginas.md §2.4, §6) cierra la cadena
- * C29 → W69 → W76 → W83 → W88 → W90: todas esas correcciones existían
- * porque el paso 4 editaba UNA config compartida por TODAS las disciplinas
- * marcadas, y cada una era una nueva forma de que la pantalla prometiera una
- * curva que la disciplina real no iba a tener. Con `configs` genuinamente
- * por disciplina —una entrada por `DisciplineKind`, cada una con SU PROPIO
- * `squadSize`/`points`/`regularMatchdays`/`countBestOf`/`tiebreakSnapshotEvery`
- * mantenida al día por `wizard.tsx` (`resizeConfigs` en cada edición del
- * plantel, `freshDisciplineConfig` en cada cambio de "Lados")— no queda
- * ninguna ambigüedad que resolver acá: cada fila usa `configs[kind]`, la
- * suya, nunca una prestada. El campo `config` de arriba (el legado de
- * `NewSeason`/`createTournament`, `db/season.ts`) sigue existiendo porque el
- * tipo lo pide, pero `createSeason` lo ignora en cuanto `disciplines` llega
- * —y el wizard SIEMPRE lo manda—: no hay curva "correcta" que elegir ahí
- * porque nadie la lee.
- *
- * `hasMasters`/`formatoDefault` sólo se agregan a la fila cuando hay 2+
- * disciplinas marcadas (`picked.length > 1`): con una sola, el paso 4 no
- * dibuja esos controles (§5 del diseño, "nadie debería enterarse de que
- * ahora es por disciplina hasta que marque la segunda") y el payload tiene
- * que verse EXACTAMENTE como antes de esta Task — sin esas dos claves,
- * `createSeason` cae al automático de siempre (decisión #4029) y al default
- * de columna (ROUND_ROBIN, 0074). Mandarlas siempre, aunque con el mismo
- * valor que el automático, arriesgaría filtrar a esa fila una edición vieja
- * que el admin hizo mientras SÍ había una segunda disciplina marcada y
- * después destildó — un control que ya no se ve no puede seguir mandando.
- *
- * `fixedTeams` NO sigue esa misma regla: a diferencia de Masters/formato, el
- * paso 4 dibuja su checkbox SIEMPRE (docs/tipos-de-torneo.md §1), con una
- * disciplina marcada o con dos — no hay "antes de esta Task" que preservar
- * porque el control es nuevo en las dos formas. Por eso viaja siempre en la
- * fila, nunca detrás de `picked.length > 1`.
- *
- * `effectiveHasMasters`/`effectiveFixedTeams` son las puertas de salida
- * reales para sus checkboxes respectivos: una disciplina de a uno no puede
- * tener Masters (`disciplines_has_masters_needs_pair`, 0053) ni equipos fijos
- * (`disciplines_fixed_teams_needs_pair`, 0077) pase lo que pase haya elegido
- * el control — el guard vive ACÁ, no confiando en que el control quede
- * siempre deshabilitado a tiempo.
- *
- * `orders` es el orden PROPIO de cada disciplina que prendió el toggle del
- * paso Formato (`Wizard`), por ÍNDICE de asiento (F1, ver
- * `toggleOwnOrder`/`seedOrderFrom` más arriba) -- `Partial`, a diferencia de
- * los cuatro `Record` de arriba: "ninguna disciplina tiene orden propio"
- * (entrada ausente) es el estado NORMAL del 100% de los torneos de hoy, no
- * un olvido.
- *
- * UN OBJETO, no nueve parámetros posicionales (WU6, ronda 3 de revisión):
- * `hasMasters` y `fixedTeams` comparten EXACTAMENTE el mismo tipo
- * (`Record<DisciplineKind, boolean>`) -- medido, swapear sus dos argumentos
- * en el call site de `wizard.tsx` deja `tsc` limpio y 1069/1069 en verde, y
- * los defaults de producción (`hasMasters` en `true`/`true`, `fixedTeams` en
- * `false`/`false`) hacen que la mutación sea SILENCIOSA en el caso más común
- * (todo torneo de `pairSize: 2` nacería con `fixed_teams = true` y sin
- * Masters, incluida la ÚNICA disciplina, porque `fixedTeams` viaja siempre y
- * `hasMasters` sólo con `picked.length > 1`). Con un objeto de propiedades
- * NOMBRADAS, swapear los VALORES de dos claves ya no es reordenar dos
- * argumentos consecutivos -- hay que reescribir la clave de cada línea, un
- * cambio visible y pincheable por fuente (`app/cableado-de-formato.unit.test.ts`).
- *
- * Sigue siendo un objeto con las nueve claves OBLIGATORIAS (F8, dos jueces
- * ciegos, `37b225b..d33377a`, ver el docblock viejo de `orders` que este
- * comentario reemplaza): ninguna es opcional ni tiene default -- olvidar una
- * en el único call site de producción (`Wizard`, `wizard.tsx`) sigue siendo
- * un error de `tsc`, no un test que haya que escribir y mantener.
+ * `orders` es el orden PROPIO de cada disciplina, por ÍNDICE de asiento (F1,
+ * ver `seedOrderFrom`) -- `Partial`: "ninguna disciplina tiene orden propio"
+ * es el estado NORMAL. Un OBJETO con las nueve claves obligatorias y no
+ * posicionales (WU6): `hasMasters` y `fixedTeams` comparten tipo, y swapearlos
+ * no rompe `tsc` -- con claves nombradas el swap es un cambio visible.
  */
 export interface NewTournamentPayloadInput {
   name: string
@@ -989,69 +483,6 @@ export function resizeConfig(config: SeasonConfig, squadSize: number, sideSize: 
 }
 
 /**
- * `resizeConfig` aplicado a las DOS disciplinas del wizard a la vez, cada
- * una con SU PROPIO `pairSize` (Task 5, docs/plan-arquitectura-de-paginas.md
- * §2.4, §6). Reemplaza a lo que antes hacía `configSideSize` + una sola
- * llamada a `resizeConfig`: hasta la Task 5 el paso 4 editaba UNA config
- * compartida por todas las disciplinas marcadas, así que agrandar o achicar
- * el plantel sólo tenía UNA curva que poner al día. Ahora cada disciplina
- * tiene la suya —incluso la que no está marcada, mismo criterio que
- * `pairSizes` en `wizard.tsx`, que también sigue las dos aunque el torneo
- * sólo use una—, así que `setSquad` (`wizard.tsx`) tiene que ponerlas al día
- * A LAS DOS, cada una contra su propio `pairSize`.
- */
-export function resizeConfigs(
-  configs: Record<DisciplineKind, SeasonConfig>,
-  squadSize: number,
-  pairSizes: Record<DisciplineKind, SideSize>,
-): Record<DisciplineKind, SeasonConfig> {
-  const next = { ...configs }
-  for (const kind of DISCIPLINE_KINDS) next[kind] = resizeConfig(configs[kind], squadSize, pairSizes[kind])
-  return next
-}
-
-/**
- * La config con la que arranca (o se rehace) UNA disciplina: `configFor`
- * para su plantel y su `pairSize`, con la forma de marcador de SU `kind` ya
- * aplicada (`disciplineProfile`) — nunca la de otra.
- *
- * Reemplaza a `configForPairSizeChange` (Task 5): aquella función existía
- * por la ambigüedad de C29/W76/W83 — UNA config compartida por 2+
- * disciplinas no podía rehacerse sin arriesgar la curva de la otra, así que
- * sólo lo hacía con `picked.length === 1`. Con una config GENUINAMENTE por
- * disciplina esa ambigüedad no existe más: tocar "Lados" para `kind` rehace
- * SU config siempre, marcada sola o junto a otra — nunca toca la de la
- * disciplina vecina, porque cada una vive en su propia entrada del
- * `Record`.
- *
- * Aplica `disciplineProfile` acá adentro (y no al leer `matchFormat` más
- * tarde, como hacía `buildDisciplines` con la config compartida): con una
- * config por disciplina no hace falta esperar al submit para saber si es
- * FIFA — se sabe en el momento en que esta función arma la fila, y
- * `steppersFor`/el resumen del paso 5 pueden leer `matchFormat.openScore`
- * directo, sin envolver de nuevo.
- */
-export function freshDisciplineConfig(
-  kind: DisciplineKind,
-  squadSize: number,
-  pairSize: SideSize,
-): SeasonConfig {
-  return disciplineProfile(kind, configFor(squadSize, pairSize)).config
-}
-
-/**
- * El Masters con el que arranca el control de una disciplina (decisión
- * #4029): `false` con `pairSize` 1 —`disciplines_has_masters_needs_pair`
- * (0053) lo rechaza siempre ahí—, `true` si no. El mismo automático que
- * `createSeason`/`addDiscipline` (`db/season.ts`/`db/discipline.ts`) aplican
- * cuando el spec no manda `hasMasters` — acá es el valor INICIAL del
- * checkbox, no una escritura.
- */
-export function automaticHasMasters(pairSize: SideSize): boolean {
-  return pairSize !== 1
-}
-
-/**
  * El Masters que de verdad se manda para una disciplina, sea lo que sea que
  * el checkbox tenga guardado: `false` siempre que `pairSize` sea 1.
  *
@@ -1084,51 +515,6 @@ export function effectiveFixedTeams(pairSize: SideSize, fixedTeams: boolean): bo
 }
 
 /**
- * Las tres opciones legales de "Formato de las fechas" (decisión ya tomada,
- * docs/tipos-de-torneo.md §2.5): `ROUND_ROBIN`, y `GROUPS_KNOCKOUT` con 2 o
- * con 4 grupos, siempre `qualifiersPerGroup: 2`. `groups: 1` no es una
- * opción acá aunque `matchdays_formato_kind` (0040) lo acepte:
- * `disciplines_formato_default_kind` (0074) lo rechaza a propósito porque
- * `offerableFormats` (`core/knockout.ts:531`) nunca lo ofrece para ningún
- * `sides` — "1 grupo + llave" no ahorra nada sobre un round robin liso.
- *
- * Es un CRITERIO, no un layout: cuáles opciones son legalmente ofrecibles
- * para una disciplina, respaldado por ese CHECK de la base. Fix round 1
- * (revisión de la Task 5): esta lista nació duplicada acá y en
- * `ajustes/formato-default.tsx` (`OPCIONES`, módulo-privada), con un test de
- * cada lado comparando contra un literal escrito a mano en vez de contra la
- * OTRA lista — nada en el repo fallaba si las dos divergían. Es la MISMA
- * clase de error que ya tiene nombre en este código: el docblock de
- * `steppersFor`/`Formato` (`ajustes/formato.tsx`) dice "copiar el criterio
- * en vez de compartirlo es lo que produjo W63". Vive acá — junto a
- * `steppersFor`, que ya comparte el mismo tipo de criterio con Ajustes — y
- * `formato-default.tsx` la IMPORTA en vez de declarar la suya.
- */
-export const FORMATO_DEFAULT_OPTIONS: MatchdayFormat[] = [
-  { kind: 'ROUND_ROBIN' },
-  { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 },
-  { kind: 'GROUPS_KNOCKOUT', groups: 4, qualifiersPerGroup: 2 },
-]
-
-/**
- * `key` estable para `FORMATO_DEFAULT_OPTIONS`, no atada a la copia:
- * `matchdayFormatLabel(candidato)` (`app/format.ts`) es texto para HUMANOS y
- * puede cambiar — mismo motivo por el que `SelectorDeFormato`
- * (`fechas/[n]/armado.tsx`) usa `candidato.groups` como `key` y no el
- * label. `FORMATO_DEFAULT_OPTIONS` es una lista fija de tres, así que basta
- * con la identidad estructural del `kind`/`groups`.
- */
-export function formatoDefaultKey(formato: MatchdayFormat): string {
-  return formato.kind === 'ROUND_ROBIN' ? 'ROUND_ROBIN' : `GROUPS_${formato.groups}`
-}
-
-/** ¿Es la misma opción de `FORMATO_DEFAULT_OPTIONS`? Compara por `kind` + `groups`, no por identidad de objeto. */
-export function isSameFormatoDefault(a: MatchdayFormat, b: MatchdayFormat): boolean {
-  if (a.kind !== b.kind) return false
-  return a.kind === 'ROUND_ROBIN' || (b.kind === 'GROUPS_KNOCKOUT' && a.groups === b.groups)
-}
-
-/**
  * Los errores del paso 4, para UNA disciplina.
  *
  * Los de puntos NO se escriben acá: salen de `pointsErrors` y de
@@ -1140,18 +526,11 @@ export function isSameFormatoDefault(a: MatchdayFormat, b: MatchdayFormat): bool
  *
  * `sideSize` es obligatorio por lo mismo que en `configFor`/`resizeConfig`
  * (#3994): con un default, los call sites que dejen de pasarlo validan
- * contra parejas en silencio, que es el bug de esta familia entera. Desde
- * la Task 5 esta función corre UNA VEZ POR DISCIPLINA (`wizard.tsx`), con
- * el `pairSize` propio de esa disciplina — ya no hay un "efectivo" de una
- * curva compartida que calcular (`configSideSize`, borrada en esta Task).
+ * contra parejas en silencio, que es el bug de esta familia entera. Corre
+ * UNA VEZ POR DISCIPLINA, con el `pairSize` propio de esa disciplina — ya no
+ * hay un "efectivo" de una curva compartida que calcular.
  *
  * `pointsErrors` mira los VALORES y `pointsCountError` la CANTIDAD.
- * `changePairSize` (`wizard.tsx`) rehace la config entera al tocar "Lados"
- * (`freshDisciplineConfig`), así que la cantidad de puntos SIEMPRE
- * corresponde apenas cambia — a diferencia de antes de esta Task, ya no
- * hace falta un aviso para el caso en que dejó de corresponder en silencio
- * (W88/W90): no hay forma de llegar a ese estado con una config genuinamente
- * propia por disciplina.
  *
  * La de `countBestOf` sí es propia, y a propósito: es la frase corta del
  * handoff, que en el wizard entra al lado del stepper que la causó.
@@ -1167,52 +546,4 @@ export function formatErrors(config: SeasonConfig, sideSize: SideSize): string[]
     errors.push('No pueden contar más fechas de las que se juegan.')
   }
   return errors
-}
-
-/**
- * El resumen del paso 5, en el orden del handoff.
- *
- * `picked` no es decorativo: la fila "Formato" decía "1 set a 4 games" leyendo
- * la config compartida, y desde que una liga de FIFA nace con marcador de goles
- * esa frase describe la mitad pádel del torneo y MIENTE sobre la otra mitad.
- * Con una sola disciplina el resumen dice exactamente lo mismo que siempre —el
- * prefijo aparece recién cuando hay dos cosas distintas que nombrar.
- *
- * Esa regla la escribe `formatsLabel` (`core/narrate.ts`) para "Formato", y
- * desde la Task 5 la aplica ACÁ TAMBIÉN `perDisciplineValue` para "Puntos",
- * "Fechas" y "Desempate": con `configs` genuinamente por disciplina esos
- * tres números pueden ser distintos entre Pádel y FIFA, y mostrar sólo uno
- * de los dos sería exactamente la misma mentira que Reglas y Ajustes ya
- * tuvieron con "Formato" (W64) — tres copias del mismo problema es como
- * nació esa ronda, y ésta es la cuarta fila que podía repetirlo si no se
- * corregía acá.
- *
- * Ya no hace falta pasar cada `config` por `disciplineProfile` acá: desde
- * que `configs[kind]` sale de `freshDisciplineConfig` (Task 5), su
- * `matchFormat.openScore` ya viene con la forma de SU `kind` aplicada.
- */
-export function summaryOf(
-  name: string,
-  names: readonly string[],
-  configs: Record<DisciplineKind, SeasonConfig>,
-  picked: readonly DisciplineKind[],
-): Array<{ key: string; value: string }> {
-  const perDisciplineValue = (value: (config: SeasonConfig) => string): string =>
-    picked.length <= 1
-      ? value(configs[picked[0]!])
-      : picked.map((kind) => `${DISCIPLINE_LABELS[kind]}: ${value(configs[kind])}`).join(' · ')
-
-  return [
-    { key: 'Nombre', value: name },
-    { key: 'Jugadores', value: String(filledCount(names)) },
-    {
-      key: 'Formato',
-      value: formatsLabel(
-        picked.map((kind) => ({ label: DISCIPLINE_LABELS[kind], matchFormat: configs[kind].matchFormat })),
-      ),
-    },
-    { key: 'Puntos', value: perDisciplineValue((config) => config.points.join(' · ')) },
-    { key: 'Fechas', value: perDisciplineValue((config) => String(config.regularMatchdays)) },
-    { key: 'Desempate', value: perDisciplineValue((config) => `cada ${config.tiebreakSnapshotEvery} fechas`) },
-  ]
 }

@@ -1,4 +1,4 @@
-import type { MatchdayFormat } from '@/core'
+import type { MatchdayFormatSetting } from '@/core'
 
 /**
  * El día de una fecha, como lo escribe el handoff.
@@ -43,11 +43,9 @@ export function initials(name: string): string {
 /**
  * "Todos contra todos" o "N grupos + llave" — el mismo texto para el botón de
  * `SelectorDeFormato` (armado de una fecha, `fechas/[n]/armado.tsx`) y para
- * el radio que elige el `formato_default` de una disciplina (Ajustes,
- * `ajustes/formato-default.tsx`): las dos pantallas nombran el mismo
- * `MatchdayFormat.kind` y TIENEN que decir lo mismo (mismo criterio que
- * `steppersFor`, `ajustes/formato.tsx:19-21` — copiar el criterio en vez de
- * compartirlo es lo que produjo W63).
+ * el paso 4 del wizard: las pantallas nombran el mismo `MatchdayFormat.kind`
+ * y TIENEN que decir lo mismo (copiar el criterio en vez de compartirlo es lo
+ * que produjo W63).
  *
  * Vive acá, en `app/format.ts` ("lo usan cuatro pantallas. Antes había tres
  * copias", el mismo motivo que ya trajo `initials`/`matchdayDay` a este
@@ -64,6 +62,7 @@ export function initials(name: string): string {
  * avisa de no repetir (ahí es sobre el NOMBRE DE COLUMNA, `formato_default`
  * vs `formato`; acá es el mismo principio aplicado al nombre de la función).
  */
-export function matchdayFormatLabel(formato: MatchdayFormat): string {
+export function matchdayFormatLabel(formato: MatchdayFormatSetting): string {
+  if (formato.kind === 'AUTO') return 'Automático'
   return formato.kind === 'ROUND_ROBIN' ? 'Todos contra todos' : `${formato.groups} grupos + llave`
 }

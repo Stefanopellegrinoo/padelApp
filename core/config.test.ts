@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { disciplineProfile, validateConfig, defaultConfig } from './config'
-import type { SeasonConfig } from './types'
+import { disciplineProfile, validateConfig, defaultConfig, effectiveMatchFormat, fichaSeed } from './config'
+import { minSquadFor } from './constants'
+import { SPORTS, SPORT_IDS, type Modality } from './sports'
+import type { SeasonConfig, SideSize } from './types'
 
 const valid: SeasonConfig = {
   squadSize: 12,
@@ -416,5 +418,103 @@ describe('maxMatches — el techo de partidos de la disciplina', () => {
     expect(validateConfig({ ...defaultConfig(8), maxMatches: 6.5 }, 2)).toContain(
       'El máximo de partidos por fecha tiene que ser un número entero.',
     )
+  })
+})
+
+describe('fichaSeed', () => {
+  it('Pádel rotan es la config de hoy más la primera fecha por nivel', () => {
+    const { firstFecha, ...rest } = fichaSeed('PADEL', 8, 'ROTAN').config
+    expect(rest).toEqual(disciplineProfile('PADEL', defaultConfig(8, 2)).config)
+    expect(firstFecha).toBe('NIVEL')
+  })
+
+  it('FIFA individual y rotan son la config de hoy; individual se sortea', () => {
+    const { firstFecha, ...individual } = fichaSeed('FIFA', 8, 'INDIVIDUAL').config
+    expect(individual).toEqual(disciplineProfile('FIFA', defaultConfig(8, 1)).config)
+    expect(firstFecha).toBe('SORTEO')
+
+    const { firstFecha: rotanFirst, ...rotan } = fichaSeed('FIFA', 8, 'ROTAN').config
+    expect(rotan).toEqual(disciplineProfile('FIFA', defaultConfig(8, 2)).config)
+    expect(rotanFirst).toBe('NIVEL')
+  })
+
+  it('Ping pong individual juega el formato de ping pong y paga la curva de seis', () => {
+    const { matchFormat, points } = fichaSeed('PING_PONG', 6, 'INDIVIDUAL').config
+    expect(matchFormat).toEqual(SPORTS.PING_PONG.format)
+    expect(points).toEqual([10, 7, 5, 3, 2, 1])
+  })
+
+  it('toda modalidad que ofrece una ficha da una config válida con su forma, de plantel mínimo a 24', () => {
+    const shapes: Record<Modality, { pairSize: SideSize; fixedTeams: boolean }> = {
+      INDIVIDUAL: { pairSize: 1, fixedTeams: false },
+      FIJAS: { pairSize: 2, fixedTeams: true },
+      ROTAN: { pairSize: 2, fixedTeams: false },
+    }
+    for (const kind of SPORT_IDS) {
+      const ficha = SPORTS[kind].ficha
+      if (ficha === null) continue
+      for (const { id: modality } of ficha.modalities) {
+        const { pairSize } = shapes[modality]
+        for (let squad = minSquadFor(pairSize); squad <= 24; squad += 1) {
+          if (pairSize === 2 && squad % 2 !== 0) continue
+          const seed = fichaSeed(kind, squad, modality)
+          expect(validateConfig(seed.config, seed.pairSize)).toEqual([])
+          expect(seed.pairSize).toBe(pairSize)
+          expect(seed.fixedTeams).toBe(shapes[modality].fixedTeams)
+          if (modality === 'INDIVIDUAL') expect(seed.hasMasters).toBe(false)
+          expect(seed.formatoDefault).toEqual({ kind: 'AUTO' })
+          expect(seed.allowsDraw).toBe(SPORTS[kind].allowsDraw)
+        }
+      }
+    }
+  })
+
+  it('el formato sembrado no comparte el objeto del registro', () => {
+    const { matchFormat } = fichaSeed('PING_PONG', 6, 'INDIVIDUAL').config
+    expect(matchFormat).not.toBe(SPORTS.PING_PONG.format)
+  })
+
+  it('Masters por defecto sólo con parejas y sólo si la ficha los pide', () => {
+    expect(fichaSeed('PADEL', 8, 'ROTAN').hasMasters).toBe(true)
+    expect(fichaSeed('FIFA', 8, 'ROTAN').hasMasters).toBe(false)
+    expect(fichaSeed('PING_PONG', 8, 'INDIVIDUAL').hasMasters).toBe(false)
+  })
+
+  it('tira si el deporte no tiene ficha o no ofrece esa modalidad', () => {
+    expect(() => fichaSeed('FUTBOL', 8, 'INDIVIDUAL')).toThrow()
+    expect(() => fichaSeed('PADEL', 8, 'INDIVIDUAL')).toThrow()
+  })
+})
+
+describe('validateConfig con la primera fecha', () => {
+  const ERROR = 'La primera fecha tiene que ser por nivel o al azar.'
+
+  it('rechaza una primera fecha que no es ni por nivel ni al azar', () => {
+    const errors = validateConfig({ ...defaultConfig(8), firstFecha: 'X' as never }, 2)
+    expect(errors).toContain(ERROR)
+  })
+
+  it('acepta las dos válidas y también que falte', () => {
+    expect(validateConfig({ ...defaultConfig(8), firstFecha: 'NIVEL' }, 2)).not.toContain(ERROR)
+    expect(validateConfig({ ...defaultConfig(8), firstFecha: 'SORTEO' }, 2)).not.toContain(ERROR)
+    expect(validateConfig(defaultConfig(8), 2)).not.toContain(ERROR)
+  })
+})
+
+/** docs/torneos-deportes.md §7: la ÚNICA regla de "a cuánto se juega esta fecha". */
+describe('effectiveMatchFormat', () => {
+  const PADEL = SPORTS.PADEL.format
+
+  it('sin formato propio, la fecha se juega al del deporte en el torneo', () => {
+    expect(effectiveMatchFormat(PADEL, null)).toBe(PADEL)
+  })
+
+  it('con formato propio, pisa sets y games y deja el resto del torneo', () => {
+    expect(effectiveMatchFormat(PADEL, { setsToWin: 2, gamesPerSet: 6 })).toEqual({
+      setsToWin: 2,
+      gamesPerSet: 6,
+      tieBreak: true,
+      openScore: false,
+    })
   })
 })

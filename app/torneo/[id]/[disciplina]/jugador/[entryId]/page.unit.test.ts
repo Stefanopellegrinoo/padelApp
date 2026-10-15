@@ -195,6 +195,11 @@ describe('Jugador trae las estadísticas de la disciplina de la URL, no la [0] d
     expect(html).toContain('Todavía no jugó Pádel')
   })
 
+  it('la diferencia se llama con la unidad del deporte: goles en FIFA, games en pádel', async () => {
+    expect(await render('fifa')).toContain('Dif. goles')
+    expect(await render('padel')).toContain('Dif. games')
+  })
+
   it('un slug de disciplina desconocido da notFound(), no la [0] por defecto', async () => {
     const { notFound } = await import('next/navigation')
 

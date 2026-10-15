@@ -4,18 +4,23 @@ import { usesSetsDiff } from './standings'
 import type { DisciplineShape, MatchFormat, MatchResult, SeasonConfig, SideSize } from './types'
 
 /**
- * La etiqueta corta del formato: "1 set a 4 games", "3 sets a 4 games",
- * "Marcador de goles".
+ * La etiqueta corta del formato: "1 set a 4 games", "mejor de 3 sets a 11
+ * puntos", "Marcador de goles".
  *
  * La misma frase la mostraban tres pantallas con tres copias —Reglas, Ajustes
  * y el resumen del wizard—, y las tres decían "1 set a 4 games" sobre una
  * disciplina que se juega a goles. La de Ajustes además escribía "set" en
  * singular siempre, así que con `setsToWin: 3` decía "3 set a 4".
+ *
+ * `unit` lo pone quien llama (`unitOf(kind, format)`, la unidad del deporte):
+ * acá adentro no vive qué se cuenta en cada deporte. `setsToWin` son los sets
+ * que hay que GANAR: con más de uno la frase dice "mejor de N", con N = 2 ×
+ * `setsToWin` − 1 los que se juegan como máximo.
  */
-export function formatLabel(format: MatchFormat): string {
+export function formatLabel(format: MatchFormat, unit: string): string {
   if (format.openScore) return 'Marcador de goles'
-  const setWord = format.setsToWin === 1 ? '1 set' : `${format.setsToWin} sets`
-  return `${setWord} a ${format.gamesPerSet} games`
+  const setWord = format.setsToWin === 1 ? '1 set' : `mejor de ${2 * format.setsToWin - 1} sets`
+  return `${setWord} a ${format.gamesPerSet} ${unit}`
 }
 
 /**
@@ -39,9 +44,9 @@ export function formatLabel(format: MatchFormat): string {
  * nombre que la UI le da a un `kind`.
  */
 export function formatsLabel(
-  disciplines: readonly { label: string; matchFormat: MatchFormat }[],
+  disciplines: readonly { label: string; matchFormat: MatchFormat; unit: string }[],
 ): string {
-  const rows = disciplines.map((row) => ({ label: row.label, format: formatLabel(row.matchFormat) }))
+  const rows = disciplines.map((row) => ({ label: row.label, format: formatLabel(row.matchFormat, row.unit) }))
   const distinct = [...new Set(rows.map((row) => row.format))]
   if (distinct.length <= 1) return distinct[0] ?? ''
   return rows.map((row) => `${row.label}: ${row.format}`).join(' · ')
@@ -60,15 +65,23 @@ export interface RulesSection {
  * be lying — and a rules page that disagrees with the app is worse than none.
  *
  * `shape` is required and has no default (same reasoning as
- * `MatchFormat.openScore`): `hasMasters`, `pairSize` and `allowsDraw` live on
- * `disciplines`, not in `config`, and a caller that forgot one would
- * otherwise narrate a discipline it does not have.
+ * `MatchFormat.openScore`): `hasMasters`, `pairSize`, `fixedTeams` and
+ * `allowsDraw` live on `disciplines`, not in `config`, and a caller that forgot
+ * one would otherwise narrate a discipline it does not have.
+ *
+ * `unit` is what a match counts in this sport (`unitOf(kind, format)`): who
+ * calls it puts it, nothing in here knows what a sport counts.
+ *
+ * This is the DETAIL under "Más detalle" on the rules page; the paragraph on
+ * top is `reglamento`. It must never contradict that paragraph, so it does not
+ * say how a matchday is built (the `fecha` line says it, and with `AUTO` or
+ * groups "todos contra todos" was false).
  *
  * The output is in Spanish because the group reads it.
  */
-export function narrateRules(config: SeasonConfig, shape: DisciplineShape): RulesSection[] {
+export function narrateRules(config: SeasonConfig, shape: DisciplineShape, unit: string): RulesSection[] {
   const { points, matchFormat, regularMatchdays, countBestOf, tiebreakSnapshotEvery } = config
-  const { hasMasters, pairSize, allowsDraw } = shape
+  const { hasMasters, pairSize, fixedTeams, allowsDraw } = shape
 
   // El piso de la fecha ya no es un "8" plano: es `minSquadFor(pairSize)`
   // (docs/tipos-de-torneo.md §3.3) — 2 con `pairSize=1`, 4 en pareja. Y ya no
@@ -103,8 +116,10 @@ export function narrateRules(config: SeasonConfig, shape: DisciplineShape): Rule
   // perfectly playable").
   const sides =
     pairSize === 1
-      ? 'Cada uno juega por su cuenta y todos contra todos. '
-      : 'Se arman parejas con todos y juegan todos contra todos. '
+      ? 'Cada uno juega por su cuenta. '
+      : fixedTeams
+        ? 'Cada pareja juega junta todo el torneo. '
+        : 'Se arman parejas con todos. '
   const guestClause =
     pairSize === 1
       ? ''
@@ -134,7 +149,7 @@ export function narrateRules(config: SeasonConfig, shape: DisciplineShape): Rule
       body:
         `Cada fecha la juegan los que confirman, como mínimo ${floor}${ceilingClause}${capClause}. ` +
         sides +
-        describeFormat(matchFormat, allowsDraw) +
+        describeFormat(matchFormat, allowsDraw, unit) +
         guestClause,
     },
     {
@@ -150,9 +165,10 @@ export function narrateRules(config: SeasonConfig, shape: DisciplineShape): Rule
 
   // "Cómo se arman las parejas" narra tres mecanismos (ordenar la tabla,
   // primero-con-último, la regla de no repetir) que son falsos de punta a
-  // punta con `pairSize === 1` (core/pairing.ts:135-147) — no hay pareja que
-  // armar, así que no hay sección que mostrarla.
-  if (pairSize !== 1) {
+  // punta con `pairSize === 1` (core/pairing.ts:135-147) —no hay pareja que
+  // armar— y también con parejas fijas, que no se arman nunca. El MISMO
+  // predicado que `sectionApplies` (reglas/rules-body.tsx).
+  if (pairSize === 2 && !fixedTeams) {
     sections.push({
       title: 'Cómo se arman las parejas',
       body:
@@ -166,7 +182,7 @@ export function narrateRules(config: SeasonConfig, shape: DisciplineShape): Rule
 
   sections.push({
     title: 'Los desempates',
-    body: describeTiebreak(matchFormat, tiebreakSnapshotEvery, pairSize),
+    body: describeTiebreak(matchFormat, tiebreakSnapshotEvery, pairSize, unit),
   })
 
   if (hasMasters) {
@@ -184,34 +200,23 @@ export function narrateRules(config: SeasonConfig, shape: DisciplineShape): Rule
 }
 
 /**
- * Cómo se llama lo que se cuenta adentro de un partido: **goles** con marcador
- * abierto, **games** cuando hay sets.
- *
- * Exportada porque no la usa sólo esta narración: la marca del campeón en la
- * lista de fechas (`championRecord`) cuenta la misma unidad. Eran dos copias
- * del mismo ternario y `championRecord` iba a ser la tercera — exactamente lo
- * que pasó con `setsToWin > 1` antes de que existiera `usesSetsDiff`.
- */
-export function scoreUnit(format: MatchFormat): 'goles' | 'games' {
-  return format.openScore ? 'goles' : 'games'
-}
-
-/**
  * El nombre del desempate, dicho como lo dice la cancha: *"diferencia de gol"*
- * en fútbol, *"diferencia de games"* en pádel.
+ * en fútbol, *"diferencia de games"* en pádel, *"diferencia de puntos"* en ping
+ * pong.
  *
- * NO sale de `scoreUnit`: es "diferencia de **gol**", singular, y no
- * "diferencia de goles". Dos funciones y no una porque son dos frases
- * distintas, no una con un sustantivo adentro.
+ * `unit` lo pone quien llama (`unitOf(kind, format)`). "goles" es el único que
+ * no se copia tal cual: es "diferencia de **gol**", singular, y no "diferencia
+ * de goles". Una sola función con la excepción adentro: las pantallas no
+ * repiten el ternario.
  */
-export function scoreDiffLabel(format: MatchFormat): string {
-  return format.openScore ? 'diferencia de gol' : 'diferencia de games'
+export function scoreDiffLabel(unit: string): string {
+  return unit === 'goles' ? 'diferencia de gol' : `diferencia de ${unit}`
 }
 
 /**
- * `pairSize` sola y no el `DisciplineShape` entero: ésta es la única
- * llamadora (línea de arriba, dentro de `narrateRules`) y sólo necesita este
- * campo — la firma más chica que funciona, mismo criterio que
+ * `pairSize` y `unit` solos y no el `DisciplineShape` entero: ésta es la única
+ * llamadora (línea de arriba, dentro de `narrateRules`) y sólo necesita estos
+ * campos — la firma más chica que funciona, mismo criterio que
  * `describeFormat` usa para `allowsDraw`.
  *
  * W1 (verify-report reglas-por-disciplina): la primera frase decía siempre
@@ -224,11 +229,12 @@ export function scoreDiffLabel(format: MatchFormat): string {
  * `subject` porque "ellas" concuerda en género con "parejas": con
  * `pairSize=1` el sujeto pasa a "jugadores" y el pronombre a "ellos".
  */
-function describeTiebreak(format: MatchFormat, snapshotEvery: number, pairSize: SideSize): string {
+function describeTiebreak(format: MatchFormat, snapshotEvery: number, pairSize: SideSize, unit: string): string {
   const setStep = usesSetsDiff(format) ? `corta la diferencia de sets, después ` : ''
-  // Con marcador abierto los "games" son goles y no hay escalón de sets que
-  // narrar: es el MISMO criterio que corre `computeStandings`, contado.
-  const scoreDiff = scoreDiffLabel(format)
+  // Con marcador abierto no hay escalón de sets que narrar: es el MISMO
+  // criterio que corre `computeStandings`, contado. Lo que se cuenta (goles,
+  // games, puntos) es la unidad del deporte.
+  const scoreDiff = scoreDiffLabel(unit)
   const subject = pairSize === 1 ? 'dos jugadores' : 'dos parejas'
   const pronoun = pairSize === 1 ? 'ellos' : 'ellas'
   return (
@@ -242,9 +248,9 @@ function describeTiebreak(format: MatchFormat, snapshotEvery: number, pairSize: 
 }
 
 /**
- * `allowsDraw` sola y no el `DisciplineShape` entero: ésta es la única
- * llamadora (línea de abajo, dentro de `narrateRules`) y sólo necesita este
- * campo — la firma más chica que funciona.
+ * `allowsDraw` y `unit` solos y no el `DisciplineShape` entero: ésta es la única
+ * llamadora (línea de abajo, dentro de `narrateRules`) y sólo necesita estos
+ * campos — la firma más chica que funciona.
  *
  * La cuarta mentira (design rev 2 §2): con marcador abierto y `allows_draw =
  * false`, la base rechaza un resultado en igualdad (`match_sets_no_draw`,
@@ -252,7 +258,7 @@ function describeTiebreak(format: MatchFormat, snapshotEvery: number, pairSize: 
  * reglas que promete lo que la base va a rechazar es peor que no decir nada
  * — así que cuando no se puede, se dice la negativa, no se calla.
  */
-function describeFormat(format: MatchFormat, allowsDraw: boolean): string {
+function describeFormat(format: MatchFormat, allowsDraw: boolean, unit: string): string {
   // Con marcador abierto no hay set, ni número al que llegar, ni tie-break:
   // hay dos números de goles y ahí termina el partido. Narrar el set de pádel
   // acá era describirle a los jugadores un formato que la app no juega.
@@ -276,7 +282,7 @@ function describeFormat(format: MatchFormat, allowsDraw: boolean): string {
   // `allows_draw = false`, 0015_disciplines.sql:20 lo defaultea false).
   // Subir: pasarle `allowsDraw` también a esta rama cuando exista una
   // disciplina real con sets + empate.
-  return `Cada partido se define a ${setWord} de ${format.gamesPerSet} games${tie}.`
+  return `Cada partido se define a ${setWord} de ${format.gamesPerSet} ${unit}${tie}.`
 }
 
 /**
@@ -322,7 +328,7 @@ export function thirdPlaceNote(matches: readonly MatchResult[]): string | null {
  * empatados en `PG` y en esa diferencia pueden terminar en un orden que esas
  * dos columnas no explican.
  *
- * `scoreDiffLabel(format)`, no un "games" fijo: la llave existe sobre todo en
+ * `scoreDiffLabel(unit)`, no un "games" fijo: la llave existe sobre todo en
  * FIFA (`pair_size=1`, `openScore=true`), donde eso es "diferencia de gol" y
  * no "diferencia de games" — mismo criterio que `tiebreakNote`
  * (tabla-desempate.ts) ya usa para la MISMA frase en la tabla de pádel/FIFA.
@@ -336,15 +342,15 @@ export function thirdPlaceNote(matches: readonly MatchResult[]): string | null {
  * así que las dos frases son mutuamente excluyentes y ninguna reemplaza a la
  * otra: completa el pie donde el otro se calla.
  */
-export function bracketOrderNote(format: MatchFormat): string {
-  return `El orden sale del resultado de la llave, no sólo de la fase de grupos: por eso puede haber lados con el mismo PG y la misma ${scoreDiffLabel(format)} en un orden distinto.`
+export function bracketOrderNote(unit: string): string {
+  return `El orden sale del resultado de la llave, no sólo de la fase de grupos: por eso puede haber lados con el mismo PG y la misma ${scoreDiffLabel(unit)} en un orden distinto.`
 }
 
 /**
  * "el 1º", "el 2º"... La única fuente de este nombre: `computeAwards`
  * (core/awards.ts) la reusa para el `reason` de `AwardLine` en vez de
  * reimplementar la misma tabla — sería la tercera copia, el mismo patrón que
- * ya se cerró para `scoreDiffLabel`/`scoreUnit` (HIGIENE, championRecord).
+ * ya se cerró para `scoreDiffLabel` (HIGIENE, championRecord).
  */
 export function ordinal(position: number): string {
   const words: Record<number, string> = {

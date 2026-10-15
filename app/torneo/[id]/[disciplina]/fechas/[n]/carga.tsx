@@ -2,6 +2,7 @@
 
 import { type Dispatch, type SetStateAction, useState, useTransition } from 'react'
 import type { MatchFormat, SetScore } from '@/core'
+import { chooseDeuce, deuceOptions } from '@/app/amigos/[playerId]/cargar-state'
 import {
   MAX_GOAL_DIGITS,
   chooseLoserGames,
@@ -31,11 +32,14 @@ export interface CargaContext {
   disciplina: string
   matchdayNumber: number
   format: MatchFormat
+  /** `unitOf(kind, format)`: 'games', 'puntos', 'goles'. */
+  unit: string
 }
 
-const TAP = 'rounded-field bg-chip px-3 py-2.5 text-[13.5px] font-extrabold'
+const TAP = 'min-h-[44px] rounded-field bg-chip px-3 py-2.5 text-[13.5px] font-extrabold'
 const ERROR_NOTE = 'rounded-field bg-live-bg px-3 py-2.5 text-[12.5px] font-bold text-live'
 const PROMPT = 'text-[11.5px] font-extrabold uppercase tracking-[.14em] text-muted'
+const cap = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
 
 /**
  * Un lado del marcador abierto.
@@ -167,6 +171,56 @@ export function PanelGoles({
 }
 
 /**
+ * El segundo toque: con cuántos se quedó el que perdió. Si el set se gana por dos (ping pong, sin
+ * tie-break) siguen los de ventaja, "12-10" … "16-14" (`deuceOptions`, los mismos de amigos); con
+ * tie-break `deuceOptions` da `[]` y pádel queda como siempre. Exportado para renderizarlo en la suite.
+ */
+export function BotonesDelPerdedor({
+  format,
+  unit,
+  pending,
+  onLoser,
+  onDeuce,
+}: {
+  format: MatchFormat
+  unit: string
+  pending: boolean
+  onLoser: (n: number) => void
+  onDeuce: (loser: number) => void
+}) {
+  return (
+    <>
+      <p className={PROMPT}>{pending ? 'Guardando…' : `${cap(unit)} del perdedor`}</p>
+      <div className="flex flex-wrap gap-2">
+        {loserGamesOptions(format).map((games) => (
+          <button
+            key={games}
+            type="button"
+            disabled={pending}
+            className={`${TAP} min-w-[44px] text-center`}
+            onClick={() => onLoser(games)}
+          >
+            {games}
+          </button>
+        ))}
+        {deuceOptions(format).map((loser) => (
+          <button
+            key={`deuce-${loser}`}
+            type="button"
+            disabled={pending}
+            aria-label={`${loser + 2} a ${loser}`}
+            className={`${TAP} min-w-[44px] text-center`}
+            onClick={() => onDeuce(loser)}
+          >
+            {`${loser + 2}-${loser}`}
+          </button>
+        ))}
+      </div>
+    </>
+  )
+}
+
+/**
  * La carga de un partido, con una máquina por forma de marcador.
  *
  * **Pádel** (el default, `openScore: false`): dos toques y sin teclado — quién
@@ -228,9 +282,7 @@ export function Carga({
     })
   }
 
-  const tapGames = (loserGames: number) => {
-    if (state === null) return
-    const next = chooseLoserGames(state, loserGames, format)
+  const completar = (next: LoadState) => {
     if (!isComplete(next, format)) {
       setState(next)
       return
@@ -301,22 +353,13 @@ export function Carga({
               </div>
             </>
           ) : (
-            <>
-              <p className={PROMPT}>{pending ? 'Guardando…' : 'Games del perdedor'}</p>
-              <div className="flex flex-wrap gap-2">
-                {loserGamesOptions(format).map((games) => (
-                  <button
-                    key={games}
-                    type="button"
-                    disabled={pending}
-                    className={`${TAP} min-w-[44px] text-center`}
-                    onClick={() => tapGames(games)}
-                  >
-                    {games}
-                  </button>
-                ))}
-              </div>
-            </>
+            <BotonesDelPerdedor
+              format={format}
+              unit={context.unit}
+              pending={pending}
+              onLoser={(n) => completar(chooseLoserGames(state, n, format))}
+              onDeuce={(loser) => completar(chooseDeuce(state, loser, format))}
+            />
           )}
         </div>
       )}

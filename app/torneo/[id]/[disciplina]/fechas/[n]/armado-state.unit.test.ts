@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { pair, type MatchdayFormat } from '@/core'
+import { pair, type MatchdayFormat, type MatchFormat } from '@/core'
 import {
   applySeatTick,
+  armadoWords,
   drawRoom,
+  formatoNotice,
   guestPartnerAbsent,
+  guestsOutnumberNote,
   matchdayShape,
   parityGuestSeat,
   type SeatVM,
@@ -275,6 +278,11 @@ describe('matchdayShape', () => {
       expect(shape.eventualSize).toBe(8)
       expect(shape.suggestedFormat).toEqual({ kind: 'ROUND_ROBIN' })
     })
+
+    it('con la fecha en Automático cuenta los partidos de lo que se va a armar: 8 de a uno son 2 grupos + llave', () => {
+      const shape = matchdayShape({ confirmed: 8, looseGuests: 0, guestPairs: 0, sideSize: 1, formato: { kind: 'AUTO' } })
+      expect(shape.matches).toBe(16)
+    })
   })
 })
 
@@ -386,6 +394,39 @@ describe('parityGuestSeat', () => {
     expect(squad).toHaveLength(3)
     expect(parityGuestSeat(squad, 1)).toBe(false)
   })
+
+  // De a uno no hay parejas que armar (§8) y el servidor no repone ningún
+  // asiento (`syncGuestSeat` sólo corre con pair_size 2): un asiento "exigido
+  // por la paridad" no existe, y marcarlo así dejaba al único invitado sin cruz
+  // y con un cartel de parejas.
+  it('de a uno no exige ningún asiento: plantel impar y un solo suelto', () => {
+    expect(parityGuestSeat(impar, 1, 1)).toBe(false)
+  })
+
+  it('de a dos, pasarle el tamaño del lado explícito no cambia nada', () => {
+    expect(parityGuestSeat(impar, 1, 2)).toBe(true)
+  })
+})
+
+/**
+ * El aviso de "más invitados al sorteo que jugadores libres". El servidor
+ * (`assertSquadCoversLooseGuests`) lo hace cumplir también de a uno, pero el
+ * texto de las parejas manda a controles que de a uno no existen.
+ */
+describe('guestsOutnumberNote', () => {
+  it('de a dos dice lo de siempre, letra por letra', () => {
+    expect(guestsOutnumberNote(2, 3, 2)).toBe(
+      'Hay 3 invitados al sorteo y quedan 2 jugadores del torneo libres para acompañarlos. Elegiles compañero en “Juega con”, poné a los que sobran en una pareja invitada, o sacalos.',
+    )
+  })
+
+  it('de a uno no manda a "Juega con" ni a una pareja invitada', () => {
+    const note = guestsOutnumberNote(1, 3, 2)
+
+    expect(note).toContain('3 invitados')
+    expect(note).toContain('2 jugadores del torneo')
+    expect(note).not.toMatch(/juega con|pareja|compañero/i)
+  })
 })
 
 /**
@@ -410,5 +451,63 @@ describe('guestPartnerAbsent', () => {
 
   it('es verdadero cuando el compañero no está en el plantel dibujado', () => {
     expect(guestPartnerAbsent(squad, { partnerId: 'fantasma' })).toBe(true)
+  })
+})
+
+// Las palabras del armado siguen a la modalidad (`sideSize`), no al deporte: de a
+// uno no hay "parejas invitadas" ni un compañero con quien jugar.
+describe('armadoWords', () => {
+  it('de a uno no hay sección de parejas invitadas ni "Juega con"', () => {
+    const words = armadoWords(1, ROUND_ROBIN, false)
+
+    expect(words.guestPairSection).toBe(false)
+    expect(words.guestPartner).toBe(false)
+    expect(words.sides).toBe('jugadores')
+  })
+
+  it('de a dos conserva el texto de siempre, con parejas invitadas y "Juega con"', () => {
+    const words = armadoWords(2, ROUND_ROBIN, false)
+
+    expect(words.guestPairSection).toBe(true)
+    expect(words.guestPartner).toBe(true)
+    expect(words.sides).toBe('parejas')
+    expect(words.addGuest).toBe('+ Agregar pareja invitada')
+  })
+})
+
+// Con parejas fijas no hay defensores ni cruce de tabla: la nota no puede prometerlos.
+describe('armadoWords — la nota del armado según la modalidad', () => {
+  const GRUPOS: MatchdayFormat = { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 }
+  const FIJAS = 'Cada pareja juega junta todo el torneo: sólo se arman los cruces.'
+
+  it('parejas fijas: dice que las parejas no cambian, sin defensores ni cruce de tabla', () => {
+    expect(armadoWords(2, ROUND_ROBIN, false, true).drawNote).toBe(FIJAS)
+  })
+
+  it('parejas fijas con grupos: la misma frase, más la de los grupos', () => {
+    expect(armadoWords(2, GRUPOS, false, true).drawNote).toBe(
+      `${FIJAS} Juegan por grupos: todos contra todos adentro de cada grupo, y los 2 primeros de cada uno pasan a la llave.`,
+    )
+  })
+
+  it('parejas que rotan e individual: el texto de siempre, letra por letra', () => {
+    expect(armadoWords(2, ROUND_ROBIN, false, false).drawNote).toBe(
+      'Los defensores quedan fijos. El resto se arma cruzando la tabla: 1° con último, 2° con anteúltimo, y así.',
+    )
+    expect(armadoWords(1, ROUND_ROBIN, false, false).drawNote).toBe('Juegan todos contra todos, en el orden de la tabla.')
+  })
+})
+
+// Fuera del armado, una fecha que se juega distinto que el deporte lo dice (§7).
+describe('formatoNotice', () => {
+  const aCuatro: MatchFormat = { setsToWin: 1, gamesPerSet: 4, tieBreak: false, openScore: false }
+  const aSeis: MatchFormat = { ...aCuatro, gamesPerSet: 6 }
+
+  it('nombra la fecha y a cuánto se juega cuando no es lo del deporte', () => {
+    expect(formatoNotice(3, aSeis, aCuatro, 'games')).toBe('Fecha 3 · 1 set a 6 games')
+  })
+
+  it('calla cuando la fecha se juega igual que el deporte', () => {
+    expect(formatoNotice(3, aCuatro, { ...aCuatro }, 'games')).toBeNull()
   })
 })

@@ -70,7 +70,17 @@ const escena = vi.hoisted(() => ({
   // toca.
   squadCount: 8,
   guestEntries: [] as { id: string; displayName: string; seedPosition: number }[],
+  // `disciplines.fixed_teams`: no viaja en `DisciplineHeader`, el armado lo pide con `disciplineConfig`.
+  fixedTeams: false,
 }))
+
+vi.mock('@/db/discipline', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/db/discipline')>()
+  return {
+    ...real,
+    disciplineConfig: async () => ({ fixedTeams: escena.fixedTeams }),
+  }
+})
 
 vi.mock('@/db/matchday', async (importOriginal) => {
   const real = await importOriginal<typeof import('@/db/matchday')>()
@@ -162,6 +172,7 @@ vi.mock('@/db/read', async (importOriginal) => {
       disciplineId: D1,
       allowsDraw: false,
       formato: escena.formato,
+      matchFormat: null,
     }
   }
 
@@ -990,5 +1001,200 @@ describe('el armado en DRAFT — tooManyToPair apaga el botón de sortear (Impor
     const boton = /<button[^>]*>Generar parejas<\/button>/.exec(html)?.[0] ?? ''
     expect(boton).not.toBe('')
     expect(boton).toContain('disabled')
+  })
+})
+
+describe('el armado en DRAFT — Automático antes de sortear (§7, hallazgo de la Task 4)', () => {
+  /**
+   * `page.tsx` le pasaba a `Armado` el `AUTO` ya resuelto con los lados
+   * SORTEADOS: antes del sorteo son 0 y daba `ROUND_ROBIN`. Con 12 de a uno la
+   * pantalla marcaba "Todos contra todos", contaba 66 partidos y no mostraba el
+   * reparto, mientras `generatePairs` iba a armar grupos con los presentes.
+   * `suggestFormat(12, 1, 36)` es 4 grupos (20 partidos): 2 grupos (34) también
+   * entra, y gana el de más grupos.
+   */
+  it('con 12 de a uno y AUTO guardado: Automático marcado, 4 grupos + llave, 20 partidos y el reparto', async () => {
+    escena.status = 'DRAFT'
+    escena.isAdmin = true
+    escena.pairSize = 1
+    escena.maxMatches = undefined
+    escena.formato = { kind: 'AUTO' } as unknown as MatchdayFormat
+    escena.sides = []
+    escena.matches = []
+    escena.squadCount = 12
+    escena.guestEntries = []
+
+    const html = await render()
+
+    const btnAutomatico = /<button[^>]*>Automático/.exec(html)?.[0] ?? ''
+    expect(btnAutomatico).toContain('aria-checked="true"')
+    expect(html).toContain('→ 4 grupos + llave (vienen 12)')
+    expect(html).toContain('20 partidos')
+    expect(html).not.toContain('66 partidos')
+    expect(html).toContain('Cómo quedan los grupos')
+  })
+})
+
+describe('la tarjeta del partido: con más de un set cuenta SETS, con uno solo los games (R15)', () => {
+  function withSets(round: number, a: number, b: number, sets: [number, number][], fase: MatchWithId['fase'] = 'GRUPO'): MatchWithId {
+    return {
+      id: `${fase}-${round}-${a}-${b}`,
+      round,
+      fase,
+      grupo: 1,
+      sideA: side(a),
+      sideB: side(b),
+      sets: sets.map(([gamesA, gamesB]) => ({ gamesA, gamesB })),
+    }
+  }
+  /** El puntaje que la tarjeta dibuja al lado del nombre, sólo en la parte de partidos (antes de la tabla). */
+  function scoreOf(html: string, name: string): string | undefined {
+    const partidos = html.slice(0, html.indexOf('Tabla de la fecha'))
+    return new RegExp(`${name}</span><span[^>]*>(\\d+|–)</span>`).exec(partidos)?.[1]
+  }
+
+  it('ping pong 11-0, 9-11, 9-11 dice 1 a 2 (no 29 a 22) y un set de pádel 4-2 sigue diciendo 4 a 2', async () => {
+    escena.status = 'OPEN'
+    escena.isAdmin = true
+    escena.pairSize = 1
+    escena.formato = { kind: 'ROUND_ROBIN' }
+    escena.sides = [1, 2, 3, 4].map(side)
+    escena.matches = [
+      withSets(1, 1, 2, [[11, 0], [9, 11], [9, 11]]),
+      withSets(1, 3, 4, [[4, 2]]),
+      withSets(2, 1, 3, [[6, 11], [11, 9], [11, 5]]),
+      unplayedMatch('GRUPO', 1, 2, 2, 4),
+    ]
+
+    const html = (await render()).replaceAll('<!-- -->', '')
+
+    // La ronda 1, completa, queda en su fila resumen.
+    expect(html).toContain('Jugador 1 1–2 Jugador 2')
+    expect(html).toContain('Jugador 3 4–2 Jugador 4')
+    expect(html).not.toContain('29–22')
+    // La ronda 2 está abierta: la tarjeta.
+    expect(scoreOf(html, 'Jugador 1')).toBe('2')
+    expect(scoreOf(html, 'Jugador 3')).toBe('1')
+  })
+
+  it('en la llave también: sets ganados con más de un set, games con uno', async () => {
+    escena.status = 'OPEN'
+    escena.isAdmin = true
+    escena.pairSize = 1
+    escena.formato = { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 }
+    escena.sides = ALL_SIDES
+    escena.matches = [
+      withSets(1, 1, 2, [[11, 0], [9, 11], [9, 11]]),
+      withSets(1, 3, 4, [[4, 2]]),
+    ]
+
+    const html = await render()
+
+    expect(scoreOf(html, 'Jugador 1')).toBe('1')
+    expect(scoreOf(html, 'Jugador 2')).toBe('2')
+    expect(scoreOf(html, 'Jugador 3')).toBe('4')
+    expect(scoreOf(html, 'Jugador 4')).toBe('2')
+  })
+})
+
+describe('el armado en DRAFT — la paridad sólo apaga el sorteo en parejas (assertMatchdaySize)', () => {
+  it('7 confirmados de a uno: "Ordenar jugadores" se puede tocar', async () => {
+    escena.status = 'DRAFT'
+    escena.isAdmin = true
+    escena.pairSize = 1
+    escena.maxMatches = undefined
+    escena.formato = { kind: 'ROUND_ROBIN' }
+    escena.sides = []
+    escena.matches = []
+    escena.squadCount = 7
+    escena.guestEntries = []
+
+    const html = await render()
+
+    const boton = /<button[^>]*>Ordenar jugadores<\/button>/.exec(html)?.[0] ?? ''
+    expect(boton).not.toBe('')
+    expect(boton).not.toContain('disabled')
+  })
+
+  it('7 en parejas (6 del plantel y un invitado suelto): "Generar parejas" sigue apagado', async () => {
+    escena.status = 'DRAFT'
+    escena.isAdmin = true
+    escena.pairSize = 2
+    escena.maxMatches = undefined
+    escena.formato = { kind: 'ROUND_ROBIN' }
+    escena.sides = []
+    escena.matches = []
+    escena.squadCount = 6
+    escena.guestEntries = [{ id: 'g1', displayName: 'Invitado 1', seedPosition: 6 }]
+
+    const html = await render()
+
+    const boton = /<button[^>]*>Generar parejas<\/button>/.exec(html)?.[0] ?? ''
+    expect(boton).not.toBe('')
+    expect(boton).toContain('disabled')
+  })
+})
+
+describe('el armado en DRAFT — con parejas fijas la nota no promete defensores (I4)', () => {
+  it('parejas fijas: "Cada pareja juega junta todo el torneo", no "Los defensores quedan fijos"', async () => {
+    escena.status = 'DRAFT'
+    escena.isAdmin = true
+    escena.pairSize = 2
+    escena.maxMatches = undefined
+    escena.formato = { kind: 'ROUND_ROBIN' }
+    // La nota va debajo de las parejas ya armadas.
+    escena.sides = [
+      { size: 2, a: 'e1', b: 'e2' },
+      { size: 2, a: 'e3', b: 'e4' },
+      { size: 2, a: 'e5', b: 'e6' },
+      { size: 2, a: 'e7', b: 'e8' },
+    ]
+    escena.matches = []
+    escena.squadCount = 8
+    escena.guestEntries = []
+    escena.fixedTeams = true
+
+    const html = await render()
+    escena.fixedTeams = false
+
+    expect(html).toContain('Cada pareja juega junta todo el torneo: sólo se arman los cruces.')
+    expect(html).not.toContain('Los defensores quedan fijos')
+  })
+})
+
+describe('la fecha GROUPS_KNOCKOUT cerrada — sin pie de desempate de la tabla de grupos (R1)', () => {
+  /**
+   * Con el orden congelado igual al vivo (`frozenPoints` vacío), `tiebreakNote` explicaba la tabla
+   * de GRUPOS: "quedó 2° por …" sobre un lado que pudo perder la final. El puesto de una fecha con
+   * llave lo decide la llave, no ese desempate.
+   */
+  it('no dice "quedó N° por …" aunque la tabla de grupos tenga un empate', async () => {
+    escena.status = 'CLOSED'
+    escena.isAdmin = true
+    escena.pairSize = 1
+    escena.formato = { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 }
+    escena.sides = ALL_SIDES
+    escena.frozenPoints = new Map()
+    // Los dos grupos salen calcados: 1 y 5 ganan los tres, empatados en todo.
+    const grupo = (g: number, [a, b, c, d]: number[]) => [
+      playedMatch('GRUPO', g, 1, a!, b!),
+      playedMatch('GRUPO', g, 1, c!, d!),
+      playedMatch('GRUPO', g, 2, a!, c!),
+      playedMatch('GRUPO', g, 2, b!, d!),
+      playedMatch('GRUPO', g, 3, a!, d!),
+      playedMatch('GRUPO', g, 3, b!, c!),
+    ]
+    escena.matches = [
+      ...grupo(1, [1, 2, 3, 4]),
+      ...grupo(2, [5, 6, 7, 8]),
+      playedMatch('SEMI', 1, 1, 1, 6),
+      playedMatch('SEMI', 1, 1, 5, 2),
+      playedMatch('FINAL', 1, 1, 5, 1),
+      unplayedMatch('TERCER_PUESTO', 1, 1, 6, 2),
+    ]
+
+    const html = await render()
+
+    expect(html).not.toMatch(/quedó \d+° por/)
   })
 })

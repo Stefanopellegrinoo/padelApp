@@ -6,11 +6,15 @@
 
 import {
   defaultMaxMatches,
+  formatsLabel,
   MAX_PAIRING_POOL,
   matchCountForFormat,
   minSquadFor,
+  resolveFormato,
   suggestFormat,
   type MatchdayFormat,
+  type MatchdayFormatSetting,
+  type MatchFormat,
   type Duo,
   type SideSize,
 } from '@/core'
@@ -58,6 +62,8 @@ export interface MatchdayShape {
   sides: number
   /** El techo de partidos de esta disciplina — el selector ofrece su menú, no el de un techo global. */
   maxMatches: number
+  /** El formato que se va a armar: el guardado, o `AUTO` resuelto con `eventualSize` (§7). */
+  formato: MatchdayFormat
   /**
    * Los partidos reales de la fecha, según el `formato` GUARDADO — round
    * robin completo (`C(sides, 2)`) si es `ROUND_ROBIN`, grupos + llave si es
@@ -149,8 +155,8 @@ export function matchdayShape({
   sideSize: SideSize
   /** El techo de partidos de ESTA disciplina. Sin pasarlo rige el default de su `sideSize`. */
   maxMatches?: number
-  /** El `matchdays.formato` GUARDADO hoy — no la sugerencia. */
-  formato: MatchdayFormat
+  /** El `matchdays.formato` GUARDADO hoy — no la sugerencia. `AUTO` cuenta lo que se armaría con estos presentes. */
+  formato: MatchdayFormatSetting
 }): MatchdayShape {
   const size = confirmed + looseGuests + guestPairs * 2
   // La línea de "son impares" describe al suelto que `syncGuestSeat` agrega, y
@@ -159,10 +165,12 @@ export function matchdayShape({
   const needsLooseGuest = sideSize === 2 && confirmed % 2 !== 0 && looseGuests === 0
   const eventualSize = size + (needsLooseGuest ? 1 : 0)
   const sides = Math.floor(size / sideSize)
+  const resolved = resolveFormato(formato, eventualSize, sideSize, maxMatches)
   return {
     size,
     sides,
-    matches: matchCountForFormat(formato, sides),
+    formato: resolved,
+    matches: matchCountForFormat(resolved, sides),
     complete: size % sideSize === 0,
     needsLooseGuest,
     eventualSize,
@@ -174,6 +182,21 @@ export function matchdayShape({
     maxMatches,
   }
 }
+
+/**
+ * "1 set a 6 games". `formatLabel` no sale del barrel de `core/` (S77): un solo
+ * formato va por `formatsLabel`, que con uno devuelve la frase sin prefijo.
+ */
+export function matchFormatLabel(format: MatchFormat, unit: string): string {
+  return formatsLabel([{ label: '', matchFormat: format, unit }])
+}
+
+/** "Fecha 3 · 1 set a 6 games", o null si la fecha se juega igual que el deporte hoy (§7). */
+export function formatoNotice(number: number, effective: MatchFormat, discipline: MatchFormat, unit: string): string | null {
+  const label = matchFormatLabel(effective, unit)
+  return label === matchFormatLabel(discipline, unit) ? null : `Fecha ${number} · ${label}`
+}
+
 /** Lo que el sorteo tiene para repartir en esta fecha. */
 export interface DrawRoom {
   /** Invitados sueltos librados al sorteo: sin compañero elegido a mano. */
@@ -230,6 +253,19 @@ export function drawRoom(
 }
 
 /**
+ * El aviso de "más invitados al sorteo que jugadores del torneo libres". El
+ * borde (`assertSquadCoversLooseGuests`) lo hace cumplir también de a uno, pero
+ * el texto de las parejas manda a "Juega con" y a la pareja invitada, que de a
+ * uno no existen (§8): ahí sólo queda sacar a los que sobran.
+ */
+export function guestsOutnumberNote(sideSize: SideSize, toTheDraw: number, freeSquad: number): string {
+  if (sideSize === 1) {
+    return `Hay ${toTheDraw} invitados y quedan ${freeSquad} jugadores del torneo libres: no puede haber más invitados que jugadores. Sacá a los que sobran.`
+  }
+  return `Hay ${toTheDraw} invitados al sorteo y quedan ${freeSquad} jugadores del torneo libres para acompañarlos. Elegiles compañero en “Juega con”, poné a los que sobran en una pareja invitada, o sacalos.`
+}
+
+/**
  * El asiento de invitado que la paridad EXIGE, y por eso el único sin cruz: con
  * el plantel impar y un solo suelto, sacarlo es un no-op —`removeLooseGuestSeat`
  * cierra con `syncGuestSeat`, que lo repone en el acto— y una cruz que no hace
@@ -238,10 +274,20 @@ export function drawRoom(
  *
  * Vivía inline en `armado.tsx` y decide qué se puede sacar y qué no, que es
  * exactamente la clase de decisión que tiene que poder testearse.
+ *
+ * Sólo de a dos (`sideSize === 2`): es donde `syncGuestSeat` repone el asiento.
+ * De a uno el servidor no sincroniza nada (un plantel impar se juega tal cual),
+ * así que no hay asiento "exigido" y el invitado se tiene que poder sacar.
+ * `sideSize` default 2 —el caso de siempre— porque el único llamador lo pasa
+ * siempre; sin default, cada test de parejas tendría que repetirlo.
  */
-export function parityGuestSeat(seats: readonly SeatVM[], looseGuestCount: number): boolean {
+export function parityGuestSeat(
+  seats: readonly SeatVM[],
+  looseGuestCount: number,
+  sideSize: SideSize = 2,
+): boolean {
   const confirmed = seats.filter((seat) => seat.playing).length
-  return confirmed % 2 !== 0 && looseGuestCount === 1
+  return sideSize === 2 && confirmed % 2 !== 0 && looseGuestCount === 1
 }
 
 /**
@@ -277,4 +323,111 @@ export function partnersTakenBy(
   return new Set(
     looseGuests.flatMap((guest) => (guest.partnerId === null ? [] : [guest.partnerId])),
   )
+}
+
+/** El vocabulario del armado: lo que `armadoWords` le devuelve a la pantalla. */
+export interface ArmadoWords {
+  sides: string
+  guestSection: string
+  guestNote: string
+  addGuest: string
+  guestPairNoun: string
+  draw: string
+  drawn: string
+  drawNote: string
+  /** Se dibuja la sección de invitados EN PAREJA y su botón. Falso de a uno. */
+  guestPairSection: boolean
+  /** El invitado suelto puede elegir con quién juega ("Juega con"). Falso de a uno. */
+  guestPartner: boolean
+}
+
+/**
+ * El vocabulario de la disciplina. Un lado de uno no es "una pareja" y su
+ * fecha no tiene "parejas invitadas": son jugadores invitados que juegan
+ * solos, igual que todos.
+ *
+ * `drawNote` (W80, verify-report-pr21-cierre #4016): antes dependía SÓLO de
+ * `sideSize`, nunca del `formato` elegido — con "N grupos + llave" elegido,
+ * la vista previa de S83 ("Cómo quedan los grupos") dibujaba arriba un
+ * reparto en grupos y esta nota, dos pantallazos más abajo, seguía
+ * prometiendo "todos contra todos, en el orden de la tabla" (o el cruce de
+ * defensores del pádel): la misma clase de contradicción que W55-W57.
+ * `formato.qualifiersPerGroup` es literal en el texto — no un "2" fijo — para
+ * que la nota se rompa sola si algún día deja de ser siempre 2 (`core/knockout.ts`,
+ * `knockoutMatchups` hoy sólo arma cruces con 2 clasificados por grupo).
+ *
+ * S93 (verify-report-pre-contract #4026): el fix de W80 de arriba
+ * REEMPLAZABA `base.drawNote` entero al elegir grupos. Para pádel
+ * (`sideSize === 2`) esa nota base no habla de grupos: dice CÓMO SE ARMARON
+ * las parejas que la lista de arriba muestra (defensores fijos, cruce de
+ * tabla) — una pregunta distinta de CÓMO SE VAN A JUGAR, que es lo que la
+ * nota de grupos contesta. Perder la primera al elegir grupos dejaba la
+ * lista de parejas sin ninguna explicación. Para singles (`sideSize === 1`)
+ * no hay paso de "armar parejas": la nota base y la de grupos contestan la
+ * MISMA pregunta (cómo se arman los partidos), así que ahí sigue
+ * reemplazando, como antes.
+ *
+ * `guestPairSection` y `guestPartner` (§8): de a uno no hay pareja que invitar
+ * ni compañero que elegir. `addGuestPair` no tiene guard de `pairSize` y sumaba
+ * dos invitados que el sorteo de a uno ignora (el lock "a constraint on a
+ * pairing that never happens constrains nothing"): ahora la pantalla no ofrece
+ * ese camino ni el "Juega con" del invitado suelto, que tampoco ata a nadie.
+ *
+ * S94 (verify-report-pre-contract #4026): `formato` puede cambiar DESPUÉS
+ * de que el fixture YA se sorteó, sin volver a sortear (mismo estado
+ * divergido que vigila C32 y que W86 cierra en la tabla del día) —
+ * `formatDrifted` (calculado en `page.tsx` contra `detail.matches`, no
+ * contra `formato` solo) dice si eso pasó. Prometer grupos sobre un
+ * fixture que sigue siendo el de antes es la misma mentira que W86 cerró
+ * del otro lado de la pantalla.
+ */
+export function armadoWords(
+  sideSize: SideSize,
+  formato: MatchdayFormat,
+  formatDrifted: boolean,
+  fixedTeams = false,
+): ArmadoWords {
+  const base: ArmadoWords =
+    sideSize === 1
+      ? {
+          sides: 'jugadores',
+          guestSection: 'Jugadores invitados',
+          guestNote:
+            'Juegan solos, como todos, y no suman puntos para el campeonato. Entran de a dos.',
+          addGuest: '+ Agregar 2 invitados',
+          guestPairNoun: 'los dos invitados',
+          draw: 'Ordenar jugadores',
+          drawn: 'Orden de la fecha',
+          drawNote: 'Juegan todos contra todos, en el orden de la tabla.',
+          guestPairSection: false,
+          guestPartner: false,
+        }
+      : {
+          sides: 'parejas',
+          guestSection: 'Parejas invitadas',
+          guestNote:
+            'Juegan juntos y no suman puntos para el campeonato: es un amistoso adentro de la fecha.',
+          addGuest: '+ Agregar pareja invitada',
+          guestPairNoun: 'la pareja invitada',
+          draw: 'Generar parejas',
+          drawn: 'Parejas',
+          // Con parejas fijas no hay defensores ni cruce de tabla (`pairingContextFor`): las parejas
+          // entran resueltas y sólo se arman los partidos. Misma idea que `narrateRules`.
+          drawNote: fixedTeams
+            ? 'Cada pareja juega junta todo el torneo: sólo se arman los cruces.'
+            : 'Los defensores quedan fijos. El resto se arma cruzando la tabla: 1° con último, 2° con anteúltimo, y así.',
+          guestPairSection: true,
+          guestPartner: true,
+        }
+
+  if (formato.kind !== 'GROUPS_KNOCKOUT') return base
+
+  const groupsNote = formatDrifted
+    ? 'El formato cambió después de sortear: para jugar por grupos hay que volver a sortear la fecha.'
+    : `Juegan por grupos: todos contra todos adentro de cada grupo, y los ${formato.qualifiersPerGroup} primeros de cada uno pasan a la llave.`
+
+  return {
+    ...base,
+    drawNote: sideSize === 2 ? `${base.drawNote} ${groupsNote}` : groupsNote,
+  }
 }

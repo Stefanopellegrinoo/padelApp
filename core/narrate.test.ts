@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { bracketOrderNote, formatLabel, formatsLabel, narrateRules, thirdPlaceNote } from './narrate'
+import { bracketOrderNote, formatLabel, formatsLabel, narrateRules, scoreDiffLabel, thirdPlaceNote } from './narrate'
+import { SPORTS } from './sports'
 import { MASTERS_MATCHES, MASTERS_SIZE } from './constants'
 import { defaultConfig } from './config'
 import { pair } from './side'
@@ -25,12 +26,16 @@ import type { DisciplineShape, MatchResult, Phase, Side, SeasonConfig } from './
  * pinneados abajo. Es exactamente la prueba de que nada de lo que ya rendía
  * cambió: el pin se estableció contra el archivo sin tocar (arriba) y sigue
  * verde contra el archivo ya implementado.
+ *
+ * (torneos-deportes, Tarea 7, a propósito): `La fecha` perdió "y juegan todos
+ * contra todos" — cómo se arma la fecha lo dice la línea `fecha` del reglamento
+ * y con `AUTO` o con grupos esa frase era falsa. El resto del texto, igual.
  */
 describe('narrateRules — pin de byte-identidad (3a.1)', () => {
   const PIN_CONFIG = defaultConfig(8)
 
   it('reproduce las seis secciones de hoy, carácter a carácter', () => {
-    const sections = narrateRules(PIN_CONFIG, { hasMasters: true, pairSize: 2, allowsDraw: true })
+    const sections = narrateRules(PIN_CONFIG, TODAY_SHAPE, 'games')
 
     expect(sections.map((section) => section.title)).toEqual([
       'El torneo',
@@ -48,8 +53,8 @@ describe('narrateRules — pin de byte-identidad (3a.1)', () => {
     )
 
     expect(sections.find((s) => s.title === 'La fecha')?.body).toBe(
-      'Cada fecha la juegan los que confirman, como mínimo 4 y hasta 12. Se arman parejas con todos y juegan ' +
-        'todos contra todos. Cada partido se define a un set de 4 games con tie-break. Si el número ' +
+      'Cada fecha la juegan los que confirman, como mínimo 4 y hasta 12. Se arman parejas con todos. ' +
+        'Cada partido se define a un set de 4 games con tie-break. Si el número ' +
         'de confirmados da impar, se suma un invitado para poder armar las parejas: el invitado no ' +
         'suma puntos, pero su compañero sí.',
     )
@@ -96,17 +101,22 @@ const CONFIG: SeasonConfig = {
 }
 
 /** La única forma que existía antes de `DisciplineShape`: pádel, con Masters. */
-const TODAY_SHAPE: DisciplineShape = { hasMasters: true, pairSize: 2, allowsDraw: true }
+const TODAY_SHAPE: DisciplineShape = { hasMasters: true, pairSize: 2, fixedTeams: false, allowsDraw: true }
 
-function bodyOf(config: SeasonConfig, title: string, shape: DisciplineShape = TODAY_SHAPE): string {
-  const block = narrateRules(config, shape).find((section) => section.title === title)
+function bodyOf(
+  config: SeasonConfig,
+  title: string,
+  shape: DisciplineShape = TODAY_SHAPE,
+  unit = 'games',
+): string {
+  const block = narrateRules(config, shape, unit).find((section) => section.title === title)
   if (block === undefined) throw new Error(`No hay bloque "${title}"`)
   return block.body
 }
 
 describe('narrateRules', () => {
   it('returns a block per topic', () => {
-    const titles = narrateRules(CONFIG, TODAY_SHAPE).map((section) => section.title)
+    const titles = narrateRules(CONFIG, TODAY_SHAPE, 'games').map((section) => section.title)
     expect(titles).toEqual([
       'El torneo',
       'La fecha',
@@ -178,7 +188,7 @@ describe('narrateRules', () => {
   })
 
   it('never leaves a placeholder in the output', () => {
-    for (const section of narrateRules(CONFIG, TODAY_SHAPE)) {
+    for (const section of narrateRules(CONFIG, TODAY_SHAPE, 'games')) {
       expect(section.body).not.toMatch(/undefined|NaN|\{\{/)
       expect(section.body.length).toBeGreaterThan(0)
     }
@@ -226,14 +236,14 @@ describe('narrateRules', () => {
 // esconde al llamador que no lo piensa).
 describe('narrateRules — DisciplineShape', () => {
   it('sin Masters no hay sección "El Masters" y "El torneo" no la nombra [R1]', () => {
-    const sections = narrateRules(CONFIG, { hasMasters: false, pairSize: 2, allowsDraw: true })
+    const sections = narrateRules(CONFIG, { ...TODAY_SHAPE, hasMasters: false }, 'games')
     expect(sections.map((s) => s.title)).not.toContain('El Masters')
     const elTorneo = sections.find((s) => s.title === 'El torneo')?.body ?? ''
     expect(elTorneo).not.toContain('Masters')
   })
 
   it('con lados de uno, "La fecha" y "Los puntos" no hablan de parejas y no hay sección de armado [R2, R3]', () => {
-    const sections = narrateRules(CONFIG, { hasMasters: true, pairSize: 1, allowsDraw: true })
+    const sections = narrateRules(CONFIG, { ...TODAY_SHAPE, pairSize: 1 }, 'games')
     const laFecha = sections.find((s) => s.title === 'La fecha')?.body ?? ''
     expect(laFecha).not.toContain('pareja')
     expect(laFecha).not.toContain('se suma un invitado')
@@ -243,17 +253,17 @@ describe('narrateRules — DisciplineShape', () => {
   })
 
   it('con hasMasters:true y pairSize:2 reproduce el pin de 3a.1 tal cual (regresión R1/R2/R3) [3a.4]', () => {
-    const sections = narrateRules(defaultConfig(8), TODAY_SHAPE)
+    const sections = narrateRules(defaultConfig(8), TODAY_SHAPE, 'games')
     expect(sections.find((s) => s.title === 'La fecha')?.body).toBe(
-      'Cada fecha la juegan los que confirman, como mínimo 4 y hasta 12. Se arman parejas con todos y juegan ' +
-        'todos contra todos. Cada partido se define a un set de 4 games con tie-break. Si el número ' +
+      'Cada fecha la juegan los que confirman, como mínimo 4 y hasta 12. Se arman parejas con todos. ' +
+        'Cada partido se define a un set de 4 games con tie-break. Si el número ' +
         'de confirmados da impar, se suma un invitado para poder armar las parejas: el invitado no ' +
         'suma puntos, pero su compañero sí.',
     )
   })
 
   it('FIFA 1v1 default: el tope de "La fecha" refleja maxMatchesOf, no el default de partidos de pádel [R4]', () => {
-    const laFecha = bodyOf(CONFIG, 'La fecha', { hasMasters: false, pairSize: 1, allowsDraw: true })
+    const laFecha = bodyOf(CONFIG, 'La fecha', { hasMasters: false, pairSize: 1, fixedTeams: false, allowsDraw: true })
     // maxMatchesOf(CONFIG, 1) === defaultMaxMatches(1) === 36, porque CONFIG no trae `maxMatches`.
     expect(laFecha).toContain('36 partidos por fecha')
   })
@@ -267,13 +277,13 @@ describe('narrateRules — DisciplineShape', () => {
 
   it('marcador abierto + empate permitido reproduce "Puede terminar empatado." tal cual [R5]', () => {
     const FIFA = { ...CONFIG, matchFormat: { ...CONFIG.matchFormat, openScore: true } }
-    const body = bodyOf(FIFA, 'La fecha', { hasMasters: false, pairSize: 1, allowsDraw: true })
+    const body = bodyOf(FIFA, 'La fecha', { hasMasters: false, pairSize: 1, fixedTeams: false, allowsDraw: true }, 'goles')
     expect(body).toContain('Puede terminar empatado.')
   })
 
   it('marcador abierto + empate NO permitido dice lo contrario, sin la palabra "empatado" [R5]', () => {
     const FIFA = { ...CONFIG, matchFormat: { ...CONFIG.matchFormat, openScore: true } }
-    const body = bodyOf(FIFA, 'La fecha', { hasMasters: false, pairSize: 1, allowsDraw: false })
+    const body = bodyOf(FIFA, 'La fecha', { hasMasters: false, pairSize: 1, fixedTeams: false, allowsDraw: false }, 'goles')
     expect(body).not.toContain('empatado')
     expect(body).toContain('ganador')
   })
@@ -291,7 +301,7 @@ describe('narrateRules — DisciplineShape', () => {
   // tiene pareja que ganar (core/pairing.ts:135-147): la tabla de la fecha
   // ordena jugadores.
   it('con lados de uno, "Los desempates" no afirma que ganan parejas [R2]', () => {
-    const body = bodyOf(CONFIG, 'Los desempates', { hasMasters: true, pairSize: 1, allowsDraw: true })
+    const body = bodyOf(CONFIG, 'Los desempates', { hasMasters: true, pairSize: 1, fixedTeams: false, allowsDraw: true })
     expect(body).not.toContain('pareja')
     expect(body).toContain('si dos jugadores ganan la misma cantidad de partidos')
     expect(body).toContain('el partido entre ellos lo decide')
@@ -299,7 +309,7 @@ describe('narrateRules — DisciplineShape', () => {
   })
 
   it('con lados de dos, "Los desempates" sigue diciendo parejas tal cual (regresión) [R2]', () => {
-    const body = bodyOf(CONFIG, 'Los desempates', { hasMasters: true, pairSize: 2, allowsDraw: true })
+    const body = bodyOf(CONFIG, 'Los desempates', { hasMasters: true, pairSize: 2, fixedTeams: false, allowsDraw: true })
     expect(body).toContain('si dos parejas ganan la misma cantidad de partidos')
     expect(body).toContain('el partido entre ellas lo decide')
   })
@@ -310,7 +320,7 @@ describe('narrateRules — DisciplineShape', () => {
   // ≤6 valores, así que nunca ejercitan ese fallback. 14 jugadores en pareja
   // son 7 lados: la primera curva real con un 7º puesto.
   it('nombra bien el 7º puesto cuando la curva de puntos tiene más de seis valores', () => {
-    const body = bodyOf(defaultConfig(14, 2), 'Los puntos', { hasMasters: false, pairSize: 2, allowsDraw: true })
+    const body = bodyOf(defaultConfig(14, 2), 'Los puntos', { hasMasters: false, pairSize: 2, fixedTeams: false, allowsDraw: true })
     expect(body).toContain('el 7º, 0')
     expect(body).not.toContain('el 8º')
   })
@@ -330,7 +340,7 @@ describe('narrateRules con marcador abierto', () => {
   }
 
   it('no promete sets, games ni tie-break', () => {
-    const body = bodyOf(FIFA, 'La fecha')
+    const body = bodyOf(FIFA, 'La fecha', TODAY_SHAPE, 'goles')
     expect(body).not.toContain('games')
     expect(body).not.toContain('tie-break')
     expect(body).toContain('goles')
@@ -342,10 +352,58 @@ describe('narrateRules con marcador abierto', () => {
     const body = bodyOf(
       { ...FIFA, matchFormat: { ...FIFA.matchFormat, setsToWin: 2 } },
       'Los desempates',
+      TODAY_SHAPE,
+      'goles',
     )
     expect(body).not.toContain('corta la diferencia de sets')
     expect(body).not.toContain('diferencia de games')
     expect(body).toContain('diferencia de gol')
+  })
+})
+
+// torneos-deportes, Tarea 7: el detalle de hoy nunca dice otra cosa que el
+// reglamento en criollo que va arriba (docs/torneos-deportes.md §6).
+describe('narrateRules — el detalle no contradice al reglamento', () => {
+  const FIJAS: DisciplineShape = { ...TODAY_SHAPE, fixedTeams: true }
+  const INDIVIDUAL: DisciplineShape = { hasMasters: false, pairSize: 1, fixedTeams: false, allowsDraw: true }
+  const FORMAS: Array<[string, DisciplineShape, string]> = [
+    ['parejas que rotan', TODAY_SHAPE, 'games'],
+    ['parejas fijas', FIJAS, 'games'],
+    ['individual', INDIVIDUAL, 'goles'],
+    ['individual sin empate', { ...INDIVIDUAL, allowsDraw: false }, 'puntos'],
+  ]
+
+  it('parejas fijas: no hay sección de armado y "La fecha" dice que juegan juntas todo el torneo', () => {
+    const sections = narrateRules(CONFIG, FIJAS, 'games')
+    expect(sections.map((s) => s.title)).not.toContain('Cómo se arman las parejas')
+    expect(bodyOf(CONFIG, 'La fecha', FIJAS)).toContain('Cada pareja juega junta todo el torneo.')
+  })
+
+  it('parejas que rotan: la sección de armado sigue, y "La fecha" dice que se arman con todos', () => {
+    expect(narrateRules(CONFIG, TODAY_SHAPE, 'games').map((s) => s.title)).toContain('Cómo se arman las parejas')
+    expect(bodyOf(CONFIG, 'La fecha', TODAY_SHAPE)).toContain('Se arman parejas con todos. ')
+  })
+
+  it('individual: "La fecha" dice que cada uno juega por su cuenta', () => {
+    expect(bodyOf(CONFIG, 'La fecha', INDIVIDUAL, 'goles')).toContain('Cada uno juega por su cuenta. ')
+  })
+
+  it('ping pong: "La fecha" cuenta de 11 puntos y "Los desempates" corta por diferencia de puntos', () => {
+    const pingPong: SeasonConfig = { ...CONFIG, matchFormat: SPORTS.PING_PONG.format }
+    expect(bodyOf(pingPong, 'La fecha', TODAY_SHAPE, 'puntos')).toContain('de 11 puntos')
+    expect(bodyOf(pingPong, 'La fecha', TODAY_SHAPE, 'puntos')).not.toContain('games')
+    const desempates = bodyOf(pingPong, 'Los desempates', TODAY_SHAPE, 'puntos')
+    expect(desempates).toContain('diferencia de puntos')
+    expect(desempates).not.toContain('diferencia de games')
+  })
+
+  it.each(FORMAS)('%s: ninguna forma dice "todos contra todos" en "La fecha"', (_nombre, shape, unit) => {
+    expect(bodyOf(CONFIG, 'La fecha', shape, unit)).not.toContain('todos contra todos')
+  })
+
+  it('la cláusula de invitados no cambia: sigue en pareja y no está de a uno', () => {
+    expect(bodyOf(CONFIG, 'La fecha', FIJAS)).toContain('se suma un invitado')
+    expect(bodyOf(CONFIG, 'La fecha', INDIVIDUAL, 'goles')).not.toContain('invitado')
   })
 })
 
@@ -355,15 +413,36 @@ describe('narrateRules con marcador abierto', () => {
 // marcador abierto.
 describe('formatLabel', () => {
   it('nombra el set y los games del pádel', () => {
-    expect(formatLabel(CONFIG.matchFormat)).toBe('1 set a 4 games')
+    expect(formatLabel(CONFIG.matchFormat, 'games')).toBe('1 set a 4 games')
   })
 
   it('pluraliza cuando el partido se define a más de un set', () => {
-    expect(formatLabel({ ...CONFIG.matchFormat, setsToWin: 3 })).toBe('3 sets a 4 games')
+    expect(formatLabel({ ...CONFIG.matchFormat, setsToWin: 3 }, 'games')).toBe('mejor de 5 sets a 4 games')
   })
 
   it('no nombra ningún set cuando el marcador es abierto', () => {
-    expect(formatLabel({ ...CONFIG.matchFormat, openScore: true })).toBe('Marcador de goles')
+    expect(formatLabel({ ...CONFIG.matchFormat, openScore: true }, 'goles')).toBe('Marcador de goles')
+  })
+
+  it('habla con la unidad que le pasan: el ping pong se juega a puntos', () => {
+    expect(formatLabel(SPORTS.PING_PONG.format, 'puntos')).toBe('mejor de 3 sets a 11 puntos')
+  })
+
+  it('pádel a dos sets de 6: mejor de 3 sets a 6 games', () => {
+    expect(formatLabel({ ...SPORTS.PADEL.format, setsToWin: 2, gamesPerSet: 6 }, 'games')).toBe(
+      'mejor de 3 sets a 6 games',
+    )
+  })
+})
+
+describe('scoreDiffLabel', () => {
+  it('con la unidad "goles" es "diferencia de gol", en singular', () => {
+    expect(scoreDiffLabel('goles')).toBe('diferencia de gol')
+  })
+
+  it('con cualquier otra unidad la nombra tal cual', () => {
+    expect(scoreDiffLabel('puntos')).toBe('diferencia de puntos')
+    expect(scoreDiffLabel('games')).toBe('diferencia de games')
   })
 })
 
@@ -378,14 +457,14 @@ describe('formatsLabel', () => {
   const FIFA = { ...CONFIG.matchFormat, openScore: true }
 
   it('con un solo formato dice lo de siempre, sin prefijo', () => {
-    expect(formatsLabel([{ label: 'Pádel', matchFormat: PADEL }])).toBe('1 set a 4 games')
+    expect(formatsLabel([{ label: 'Pádel', matchFormat: PADEL, unit: 'games' }])).toBe('1 set a 4 games')
   })
 
   it('con dos formatos nombra los dos y de quién es cada uno', () => {
     expect(
       formatsLabel([
-        { label: 'Pádel', matchFormat: PADEL },
-        { label: 'FIFA', matchFormat: FIFA },
+        { label: 'Pádel', matchFormat: PADEL, unit: 'games' },
+        { label: 'FIFA', matchFormat: FIFA, unit: 'goles' },
       ]),
     ).toBe('Pádel: 1 set a 4 games · FIFA: Marcador de goles')
   })
@@ -393,10 +472,19 @@ describe('formatsLabel', () => {
   it('dos disciplinas del mismo formato no son dos cosas que nombrar', () => {
     expect(
       formatsLabel([
-        { label: 'Pádel', matchFormat: PADEL },
-        { label: 'Pádel', matchFormat: PADEL },
+        { label: 'Pádel', matchFormat: PADEL, unit: 'games' },
+        { label: 'Pádel', matchFormat: PADEL, unit: 'games' },
       ]),
     ).toBe('1 set a 4 games')
+  })
+
+  it('cada fila cuenta en la unidad de su deporte', () => {
+    expect(
+      formatsLabel([
+        { label: 'Pádel', matchFormat: PADEL, unit: 'games' },
+        { label: 'Ping pong', matchFormat: SPORTS.PING_PONG.format, unit: 'puntos' },
+      ]),
+    ).toBe('Pádel: 1 set a 4 games · Ping pong: mejor de 3 sets a 11 puntos')
   })
 
   it('sin disciplinas no inventa una frase', () => {
@@ -440,18 +528,19 @@ describe('thirdPlaceNote', () => {
 // que esas columnas no explican, porque el orden real lo arma la llave
 // (`knockoutPositions`), no la fase de grupos sola.
 describe('bracketOrderNote', () => {
-  const PADEL = CONFIG.matchFormat
-  const FIFA = { ...CONFIG.matchFormat, openScore: true }
-
   it('pádel: cuenta la diferencia de games', () => {
-    expect(bracketOrderNote(PADEL)).toBe(
+    expect(bracketOrderNote('games')).toBe(
       'El orden sale del resultado de la llave, no sólo de la fase de grupos: por eso puede haber lados con el mismo PG y la misma diferencia de games en un orden distinto.',
     )
   })
 
   it('FIFA (marcador abierto): cuenta la diferencia de GOL, no de games', () => {
-    expect(bracketOrderNote(FIFA)).toBe(
+    expect(bracketOrderNote('goles')).toBe(
       'El orden sale del resultado de la llave, no sólo de la fase de grupos: por eso puede haber lados con el mismo PG y la misma diferencia de gol en un orden distinto.',
     )
+  })
+
+  it('ping pong: cuenta la diferencia de puntos', () => {
+    expect(bracketOrderNote('puntos')).toContain('diferencia de puntos')
   })
 })

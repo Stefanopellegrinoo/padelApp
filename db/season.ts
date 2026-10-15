@@ -1,5 +1,14 @@
-import { sideOfRow } from '@/core'
-import type { Award, DisciplineId, EntryId, MatchdayFormat, MatchdayHistory, SeasonConfig, SideSize } from '@/core'
+import { isTournamentSport, shuffled, sideOfRow, sportFormatError } from '@/core'
+import type {
+  Award,
+  DisciplineId,
+  EntryId,
+  MatchdayFormatSetting,
+  MatchdayHistory,
+  SeasonConfig,
+  SideSize,
+  TournamentSport,
+} from '@/core'
 import type { Database, Json } from './database.types'
 import { EdgeError } from './errors'
 import { assertValidConfig } from './validate'
@@ -230,9 +239,102 @@ function isIndexPermutation(order: readonly number[], length: number): boolean {
   return true
 }
 
+/** ¿`teams` son parejas de dos asientos distintos de `[0, squadLength)`, cada asiento en una sola? Llega de afuera: se mira la forma. */
+function isTeamsShape(teams: unknown, squadLength: number): boolean {
+  if (!Array.isArray(teams)) return false
+  const seen = new Set<number>()
+  for (const pair of teams) {
+    if (!Array.isArray(pair) || pair.length !== 2) return false
+    for (const at of pair) {
+      if (!Number.isInteger(at) || at < 0 || at >= squadLength || seen.has(at)) return false
+      seen.add(at)
+    }
+  }
+  return true
+}
+
+/** Sorteo, orden propio e "igual que" son tres formas de armar la primera fecha: una sola por deporte (también en `addDiscipline`). */
+export const ONE_FIRST_FECHA_FORM = 'Cada deporte arma su primera fecha de una sola forma.'
+
+/**
+ * Lo que el wizard nuevo le suma a una disciplina (sorteo, "igual que",
+ * parejas), o el mensaje de por qué no cierra. Es JSON de cliente sin schema en
+ * runtime (mismo argumento que `isIndexPermutation`): se mira antes de escribir.
+ */
+function firstFechaError(
+  spec: NewSeasonDiscipline,
+  index: number,
+  specs: readonly NewSeasonDiscipline[],
+  squadLength: number,
+): string | null {
+  const forms = [spec.seedOrder !== undefined, spec.shuffle === true, spec.sameOrderAs !== undefined]
+  if (forms.filter(Boolean).length > 1) return ONE_FIRST_FECHA_FORM
+  const source = spec.sameOrderAs
+  if (
+    source !== undefined &&
+    !(Number.isInteger(source) && source >= 0 && source < specs.length && source !== index && specs[source]!.sameOrderAs === undefined)
+  ) {
+    return '"Igual que" tiene que apuntar a otro deporte del torneo.'
+  }
+  if (spec.teams === undefined) return null
+  if (spec.fixedTeams !== true || (spec.pairSize ?? 2) !== 2) {
+    return 'Las parejas fijas sólo van en un deporte de parejas fijas.'
+  }
+  return isTeamsShape(spec.teams, squadLength)
+    ? null
+    : 'Las parejas tienen que ser de dos personas distintas del plantel, cada una en una sola pareja.'
+}
+
+/**
+ * El orden final de cada disciplina (índices sobre `squadNames`), o `undefined`
+ * = el global de siempre. `seedOrder` va tal cual; `shuffle` sortea unidades
+ * (cada pareja de `teams` y cada suelto) y las aplana, así las parejas quedan
+ * contiguas; `sameOrderAs` copia el ya resuelto de la otra (con `teams`
+ * propios, reagrupado: `groupPairs`). Pura: `random` viene de afuera, y los
+ * specs ya pasaron `firstFechaError`.
+ */
+export function resolveSeedOrders(
+  specs: readonly NewSeasonDiscipline[],
+  squadLength: number,
+  random: () => number,
+): Array<number[] | undefined> {
+  const own = specs.map((spec) => {
+    if (spec.seedOrder !== undefined) return spec.seedOrder
+    if (spec.shuffle !== true) return undefined
+    const teams = spec.teams ?? []
+    const paired = new Set(teams.flat())
+    const loose = Array.from({ length: squadLength }, (_, at) => at).filter((at) => !paired.has(at))
+    return shuffled([...teams, ...loose.map((at) => [at])], random).flat()
+  })
+  return own.map((order, index) => {
+    const { sameOrderAs: source, teams } = specs[index]!
+    if (source === undefined) return order
+    const copied = own[source] ?? Array.from({ length: squadLength }, (_, at) => at)
+    return teams === undefined ? copied : groupPairs(copied, teams)
+  })
+}
+
+/**
+ * Con parejas fijas el orden es de parejas (docs/torneos-deportes.md §4): un
+ * orden copiado de otra disciplina puede separarlas. Cada pareja va junta donde
+ * aparece primero cualquiera de los dos (ése primero); los sueltos no se mueven
+ * entre sí.
+ */
+function groupPairs(order: readonly number[], teams: ReadonlyArray<readonly [number, number]>): number[] {
+  const mateOf = new Map(teams.flatMap(([a, b]) => [[a, b], [b, a]] as const))
+  const placed = new Set<number>()
+  return order.flatMap((at) => {
+    if (placed.has(at)) return []
+    const mate = mateOf.get(at)
+    const unit = mate === undefined ? [at] : [at, mate]
+    for (const seat of unit) placed.add(seat)
+    return unit
+  })
+}
+
 /** Una disciplina a crear junto con la temporada. `config` es obligatoria: cada disciplina puede declarar la suya, no hereda de la temporada. */
 export interface NewSeasonDiscipline {
-  kind?: 'PADEL' | 'FIFA'
+  kind?: TournamentSport
   config: SeasonConfig
   /**
    * 1 (lados de a uno) o 2 (parejas), elegido al configurar la disciplina —
@@ -254,10 +356,11 @@ export interface NewSeasonDiscipline {
   hasMasters?: boolean
   /**
    * El formato por default de cada fecha nueva de esta disciplina (0074,
-   * docs/tipos-de-torneo.md §2.5). Sin especificar, el default de columna
+   * docs/tipos-de-torneo.md §2.5), `{ kind: 'AUTO' }` incluido (0095: es el de
+   * la ficha de cada deporte). Sin especificar, el default de columna
    * (`ROUND_ROBIN`) — mismo comportamiento de siempre.
    */
-  formatoDefault?: MatchdayFormat
+  formatoDefault?: MatchdayFormatSetting
   /**
    * Si esta disciplina es de equipos fijos: la pareja no rota nunca,
    * `discipline_teams` la fija en vez de `pair_locks` (0068,
@@ -301,6 +404,19 @@ export interface NewSeasonDiscipline {
    * asiento en silencio o dejaría a otro con dos.
    */
   seedOrder?: number[]
+  /**
+   * "Al azar": el servidor sortea el orden inicial y lo guarda como `seedOrder`
+   * (docs/torneos-deportes.md §4). Con `teams`, sortea parejas: cada una queda
+   * contigua. A lo sumo uno de `seedOrder` / `shuffle` / `sameOrderAs`.
+   */
+  shuffle?: boolean
+  /**
+   * "Igual que": índice en `disciplines` de la disciplina cuyo orden final se
+   * copia. Esa no puede ser a su vez `sameOrderAs`.
+   */
+  sameOrderAs?: number
+  /** Parejas fijas desde el wizard: índices sobre `squadNames`. Exige `fixedTeams: true` y `pairSize: 2`. */
+  teams?: Array<[number, number]>
 }
 
 export interface NewSeason {
@@ -379,7 +495,13 @@ export async function createSeason(
   // haya elegido, y rechazaba un torneo de dos amigos al FIFA (piso real 2)
   // por no llegar al piso de a dos (4) — aunque la validación de LA
   // disciplina, la del loop, lo aceptara.
-  for (const spec of disciplineSpecs) {
+  for (const [index, spec] of disciplineSpecs.entries()) {
+    // `kind` viaja en el payload del cliente: el CHECK de la base sólo mira la
+    // forma del id (0094), así que un `TEJO` falsificado llega hasta acá.
+    const kind = spec.kind ?? 'PADEL'
+    if (!isTournamentSport(kind)) throw new EdgeError('Elegí un deporte de la lista.')
+    const formatProblem = sportFormatError(kind, spec.config.matchFormat)
+    if (formatProblem !== null) throw new EdgeError(formatProblem)
     assertValidConfig(spec.config, spec.pairSize ?? 2)
     if (squadNames.length !== spec.config.squadSize) {
       throw new EdgeError(
@@ -396,6 +518,8 @@ export async function createSeason(
         `El orden propio de ${spec.kind ?? 'PADEL'} no coincide con el plantel: tiene que ser el mismo plantel, sólo reordenado.`,
       )
     }
+    const firstFechaProblem = firstFechaError(spec, index, disciplineSpecs, squadNames.length)
+    if (firstFechaProblem !== null) throw new EdgeError(firstFechaProblem)
   }
 
   const trimmed = name.trim()
@@ -587,10 +711,15 @@ export async function createSeason(
     // compensatorio existe para evitar. Hoisteado y con el propio `try`
     // de acá abajo, ese throw SÍ dispara el rollback.
     let seatRows: { discipline_id: string; entry_id: string; season_id: string; seed_position: number }[]
+    let teamRows: { discipline_id: string; season_id: string; entry_a: string; entry_b: string }[]
     try {
+      // El orden final de cada disciplina: el `seedOrder` del wizard, el sorteo
+      // "Al azar" (que se guarda como orden, no como una regla aparte) o el de
+      // otro deporte. Con nada de eso, `undefined`: el global de siempre.
+      const seedOrders = resolveSeedOrders(disciplineSpecs, squadNames.length, Math.random)
       seatRows = disciplineRows.flatMap((discipline, disciplineIndex) => {
         const spec = disciplineSpecs[disciplineIndex]!
-        const seedOrder = spec.seedOrder
+        const seedOrder = seedOrders[disciplineIndex]
         // El índice del array, no una columna de vuelta (C37): `insert ...
         // returning` devuelve las filas en el orden del `values`, así que
         // `entryRows[i]` es `squadNames[i]`. Lo fija el test de
@@ -605,7 +734,8 @@ export async function createSeason(
             seed_position: index,
           }))
         }
-        // `spec.seedOrder` (PR11c, formato de índices desde WU1) es la
+        // `seedOrder` (el de `spec.seedOrder` desde PR11c, formato de índices
+        // desde WU1, o el que resolvió `resolveSeedOrders`) es la
         // EXCEPCIÓN a ese índice global: cuando la disciplina trae su propio
         // orden, cada elemento YA ES el índice sobre `squadNames`/`entryRows`
         // -- no hace falta traducir nada más, `seedOrderFrom`
@@ -638,6 +768,16 @@ export async function createSeason(
           }
         })
       })
+      // Las parejas fijas del wizard, por disciplina: índices sobre `squadNames`
+      // -> `entryRows[i]` (mismo contrato de orden que `seatRows`).
+      teamRows = disciplineRows.flatMap((discipline, disciplineIndex) =>
+        (disciplineSpecs[disciplineIndex]!.teams ?? []).map(([a, b]) => ({
+          discipline_id: discipline.id,
+          season_id: season.id,
+          entry_a: entryRows[a]!.id,
+          entry_b: entryRows[b]!.id,
+        })),
+      )
     } catch (err) {
       await supabase.from('seasons').delete().eq('id', season.id)
       throw err
@@ -647,6 +787,20 @@ export async function createSeason(
     if (seatsError !== null) {
       await supabase.from('seasons').delete().eq('id', season.id)
       throw new EdgeError(`No se pudo asignar el plantel a las disciplinas: ${seatsError.message}`)
+    }
+
+    // Después de `discipline_entries`: cada mitad de la pareja es una FK a esa
+    // tabla. Un solo insert con todas, y el mismo rollback.
+    // ponytail: entre parejas del mismo insert `teamsOf` ordena por `created_at, id`,
+    // o sea por uuid, y es el orden en que `buildPairs` pone las parejas fijas
+    // (`core/pairing.ts:204`) -- ya pasaba con las de Ajustes; si importa para
+    // sembrar grupos, ordenar los equipos por `seed_position`.
+    if (teamRows.length > 0) {
+      const { error: teamsError } = await supabase.from('discipline_teams').insert(teamRows)
+      if (teamsError !== null) {
+        await supabase.from('seasons').delete().eq('id', season.id)
+        throw new EdgeError(`No se pudieron armar las parejas fijas: ${teamsError.message}`)
+      }
     }
   }
 

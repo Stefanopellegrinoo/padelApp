@@ -28,3 +28,13 @@ export function orderByPoints(
     return (arrivalRank.get(left) ?? 0) - (arrivalRank.get(right) ?? 0)
   })
 }
+
+/** Fisher-Yates on a copy. `random` is injected (core has no `Math.random`) so a draw can be tested and replayed. */
+export function shuffled<T>(items: readonly T[], random: () => number): T[] {
+  const out = [...items]
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1))
+    ;[out[i], out[j]] = [out[j]!, out[i]!]
+  }
+  return out
+}

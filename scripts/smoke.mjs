@@ -102,6 +102,7 @@ async function main() {
   )
 
   // ── 4. Crear un torneo de 8 ────────────────────────────────────────────────
+  // OJO: maneja el wizard de 5 pasos, ya borrado (Tarea 16, torneos-deportes); pendiente de reescribir contra `crear.tsx`.
   heading('Crear un torneo nuevo de 8, hasta el paso 5')
   const seasonName = `Smoke ${new Date().toISOString().slice(11, 19)}`
   const squad = ['Ana', 'Bruno', 'Caro', 'Diego', 'Emi', 'Fede', 'Gaby', 'Hernán']
@@ -333,7 +334,7 @@ async function main() {
     'el script del admin llegó crudo al DOM anónimo',
   )
   // La prosa generada es lo que prueba que `season_public_formats` sirvió las
-  // seis columnas: sin `has_masters`/`pair_size`/`allows_draw` el `shape` llega
+  // ocho columnas: sin `has_masters`/`pair_size`/`fixed_teams`/`allows_draw` el `shape` llega
   // incompleto y `narrateRules` no puede armar estas filas.
   check(
     'y la prosa generada llega entera, no sólo el texto libre',

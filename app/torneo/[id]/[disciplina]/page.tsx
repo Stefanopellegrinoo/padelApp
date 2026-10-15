@@ -1,5 +1,7 @@
 import { notFound } from 'next/navigation'
 import { resolveDisciplineBySlug } from '@/core'
+import { disciplineConfig } from '@/db/discipline'
+import { teamsOf } from '@/db/discipline-teams'
 import { entriesOf, seasonAwardsOf, seasonHeader, seasonMatchdaysOf } from '@/db/read'
 import { serverClient } from '@/db/server'
 import { TablaView } from '../tabla-view'
@@ -28,10 +30,16 @@ export default async function DisciplinaTablaPage({ params }: PageProps) {
   const discipline = resolveDisciplineBySlug(header.disciplines, disciplina)
   if (discipline === undefined) notFound()
 
-  const [entries, awardsByDiscipline] = await Promise.all([
+  const [entries, awardsByDiscipline, { fixedTeams }] = await Promise.all([
     entriesOf(supabase, seasonId, discipline.id),
     seasonAwardsOf(supabase, seasonMatchdays),
+    // `fixedTeams` no viaja en `DisciplineHeader`: se pide con `disciplineConfig`.
+    disciplineConfig(supabase, discipline.id),
   ])
+  // Con parejas fijas la tabla va por pareja; `[]` deja la de siempre, por persona.
+  const teams = fixedTeams
+    ? (await teamsOf(supabase, discipline.id)).map((team) => ({ a: team.entryA, b: team.entryB }))
+    : []
 
   return (
     <TablaView
@@ -41,6 +49,7 @@ export default async function DisciplinaTablaPage({ params }: PageProps) {
       entries={entries}
       matchdays={seasonMatchdays.filter((matchday) => matchday.disciplineId === discipline.id)}
       awardsByMatchday={awardsByDiscipline.get(discipline.id) ?? new Map()}
+      teams={teams}
     />
   )
 }

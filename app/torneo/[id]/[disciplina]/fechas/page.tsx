@@ -2,10 +2,12 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import {
   MASTERS_SIZE,
+  effectiveMatchFormat,
   groupPhaseMatches,
   members,
   resolveDisciplineBySlug,
   sameSide,
+  unitOf,
   type Award,
   type MatchResult,
   type Side,
@@ -26,6 +28,7 @@ import { championRecord, sideNames } from './campeon-de-la-fecha'
 // cruzando un segmento dinámico (mismo criterio que ya documentaba esta
 // pantalla en PR 10, cuando vivía un nivel más arriba).
 import { ArmarMasters } from '@/app/torneo/[id]/[disciplina]/fechas/[n]/masters'
+import { formatoNotice } from '@/app/torneo/[id]/[disciplina]/fechas/[n]/armado-state'
 
 interface PageProps {
   params: Promise<{ id: string; disciplina: string }>
@@ -73,7 +76,8 @@ export default async function FechasPage({ params }: PageProps) {
   const nameById = new Map(entries.map((entry) => [entry.id, entry.displayName]))
   // Levantado afuera de `championOf`: es una función ANIDADA y el narrowing
   // del `notFound()` de arriba no la cruza.
-  const matchFormat = discipline.config.matchFormat
+  const tournamentFormat = discipline.config.matchFormat
+  const sportKind = discipline.kind
   // El Masters no se dibuja como fila: esta pantalla sólo lista fechas REGULAR
   // y muestra el Masters como el bloque bloqueado del final (Task 7, Plan 3).
   const disciplineMatchdays = seasonMatchdays.filter((matchday) => matchday.disciplineId === discipline.id)
@@ -105,6 +109,8 @@ export default async function FechasPage({ params }: PageProps) {
     if (championSide === undefined) return null
 
     const names = sideNames(championSide, nameById)
+    // A cuánto se jugó ESA fecha (§7), no el formato de hoy del torneo.
+    const matchFormat = effectiveMatchFormat(tournamentFormat, matchday.matchFormat)
     return {
       names,
       record: championRecord(
@@ -121,6 +127,7 @@ export default async function FechasPage({ params }: PageProps) {
         // hoy: una fecha vieja se lee con la regla con la que se jugó. Mismo
         // criterio que la tabla del día y que `closeMatchday`.
         matchday.allowsDraw,
+        unitOf(sportKind, matchFormat),
       ),
     }
   }
@@ -203,6 +210,9 @@ export default async function FechasPage({ params }: PageProps) {
               ? 'bg-chip text-muted'
               : 'text-muted'
           const tagLabel = played ? 'Jugada' : inProgress ? 'En juego' : 'Armando'
+          // "Fecha 3 · 1 set a 6 games" cuando se juega distinto que el deporte (§7).
+          const effective = effectiveMatchFormat(tournamentFormat, matchday.matchFormat)
+          const notice = formatoNotice(matchday.number, effective, tournamentFormat, unitOf(sportKind, effective))
 
           return (
             <Link
@@ -218,7 +228,7 @@ export default async function FechasPage({ params }: PageProps) {
                     live ? 'opacity-75' : 'text-muted'
                   }`}
                 >
-                  Fecha {matchday.number}
+                  {notice ?? `Fecha ${matchday.number}`}
                   {matchday.playedOn !== null ? ` · ${matchdayDay(matchday.playedOn)}` : ''}
                 </p>
                 <span className={`shrink-0 rounded-full px-[10px] py-[6px] text-[10.5px] font-extrabold ${tagClass}`}>

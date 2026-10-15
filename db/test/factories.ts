@@ -6,7 +6,8 @@ import type { TestUser } from './users'
 
 /** Una disciplina a crear junto con la temporada. Todo opcional: `{}` es un PADEL con la config de la temporada. */
 export interface DisciplineSpec {
-  kind?: 'PADEL' | 'FIFA'
+  /** Cualquier id de forma válida (0094): deja armar un 'TEJO' como andamiaje; la guarda de producción no pasa por acá. */
+  kind?: string
   config?: SeasonConfig
   weight?: number
   /** Mismo contrato que `NewSeasonDiscipline`/`NewDiscipline` (PR14 slice A): elegido al crear, no derivado de `kind`. Sin especificar, default de columna (2). */

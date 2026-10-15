@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
-import { defaultConfig, type DisciplineId, type MatchdayFormat, type SeasonConfig } from '@/core'
+import { defaultConfig, type DisciplineId, type MatchdayFormat, type MatchdayFormatSetting, type SeasonConfig } from '@/core'
 import type { DisciplineHeader } from '@/db/read'
 
 /**
@@ -35,15 +35,15 @@ import type { DisciplineHeader } from '@/db/read'
  *    son server components `async`: se los llama, se los renderiza con
  *    `renderToStaticMarkup` y se mira el HTML. Los lectores de `@/db/read`
  *    van mockeados; el resto —`primaryDiscipline`, `formatsLabel`,
- *    `steppersFor`, el JSX entero— corre de verdad. Esto mide COMPORTAMIENTO,
+ *    `reglamento`, el JSX entero— corre de verdad. Esto mide COMPORTAMIENTO,
  *    no texto, así que sobrevive a que alguien refactorice el call site.
  *
- * 2. **El paso 4 del wizard se pincha por FUENTE.** `step` es estado interno
- *    de `Wizard` y en la suite no hay clicks, así que renderizando no se
- *    llega. Se pinchan los ARGUMENTOS del call site, no el nombre: la ronda
- *    18 midió que un assert por nombre de función no alcanza —pasarle una
- *    copia conserva el texto intacto— y el mis-wire de M-A es exactamente
- *    eso, el mismo nombre con otro argumento.
+ * 2. **Lo que vive detrás de un click se pincha por FUENTE.** En la suite no
+ *    hay clicks, así que renderizando no se llega. Se pinchan los ARGUMENTOS
+ *    del call site, no el nombre: la ronda 18 midió que un assert por nombre
+ *    de función no alcanza —pasarle una copia conserva el texto intacto— y el
+ *    mis-wire de M-A es exactamente eso, el mismo nombre con otro argumento.
+ *    (El wizard de cinco pasos que pinchaba esto ya no existe.)
  */
 
 /** El fuente sin comentarios de línea ni de bloque: lo que de verdad se ejecuta. */
@@ -58,17 +58,26 @@ const escena = vi.hoisted(() => ({
   // Rebanada 3a de "reglas por disciplina": `hasMasters`/`pairSize`/
   // `allowsDraw` reales (0069), mismo criterio que `disciplina()` abajo — sin
   // esto la rama anónima le pasaría `undefined` a `RulesBody.shape`.
+  // Torneos-deportes, Tarea 7: Reglas lee de acá en LAS DOS ramas (con y sin
+  // sesión) — es la única fuente de `fixedTeams`/`formatoDefault`/`rulesText`
+  // de cada bloque; `seasonHeader` sólo aporta `isAdmin`.
   publicFormats: [] as {
-    kind: 'PADEL' | 'FIFA'
+    kind: string
     config: unknown
     hasMasters: boolean
     pairSize: 1 | 2
     allowsDraw: boolean
+    fixedTeams: boolean
+    formatoDefault: MatchdayFormatSetting
     rulesText: string
   }[],
-  // Rebanada 3b: el texto libre de CADA disciplina, para probar que el bloque
-  // de Pádel muestra el suyo y el de FIFA el suyo — nunca el del otro.
+  // El texto libre de CADA disciplina para Ajustes (`disciplineRulesOf`).
+  // Reglas ya no lo lee: su texto sale de `publicFormats[].rulesText`.
   rulesByDiscipline: new Map<DisciplineId, string>(),
+  // El plantel de la temporada (`seasonSquadMembersOf`) y quién juega cada disciplina
+  // (`squadSeedOrder`): vacíos salvo en el aviso de puntos de Ajustes.
+  squad: [] as { id: string; displayName: string; playerId: string | null }[],
+  playersByDiscipline: new Map<string, string[]>(),
 }))
 
 vi.mock('@/db/server', () => ({
@@ -94,11 +103,8 @@ vi.mock('@/db/read', async (importOriginal) => {
       disciplines: escena.disciplines,
     }),
     // Rebanada 2 de "reglas por disciplina": Ajustes lee esto para armar un
-    // editor por disciplina (`disciplineId -> rules_text`). Rebanada 3b:
-    // Reglas CON SESIÓN también lo lee, un bloque por disciplina —
-    // `escena.rulesByDiscipline` vacío por default, lo que hace que ningún
-    // bloque muestre texto libre (caso válido, ya cubierto por los tests que
-    // sólo miran el panel de Formato).
+    // editor por disciplina (`disciplineId -> rules_text`). Reglas, con o sin
+    // sesión, lee el texto de `publicFormats` (torneos-deportes, Tarea 7).
     disciplineRulesOf: async () => escena.rulesByDiscipline,
     // La rama SIN SESIÓN. `season_public_rules` (0022) devuelve la config de
     // UNA disciplina —la de por defecto— y ni su `kind`, así que sola no
@@ -124,10 +130,23 @@ vi.mock('@/db/read', async (importOriginal) => {
     // `seasonMatchdaysOf` (temporada entera) para que `playedCount` del
     // modal de borrar cubra TODAS las disciplinas, no sólo la primera.
     seasonMatchdaysOf: async () => [],
-    seasonSquadMembersOf: async () => [],
+    seasonSquadMembersOf: async () => escena.squad,
     playerNames: async () => new Map<string, string>(),
   }
 })
+
+// `fixedTeams` no viaja en `DisciplineHeader`: el panel de reglas lo lee con `disciplineConfig`
+// (mismo criterio que `[disciplina]/ajustes`). El cliente de esta suite no tiene `from`, así que
+// se mockea sólo ese lector y el resto de `@/db/discipline` es el de verdad.
+vi.mock('@/db/discipline', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/db/discipline')>()),
+  disciplineConfig: async () => ({ fixedTeams: false }),
+}))
+
+vi.mock('@/db/season', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/db/season')>()),
+  squadSeedOrder: async (_supabase: unknown, disciplineId: string) => escena.playersByDiscipline.get(disciplineId) ?? [],
+}))
 
 const PADEL = defaultConfig(8)
 const FIFA: SeasonConfig = { ...PADEL, matchFormat: { ...PADEL.matchFormat, openScore: true } }
@@ -161,16 +180,26 @@ function disciplina(
 const SOLO_PADEL = [disciplina('d1', 'PADEL', PADEL)]
 const PADEL_Y_FIFA = [disciplina('d1', 'PADEL', PADEL), disciplina('d2', 'FIFA', FIFA)]
 
-/** El equivalente de `disciplina()` para la rama SIN SESIÓN: mismo criterio de `hasMasters`/`allowsDraw` por `kind`. */
-function publicFormat(kind: 'PADEL' | 'FIFA', config: unknown, rulesText = '') {
+/**
+ * Lo que devuelve `season_public_formats` para una disciplina: mismo criterio de
+ * `hasMasters`/`allowsDraw` por `kind` que `disciplina()`, y por defecto parejas
+ * que rotan con `ROUND_ROBIN` (lo de siempre). `fixedTeams` y `formatoDefault`
+ * se pasan sólo cuando el test los necesita.
+ */
+function publicFormat(
+  kind: 'PADEL' | 'FIFA' | 'PING_PONG',
+  config: unknown,
+  rulesText = '',
+  { fixedTeams = false, formatoDefault = { kind: 'ROUND_ROBIN' } as MatchdayFormatSetting } = {},
+) {
   const pairSize = kind === 'PADEL' ? (2 as const) : (1 as const)
-  return { kind, config, pairSize, hasMasters: pairSize === 2, allowsDraw: kind === 'FIFA', rulesText }
+  return { kind, config, pairSize, hasMasters: pairSize === 2, allowsDraw: kind === 'FIFA', fixedTeams, formatoDefault, rulesText }
 }
 
 /**
  * El bloque de UNA disciplina, recortado del HTML de la página entera:
- * desde su encabezado `<h2>` (rebanada 3b: sólo aparece con más de una
- * disciplina) hasta el próximo `<h2>` o el final del documento. Mismo
+ * desde su título `<h2>` (siempre aparece, uno por deporte) hasta el próximo
+ * `<h2>` o el final del documento. Mismo
  * espíritu que `panelesDeFormato` de más abajo para Ajustes, pero por texto
  * de encabezado en vez de por atributo — Reglas no tiene `disciplineId` en
  * la rama SIN SESIÓN (0069 lo deja afuera a propósito), así que no hay un
@@ -197,16 +226,27 @@ async function ajustes(disciplines: DisciplineHeader[]): Promise<string> {
 
 describe('Reglas con sesión — la página entera, no el componente suelto', () => {
   /**
-   * M-C, rebanada 3b. Volver a construir `disciplines` sólo con
-   * `primaryDiscipline(header)` reintroduce W64: FIFA desaparece de la
-   * pantalla entera, no sólo de una frase. Con esto se pone rojo.
+   * M-C. Volver a construir los bloques sólo con `primaryDiscipline(header)`
+   * reintroduce W64: FIFA desaparece de la pantalla entera, no sólo de una
+   * frase. Con esto se pone rojo. Torneos-deportes Tarea 7: cada bloque trae
+   * su reglamento arriba y su acordeón de siempre en "Más detalle".
    */
-  it('dibuja un bloque por disciplina, cada uno con su propio formato', async () => {
+  it('dibuja un bloque por disciplina: el reglamento arriba, su acordeón en "Más detalle"', async () => {
+    escena.user = { id: 'admin' }
+    escena.publicFormats = [publicFormat('PADEL', PADEL), publicFormat('FIFA', FIFA)]
     const html = await reglas(PADEL_Y_FIFA)
     expect(html).toContain('>Pádel</h2>')
     expect(html).toContain('>FIFA</h2>')
-    expect(bloqueDe(html, 'Pádel')).toContain('1 set a 4 games')
-    expect(bloqueDe(html, 'FIFA')).toContain('Marcador de goles')
+
+    const padel = bloqueDe(html, 'Pádel')
+    expect(padel).toContain('Parejas que rotan.')
+    expect(padel.indexOf('Parejas que rotan.')).toBeLessThan(padel.indexOf('<details'))
+    expect(padel.slice(padel.indexOf('<details'))).toContain('1 set a 4 games')
+
+    const fifa = bloqueDe(html, 'FIFA')
+    expect(fifa).toContain('Partidos a goles; se puede empatar.')
+    expect(fifa.indexOf('Partidos a goles')).toBeLessThan(fifa.indexOf('<details'))
+    expect(fifa.slice(fifa.indexOf('<details'))).toContain('Marcador de goles')
     // La frase combinada de antes de 3b ya no existe en ningún lado.
     expect(html).not.toContain('Pádel: 1 set a 4 games · FIFA: Marcador de goles')
   })
@@ -218,10 +258,11 @@ describe('Reglas con sesión — la página entera, no el componente suelto', ()
    * texto libre y nunca el del otro.
    */
   it('cada bloque narra su propia disciplina y su propio texto libre', async () => {
-    escena.rulesByDiscipline = new Map([
-      ['d1' as DisciplineId, 'Traer pelotas nuevas.'],
-      ['d2' as DisciplineId, 'Se juega con barro.'],
-    ])
+    escena.user = { id: 'admin' }
+    escena.publicFormats = [
+      publicFormat('PADEL', PADEL, 'Traer pelotas nuevas.'),
+      publicFormat('FIFA', FIFA, 'Se juega con barro.'),
+    ]
     const html = await reglas(PADEL_Y_FIFA)
     const padel = bloqueDe(html, 'Pádel')
     const fifa = bloqueDe(html, 'FIFA')
@@ -236,27 +277,46 @@ describe('Reglas con sesión — la página entera, no el componente suelto', ()
     expect(fifa).not.toContain('Traer pelotas nuevas.')
   })
 
-  /** PIN de no-regresión (R10): un torneo de una sola disciplina dice lo de siempre, sin encabezado. */
-  it('con una sola disciplina dice exactamente lo de siempre, sin encabezado', async () => {
-    escena.rulesByDiscipline = new Map()
+  /** Las dos reglas de juego que suma `season_public_formats` (0099) llegan hasta el reglamento. */
+  it('parejas fijas y fecha AUTO: el reglamento lo dice y no hay fila de armado de parejas', async () => {
+    escena.user = { id: 'admin' }
+    escena.publicFormats = [publicFormat('PADEL', PADEL, '', { fixedTeams: true, formatoDefault: { kind: 'AUTO' } })]
     const html = await reglas(SOLO_PADEL)
+    expect(html).toContain('Parejas fijas.')
+    expect(html).toContain('Cada fecha se arma sola, según cuántos vengan.')
+    expect(html).not.toContain('Cómo se arman las parejas')
+  })
+
+  it('quien organiza ve "Editar reglas"; la línea fija sale una sola vez', async () => {
+    escena.user = { id: 'admin' }
+    escena.publicFormats = [publicFormat('PADEL', PADEL), publicFormat('FIFA', FIFA)]
+    const html = await reglas(PADEL_Y_FIFA)
+    expect(html).toContain('Editar reglas')
+    expect(html.split('Alguna fecha puede jugarse a otra cosa: se avisa en esa fecha.')).toHaveLength(2)
+  })
+
+  /** Con una sola disciplina el título igual aparece (§6: siempre con su título). */
+  it('con una sola disciplina el título también sale', async () => {
+    escena.user = { id: 'admin' }
+    escena.publicFormats = [publicFormat('PADEL', PADEL)]
+    const html = await reglas(SOLO_PADEL)
+    expect(html).toContain('>Pádel</h2>')
     expect(html).toContain('1 set a 4 games')
     expect(html).not.toContain('Pádel: 1 set a 4 games')
-    expect(html).not.toContain('<h2')
   })
 })
 
 /**
- * El panel que edita el formato, tal cual sale al HTML. Antes de Task 4
- * (docs/plan-arquitectura-de-paginas.md) el contenedor dibujaba uno POR
- * DISCIPLINA acá mismo (C36); ahora sólo lo hace con UNA disciplina --
- * con 2+, este panel se mudó a `[disciplina]/ajustes`
- * (`[disciplina]/ajustes/page.unit.test.ts` prueba ese caso). El `id="formato"`
- * (el ancla de la fila de arriba) sigue en el contenedor, no en cada
- * `<section>`.
+ * El panel que cuenta y edita las reglas de un deporte, tal cual sale al HTML. Antes de Task 4
+ * (docs/plan-arquitectura-de-paginas.md) el contenedor dibujaba uno POR DISCIPLINA acá mismo
+ * (C36); ahora sólo lo hace con UNA disciplina -- con 2+, este panel se mudó a
+ * `[disciplina]/ajustes` (`[disciplina]/ajustes/page.unit.test.ts` prueba ese caso). El
+ * `id="formato"` (el ancla de la fila de arriba) sigue en el contenedor, no en cada `<section>`.
+ * Torneos-deportes, Tarea 14: el panel es `ReglasDeporte` (`data-reglas-deporte`), que reemplaza a
+ * "Formato" y "Formato de las fechas".
  */
-function panelDeFormato(html: string): string {
-  return /<section data-formato="[^"]*"[\s\S]*?<\/section>/.exec(html)?.[0] ?? ''
+function panelDeReglas(html: string): string {
+  return /<section data-reglas-deporte="[^"]*"[\s\S]*?<\/section>/.exec(html)?.[0] ?? ''
 }
 
 describe('Ajustes — la página entera', () => {
@@ -269,7 +329,7 @@ describe('Ajustes — la página entera', () => {
 
   /**
    * PIN de no-regresión: un torneo de UNA sola disciplina —o sea todos los
-   * que existen hoy— sigue mostrando el panel de Formato inline, sin sufijo.
+   * que existen hoy— sigue mostrando el panel de reglas inline, sin sufijo.
    * Es la propiedad que Task 4 exige para el caso simple (§5 del diseño).
    *
    * Este `it` sólo fija el título y que el panel exista, no el documento
@@ -277,8 +337,8 @@ describe('Ajustes — la página entera', () => {
    * la Task contra la de después) se hizo a mano una vez, sin harness en el
    * repo para volver a correrlo.
    */
-  it('con una sola disciplina el panel de Formato sigue inline, sin sufijo', async () => {
-    expect(panelDeFormato(await ajustes(SOLO_PADEL))).toContain('>Formato</h2>')
+  it('con una sola disciplina el panel de reglas sigue inline, sin sufijo', async () => {
+    expect(panelDeReglas(await ajustes(SOLO_PADEL))).toContain('Reglas de Pádel')
   })
 
   /**
@@ -289,10 +349,10 @@ describe('Ajustes — la página entera', () => {
    * no se dibuja, en vez de quedar apuntando a un `#formato` que ya no
    * existe acá (el defecto medido: el ancla siempre caía en la [0]).
    */
-  it('con 2+ disciplinas la fila y el panel de Formato desaparecen del contenedor', async () => {
+  it('con 2+ disciplinas la fila y el panel de reglas desaparecen del contenedor', async () => {
     const html = await ajustes(PADEL_Y_FIFA)
     expect(html).not.toContain('Formato')
-    expect(panelDeFormato(html)).toBe('')
+    expect(panelDeReglas(html)).toBe('')
   })
 
   /**
@@ -323,8 +383,8 @@ describe('Ajustes — el conteo del modal de borrar cubre la temporada entera', 
    * El pin es de FUENTE, no de render: el texto que muestra `playedCount`
    * vive detrás de `{open && ...}` en `eliminar.tsx` (`useState` interno,
    * arranca cerrado), así que un render estático -- sin clicks, este repo no
-   * tiene runner E2E -- no lo alcanza. Mismo techo que el paso 4 del wizard,
-   * de acá abajo: `seasonMatchdaysOf` y `matchdaysOf` son identificadores
+   * tiene runner E2E -- no lo alcanza. Mismo techo que el punto 2 de
+   * la cabecera: `seasonMatchdaysOf` y `matchdaysOf` son identificadores
    * DISTINTOS (mayúscula/minúscula en la M), así que el mis-wire que este
    * test tiene que agarrar no cambia ningún texto visible -- cambia CUÁL
    * lectura corre, y eso sólo se ve en el call site.
@@ -336,336 +396,6 @@ describe('Ajustes — el conteo del modal de borrar cubre la temporada entera', 
   it('playedCount sale de seasonMatchdaysOf (temporada entera), no de matchdaysOf (disciplina por defecto)', () => {
     expect(fuente).toMatch(/\bseasonMatchdaysOf\(supabase, seasonId\)/)
     expect(fuente).not.toMatch(/\bmatchdaysOf\(supabase, seasonId\)/)
-  })
-})
-
-describe('el paso 4 del wizard — el cableado que ningún render alcanza', () => {
-  const fuente = sinComentarios(
-    readFileSync(join(process.cwd(), 'app/torneos/nuevo/wizard.tsx'), 'utf8'),
-  )
-  /**
-   * El call site entero, como lo escribe el fuente. El techo es un falso
-   * POSITIVO —un prop con una arrow function adentro corta el `[^>]*`— que es
-   * el lado correcto del que equivocarse: el test se pone rojo y se lee este
-   * comentario.
-   */
-  const llamada = /<PasoFormato\b[^>]*\/>/.exec(fuente)?.[0] ?? ''
-
-  /** M-B: el paso 4 desconectado deja esto en vacío. */
-  it('el paso 4 monta PasoFormato', () => {
-    expect(llamada).not.toBe('')
-  })
-
-  /**
-   * M-A. `picked` es el argumento del que depende W63: con una lista fija el
-   * paso 4 vuelve a ofrecer sets y games en una liga de solo FIFA, y los
-   * cuatro tests de `steppersFor` y los tres de `PasoFormato` siguen verdes
-   * porque el módulo está bien y lo que está mal es lo que le entra.
-   *
-   * Task 5 (docs/plan-arquitectura-de-paginas.md): `PasoFormato` dejó de
-   * recibir un `config`/`onChange` únicos -- ahora es `configs`/`pairSizes`/
-   * `hasMasters`/`formatoDefault`/`errors`, todos `Record` por disciplina, y
-   * tres setters con NOMBRE (`changeConfig`/`changeHasMasters`/
-   * `changeFormatoDefault`, declarados junto a `changePairSize`) en vez de
-   * arrows inline -- una arrow ahí adentro corta en seco a la regexp de
-   * `llamada` (`[^>]*` no puede cruzar el `>` de un `=>`, y el propio
-   * comentario de esa constante lo advierte).
-   */
-  it('le pasa las disciplinas MARCADAS, la config viva y los tres setters', () => {
-    expect(llamada).toMatch(/\bpicked=\{disciplines\}/)
-    expect(llamada).toMatch(/\bconfigs=\{configs\}/)
-    expect(llamada).toMatch(/\bpairSizes=\{pairSizes\}/)
-    expect(llamada).toMatch(/\bhasMasters=\{hasMasters\}/)
-    expect(llamada).toMatch(/\bformatoDefault=\{formatoDefault\}/)
-    // Equipos fijos (docs/tipos-de-torneo.md §1): mismo riesgo de mis-wire
-    // que los otros cuatro -- el checkbox nuevo del paso 4 depende de que
-    // esta prop y su setter lleguen enganchados al estado real, no a una
-    // copia ni a un literal fijo.
-    expect(llamada).toMatch(/\bfixedTeams=\{fixedTeams\}/)
-    // Orden propio (F9, dos jueces ciegos, `37b225b..d33377a`): mismo riesgo
-    // de mis-wire que `fixedTeams` -- el checkbox de "orden propio" del paso
-    // Formato depende de que esta prop y su setter lleguen enganchados al
-    // estado real, no a un literal fijo ni a la copia de otra disciplina.
-    expect(llamada).toMatch(/\bownOrder=\{ownOrder\}/)
-    expect(llamada).toMatch(/\berrors=\{errorsByKind\}/)
-    expect(llamada).toMatch(/\bonChangeConfig=\{changeConfig\}/)
-    expect(llamada).toMatch(/\bonChangeHasMasters=\{changeHasMasters\}/)
-    expect(llamada).toMatch(/\bonChangeFormatoDefault=\{changeFormatoDefault\}/)
-    expect(llamada).toMatch(/\bonChangeFixedTeams=\{changeFixedTeams\}/)
-    expect(llamada).toMatch(/\bonChangeOwnOrder=\{changeOwnOrder\}/)
-  })
-
-  /**
-   * Que el pin sea del ARGUMENTO y no del NOMBRE es la lección de la ronda
-   * 18: un mis-wire conserva el nombre intacto. Esta mitad falla contra
-   * cualquier versión de este chequeo que sólo mire `<PasoFormato`.
-   */
-  it('un mis-wire con el mismo nombre no lo satisface', () => {
-    const misWire = `<PasoFormato configs={configs} picked={['PADEL']} pairSizes={pairSizes} hasMasters={hasMasters} formatoDefault={formatoDefault} errors={errorsByKind} onChangeConfig={changeConfig} onChangeHasMasters={changeHasMasters} onChangeFormatoDefault={changeFormatoDefault} />`
-    expect(misWire).toMatch(/<PasoFormato\b/)
-    expect(/<PasoFormato\b[^>]*\/>/.exec(misWire)?.[0] ?? '').not.toMatch(
-      /\bpicked=\{disciplines\}/,
-    )
-  })
-})
-
-/**
- * F9 (dos jueces ciegos, `37b225b..d33377a`): el mismo techo que
- * `<PasoFormato>` de arriba, ahora para el paso 3 ("Orden inicial") -- sin
- * clicks la suite no llega hasta acá, así que el ÚNICO lugar donde un
- * mis-wire de este call site se puede cazar es pinchando el ARGUMENTO por
- * FUENTE.
- *
- * `onMoveGlobal` viajaba como una arrow inline
- * (`(from, to) => setSquad(moveSeat(squad, from, to))`) -- exactamente el
- * defecto que el comentario de `llamada` (arriba) ya documenta para
- * `PasoFormato`: una arrow ahí adentro corta en seco la regexp (`[^>]*` no
- * puede cruzar el `>` de un `=>`), así que este call site NO se podía
- * pinchar hasta extraerla a un nombre (`moveGlobalSeat`, `wizard.tsx`),
- * mismo criterio que `changeConfig`/`changeHasMasters`/`changeFormatoDefault`/
- * `changeFixedTeams`/`changeOwnOrder`.
- */
-describe('el paso "Orden inicial" del wizard — el cableado que ningún render alcanza', () => {
-  const fuente = sinComentarios(
-    readFileSync(join(process.cwd(), 'app/torneos/nuevo/wizard.tsx'), 'utf8'),
-  )
-  const llamada = /<PasoOrdenInicial\b[^>]*\/>/.exec(fuente)?.[0] ?? ''
-
-  it('el paso 3 monta PasoOrdenInicial', () => {
-    expect(llamada).not.toBe('')
-  })
-
-  it('le pasa el plantel ordenado, el asiento propio, las disciplinas y el orden propio de cada una -- sin arrows inline', () => {
-    expect(llamada).toMatch(/\borderedNames=\{orderedNames\}/)
-    expect(llamada).toMatch(/\bmySeat=\{mySeat\}/)
-    expect(llamada).toMatch(/\bdisciplines=\{disciplines\}/)
-    expect(llamada).toMatch(/\bownOrder=\{ownOrder\}/)
-    expect(llamada).toMatch(/\borders=\{orders\}/)
-    expect(llamada).toMatch(/\bonMoveGlobal=\{moveGlobalSeat\}/)
-    expect(llamada).toMatch(/\bonMoveOwn=\{changeOrderAt\}/)
-  })
-})
-
-/**
- * F7 (dos jueces ciegos, `37b225b..d33377a`): el orden de los pasos vive en
- * CUATRO lugares que nada más obliga a coincidir entre sí -- `TITLES`/`HELP`
- * (qué título/ayuda muestra cada `step`) y `blocked`/`advance` (qué `step`
- * frena el "Continuar" y cuál dispara el submit). Medido, las dos mutaciones
- * de abajo pasan 1028/1028 + `tsc` limpio sin este describe:
- *
- * · Revertir `blocked` de `step === 2 && anyErrors` a `step === 3 &&
- *   anyErrors` deja al wizard TRABADO en "Orden inicial" (paso 3) cada vez
- *   que quede un error de Formato sin resolver -- ese aviso vive DENTRO de
- *   `PasoFormato`, que ya no se ve en el paso 3, así que no hay ningún
- *   cartel que explique por qué "Continuar" sigue gris. Soft-lock.
- * · Mover el submit de `advance()` de `step === 3` a `step === 2` hace
- *   "Orden inicial" INALCANZABLE: el botón dispara `submit()` un paso antes
- *   de tiempo, desde Formato.
- */
-describe('el wizard — TITLES/HELP/blocked/advance no se desalinean entre sí (F7)', () => {
-  const fuente = sinComentarios(
-    readFileSync(join(process.cwd(), 'app/torneos/nuevo/wizard.tsx'), 'utf8'),
-  )
-
-  it('TITLES tiene los cinco pasos, en el orden Nombre/Plantel/Formato/Orden inicial/Listo', () => {
-    expect(fuente).toContain(
-      "const TITLES = ['Nombre y disciplinas', 'El plantel', 'Formato', 'Orden inicial', 'Listo']",
-    )
-  })
-
-  /**
-   * WU7 (ronda 3 de revisión): el pin de antes anclaba en la COLA del
-   * array (los últimos tres elementos más el `]` de cierre), así que
-   * `HELP[0]` quedaba sin pinear -- insertar un elemento nuevo ANTES de él
-   * (`const HELP = ['nuevo', 'Como lo llaman...', ...]`) corre todos los
-   * índices un lugar y sigue matcheando la cola intacta. Ahora ancla desde
-   * `const HELP = [` -- los CINCO textos, en orden, sin nada antes del
-   * primero.
-   */
-  it('HELP tiene los cinco textos completos, en el orden Nombre/Plantel/Formato/Orden inicial/Listo -- nada se puede insertar antes del primero', () => {
-    expect(fuente).toMatch(
-      /const HELP = \[\s*'Como lo llaman en el grupo\. Se puede cambiar después\.',\s*'',\s*'Todos tienen un valor que ya funciona\. Si no te importa, seguí de largo\.',\s*'Ordenalos del mejor al peor\. Es el criterio que corta los empates hasta que haya fechas jugadas, y de ahí salen las primeras parejas\.',\s*'',\s*\]/,
-    )
-  })
-
-  it('blocked frena el paso 2 (Formato) cuando hay errores, no el 3 (Orden inicial)', () => {
-    expect(fuente).toContain('(step === 2 && anyErrors)')
-    expect(fuente).not.toContain('(step === 3 && anyErrors)')
-  })
-
-  it('advance() dispara submit() en el paso 3 (Orden inicial), el último paso configurable', () => {
-    const advance = /const advance = \(\) => \{[\s\S]*?\n {2}\}/.exec(fuente)?.[0] ?? ''
-    expect(advance).not.toBe('')
-    expect(advance).toContain('if (step === 3) {')
-    expect(advance).not.toContain('if (step === 2) {')
-  })
-
-  /**
-   * WU3 (ronda 2 de revisión): F7 pinea `blocked`/`advance` y a los cuatro
-   * `TITLES`/`HELP`, pero dejó afuera una QUINTA ubicación sin pinear -- los
-   * gates de RENDER en sí. Medido: swapear `{step === 2 && <PasoFormato/>}`
-   * con `{step === 3 && <PasoOrdenInicial/>}` sobrevive 1050/1050 + `tsc`
-   * limpio: el paso 2 queda titulado "Formato" pero dibuja la lista de
-   * orden, y `blocked` (`step === 2 && anyErrors`) apaga "Continuar" sobre un
-   * paso cuyos `<Aviso>` de error viven DENTRO de `PasoFormato`, que ya no se
-   * ve ahí -- el mismo soft-lock que el comentario de F7 dice prevenir.
-   */
-  it('PasoFormato se dibuja en el paso 2, no en el 3', () => {
-    expect(fuente).toMatch(/\{step === 2 && \(\s*<PasoFormato\b/)
-    expect(fuente).not.toMatch(/\{step === 3 && \(\s*<PasoFormato\b/)
-  })
-
-  it('PasoOrdenInicial se dibuja en el paso 3, no en el 2', () => {
-    expect(fuente).toMatch(/\{step === 3 && \(\s*<PasoOrdenInicial\b/)
-    expect(fuente).not.toMatch(/\{step === 2 && \(\s*<PasoOrdenInicial\b/)
-  })
-
-  /** "Usar los defaults" (wizard.tsx) también está gateado a mano al `step === 2` -- mismo riesgo de desalineación que arriba, mismo pin. */
-  it('"Usar los defaults" está gateado al paso 2 (Formato)', () => {
-    const boton = /\{step === 2 && \(\s*<button[\s\S]*?Usar los defaults[\s\S]*?\)\}/.exec(fuente)?.[0] ?? ''
-    expect(boton).not.toBe('')
-    expect(boton.length).toBeLessThan(800) // no se comió de más: sigue siendo ESTE botón, no el resto del archivo.
-  })
-
-  /**
-   * WU7 (ronda 3 de revisión): el pin de arriba sólo prueba que EL GATE del
-   * paso está bien puesto -- nada ahí adentro pincha el `onClick` en sí. Se
-   * puede vaciar el cuerpo (`onClick={() => {}}`) sin que ese test se
-   * entere: sigue habiendo un `<button>` con el texto "Usar los defaults"
-   * dentro de `{step === 2 && (...)}`. Este pin exige el cuerpo real: rehace
-   * la config de CADA disciplina marcada con `freshDisciplineConfig`.
-   */
-  it('"Usar los defaults" de verdad rehace la config de cada disciplina marcada, no un botón vacío', () => {
-    const boton = /\{step === 2 && \(\s*<button[\s\S]*?Usar los defaults[\s\S]*?\)\}/.exec(fuente)?.[0] ?? ''
-    expect(boton).toContain('setConfigsState((current) => {')
-    expect(boton).toContain('for (const kind of disciplines)')
-    expect(boton).toContain('next[kind] = freshDisciplineConfig(kind, filled, pairSizes[kind])')
-  })
-})
-
-/**
- * WU2 (ronda 2 de revisión) + WU1 (ronda 3, ESTE fix): los cuatro handlers
- * que hilan `squad` y `orders` a la vez vivían con la lógica ADENTRO del
- * handler de `.tsx` -- `wizard-state.unit.test.ts` cubre la función pura que
- * cada uno arma (`editSeatState`/`joinSquadState`/`removeSeatState`/
- * `moveGlobalSeatState`), pero eso no prueba que el HANDLER de `wizard.tsx`
- * de verdad la llame -- mismo techo que el resto de este archivo: sin
- * clicks, la suite no llega a ejecutar el cuerpo del handler, así que el
- * ÚNICO lugar donde un mis-wire se puede cazar es pinchando el ARGUMENTO por
- * FUENTE (ronda 18).
- *
- * El fix de WU2 (dos `useState`, dos setters sueltos por handler) resultó
- * INCOMPLETO: `setOrdersState(next.orders)` y `setOrdersState(orders)` (el
- * `orders` VIEJO del closure) comparten tipo, así que ninguna mutación de
- * las dos rompía `tsc` -- medido, las cuatro variantes (una por handler)
- * sobreviven 1069/1069 + `tsc` limpio. Una regexp más ajustada (`toMatch` de
- * un argumento más específico) seguía siendo el mismo síntoma: la próxima
- * mutación de UNA palabra le iba a ganar de nuevo.
- *
- * WU1 (ronda 3) saca el seam de raíz: `squad`+`orders` viven en UN solo
- * `useState<SquadOrders>` y hay un ÚNICO `setSquad` que exige el objeto
- * COMPLETO -- pasar sólo la mitad de un `SquadOrders` donde se espera el
- * tipo entero es un error de `tsc`, no algo que un pin tenga que cazar en
- * runtime. Los tests de acá abajo pinchan que cada handler sea EXACTAMENTE
- * `setSquad(<la función pura>(...))`, una sola línea: cualquier
- * reconstrucción que cherry-pickee un campo del objeto (`setSquad({
- * ...editSeatState(...), orders })`, la única forma de reintroducir el bug
- * que SÍ typechequea) necesita más código que este one-liner y deja de
- * matchear el pin exacto.
- */
-describe('los handlers de squad+orders del wizard -- el cableado que ningún render alcanza (WU1, ronda 3 de revisión)', () => {
-  const fuente = sinComentarios(
-    readFileSync(join(process.cwd(), 'app/torneos/nuevo/wizard.tsx'), 'utf8'),
-  )
-
-  it('squad y orders viven en UN solo useState<SquadOrders>, no en dos useState sueltos', () => {
-    expect(fuente).toMatch(/useState<SquadOrders>/)
-    expect(fuente).not.toMatch(/useState<Squad>/)
-    expect(fuente).not.toMatch(/useState<Partial<Record<DisciplineKind, number\[\]>>>/)
-  })
-
-  /**
-   * `setSquad` es el ÚNICO punto que escribe `SquadOrders` -- pinchar que
-   * reciba `next` COMPLETO (no un campo reconstruido) cierra la puerta que
-   * la mutación de WU2 explotaba: si alguien reescribe esto para armar
-   * `{ squad: next.squad, orders }` (el `orders` viejo), esta línea exacta
-   * deja de existir.
-   */
-  it('setSquad aplica el objeto SquadOrders completo que le pasan, sin reconstruirlo', () => {
-    expect(fuente).toMatch(/const setSquad = \(next: SquadOrders\) => \{\s*setSquadOrdersState\(next\)/)
-  })
-
-  it('editSeatName aplica editSeatState en un solo setSquad, sin setter aparte para orders', () => {
-    expect(fuente).toMatch(
-      /const editSeatName = \(index: number, value: string\) => setSquad\(editSeatState\(squad, orders, index, value\)\)/,
-    )
-  })
-
-  it('joinSquad aplica joinSquadState en un solo setSquad, sin setter aparte para orders', () => {
-    expect(fuente).toMatch(/const joinSquad = \(\) => setSquad\(joinSquadState\(squad, orders, myName\)\)/)
-  })
-
-  it('removeSeat aplica removeSeatState en un solo setSquad, sin setter aparte para orders', () => {
-    expect(fuente).toMatch(
-      /const removeSeat = \(index: number\) => setSquad\(removeSeatState\(squad, orders, index\)\)/,
-    )
-  })
-
-  it('moveGlobalSeat aplica moveGlobalSeatState en un solo setSquad, sin setter aparte para orders', () => {
-    expect(fuente).toMatch(
-      /const moveGlobalSeat = \(from: number, to: number\) => setSquad\(moveGlobalSeatState\(squad, orders, from, to\)\)/,
-    )
-  })
-
-  /** "+ Agregar jugador" (WU2): pasa por `addBlankSeat`, con `orders` intacto -- una fila en blanco no toca ningún orden propio. */
-  it('"+ Agregar jugador" pasa por addBlankSeat, no arma el array a mano', () => {
-    expect(fuente).toMatch(/setSquad\(\{ squad: addBlankSeat\(squad\), orders \}\)/)
-  })
-})
-
-/**
- * WU6 (ronda 3 de revisión): `newTournamentPayload` pasó de nueve
- * parámetros posicionales a un objeto de propiedades NOMBRADAS
- * (`wizard-state.ts`) porque `hasMasters` y `fixedTeams` comparten
- * EXACTAMENTE el mismo tipo (`Record<DisciplineKind, boolean>`) -- medido,
- * swapear esos dos argumentos en este call site dejaba `tsc` limpio y
- * 1069/1069 en verde, y los defaults de producción hacían la mutación
- * SILENCIOSA en el caso más común (todo torneo de `pairSize: 2` nacería con
- * `fixed_teams = true` y sin Masters).
- *
- * Un objeto no vuelve el swap IMPOSIBLE de escribir -- `hasMasters:
- * fixedTeams, ..., fixedTeams: hasMasters` sigue tipando -- pero deja de ser
- * un reordenamiento silencioso de dos líneas consecutivas: hay que
- * reescribir la CLAVE de cada una, un cambio de texto visible y pincheable.
- * Este pin exige la forma SHORTHAND (`hasMasters,`/`fixedTeams,`, el nombre
- * del campo solo, sin `:`) para las dos claves de riesgo -- cualquier swap
- * (`hasMasters: fixedTeams`) dejaría de ser shorthand y el pin se rompe.
- */
-describe('el submit del wizard -- newTournamentPayload como objeto nombrado, no nueve posicionales (WU6, ronda 3 de revisión)', () => {
-  const fuente = sinComentarios(
-    readFileSync(join(process.cwd(), 'app/torneos/nuevo/wizard.tsx'), 'utf8'),
-  )
-  const llamada = /newTournamentPayload\(\{[^)]*\}\)/.exec(fuente)?.[0] ?? ''
-
-  it('el call site de submit() llama a newTournamentPayload', () => {
-    expect(llamada).not.toBe('')
-  })
-
-  it('hasMasters y fixedTeams viajan en shorthand -- un swap de sus VALORES dejaría de serlo', () => {
-    expect(llamada).toMatch(/\bhasMasters,/)
-    expect(llamada).toMatch(/\bfixedTeams,/)
-    expect(llamada).not.toMatch(/\bhasMasters: fixedTeams\b/)
-    expect(llamada).not.toMatch(/\bfixedTeams: hasMasters\b/)
-  })
-
-  it('las nueve claves están, cada una con su propio dato -- picked explícito (la variable local se llama disciplines)', () => {
-    expect(llamada).toMatch(/\bname,/)
-    expect(llamada).toMatch(/\bsquad,/)
-    expect(llamada).toMatch(/\bconfigs,/)
-    expect(llamada).toMatch(/\bpicked: disciplines,/)
-    expect(llamada).toMatch(/\bpairSizes,/)
-    expect(llamada).toMatch(/\bformatoDefault,/)
-    expect(llamada).toMatch(/\borders,?\s*\}\)/)
   })
 })
 
@@ -682,13 +412,18 @@ describe('el submit del wizard -- newTournamentPayload como objeto nombrado, no 
 // Estos tests montan la PÁGINA con `user: null`, que es la rama que ningún
 // test tocaba nunca.
 describe('Reglas SIN SESIÓN — la mitad pública, que es la que faltaba', () => {
-  it('dibuja un bloque por disciplina cuando el torneo tiene dos', async () => {
+  it('dibuja un bloque por disciplina: el reglamento arriba, su acordeón en "Más detalle"', async () => {
     escena.user = null
     escena.publicFormats = [publicFormat('PADEL', PADEL), publicFormat('FIFA', FIFA)]
     const html = await reglas(PADEL_Y_FIFA)
-    expect(bloqueDe(html, 'Pádel')).toContain('1 set a 4 games')
-    expect(bloqueDe(html, 'FIFA')).toContain('Marcador de goles')
+    const padel = bloqueDe(html, 'Pádel')
+    const fifa = bloqueDe(html, 'FIFA')
+    expect(padel.indexOf('Parejas que rotan.')).toBeLessThan(padel.indexOf('<details'))
+    expect(padel.slice(padel.indexOf('<details'))).toContain('1 set a 4 games')
+    expect(fifa.indexOf('Partidos a goles')).toBeLessThan(fifa.indexOf('<details'))
+    expect(fifa.slice(fifa.indexOf('<details'))).toContain('Marcador de goles')
     expect(html).not.toContain('Pádel: 1 set a 4 games · FIFA: Marcador de goles')
+    expect(html).not.toContain('Editar reglas')
   })
 
   /** R11, rama anónima: mismo criterio que la rama con sesión — cada bloque narra su propia disciplina y su propio texto. */
@@ -709,13 +444,37 @@ describe('Reglas SIN SESIÓN — la mitad pública, que es la que faltaba', () =
     expect(fifa).not.toContain('Traer pelotas nuevas.')
   })
 
-  it('y con UNA sola sigue diciendo exactamente lo de siempre, sin prefijo ni encabezado', async () => {
+  it('parejas fijas y fecha AUTO llegan al reglamento también sin sesión', async () => {
+    escena.user = null
+    escena.publicFormats = [publicFormat('PADEL', PADEL, '', { fixedTeams: true, formatoDefault: { kind: 'AUTO' } })]
+    const html = await reglas(SOLO_PADEL)
+    expect(html).toContain('Parejas fijas.')
+    expect(html).toContain('Cada fecha se arma sola, según cuántos vengan.')
+    expect(html).not.toContain('Cómo se arman las parejas')
+  })
+
+  /** La unidad sale del deporte (`unitOf`), no de un "games" fijo: el ping pong se juega a puntos, en el reglamento Y en el detalle. */
+  it('cada bloque cuenta en la unidad de SU deporte: el ping pong, a puntos', async () => {
+    escena.user = null
+    const pingPong = { ...PADEL, matchFormat: { setsToWin: 2, gamesPerSet: 11, tieBreak: false, openScore: false } }
+    escena.publicFormats = [publicFormat('PADEL', PADEL), publicFormat('PING_PONG', pingPong)]
+    const html = await reglas(PADEL_Y_FIFA)
+    const padel = bloqueDe(html, 'Pádel')
+    const ping = bloqueDe(html, 'Ping pong')
+    expect(padel).toContain('de 4 games')
+    expect(ping).toContain('de 11 puntos')
+    expect(ping.slice(ping.indexOf('<details'))).toContain('mejor de 3 sets a 11 puntos')
+    expect(ping).not.toContain('games')
+  })
+
+  it('y con UNA sola sigue diciendo lo de siempre, con su título', async () => {
     escena.user = null
     escena.publicFormats = [publicFormat('PADEL', PADEL)]
     const html = await reglas(SOLO_PADEL)
+    expect(html).toContain('>Pádel</h2>')
     expect(html).toContain('1 set a 4 games')
     expect(html).not.toContain('Pádel: 1 set a 4 games')
-    expect(html).not.toContain('<h2')
+    expect(html).toContain('Ir al inicio')
   })
 
   it('un link muerto sigue mostrando la frase de link muerto, no un error', async () => {
@@ -723,5 +482,34 @@ describe('Reglas SIN SESIÓN — la mitad pública, que es la que faltaba', () =
     escena.publicFormats = []
     const html = await reglas([])
     expect(html).toContain('necesitás el link que te pasó tu grupo')
+  })
+})
+
+describe('Ajustes — el aviso de puntos cuenta los asientos de CADA deporte, no el plantel entero', () => {
+  const ids = (n: number) => Array.from({ length: n }, (_, index) => `e${index + 1}`)
+  const PADEL_6 = disciplina('d1', 'PADEL', defaultConfig(6))
+  const fifa = (squadSize: number) =>
+    disciplina('d2', 'FIFA', { ...defaultConfig(squadSize, 1), matchFormat: { ...PADEL.matchFormat, openScore: true } })
+
+  function plantel(seats: number, players: Record<string, number>): void {
+    escena.squad = ids(seats).map((id) => ({ id, displayName: id, playerId: null }))
+    escena.playersByDiscipline = new Map(Object.entries(players).map(([id, n]) => [id, ids(n)]))
+  }
+
+  it('un deporte que juegan 5 de los 6 del plantel, con 5 valores de puntos: sin aviso', async () => {
+    plantel(6, { d1: 6, d2: 5 })
+
+    const html = await ajustes([PADEL_6, fifa(5)])
+
+    expect(html).not.toContain('hacen falta')
+  })
+
+  it('un desajuste de verdad (lo juegan 4 y hay 5 valores de puntos) se sigue avisando', async () => {
+    plantel(6, { d1: 6, d2: 4 })
+
+    const html = await ajustes([PADEL_6, fifa(5)])
+
+    expect(html).toContain('FIFA: Con un plantel de 4 hacen falta 4 valores de puntos, no 5.')
+    expect(html).not.toContain('Pádel:')
   })
 })

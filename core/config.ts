@@ -1,6 +1,6 @@
 import { minSquadFor } from './constants'
-import { SPORTS, type TournamentSport } from './sports'
-import type { SeasonConfig, SideSize } from './types'
+import { SPORTS, modalityShape, sportOf, type Modality, type SportId, type TournamentSport } from './sports'
+import type { MatchFormat, MatchFormatOwn, MatchdayFormatSetting, SeasonConfig, SideSize } from './types'
 
 /**
  * Los seis puestos que pagan. Es la tabla de un torneo de seis parejas, y
@@ -55,7 +55,7 @@ const DEFAULT_POINTS: Record<number, number[]> = {
   // vez, y sin semilla acá `defaultConfig` devolvía `points: []` y
   // `pointsCountError` lo rechazaba. El creador la edita puesto por puesto en
   // el wizard (app/torneos/nuevo/wizard.tsx:311-325) y después en ajustes
-  // (app/torneo/[id]/ajustes/formato.tsx:103-113) — lo único que tiene que
+  // (la hoja "Personalizar reglas", app/deporte/personalizar-reglas.tsx) — lo único que tiene que
   // respetar la semilla es `pointsErrors`, más abajo.
   2: [10, 6],
   3: [10, 6, 3],
@@ -88,10 +88,10 @@ const DEFAULT_POINTS: Record<number, number[]> = {
  * (S80, verify-report-pr21 #4004): este bloque decía *"Lo que SIGUE sin
  * existir es el camino de PANTALLA: ningún caller de hoy pasa `sideSize =
  * 1`"*. Falso desde las Rebanadas E/F: `configFor` (`app/torneos/nuevo/
- * wizard-state.ts`, caller de `wizard.tsx`) y `newDisciplineSpec` (misma
- * `wizard-state.ts`, caller de `app/torneo/[id]/ajustes/actions.ts`) le pasan
- * `sideSize = 1` a esta función cuando el admin elige "Individual" — los dos
- * caminos de creación de disciplina. Corregido acá, mismo criterio que N48 y
+ * wizard-state.ts`, antes caller del wizard de cinco pasos) y
+ * `newDisciplineSpec` (borrada con él, antes caller de `app/torneo/[id]/
+ * ajustes/actions.ts`) le pasaban `sideSize = 1` a esta función cuando el
+ * admin elegía "Individual" — los dos caminos de creación de disciplina. Corregido acá, mismo criterio que N48 y
  * la corrección de arriba: la frase falsa vive en el código y ahí se arregla.
  */
 export function defaultConfig(squadSize: number, sideSize: SideSize = 2): SeasonConfig {
@@ -141,6 +141,60 @@ export function disciplineProfile(
     // `kind` y no de lo que traía la config que entró.
     config: { ...config, matchFormat: { ...config.matchFormat, openScore: goals } },
     allowsDraw: sport.allowsDraw,
+  }
+}
+
+/**
+ * A cuánto se juega una fecha (docs/torneos-deportes.md §7): LA regla. Nadie lee
+ * el formato de la disciplina directo para una fecha; todo pasa por acá.
+ *
+ * ponytail: con fechas a distinta cantidad de sets, el desempate por diferencia
+ * de sets mezcla fechas distintas (spec §7, aceptado). Si molesta: desempatar por fecha.
+ *
+ * ponytail: las fechas cerradas antes de 0096 tienen `match_format` null y se releen
+ * con el formato de HOY de la disciplina (sin backfill, R14). Sólo afecta rótulos: los
+ * puntos ya están guardados. Si molesta: backfill con el formato de cada fecha.
+ */
+export function effectiveMatchFormat(base: MatchFormat, own: MatchFormatOwn | null): MatchFormat {
+  return own === null ? base : { ...base, setsToWin: own.setsToWin, gamesPerSet: own.gamesPerSet }
+}
+
+/** Lo que escribe una disciplina nueva, sembrada desde la ficha de su deporte. */
+export interface DisciplineSeed {
+  config: SeasonConfig
+  pairSize: SideSize
+  fixedTeams: boolean
+  allowsDraw: boolean
+  hasMasters: boolean
+  formatoDefault: MatchdayFormatSetting
+}
+
+/**
+ * Siembra una disciplina desde la ficha: la ÚNICA lectura de la ficha al crear
+ * (el wizard y "Agregar un deporte"); una config guardada no se recalcula de
+ * acá. Para Pádel y FIFA da lo mismo que `disciplineProfile(kind, defaultConfig(n, lados))`
+ * más `firstFecha`: la ficha nombra lo de hoy, no lo cambia.
+ *
+ * Tira (Error, no EdgeError) si el deporte no tiene ficha o no ofrece esa
+ * modalidad: es un bug del llamador, no un error de usuario.
+ */
+export function fichaSeed(kind: SportId, squadSize: number, modality: Modality): DisciplineSeed {
+  const sport = sportOf(kind)
+  const ficha = sport.ficha
+  if (ficha === null || !ficha.modalities.some((option) => option.id === modality)) {
+    throw new Error(`${kind} no se juega en ${modality}.`)
+  }
+  const { pairSize, fixedTeams } = modalityShape(modality)
+  const base = defaultConfig(squadSize, pairSize)
+  // Copia: la config sembrada no puede compartir el objeto del registro.
+  const matchFormat = sport.family === 'sets' ? { ...sport.format } : { ...base.matchFormat, openScore: true }
+  return {
+    config: { ...base, ...ficha.season, matchFormat, firstFecha: ficha.firstFecha[modality] },
+    pairSize,
+    fixedTeams,
+    allowsDraw: sport.allowsDraw,
+    hasMasters: ficha.masters && pairSize === 2,
+    formatoDefault: ficha.fechaFormat,
   }
 }
 
@@ -253,6 +307,10 @@ export function validateConfig(config: SeasonConfig, sideSize: SideSize): string
   }
   if (tiebreakSnapshotEvery < 1) {
     errors.push('El orden de desempate se tiene que refrescar cada 1 fecha o más.')
+  }
+  // La config viaja como JSON de cliente: el tipo no alcanza para esta clave.
+  if (config.firstFecha !== undefined && config.firstFecha !== 'NIVEL' && config.firstFecha !== 'SORTEO') {
+    errors.push('La primera fecha tiene que ser por nivel o al azar.')
   }
 
   return errors

@@ -8,6 +8,7 @@ import {
   computeRanking,
   computeStandings,
   currentPhase,
+  effectiveMatchFormat,
   groupPhaseMatches,
   groupSides,
   includes,
@@ -20,8 +21,10 @@ import {
   previousContext,
   resolveDisciplineBySlug,
   sameSide,
+  sideWords,
   snapshotForMatchday,
   thirdPlaceNote,
+  unitOf,
   usesSetsDiff,
   type MatchResult,
   type SeasonConfig,
@@ -39,6 +42,7 @@ import {
   seasonMatchdaysOf,
 } from '@/db/read'
 import { pairingContextFor } from '@/db/matchday'
+import { disciplineConfig } from '@/db/discipline'
 import { sideLabel, tiebreakNote } from './tabla-desempate'
 import { TablaDelDia } from './tabla-del-dia'
 import { awardsBefore, closedHistory, frozenPointsOf, type FrozenAward } from '@/db/season'
@@ -54,6 +58,7 @@ import { MastersDraft, type QualifierVM } from './masters'
 import { SumarInvitado, type GuestPromoteVM, type SumarSeatVM } from './sumar'
 import { guestsToPromote } from './sumar-state'
 import { frozenTableRows, orderMoved } from './tabla-congelada'
+import { formatoNotice, matchdayShape } from './armado-state'
 
 interface PageProps {
   params: Promise<{ id: string; disciplina: string; n: string }>
@@ -64,14 +69,17 @@ function sideKey(side: Side): string {
   return [...members(side)].sort().join('~')
 }
 
-function totalGames(match: MatchResult): [number, number] {
-  let a = 0
-  let b = 0
-  for (const set of match.sets) {
-    a += set.gamesA
-    b += set.gamesB
-  }
-  return [a, b]
+/**
+ * Lo que la tarjeta del partido dice de cada lado (R15): con un solo set, sus games/goles/puntos;
+ * con más de uno, los SETS ganados — sumar 11-0, 9-11, 9-11 da 29 a 22 y señala al que perdió.
+ * `['–', '–']` sin resultado.
+ */
+function cardScore(match: MatchResult): [string, string] {
+  if (match.sets.length === 0) return ['–', '–']
+  if (match.sets.length === 1) return [String(match.sets[0]!.gamesA), String(match.sets[0]!.gamesB)]
+  const won = (mine: 'gamesA' | 'gamesB', theirs: 'gamesA' | 'gamesB') =>
+    String(match.sets.filter((set) => set[mine] > set[theirs]).length)
+  return [won('gamesA', 'gamesB'), won('gamesB', 'gamesA')]
 }
 
 /** Ganador del partido por sets, la misma cuenta que usa `computeStandings`. `null` sin resultado. */
@@ -141,7 +149,11 @@ export default async function FechaDetailPage({ params }: PageProps) {
         : `Cerrada${matchday.playedOn !== null ? ` · ${matchdayFull(matchday.playedOn)}` : ''}`
 
   // El vocabulario de la disciplina: un lado de uno no es "una pareja".
-  const sideWord = discipline.pairSize === 1 ? 'jugadores' : 'parejas'
+  const sideWord = sideWords(discipline.pairSize).many
+
+  // "Fecha 3 · 1 set a 6 games" en la cabecera de una fecha fuera del armado
+  // que se juega distinto que el deporte (§7). Lo calcula la rama no-DRAFT.
+  let notice: string | null = null
 
   let body: ReactNode = (
     <div className="rounded-card bg-chip p-4 text-center text-[13px] font-[550] text-muted">
@@ -194,12 +206,14 @@ export default async function FechaDetailPage({ params }: PageProps) {
   // `attendances_write` no deja tildar a nadie que no sea admin. Un jugador que
   // llegue a esta URL ve la tarjeta de arriba, que es la verdad para él.
   if (!isMasters && matchday.status === 'DRAFT' && header.isAdmin) {
-    const [attendances, detail, locks, lastHistory, beforeLastHistory] = await Promise.all([
+    const [attendances, detail, locks, lastHistory, beforeLastHistory, { fixedTeams }] = await Promise.all([
       attendancesOf(supabase, matchday.id),
       matchdayDetail(supabase, matchday.id),
       pairLocksOf(supabase, matchday.id),
       closedHistory(supabase, matchday.disciplineId, matchdayNumber - 1),
       closedHistory(supabase, matchday.disciplineId, matchdayNumber - 2),
+      // `fixedTeams` no viaja en `DisciplineHeader`: se pide con `disciplineConfig`, como en Ajustes.
+      disciplineConfig(supabase, matchday.disciplineId),
     ])
 
     const { defenders, defendersAlreadyRepeated } = previousContext(lastHistory, beforeLastHistory)
@@ -289,7 +303,18 @@ export default async function FechaDetailPage({ params }: PageProps) {
     // mismo. Sin nada armable todavía no hay nada que previsualizar: mejor
     // ninguna vista previa que una pantalla rota.
     let groupPreview: GroupPreviewVM[] | null = null
-    const formatoDraft = matchday.formato
+    // `AUTO` (§7) se resuelve con los que VIENEN —la misma cuenta que
+    // `Armado` y que `generatePairs`—, no con los lados ya sorteados: antes
+    // del sorteo son 0, y daba "todos contra todos" sin vista previa mientras
+    // `generatePairs` iba a armar grupos.
+    const formatoDraft = matchdayShape({
+      confirmed: seats.filter((seat) => seat.playing).length,
+      looseGuests: looseGuests.length,
+      guestPairs: guestPairs.length,
+      sideSize: discipline.pairSize,
+      maxMatches: maxMatchesOf(discipline.config, discipline.pairSize),
+      formato: matchday.formato,
+    }).formato
 
     // S94 (verify-report-pre-contract #4026): mismo estado divergido que
     // C32/W86 — `changeMatchdayFormat` puede tocar `formato` DESPUÉS de que
@@ -349,7 +374,11 @@ export default async function FechaDetailPage({ params }: PageProps) {
         defenders={effectiveDefenders}
         loadedResults={detail.matches.filter((match) => match.sets.length > 0).length}
         formato={matchday.formato}
+        kind={discipline.kind}
+        matchFormat={effectiveMatchFormat(discipline.config.matchFormat, matchday.matchFormat)}
+        ownMatchFormat={matchday.matchFormat}
         formatDrifted={formatDrifted}
+        fixedTeams={fixedTeams}
         groupPreview={groupPreview}
       />
     )
@@ -358,8 +387,14 @@ export default async function FechaDetailPage({ params }: PageProps) {
   if (matchday.status !== 'DRAFT') {
     const status = matchday.status
     // Mismo cierre que arriba (Masters): la config es de la disciplina de
-    // ESTA fecha, no la [0] de la temporada.
-    const config = disciplineOf(header, matchday.disciplineId).config
+    // ESTA fecha, no la [0] de la temporada. Y a cuánto se juega ESTA fecha
+    // (§7): la tabla, la carga y las notas leen el efectivo, no el del torneo.
+    const base = disciplineOf(header, matchday.disciplineId).config
+    const config = { ...base, matchFormat: effectiveMatchFormat(base.matchFormat, matchday.matchFormat) }
+    // La unidad es del deporte, no del formato (§8): games, goles, puntos.
+    const unit = unitOf(discipline.kind, config.matchFormat)
+    // El Masters no se llama "Fecha N" en ningún lado de la app.
+    notice = isMasters ? null : formatoNotice(matchday.number, config.matchFormat, base.matchFormat, unit)
     const seedOrder = entries
       .filter((entry) => entry.kind === 'SQUAD')
       .sort((a, b) => a.seedPosition - b.seedPosition)
@@ -504,7 +539,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
         return a.round - b.round
       })
       .map((match) => {
-        const [gamesA, gamesB] = totalGames(match)
+        const [scoreA, scoreB] = cardScore(match)
         return {
           key: match.id,
           matchId: match.id,
@@ -512,8 +547,8 @@ export default async function FechaDetailPage({ params }: PageProps) {
           grupo: match.grupo,
           sideAName: sideName(match.sideA),
           sideBName: sideName(match.sideB),
-          scoreA: match.sets.length === 0 ? '–' : String(gamesA),
-          scoreB: match.sets.length === 0 ? '–' : String(gamesB),
+          scoreA,
+          scoreB,
           winner: matchWinner(match),
         }
       })
@@ -614,16 +649,15 @@ export default async function FechaDetailPage({ params }: PageProps) {
       const loadedCount = roundMatches.filter((match) => match.sets.length > 0).length
 
       const matches: RoundMatchVM[] = roundMatches.map((match, index) => {
-        const [gamesA, gamesB] = totalGames(match)
-        const winner = matchWinner(match)
+        const [scoreA, scoreB] = cardScore(match)
         return {
           key: `${roundNumber}-${index}`,
           matchId: match.id,
           pairAName: sideName(match.sideA),
           pairBName: sideName(match.sideB),
-          scoreA: match.sets.length === 0 ? '–' : String(gamesA),
-          scoreB: match.sets.length === 0 ? '–' : String(gamesB),
-          winner,
+          scoreA,
+          scoreB,
+          winner: matchWinner(match),
         }
       })
 
@@ -649,7 +683,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
     // esto es sólo no dibujar un botón que va a rebotar.
     const cargaContext =
       (header.isAdmin || header.playersCanScore) && status === 'OPEN'
-        ? { seasonId, matchdayId: matchday.id, disciplina, matchdayNumber: matchday.number, format: config.matchFormat }
+        ? { seasonId, matchdayId: matchday.id, disciplina, matchdayNumber: matchday.number, format: config.matchFormat, unit }
         : null
     // Excluye un `TERCER_PUESTO` sin jugar (decisiones #3979/#3988): la RPC
     // `close_matchday` (0041) ya tolera cerrar con ese único partido vacío, y
@@ -703,9 +737,12 @@ export default async function FechaDetailPage({ params }: PageProps) {
     // `computeStandings` sobre el orden vivo, así que sobre el congelado estaría
     // explicando una comparación que nunca ocurrió. Cuando el orden no se movió,
     // que es el caso normal, el pie se ve igual que siempre.
+    //
+    // Con llave, nunca (R1): el puesto lo decide la llave, y el desempate de la tabla de grupos
+    // podía decir "quedó 2°" de quien perdió la final aunque el orden congelado no se moviera.
     const note =
-      status === 'CLOSED' && !orderMoved(standings, tableRows)
-        ? tiebreakNote(standings, config, nameOf, discipline.pairSize)
+      status === 'CLOSED' && !isGroupsKnockout && !orderMoved(standings, tableRows)
+        ? tiebreakNote(standings, config, nameOf, discipline.pairSize, unit)
         : null
 
     // W70 (verify-report-pr21 #4004), decisión #3962 respetada: el orden NO
@@ -716,13 +753,13 @@ export default async function FechaDetailPage({ params }: PageProps) {
     // el borde raro que `tiebreakNote` ya cubre— y el pie se queda mudo justo
     // donde más hace falta: medido, dos lados con el mismo `PG` y la misma
     // diferencia en un orden que ninguna columna explica. Mutuamente
-    // excluyente con `note`: cuando el orden no se movió, `tiebreakNote` ya lo
-    // explica y esto no hace falta. `config.matchFormat`, no un "games" fijo:
+    // excluyente con `note`, que con llave ya no sale (R1): con el orden sin
+    // mover no hay nada que explicar. `config.matchFormat`, no un "games" fijo:
     // la llave existe sobre todo en FIFA, donde eso es gol, no games —mismo
     // argumento de `tiebreakNote` dos líneas arriba.
     const bracketNote =
       status === 'CLOSED' && isGroupsKnockout && orderMoved(standings, tableRows)
-        ? bracketOrderNote(config.matchFormat)
+        ? bracketOrderNote(unit)
         : null
 
     // Decisión #3990: el costo que quedó vivo de #3979 ("se puede cerrar sin
@@ -938,6 +975,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
               disciplina,
               matchdayNumber: matchday.number,
               format: config.matchFormat,
+              unit,
             }}
             status={status}
             remaining={remainingMatches}
@@ -959,6 +997,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
         <h1 className="text-[26px] font-extrabold tracking-[-.03em]">
           {isMasters ? 'Masters' : `Fecha ${matchday.number}`}
         </h1>
+        {notice !== null && <p className="text-[12.5px] font-bold text-muted">{notice}</p>}
       </header>
 
       {/* El día se elegía una sola vez, al abrir la fecha, y quedaba para

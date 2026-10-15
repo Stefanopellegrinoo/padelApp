@@ -1,12 +1,26 @@
 'use client'
 
 import { useOptimistic, useState, useTransition } from 'react'
-import { MAX_PAIRING_POOL, minSquadFor, offerableFormats, type MatchdayFormat, type Duo, type SideSize } from '@/core'
+import {
+  MAX_PAIRING_POOL,
+  minSquadFor,
+  offerableFormats,
+  unitOf,
+  type MatchdayFormat,
+  type MatchdayFormatSetting,
+  type MatchFormat,
+  type MatchFormatOwn,
+  type Duo,
+  type SideSize,
+} from '@/core'
 import { initials, matchdayFormatLabel } from '@/app/format'
+import { BloquePartido } from '@/app/deporte/personalizar-reglas'
+import { setsSportOf } from '@/app/deporte/personalizar-reglas-state'
 import {
   addGuestPair,
   addLooseGuest,
   changeMatchdayFormat,
+  changeMatchFormat,
   confirmMatchday,
   drawPairs,
   removeGuestPair,
@@ -18,9 +32,12 @@ import {
 } from './actions'
 import {
   applySeatTick,
+  armadoWords,
   drawRoom,
   guestPartnerAbsent,
+  guestsOutnumberNote,
   matchdayShape,
+  matchFormatLabel,
   parityGuestSeat,
   partnersTakenBy,
   type SeatVM,
@@ -63,79 +80,6 @@ export interface DraftPairVM {
 export interface GroupPreviewVM {
   number: number
   names: string[]
-}
-
-/**
- * El vocabulario de la disciplina. Un lado de uno no es "una pareja" y su
- * fecha no tiene "parejas invitadas": son jugadores invitados que juegan
- * solos, igual que todos.
- *
- * `drawNote` (W80, verify-report-pr21-cierre #4016): antes dependía SÓLO de
- * `sideSize`, nunca del `formato` elegido — con "N grupos + llave" elegido,
- * la vista previa de S83 ("Cómo quedan los grupos") dibujaba arriba un
- * reparto en grupos y esta nota, dos pantallazos más abajo, seguía
- * prometiendo "todos contra todos, en el orden de la tabla" (o el cruce de
- * defensores del pádel): la misma clase de contradicción que W55-W57.
- * `formato.qualifiersPerGroup` es literal en el texto — no un "2" fijo — para
- * que la nota se rompa sola si algún día deja de ser siempre 2 (`core/knockout.ts`,
- * `knockoutMatchups` hoy sólo arma cruces con 2 clasificados por grupo).
- *
- * S93 (verify-report-pre-contract #4026): el fix de W80 de arriba
- * REEMPLAZABA `base.drawNote` entero al elegir grupos. Para pádel
- * (`sideSize === 2`) esa nota base no habla de grupos: dice CÓMO SE ARMARON
- * las parejas que la lista de arriba muestra (defensores fijos, cruce de
- * tabla) — una pregunta distinta de CÓMO SE VAN A JUGAR, que es lo que la
- * nota de grupos contesta. Perder la primera al elegir grupos dejaba la
- * lista de parejas sin ninguna explicación. Para singles (`sideSize === 1`)
- * no hay paso de "armar parejas": la nota base y la de grupos contestan la
- * MISMA pregunta (cómo se arman los partidos), así que ahí sigue
- * reemplazando, como antes.
- *
- * S94 (verify-report-pre-contract #4026): `formato` puede cambiar DESPUÉS
- * de que el fixture YA se sorteó, sin volver a sortear (mismo estado
- * divergido que vigila C32 y que W86 cierra en la tabla del día) —
- * `formatDrifted` (calculado en `page.tsx` contra `detail.matches`, no
- * contra `formato` solo) dice si eso pasó. Prometer grupos sobre un
- * fixture que sigue siendo el de antes es la misma mentira que W86 cerró
- * del otro lado de la pantalla.
- */
-function words(sideSize: SideSize, formato: MatchdayFormat, formatDrifted: boolean) {
-  const base =
-    sideSize === 1
-      ? {
-          sides: 'jugadores',
-          guestSection: 'Jugadores invitados',
-          guestNote:
-            'Juegan solos, como todos, y no suman puntos para el campeonato. Entran de a dos.',
-          addGuest: '+ Agregar 2 invitados',
-          guestPairNoun: 'los dos invitados',
-          draw: 'Ordenar jugadores',
-          drawn: 'Orden de la fecha',
-          drawNote: 'Juegan todos contra todos, en el orden de la tabla.',
-        }
-      : {
-          sides: 'parejas',
-          guestSection: 'Parejas invitadas',
-          guestNote:
-            'Juegan juntos y no suman puntos para el campeonato: es un amistoso adentro de la fecha.',
-          addGuest: '+ Agregar pareja invitada',
-          guestPairNoun: 'la pareja invitada',
-          draw: 'Generar parejas',
-          drawn: 'Parejas',
-          drawNote:
-            'Los defensores quedan fijos. El resto se arma cruzando la tabla: 1° con último, 2° con anteúltimo, y así.',
-        }
-
-  if (formato.kind !== 'GROUPS_KNOCKOUT') return base
-
-  const groupsNote = formatDrifted
-    ? 'El formato cambió después de sortear: para jugar por grupos hay que volver a sortear la fecha.'
-    : `Juegan por grupos: todos contra todos adentro de cada grupo, y los ${formato.qualifiersPerGroup} primeros de cada uno pasan a la llave.`
-
-  return {
-    ...base,
-    drawNote: sideSize === 2 ? `${base.drawNote} ${groupsNote}` : groupsNote,
-  }
 }
 
 interface ArmadoProps {
@@ -182,8 +126,19 @@ interface ArmadoProps {
    * realmente se pierde.
    */
   loadedResults: number
-  /** El `matchdays.formato` guardado hoy (REQ-D8-1) — `ROUND_ROBIN` por default hasta que se elija otro. */
-  formato: MatchdayFormat
+  /**
+   * El `matchdays.formato` GUARDADO (REQ-D8-1), `AUTO` incluido (§7): es el
+   * estado del selector. Lo que se va a armar lo resuelve `matchdayShape` con
+   * los que vienen, nunca `page.tsx` con los lados ya sorteados — antes del
+   * sorteo son 0 y `AUTO` leía "todos contra todos".
+   */
+  formato: MatchdayFormatSetting
+  /** El deporte de la disciplina: decide si hay "a cuánto se juega" (sets) y en qué unidad. */
+  kind: string
+  /** A cuánto se juega ESTA fecha (§7): el propio de la fecha, o el del deporte en el torneo. */
+  matchFormat: MatchFormat
+  /** `matchdays.match_format`: el propio de la fecha, o `null` si va como el torneo. */
+  ownMatchFormat: MatchFormatOwn | null
   /**
    * `true` cuando `formato` es `GROUPS_KNOCKOUT` pero el fixture YA
    * sorteado no lo cubre (S94, verify-report-pre-contract #4026) — mismo
@@ -191,6 +146,8 @@ interface ArmadoProps {
    * `detail.matches`, no contra `formato` solo.
    */
   formatDrifted: boolean
+  /** `disciplines.fixed_teams`: la pareja es la misma todo el torneo. Cambia la nota del sorteo. */
+  fixedTeams: boolean
   /**
    * El reparto real en grupos (S83, verify-report-pr21 #4004), calculado en
    * `page.tsx` con las MISMAS funciones que `generatePairs` usa para armar
@@ -230,7 +187,11 @@ export function Armado({
   defenders,
   loadedResults,
   formato,
+  kind,
+  matchFormat,
+  ownMatchFormat,
   formatDrifted,
+  fixedTeams,
   groupPreview,
 }: ArmadoProps) {
   const [pending, startTransition] = useTransition()
@@ -313,7 +274,9 @@ export function Armado({
   })
   const { size, sides, matches, complete, needsLooseGuest, eventualSize, tooFew, tooManyToPair, suggestedFormat } =
     shape
-  const label = words(sideSize, formato, formatDrifted)
+  // Lo que se va a armar, `AUTO` resuelto con los que vienen: las notas
+  // describen eso, no el `AUTO` guardado.
+  const label = armadoWords(sideSize, shape.formato, formatDrifted, fixedTeams)
   const guestUnnamed = [
     ...looseGuests.map((guest) => guest.name),
     ...guestPairs.flatMap((pair) => [pair.a.name, pair.b.name]),
@@ -322,7 +285,7 @@ export function Armado({
   // El asiento que la paridad EXIGE, y por eso el único sin cruz. La cuenta
   // vive en `armado-state.ts` y tiene test propio: decide qué se puede sacar y
   // qué no, y acá adentro no la podía tener.
-  const requiredGuestSeat = parityGuestSeat(optimisticSeats, looseGuests.length)
+  const requiredGuestSeat = parityGuestSeat(optimisticSeats, looseGuests.length, sideSize)
 
   // Los jugadores del torneo que ya están trabados con un invitado. Ofrecerlos
   // en el `<select>` de OTRO invitado es ofrecer algo que siempre rebota
@@ -357,11 +320,12 @@ export function Armado({
   // dejaba la fecha impar de a un asiento, porque la pareja invitada suma dos.
   // "+ Agregar invitado" suma UNO, así que un plantel par más un invitado da 11
   // y el botón tiene que apagarse en vez de rebotar con el mismo texto que la
-  // banda ya muestra arriba.
+  // banda ya muestra arriba. Sólo en parejas: de a uno cada persona es su lado
+  // y la base acepta impares (`assertMatchdaySize`).
   const canDraw =
     !tooFew &&
     !tooManyToPair &&
-    eventualSize % 2 === 0 &&
+    (sideSize === 1 || eventualSize % 2 === 0) &&
     !guestsOutnumberSquad &&
     !someGuestPartnerAbsent &&
     !pending
@@ -411,9 +375,21 @@ export function Armado({
         // exactamente lo mismo que antes de settear.
         sides={sizeSettled ? shape.sides : 0}
         maxMatches={shape.maxMatches}
-        suggested={suggestedFormat}
+        resolved={suggestedFormat}
+        // Mismo gate: `eventualSize` mezcla el `confirmed` optimista con los
+        // invitados viejos, y la línea de Automático lo imprime.
+        headcount={sizeSettled ? eventualSize : null}
         pending={pending}
         onChange={(next) => run(() => changeMatchdayFormat(seasonId, matchdayId, matchdayNumber, next))}
+      />
+
+      <EstaFechaSeJuegaA
+        kind={kind}
+        effective={matchFormat}
+        own={ownMatchFormat}
+        unit={unitOf(kind, matchFormat)}
+        pending={pending}
+        onSave={(own) => run(() => changeMatchFormat(seasonId, matchdayId, matchdayNumber, own))}
       />
 
       {/* S83 (verify-report-pr21 #4004): entre elegir "2 grupos + llave" y
@@ -504,6 +480,7 @@ export function Armado({
             position={looseGuests.length === 1 ? null : index + 1}
             required={requiredGuestSeat}
             partnerAbsent={guestPartnerAbsent(optimisticSeats, guest)}
+            partner={label.guestPartner}
             toTheDraw={toTheDraw}
             pending={pending}
             onName={(name) =>
@@ -532,53 +509,54 @@ export function Armado({
         </button>
       </section>
 
-      <section className="flex flex-col gap-2">
-        <h2 className={`${STEP_TITLE} border-b border-line pb-2`}>{label.guestSection}</h2>
+      {/* De a uno no hay parejas que invitar (§8). Una fecha que ya trae parejas
+          invitadas de antes las sigue viendo y pudiendo sacar —cuentan en
+          `size`, esconderlas dejaría lugares invisibles—; lo que no se ofrece
+          es sumar más. */}
+      {(label.guestPairSection || guestPairs.length > 0) && (
+        <section className="flex flex-col gap-2">
+          <h2 className={`${STEP_TITLE} border-b border-line pb-2`}>{label.guestSection}</h2>
 
-        {guestPairs.map((pair, index) => (
-          <ParejaInvitada
-            key={pair.lockId}
-            pair={pair}
-            position={guestPairs.length === 1 ? null : index + 1}
-            pending={pending}
-            pairNoun={label.guestPairNoun}
-            onName={(entryId, name) =>
-              run(() => saveGuestName(seasonId, matchdayId, matchdayNumber, entryId, name))
-            }
-            onRemove={() =>
-              run(() =>
-                removeGuestPair(
-                  seasonId,
-                  matchdayId,
-                  matchdayNumber,
-                  pair.a.entryId,
-                  pair.b.entryId,
-                ),
-              )
-            }
-          />
-        ))}
+          {guestPairs.map((pair, index) => (
+            <ParejaInvitada
+              key={pair.lockId}
+              pair={pair}
+              position={guestPairs.length === 1 ? null : index + 1}
+              pending={pending}
+              pairNoun={label.guestPairNoun}
+              onName={(entryId, name) =>
+                run(() => saveGuestName(seasonId, matchdayId, matchdayNumber, entryId, name))
+              }
+              onRemove={() =>
+                run(() =>
+                  removeGuestPair(
+                    seasonId,
+                    matchdayId,
+                    matchdayNumber,
+                    pair.a.entryId,
+                    pair.b.entryId,
+                  ),
+                )
+              }
+            />
+          ))}
 
-        {/* ponytail: `addGuestPair` no tiene guard de `pairSize` y suma los
-            invitados de a DOS incluso donde no hay parejas — con `sideSize=1`
-            el lock que los traba lo ignora `buildSides` entero (su propio
-            comentario: "a constraint on a pairing that never happens
-            constrains nothing"), así que quedan dos invitados jugando solos.
-            No revienta y hoy es el ÚNICO camino para sumar un invitado a una
-            fecha de a uno, así que el copy lo dice en vez de esconderlo. El
-            arreglo real es una action de un invitado suelto; va en su propia
-            rebanada, no acá. */}
-        <p className="text-[11.5px] font-[600] text-muted">{label.guestNote}</p>
+          {label.guestPairSection && (
+            <>
+              <p className="text-[11.5px] font-[600] text-muted">{label.guestNote}</p>
 
-        <button
-          type="button"
-          disabled={pending}
-          onClick={() => run(() => addGuestPair(seasonId, matchdayId, matchdayNumber))}
-          className="min-h-11 rounded-field border-[1.5px] border-line p-3 text-[13.5px] font-extrabold"
-        >
-          {label.addGuest}
-        </button>
-      </section>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => run(() => addGuestPair(seasonId, matchdayId, matchdayNumber))}
+                className="min-h-11 rounded-field border-[1.5px] border-line p-3 text-[13.5px] font-extrabold"
+              >
+                {label.addGuest}
+              </button>
+            </>
+          )}
+        </section>
+      )}
 
       {pairs.length > 0 && (
         <section className="flex flex-col gap-2">
@@ -657,9 +635,7 @@ export function Armado({
           barato, un cartel rojo que miente no. */}
       {sizeSettled && guestsOutnumberSquad && (
         <p role="alert" className="rounded-field bg-live-bg px-3 py-2.5 text-[12.5px] font-bold text-live">
-          Hay {toTheDraw} invitados al sorteo y quedan {freeSquad} jugadores del torneo libres para
-          acompañarlos. Elegiles compañero en “Juega con”, poné a los que sobran en una pareja
-          invitada, o sacalos.
+          {guestsOutnumberNote(sideSize, toTheDraw, freeSquad)}
         </p>
       )}
       {guestUnnamed && pairs.length > 0 && (
@@ -721,7 +697,7 @@ export function Armado({
  *   apoyarse sólo en la clase.
  * - **Acortar el texto** ("Todos vs. todos"): sí baja la fila a dos líneas
  *   (medido: 71px → 56px), pero `matchdayFormatLabel` (`app/format.ts`) es
- *   el MISMO texto para este botón, la leyenda "Sugerido:" (línea de arriba)
+ *   el MISMO texto para este botón, la línea de "Automático" (arriba)
  *   Y el radio de `FormatoDefault` en Ajustes (`ajustes/formato-default.tsx`,
  *   §2.5) — cambiarlo tocaría asserts en tres archivos de test
  *   (`armado.unit.test.ts`, `page.unit.test.ts`,
@@ -736,6 +712,7 @@ export function Armado({
 const FORMATO_BOTON = 'flex-1 rounded-field border-[1.5px] p-3 text-[13.5px] font-extrabold'
 const FORMATO_ELEGIDO = 'border-accent bg-accent text-accent-text'
 const FORMATO_LIBRE = 'border-line'
+const AUTOMATICO_LINEA = 'mt-0.5 block text-[11.5px] font-semibold opacity-80'
 
 /**
  * El selector de formato de la fecha (REQ-D8-1): "todos contra todos"
@@ -770,39 +747,42 @@ const FORMATO_LIBRE = 'border-line'
  * excluyentes, sobre `<button>` en vez de `<input type="radio">` porque acá
  * no hay un `<form>` que serialice el valor — el estado lo maneja `onChange`.
  *
- * `suggested` (W77, verify-report-pr21-cierre #4016 / decisión #4022):
- * `suggestFormat` (`core/knockout.ts`) se había quedado sin consumidor de
- * producción, y con eso desaparecía de la pantalla el primer GIVEN de
- * REQ-D8-1 ("propone 2 grupos de 4"). La marca es una LEYENDA de texto
- * aparte (`Sugerido: …`), nunca una clase ni un `aria-checked` sobre el
- * botón — a propósito, para que no repita el error de S81: "sugerido" y
- * "elegido" son preguntas distintas y un lector de pantalla (o un test) no
- * tiene por qué confundirlas.
+ * "Automático" (§7) va arriba, a lo ancho: es una opción más del radiogroup
+ * (`aria-checked` con `AUTO` guardado) y su segunda línea dice lo que
+ * elegiría con los que vienen, `→ 2 grupos + llave (vienen 8)`. Esa línea es
+ * lo que antes era la leyenda "Sugerido: …" (W77, decisión #4022): sigue
+ * siendo TEXTO, nunca un `aria-checked` sobre el botón de ese formato, para
+ * que no repita el error de S81 — "lo que elegiría Automático" y "lo
+ * elegido" son preguntas distintas.
  *
- * La leyenda sólo se dibuja si `suggested` es de verdad una de las opciones
- * que este selector está mostrando (ofrecida hoy, o el `formato` guardado
- * como huérfano de W73) — nunca nombra un botón que no existe. `suggested`
- * llega con `eventualSize` (cuenta al invitado suelto que todavía no está
- * sentado, `armado-state.ts`) mientras que `sides` acá es el tamaño de HOY;
- * en el hueco donde los dos difieren, la leyenda calla en vez de mentir.
+ * La línea sólo se dibuja si `resolved` es de verdad una de las opciones que
+ * este selector está mostrando (ofrecida hoy, o el `formato` guardado como
+ * huérfano de W73) — nunca nombra un botón que no existe. `resolved` llega
+ * con `eventualSize` (cuenta al invitado suelto que todavía no está sentado,
+ * `armado-state.ts`) mientras que `sides` acá es el tamaño de HOY; en el
+ * hueco donde los dos difieren, la línea calla en vez de mentir.
  */
 export function SelectorDeFormato({
   formato,
   sides,
   maxMatches,
-  suggested,
+  resolved,
+  headcount,
   pending,
   onChange,
 }: {
-  formato: MatchdayFormat
+  /** El GUARDADO, `AUTO` incluido. */
+  formato: MatchdayFormatSetting
   /** Lados de HOY: de acá sale qué botones de grupos se ofrecen (`offerableFormats`), no de una sugerencia. */
   sides: number
   /** El techo de partidos de ESTA disciplina (`config.maxMatches`): con él se arma el menú. */
   maxMatches: number
-  /** El formato que `suggestFormat` propone (REQ-D8-1) — se marca con una leyenda, no reemplaza los botones de #4014. */
-  suggested: MatchdayFormat
+  /** Lo que elegiría "Automático" con los que vienen (`suggestFormat`, REQ-D8-1). */
+  resolved: MatchdayFormat
+  /** Los que vienen: personas, no lados. `null` mientras el tilde vuela: la línea se tapa en vez de mentir. */
+  headcount: number | null
   pending: boolean
-  onChange: (formato: MatchdayFormat) => void
+  onChange: (formato: MatchdayFormatSetting) => void
 }) {
   const menu = offerableFormats(sides, maxMatches)
   const ofertados = menu.filter(
@@ -826,43 +806,141 @@ export function SelectorDeFormato({
     formato.kind === 'GROUPS_KNOCKOUT' && !ofertados.some((candidato) => candidato.groups === formato.groups)
       ? [...ofertados, formato]
       : ofertados
-  const suggestedIsShown =
-    suggested.kind === 'ROUND_ROBIN' || grupos.some((candidato) => candidato.groups === suggested.groups)
+  const resolvedIsShown =
+    resolved.kind === 'ROUND_ROBIN'
+      ? ofreceRoundRobin
+      : grupos.some((candidato) => candidato.groups === resolved.groups)
+  const automatico = formato.kind === 'AUTO'
   return (
     <section className="flex flex-col gap-2">
       <h2 className={`${STEP_TITLE} border-b border-line pb-2`}>Formato de la fecha</h2>
-      {suggestedIsShown && (
-        <p className="text-[11.5px] font-[600] text-muted">Sugerido: {matchdayFormatLabel(suggested)}</p>
-      )}
-      <div className="flex gap-2" role="radiogroup" aria-label="Formato de la fecha">
-        {ofreceRoundRobin && (
-          <button
-            type="button"
-            role="radio"
-            aria-checked={formato.kind === 'ROUND_ROBIN'}
-            disabled={pending}
-            onClick={() => onChange({ kind: 'ROUND_ROBIN' })}
-            className={`${FORMATO_BOTON} ${formato.kind === 'ROUND_ROBIN' ? FORMATO_ELEGIDO : FORMATO_LIBRE}`}
-          >
-            {matchdayFormatLabel({ kind: 'ROUND_ROBIN' })}
-          </button>
-        )}
-        {grupos.map((candidato) => (
-          <button
-            key={candidato.groups}
-            type="button"
-            role="radio"
-            aria-checked={formato.kind === 'GROUPS_KNOCKOUT' && formato.groups === candidato.groups}
-            disabled={pending}
-            onClick={() => onChange(candidato)}
-            className={`${FORMATO_BOTON} ${
-              formato.kind === 'GROUPS_KNOCKOUT' && formato.groups === candidato.groups ? FORMATO_ELEGIDO : FORMATO_LIBRE
-            }`}
-          >
-            {matchdayFormatLabel(candidato)}
-          </button>
-        ))}
+      <div className="flex flex-col gap-2" role="radiogroup" aria-label="Formato de la fecha">
+        <button
+          type="button"
+          role="radio"
+          aria-checked={automatico}
+          disabled={pending}
+          onClick={() => onChange({ kind: 'AUTO' })}
+          className={`${FORMATO_BOTON} ${automatico ? FORMATO_ELEGIDO : FORMATO_LIBRE}`}
+        >
+          Automático
+          {/* Sin la cuenta asentada, un renglón vacío e `invisible` guarda la
+              altura: el botón no salta bajo el dedo entre tilde y tilde. */}
+          {headcount === null ? (
+            <span className={`${AUTOMATICO_LINEA} invisible`}>{'\u00a0'}</span>
+          ) : (
+            resolvedIsShown && (
+              <span className={AUTOMATICO_LINEA}>{`→ ${matchdayFormatLabel(resolved)} (vienen ${headcount})`}</span>
+            )
+          )}
+        </button>
+        <div className="flex gap-2">
+          {ofreceRoundRobin && (
+            <button
+              type="button"
+              role="radio"
+              aria-checked={formato.kind === 'ROUND_ROBIN'}
+              disabled={pending}
+              onClick={() => onChange({ kind: 'ROUND_ROBIN' })}
+              className={`${FORMATO_BOTON} ${formato.kind === 'ROUND_ROBIN' ? FORMATO_ELEGIDO : FORMATO_LIBRE}`}
+            >
+              {matchdayFormatLabel({ kind: 'ROUND_ROBIN' })}
+            </button>
+          )}
+          {grupos.map((candidato) => (
+            <button
+              key={candidato.groups}
+              type="button"
+              role="radio"
+              aria-checked={formato.kind === 'GROUPS_KNOCKOUT' && formato.groups === candidato.groups}
+              disabled={pending}
+              onClick={() => onChange(candidato)}
+              className={`${FORMATO_BOTON} ${
+                formato.kind === 'GROUPS_KNOCKOUT' && formato.groups === candidato.groups ? FORMATO_ELEGIDO : FORMATO_LIBRE
+              }`}
+            >
+              {matchdayFormatLabel(candidato)}
+            </button>
+          ))}
+        </div>
       </div>
+    </section>
+  )
+}
+
+/**
+ * "Esta fecha se juega a: 1 set a 4 games · Cambiar" (§7): el formato de
+ * partido propio de ESTA fecha, sólo en armado (la base lo traba fuera de
+ * DRAFT). "Cambiar" despliega los mismos controles que el bloque "El partido"
+ * de "Personalizar reglas", arrancando del efectivo; "Como el torneo" vuelve a
+ * `null`. Un deporte de goles o un marcador abierto no tienen a cuánto jugar:
+ * no se dibuja.
+ */
+export function EstaFechaSeJuegaA({
+  kind,
+  effective,
+  own,
+  unit,
+  pending,
+  onSave,
+}: {
+  kind: string
+  effective: MatchFormat
+  own: MatchFormatOwn | null
+  unit: string
+  pending: boolean
+  onSave: (own: MatchFormatOwn | null) => void
+}) {
+  // El borrador mientras se edita; `null` es cerrado.
+  const [draft, setDraft] = useState<MatchFormat | null>(null)
+  if (setsSportOf(kind) === null || effective.openScore) return null
+
+  const save = (next: MatchFormatOwn | null) => {
+    setDraft(null)
+    onSave(next)
+  }
+
+  return (
+    <section className="flex flex-col gap-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[13.5px] font-bold">{`Esta fecha se juega a: ${matchFormatLabel(effective, unit)}`}</p>
+        {/* Es su propio cancelar, como "Cargar resultado": volver a tocarlo
+            cierra los controles y tira el borrador. */}
+        <button
+          type="button"
+          disabled={pending}
+          aria-expanded={draft !== null}
+          onClick={() => setDraft(draft === null ? effective : null)}
+          className="min-h-11 shrink-0 px-1 text-[13.5px] font-extrabold text-accent-link"
+        >
+          Cambiar
+        </button>
+      </div>
+      {draft !== null && (
+        <>
+          <BloquePartido kind={kind} format={draft} disabled={pending} onChange={setDraft} />
+          <div className="flex gap-2">
+            {own !== null && (
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => save(null)}
+                className="min-h-11 flex-1 rounded-field border-[1.5px] border-line p-3 text-[13.5px] font-extrabold"
+              >
+                Como el torneo
+              </button>
+            )}
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => save({ setsToWin: draft.setsToWin, gamesPerSet: draft.gamesPerSet })}
+              className="min-h-11 flex-1 rounded-field bg-accent p-3 text-[13.5px] font-extrabold text-accent-text"
+            >
+              Guardar
+            </button>
+          </div>
+        </>
+      )}
     </section>
   )
 }
@@ -962,6 +1040,8 @@ interface GuestCardProps {
   required: boolean
   /** El compañero elegido a mano no juega esta fecha: la fecha no se puede sortear así. */
   partnerAbsent: boolean
+  /** Se puede elegir con quién juega. Falso de a uno: no hay compañero, el invitado juega solo. */
+  partner: boolean
   /** Cuántos invitados van al sorteo en total, este incluido. Decide si "va último" o va al fondo con otros. */
   toTheDraw: number
   pending: boolean
@@ -997,6 +1077,7 @@ function GuestCard({
   position,
   required,
   partnerAbsent,
+  partner,
   toTheDraw,
   pending,
   onName,
@@ -1062,46 +1143,55 @@ function GuestCard({
             sorteo. La consecuencia de puntos va DEBAJO porque cambia con lo que
             se elija acá — leerla antes es leerla sobre una elección que todavía
             no se hizo. */}
-        <label className="flex items-center gap-2 text-[12.5px] font-bold">
-          Juega con
-          <select
-            value={guest.partnerId ?? ''}
-            disabled={pending}
-            onChange={(event) => onPartner(event.target.value === '' ? null : event.target.value)}
-            // Empieza con el texto visible de la etiqueta y sigue con quién es
-            // esta tarjeta: así el nombre accesible contiene al visible (WCAG
-            // 2.5.3) y además distingue un `<select>` del de al lado.
-            aria-label={`Juega con — ${who}`}
-            className="min-h-11 flex-1 rounded-field border border-line bg-surface p-[10px] text-[13.5px] font-bold outline-none"
-          >
-            {/* Es la opción "al sorteo", y tiene que decir qué va a pasar:
-                "El que toque" no se leía como una opción, se leía como que
-                todavía no se eligió nada. */}
-            <option value="">El que salga en el sorteo</option>
-            {seats
-              // El que ya está trabado con OTRO invitado no se ofrece: elegirlo
-              // rebota en el acto con "Alguien está fijado en dos parejas a la
-              // vez". El compañero propio sí se ofrece, o el select no podría
-              // mostrar su propio valor.
-              .filter(
-                (seat) =>
-                  seat.playing &&
-                  (seat.entryId === guest.partnerId || !partnersTaken.has(seat.entryId)),
-              )
-              .map((seat) => (
-                <option key={seat.entryId} value={seat.entryId}>
-                  {seat.name}
-                </option>
-              ))}
-          </select>
-        </label>
+        {partner && (
+          <label className="flex items-center gap-2 text-[12.5px] font-bold">
+            Juega con
+            <select
+              value={guest.partnerId ?? ''}
+              disabled={pending}
+              onChange={(event) => onPartner(event.target.value === '' ? null : event.target.value)}
+              // Empieza con el texto visible de la etiqueta y sigue con quién es
+              // esta tarjeta: así el nombre accesible contiene al visible (WCAG
+              // 2.5.3) y además distingue un `<select>` del de al lado.
+              aria-label={`Juega con — ${who}`}
+              className="min-h-11 flex-1 rounded-field border border-line bg-surface p-[10px] text-[13.5px] font-bold outline-none"
+            >
+              {/* Es la opción "al sorteo", y tiene que decir qué va a pasar:
+                  "El que toque" no se leía como una opción, se leía como que
+                  todavía no se eligió nada. */}
+              <option value="">El que salga en el sorteo</option>
+              {seats
+                // El que ya está trabado con OTRO invitado no se ofrece: elegirlo
+                // rebota en el acto con "Alguien está fijado en dos parejas a la
+                // vez". El compañero propio sí se ofrece, o el select no podría
+                // mostrar su propio valor.
+                .filter(
+                  (seat) =>
+                    seat.playing &&
+                    (seat.entryId === guest.partnerId || !partnersTaken.has(seat.entryId)),
+                )
+                .map((seat) => (
+                  <option key={seat.entryId} value={seat.entryId}>
+                    {seat.name}
+                  </option>
+                ))}
+            </select>
+          </label>
+        )}
 
         {/* El compañero trabado que después avisó que no va. El `<select>` de
             arriba filtra por `seat.playing`, así que muestra "El que salga en
             el sorteo" mientras este párrafo —que busca en `seats`, ausentes
             incluidos— afirmaba que los puntos los cobra alguien que no viene.
             La fecha además rebota: el lock sobrevive al destilde. */}
-        {partnerAbsent ? (
+        {!partner ? (
+          // Sin pareja el invitado no cobra ni le hace cobrar a nadie, y el
+          // sorteo de a uno lo manda al final: esta nota reemplaza a las tres de
+          // abajo (puntos de la pareja, "va último", "elegile compañero").
+          <p className="text-[11.5px] font-[600] text-muted">
+            Juega solo y no suma puntos para el campeonato. Va al final del orden: nadie sabe cómo juega.
+          </p>
+        ) : partnerAbsent ? (
           <p
             role="alert"
             className="rounded-field bg-live-bg px-3 py-2.5 text-[11.5px] font-bold text-live"
@@ -1133,7 +1223,7 @@ function GuestCard({
             "Va último" es de a uno. Con varios al sorteo los tres decían lo
             mismo y sólo uno lo es: el ÚLTIMO de la lista es el que cae con el
             líder de la tabla (ver `PairingInput.guestIds`). */}
-        {guest.partnerId === null && (
+        {partner && guest.partnerId === null && (
           <p className="text-[11.5px] font-[600] text-muted">
             {toTheDraw > 1
               ? 'Va al fondo del sorteo, con los otros invitados: nadie sabe cómo juegan. Si lo conocés, elegile compañero.'

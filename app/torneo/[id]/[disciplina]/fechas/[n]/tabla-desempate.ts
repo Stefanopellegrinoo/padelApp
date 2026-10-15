@@ -37,6 +37,7 @@ export function tiebreakNote(
   config: SeasonConfig,
   nameOf: Map<string, string>,
   sideSize: SideSize,
+  unit: string,
 ): string | null {
   const label = (side: Side) => sideLabel(side, nameOf)
   // El slice anterior normalizó "parejas"→
@@ -51,8 +52,9 @@ export function tiebreakNote(
   // de abajo explicando otra.
   const bySetsDiff = usesSetsDiff(config.matchFormat)
   // Importado y no copiado: la página de Reglas narra el MISMO desempate con
-  // la MISMA frase, y eran dos copias del ternario en dos archivos.
-  const scoreDiff = scoreDiffLabel(config.matchFormat)
+  // la MISMA frase, y eran dos copias del ternario en dos archivos. La unidad
+  // es del deporte (`unitOf`), la pone quien llama.
+  const scoreDiff = scoreDiffLabel(unit)
 
   for (let i = 1; i < standings.length; i++) {
     const better = standings[i - 1]

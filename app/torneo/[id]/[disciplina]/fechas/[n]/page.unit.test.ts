@@ -1212,9 +1212,14 @@ describe('con parejas fijas no hay pareja "Defensora" (R17)', () => {
     expect(await render('2')).not.toContain('Defensora')
   })
 
-  it('parejas fijas: la fecha abierta tampoco resalta a la campeona anterior como defensora', async () => {
+  it('control: con parejas que rotan, la fecha abierta marca a la campeona anterior como defensora', async () => {
+    fecha2('OPEN', false)
+    expect(await render('2')).toContain('· Defensora')
+  })
+
+  it('parejas fijas: la fecha abierta tampoco marca a la campeona anterior como defensora', async () => {
     fecha2('OPEN', true)
-    expect(await render('2')).not.toContain('font-[750] bg-ok-bg text-up')
+    expect(await render('2')).not.toContain('· Defensora')
   })
 })
 

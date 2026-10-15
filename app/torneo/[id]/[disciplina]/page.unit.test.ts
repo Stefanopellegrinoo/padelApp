@@ -192,6 +192,17 @@ describe('Tabla de un deporte de parejas fijas', () => {
     expect(html.indexOf(MASTERS_LINE)).toBeLessThan(html.indexOf('Eli'))
   })
 
+  it('no anuncia defensores: con parejas fijas el sorteo no los tiene (R17)', async () => {
+    const html = await render()
+    expect(html).not.toContain('les queda 1 defensa')
+  })
+
+  it('control: con parejas que rotan, la campeona de la fecha 1 sí defiende', async () => {
+    vi.mocked(disciplineConfig).mockResolvedValueOnce({ fixedTeams: false } as Awaited<ReturnType<typeof disciplineConfig>>)
+    const html = await render()
+    expect(html).toContain('Ganaron la fecha 1 · les queda 1 defensa')
+  })
+
   it('en un deporte sin parejas fijas la tabla sigue por persona', async () => {
     vi.mocked(disciplineConfig).mockResolvedValueOnce({ fixedTeams: false } as Awaited<ReturnType<typeof disciplineConfig>>)
     vi.mocked(teamsOf).mockClear()

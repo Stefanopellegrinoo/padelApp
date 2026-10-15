@@ -20,6 +20,8 @@ interface TablaViewProps {
    * y el desempate (`tiebreakOrder`) va por persona en los dos casos.
    */
   teams: readonly { a: EntryId; b: EntryId }[]
+  /** `disciplines.fixed_teams`: con parejas fijas el sorteo no tiene defensores (`pairingContextFor`). */
+  fixedTeams: boolean
 }
 
 /**
@@ -45,6 +47,7 @@ export function TablaView({
   matchdays,
   awardsByMatchday,
   teams,
+  fixedTeams,
 }: TablaViewProps) {
   const config = discipline.config
 
@@ -100,14 +103,16 @@ export function TablaView({
   // La derivación vive en `tabla-state.ts`, con
   // test propio, y ahora recibe `pairSize` — de a uno no hay defensores, y
   // esta pantalla los anunciaba igual sobre un jugador solo.
-  const defenders = defendersOf(
-    closedRegular.map((matchday) => ({
-      number: matchday.number,
-      awards: awardsByMatchday.get(matchday.number) ?? [],
-    })),
-    nameOf,
-    discipline.pairSize,
-  )
+  const defenders = fixedTeams
+    ? null
+    : defendersOf(
+        closedRegular.map((matchday) => ({
+          number: matchday.number,
+          awards: awardsByMatchday.get(matchday.number) ?? [],
+        })),
+        nameOf,
+        discipline.pairSize,
+      )
 
   // La derivación vive en `tabla-state.ts` (mismo patrón que `defenders`
   // arriba), con test propio.

@@ -212,6 +212,12 @@ export { thirdPlaceNote } from './narrate'
 // siempre (`tiebreakNote`) se apaga por `orderMoved`.
 export { bracketOrderNote } from './narrate'
 
+//── El reglamento en criollo de UNA disciplina (docs/torneos-deportes.md §6) ──
+// Una sola función para el paso 4 del wizard, el "Así queda" de "Personalizar
+// reglas" y la página Reglas: nunca dicen cosas distintas.
+export type { ReglamentoInput, ReglamentoKey, ReglamentoLine } from './reglamento'
+export { reglamento, desempateLine, fichaLine } from './reglamento'
+
 // ── Reading the season back ──────────────────────────────────────────────────
 // What the read-only screens need on top of the ranking. All derived, nothing
 // stored: recomputing is cheap and deterministic, and a stored position would

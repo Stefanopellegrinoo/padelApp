@@ -139,6 +139,7 @@ describe('la ficha', () => {
 
   it('isTournamentSport acepta sólo ids del registro que se juegan en torneos', () => {
     expect(isTournamentSport('PADEL')).toBe(true)
+    expect(isTournamentSport('PING_PONG')).toBe(true)
     expect(isTournamentSport('FUTBOL')).toBe(false)
     expect(isTournamentSport('toString')).toBe(false)
     expect(isTournamentSport('padel')).toBe(false)

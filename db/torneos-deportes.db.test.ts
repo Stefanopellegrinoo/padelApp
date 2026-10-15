@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { defaultConfig, shuffled, type DisciplineId, type MatchdayFormatSetting, type SeasonConfig } from '@/core'
+import { defaultConfig, fichaSeed, shuffled, type DisciplineId, type MatchdayFormatSetting, type SeasonConfig } from '@/core'
 import type { Client } from './client'
 import type { Json } from './database.types'
 import {
@@ -921,5 +921,39 @@ describe('addDiscipline: sorteo e "igual que" se validan antes de escribir (la d
 
     expect(caught).toBeInstanceOf(EdgeError)
     expect(await disciplinesIn(seasonId)).toBe(1)
+  })
+})
+
+// ── Tarea 19: ping pong en torneos (§3, §12 riesgo 4).
+
+describe('ping pong en torneos: nace de su ficha y la fecha valida a 11, ganando por 2', () => {
+  it('createSeason con Ping pong individual; 12-10 y 11-5 se guardan, 11-10 no', async () => {
+    const admin = await createTestUser()
+    const names = playerNames(4)
+    const { seasonId } = await createSeasonOf(admin.client, {
+      name: 'Ping pong',
+      squadNames: names,
+      config: defaultConfig(4, 1),
+      disciplines: [{ kind: 'PING_PONG', ...fichaSeed('PING_PONG', 4, 'INDIVIDUAL') }],
+    })
+    const disciplineId = await disciplineIdOf(seasonId, 'PING_PONG')
+    const matchdayId = await createMatchday(admin.client, seasonId, MATCHDAY_PLAYED_ON, disciplineId)
+    for (const entryId of await seatIds(seasonId, names)) await setAttendance(admin.client, matchdayId, entryId, 'PLAYING')
+    await generatePairs(admin.client, matchdayId)
+    await openMatchday(admin.client, matchdayId)
+    const [first, second] = await matchesOf(matchdayId)
+
+    await saveResult(admin.client, first!.id, [
+      { gamesA: 12, gamesB: 10 },
+      { gamesA: 11, gamesB: 5 },
+    ])
+    await expect(saveResult(admin.client, second!.id, [{ gamesA: 11, gamesB: 10 }])).rejects.toThrow('11-10 no cierra el set')
+
+    const { data: sets } = await adminClient().from('match_sets').select('games_a, games_b, match_id').in('match_id', [first!.id, second!.id])
+    expect(sets?.filter((set) => set.match_id === first!.id).map((set) => [set.games_a, set.games_b]).sort()).toEqual([
+      [11, 5],
+      [12, 10],
+    ])
+    expect(sets?.filter((set) => set.match_id === second!.id)).toEqual([])
   })
 })

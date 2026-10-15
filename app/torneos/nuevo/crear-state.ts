@@ -80,10 +80,13 @@ export function opcionesPrimeraFecha(
   cards: readonly DeporteElegido[],
   kind: TournamentSport,
 ): { value: PrimeraFecha; label: string; sub: string | null }[] {
-  // Sin cadenas: sólo se copia a una tarjeta que tenga su propio orden.
-  const igualQue = cards
-    .filter((card) => card.kind !== kind && !isIgualQue(card.primeraFecha))
-    .map((card) => ({ value: { igualQue: card.kind }, label: `Igual que ${sportLabel(card.kind)}`, sub: null }))
+  // Sin cadenas: sólo se copia a una tarjeta que tenga su propio orden, y a la que otra copia no copia a nadie.
+  const copiada = cards.some((card) => isIgualQue(card.primeraFecha) && card.primeraFecha.igualQue === kind)
+  const igualQue = copiada
+    ? []
+    : cards
+        .filter((card) => card.kind !== kind && !isIgualQue(card.primeraFecha))
+        .map((card) => ({ value: { igualQue: card.kind }, label: `Igual que ${sportLabel(card.kind)}`, sub: null }))
   return [
     { value: 'NIVEL', label: 'Por nivel', sub: 'las ordenás vos' },
     { value: 'SORTEO', label: 'Al azar', sub: 'sorteo' },

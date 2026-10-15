@@ -154,6 +154,17 @@ describe('opcionesPrimeraFecha', () => {
     // y Pádel sigue viendo su elección vigente entre las opciones
     expect(opcionesPrimeraFecha(cards, 'PADEL').map((o) => o.value)).toContainEqual({ igualQue: 'FIFA' })
   })
+
+  it('con tres deportes, a la que otra copia no se le ofrece "igual que" (FIFA → Pádel → Ping pong sería una cadena)', () => {
+    const cards = [
+      card('PADEL', 'ROTAN'),
+      card('PING_PONG', 'INDIVIDUAL'),
+      card('FIFA', 'INDIVIDUAL', 8, { primeraFecha: { igualQue: 'PADEL' } }),
+    ]
+    expect(opcionesPrimeraFecha(cards, 'PADEL')).toEqual([POR_NIVEL, AL_AZAR])
+    // Ping pong nadie la copia: puede copiar a Pádel (dos que copian a la misma no es cadena), no a FIFA.
+    expect(opcionesPrimeraFecha(cards, 'PING_PONG').map((o) => o.label)).toEqual(['Por nivel', 'Al azar', 'Igual que Pádel'])
+  })
 })
 
 describe('cambiarPrimeraFecha', () => {

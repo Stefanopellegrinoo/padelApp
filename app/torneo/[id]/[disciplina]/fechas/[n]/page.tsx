@@ -677,7 +677,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
     // esto es sólo no dibujar un botón que va a rebotar.
     const cargaContext =
       (header.isAdmin || header.playersCanScore) && status === 'OPEN'
-        ? { seasonId, matchdayId: matchday.id, disciplina, matchdayNumber: matchday.number, format: config.matchFormat }
+        ? { seasonId, matchdayId: matchday.id, disciplina, matchdayNumber: matchday.number, format: config.matchFormat, unit }
         : null
     // Excluye un `TERCER_PUESTO` sin jugar (decisiones #3979/#3988): la RPC
     // `close_matchday` (0041) ya tolera cerrar con ese único partido vacío, y
@@ -966,6 +966,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
               disciplina,
               matchdayNumber: matchday.number,
               format: config.matchFormat,
+              unit,
             }}
             status={status}
             remaining={remainingMatches}

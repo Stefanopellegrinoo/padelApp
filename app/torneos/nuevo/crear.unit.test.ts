@@ -2,12 +2,19 @@ import { createElement, type ComponentProps } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { TOURNAMENT_SPORTS, reglamento, sportLabel } from '@/core'
-import { cambiarModalidad, cambiarPrimeraFecha, crearPayload, elegirDeporte, type DeporteElegido } from './crear-state'
+import {
+  cambiarModalidad,
+  cambiarPrimeraFecha,
+  crearPayload,
+  elegirDeporte,
+  opcionesPrimeraFecha,
+  type DeporteElegido,
+} from './crear-state'
 import { PasoComoSeJuega, PasoListo, PasoNuevo, copiarLink, encabezado } from './crear'
 
 /**
  * Los pasos del wizard nuevo, RENDERIZADOS (sin clicks no se llega a cada paso: entran con props).
- * Pádel + FIFA solamente: ping pong recién se juega en torneos en la Tarea 19.
+ * Casi todo con Pádel + FIFA; al final, los tres (ping pong se juega en torneos desde la Tarea 19).
  */
 const SEIS = { names: ['Martina', 'Fede', 'Lucas', 'Ana', 'Beto', 'Nico'], mySeat: 0 }
 /** Pádel (rotan, por nivel) + FIFA (individual, al azar): las dos tal cual su ficha. */
@@ -145,6 +152,39 @@ describe('PasoListo', () => {
 
   it('muestra el error del servidor', () => {
     expect(listo(PADEL_FIFA, { error: 'No se pudo crear.' })).toContain('No se pudo crear.')
+  })
+})
+
+describe('Pádel + Ping pong + FIFA', () => {
+  const TRES = elegirDeporte(elegirDeporte(elegirDeporte([], 'PADEL', 6), 'PING_PONG', 6), 'FIFA', 6)
+  const sections = (html: string) => html.split('<section').slice(1)
+
+  it('ningún "igual que" que se ofrece arma una cadena: el paso 4 se dibuja en todos los caminos', () => {
+    // Todos los estados alcanzables tocando opciones ofrecidas (4 opciones por tarjeta como mucho: 4³).
+    const key = (cards: readonly DeporteElegido[]) => JSON.stringify(cards.map((c) => c.primeraFecha))
+    const seen = new Map<string, readonly DeporteElegido[]>()
+    const queue: (readonly DeporteElegido[])[] = [TRES]
+    while (queue.length > 0) {
+      const cards = queue.pop()!
+      if (seen.has(key(cards))) continue
+      seen.set(key(cards), cards)
+      for (const { kind } of cards) {
+        for (const { value } of opcionesPrimeraFecha(cards, kind)) queue.push(cambiarPrimeraFecha(cards, kind, value))
+      }
+    }
+    // El camino que rompía: FIFA igual que Pádel, y después Pádel igual que Ping pong.
+    const fifaCopiaAPadel = cambiarPrimeraFecha(TRES, 'FIFA', { igualQue: 'PADEL' })
+    expect(seen.has(key(cambiarPrimeraFecha(fifaCopiaAPadel, 'PADEL', { igualQue: 'PING_PONG' })))).toBe(false)
+    for (const cards of seen.values()) expect(sections(listo(cards))).toHaveLength(3)
+  })
+
+  it('el paso 4 cuenta los tres, ping pong a 11 y en su modalidad', () => {
+    const [padel, pingPong, fifa] = sections(listo(TRES))
+    expect(padel).toContain('>Pádel<')
+    expect(pingPong).toContain('>Ping pong<')
+    expect(pingPong).toContain('Individual. La primera fecha se arma al azar')
+    expect(pingPong).toContain('Partidos al mejor de 3 sets de 11 puntos, se gana por 2.')
+    expect(fifa).toContain('>FIFA<')
   })
 })
 

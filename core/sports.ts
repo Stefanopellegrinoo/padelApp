@@ -33,10 +33,7 @@ interface SportBase {
   label: string
   /** Plural, minúscula: 'games' | 'puntos' | 'goles'. El copy lo arma la pantalla. */
   unit: string
-  /**
-   * Se puede elegir al crear un torneo: exige `ficha`. Hoy sólo PADEL y FIFA
-   * (CHECK de `disciplines.kind`); PING_PONG ya tiene ficha y se enciende cuando la base lo acepte.
-   */
+  /** Se puede elegir al crear un torneo: exige `ficha`. */
   tournaments: boolean
   /** Con qué nace un torneo de este deporte; `null` si no se juega en torneos (FUTBOL, BASQUET). */
   ficha: TournamentFicha | null
@@ -74,7 +71,7 @@ export const SPORTS = {
     },
   },
   PING_PONG: {
-    label: 'Ping pong', unit: 'puntos', family: 'sets', allowsDraw: false, tournaments: false,
+    label: 'Ping pong', unit: 'puntos', family: 'sets', allowsDraw: false, tournaments: true,
     format: { setsToWin: 2, gamesPerSet: 11, tieBreak: false, openScore: false },
     setsToWin: { min: 1, max: 4 }, gamesPerSet: { min: 11, max: 11 },
     ficha: {
@@ -155,8 +152,8 @@ export function unitOf(kind: string, format: MatchFormat): string {
   return format.openScore ? 'goles' : 'games'
 }
 
-/** Tupla literal a propósito: `Record<DisciplineKind, …>` del wizard necesita las claves exactas. */
-export const TOURNAMENT_SPORTS = ['PADEL', 'FIFA'] as const satisfies readonly SportId[]
+/** Tupla literal a propósito (`TournamentSport` necesita las claves exactas); el orden del registro es el de los chips. */
+export const TOURNAMENT_SPORTS = ['PADEL', 'PING_PONG', 'FIFA'] as const satisfies readonly SportId[]
 export type TournamentSport = (typeof TOURNAMENT_SPORTS)[number]
 
 export function isTournamentSport(raw: string): raw is TournamentSport {

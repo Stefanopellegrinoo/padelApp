@@ -102,6 +102,7 @@ async function main() {
   )
 
   // ── 4. Crear un torneo de 8 ────────────────────────────────────────────────
+  // OJO: maneja el wizard de 5 pasos, ya borrado (Tarea 16, torneos-deportes); pendiente de reescribir contra `crear.tsx`.
   heading('Crear un torneo nuevo de 8, hasta el paso 5')
   const seasonName = `Smoke ${new Date().toISOString().slice(11, 19)}`
   const squad = ['Ana', 'Bruno', 'Caro', 'Diego', 'Emi', 'Fede', 'Gaby', 'Hernán']

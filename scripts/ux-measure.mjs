@@ -437,6 +437,7 @@ async function main() {
   }
 
   // ================= 9) Wizard de creación de torneo =================
+  // OJO: maneja el wizard de 5 pasos, ya borrado (Tarea 16, torneos-deportes); pendiente de reescribir contra `crear.tsx`.
   await page.goto(`${BASE}/torneos/nuevo`, { waitUntil: 'networkidle' })
   await page.fill('input[placeholder="Los Jueves 2026"]', `UX Wizard ${Date.now()}`)
   await measureInteraction(page, '19-wizard-step0-continuar', async () => {

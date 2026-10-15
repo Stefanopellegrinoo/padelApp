@@ -88,10 +88,10 @@ const DEFAULT_POINTS: Record<number, number[]> = {
  * (S80, verify-report-pr21 #4004): este bloque decía *"Lo que SIGUE sin
  * existir es el camino de PANTALLA: ningún caller de hoy pasa `sideSize =
  * 1`"*. Falso desde las Rebanadas E/F: `configFor` (`app/torneos/nuevo/
- * wizard-state.ts`, caller de `wizard.tsx`) y `newDisciplineSpec` (misma
- * `wizard-state.ts`, caller de `app/torneo/[id]/ajustes/actions.ts`) le pasan
- * `sideSize = 1` a esta función cuando el admin elige "Individual" — los dos
- * caminos de creación de disciplina. Corregido acá, mismo criterio que N48 y
+ * wizard-state.ts`, antes caller del wizard de cinco pasos) y
+ * `newDisciplineSpec` (borrada con él, antes caller de `app/torneo/[id]/
+ * ajustes/actions.ts`) le pasaban `sideSize = 1` a esta función cuando el
+ * admin elegía "Individual" — los dos caminos de creación de disciplina. Corregido acá, mismo criterio que N48 y
  * la corrección de arriba: la frase falsa vive en el código y ahí se arregla.
  */
 export function defaultConfig(squadSize: number, sideSize: SideSize = 2): SeasonConfig {

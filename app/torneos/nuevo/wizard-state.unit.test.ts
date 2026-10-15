@@ -2,50 +2,23 @@ import { describe, expect, it } from 'vitest'
 import { defaultConfig, disciplineProfile, validateConfig, type MatchdayFormat, type SideSize } from '@/core'
 import type { DisciplineKind } from './wizard-state'
 import {
-  FORMATO_DEFAULT_OPTIONS,
-  STEPPERS,
   type Squad,
   addBlankSeat,
   addMySeat,
-  addToOrder,
-  addToOrders,
-  automaticHasMasters,
   buildDisciplines,
   configFor,
-  disciplinesWarning,
-  editSeatState,
   effectiveFixedTeams,
   effectiveFloor,
   effectiveHasMasters,
   filledCount,
-  filledSeatIndices,
   formatErrors,
-  formatoDefaultKey,
-  freshDisciplineConfig,
-  isSameFormatoDefault,
-  joinSquadState,
-  moveGlobalSeatState,
-  moveInOrder,
-  moveSeat,
   namesAfterEdit,
-  newDisciplineSpec,
   newTournamentPayload,
-  removeFromOrder,
-  removeFromOrders,
   removeSeatAt,
-  removeSeatState,
   resizeConfig,
-  resizeConfigs,
   seedOrderFrom,
   squadWarning,
-  steppersFor,
   submitSeats,
-  summaryOf,
-  swapInOrder,
-  swapInOrders,
-  toggleDiscipline,
-  toggleOwnOrder,
-  visibleOrderPositions,
   withoutTrailingBlanks,
 } from './wizard-state'
 
@@ -203,69 +176,6 @@ describe('the config the wizard builds', () => {
 })
 
 /**
- * Task 5 (docs/plan-arquitectura-de-paginas.md §2.4, §6): reemplaza a
- * `configForPairSizeChange` (W83, #4026, borrada en esta Task). Aquella
- * función distinguía "una sola disciplina marcada" (rehace) de "dos o más"
- * (no toca, C29) porque una config COMPARTIDA no podía rehacerse sin
- * arriesgar la curva de la disciplina vecina. Con una config por disciplina
- * esa distinción no existe: tocar "Lados" para `kind` siempre rehace SU
- * config, sola o junto a otra.
- */
-describe('freshDisciplineConfig (Task 5, reemplaza a configForPairSizeChange)', () => {
-  it('rehace la curva de ESA disciplina a la del sideSize elegido', () => {
-    const next = freshDisciplineConfig('FIFA', 8, 1)
-    expect(next.points).toEqual([10, 7, 5, 3, 2, 1, 0, 0])
-  })
-
-  it('aplica la forma de marcador de SU kind -- FIFA nace con openScore, Pádel no', () => {
-    expect(freshDisciplineConfig('FIFA', 8, 2).matchFormat.openScore).toBe(true)
-    expect(freshDisciplineConfig('PADEL', 8, 2).matchFormat.openScore).toBe(false)
-  })
-
-  // Marcar la MISMA disciplina junto con otra no cambia nada: cada una vive
-  // en su propia entrada, nunca hay una "compartida" que cuidar.
-  it('da la misma config esté sola o junto a otra disciplina marcada', () => {
-    expect(freshDisciplineConfig('FIFA', 8, 1)).toEqual(freshDisciplineConfig('FIFA', 8, 1))
-  })
-})
-
-/**
- * Task 5: reemplaza a `configSideSize` (corrección #4030/lección #3994,
- * borrada en esta Task). `resizeConfigs` pone al día las DOS disciplinas del
- * wizard a la vez, cada una contra SU PROPIO `pairSize` -- ya no hace falta
- * calcular un "sideSize efectivo" de una curva compartida.
- */
-describe('resizeConfigs (Task 5, reemplaza a configSideSize)', () => {
-  it('agrandar el plantel pone al día la curva de CADA disciplina, cada una con su propio sideSize', () => {
-    const configs = { PADEL: configFor(8, 2), FIFA: configFor(8, 1) }
-    const next = resizeConfigs(configs, 10, { PADEL: 2, FIFA: 1 })
-    expect(next.PADEL.points).toEqual(defaultConfig(10, 2).points)
-    expect(next.FIFA.points).toEqual(defaultConfig(10, 1).points)
-    expect(next.PADEL.points).not.toEqual(next.FIFA.points)
-  })
-
-  it('no toca nada si el tamaño no cambió, para ninguna de las dos', () => {
-    const configs = { PADEL: configFor(8, 2), FIFA: configFor(8, 1) }
-    const next = resizeConfigs(configs, 8, { PADEL: 2, FIFA: 1 })
-    expect(next.PADEL).toBe(configs.PADEL)
-    expect(next.FIFA).toBe(configs.FIFA)
-  })
-})
-
-/**
- * El automático de la decisión #4029, con el que arranca el checkbox de
- * Masters de CADA disciplina en el paso 4 (Task 5): `true` de a dos,
- * `false` de a uno -- `disciplines_has_masters_needs_pair` (0053) rechaza
- * `true` con `pairSize` 1 siempre.
- */
-describe('automaticHasMasters (decisión #4029)', () => {
-  it('true con pairSize 2, false con pairSize 1', () => {
-    expect(automaticHasMasters(2)).toBe(true)
-    expect(automaticHasMasters(1)).toBe(false)
-  })
-})
-
-/**
  * La puerta de salida real de Masters (Task 5): pase lo que pase tenga
  * guardado el checkbox, una disciplina de a uno nunca manda `true` --
  * `disciplines_has_masters_needs_pair` (0053) la rechazaría en la base.
@@ -278,44 +188,6 @@ describe('effectiveHasMasters', () => {
   it('respeta lo que diga el checkbox con pairSize 2', () => {
     expect(effectiveHasMasters(2, true)).toBe(true)
     expect(effectiveHasMasters(2, false)).toBe(false)
-  })
-})
-
-/**
- * Las mismas tres opciones que Ajustes (`formato-default.tsx`, §2.5):
- * ROUND_ROBIN, 2 grupos o 4 grupos, siempre `qualifiersPerGroup: 2`.
- */
-describe('FORMATO_DEFAULT_OPTIONS / formatoDefaultKey / isSameFormatoDefault', () => {
-  it('son las tres opciones de Ajustes, ni una más', () => {
-    expect(FORMATO_DEFAULT_OPTIONS).toEqual([
-      { kind: 'ROUND_ROBIN' },
-      { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 },
-      { kind: 'GROUPS_KNOCKOUT', groups: 4, qualifiersPerGroup: 2 },
-    ])
-  })
-
-  it('formatoDefaultKey distingue las tres entre sí', () => {
-    const keys = FORMATO_DEFAULT_OPTIONS.map(formatoDefaultKey)
-    expect(new Set(keys).size).toBe(3)
-  })
-
-  it('isSameFormatoDefault compara por kind + groups, no por identidad de objeto', () => {
-    expect(isSameFormatoDefault({ kind: 'ROUND_ROBIN' }, { kind: 'ROUND_ROBIN' })).toBe(true)
-    expect(
-      isSameFormatoDefault(
-        { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 },
-        { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 },
-      ),
-    ).toBe(true)
-    expect(
-      isSameFormatoDefault(
-        { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 },
-        { kind: 'GROUPS_KNOCKOUT', groups: 4, qualifiersPerGroup: 2 },
-      ),
-    ).toBe(false)
-    expect(isSameFormatoDefault({ kind: 'ROUND_ROBIN' }, { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 })).toBe(
-      false,
-    )
   })
 })
 
@@ -375,57 +247,6 @@ describe('formatErrors', () => {
   })
 })
 
-describe('summaryOf', () => {
-  it('lists the six rows of the handoff, in order', () => {
-    const configs = { PADEL: configFor(8, 2), FIFA: configFor(8, 2) }
-    const rows = summaryOf('Los Jueves 2026', Array(8).fill('Jugador'), configs, ['PADEL'])
-    expect(rows.map((row) => row.key)).toEqual([
-      'Nombre',
-      'Jugadores',
-      'Formato',
-      'Puntos',
-      'Fechas',
-      'Desempate',
-    ])
-    expect(rows[1]?.value).toBe('8')
-    // Con una sola disciplina el resumen dice lo mismo de siempre, sin prefijo.
-    expect(rows[2]?.value).toBe('1 set a 4 games')
-    expect(rows[3]?.value).toBe('10 · 6 · 3 · 1')
-    expect(rows[4]?.value).toBe('10')
-  })
-
-  // PR20 rebanada D2: con FIFA marcado, "1 set a 4 games" describe la mitad
-  // pádel del torneo y MIENTE sobre la otra mitad. Es la misma clase de copy
-  // que ya costó W47, W51 y W56.
-  it('nombra el formato de cada disciplina cuando hay más de una', () => {
-    const configs = { PADEL: configFor(8, 2), FIFA: disciplineProfile('FIFA', configFor(8, 2)).config }
-    const rows = summaryOf('Los Jueves 2026', Array(8).fill('Jugador'), configs, ['PADEL', 'FIFA'])
-    expect(rows[2]?.value).toBe('Pádel: 1 set a 4 games · FIFA: Marcador de goles')
-  })
-
-  it('y una liga de sólo FIFA no promete ningún set', () => {
-    const configs = { PADEL: configFor(8, 2), FIFA: disciplineProfile('FIFA', configFor(8, 2)).config }
-    const rows = summaryOf('Liga FIFA', Array(8).fill('Jugador'), configs, ['FIFA'])
-    expect(rows[2]?.value).toBe('Marcador de goles')
-  })
-
-  /**
-   * Task 5: "Puntos", "Fechas" y "Desempate" también nombran la disciplina
-   * cuando hay 2+, igual que "Formato" desde W64 -- con `configs`
-   * genuinamente por disciplina estos tres números pueden ser distintos
-   * entre Pádel y FIFA, y mostrar sólo uno de los dos sería la misma mentira
-   * que esa ronda ya cerró para "Formato".
-   */
-  it('Puntos, Fechas y Desempate también nombran la disciplina con 2+ marcadas', () => {
-    const configs = {
-      PADEL: { ...configFor(8, 2), regularMatchdays: 10 },
-      FIFA: { ...disciplineProfile('FIFA', configFor(8, 2)).config, regularMatchdays: 12 },
-    }
-    const rows = summaryOf('Mixto', Array(8).fill('Jugador'), configs, ['PADEL', 'FIFA'])
-    expect(rows[4]?.value).toBe('Pádel: 10 · FIFA: 12')
-  })
-})
-
 // El asiento propio se sigue por índice sobre una lista que se reordena, se
 // achica y se agranda. Cada operación que corre la lista tiene que correrlo, y
 // el que no lo hace no rompe nada visible: deja al organizador atado al asiento
@@ -473,290 +294,11 @@ describe('addMySeat', () => {
   })
 })
 
-describe('moveSeat', () => {
-  it('follows the organizer when their seat moves up', () => {
-    const squad = { names: ['Nacho', 'Colo'], mySeat: 1 }
-    expect(moveSeat(squad, 1, 0)).toEqual({ names: ['Colo', 'Nacho'], mySeat: 0 })
-  })
-
-  it('follows the organizer when another seat swaps into theirs', () => {
-    const squad = { names: ['Nacho', 'Colo'], mySeat: 1 }
-    expect(moveSeat(squad, 0, 1)).toEqual({ names: ['Colo', 'Nacho'], mySeat: 0 })
-  })
-
-  it('refuses to move past either end', () => {
-    const squad = { names: ['Colo', 'Nacho'], mySeat: 0 }
-    expect(moveSeat(squad, 0, -1)).toEqual(squad)
-    expect(moveSeat(squad, 1, 2)).toEqual(squad)
-  })
-})
-
-/**
- * WU2 (ronda 2 de revisión): los cuatro handlers que hilan `squad` y
- * `orders` a la vez (`editSeatName`/`joinSquad`/`removeSeat`/`moveGlobalSeat`,
- * `wizard.tsx`) vivían enteros adentro de `Wizard`, sin ningún test que los
- * ejercitara juntos -- esta suite no tiene runner de clicks/tecleo, así que
- * la lógica que sólo existía adentro de un handler de `.tsx` quedaba
- * estructuralmente fuera de su alcance (mismo defecto que
- * `app/cableado-de-formato.unit.test.ts` ya documenta para el paso 4).
- *
- * Reemplaza al patrón anterior (dos llamadas sueltas por handler, una a
- * `setSquad`/`setSquadState` y otra a `setOrdersState`) por UNA función pura
- * que arma las DOS mitades del estado combinado a la vez -- mismo criterio
- * que ya usa el resto de `wizard-state.ts`: la lógica vive acá, testeada sin
- * DOM, y `wizard.tsx` sólo aplica los dos setters con lo que le devuelven
- * (pin de ese cableado en `app/cableado-de-formato.unit.test.ts`).
- */
-describe('editSeatState', () => {
-  it('un asiento en blanco que pasa a tener contenido entra a cada orden propio que ya exista', () => {
-    const squad: Squad = { names: ['Colo', ''], mySeat: 0 }
-    const next = editSeatState(squad, { FIFA: [0] }, 1, 'Nacho')
-    expect(next.squad.names).toEqual(['Colo', 'Nacho', ''])
-    expect(next.orders).toEqual({ FIFA: [0, 1] })
-  })
-
-  it('una renombrada (la fila ya tenía nombre) no toca orders para nada', () => {
-    const squad: Squad = { names: ['Colo', 'Nacho'], mySeat: 0 }
-    // WU7 (ronda 3 de revisión): `{ FIFA: [1] }`, SIN el índice 0 -- con
-    // `{ FIFA: [1, 0] }` (el fixture de antes) `addToOrder` ya no agrega
-    // nada porque el 0 estaba anotado, así que dropear `wasBlank &&` en
-    // `editSeatState` (wizard-state.ts) quedaba indistinguible: el guard de
-    // sobra corría igual y el resultado daba lo mismo. Con el 0 AUSENTE,
-    // dropear el guard sí agrega el índice 0 -- `{ FIFA: [1, 0] }`,
-    // DISTINTO de lo esperado.
-    const next = editSeatState(squad, { FIFA: [1] }, 0, 'Coco')
-    expect(next.squad.names).toEqual(['Coco', 'Nacho'])
-    expect(next.orders).toEqual({ FIFA: [1] })
-  })
-})
-
-describe('joinSquadState', () => {
-  it('el organizador entra en un asiento NUEVO al final, y ese índice entra a cada orden propio', () => {
-    const squad: Squad = { names: ['Nacho', 'Fede'], mySeat: null }
-    const next = joinSquadState(squad, { FIFA: [1, 0] }, 'Colo')
-    expect(next.squad).toEqual({ names: ['Nacho', 'Fede', 'Colo'], mySeat: 2 })
-    expect(next.orders).toEqual({ FIFA: [1, 0, 2] })
-  })
-})
-
-describe('removeSeatState', () => {
-  // El caso PELIGROSO que WU2 midió: sacar un asiento del medio sin correr
-  // el orden propio deja índices viejos leídos contra un plantel corrido --
-  // gente equivocada, sin ningún error, porque el guard de permutación de
-  // `db/season.ts` lo sigue aceptando (misma CANTIDAD de índices, sólo que
-  // corridos).
-  it('sacar un asiento del medio corre los índices de más atrás del orden propio, igual que a mySeat', () => {
-    const squad: Squad = { names: ['Ana', 'Beto', 'Caro', 'Dani'], mySeat: null }
-    // FIFA: [1, 3, 0, 2] -- Beto, Dani, Ana, Caro. Sacamos a Ana (índice 0).
-    const next = removeSeatState(squad, { FIFA: [1, 3, 0, 2] }, 0)
-    expect(next.squad.names).toEqual(['Beto', 'Caro', 'Dani'])
-    // Correcto: Beto, Dani, Caro -- índices [0, 2, 1] sobre el plantel nuevo.
-    expect(next.orders).toEqual({ FIFA: [0, 2, 1] })
-  })
-})
-
-describe('moveGlobalSeatState', () => {
-  it('el swap del orden global arrastra mySeat Y corre cada orden propio', () => {
-    const squad: Squad = { names: ['Nacho', 'Colo'], mySeat: 1 }
-    const next = moveGlobalSeatState(squad, { FIFA: [0, 1] }, 1, 0)
-    expect(next.squad).toEqual({ names: ['Colo', 'Nacho'], mySeat: 0 })
-    expect(next.orders).toEqual({ FIFA: [1, 0] })
-  })
-
-  // WU5 (ronda 2 de revisión): `moveSeat` se niega a mover fuera de rango
-  // (deja `squad` intacto), pero `swapInOrders` sueltas swapeaba igual --
-  // las dos mitades de UNA acción de usuario en desacuerdo sobre qué es
-  // "fuera de rango". Acá comparten UN solo guard: fuera de rango no toca
-  // NINGUNA de las dos mitades.
-  it('fuera de rango no toca ni squad ni orders -- las dos mitades comparten el mismo guard', () => {
-    const squad: Squad = { names: ['Colo', 'Nacho'], mySeat: 0 }
-    const orders = { FIFA: [0, 1] }
-    expect(moveGlobalSeatState(squad, orders, 0, -1)).toEqual({ squad, orders })
-    expect(moveGlobalSeatState(squad, orders, 1, 2)).toEqual({ squad, orders })
-  })
-})
-
 /** "+ Agregar jugador" (paso 1): agrega una fila en blanco al final -- no toca `orders`, una fila en blanco todavía no es un asiento (`addToOrders` corre recién en `editSeatState`, cuando esa fila deja de estarlo). */
 describe('addBlankSeat', () => {
   it('agrega una fila en blanco al final, sin tocar mySeat', () => {
     const squad: Squad = { names: ['Colo', 'Nacho'], mySeat: 0 }
     expect(addBlankSeat(squad)).toEqual({ names: ['Colo', 'Nacho', ''], mySeat: 0 })
-  })
-})
-
-/**
- * F1 (dos jueces ciegos, `37b225b..d33377a`): los índices de `names` que de
- * verdad tienen alguien -- sin las filas en blanco del MEDIO
- * (`withoutTrailingBlanks` sólo saca las del final). Es lo que arranca el
- * orden propio de una disciplina (`toggleOwnOrder`, abajo).
- */
-describe('filledSeatIndices', () => {
-  it('sin blancos, da todos los índices', () => {
-    expect(filledSeatIndices(['Colo', 'Nacho', 'Fede'])).toEqual([0, 1, 2])
-  })
-
-  // Minor de esta tarea: una fila en blanco en el MEDIO no puede colarse en
-  // el orden propio -- terminaría con flechas que funcionan sobre un nombre
-  // vacío y un `aria-label="Subir a  en FIFA"`.
-  it('salta las filas en blanco del medio, no sólo las del final', () => {
-    expect(filledSeatIndices(['Colo', '', 'Fede'])).toEqual([0, 2])
-  })
-
-  it('un espacio suelto no cuenta como cargado -- mismo criterio que filledCount', () => {
-    expect(filledSeatIndices(['Colo', '   '])).toEqual([0])
-  })
-})
-
-/**
- * WU3/WU4 (ronda 3 de revisión): las POSICIONES de `order` (no los `at` que
- * guarda) cuyo asiento sigue teniendo nombre -- la fila fantasma. Filtrar
- * recién en el `.map` de `wizard.tsx` (la versión de antes de esta tarea)
- * dejaba CUATRO defectos atados a la posición RAW de la fantasma: la
- * numeración saltaba (1,2,4,5 en vez de 1,2,3,4), el swap con la fantasma
- * era un no-op visible sin feedback, el `disabled` del primer/último
- * visible caía sobre la posición de la fantasma en vez de la real, y todo
- * visible de más ganaba un `border-t` de sobra.
- *
- * Reusa `filledSeatIndices` -- no una copia del mismo filtro -- aplicada a
- * los NOMBRES que `order` señala, en el orden en que `order` los trae: el
- * orden GLOBAL es, en el fondo, este mismo cálculo con un `order` implícito
- * `[0, 1, ..., n)` (`filledSeatIndices(names)` directo alcanza para ese
- * caso). Devuelve POSICIONES (índices de `order`), no los `at` que `order`
- * guarda -- lo que `onMoveGlobal`/`onMoveOwn` necesitan para swapear
- * (`moveSeat`/`moveInOrder` operan sobre posiciones, F1).
- */
-describe('visibleOrderPositions', () => {
-  it('sin fantasmas, da todas las posiciones', () => {
-    expect(visibleOrderPositions([2, 0, 1], ['Colo', 'Nacho', 'Fede'])).toEqual([0, 1, 2])
-  })
-
-  it('salta la posición cuyo `at` señala a un nombre en blanco', () => {
-    // order[1] = 2 -> names[2] = '' (Caro, vaciada a mano). Sólo esa
-    // posición (1) se salta -- las demás quedan, en el mismo orden.
-    expect(visibleOrderPositions([0, 2, 1, 3], ['Ana', 'Beto', '', 'Dani'])).toEqual([0, 2, 3])
-  })
-
-  it('un espacio suelto también cuenta como fantasma -- mismo criterio que filledSeatIndices', () => {
-    expect(visibleOrderPositions([0, 1], ['Colo', '   '])).toEqual([0])
-  })
-
-  it('distingue POSICIÓN (índice de order) de `at` (lo que order guarda) -- una permutación NO identidad', () => {
-    // order = [2, 0, 1]: posición 0 guarda at=2 (Fede), posición 1 guarda
-    // at=0 (Colo). Con una identidad ([0,1,2]) las dos lecturas coinciden
-    // siempre y esta prueba no podría existir.
-    expect(visibleOrderPositions([2, 0, 1], ['Colo', 'Nacho', 'Fede'])).not.toEqual([2, 0, 1])
-    expect(visibleOrderPositions([2, 0, 1], ['Colo', 'Nacho', 'Fede'])).toEqual([0, 1, 2])
-  })
-})
-
-/**
- * El toggle "orden propio" del paso Formato (docs/tipos-de-torneo.md §3):
- * prender copia el orden GLOBAL de ESE instante a la entrada de la
- * disciplina, apagar la borra entera -- no la deja vacía, que sería un
- * `seedOrder: []` que no calza con NADA de permutación (`db/season.ts`,
- * `isIndexPermutation`).
- *
- * F1: la copia es de ÍNDICES (`filledSeatIndices`), no de nombres --
- * reconciliar por VALOR era exactamente lo que perdía el asiento de una
- * renombrada a mitad de tipeo (ver `describe('F1 ...')` más abajo).
- *
- * Copiar y no referenciar el array global en vivo sigue siendo la decisión:
- * una vez prendido, la lista de la disciplina se edita SOLA (`moveInOrder`,
- * más abajo) -- si el admin reordena el plantel GLOBAL después, esa edición
- * no tiene por qué pisar lo que ya se armó para esta disciplina en
- * particular.
- */
-describe('toggleOwnOrder', () => {
-  it('prender copia el orden global de este instante, por índice', () => {
-    expect(toggleOwnOrder({}, 'FIFA', true, ['Colo', 'Nacho', 'Fede'])).toEqual({
-      FIFA: [0, 1, 2],
-    })
-  })
-
-  it('apagar borra la entrada entera -- no queda ni vacía', () => {
-    const next = toggleOwnOrder({ FIFA: [1, 0, 2] }, 'FIFA', false, ['Colo', 'Nacho', 'Fede'])
-    expect(next).toEqual({})
-    expect('FIFA' in next).toBe(false)
-  })
-
-  it('no toca la entrada de la disciplina vecina', () => {
-    expect(toggleOwnOrder({ PADEL: [1, 0] }, 'FIFA', true, ['Colo', 'Nacho'])).toEqual({
-      PADEL: [1, 0],
-      FIFA: [0, 1],
-    })
-  })
-
-  it('volver a prender pisa lo que hubiera quedado, con el orden global de AHORA', () => {
-    expect(toggleOwnOrder({ FIFA: [7] }, 'FIFA', true, ['Colo', 'Nacho'])).toEqual({
-      FIFA: [0, 1],
-    })
-  })
-
-  // Minor: una fila en blanco del medio no entra al copiar.
-  it('no copia el índice de una fila en blanco del medio', () => {
-    expect(toggleOwnOrder({}, 'FIFA', true, ['Colo', '', 'Fede'])).toEqual({ FIFA: [0, 2] })
-  })
-})
-
-/**
- * F1: el orden propio de una disciplina, con un asiento SACADO -- misma
- * fórmula que `removeSeatAt` ya aplica a `mySeat`, generalizada a una lista
- * entera.
- */
-describe('removeFromOrder / removeFromOrders', () => {
-  it('el índice sacado desaparece, y los de más atrás se corren para adelante', () => {
-    expect(removeFromOrder([2, 0, 3, 1], 1)).toEqual([1, 0, 2])
-  })
-
-  it('no toca los índices de más adelante del que se sacó', () => {
-    expect(removeFromOrder([0, 1], 3)).toEqual([0, 1])
-  })
-
-  it('removeFromOrders sólo toca las disciplinas que tienen su propia lista', () => {
-    expect(removeFromOrders({ PADEL: [2, 0, 1] }, 0)).toEqual({ PADEL: [1, 0] })
-    expect(removeFromOrders({}, 0)).toEqual({})
-  })
-})
-
-/**
- * F1: el orden propio de una disciplina, con un asiento NUEVO agregado al
- * final -- el lugar donde entra cualquiera que aparece (`addMySeat`, o una
- * fila que deja de estar en blanco).
- */
-describe('addToOrder / addToOrders', () => {
-  it('agrega el índice al final si todavía no estaba', () => {
-    expect(addToOrder([1, 0], 2)).toEqual([1, 0, 2])
-  })
-
-  it('no lo duplica si ya estaba -- una renombrada no agrega nada', () => {
-    expect(addToOrder([1, 0, 2], 0)).toEqual([1, 0, 2])
-  })
-
-  it('addToOrders sólo toca las disciplinas que tienen su propia lista', () => {
-    expect(addToOrders({ FIFA: [0, 1] }, 2)).toEqual({ FIFA: [0, 1, 2] })
-    expect(addToOrders({}, 2)).toEqual({})
-  })
-})
-
-/**
- * F1: el orden propio de una disciplina, con `from`/`to` swapeados -- misma
- * fórmula que `moveSeat` usa para `mySeat`. Necesario para que el swap del
- * orden GLOBAL (`moveSeat`/`onMoveGlobal`, `wizard.tsx`) no le pise la
- * identidad a un orden propio que ya tuviera anotado alguno de los dos
- * asientos.
- */
-describe('swapInOrder / swapInOrders', () => {
-  it('el que apuntaba a from pasa a apuntar a to, y viceversa', () => {
-    expect(swapInOrder([0, 1, 2], 0, 2)).toEqual([2, 1, 0])
-  })
-
-  it('no toca los índices que no son ni from ni to', () => {
-    expect(swapInOrder([0, 1, 2], 0, 2)[1]).toBe(1)
-  })
-
-  it('swapInOrders sólo toca las disciplinas que tienen su propia lista', () => {
-    expect(swapInOrders({ PADEL: [0, 1] }, 0, 1)).toEqual({ PADEL: [1, 0] })
-    expect(swapInOrders({}, 0, 1)).toEqual({})
   })
 })
 
@@ -836,26 +378,6 @@ describe('seedOrderFrom', () => {
     // Caro (2) mantiene su lugar pedido, y Beto (1, el que nunca se pidió)
     // se agrega al final -- sigue siendo una permutación de largo 3, no 4.
     expect(seedOrderFrom([0, 0, 2], ['Ana', 'Beto', 'Caro'])).toEqual([0, 2, 1])
-  })
-})
-
-/** Igual que `moveSeat`, pero sin `mySeat` que arrastrar: la lista propia de una disciplina es de ÍNDICES sueltos (F1). */
-describe('moveInOrder', () => {
-  it('sube o baja una posición', () => {
-    expect(moveInOrder([0, 1], 0, 1)).toEqual([1, 0])
-    expect(moveInOrder([0, 1], 1, 0)).toEqual([1, 0])
-  })
-
-  it('se niega a mover más allá de cualquiera de los dos bordes', () => {
-    expect(moveInOrder([0, 1], 0, -1)).toEqual([0, 1])
-    expect(moveInOrder([0, 1], 1, 2)).toEqual([0, 1])
-  })
-
-  // Minor de esta tarea: antes reimplementaba el swap de `moveSeat` a mano y
-  // sólo guardaba `to` -- un `from` fuera de rango la rompía en silencio.
-  it('también se niega si from cae afuera de rango', () => {
-    expect(moveInOrder([0, 1], -1, 0)).toEqual([0, 1])
-    expect(moveInOrder([0, 1], 2, 0)).toEqual([0, 1])
   })
 })
 
@@ -988,33 +510,6 @@ describe('withoutTrailingBlanks', () => {
   })
 })
 
-describe('toggleDiscipline', () => {
-  it('adds a kind that was not picked, at the end', () => {
-    expect(toggleDiscipline(['PADEL'], 'FIFA')).toEqual(['PADEL', 'FIFA'])
-  })
-
-  it('removes a kind that was already picked', () => {
-    expect(toggleDiscipline(['PADEL', 'FIFA'], 'PADEL')).toEqual(['FIFA'])
-  })
-
-  // El orden de toque ES el contrato (11b/PR10): se vuelve `position` y de ahí
-  // el ordinal del slug. No hay un orden "correcto" por kind.
-  it('keeps the touch order, not a fixed one', () => {
-    expect(toggleDiscipline(['FIFA'], 'PADEL')).toEqual(['FIFA', 'PADEL'])
-  })
-})
-
-describe('disciplinesWarning', () => {
-  it('asks for at least one discipline when none is picked', () => {
-    expect(disciplinesWarning([])).toBe('Elegí al menos una disciplina para el torneo.')
-  })
-
-  it('says nothing once at least one is picked', () => {
-    expect(disciplinesWarning(['PADEL'])).toBeNull()
-    expect(disciplinesWarning(['FIFA'])).toBeNull()
-  })
-})
-
 describe('buildDisciplines', () => {
   // PR20 rebanada D2: las filas ya NO comparten la config palabra por palabra
   // —comparten los puntos, las fechas y el plantel, que es lo que el paso 4
@@ -1071,28 +566,6 @@ describe('buildDisciplines', () => {
         pairSize: 1,
       },
     ])
-  })
-})
-
-describe('newDisciplineSpec', () => {
-  // El "+ Agregar disciplina" de Ajustes arma esto con el tamaño de SU
-  // plantel elegido (REQ-D1-4), no el de toda la temporada.
-  it('arma la config del tamaño de plantel que se le pasa', () => {
-    expect(newDisciplineSpec('PADEL', 8)).toEqual({
-      kind: 'PADEL',
-      config: defaultConfig(8),
-      allowsDraw: false,
-    })
-  })
-
-  // El punto de unión del lado de Ajustes (Rebanada F): pairSize tiene que
-  // llegar hasta acá Y la config.points tiene que ser la curva de la
-  // decisión #3963 — no sólo que la clave `pairSize` exista (#3957).
-  it('con pairSize=1 arma la curva de la decisión #3963, no la de parejas', () => {
-    const spec = newDisciplineSpec('FIFA', 8, 1)
-    expect(spec.pairSize).toBe(1)
-    expect(spec.config.points).toEqual([10, 7, 5, 3, 2, 1, 0, 0])
-    expect(spec.allowsDraw).toBe(true)
   })
 })
 
@@ -1587,45 +1060,6 @@ describe('submitSeats', () => {
 })
 
 /**
- * W63: el paso 4 de una liga que NO tiene pádel
- * dibujaba "Sets por partido" y "Games por set", y el segundo se anuncia con
- * "A 4 games el resultado se carga en dos toques" — justo la máquina que una
- * disciplina de marcador abierto no monta.
- *
- * Antes de la Task 5 el criterio del wizard difería del de Ajustes: acá la
- * config era de la TEMPORADA y la compartían todas las marcadas, así que se
- * le pasaban los formatos de TODAS a la vez (de ahí el test "alcanza con
- * que UNA use sets", abajo). Desde la Task 5 el wizard también llama con un
- * array de UNO, por disciplina — igual que Ajustes — así que ese caso ya no
- * tiene un caller vivo, pero la función lo sigue soportando (la firma
- * genérica de `steppersFor` no cambió, y Ajustes ya llama con un array).
- */
-describe('steppersFor', () => {
-  const PADEL = configFor(8, 2).matchFormat
-  const FIFA = { ...PADEL, openScore: true }
-
-  it('con sets dibuja los cinco', () => {
-    expect(steppersFor([PADEL]).map((row) => row.key)).toEqual(STEPPERS.map((row) => row.key))
-  })
-
-  it('sin sets se van los dos que no gobiernan nada', () => {
-    expect(steppersFor([FIFA]).map((row) => row.key)).toEqual([
-      'regularMatchdays',
-      'countBestOf',
-      'tiebreakSnapshotEvery',
-    ])
-  })
-
-  it('alcanza con que UNA use sets para que sigan estando', () => {
-    expect(steppersFor([PADEL, FIFA]).map((row) => row.key)).toEqual(STEPPERS.map((row) => row.key))
-  })
-
-  it('sin disciplinas no saca nada: no hay "nadie usa sets" sin nadie', () => {
-    expect(steppersFor([])).toEqual(STEPPERS)
-  })
-})
-
-/**
  * W88 y W90 (`verify-report-go-no-go`, #4034) eran la cuarta y la quinta
  * puerta de la familia C29 → W69 → W76 → W83: `config` era UNA curva
  * compartida por el paso 4, y destildar o volver a tildar una disciplina
@@ -1633,8 +1067,7 @@ describe('steppersFor', () => {
  * nada lo avisara. La Task 5 (docs/plan-arquitectura-de-paginas.md) cierra
  * la familia entera: con `configs` genuinamente por disciplina no existe
  * una curva compartida que un toggle pueda desactualizar — cada disciplina
- * mantiene la suya, y `changePairSize`/`freshDisciplineConfig`
- * (`wizard.tsx`/`wizard-state.ts`) la rehacen siempre que cambia SU
+ * mantiene la suya, y el wizard la rehace siempre que cambia SU
  * `pairSize`. Los dos escenarios textuales de esos informes ya no son
  * alcanzables, así que sus tests (que llamaban a `configSideSize`/
  * `configForPairSizeChange`, las dos borradas en esta Task) se van con
@@ -1649,16 +1082,6 @@ describe('formatErrors', () => {
     expect(formatErrors(configFor(8, 1), 1)).toEqual([])
     expect(formatErrors(configFor(12, 2), 2)).toEqual([])
   })
-
-  // Task 5: con una config por disciplina, cambiar cuántas marcadas hay NO
-  // puede dejar a la que sobrevive con una cantidad de puntos que no le
-  // corresponde -- `freshDisciplineConfig` la rehace siempre que cambia SU
-  // `pairSize`, así que el escenario que medían W88/W90 (una curva
-  // compartida desactualizada) ya no es alcanzable.
-  it('freshDisciplineConfig nunca deja una cantidad de puntos que no corresponda', () => {
-    const config = freshDisciplineConfig('FIFA', 8, 1)
-    expect(formatErrors(config, 1)).toEqual([])
-  })
 })
 
 // ── El torneo de un día (docs/tipos-de-torneo.md §2.1) ──────────────────────
@@ -1668,13 +1091,10 @@ describe('formatErrors', () => {
 // stepper del paso 4, con un `min: 4` que no protegía nada — no hay ninguna
 // regla del dominio detrás de ese 4.
 //
-// Este bloque es el PIN: si alguien vuelve a subir el mínimo, el torneo de un
-// día se muere otra vez en silencio, sin que ningún otro test se entere.
+// Este bloque es el PIN: si la validación vuelve a exigir más de una fecha,
+// el torneo de un día se muere otra vez en silencio, sin que ningún otro test
+// se entere.
 describe('un torneo de una sola fecha', () => {
-  it('el stepper de fechas baja hasta 1', () => {
-    expect(STEPPERS.find((row) => row.key === 'regularMatchdays')?.min).toBe(1)
-  })
-
   it('con una fecha y contando una, el paso 4 no protesta', () => {
     const config = { ...configFor(8, 2), regularMatchdays: 1, countBestOf: 1 }
     expect(formatErrors(config, 2)).toEqual([])

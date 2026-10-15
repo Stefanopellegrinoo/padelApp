@@ -183,6 +183,8 @@ describe('matchdays.match_format — forma (0096)', () => {
     ['un texto', 'x'],
     ['un arreglo', [1, 2]],
     ['gamesPerSet de tres cifras', { setsToWin: 2, gamesPerSet: 100 }],
+    ['los dos como texto', { setsToWin: '2', gamesPerSet: '6' }],
+    ['uno como número y otro como texto', { setsToWin: 2, gamesPerSet: '6' }],
   ])('rechaza %s con matchdays_match_format_shape', async (_label, matchFormat) => {
     const { admin, matchdayId } = await draftMatchday()
 

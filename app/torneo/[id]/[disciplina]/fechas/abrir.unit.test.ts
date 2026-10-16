@@ -51,8 +51,12 @@ describe('AbrirFecha — el texto del botón', () => {
       createElement(AbrirFecha, { seasonId: 's1', disciplineId: 'd1' as DisciplineId, number: 3, sportName }),
     )
 
-  it('con deporte lo nombra', () => {
-    expect(botonDe('Ping pong')).toContain('Abrir fecha 3 de Ping pong')
+  it('con deporte lo nombra, en un renglón propio y más chico', () => {
+    // Al lado del selector de fecha no entra en uno: partido a propósito, no
+    // cortado donde caiga. El texto (y el nombre accesible) sigue entero.
+    const markup = botonDe('Ping pong')
+    expect(markup.replace(/<[^>]+>/g, '')).toContain('Abrir fecha 3 de Ping pong')
+    expect(markup).toMatch(/<span class="block[^"]*"> de Ping pong<\/span>/)
   })
 
   it('sin deporte queda como estaba', () => {

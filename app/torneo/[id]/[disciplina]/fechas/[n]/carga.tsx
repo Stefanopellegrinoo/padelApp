@@ -1,6 +1,6 @@
 'use client'
 
-import { type Dispatch, type SetStateAction, useState, useTransition } from 'react'
+import { type Dispatch, type SetStateAction, useEffect, useRef, useState, useTransition } from 'react'
 import type { MatchFormat, SetScore } from '@/core'
 import { chooseDeuce, deuceOptions } from '@/app/amigos/[playerId]/cargar-state'
 import {
@@ -265,6 +265,21 @@ export function Carga({
   const [pending, startTransition] = useTransition()
   const { seasonId, matchdayNumber, format } = context
 
+  // El panel se abre DEBAJO del botón, y si el botón está al pie de la pantalla queda tapado por la
+  // barra de pestañas o fuera de vista: parece que el toque no hizo nada y se vuelve a tocar, que lo
+  // cierra. Se vuelve a mirar al abrir, al cambiar de paso y al aparecer un error, porque cada uno de
+  // los tres agranda el panel: el paso del perdedor es más alto que el de "¿Quién ganó?" (más con
+  // empate a dos) y el error se suma debajo. `nearest` no hace nada si ya se ve, así que mirar de más
+  // es gratis. NO depende de `goals`: mover la pantalla mientras se tipea, con el teclado del celular
+  // abierto, estorba más de lo que ayuda. Y no hay que mirar cuando el error cierra el panel (pádel):
+  // ahí `open` es falso y el error queda pegado al botón.
+  const open = state !== null
+  const step = state === null ? 0 : state.pendingWinner === null ? 1 : 2
+  const containerRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (open) containerRef.current?.scrollIntoView({ block: 'nearest' })
+  }, [open, step, error])
+
   const saveOpenScore = (draft: SetScore) => {
     setError(null)
     startTransition(async () => {
@@ -303,10 +318,14 @@ export function Carga({
   }
 
   return (
-    <div className="mt-2 flex flex-col gap-2">
+    // `scroll-mb-24` (96px) alcanza para la barra de pestañas fija de abajo, que mide entre 77 y 87px
+    // (borde 1 + pt-2 8 + pestaña 44 + pb `max(24px, safe-area)`). Sin ese margen `nearest` pega el
+    // panel al borde de la pantalla y la barra lo tapa.
+    <div ref={containerRef} className="mt-2 flex scroll-mb-24 flex-col gap-2">
       <button
         type="button"
         disabled={pending}
+        aria-expanded={open}
         onClick={() => {
           setError(null)
           setGoals({ a: '', b: '' })

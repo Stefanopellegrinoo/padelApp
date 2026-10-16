@@ -51,6 +51,8 @@ interface DesempateProps {
    * jugador del torneo como si fuera el líder el mismo día que se crea.
    */
   highlightLeader?: boolean
+  /** El título de la sección. Default "Tabla general"; la Tabla de un deporte con 2+ en la temporada dice de cuál (`tabla-view.tsx`). */
+  title?: string
 }
 
 function movementLabel(movement: number | null): string | null {
@@ -64,7 +66,7 @@ function movementColor(movement: number | null): string {
   return movement > 0 ? 'text-up' : 'text-down'
 }
 
-/** Sección "Tabla general" + el sheet de desempate. Un solo componente porque ambos disparadores —el botón fijo y cada chip ⓘ— comparten el mismo estado de qué hay abierto. */
+/** Sección de la tabla ("Tabla general" o la de un deporte) + el sheet de desempate. Un solo componente porque ambos disparadores —el botón fijo y cada chip ⓘ— comparten el mismo estado de qué hay abierto. */
 export function Desempate({
   base,
   rows,
@@ -74,6 +76,7 @@ export function Desempate({
   asOfMatchday,
   nextRefreshMatchday,
   highlightLeader = true,
+  title = 'Tabla general',
 }: DesempateProps) {
   const router = useRouter()
   const [openFor, setOpenFor] = useState<string | 'all' | null>(null)
@@ -110,7 +113,7 @@ export function Desempate({
   return (
     <>
       <div className="flex items-center justify-between">
-        <p className="text-[15px] font-extrabold tracking-[-.02em]">Tabla general</p>
+        <p className="text-[15px] font-extrabold tracking-[-.02em]">{title}</p>
         <button
           type="button"
           onClick={() => setOpenFor('all')}

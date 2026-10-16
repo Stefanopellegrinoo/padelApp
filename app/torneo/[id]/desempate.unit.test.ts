@@ -69,3 +69,33 @@ describe('Desempate — tabla global (base null) no tiene filas clickeables', ()
     expect(fila).toContain('cursor-pointer')
   })
 })
+
+/**
+ * La Tabla de un deporte, con 2+ en la temporada, decía "Tabla general" igual
+ * que la global: el título lo pone quien la dibuja, y la global queda igual.
+ */
+describe('Desempate — el título de la sección', () => {
+  const conTitulo = (title?: string) =>
+    renderToStaticMarkup(
+      createElement(Desempate, {
+        base: '/torneo/s1/padel',
+        rows: [row(1)],
+        mastersCutoff: 4,
+        tiebreakOrder: [],
+        tiebreakSnapshotEvery: 3,
+        asOfMatchday: null,
+        nextRefreshMatchday: 3,
+        title,
+      }),
+    )
+
+  it('sin título, "Tabla general" como siempre', () => {
+    expect(conTitulo()).toContain('>Tabla general<')
+  })
+
+  it('con título, ése y no "Tabla general"', () => {
+    const markup = conTitulo('Tabla de Pádel')
+    expect(markup).toContain('>Tabla de Pádel<')
+    expect(markup).not.toContain('Tabla general')
+  })
+})

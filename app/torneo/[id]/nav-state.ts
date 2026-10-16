@@ -5,6 +5,9 @@
  * `tabla-state.ts`.
  */
 
+import { disciplineSlugs, sportLabel, type SluggableDiscipline } from '@/core'
+import { EdgeError } from '@/db/errors'
+
 /**
  * Segmentos de primer nivel de esta sección que NO son un slug de
  * disciplina. `kind` sólo puede ser `'padel'`/`'fifa'` (con sufijo `-N`,
@@ -80,4 +83,70 @@ export function navTabs(seasonId: string, defaultDisciplineSlug: string, pathnam
       isActive: pathname.startsWith(`${base}/reglas`),
     },
   ]
+}
+
+export interface SportChip {
+  label: string
+  href: string
+  isActive: boolean
+}
+
+/**
+ * Lo que puede seguir al slug para que la URL sea la RAÍZ de una sección:
+ * Tabla (nada), Fechas o Stats. Sin barra final, como el resto de este
+ * archivo: `usePathname` no la trae.
+ */
+const SECTION_ROOTS = new Set(['', '/fechas', '/stats'])
+
+/**
+ * Los chips para cambiar de deporte sin pasar por la Tabla general: uno por
+ * deporte de la temporada, en el orden que llega, cada uno apuntando a la
+ * MISMA sección del otro deporte (`/padel/fechas` → `/fifa/fechas`).
+ *
+ * Sólo en las tres raíces de sección. Más abajo (`/fechas/{n}`, `/jugador/…`,
+ * `/ajustes`) cambiar de deporte no tiene un destino equivalente —la fecha 3
+ * de pádel no existe en FIFA— y en el contenedor, Reglas y Ajustes del torneo
+ * no hay deporte que cambiar. Con un solo deporte, tampoco. Y un slug que no
+ * es de la temporada (la página ya hace `notFound()`) no enciende nada.
+ */
+export function sportChips(
+  seasonId: string,
+  sports: readonly { slug: string; label: string }[],
+  pathname: string,
+): SportChip[] {
+  const base = `/torneo/${seasonId}`
+  if (sports.length < 2 || !pathname.startsWith(`${base}/`)) return []
+
+  const current = currentDisciplineSlug(base, pathname)
+  if (current === null || !sports.some((sport) => sport.slug === current)) return []
+
+  const section = pathname.slice(`${base}/${current}`.length)
+  if (!SECTION_ROOTS.has(section)) return []
+
+  return sports.map((sport) => ({
+    label: sport.label,
+    href: `${base}/${sport.slug}${section}`,
+    isActive: sport.slug === current,
+  }))
+}
+
+/**
+ * Slug y nombre de cada deporte de la temporada, en el orden que llega —el de
+ * `position`—, para los chips y el botón de abrir fecha. Dos disciplinas del
+ * mismo `kind` darían dos "Pádel" iguales: el nombre se numera con la misma
+ * regla que el slug (`core/discipline-slug.ts`), la primera pelada y la
+ * n-ésima con " n", para que lo que dice el chip sea lo que dice la URL.
+ */
+export function sportsOf(disciplines: readonly SluggableDiscipline[]): { slug: string; label: string }[] {
+  const slugOf = disciplineSlugs(disciplines)
+  // Por `kind` y no por nombre: es lo que numera el slug.
+  const seenByKind = new Map<string, number>()
+  return disciplines.map((discipline) => {
+    const ordinal = (seenByKind.get(discipline.kind) ?? 0) + 1
+    seenByKind.set(discipline.kind, ordinal)
+    const slug = slugOf.get(discipline.id)
+    if (slug === undefined) throw new EdgeError('La disciplina de la temporada no existe.')
+    const label = sportLabel(discipline.kind)
+    return { slug, label: ordinal === 1 ? label : `${label} ${ordinal}` }
+  })
 }

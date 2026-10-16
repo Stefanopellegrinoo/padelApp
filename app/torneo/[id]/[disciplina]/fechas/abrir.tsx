@@ -32,9 +32,11 @@ interface AbrirFechaProps {
   disciplineId: DisciplineId
   /** El número que va a tener la fecha: el mismo `max(number) + 1` que hace `createMatchday`. */
   number: number
+  /** Sólo con 2+ deportes en la temporada: "Abrir fecha 3 de Ping pong". Con uno, no hay nada que aclarar. */
+  sportName?: string
 }
 
-export function AbrirFecha({ seasonId, disciplineId, number }: AbrirFechaProps) {
+export function AbrirFecha({ seasonId, disciplineId, number, sportName }: AbrirFechaProps) {
   const [playedOn, setPlayedOn] = useState(today)
   const [error, setError] = useState<string | null>(null)
   // El `useState` de arriba corre TAMBIÉN en el servidor (este componente es
@@ -80,6 +82,8 @@ export function AbrirFecha({ seasonId, disciplineId, number }: AbrirFechaProps) 
           }`}
         >
           Abrir fecha {number}
+          {/* Renglón propio y más chico: al lado del selector de fecha no entra en uno. */}
+          {sportName !== undefined && <span className="block text-[11.5px] font-bold"> de {sportName}</span>}
         </button>
       </div>
 

@@ -3,7 +3,9 @@ import { disciplineSlugs } from '@/core'
 import { EdgeError } from '@/db/errors'
 import { primaryDiscipline, seasonHeader } from '@/db/read'
 import { serverClient } from '@/db/server'
+import { ChipsDeporte } from './chips-deporte'
 import { TorneoNav } from './nav'
+import { sportsOf } from './nav-state'
 
 interface TorneoLayoutProps {
   children: ReactNode
@@ -16,6 +18,12 @@ interface TorneoLayoutProps {
  * tiene lugar en ella—, contenedor con el padding común y la nav fija de 4. El
  * header de cada pantalla (kicker, título, botón) es contenido de cada
  * `page.tsx`, no de este layout.
+ *
+ * Con 2+ deportes, arriba de todo va la fila de chips para cambiar de deporte
+ * (`ChipsDeporte`): vive acá y no en cada pantalla porque ninguna de las tres
+ * (Tabla, Fechas, Stats) tiene un header fijo con el que chocar, y así los
+ * chips siguen montados al cambiar de deporte — `ChipsDeporte` decide solo en
+ * qué rutas se dibuja.
  *
  * **Sin sesión el layout no pregunta nada y no dibuja la nav.** Reglas es
  * pública y este layout la estaba frenando antes de que se montara. Las demás
@@ -63,7 +71,10 @@ export default async function TorneoLayout({ children, params }: TorneoLayoutPro
 
   return (
     <div className="flex min-h-dvh flex-col bg-bg text-text">
-      <main className="flex-1 px-5 pb-6">{children}</main>
+      <main className="flex-1 px-5 pb-6">
+        <ChipsDeporte seasonId={id} sports={sportsOf(header.disciplines)} />
+        {children}
+      </main>
       <TorneoNav seasonId={id} defaultDisciplineSlug={defaultDisciplineSlug} />
     </div>
   )

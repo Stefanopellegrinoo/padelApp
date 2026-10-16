@@ -81,3 +81,48 @@ export function navTabs(seasonId: string, defaultDisciplineSlug: string, pathnam
     },
   ]
 }
+
+export interface SportChip {
+  label: string
+  href: string
+  isActive: boolean
+}
+
+/**
+ * Lo que puede seguir al slug para que la URL sea la RAÍZ de una sección:
+ * Tabla (nada), Fechas o Stats. Sin barra final, como el resto de este
+ * archivo: `usePathname` no la trae.
+ */
+const SECTION_ROOTS = new Set(['', '/fechas', '/stats'])
+
+/**
+ * Los chips para cambiar de deporte sin pasar por la Tabla general: uno por
+ * deporte de la temporada, en el orden que llega, cada uno apuntando a la
+ * MISMA sección del otro deporte (`/padel/fechas` → `/fifa/fechas`).
+ *
+ * Sólo en las tres raíces de sección. Más abajo (`/fechas/{n}`, `/jugador/…`,
+ * `/ajustes`) cambiar de deporte no tiene un destino equivalente —la fecha 3
+ * de pádel no existe en FIFA— y en el contenedor, Reglas y Ajustes del torneo
+ * no hay deporte que cambiar. Con un solo deporte, tampoco. Y un slug que no
+ * es de la temporada (la página ya hace `notFound()`) no enciende nada.
+ */
+export function sportChips(
+  seasonId: string,
+  sports: readonly { slug: string; label: string }[],
+  pathname: string,
+): SportChip[] {
+  const base = `/torneo/${seasonId}`
+  if (sports.length < 2 || !pathname.startsWith(`${base}/`)) return []
+
+  const current = currentDisciplineSlug(base, pathname)
+  if (current === null || !sports.some((sport) => sport.slug === current)) return []
+
+  const section = pathname.slice(`${base}/${current}`.length)
+  if (!SECTION_ROOTS.has(section)) return []
+
+  return sports.map((sport) => ({
+    label: sport.label,
+    href: `${base}/${sport.slug}${section}`,
+    isActive: sport.slug === current,
+  }))
+}

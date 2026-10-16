@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { currentDisciplineSlug, navTabs } from './nav-state'
+import { currentDisciplineSlug, navTabs, sportChips } from './nav-state'
 
 const seasonId = 's1'
 const base = `/torneo/${seasonId}`
@@ -88,5 +88,86 @@ describe('currentDisciplineSlug', () => {
     expect(currentDisciplineSlug(base, `${base}/stats`)).toBeNull()
     expect(currentDisciplineSlug(base, `${base}/fechas`)).toBeNull()
     expect(currentDisciplineSlug(base, `${base}/jugador/e1`)).toBeNull()
+  })
+})
+
+const sports = [
+  { slug: 'padel', label: 'Pádel' },
+  { slug: 'fifa', label: 'FIFA' },
+]
+
+describe('sportChips — cuándo se muestran', () => {
+  it('con un solo deporte no hay nada que elegir', () => {
+    expect(sportChips(seasonId, [{ slug: 'padel', label: 'Pádel' }], `${base}/padel`)).toEqual([])
+  })
+
+  it.each([
+    ['tabla', `${base}/padel`],
+    ['fechas', `${base}/padel/fechas`],
+    ['stats', `${base}/padel/stats`],
+  ])('en la raíz de %s (%s) hay un chip por deporte', (_section, pathname) => {
+    expect(sportChips(seasonId, sports, pathname)).toHaveLength(2)
+  })
+
+  it.each([
+    ['una fecha puntual', `${base}/padel/fechas/3`],
+    ['perfil de jugador', `${base}/padel/jugador/x`],
+    ['ajustes del deporte', `${base}/padel/ajustes`],
+    ['la tabla global', `${base}`],
+    ['reglas', `${base}/reglas`],
+    ['ajustes del torneo', `${base}/ajustes`],
+    ['un slug que no es de la temporada', `${base}/basquet/fechas`],
+    ['otra sección de otro torneo', '/torneo/s2/padel'],
+  ])('en %s (%s) no se muestran', (_case, pathname) => {
+    expect(sportChips(seasonId, sports, pathname)).toEqual([])
+  })
+})
+
+describe('sportChips — a dónde apunta cada chip', () => {
+  it('en Tabla cambia sólo el deporte', () => {
+    expect(sportChips(seasonId, sports, `${base}/padel`).map((chip) => chip.href)).toEqual([
+      `${base}/padel`,
+      `${base}/fifa`,
+    ])
+  })
+
+  it('en Fechas se queda en Fechas', () => {
+    expect(sportChips(seasonId, sports, `${base}/padel/fechas`).map((chip) => chip.href)).toEqual([
+      `${base}/padel/fechas`,
+      `${base}/fifa/fechas`,
+    ])
+  })
+
+  it('en Stats se queda en Stats', () => {
+    expect(sportChips(seasonId, sports, `${base}/fifa/stats`).map((chip) => chip.href)).toEqual([
+      `${base}/padel/stats`,
+      `${base}/fifa/stats`,
+    ])
+  })
+
+  it('no arrastra el query string del deporte anterior', () => {
+    // `usePathname` no lo trae; el chip tampoco lo inventa.
+    for (const chip of sportChips(seasonId, sports, `${base}/padel/stats`)) {
+      expect(chip.href).not.toContain('?')
+    }
+  })
+})
+
+describe('sportChips — el chip encendido y el orden', () => {
+  it('se enciende el deporte de la URL, y sólo ése', () => {
+    const chips = sportChips(seasonId, sports, `${base}/fifa/fechas`)
+    expect(chips.map((chip) => [chip.label, chip.isActive])).toEqual([
+      ['Pádel', false],
+      ['FIFA', true],
+    ])
+  })
+
+  it('respeta el orden que llega, sin reordenar por el deporte actual', () => {
+    const three = [
+      { slug: 'padel', label: 'Pádel' },
+      { slug: 'padel-2', label: 'Pádel 2' },
+      { slug: 'fifa', label: 'FIFA' },
+    ]
+    expect(sportChips(seasonId, three, `${base}/fifa`).map((chip) => chip.label)).toEqual(['Pádel', 'Pádel 2', 'FIFA'])
   })
 })

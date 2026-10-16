@@ -20,10 +20,10 @@ interface TorneoLayoutProps {
  * `page.tsx`, no de este layout.
  *
  * Con 2+ deportes, arriba de todo va la fila de chips para cambiar de deporte
- * (`ChipsDeporte`): vive acá y no en cada pantalla porque ninguna de las tres
- * (Tabla, Fechas, Stats) tiene un header fijo con el que chocar, y así los
- * chips siguen montados al cambiar de deporte — `ChipsDeporte` decide solo en
- * qué rutas se dibuja.
+ * (`ChipsDeporte`): vive acá y no en cada pantalla para que siga montada al
+ * cambiar de deporte, y va primero de todo —en Tabla, arriba del `Volver`— como
+ * selector de la sección entera. `ChipsDeporte` decide solo en qué rutas se
+ * dibuja.
  *
  * **Sin sesión el layout no pregunta nada y no dibuja la nav.** Reglas es
  * pública y este layout la estaba frenando antes de que se montara. Las demás

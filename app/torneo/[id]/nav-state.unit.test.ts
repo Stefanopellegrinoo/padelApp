@@ -145,13 +145,6 @@ describe('sportChips — a dónde apunta cada chip', () => {
       `${base}/fifa/stats`,
     ])
   })
-
-  it('no arrastra el query string del deporte anterior', () => {
-    // `usePathname` no lo trae; el chip tampoco lo inventa.
-    for (const chip of sportChips(seasonId, sports, `${base}/padel/stats`)) {
-      expect(chip.href).not.toContain('?')
-    }
-  })
 })
 
 describe('sportChips — el chip encendido y el orden', () => {
@@ -170,6 +163,20 @@ describe('sportChips — el chip encendido y el orden', () => {
       { slug: 'fifa', label: 'FIFA' },
     ]
     expect(sportChips(seasonId, three, `${base}/fifa`).map((chip) => chip.label)).toEqual(['Pádel', 'Pádel 2', 'FIFA'])
+  })
+
+  it('en el deporte repetido se enciende sólo ése, no el primero del mismo kind', () => {
+    const three = [
+      { slug: 'padel', label: 'Pádel' },
+      { slug: 'padel-2', label: 'Pádel 2' },
+      { slug: 'fifa', label: 'FIFA' },
+    ]
+    const chips = sportChips(seasonId, three, `${base}/padel-2/fechas`)
+    expect(chips.map((chip) => [chip.href, chip.isActive])).toEqual([
+      [`${base}/padel/fechas`, false],
+      [`${base}/padel-2/fechas`, true],
+      [`${base}/fifa/fechas`, false],
+    ])
   })
 })
 

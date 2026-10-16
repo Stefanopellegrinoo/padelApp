@@ -6,6 +6,7 @@
  */
 
 import { disciplineSlugs, sportLabel, type SluggableDiscipline } from '@/core'
+import { EdgeError } from '@/db/errors'
 
 /**
  * Segmentos de primer nivel de esta sección que NO son un slug de
@@ -138,12 +139,14 @@ export function sportChips(
  */
 export function sportsOf(disciplines: readonly SluggableDiscipline[]): { slug: string; label: string }[] {
   const slugOf = disciplineSlugs(disciplines)
-  const seenByLabel = new Map<string, number>()
+  // Por `kind` y no por nombre: es lo que numera el slug.
+  const seenByKind = new Map<string, number>()
   return disciplines.map((discipline) => {
+    const ordinal = (seenByKind.get(discipline.kind) ?? 0) + 1
+    seenByKind.set(discipline.kind, ordinal)
+    const slug = slugOf.get(discipline.id)
+    if (slug === undefined) throw new EdgeError('La disciplina de la temporada no existe.')
     const label = sportLabel(discipline.kind)
-    const ordinal = (seenByLabel.get(label) ?? 0) + 1
-    seenByLabel.set(label, ordinal)
-    // `slugOf` tiene una entrada por cada disciplina de la lista.
-    return { slug: slugOf.get(discipline.id) as string, label: ordinal === 1 ? label : `${label} ${ordinal}` }
+    return { slug, label: ordinal === 1 ? label : `${label} ${ordinal}` }
   })
 }

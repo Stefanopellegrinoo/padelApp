@@ -26,12 +26,9 @@ interface TablaViewProps {
 
 /**
  * La Tabla de una disciplina — shaping + presentación, extraída de
- * `page.tsx` (PR12b, slice 1/2 de REQ-D9) para que `[disciplina]/page.tsx`
- * la reuse tal cual. La raíz de la temporada (`page.tsx`) TODAVÍA no la
- * importa a propósito — sigue con su propia copia, apuntando a la disciplina
- * por defecto — porque slice 2 la reemplaza por la tabla global; ahí sí pasa
- * a usar (una variante de) este mismo componente, cerrando la duplicación
- * temporal entre las dos rutas.
+ * `page.tsx` (PR12b, slice 1/2 de REQ-D9); sólo la usa `[disciplina]/page.tsx`.
+ * La raíz de la temporada (`page.tsx`) es la tabla global desde slice 2 y no
+ * la importa: suma todas las disciplinas con `computeGlobalRanking`.
  *
  * Recibe `discipline`, no `header.disciplines[0]`: `header.regularMatchdays`
  * es SIEMPRE el de la disciplina primaria (`db/read.ts: toSeasonHeader`), y

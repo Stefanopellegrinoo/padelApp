@@ -267,13 +267,18 @@ export function Carga({
 
   // El panel se abre DEBAJO del botón, y si el botón está al pie de la pantalla queda tapado por la
   // barra de pestañas o fuera de vista: parece que el toque no hizo nada y se vuelve a tocar, que lo
-  // cierra. Se scrollea sólo al ABRIR —la dependencia es el booleano, no `state`— porque elegir quién
-  // ganó cambia `state` con el panel ya abierto y no hay por qué mover la pantalla de nuevo.
+  // cierra. Se vuelve a mirar al abrir, al cambiar de paso y al aparecer un error, porque cada uno de
+  // los tres agranda el panel: el paso del perdedor es más alto que el de "¿Quién ganó?" (más con
+  // empate a dos) y el error se suma debajo. `nearest` no hace nada si ya se ve, así que mirar de más
+  // es gratis. NO depende de `goals`: mover la pantalla mientras se tipea, con el teclado del celular
+  // abierto, estorba más de lo que ayuda. Y no hay que mirar cuando el error cierra el panel (pádel):
+  // ahí `open` es falso y el error queda pegado al botón.
   const open = state !== null
+  const step = state === null ? 0 : state.pendingWinner === null ? 1 : 2
   const containerRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (open) containerRef.current?.scrollIntoView({ block: 'nearest' })
-  }, [open])
+  }, [open, step, error])
 
   const saveOpenScore = (draft: SetScore) => {
     setError(null)
@@ -313,8 +318,9 @@ export function Carga({
   }
 
   return (
-    // `scroll-mb-24` (96px): lo que mide la barra de pestañas fija de abajo (44 de pestaña + padding +
-    // safe area). Sin ese margen `nearest` pega el panel al borde de la pantalla y la barra lo tapa.
+    // `scroll-mb-24` (96px) alcanza para la barra de pestañas fija de abajo, que mide entre 77 y 87px
+    // (borde 1 + pt-2 8 + pestaña 44 + pb `max(24px, safe-area)`). Sin ese margen `nearest` pega el
+    // panel al borde de la pantalla y la barra lo tapa.
     <div ref={containerRef} className="mt-2 flex scroll-mb-24 flex-col gap-2">
       <button
         type="button"

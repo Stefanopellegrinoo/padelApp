@@ -3,6 +3,7 @@ import { rankingWithMovement, snapshotForMatchday, type Award, type EntryId } fr
 import type { DisciplineHeader, EntryRow, MatchdaySummary, SeasonHeader } from '@/db/read'
 import { initials, matchdayDay } from '@/app/format'
 import { Desempate, type StandingsRow, type TiebreakEntry } from './desempate'
+import { sportsOf } from './nav-state'
 import { defendersOf, mastersCutoffFor, pairRows, volverDestination } from './tabla-state'
 import { Volver } from './volver'
 
@@ -114,6 +115,11 @@ export function TablaView({
   // La derivación vive en `tabla-state.ts` (mismo patrón que `defenders`
   // arriba), con test propio.
   const volver = volverDestination(header.id, header.disciplines.length)
+  // Con 2+ deportes "Tabla general" es la global (`page.tsx`): ésta dice de cuál es.
+  const sportName =
+    header.disciplines.length > 1
+      ? sportsOf(header.disciplines).find((sport) => sport.slug === disciplina)?.label
+      : undefined
 
   return (
     <div className="flex flex-col gap-3 pt-4">
@@ -172,6 +178,7 @@ export function TablaView({
         tiebreakSnapshotEvery={config.tiebreakSnapshotEvery}
         asOfMatchday={asOfMatchday}
         nextRefreshMatchday={nextRefreshMatchday}
+        title={sportName === undefined ? undefined : `Tabla de ${sportName}`}
       />
     </div>
   )

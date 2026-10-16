@@ -22,6 +22,7 @@ import {
 } from '@/db/read'
 import { serverClient } from '@/db/server'
 import { matchdayDay } from '@/app/format'
+import { sportsOf } from '@/app/torneo/[id]/nav-state'
 import { AbrirFecha } from './abrir'
 import { championRecord, sideNames } from './campeon-de-la-fecha'
 // Import absoluto, no relativo: `./[n]/masters` sería válido pero ilegible
@@ -148,10 +149,22 @@ export default async function FechasPage({ params }: PageProps) {
   // "Abrir fecha 7" y la base crea la 8, la app queda mintiendo.
   const nextNumber = Math.max(0, ...disciplineMatchdays.map((matchday) => matchday.number)) + 1
 
+  // Con 2+ deportes el botón dice de cuál abre la fecha (el mismo nombre que el
+  // chip de arriba, numerado si el deporte se repite); con uno, queda como estaba.
+  const sportName =
+    header.disciplines.length > 1
+      ? sportsOf(header.disciplines).find((sport) => sport.slug === disciplina)?.label
+      : undefined
+
   return (
     <div className="flex flex-col gap-3 pt-3">
       {header.isAdmin && !hasLiveMatchday && (
-        <AbrirFecha seasonId={seasonId} disciplineId={discipline.id} number={nextNumber} />
+        <AbrirFecha
+          seasonId={seasonId}
+          disciplineId={discipline.id}
+          number={nextNumber}
+          sportName={sportName}
+        />
       )}
 
       <header className="flex flex-col gap-[3px]">

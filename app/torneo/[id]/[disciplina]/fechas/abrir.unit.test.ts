@@ -1,5 +1,8 @@
 import { describe, expect, it, vi, afterEach } from 'vitest'
-import { today } from './abrir'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import type { DisciplineId } from '@/core'
+import { AbrirFecha, today } from './abrir'
 
 /**
  * `today()` arma el `YYYY-MM-DD` que pide `<input type="date">` con los
@@ -35,5 +38,24 @@ describe('today', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date(2026, 0, 5, 12, 0, 0)) // 5 de enero, hora local
     expect(today()).toBe('2026-01-05')
+  })
+})
+
+/**
+ * Con 2+ deportes en la temporada, "Abrir fecha 3" a secas no dice de cuál: el
+ * botón nombra el deporte. Con uno solo no hay nada que aclarar.
+ */
+describe('AbrirFecha — el texto del botón', () => {
+  const botonDe = (sportName?: string) =>
+    renderToStaticMarkup(
+      createElement(AbrirFecha, { seasonId: 's1', disciplineId: 'd1' as DisciplineId, number: 3, sportName }),
+    )
+
+  it('con deporte lo nombra', () => {
+    expect(botonDe('Ping pong')).toContain('Abrir fecha 3 de Ping pong')
+  })
+
+  it('sin deporte queda como estaba', () => {
+    expect(botonDe()).toContain('Abrir fecha 3<')
   })
 })

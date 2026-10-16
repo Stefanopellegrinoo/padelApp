@@ -5,6 +5,8 @@
  * `tabla-state.ts`.
  */
 
+import { disciplineSlugs, sportLabel, type SluggableDiscipline } from '@/core'
+
 /**
  * Segmentos de primer nivel de esta sección que NO son un slug de
  * disciplina. `kind` sólo puede ser `'padel'`/`'fifa'` (con sufijo `-N`,
@@ -125,4 +127,23 @@ export function sportChips(
     href: `${base}/${sport.slug}${section}`,
     isActive: sport.slug === current,
   }))
+}
+
+/**
+ * Slug y nombre de cada deporte de la temporada, en el orden que llega —el de
+ * `position`—, para los chips y el botón de abrir fecha. Dos disciplinas del
+ * mismo `kind` darían dos "Pádel" iguales: el nombre se numera con la misma
+ * regla que el slug (`core/discipline-slug.ts`), la primera pelada y la
+ * n-ésima con " n", para que lo que dice el chip sea lo que dice la URL.
+ */
+export function sportsOf(disciplines: readonly SluggableDiscipline[]): { slug: string; label: string }[] {
+  const slugOf = disciplineSlugs(disciplines)
+  const seenByLabel = new Map<string, number>()
+  return disciplines.map((discipline) => {
+    const label = sportLabel(discipline.kind)
+    const ordinal = (seenByLabel.get(label) ?? 0) + 1
+    seenByLabel.set(label, ordinal)
+    // `slugOf` tiene una entrada por cada disciplina de la lista.
+    return { slug: slugOf.get(discipline.id) as string, label: ordinal === 1 ? label : `${label} ${ordinal}` }
+  })
 }

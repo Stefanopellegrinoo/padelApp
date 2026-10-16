@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { currentDisciplineSlug, navTabs, sportChips } from './nav-state'
+import type { DisciplineId } from '@/core'
+import { currentDisciplineSlug, navTabs, sportChips, sportsOf } from './nav-state'
 
 const seasonId = 's1'
 const base = `/torneo/${seasonId}`
@@ -169,5 +170,24 @@ describe('sportChips — el chip encendido y el orden', () => {
       { slug: 'fifa', label: 'FIFA' },
     ]
     expect(sportChips(seasonId, three, `${base}/fifa`).map((chip) => chip.label)).toEqual(['Pádel', 'Pádel 2', 'FIFA'])
+  })
+})
+
+describe('sportsOf — el slug y el nombre de cada deporte', () => {
+  const discipline = (id: string, kind: string) => ({ id: id as DisciplineId, kind })
+
+  it('en el orden que llega, con el slug de URL y el nombre del registro', () => {
+    expect(sportsOf([discipline('d1', 'PADEL'), discipline('d2', 'PING_PONG')])).toEqual([
+      { slug: 'padel', label: 'Pádel' },
+      { slug: 'ping-pong', label: 'Ping pong' },
+    ])
+  })
+
+  it('un mismo deporte dos veces se numera como el slug: el primero pelado, el segundo con " 2"', () => {
+    expect(sportsOf([discipline('d1', 'PADEL'), discipline('d2', 'FIFA'), discipline('d3', 'PADEL')])).toEqual([
+      { slug: 'padel', label: 'Pádel' },
+      { slug: 'fifa', label: 'FIFA' },
+      { slug: 'padel-2', label: 'Pádel 2' },
+    ])
   })
 })

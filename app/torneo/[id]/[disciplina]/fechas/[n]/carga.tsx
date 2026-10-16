@@ -1,6 +1,6 @@
 'use client'
 
-import { type Dispatch, type SetStateAction, useState, useTransition } from 'react'
+import { type Dispatch, type SetStateAction, useEffect, useRef, useState, useTransition } from 'react'
 import type { MatchFormat, SetScore } from '@/core'
 import { chooseDeuce, deuceOptions } from '@/app/amigos/[playerId]/cargar-state'
 import {
@@ -265,6 +265,16 @@ export function Carga({
   const [pending, startTransition] = useTransition()
   const { seasonId, matchdayNumber, format } = context
 
+  // El panel se abre DEBAJO del botón, y si el botón está al pie de la pantalla queda tapado por la
+  // barra de pestañas o fuera de vista: parece que el toque no hizo nada y se vuelve a tocar, que lo
+  // cierra. Se scrollea sólo al ABRIR —la dependencia es el booleano, no `state`— porque elegir quién
+  // ganó cambia `state` con el panel ya abierto y no hay por qué mover la pantalla de nuevo.
+  const open = state !== null
+  const containerRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (open) containerRef.current?.scrollIntoView({ block: 'nearest' })
+  }, [open])
+
   const saveOpenScore = (draft: SetScore) => {
     setError(null)
     startTransition(async () => {
@@ -303,10 +313,13 @@ export function Carga({
   }
 
   return (
-    <div className="mt-2 flex flex-col gap-2">
+    // `scroll-mb-24` (96px): lo que mide la barra de pestañas fija de abajo (44 de pestaña + padding +
+    // safe area). Sin ese margen `nearest` pega el panel al borde de la pantalla y la barra lo tapa.
+    <div ref={containerRef} className="mt-2 flex scroll-mb-24 flex-col gap-2">
       <button
         type="button"
         disabled={pending}
+        aria-expanded={open}
         onClick={() => {
           setError(null)
           setGoals({ a: '', b: '' })

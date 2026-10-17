@@ -1788,6 +1788,10 @@ export async function resultsOf(
     .select('id, round, pair_a, pair_b, fase, grupo')
     .eq('matchday_id', matchdayId)
     .order('round', { ascending: true })
+    // Desempate por `id`, como en `db/read.ts` (N77): sin él, el orden de los
+    // partidos de una misma ronda lo decide el plan de Postgres, y cambió solo
+    // con los índices nuevos al ensayar las migraciones sobre la copia de prod.
+    .order('id', { ascending: true })
   if (matchesError) throw new EdgeError(`No se pudieron leer los partidos: ${matchesError.message}`)
 
   const matchIds = (matchRows ?? []).map((row) => row.id)

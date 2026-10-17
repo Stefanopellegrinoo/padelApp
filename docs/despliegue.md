@@ -248,10 +248,10 @@ Se decidió apagarla: el mail acá **no se usa para nada más que autenticar**. 
 (`split_part(email, '@', 1)`), que no se usa nunca porque el registro siempre
 manda `display_name`.
 
-> Lo único a tener en cuenta el día que se construya **recuperar contraseña**
-> —hoy `/login/recuperar` es un placeholder—: ahí el mail pasa a ser el canal de
-> recuperación, y un mail mal tipeado deja a esa persona sin poder recuperar su
-> cuenta. No es un agujero de seguridad, es una molestia para quien se equivocó.
+> Con **recuperar contraseña** (sección 5) el mail pasa a ser el canal de
+> recuperación, y un mail mal tipeado al registrarse deja a esa persona sin poder
+> recuperar su cuenta. No es un agujero de seguridad, es una molestia para quien
+> se equivocó. Por eso la pantalla de recuperar muestra a qué mail se mandó.
 
 ### 4. Google OAuth
 
@@ -296,6 +296,61 @@ npm run db:start     # la config se lee al arrancar, no en caliente
 solo, porque `handle_new_user` usa `full_name` del metadata como segundo
 fallback; y el `next` sobrevive el viaje, así que quien abre el link de
 invitación sin cuenta y entra con Google vuelve a la invitación.
+
+### 5. Los mails de recuperar contraseña (Gmail)
+
+**El código está entero:**
+- *Olvidé mi contraseña* (`/login/recuperar`) manda el mail con
+  `resetPasswordForEmail`.
+- El link entra por `app/auth/confirm/route.ts`.
+- La clave nueva se elige en `/login/nueva-clave`.
+
+**Lo que falta es por dónde sale el mail.** El envío que trae Supabase no
+sirve: sólo entrega a los miembros del equipo de Supabase, 2 mails por hora, y
+la documentación aclara que no es para producción. Se usa una cuenta de Gmail.
+Gmail permite unos 500 mails por día, que sobra.
+
+**a) Gmail.** En la cuenta que va a mandar los mails:
+- activar la *Verificación en 2 pasos*;
+- crear una *contraseña de aplicación* en `myaccount.google.com/apppasswords`.
+  Son 16 letras y se ven una sola vez: guardala.
+
+**b) Supabase → Authentication → Emails → SMTP Settings →** *Enable custom SMTP*:
+
+| Campo | Valor |
+|---|---|
+| Sender email | el Gmail, completo |
+| Sender name | `Padel Liga` |
+| Host | `smtp.gmail.com` |
+| Port | `587` |
+| Username | el Gmail, completo |
+| Password | la contraseña de aplicación, sin espacios |
+
+**El remitente tiene que ser el mismo Gmail**: si no, Gmail lo reescribe o lo
+rechaza.
+
+**c) Supabase → Authentication → Emails → Templates → Reset Password:**
+- *Subject*: `Elegí tu contraseña nueva`.
+- *Body*: el contenido entero de `supabase/templates/recovery.html`. Es el mismo
+  que usa la base local.
+
+**No sirve el mail que viene de fábrica:** su link sólo anda en el mismo
+navegador que pidió el mail. El nuestro usa `token_hash`, y anda aunque el mail
+se abra en la app de Gmail del celular.
+
+**d) Supabase → Authentication → URL Configuration → Site URL:** la dirección de
+la app en Vercel, sin barra al final. El link del mail se arma con ella: si
+quedó en `localhost:3000`, el link apunta a la compu de alguien.
+
+**e) Probarlo:** desde la app, *Olvidé mi contraseña* con tu propio mail. Tiene
+que llegar el mail en castellano, el link tiene que abrir *Elegí tu contraseña
+nueva*, y al guardar tenés que entrar con la clave nueva. Si no llega, revisá
+spam y después *Authentication → Logs*: un error de SMTP casi siempre es la
+contraseña de aplicación mal pegada.
+
+**En local no hace falta nada:** los mails caen en Mailpit
+(`http://127.0.0.1:54324`), y la plantilla la carga `supabase/config.toml` al
+arrancar. Si la base ya estaba corriendo, hay que reiniciarla para que la tome.
 
 ---
 

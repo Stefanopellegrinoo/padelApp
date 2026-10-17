@@ -249,9 +249,15 @@ Se decidió apagarla: el mail acá **no se usa para nada más que autenticar**. 
 manda `display_name`.
 
 > Con **recuperar contraseña** (sección 5) el mail pasa a ser el canal de
-> recuperación, y un mail mal tipeado al registrarse deja a esa persona sin poder
-> recuperar su cuenta. No es un agujero de seguridad, es una molestia para quien
-> se equivocó. Por eso la pantalla de recuperar muestra a qué mail se mandó.
+> recuperación. Un mail mal tipeado al registrarse tiene dos efectos:
+> - esa persona no puede recuperar su cuenta, porque el mail le llega a otro;
+> - quien reciba los mails de esa dirección (por ejemplo un dominio con errata
+>   tipo `gmial.com`) puede pedir el link y quedarse con la cuenta.
+>
+> Con la confirmación apagada nadie verifica que el mail sea de quien se
+> registra. Se asume ese riesgo para un grupo de amigos. Si algún día no
+> alcanza, se prende "Confirm email". La pantalla de recuperar muestra a qué mail
+> se mandó, para que el error se vea.
 
 ### 4. Google OAuth
 
@@ -302,8 +308,17 @@ invitación sin cuenta y entra con Google vuelve a la invitación.
 **El código está entero:**
 - *Olvidé mi contraseña* (`/login/recuperar`) manda el mail con
   `resetPasswordForEmail`.
-- El link entra por `app/auth/confirm/route.ts`.
+- El link abre `/auth/confirm`, que muestra un botón. El token se usa recién al
+  tocarlo, para que un escáner de correo que abre el link antes no lo venza.
 - La clave nueva se elige en `/login/nueva-clave`.
+
+**Configurar a–d ANTES de mergear el código.** Si la pantalla sale sin el SMTP:
+- el mail no le llega a nadie fuera del equipo de Supabase, así que la pantalla
+  dice "No pudimos mandar el mail" a toda cuenta real;
+- y dice "Listo" a un mail sin cuenta, o sea que delata qué mails están
+  registrados.
+
+Configurarlo antes no rompe nada: hoy la app no tiene cómo pedir el mail.
 
 **Lo que falta es por dónde sale el mail.** El envío que trae Supabase no
 sirve: sólo entrega a los miembros del equipo de Supabase, 2 mails por hora, y
@@ -347,6 +362,18 @@ que llegar el mail en castellano, el link tiene que abrir *Elegí tu contraseña
 nueva*, y al guardar tenés que entrar con la clave nueva. Si no llega, revisá
 spam y después *Authentication → Logs*: un error de SMTP casi siempre es la
 contraseña de aplicación mal pegada.
+
+**El límite de envíos** está en *Authentication → Rate Limits* y viene en 30 mails
+por hora para todo el proyecto, que alcanza. No hay captcha. Si alguien abusa
+de la pantalla, puede agotar ese límite y durante esa hora nadie recupera su
+cuenta. El arreglo, si hace falta, es el captcha de Supabase (Turnstile).
+
+**Opcional, gratis y en el mismo dashboard:**
+- *Authentication → Sign In / Providers → Email → Email OTP Length* en 10 en vez
+  de 6. Hace mucho más difícil adivinar el link, y la plantilla no muestra el
+  código.
+- *Secure password change* prendido. Para cambiar la clave pide una sesión de
+  menos de 24 horas, y la del link siempre lo es.
 
 **En local no hace falta nada:** los mails caen en Mailpit
 (`http://127.0.0.1:54324`), y la plantilla la carga `supabase/config.toml` al

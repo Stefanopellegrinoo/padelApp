@@ -9,6 +9,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const auth = {
   resetPasswordForEmail: vi.fn(),
+  verifyOtp: vi.fn(),
   getUser: vi.fn(),
   updateUser: vi.fn(),
 }
@@ -20,7 +21,7 @@ const redirect = vi.fn((path: string) => {
 })
 vi.mock('next/navigation', () => ({ redirect: (path: string) => redirect(path) }))
 
-const { requestPasswordReset, setNewPassword } = await import('./actions')
+const { confirmRecovery, requestPasswordReset, setNewPassword } = await import('./actions')
 
 function form(fields: Record<string, string>): FormData {
   const data = new FormData()
@@ -56,7 +57,8 @@ describe('requestPasswordReset', () => {
 
     const state = await requestPasswordReset(initial, form({ email: 'ana@mail.com' }))
 
-    expect(state).toEqual({ error: 'Pediste muchos links seguidos. Esperá un rato y probá de nuevo.', sent: false })
+    // Neutro: el límite de envíos es del proyecto entero, puede haberlo agotado otro.
+    expect(state).toEqual({ error: 'Se pidieron muchos links seguidos. Esperá un rato y probá de nuevo.', sent: false })
   })
 
   it('si el mail no sale, lo dice en vez de fingir que salió', async () => {
@@ -96,6 +98,15 @@ describe('setNewPassword', () => {
     expect(state).toEqual({ error: 'Tiene que ser distinta de la que tenías.' })
   })
 
+  it('si prod exige una clave más fuerte, lo dice en vez de un error genérico', async () => {
+    auth.getUser.mockResolvedValue({ data: { user: { id: 'u1' } }, error: null })
+    auth.updateUser.mockResolvedValue({ data: null, error: { code: 'weak_password', message: 'weak' } })
+
+    const state = await setNewPassword(initial, form({ password: 'nueva123' }))
+
+    expect(state).toEqual({ error: 'Esa contraseña es muy fácil. Probá con una más larga.' })
+  })
+
   it('si Supabase falla por otra cosa, lo dice', async () => {
     auth.getUser.mockResolvedValue({ data: { user: { id: 'u1' } }, error: null })
     auth.updateUser.mockResolvedValue({ data: null, error: { code: 'unexpected_failure', message: 'boom' } })
@@ -111,5 +122,27 @@ describe('setNewPassword', () => {
 
     await expect(setNewPassword(initial, form({ password: 'nueva123' }))).rejects.toThrow('NEXT_REDIRECT /torneos')
     expect(auth.updateUser).toHaveBeenCalledWith({ password: 'nueva123' })
+  })
+})
+
+describe('confirmRecovery', () => {
+  it('con el token del mail deja la sesión y va a elegir la clave nueva', async () => {
+    auth.verifyOtp.mockResolvedValue({ data: {}, error: null })
+
+    await expect(confirmRecovery(form({ token_hash: 'pkce_abc' }))).rejects.toThrow('NEXT_REDIRECT /login/nueva-clave')
+    expect(auth.verifyOtp).toHaveBeenCalledWith({ type: 'recovery', token_hash: 'pkce_abc' })
+  })
+
+  it('un link vencido o ya usado vuelve a pedir otro', async () => {
+    auth.verifyOtp.mockResolvedValue({ data: null, error: { message: 'expired' } })
+
+    await expect(confirmRecovery(form({ token_hash: 'pkce_abc' }))).rejects.toThrow(
+      'NEXT_REDIRECT /login/recuperar?error=link',
+    )
+  })
+
+  it('sin token no llama a Supabase', async () => {
+    await expect(confirmRecovery(form({}))).rejects.toThrow('NEXT_REDIRECT /login/recuperar?error=link')
+    expect(auth.verifyOtp).not.toHaveBeenCalled()
   })
 })

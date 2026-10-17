@@ -26,6 +26,9 @@ export default function NuevaClaveForm({ email }: { email: string }) {
         </div>
 
         <form action={formAction} className="flex flex-col gap-4">
+          {/* Para que el gestor de contraseñas guarde la clave nueva en la cuenta
+              correcta: lo busca en un campo de usuario dentro del mismo form. */}
+          <input type="email" autoComplete="username" value={email} readOnly hidden />
           <div className="flex flex-col gap-1">
             <label htmlFor="password" className="text-[11.5px] font-extrabold text-muted">
               Contraseña nueva

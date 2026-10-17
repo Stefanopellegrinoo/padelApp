@@ -1,7 +1,8 @@
 -- Corte a producción, paso POST. Se corre contra prod después del push:
---   psql "$PROD_DB_URL" -f scripts/corte-prod/post.sql
+--   psql "$PROD_DB_URL" --single-transaction -f scripts/corte-prod/post.sql
 -- Compara contra la foto que dejó pre.sql en `audit_pre`. Todo tiene que dar
--- 0 / 0 en A y OK en B. Ensayado sobre una copia de prod el 17/10/2026: 24/24.
+-- 0 / 0 en A y OK en B. Si algo no da, termina con `ERROR: POST no da`.
+-- Ensayado sobre una copia de prod el 17/10/2026: 24/24.
 \set ON_ERROR_STOP on
 \pset footer off
 -- Filas de audit_pre.<t> sin una fila idéntica en public.<t>, en las columnas
@@ -17,7 +18,7 @@ begin
                                       (select count(*) from (select %1$s from public.%2$I except all select %1$s from audit_pre.%2$I) y), %3$L', c, t, c);
 end $$;
 
-\echo == A. Cada fila de antes sigue igual (missing y extra tienen que dar 0) ==
+create temp table post_a as
 select 'seasons' t, * from pg_temp.lost('seasons')
 union all select 'matchdays', * from pg_temp.lost('matchdays')
 union all select 'players', * from pg_temp.lost('players')
@@ -29,8 +30,7 @@ union all select 'matches', * from pg_temp.lost('matches')
 union all select 'match_sets', * from pg_temp.lost('match_sets')
 union all select 'pair_locks', * from pg_temp.lost('pair_locks');
 
-\echo == B. Invariantes (todas tienen que dar OK) ==
-select chk, expected, got, case when expected=got then 'OK' else 'FAIL' end res from (
+create temp table post_b as
  select 'B1 auth.users sin cambios (id, email, created_at)' chk, '0' expected, (select count(*) from (select id,email,created_at from audit_pre.auth_users except select id,email,created_at from auth.users) x)::text got
  union all select 'B2 cantidad de auth.users', (select count(*) from audit_pre.auth_users)::text, (select count(*) from auth.users)::text
  union all select 'B3 seasons.config y status ya no existen (0066)', '0', (select count(*) from information_schema.columns where table_schema='public' and table_name='seasons' and column_name in ('config','status'))::text
@@ -53,12 +53,33 @@ select chk, expected, got, case when expected=got then 'OK' else 'FAIL' end res 
  union all select 'B20 suma de puntos de awards', (select coalesce(sum(points),0)::text from audit_pre.awards), (select coalesce(sum(points),0)::text from public.awards)
  union all select 'B21 suma de games de los sets', (select coalesce(sum(games_a)+sum(games_b),0)::text from audit_pre.match_sets), (select coalesce(sum(games_a)+sum(games_b),0)::text from public.match_sets)
  union all select 'B22 players_can_score sin cambios (0089)', '0', (select count(*) from audit_pre.seasons p join public.seasons s using (id) where s.players_can_score is distinct from p.players_can_score)::text
- union all select 'B23 fechas por estado', (select string_agg(status||'='||n, ',' order by status) from (select status, count(*) n from audit_pre.matchdays group by 1) x), (select string_agg(status||'='||n, ',' order by status) from (select status, count(*) n from public.matchdays group by 1) x)
- union all select 'B24 trigger on_auth_user_created', '1', (select count(*) from pg_trigger where tgrelid='auth.users'::regclass and tgname='on_auth_user_created')::text
-) z;
+ union all select 'B23 fechas por estado', (select coalesce(string_agg(status||'='||n, ',' order by status),'') from (select status, count(*) n from audit_pre.matchdays group by 1) x), (select coalesce(string_agg(status||'='||n, ',' order by status),'') from (select status, count(*) n from public.matchdays group by 1) x)
+ union all select 'B24 trigger on_auth_user_created', '1', (select count(*) from pg_trigger where tgrelid='auth.users'::regclass and tgname='on_auth_user_created')::text;
 
-\echo == C. Constraints sin validar: sólo matchdays_match_format_shape (0098) y realtime.messages_payload_exclusive (de Supabase) ==
-select conrelid::regclass, conname, contype from pg_constraint where not convalidated order by 1,2;
+-- Constraints de public sin validar: la única esperada es la de 0098.
+create temp table post_c as
+select conrelid::regclass::text tabla, conname from pg_constraint
+ where connamespace='public'::regnamespace and not convalidated and conname <> 'matchdays_match_format_shape';
 
-\echo == D. Tablas públicas SIN RLS: tiene que dar vacío ==
+create temp table post_d as
 select relname from pg_class where relnamespace='public'::regnamespace and relkind='r' and not relrowsecurity;
+
+\echo == A. Cada fila de antes sigue igual (missing y extra tienen que dar 0) ==
+select * from post_a;
+\echo == B. Invariantes (todas tienen que dar OK) ==
+select chk, expected, got, case when expected=got then 'OK' else 'FAIL' end res from post_b;
+\echo == C. Constraints de public sin validar, salvo matchdays_match_format_shape (0098): tiene que dar vacío ==
+select * from post_c;
+\echo == D. Tablas públicas SIN RLS: tiene que dar vacío ==
+select * from post_d;
+
+do $$
+begin
+  if exists (select 1 from post_a where missing <> 0 or extra <> 0)
+     or exists (select 1 from post_b where expected is distinct from got)
+     or exists (select 1 from post_c)
+     or exists (select 1 from post_d) then
+    raise exception 'POST no da: mirá las filas de arriba. NO mergees.';
+  end if;
+end $$;
+\echo == POST OK ==

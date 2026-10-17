@@ -41,7 +41,8 @@ deploy, así que un merge a `main` sale a producción solo.
 ### Lo que demostró el ensayo (2026-10-17)
 
 Con un dump de prod de ese día se armó una copia en un stack local aparte y se
-corrió encima **exactamente la secuencia de abajo**:
+corrió encima **exactamente la secuencia que hace `scripts/corte-prod/corte.sh`**
+(primero a mano y después con el script, de punta a punta):
 
 - **No se perdió ni cambió nada.** Cada fila de antes sigue igual en las
   columnas que quedan, y las invariantes de `scripts/corte-prod/post.sql` dan
@@ -73,13 +74,11 @@ Tres cosas que descubrió el ensayo y que el guion ya resuelve:
 
 ### Antes del día
 
-- **`integracion` tiene que incluir el guion y los scripts** (`scripts/corte-prod/`).
-- **El PR de `integracion` a `main` tiene que estar abierto, con el CI y el
-  preview de Vercel en verde.** Así el paso 8 es apretar un botón.
+- **`integracion` subida y actualizada** en el checkout desde donde se corre,
+  con `node_modules` instalado.
+- **El PR de `integracion` a `main` abierto, con el CI y el preview de Vercel en
+  verde.** Así el merge es apretar un botón.
 - **Docker corriendo:** `supabase db dump` lo usa.
-- **Desde el checkout, `npx supabase --version` tiene que decir `2.113.0`** y no
-  quejarse de ningún `.env.local`. Un worktree limpio de `integracion` con el
-  `node_modules` del repo no tiene ese archivo.
 - **Un lugar libre para un proyecto de Supabase.** La única vuelta atrás después
   de la `0066` es restaurar el backup en un proyecto nuevo (ver *Si algo sale
   mal*), y el plan free tiene un límite de proyectos activos. Saber de antemano
@@ -87,124 +86,78 @@ Tres cosas que descubrió el ensayo y que el guion ya resuelve:
 
 ### El día del corte
 
-Todo se corre desde un checkout de `integracion` con `node_modules`, para que
-`npx supabase` use el CLI fijado en el repo y no uno bajado al vuelo. **Nunca
-`supabase link`:** deja el repo apuntando a prod y un `db push` distraído
-llega a la nube.
+1. **Avisar al grupo** que nadie use la app por unos 15 minutos, y sacar una
+   captura de la tabla de cada torneo.
+2. **Correr el script** desde el repo, en `integracion`:
 
-**0. Avisar al grupo:** unos 15 minutos sin usar la app. Sacar una captura de
-la tabla de cada torneo para comparar al final.
+   ```bash
+   bash scripts/corte-prod/corte.sh
+   ```
 
-**1. La URL de prod.** Sale de *Connect → Session pooler*; la conexión directa
-es sólo IPv6. El host es el de ese diálogo: el 17/10 era
-`aws-0-sa-east-1.pooler.supabase.com`, pero hay proyectos con `aws-1-`. La
-contraseña se escapa porque puede tener `@`. Pegar las líneas de a una (si se
-juntan dos, el `echo` imprime la contraseña):
+   Pide la URI de *Connect → Session pooler* (la que dice `[YOUR-PASSWORD]`) y
+   la contraseña de la base, que no se ve al escribir. Después hace solo, en
+   orden:
+   - el backup y su validación: usuarios, todas las tablas y el historial;
+   - el PRE;
+   - el `migration repair`;
+   - el dry run, comparado contra los archivos del repo.
 
-```bash
-printf 'Contraseña: '; read -rs PW; echo; ENC=$(printf %s "$PW" | python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.stdin.read(),safe=""))'); echo "largo: ${#ENC}"
-```
+   Hasta ahí no cambia ningún dato. **Antes de aplicar las migraciones pide
+   escribir `CORTE`.** Después aplica y corre el POST. Si algo no da, frena,
+   deshace lo que se puede deshacer y dice qué hacer. Ensayado sobre una copia
+   de prod: tarda unos 20 segundos.
+3. **Cuando diga `LISTO`, mergear el PR** de `integracion` a `main`. Vercel
+   deploya solo.
+4. **Con el deploy nuevo arriba, comparar la tabla de cada torneo** con las
+   capturas. Si se ven bien, escribir `LIMPIAR` en el script: borra la foto
+   `audit_pre`, que guarda una copia de los mails.
+5. **Resetear la contraseña de la base** en el dashboard.
 
-```bash
-export PROD_DB_URL="postgresql://postgres.<tu-proyecto-ref>:${ENC}@aws-0-sa-east-1.pooler.supabase.com:5432/postgres"; unset PW ENC
-```
+El backup queda en `~/backups/padelapp/<fecha_hora>-corte/`, junto con la salida
+de cada paso (`pre.txt`, `dry-run.txt`, `push.txt`, `post.txt`).
 
-**2. Backup fresco, más el historial aparte.** El `echo` imprime la carpeta:
-**anotala tal cual**, porque la vuelta atrás la necesita y recalcularla después
-de medianoche da otra fecha.
-
-```bash
-B=~/backups/padelapp/$(date +%F)-corte; mkdir -p "$B"; echo "B=$B"
-npx supabase db dump --db-url "$PROD_DB_URL" -f "$B/roles.sql" --role-only
-npx supabase db dump --db-url "$PROD_DB_URL" -f "$B/schema.sql"
-npx supabase db dump --db-url "$PROD_DB_URL" -f "$B/data.sql" --data-only --use-copy
-psql "$PROD_DB_URL" -v ON_ERROR_STOP=1 -c "\copy supabase_migrations.schema_migrations to '$B/schema_migrations.tsv'"
-rg -c '^COPY "auth"."users"' "$B/data.sql"     # tiene que dar 1
-rg -c '^COPY "public"\.' "$B/data.sql"         # tiene que dar 10: las diez tablas
-rg -c '' "$B/schema_migrations.tsv"            # tiene que dar 15
-```
-
-**3. PRE.** Congela todo en el schema `audit_pre` y chequea lo que haría fallar
-a alguna migración. **Frena solo:** si algo no da, termina con `ERROR: PRE no
-da` y no deja nada escrito. Tiene que terminar en `PRE OK`.
-
-```bash
-psql "$PROD_DB_URL" --single-transaction -f scripts/corte-prod/pre.sql
-```
-
-**4. Alinear el historial:**
-
-```bash
-npx supabase migration list --db-url "$PROD_DB_URL"   # los 15 timestamps aparecen sólo como remotos
-npx supabase migration repair --db-url "$PROD_DB_URL" --status reverted 20260811191556 20260811191630 20260811191646 20260811191704 20260811191738 20260811191747 20260811191812 20260811191827 20260811192144 20260811193416 20260813214453 20260816144332 20260816144347 20260816144415 20260911214125
-npx supabase migration repair --db-url "$PROD_DB_URL" --status applied 0001 0002 0003 0004 0005 0006 0007 0008 0009 0010 0011 0012 0013 0014 0089
-```
-
-**5. Dry run.** Tiene que listar 83 archivos, de la `0015` a la `0099`, **sin la
-`0089`**. Si lista otra cosa, se para acá.
-
-```bash
-npx supabase db push --db-url "$PROD_DB_URL" --include-all --dry-run
-```
-
-**6. El push** (pide `[Y/n]`):
-
-```bash
-npx supabase db push --db-url "$PROD_DB_URL" --include-all
-```
-
-**7. POST, antes del merge.** Mientras esto no dé bien, el código nuevo no sale.
-La sección A tiene que dar 0 / 0, la B todo OK, la C sólo las dos constraints
-que nombra y la D vacía. Después, `migration list`: cada local con su remoto.
-
-```bash
-psql "$PROD_DB_URL" --single-transaction -f scripts/corte-prod/post.sql
-npx supabase migration list --db-url "$PROD_DB_URL"
-```
-
-**8. Enseguida:** mergear el PR de `integracion` a `main`. Vercel deploya solo.
-
-**9.** Con el deploy nuevo arriba, comparar la tabla de cada torneo con las
-capturas del paso 0.
-
-**10. Limpiar.** Borrar `audit_pre`, que guarda una copia de los mails. Después
-`unset PROD_DB_URL` y resetear la contraseña de la base.
-
-```bash
-psql "$PROD_DB_URL" -c 'drop schema audit_pre cascade'
-```
+**Nunca `supabase link`:** deja el repo apuntando a prod y un `db push`
+distraído llega a la nube. El script se niega a correr si el repo está
+linkeado.
 
 ### Si algo sale mal
 
-- **Falla el PRE o el dry run.** Si falla el PRE, no queda nada escrito. Si
-  falla el dry run, quedó el `audit_pre` del PRE: borralo
-  (`drop schema audit_pre cascade`) antes de reintentar. Si ya se corrió el
-  repair, se vuelve el historial a como estaba con el `.tsv` del paso 2: poné en
-  `B` la carpeta que anotaste. Si el archivo no existe o está vacío, no se toca
-  nada y lo dice. Después, `migration list` tiene que mostrar los 15 timestamps
-  como remotos. Probado sobre la copia:
+- **El script frena antes de escribir `CORTE`.** Deshace solo: devuelve el
+  historial al `.tsv` del backup y borra `audit_pre`. Prod queda exactamente
+  como estaba; está probado comparando el catálogo y los datos. Si dice que
+  **no** pudo restaurar el historial, el comando a mano es el de abajo, con `B`
+  = la carpeta del backup. Antes, armar `PROD_DB_URL` con estas dos líneas,
+  pegadas de a una (la contraseña se escapa porque puede tener `@`; la URI es
+  la de *Connect → Session pooler*):
+
+  ```bash
+  printf 'Contraseña: '; IFS= read -rs PW; echo; ENC=$(printf %s "$PW" | python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.stdin.read(),safe=""))'); echo "largo: ${#ENC}"
+  ```
+
+  ```bash
+  export PROD_DB_URL="postgresql://postgres.<tu-proyecto-ref>:${ENC}@<host del pooler>:5432/postgres"; unset PW ENC
+  ```
 
   ```bash
   if test -s "$B/schema_migrations.tsv"; then psql "$PROD_DB_URL" -v ON_ERROR_STOP=1 --single-transaction -c 'delete from supabase_migrations.schema_migrations' -c "\copy supabase_migrations.schema_migrations from '$B/schema_migrations.tsv'"; else echo "NO EXISTE o está vacío: $B/schema_migrations.tsv — no se tocó nada"; fi
   ```
 
-- **Falla el push en el archivo N.** Parar y no reintentar a ciegas. Quedan
-  aplicados de la 0015 a N-1. La app queda sin usar hasta que se arregle el
-  archivo en una rama, se re-ensaye sobre una copia y se vuelva a correr
-  `--include-all`, que sigue desde N. No se probó si el código de `main` anda
-  con una cadena aplicada a medias.
-- **El POST da FAIL (paso 7).** No mergear. La app está caída, pero nadie
-  escribió nada nuevo, así que la foto de `audit_pre` y el dump del paso 2
-  siguen siendo todo lo que hay. Mandar la salida del POST antes de decidir
-  entre arreglar hacia adelante o restaurar.
-- **Algo no cuadra después del merge (paso 9).** La vuelta atrás es completa:
-  restaurar en un proyecto nuevo (abajo) y revertir el merge en `main`. Lo que
-  se haya escrito desde el deploy se pierde. *Instant Rollback* solo no
-  alcanza: el build viejo trae fija la URL de prod, y ese código no anda contra
-  el esquema migrado.
+- **Falla el push.** Parar y no reintentar a ciegas. Quedan aplicadas las
+  migraciones anteriores a la que falló (está en `push.txt`). La app queda sin
+  usar hasta que se arregle el archivo en una rama, se re-ensaye sobre una copia
+  y se vuelva a correr el push con `--include-all`, que sigue desde donde quedó.
+  No se probó si el código de `main` anda con una cadena aplicada a medias.
+- **El POST no da.** No mergear. La app está caída, pero nadie escribió nada
+  nuevo, así que `audit_pre` y el backup siguen siendo todo lo que hay. Mandar
+  `post.txt` antes de decidir entre arreglar hacia adelante o restaurar.
+- **Algo no cuadra después del merge.** La vuelta atrás es completa: restaurar
+  en un proyecto nuevo (abajo) y revertir el merge en `main`. Lo que se haya
+  escrito desde el deploy se pierde. *Instant Rollback* solo no alcanza: el
+  build viejo trae fija la URL de prod, y ese código no anda contra el esquema
+  migrado.
 - **Restaurar, sólo en un proyecto nuevo.** Restaurar encima de prod choca con
   las filas que ya están (`auth.users`) y con el esquema ya migrado, y eso no se
-  ensayó. Lo que sí se ensayó el 17/10 es restaurar este mismo dump en un stack
+  ensayó. Lo que sí se ensayó, dos veces, es restaurar este dump en un stack
   vacío, que es lo que es un proyecto nuevo. Hacen falta tres ajustes:
   - sacar de `roles.sql` el `GRANT SET ON PARAMETER "log_min_messages"`, que
     sólo puede dar un superusuario;

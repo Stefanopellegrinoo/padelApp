@@ -125,8 +125,18 @@ linkeado.
 - **El script frena antes de escribir `CORTE`.** Deshace solo: devuelve el
   historial al `.tsv` del backup y borra `audit_pre`. Prod queda exactamente
   como estaba; está probado comparando el catálogo y los datos. Si dice que
-  **no** pudo restaurar el historial, el comando a mano es este, con `B` = la
-  carpeta del backup y la URL de prod en `PROD_DB_URL`:
+  **no** pudo restaurar el historial, el comando a mano es el de abajo, con `B`
+  = la carpeta del backup. Antes, armar `PROD_DB_URL` con estas dos líneas,
+  pegadas de a una (la contraseña se escapa porque puede tener `@`; la URI es
+  la de *Connect → Session pooler*):
+
+  ```bash
+  printf 'Contraseña: '; IFS= read -rs PW; echo; ENC=$(printf %s "$PW" | python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.stdin.read(),safe=""))'); echo "largo: ${#ENC}"
+  ```
+
+  ```bash
+  export PROD_DB_URL="postgresql://postgres.<tu-proyecto-ref>:${ENC}@<host del pooler>:5432/postgres"; unset PW ENC
+  ```
 
   ```bash
   if test -s "$B/schema_migrations.tsv"; then psql "$PROD_DB_URL" -v ON_ERROR_STOP=1 --single-transaction -c 'delete from supabase_migrations.schema_migrations' -c "\copy supabase_migrations.schema_migrations from '$B/schema_migrations.tsv'"; else echo "NO EXISTE o está vacío: $B/schema_migrations.tsv — no se tocó nada"; fi

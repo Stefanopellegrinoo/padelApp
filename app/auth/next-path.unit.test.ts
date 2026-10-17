@@ -30,6 +30,14 @@ describe('safeNextPath', () => {
     expect(safeNextPath('\\\\el-atacante.com')).toBe('/')
   })
 
+  // `..` no cambia de sitio, pero resuelto deja un path `//host`: el router de
+  // Next lo reusa como URL y ahí sí es otro sitio.
+  it('rechaza los .. que, resueltos, dejan un path //host', () => {
+    expect(safeNextPath('/..//el-atacante.com')).toBe('/')
+    expect(safeNextPath('/%2e%2e//el-atacante.com')).toBe('/')
+    expect(safeNextPath('/torneos/../..//el-atacante.com')).toBe('/')
+  })
+
   it('no rompe el login con algo que ni siquiera es una URL', () => {
     expect(safeNextPath('//%%')).toBe('/')
     expect(safeNextPath('/\\%%')).toBe('/')

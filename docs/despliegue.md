@@ -363,8 +363,9 @@ nueva*, y al guardar tenés que entrar con la clave nueva. Si no llega, revisá
 spam y después *Authentication → Logs*: un error de SMTP casi siempre es la
 contraseña de aplicación mal pegada.
 
-**El límite de envíos** está en *Authentication → Rate Limits* y viene en 30 mails
-por hora para todo el proyecto, que alcanza. No hay captcha. Si alguien abusa
+**El límite de envíos** está en *Authentication → Rate Limits*: revisá cuántos
+mails por hora permite para todo el proyecto después de prender el SMTP (unas
+decenas alcanzan). No hay captcha. Si alguien abusa
 de la pantalla, puede agotar ese límite y durante esa hora nadie recupera su
 cuenta. El arreglo, si hace falta, es el captcha de Supabase (Turnstile).
 

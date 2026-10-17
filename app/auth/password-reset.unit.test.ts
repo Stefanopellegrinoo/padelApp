@@ -104,7 +104,7 @@ describe('setNewPassword', () => {
 
     const state = await setNewPassword(initial, form({ password: 'nueva123' }))
 
-    expect(state).toEqual({ error: 'Esa contraseña es muy fácil. Probá con una más larga.' })
+    expect(state).toEqual({ error: 'Esa contraseña es muy fácil. Probá con una más larga, o con letras y números.' })
   })
 
   it('si Supabase falla por otra cosa, lo dice', async () => {

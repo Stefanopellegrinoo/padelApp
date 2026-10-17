@@ -135,7 +135,7 @@ export async function setNewPassword(_state: FormState, form: FormData): Promise
 
   const { error } = await supabase.auth.updateUser({ password })
   if (error?.code === 'same_password') return { error: 'Tiene que ser distinta de la que tenías.' }
-  if (error?.code === 'weak_password') return { error: 'Esa contraseña es muy fácil. Probá con una más larga.' }
+  if (error?.code === 'weak_password') return { error: 'Esa contraseña es muy fácil. Probá con una más larga, o con letras y números.' }
   if (error !== null) return { error: 'No pudimos guardar la contraseña. Probá de nuevo.' }
 
   redirect(afterLogin(null))

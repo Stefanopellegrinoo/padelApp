@@ -9,10 +9,10 @@ ningún otro lado: si este documento se pierde, hay que redescubrirlo.
 
 | | |
 |---|---|
-| **Código en GitHub** | [`Stefanopellegrinoo/padelApp`](https://github.com/Stefanopellegrinoo/padelApp), **privado**. `main` es la rama por defecto. La otra rama subida es `feature/torneo-multi-disciplina`. Las ramas de plan se borraron el 30/08: su contenido está adentro de `main` |
+| **Código en GitHub** | [`Stefanopellegrinoo/padelApp`](https://github.com/Stefanopellegrinoo/padelApp), **privado**. `main` es la rama por defecto. Las otras ramas subidas son `feature/torneo-multi-disciplina` e `integracion/multi-disciplina-con-rapidos`, que es la que va a `main` en [El corte](#el-corte-a-producción). Las ramas de plan se borraron el 30/08: su contenido está adentro de `main` |
 | **Base de producción** | Supabase Cloud, proyecto **`padelApp`** — ref `<tu-proyecto-ref>`, región `sa-east-1` (São Paulo), plan free |
-| **Las migraciones aplicadas** | **14** (`0001_schema` → `0014_promote_guest`), o sea **exactamente `main`**. 10 tablas, **las 10 con RLS**. Medido el 2026-08-24 contra `supabase_migrations.schema_migrations`. El PR #16 (28/08) movió `main` pero **no trajo migraciones**, así que el 14 sigue valiendo |
-| **La base TIENE datos reales** | 12 players · 2 torneos (los dos `ACTIVE`) · 22 entries · 3 fechas (2 cerradas) · 27 partidos · **15 premios otorgados**. `supabase/seed.sql` nunca corrió contra la nube: esto lo cargó gente usando la app |
+| **Las migraciones aplicadas** | **15**: de `0001` a `0014`, más la `0089` (el hotfix del 11/09), o sea **exactamente `main`**. **Están registradas con timestamps**, no con el número del archivo (`20260811191556 schema` … `20260911214125 seasons_players_can_score`), así que el CLI no las reconoce: ver [El corte a producción](#el-corte-a-producción). Medido el 2026-10-17 contra `supabase_migrations.schema_migrations` |
+| **La base TIENE datos reales** | Al 2026-10-17: 15 usuarios · 15 players · 2 torneos · 27 entries (22 del plantel) · 7 fechas (6 cerradas, 1 en armado) · 69 partidos · 54 sets · **52 premios otorgados**. `supabase/seed.sql` nunca corrió contra la nube: esto lo cargó gente usando la app |
 | **El trigger de alta** | Probado **en producción**: un alta de prueba creó su `players` con el nombre del metadata. Después se borró |
 
 > **Este cuadro es una FOTO, y ya mintió una vez.** Hasta el 2026-08-24 decía
@@ -31,35 +31,193 @@ ningún otro lado: si este documento se pierde, hay que redescubrirlo.
 
 ---
 
-## Lo que falta para que `main` funcione en producción
+## El corte a producción
 
-La rama `feature/torneo-multi-disciplina` tiene **todas las migraciones de la
-`0015` en adelante** sin aplicar contra la nube. El punto de corte es lo estable
-—producción está en la `0014`—; la CANTIDAD sube con cada migración nueva, así
-que contala vos y no la leas de acá. Tres cosas que conviene saber antes de
-mergear:
+`integracion/multi-disciplina-con-rapidos` trae de la `0015` a la `0099` (83
+archivos) sin aplicar contra la nube. **Nada automatiza el `db push`**: el CI
+levanta Supabase en el runner y no toca la nube. Y `vercel.json` no frena el
+deploy, así que un merge a `main` sale a producción solo.
 
-1. **Nada automatiza el `db push`.** El CI (`.github/workflows/ci.yml`) sólo
-   levanta Supabase *en el runner*; no toca la nube. Se aplican a mano.
-2. **`vercel.json` no desactiva el deploy**, así que un merge a `main` deploya
-   código que busca `disciplines`, `discipline_entries` y `award_lines` —
-   tres tablas que producción todavía no tiene.
-3. **No hay procedimiento de backup escrito en este repo.** Antes de aplicar
-   el CONTRACT (`0066`, irreversible: dropea dos columnas y anula 21
-   `seed_position`), sacar el dump:
+### Lo que demostró el ensayo (2026-10-17)
 
-   ```bash
-   npx supabase link --project-ref <tu-proyecto-ref>
-   npx supabase db dump --linked --data-only --use-copy -f prod-$(date +%F).sql
-   ```
+Con un dump de prod de ese día se armó una copia en un stack local aparte y se
+corrió encima **exactamente la secuencia de abajo**:
 
-   `link` deja `supabase/.temp/project-ref` escrito, y a partir de ahí un
-   `db push` distraído llega a la nube. Hoy el repo NO está linkeado.
+- **No se perdió ni cambió nada.** Cada fila de antes sigue igual en las
+  columnas que quedan, y las invariantes de `scripts/corte-prod/post.sql` dan
+  24/24 OK. Los puntos (228) y los games (363) suman lo mismo.
+- **Las pantallas son las mismas.** Se compararon 29: `main` sobre la copia sin
+  migrar contra `integracion` sobre la copia migrada. Tablas, posiciones,
+  puntos, fechas y stats de los dos torneos salieron idénticos byte a byte. Lo
+  único que cambió fue el orden de los partidos dentro de una ronda, que tenía
+  un desempate faltante y se arregló en `db/matchday.ts`.
+- **El push tarda unos 9 segundos.**
 
-**La cadena ya se ensayó contra la forma real de producción** (2026-08-24): las
-52 aplicadas sobre los datos de prod preservaron todo — los 21 `seed_position`
-del plantel aparecieron intactos en `discipline_entries`, las 2 configs
-migraron a `disciplines.config` y los 15 premios quedaron donde estaban.
+Tres cosas que descubrió el ensayo y que el guion ya resuelve:
+
+1. **El historial de prod no coincide con los archivos.** Prod registró las
+   migraciones con timestamps, así que `db push` se niega a correr
+   (`Remote migration versions not found in local migrations directory`). Falla
+   sin tocar nada. Para alinearlo está `migration repair`, que toca sólo
+   `supabase_migrations.schema_migrations`. Se comprobó comparando el catálogo,
+   el dump del esquema y un hash de los datos antes y después.
+2. **Cada archivo corre en su propia transacción.** Si falla el archivo N,
+   quedan aplicados de la 0015 a N-1 y el resto no se intenta. **Después de la
+   `0066` no hay vuelta atrás sin restore**, porque borra `seasons.config` y
+   `seasons.status`. Antes las copia a `disciplines`, que es por qué no se pierde
+   nada.
+3. **Entre el push y el deploy, el código de `main` da 500 en todas las
+   páginas** (`column seasons.status does not exist`). Es una caída visible, no
+   escrituras silenciosas. Por eso el merge va enseguida del push (con el POST
+   en el medio, que tarda segundos), y nadie usa la app durante la ventana.
+
+### Antes del día
+
+- **`integracion` tiene que incluir el guion y los scripts** (`scripts/corte-prod/`).
+- **El PR de `integracion` a `main` tiene que estar abierto, con el CI y el
+  preview de Vercel en verde.** Así el paso 8 es apretar un botón.
+- **Docker corriendo:** `supabase db dump` lo usa.
+- **Desde el checkout, `npx supabase --version` tiene que decir `2.113.0`** y no
+  quejarse de ningún `.env.local`. Un worktree limpio de `integracion` con el
+  `node_modules` del repo no tiene ese archivo.
+- **Un lugar libre para un proyecto de Supabase.** La única vuelta atrás después
+  de la `0066` es restaurar el backup en un proyecto nuevo (ver *Si algo sale
+  mal*), y el plan free tiene un límite de proyectos activos. Saber de antemano
+  cuál pausar si hace falta.
+
+### El día del corte
+
+Todo se corre desde un checkout de `integracion` con `node_modules`, para que
+`npx supabase` use el CLI fijado en el repo y no uno bajado al vuelo. **Nunca
+`supabase link`:** deja el repo apuntando a prod y un `db push` distraído
+llega a la nube.
+
+**0. Avisar al grupo:** unos 15 minutos sin usar la app. Sacar una captura de
+la tabla de cada torneo para comparar al final.
+
+**1. La URL de prod.** Sale de *Connect → Session pooler*; la conexión directa
+es sólo IPv6. El host es el de ese diálogo: el 17/10 era
+`aws-0-sa-east-1.pooler.supabase.com`, pero hay proyectos con `aws-1-`. La
+contraseña se escapa porque puede tener `@`. Pegar las líneas de a una (si se
+juntan dos, el `echo` imprime la contraseña):
+
+```bash
+printf 'Contraseña: '; read -rs PW; echo; ENC=$(printf %s "$PW" | python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.stdin.read(),safe=""))'); echo "largo: ${#ENC}"
+```
+
+```bash
+export PROD_DB_URL="postgresql://postgres.<tu-proyecto-ref>:${ENC}@aws-0-sa-east-1.pooler.supabase.com:5432/postgres"; unset PW ENC
+```
+
+**2. Backup fresco, más el historial aparte.** El `echo` imprime la carpeta:
+**anotala tal cual**, porque la vuelta atrás la necesita y recalcularla después
+de medianoche da otra fecha.
+
+```bash
+B=~/backups/padelapp/$(date +%F)-corte; mkdir -p "$B"; echo "B=$B"
+npx supabase db dump --db-url "$PROD_DB_URL" -f "$B/roles.sql" --role-only
+npx supabase db dump --db-url "$PROD_DB_URL" -f "$B/schema.sql"
+npx supabase db dump --db-url "$PROD_DB_URL" -f "$B/data.sql" --data-only --use-copy
+psql "$PROD_DB_URL" -v ON_ERROR_STOP=1 -c "\copy supabase_migrations.schema_migrations to '$B/schema_migrations.tsv'"
+rg -c '^COPY "auth"."users"' "$B/data.sql"     # tiene que dar 1
+rg -c '^COPY "public"\.' "$B/data.sql"         # tiene que dar 10: las diez tablas
+rg -c '' "$B/schema_migrations.tsv"            # tiene que dar 15
+```
+
+**3. PRE.** Congela todo en el schema `audit_pre` y chequea lo que haría fallar
+a alguna migración. **Frena solo:** si algo no da, termina con `ERROR: PRE no
+da` y no deja nada escrito. Tiene que terminar en `PRE OK`.
+
+```bash
+psql "$PROD_DB_URL" --single-transaction -f scripts/corte-prod/pre.sql
+```
+
+**4. Alinear el historial:**
+
+```bash
+npx supabase migration list --db-url "$PROD_DB_URL"   # los 15 timestamps aparecen sólo como remotos
+npx supabase migration repair --db-url "$PROD_DB_URL" --status reverted 20260811191556 20260811191630 20260811191646 20260811191704 20260811191738 20260811191747 20260811191812 20260811191827 20260811192144 20260811193416 20260813214453 20260816144332 20260816144347 20260816144415 20260911214125
+npx supabase migration repair --db-url "$PROD_DB_URL" --status applied 0001 0002 0003 0004 0005 0006 0007 0008 0009 0010 0011 0012 0013 0014 0089
+```
+
+**5. Dry run.** Tiene que listar 83 archivos, de la `0015` a la `0099`, **sin la
+`0089`**. Si lista otra cosa, se para acá.
+
+```bash
+npx supabase db push --db-url "$PROD_DB_URL" --include-all --dry-run
+```
+
+**6. El push** (pide `[Y/n]`):
+
+```bash
+npx supabase db push --db-url "$PROD_DB_URL" --include-all
+```
+
+**7. POST, antes del merge.** Mientras esto no dé bien, el código nuevo no sale.
+La sección A tiene que dar 0 / 0, la B todo OK, la C sólo las dos constraints
+que nombra y la D vacía. Después, `migration list`: cada local con su remoto.
+
+```bash
+psql "$PROD_DB_URL" --single-transaction -f scripts/corte-prod/post.sql
+npx supabase migration list --db-url "$PROD_DB_URL"
+```
+
+**8. Enseguida:** mergear el PR de `integracion` a `main`. Vercel deploya solo.
+
+**9.** Con el deploy nuevo arriba, comparar la tabla de cada torneo con las
+capturas del paso 0.
+
+**10. Limpiar.** Borrar `audit_pre`, que guarda una copia de los mails. Después
+`unset PROD_DB_URL` y resetear la contraseña de la base.
+
+```bash
+psql "$PROD_DB_URL" -c 'drop schema audit_pre cascade'
+```
+
+### Si algo sale mal
+
+- **Falla el PRE o el dry run.** Si falla el PRE, no queda nada escrito. Si
+  falla el dry run, quedó el `audit_pre` del PRE: borralo
+  (`drop schema audit_pre cascade`) antes de reintentar. Si ya se corrió el
+  repair, se vuelve el historial a como estaba con el `.tsv` del paso 2: poné en
+  `B` la carpeta que anotaste. Si el archivo no existe o está vacío, no se toca
+  nada y lo dice. Después, `migration list` tiene que mostrar los 15 timestamps
+  como remotos. Probado sobre la copia:
+
+  ```bash
+  if test -s "$B/schema_migrations.tsv"; then psql "$PROD_DB_URL" -v ON_ERROR_STOP=1 --single-transaction -c 'delete from supabase_migrations.schema_migrations' -c "\copy supabase_migrations.schema_migrations from '$B/schema_migrations.tsv'"; else echo "NO EXISTE o está vacío: $B/schema_migrations.tsv — no se tocó nada"; fi
+  ```
+
+- **Falla el push en el archivo N.** Parar y no reintentar a ciegas. Quedan
+  aplicados de la 0015 a N-1. La app queda sin usar hasta que se arregle el
+  archivo en una rama, se re-ensaye sobre una copia y se vuelva a correr
+  `--include-all`, que sigue desde N. No se probó si el código de `main` anda
+  con una cadena aplicada a medias.
+- **El POST da FAIL (paso 7).** No mergear. La app está caída, pero nadie
+  escribió nada nuevo, así que la foto de `audit_pre` y el dump del paso 2
+  siguen siendo todo lo que hay. Mandar la salida del POST antes de decidir
+  entre arreglar hacia adelante o restaurar.
+- **Algo no cuadra después del merge (paso 9).** La vuelta atrás es completa:
+  restaurar en un proyecto nuevo (abajo) y revertir el merge en `main`. Lo que
+  se haya escrito desde el deploy se pierde. *Instant Rollback* solo no
+  alcanza: el build viejo trae fija la URL de prod, y ese código no anda contra
+  el esquema migrado.
+- **Restaurar, sólo en un proyecto nuevo.** Restaurar encima de prod choca con
+  las filas que ya están (`auth.users`) y con el esquema ya migrado, y eso no se
+  ensayó. Lo que sí se ensayó el 17/10 es restaurar este mismo dump en un stack
+  vacío, que es lo que es un proyecto nuevo. Hacen falta tres ajustes:
+  - sacar de `roles.sql` el `GRANT SET ON PARAMETER "log_min_messages"`, que
+    sólo puede dar un superusuario;
+  - sacar de `data.sql` los bloques `COPY` de auth o storage con 0 filas cuyas
+    tablas no existan en la versión de destino;
+  - **recrear a mano el trigger `on_auth_user_created`** sobre `auth.users`
+    (está en `0003_new_user.sql`), porque `db dump` no exporta objetos del
+    schema `auth`.
+
+  Después, apuntar las dos variables de Vercel al proyecto nuevo y **hacer un
+  redeploy de `main`** (el de antes del merge), porque las `NEXT_PUBLIC_*` se
+  fijan en el build. Hay que repetir la config de Auth de las secciones de
+  abajo (URLs, confirmación de mail, Google), porque no viene en el dump.
 
 ---
 
@@ -86,8 +244,8 @@ RLS, no el secreto de esa clave.
 ### 1. Vercel
 
 Importar el repo y cargar las dos variables de arriba. Next 15 se detecta solo:
-no hay que tocar build command ni output directory, y el repo no tiene
-`vercel.json` ni lo necesita.
+no hay que tocar build command ni output directory. El `vercel.json` del repo
+sólo fija la región (`gru1`, São Paulo, la misma de la base).
 
 ### 2. Las URLs de Auth, apenas exista el dominio
 

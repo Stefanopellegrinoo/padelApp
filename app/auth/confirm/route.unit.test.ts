@@ -29,7 +29,7 @@ describe('GET /auth/confirm', () => {
     const location = await visit('?token_hash=abc123&type=recovery')
 
     expect(verifyOtp).toHaveBeenCalledWith({ type: 'recovery', token_hash: 'abc123' })
-    expect(location).toBe('https://app.test/login/nueva-clave')
+    expect(location).toBe('/login/nueva-clave')
   })
 
   it('un link vencido o ya usado vuelve a pedir otro', async () => {
@@ -37,21 +37,21 @@ describe('GET /auth/confirm', () => {
 
     const location = await visit('?token_hash=abc123&type=recovery')
 
-    expect(location).toBe('https://app.test/login/recuperar?error=link')
+    expect(location).toBe('/login/recuperar?error=link')
   })
 
   it('sin token no llama a Supabase', async () => {
     const location = await visit('?type=recovery')
 
     expect(verifyOtp).not.toHaveBeenCalled()
-    expect(location).toBe('https://app.test/login/recuperar?error=link')
+    expect(location).toBe('/login/recuperar?error=link')
   })
 
   it('sólo acepta links de recuperación', async () => {
     const location = await visit('?token_hash=abc123&type=signup')
 
     expect(verifyOtp).not.toHaveBeenCalled()
-    expect(location).toBe('https://app.test/login/recuperar?error=link')
+    expect(location).toBe('/login/recuperar?error=link')
   })
 
   it('ignora un next del link: no hay redirector abierto', async () => {
@@ -59,6 +59,6 @@ describe('GET /auth/confirm', () => {
 
     const location = await visit('?token_hash=abc123&type=recovery&next=https://otro-sitio.com')
 
-    expect(location).toBe('https://app.test/login/nueva-clave')
+    expect(location).toBe('/login/nueva-clave')
   })
 })

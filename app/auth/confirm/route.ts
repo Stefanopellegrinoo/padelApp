@@ -1,4 +1,4 @@
-import { NextResponse, type NextRequest } from 'next/server'
+import type { NextRequest } from 'next/server'
 import { serverClient } from '@/db/server'
 
 /**
@@ -14,16 +14,27 @@ import { serverClient } from '@/db/server'
  * abierto con la sesión recién creada.
  */
 export async function GET(request: NextRequest) {
-  const { searchParams, origin } = new URL(request.url)
+  const { searchParams } = new URL(request.url)
   const tokenHash = searchParams.get('token_hash')
-  const expired = NextResponse.redirect(`${origin}/login/recuperar?error=link`)
 
   // Por ahora el único mail con link es el de recuperar contraseña.
-  if (tokenHash === null || searchParams.get('type') !== 'recovery') return expired
+  if (tokenHash === null || searchParams.get('type') !== 'recovery') return redirectTo('/login/recuperar?error=link')
 
   const supabase = await serverClient()
   const { error } = await supabase.auth.verifyOtp({ type: 'recovery', token_hash: tokenHash })
-  if (error !== null) return expired
+  if (error !== null) return redirectTo('/login/recuperar?error=link')
 
-  return NextResponse.redirect(`${origin}/login/nueva-clave`)
+  return redirectTo('/login/nueva-clave')
+}
+
+/**
+ * Redirect con `Location` relativa, que el navegador resuelve contra el host en
+ * el que ya está. Con una absoluta armada desde `request.url`, `next dev`
+ * contesta `localhost` aunque el link haya entrado por `127.0.0.1` —que es el
+ * `site_url` local—, y la cookie de sesión recién puesta queda en el otro host:
+ * la pantalla siguiente dice que el link venció. Lo encontró el recorrido
+ * entero contra Mailpit; los tests con el cliente mockeado no lo ven.
+ */
+function redirectTo(path: string): Response {
+  return new Response(null, { status: 303, headers: { Location: path } })
 }

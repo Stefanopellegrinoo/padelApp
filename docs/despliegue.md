@@ -9,7 +9,7 @@ ningún otro lado: si este documento se pierde, hay que redescubrirlo.
 
 | | |
 |---|---|
-| **Código en GitHub** | [`Stefanopellegrinoo/padelApp`](https://github.com/Stefanopellegrinoo/padelApp), **privado**. `main` es la rama por defecto. La otra rama subida es `feature/torneo-multi-disciplina`. Las ramas de plan se borraron el 30/08: su contenido está adentro de `main` |
+| **Código en GitHub** | [`Stefanopellegrinoo/padelApp`](https://github.com/Stefanopellegrinoo/padelApp), **privado**. `main` es la rama por defecto. Las otras ramas subidas son `feature/torneo-multi-disciplina` e `integracion/multi-disciplina-con-rapidos`, que es la que va a `main` en [El corte](#el-corte-a-producción). Las ramas de plan se borraron el 30/08: su contenido está adentro de `main` |
 | **Base de producción** | Supabase Cloud, proyecto **`padelApp`** — ref `<tu-proyecto-ref>`, región `sa-east-1` (São Paulo), plan free |
 | **Las migraciones aplicadas** | **15**: de `0001` a `0014`, más la `0089` (el hotfix del 11/09), o sea **exactamente `main`**. **Están registradas con timestamps**, no con el número del archivo (`20260811191556 schema` … `20260911214125 seasons_players_can_score`), así que el CLI no las reconoce: ver [El corte a producción](#el-corte-a-producción). Medido el 2026-10-17 contra `supabase_migrations.schema_migrations` |
 | **La base TIENE datos reales** | Al 2026-10-17: 15 usuarios · 15 players · 2 torneos · 27 entries (22 del plantel) · 7 fechas (6 cerradas, 1 en armado) · 69 partidos · 54 sets · **52 premios otorgados**. `supabase/seed.sql` nunca corrió contra la nube: esto lo cargó gente usando la app |
@@ -49,8 +49,8 @@ corrió encima **exactamente la secuencia de abajo**:
 - **Las pantallas son las mismas.** Se compararon 29: `main` sobre la copia sin
   migrar contra `integracion` sobre la copia migrada. Tablas, posiciones,
   puntos, fechas y stats de los dos torneos salieron idénticos byte a byte. Lo
-  único que cambió fue el orden de los partidos dentro de una ronda, y eso ya
-  está arreglado.
+  único que cambió fue el orden de los partidos dentro de una ronda, que tenía
+  un desempate faltante y se arregló en `abc88ef`.
 - **El push tarda unos 9 segundos.**
 
 Tres cosas que descubrió el ensayo y que el guion ya resuelve:
@@ -68,8 +68,22 @@ Tres cosas que descubrió el ensayo y que el guion ya resuelve:
    nada.
 3. **Entre el push y el deploy, el código de `main` da 500 en todas las
    páginas** (`column seasons.status does not exist`). Es una caída visible, no
-   escrituras silenciosas. Por eso el merge va inmediatamente después del push,
-   y nadie usa la app durante la ventana.
+   escrituras silenciosas. Por eso el merge va enseguida del push (con el POST
+   en el medio, que tarda segundos), y nadie usa la app durante la ventana.
+
+### Antes del día
+
+- **`integracion` tiene que incluir el guion y los scripts** (`scripts/corte-prod/`).
+- **El PR de `integracion` a `main` tiene que estar abierto, con el CI y el
+  preview de Vercel en verde.** Así el paso 8 es apretar un botón.
+- **Docker corriendo:** `supabase db dump` lo usa.
+- **Desde el checkout, `npx supabase --version` tiene que decir `2.113.0`** y no
+  quejarse de ningún `.env.local`. Un worktree limpio de `integracion` con el
+  `node_modules` del repo no tiene ese archivo.
+- **Un lugar libre para un proyecto de Supabase.** La única vuelta atrás después
+  de la `0066` es restaurar el backup en un proyecto nuevo (ver *Si algo sale
+  mal*), y el plan free tiene un límite de proyectos activos. Saber de antemano
+  cuál pausar si hace falta.
 
 ### El día del corte
 
@@ -82,8 +96,10 @@ llega a la nube.
 la tabla de cada torneo para comparar al final.
 
 **1. La URL de prod.** Sale de *Connect → Session pooler*; la conexión directa
-es sólo IPv6. La contraseña se escapa porque puede tener `@`. Pegar las líneas
-de a una (si se juntan dos, el `echo` imprime la contraseña):
+es sólo IPv6. El host es el de ese diálogo: el 17/10 era
+`aws-0-sa-east-1.pooler.supabase.com`, pero hay proyectos con `aws-1-`. La
+contraseña se escapa porque puede tener `@`. Pegar las líneas de a una (si se
+juntan dos, el `echo` imprime la contraseña):
 
 ```bash
 printf 'Contraseña: '; read -rs PW; echo; ENC=$(printf %s "$PW" | python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.stdin.read(),safe=""))'); echo "largo: ${#ENC}"
@@ -93,20 +109,24 @@ printf 'Contraseña: '; read -rs PW; echo; ENC=$(printf %s "$PW" | python3 -c 'i
 export PROD_DB_URL="postgresql://postgres.<tu-proyecto-ref>:${ENC}@aws-0-sa-east-1.pooler.supabase.com:5432/postgres"; unset PW ENC
 ```
 
-**2. Backup fresco, más el historial aparte:**
+**2. Backup fresco, más el historial aparte.** El `echo` imprime la carpeta:
+**anotala tal cual**, porque la vuelta atrás la necesita y recalcularla después
+de medianoche da otra fecha.
 
 ```bash
-B=~/backups/padelapp/$(date +%F)-corte; mkdir -p "$B"
+B=~/backups/padelapp/$(date +%F)-corte; mkdir -p "$B"; echo "B=$B"
 npx supabase db dump --db-url "$PROD_DB_URL" -f "$B/roles.sql" --role-only
 npx supabase db dump --db-url "$PROD_DB_URL" -f "$B/schema.sql"
 npx supabase db dump --db-url "$PROD_DB_URL" -f "$B/data.sql" --data-only --use-copy
-psql "$PROD_DB_URL" -c "\copy supabase_migrations.schema_migrations to '$B/schema_migrations.tsv'"
-rg -c '^COPY "auth"."users"' "$B/data.sql"   # tiene que dar 1
+psql "$PROD_DB_URL" -v ON_ERROR_STOP=1 -c "\copy supabase_migrations.schema_migrations to '$B/schema_migrations.tsv'"
+rg -c '^COPY "auth"."users"' "$B/data.sql"     # tiene que dar 1
+rg -c '^COPY "public"\.' "$B/data.sql"         # tiene que dar 10: las diez tablas
+rg -c '' "$B/schema_migrations.tsv"            # tiene que dar 15
 ```
 
 **3. PRE.** Congela todo en el schema `audit_pre` y chequea lo que haría fallar
-a alguna migración. Lo que dice "debe dar 0" tiene que dar 0, y todos los
-nombres tienen que dar `t`. Anotá las cantidades. Si algo no da, se para acá.
+a alguna migración. **Frena solo:** si algo no da, termina con `ERROR: PRE no
+da` y no deja nada escrito. Tiene que terminar en `PRE OK`.
 
 ```bash
 psql "$PROD_DB_URL" --single-transaction -f scripts/corte-prod/pre.sql
@@ -133,17 +153,16 @@ npx supabase db push --db-url "$PROD_DB_URL" --include-all --dry-run
 npx supabase db push --db-url "$PROD_DB_URL" --include-all
 ```
 
-**7. Inmediatamente:** merge de `integracion` a `main` y push. Vercel deploya
-solo.
-
-**8. POST.** La sección A tiene que dar 0 / 0, la B todo OK, la C sólo las dos
-constraints que nombra y la D vacía. Después, `migration list`: cada local con
-su remoto.
+**7. POST, antes del merge.** Mientras esto no dé bien, el código nuevo no sale.
+La sección A tiene que dar 0 / 0, la B todo OK, la C sólo las dos constraints
+que nombra y la D vacía. Después, `migration list`: cada local con su remoto.
 
 ```bash
 psql "$PROD_DB_URL" --single-transaction -f scripts/corte-prod/post.sql
 npx supabase migration list --db-url "$PROD_DB_URL"
 ```
+
+**8. Enseguida:** mergear el PR de `integracion` a `main`. Vercel deploya solo.
 
 **9.** Con el deploy nuevo arriba, comparar la tabla de cada torneo con las
 capturas del paso 0.
@@ -157,13 +176,13 @@ psql "$PROD_DB_URL" -c 'drop schema audit_pre cascade'
 
 ### Si algo sale mal
 
-- **Falla el PRE o el dry run.** No se tocó nada más que `audit_pre` (borrala).
-  Si ya se corrió el repair, se vuelve el historial a como estaba con el `.tsv`
-  del paso 2 (si cambiaste de terminal, volvé a definir `B`). Probado sobre la
-  copia:
+- **Falla el PRE o el dry run.** El PRE no deja nada escrito. Si ya se corrió el
+  repair, se vuelve el historial a como estaba con el `.tsv` del paso 2: poné en
+  `B` la carpeta que anotaste. Si el archivo no existe o está vacío, el `test -s`
+  frena antes del `delete`. Probado sobre la copia:
 
   ```bash
-  psql "$PROD_DB_URL" --single-transaction -c 'delete from supabase_migrations.schema_migrations' -c "\copy supabase_migrations.schema_migrations from '$B/schema_migrations.tsv'"
+  test -s "$B/schema_migrations.tsv" && psql "$PROD_DB_URL" -v ON_ERROR_STOP=1 --single-transaction -c 'delete from supabase_migrations.schema_migrations' -c "\copy supabase_migrations.schema_migrations from '$B/schema_migrations.tsv'"
   ```
 
 - **Falla el push en el archivo N.** Parar y no reintentar a ciegas. Quedan
@@ -171,10 +190,19 @@ psql "$PROD_DB_URL" -c 'drop schema audit_pre cascade'
   archivo en una rama, se re-ensaye sobre una copia y se vuelva a correr
   `--include-all`, que sigue desde N. No se probó si el código de `main` anda
   con una cadena aplicada a medias.
-- **El POST da FAIL o una tabla no coincide.** `audit_pre` tiene la foto de
-  antes y el paso 2 el dump completo. Restaurar el dump en prod o en un
-  proyecto nuevo (y cambiar las dos variables de Vercel) pide tres ajustes, los
-  mismos del ensayo:
+- **El POST da FAIL (paso 7).** No mergear. La app está caída, pero nadie
+  escribió nada nuevo, así que la foto de `audit_pre` y el dump del paso 2
+  siguen siendo todo lo que hay. Mandar la salida del POST antes de decidir
+  entre arreglar hacia adelante o restaurar.
+- **Algo no cuadra después del merge (paso 9).** La vuelta atrás es completa:
+  restaurar en un proyecto nuevo (abajo) y revertir el merge en `main`. Lo que
+  se haya escrito desde el deploy se pierde. *Instant Rollback* solo no
+  alcanza: el build viejo trae fija la URL de prod, y ese código no anda contra
+  el esquema migrado.
+- **Restaurar, sólo en un proyecto nuevo.** Restaurar encima de prod choca con
+  las filas que ya están (`auth.users`) y con el esquema ya migrado, y eso no se
+  ensayó. Lo que sí se ensayó el 17/10 es restaurar este mismo dump en un stack
+  vacío, que es lo que es un proyecto nuevo. Hacen falta tres ajustes:
   - sacar de `roles.sql` el `GRANT SET ON PARAMETER "log_min_messages"`, que
     sólo puede dar un superusuario;
   - sacar de `data.sql` los bloques `COPY` de auth o storage con 0 filas cuyas
@@ -182,6 +210,11 @@ psql "$PROD_DB_URL" -c 'drop schema audit_pre cascade'
   - **recrear a mano el trigger `on_auth_user_created`** sobre `auth.users`
     (está en `0003_new_user.sql`), porque `db dump` no exporta objetos del
     schema `auth`.
+
+  Después, apuntar las dos variables de Vercel al proyecto nuevo y **hacer un
+  redeploy de `main`** (el de antes del merge), porque las `NEXT_PUBLIC_*` se
+  fijan en el build. Hay que repetir la config de Auth de las secciones de
+  abajo (URLs, confirmación de mail, Google), porque no viene en el dump.
 
 ---
 
@@ -208,8 +241,8 @@ RLS, no el secreto de esa clave.
 ### 1. Vercel
 
 Importar el repo y cargar las dos variables de arriba. Next 15 se detecta solo:
-no hay que tocar build command ni output directory, y el repo no tiene
-`vercel.json` ni lo necesita.
+no hay que tocar build command ni output directory. El `vercel.json` del repo
+sólo fija la región (`gru1`, São Paulo, la misma de la base).
 
 ### 2. Las URLs de Auth, apenas exista el dominio
 

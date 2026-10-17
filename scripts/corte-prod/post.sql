@@ -1,7 +1,7 @@
 -- Corte a producción, paso POST. Se corre contra prod después del push:
 --   psql "$PROD_DB_URL" -f scripts/corte-prod/post.sql
 -- Compara contra la foto que dejó pre.sql en `audit_pre`. Todo tiene que dar
--- 0 / 0 en A y OK en B. Ensayado sobre una copia de prod el 17/10/2026: 26/26.
+-- 0 / 0 en A y OK en B. Ensayado sobre una copia de prod el 17/10/2026: 24/24.
 \set ON_ERROR_STOP on
 \pset footer off
 -- Filas de audit_pre.<t> sin una fila idéntica en public.<t>, en las columnas
@@ -35,7 +35,7 @@ select chk, expected, got, case when expected=got then 'OK' else 'FAIL' end res 
  union all select 'B2 cantidad de auth.users', (select count(*) from audit_pre.auth_users)::text, (select count(*) from auth.users)::text
  union all select 'B3 seasons.config y status ya no existen (0066)', '0', (select count(*) from information_schema.columns where table_schema='public' and table_name='seasons' and column_name in ('config','status'))::text
  union all select 'B4 una disciplina por temporada', '0', (select count(*) from public.seasons s where (select count(*) from public.disciplines d where d.season_id=s.id) <> 1)::text
- union all select 'B5 disciplines.config contiene la config de antes', '0', (select count(*) from audit_pre.seasons p join public.disciplines d on d.season_id=p.id where not d.config @> p.config)::text
+ union all select 'B5 disciplines.config = config de antes (salvo openScore)', '0', (select count(*) from audit_pre.seasons p join public.disciplines d on d.season_id=p.id where (d.config #- '{matchFormat,openScore}') is distinct from (p.config #- '{matchFormat,openScore}'))::text
  union all select 'B6 matchFormat.openScore=false (0037)', '0', (select count(*) from public.disciplines where (config->'matchFormat'->>'openScore') is distinct from 'false')::text
  union all select 'B7 disciplines.status = status de antes', '0', (select count(*) from audit_pre.seasons p join public.disciplines d on d.season_id=p.id where d.status is distinct from p.status)::text
  union all select 'B8 disciplines.rules_text = rules_text de antes (0069)', '0', (select count(*) from audit_pre.seasons p join public.disciplines d on d.season_id=p.id where d.rules_text is distinct from p.rules_text)::text

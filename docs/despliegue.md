@@ -9,9 +9,9 @@ ningún otro lado: si este documento se pierde, hay que redescubrirlo.
 
 | | |
 |---|---|
-| **Código en GitHub** | [`Stefanopellegrinoo/padelApp`](https://github.com/Stefanopellegrinoo/padelApp), **privado**. `main` es la rama por defecto. Las otras ramas subidas son `feature/torneo-multi-disciplina` e `integracion/multi-disciplina-con-rapidos`, que es la que va a `main` en [El corte](#el-corte-a-producción). Las ramas de plan se borraron el 30/08: su contenido está adentro de `main` |
+| **Código en GitHub** | [`Stefanopellegrinoo/padelApp`](https://github.com/Stefanopellegrinoo/padelApp), **privado**. `main` es la rama por defecto y la que está en producción. Las ramas de trabajo se borran cuando entran a `main`: `feature/torneo-multi-disciplina` e `integracion/multi-disciplina-con-rapidos` entraron el 17/10 con [el corte](#el-corte-a-producción) |
 | **Base de producción** | Supabase Cloud, proyecto **`padelApp`** — ref `<tu-proyecto-ref>`, región `sa-east-1` (São Paulo), plan free |
-| **Las migraciones aplicadas** | **15**: de `0001` a `0014`, más la `0089` (el hotfix del 11/09), o sea **exactamente `main`**. **Están registradas con timestamps**, no con el número del archivo (`20260811191556 schema` … `20260911214125 seasons_players_can_score`), así que el CLI no las reconoce: ver [El corte a producción](#el-corte-a-producción). Medido el 2026-10-17 contra `supabase_migrations.schema_migrations` |
+| **Las migraciones aplicadas** | **98**, de `0001` a `0099` (la `0017` no existe), o sea **exactamente `main`**. Desde el corte del 17/10 están registradas con el número del archivo, así que `db push` las reconoce. Antes eran 15 registradas con timestamps (ver [El corte a producción](#el-corte-a-producción)). Medido el 2026-10-17 por el POST del corte |
 | **La base TIENE datos reales** | Al 2026-10-17: 15 usuarios · 15 players · 2 torneos · 27 entries (22 del plantel) · 7 fechas (6 cerradas, 1 en armado) · 69 partidos · 54 sets · **52 premios otorgados**. `supabase/seed.sql` nunca corrió contra la nube: esto lo cargó gente usando la app |
 | **El trigger de alta** | Probado **en producción**: un alta de prueba creó su `players` con el nombre del metadata. Después se borró |
 
@@ -33,10 +33,35 @@ ningún otro lado: si este documento se pierde, hay que redescubrirlo.
 
 ## El corte a producción
 
-`integracion/multi-disciplina-con-rapidos` trae de la `0015` a la `0099` (83
-archivos) sin aplicar contra la nube. **Nada automatiza el `db push`**: el CI
-levanta Supabase en el runner y no toca la nube. Y `vercel.json` no frena el
-deploy, así que un merge a `main` sale a producción solo.
+**Se hizo el 2026-10-17, de 13:46 a 13:50** (PR #21, merge `6394d00`). Las 83
+migraciones de la `0015` a la `0099` se aplicaron con `scripts/corte-prod/corte.sh`,
+el POST dio 24/24 sin una fila perdida y la app estuvo caída unos 3 a 4 minutos.
+El backup de antes del corte quedó fuera del repo, en
+`~/backups/padelapp/2026-10-17_1346-corte/`.
+
+`corte.sh` quedó atado a ese corte: frena si el historial de prod no son los 15
+timestamps de antes, así que no se puede volver a correr por error. Lo de abajo
+queda como registro de cómo se hizo y de cómo se vuelve atrás.
+
+### Las migraciones que vengan
+
+Alcanza con el CLI, porque el historial de prod ya coincide con los archivos.
+**Nada automatiza el `db push`**: el CI levanta Supabase en el runner y no toca
+la nube. Y un merge a `main` sale a producción solo, así que el orden es
+backup, push, merge. `PROD_DB_URL` se arma como en *Si algo sale mal*: la URI
+del Session pooler con la contraseña escapada.
+
+```bash
+B=~/backups/padelapp/$(date +%F_%H%M); mkdir -p "$B"; echo "B=$B"
+npx supabase db dump --db-url "$PROD_DB_URL" -f "$B/roles.sql" --role-only
+npx supabase db dump --db-url "$PROD_DB_URL" -f "$B/schema.sql"
+npx supabase db dump --db-url "$PROD_DB_URL" -f "$B/data.sql" --data-only --use-copy
+npx supabase db push --db-url "$PROD_DB_URL" --dry-run   # tiene que listar sólo las migraciones nuevas
+npx supabase db push --db-url "$PROD_DB_URL"
+```
+
+Si una migración borra o mueve datos, conviene ensayarla antes sobre una copia,
+como se hizo con este corte.
 
 ### Lo que demostró el ensayo (2026-10-17)
 
@@ -196,9 +221,10 @@ RLS, no el secreto de esa clave.
 
 ### 1. Vercel
 
-Importar el repo y cargar las dos variables de arriba. Next 15 se detecta solo:
-no hay que tocar build command ni output directory. El `vercel.json` del repo
-sólo fija la región (`gru1`, São Paulo, la misma de la base).
+**Hecho.** El repo está importado con las dos variables de arriba, y cada
+merge a `main` deploya producción: lo confirmó el corte del 17/10. Next 15 se
+detecta solo, sin tocar build command ni output directory. El `vercel.json` del
+repo sólo fija la región (`gru1`, São Paulo, la misma de la base).
 
 ### 2. Las URLs de Auth, apenas exista el dominio
 

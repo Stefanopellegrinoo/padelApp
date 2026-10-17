@@ -1,0 +1,513 @@
+import { describe, expect, it } from 'vitest'
+import { pair, type MatchdayFormat, type MatchFormat } from '@/core'
+import {
+  applySeatTick,
+  armadoWords,
+  drawRoom,
+  formatoNotice,
+  guestPartnerAbsent,
+  guestsOutnumberNote,
+  matchdayShape,
+  parityGuestSeat,
+  type SeatVM,
+} from './armado-state'
+
+const ROUND_ROBIN: MatchdayFormat = { kind: 'ROUND_ROBIN' }
+
+const squad: SeatVM[] = [
+  { entryId: 'a', name: 'Ana', playing: true },
+  { entryId: 'b', name: 'Beto', playing: true },
+  { entryId: 'c', name: 'Cami', playing: false },
+]
+
+describe('applySeatTick', () => {
+  it('marca que un asiento no viene, sin tocar a los demás', () => {
+    const next = applySeatTick(squad, { entryId: 'a', playing: false })
+
+    expect(next.map((seat) => seat.playing)).toEqual([false, true, false])
+  })
+
+  it('marca que un asiento vuelve a venir', () => {
+    const next = applySeatTick(squad, { entryId: 'c', playing: true })
+
+    expect(next.map((seat) => seat.playing)).toEqual([true, true, true])
+  })
+
+  /**
+   * El test que existe por el bug que NO ocurre.
+   *
+   * React vuelve a aplicar la lista de acciones pendientes contra la base más
+   * nueva cada vez que llegan props del servidor. Si el toque dijera "dalo
+   * vuelta" en lugar de "queda así", este replay sobre una base que ya trae el
+   * cambio lo invertiría, y el asiento volvería solo a mitad de la espera.
+   *
+   * Con un toggle esta aserción da `true` y el test falla.
+   */
+  it('reaplicado sobre una base que ya trae el cambio, no lo da vuelta', () => {
+    const tick = { entryId: 'a', playing: false }
+    const baseDelServidor = applySeatTick(squad, tick)
+
+    const replay = applySeatTick(baseDelServidor, tick)
+
+    expect(replay[0]?.playing).toBe(false)
+  })
+
+  it('dos toques al mismo asiento terminan en el último que se pidió', () => {
+    const apagado = applySeatTick(squad, { entryId: 'b', playing: false })
+    const prendido = applySeatTick(apagado, { entryId: 'b', playing: true })
+
+    expect(prendido[1]?.playing).toBe(true)
+  })
+
+  it('no muta el plantel que recibe', () => {
+    applySeatTick(squad, { entryId: 'a', playing: false })
+
+    expect(squad[0]?.playing).toBe(true)
+  })
+
+  it('deja el plantel igual si el asiento no existe', () => {
+    const next = applySeatTick(squad, { entryId: 'fantasma', playing: false })
+
+    expect(next.map((seat) => seat.playing)).toEqual([true, true, false])
+  })
+})
+
+/**
+ * S31: `armado.tsx` tenía `confirmed % 2` y
+ * `{size / 2} parejas` hardcodeados — los espejos en la pantalla de los bugs
+ * de aridad que la base ya tiene arreglados (`assertMatchdaySize` condiciona
+ * la paridad por `sideSize` desde PR14/W24). Con una disciplina de a uno, esa
+ * pantalla pedía un invitado que no hace falta y dividía por 2 un número que
+ * no se divide.
+ *
+ * La cuenta se saca de la pantalla para poder probarla, mismo motivo y mismo
+ * patrón que `sumar-state.ts`: `armado.tsx` es `'use client'` e importa
+ * acciones `'use server'`.
+ *
+ * `matches` es nuevo y no es cosmético: la pantalla decía "La fecha es de 12"
+ * sin que nadie pudiera saber que eso son 66 partidos de a uno contra 15 de a
+ * dos. Ese es el número que hace pedir el formato de grupos (REQ-D8-1, PR21),
+ * que es la respuesta real al techo — W32 NO se cierra con una constante.
+ */
+describe('matchdayShape', () => {
+  describe('de a dos (pair_size=2)', () => {
+    it('parte el plantel en parejas y cuenta el round robin', () => {
+      const shape = matchdayShape({ confirmed: 12, looseGuests: 0, guestPairs: 0, sideSize: 2, formato: ROUND_ROBIN })
+      expect(shape.size).toBe(12)
+      expect(shape.sides).toBe(6)
+      expect(shape.matches).toBe(15)
+      expect(shape.complete).toBe(true)
+      expect(shape.needsLooseGuest).toBe(false)
+    })
+
+    it('con plantel impar pide el invitado suelto que empareja', () => {
+      const shape = matchdayShape({ confirmed: 7, looseGuests: 0, guestPairs: 0, sideSize: 2, formato: ROUND_ROBIN })
+      expect(shape.needsLooseGuest).toBe(true)
+      expect(shape.eventualSize).toBe(8)
+      // 7 solos no bloquea por piso: van a ser 8.
+      expect(shape.tooFew).toBe(false)
+    })
+
+    it('no vuelve a pedir un suelto cuando ya hay uno', () => {
+      const shape = matchdayShape({ confirmed: 7, looseGuests: 1, guestPairs: 0, sideSize: 2, formato: ROUND_ROBIN })
+      expect(shape.needsLooseGuest).toBe(false)
+      expect(shape.size).toBe(8)
+      expect(shape.complete).toBe(true)
+    })
+
+    it('una pareja invitada suma dos y no cambia la paridad', () => {
+      const shape = matchdayShape({ confirmed: 8, looseGuests: 0, guestPairs: 1, sideSize: 2, formato: ROUND_ROBIN })
+      expect(shape.size).toBe(10)
+      expect(shape.sides).toBe(5)
+      expect(shape.needsLooseGuest).toBe(false)
+    })
+
+    it('marca la fecha incompleta cuando queda alguien sin pareja', () => {
+      // Plantel par con un suelto YA nombrado: `syncGuestSeat` lo conserva a
+      // propósito y la fecha queda impar. Es el caso que el comentario de
+      // `armado.tsx` nombraba como no dibujado.
+      const shape = matchdayShape({ confirmed: 8, looseGuests: 1, guestPairs: 0, sideSize: 2, formato: ROUND_ROBIN })
+      expect(shape.size).toBe(9)
+      expect(shape.complete).toBe(false)
+    })
+
+    // Sin esto, `tooFew` de a dos podía quedar hardcodeado a `minSquadFor(1)`
+    // (o a un `2` suelto) y el archivo entero seguía en verde: las únicas
+    // otras aserciones de `tooFew` con `sideSize: 2` (arriba, eventualSize 8)
+    // pasan bajo cualquier piso <= 8. 2 y 4 confirmados, pares y sin
+    // invitado de por medio, para no arrastrar la paridad a la cuenta.
+    it('respeta minSquadFor(2) = 4, no el piso de a uno ni un 2 suelto', () => {
+      expect(matchdayShape({ confirmed: 2, looseGuests: 0, guestPairs: 0, sideSize: 2, formato: ROUND_ROBIN }).tooFew).toBe(true)
+      expect(matchdayShape({ confirmed: 4, looseGuests: 0, guestPairs: 0, sideSize: 2, formato: ROUND_ROBIN }).tooFew).toBe(false)
+    })
+
+    // Fix round 2 (Task 3): `tooManyToPair` no tenía ningún test propio fuera
+    // de `armado-state.ts` y `armado.tsx`. Este test cubre el UMBRAL mismo
+    // (12 no corta, 13 sí). Lo que no cubre (medido con mutación, Important
+    // 4 del fix wave piso-y-techo): el guard `sideSize === 2 &&` -- lo cubre
+    // "de a uno nunca corta por MAX_PAIRING_POOL" más abajo -- y el gate de
+    // `canDraw` (`armado.tsx:363`) -- lo cubre
+    // `page.unit.test.ts` ("tooManyToPair apaga el botón de sortear"),
+    // porque `Armado` entero no se puede renderizar en este archivo (importa
+    // `./actions`, `'use server'`).
+    // `confirmed` y `eventualSize` no son el mismo número: 12 confirmados
+    // con un suelto YA sentado (no pide uno nuevo, `needsLooseGuest` da
+    // `false`) da `eventualSize` 13 sin arrastrar la paridad.
+    it('avisa que no se puede sortear pasado MAX_PAIRING_POOL, y no antes', () => {
+      const limite = matchdayShape({ confirmed: 12, looseGuests: 0, guestPairs: 0, sideSize: 2, formato: ROUND_ROBIN })
+      expect(limite.eventualSize).toBe(12)
+      expect(limite.tooManyToPair).toBe(false)
+
+      const pasado = matchdayShape({ confirmed: 12, looseGuests: 1, guestPairs: 0, sideSize: 2, formato: ROUND_ROBIN })
+      expect(pasado.eventualSize).toBe(13)
+      expect(pasado.tooManyToPair).toBe(true)
+    })
+  })
+
+  describe('de a uno (pair_size=1)', () => {
+    it('cada jugador es su propio lado: la paridad no existe', () => {
+      const shape = matchdayShape({ confirmed: 9, looseGuests: 0, guestPairs: 0, sideSize: 1, formato: ROUND_ROBIN })
+      expect(shape.sides).toBe(9)
+      expect(shape.needsLooseGuest).toBe(false)
+      expect(shape.complete).toBe(true)
+      expect(shape.eventualSize).toBe(9)
+    })
+
+    it('nunca pide un invitado para emparejar, ni con plantel impar', () => {
+      for (const confirmed of [7, 8, 9, 10, 11]) {
+        const shape = matchdayShape({ confirmed, looseGuests: 0, guestPairs: 0, sideSize: 1, formato: ROUND_ROBIN })
+        expect(shape.needsLooseGuest).toBe(false)
+        expect(shape.complete).toBe(true)
+      }
+    })
+
+    // Fix round 3 (Important 4 del fix wave piso-y-techo): `tooManyToPair`
+    // es el techo de CPU del SORTEO POR PAREJAS (`allMatchings`,
+    // `core/matchings.ts`) — de a uno no hay parejas que sortear por fuerza
+    // bruta, así que el guard `sideSize === 2 &&` tiene que seguir apagado
+    // acá por más presentes que haya. Sin este test, borrar ese guard de
+    // `matchdayShape` dejaba 884/884 verdes: un FIFA de 20 quedaba bloqueado
+    // en silencio -- exactamente lo que este cambio existe para destrabar.
+    it('de a uno nunca corta por MAX_PAIRING_POOL, por más presentes que haya', () => {
+      expect(matchdayShape({ confirmed: 20, looseGuests: 0, guestPairs: 0, sideSize: 1, formato: ROUND_ROBIN }).tooManyToPair).toBe(false)
+    })
+
+    it('cuenta los partidos que la fecha va a tener de verdad', () => {
+      // El número que W32 nombra y la pantalla nunca mostró: 12 de a uno son
+      // 66 partidos donde 12 de a dos son 15.
+      expect(matchdayShape({ confirmed: 8, looseGuests: 0, guestPairs: 0, sideSize: 1, formato: ROUND_ROBIN }).matches).toBe(28)
+      expect(matchdayShape({ confirmed: 12, looseGuests: 0, guestPairs: 0, sideSize: 1, formato: ROUND_ROBIN }).matches).toBe(66)
+      expect(matchdayShape({ confirmed: 12, looseGuests: 0, guestPairs: 0, sideSize: 2, formato: ROUND_ROBIN }).matches).toBe(15)
+    })
+
+    /**
+     * W72 (verify-report-pr21 #4004): con "2 grupos + llave" ya elegido y
+     * GUARDADO en la base, la banda seguía prometiendo el round robin —28,
+     * la fórmula vieja hardcodeada— cuando los partidos reales son 12 de
+     * grupo + 4 de llave (semis, final y tercer puesto) = 16. `matches`
+     * tiene que mirar el `formato` que llega, no asumir siempre round robin.
+     */
+    it('con "2 grupos + llave" ya elegido, cuenta los partidos reales — no el round robin', () => {
+      const grupos2: MatchdayFormat = { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 }
+      const shape = matchdayShape({ confirmed: 8, looseGuests: 0, guestPairs: 0, sideSize: 1, formato: grupos2 })
+      expect(shape.matches).toBe(16)
+    })
+
+    it('una pareja invitada suma dos jugadores que juegan solos', () => {
+      // La matriz tenía `guestPairs` sólo con
+      //`sideSize: 2`. Este es el caso que produjo W41 — el servidor rechazaba
+      // esta misma fecha mientras la pantalla la mostraba armable.
+      const shape = matchdayShape({ confirmed: 8, looseGuests: 0, guestPairs: 1, sideSize: 1, formato: ROUND_ROBIN })
+      expect(shape.size).toBe(10)
+      expect(shape.sides).toBe(10)
+      expect(shape.matches).toBe(45)
+      expect(shape.complete).toBe(true)
+      expect(shape.needsLooseGuest).toBe(false)
+      // Y el servidor tiene que estar de acuerdo: con W41 arreglado,
+      // `assertPointsCoverMatchday` cuenta 8 competidores del torneo para esta
+      // misma fecha —los 2 invitados son dos lados que no cobran—, así que la
+      // pantalla y la base dicen lo mismo.
+    })
+
+    // El PISO se deriva de `sideSize` (`minSquadFor`, docs/tipos-de-torneo.md
+    // §3.3) igual que `assertMatchdaySize` (db/validate.ts): de a uno el piso
+    // real es 2, no un plano heredado del 2v2. Ya no hay techo que probar acá
+    // (docs/plan-piso-y-techo-del-plantel.md Task 3 borró `tooMany` con él):
+    // 13 confirmados, uno más que el viejo límite de 12, sigue sin disparar
+    // ningún piso — si alguien revive un techo acá, esto se pone rojo.
+    it('respeta el piso derivado del deporte, y ya no tiene ningún techo que respetar', () => {
+      expect(matchdayShape({ confirmed: 1, looseGuests: 0, guestPairs: 0, sideSize: 1, formato: ROUND_ROBIN }).tooFew).toBe(true)
+      expect(matchdayShape({ confirmed: 2, looseGuests: 0, guestPairs: 0, sideSize: 1, formato: ROUND_ROBIN }).tooFew).toBe(false)
+      expect(matchdayShape({ confirmed: 13, looseGuests: 0, guestPairs: 0, sideSize: 1, formato: ROUND_ROBIN }).tooFew).toBe(false)
+      expect(matchdayShape({ confirmed: 13, looseGuests: 0, guestPairs: 0, sideSize: 1, formato: ROUND_ROBIN })).not.toHaveProperty('tooMany')
+    })
+  })
+
+  /**
+   * REQ-D8-1: `matchdayShape` expone el `suggestedFormat` de `suggestFormat`,
+   * editable antes de armar (el selector de `armado.tsx` es lo que lo hace
+   * editable — acá sólo se fija que la SUGERENCIA que ve la pantalla es la
+   * real y no una copia). Usa `eventualSize`, no `confirmed`: el suelto que
+   * `syncGuestSeat` va a sumar para emparejar cuenta para la sugerencia igual
+   * que cuenta para `matches`.
+   */
+  describe('suggestedFormat (REQ-D8-1)', () => {
+    it('8 presentes de a uno sugieren 2 grupos + llave, el ejemplo del requisito', () => {
+      const shape = matchdayShape({ confirmed: 8, looseGuests: 0, guestPairs: 0, sideSize: 1, formato: ROUND_ROBIN })
+      expect(shape.suggestedFormat).toEqual({ kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 })
+    })
+
+    it('12 de a uno sugieren 4 grupos: la salida real de W32, no 66 partidos de round robin', () => {
+      const shape = matchdayShape({ confirmed: 12, looseGuests: 0, guestPairs: 0, sideSize: 1, formato: ROUND_ROBIN })
+      expect(shape.suggestedFormat).toEqual({ kind: 'GROUPS_KNOCKOUT', groups: 4, qualifiersPerGroup: 2 })
+    })
+
+    it('un plantel chico sugiere todos contra todos, de a uno o de a dos', () => {
+      expect(matchdayShape({ confirmed: 5, looseGuests: 0, guestPairs: 0, sideSize: 1, formato: ROUND_ROBIN }).suggestedFormat).toEqual({
+        kind: 'ROUND_ROBIN',
+      })
+      expect(matchdayShape({ confirmed: 8, looseGuests: 0, guestPairs: 0, sideSize: 2, formato: ROUND_ROBIN }).suggestedFormat).toEqual({
+        kind: 'ROUND_ROBIN',
+      })
+    })
+
+    it('cuenta el suelto que todavía no está: la sugerencia usa eventualSize, no confirmed', () => {
+      // 7 confirmados de a dos piden un suelto (eventualSize 8, 4 lados) — la
+      // sugerencia tiene que mirar esos 4 lados, no los 3 lados y pico de 7.
+      const shape = matchdayShape({ confirmed: 7, looseGuests: 0, guestPairs: 0, sideSize: 2, formato: ROUND_ROBIN })
+      expect(shape.eventualSize).toBe(8)
+      expect(shape.suggestedFormat).toEqual({ kind: 'ROUND_ROBIN' })
+    })
+
+    it('con la fecha en Automático cuenta los partidos de lo que se va a armar: 8 de a uno son 2 grupos + llave', () => {
+      const shape = matchdayShape({ confirmed: 8, looseGuests: 0, guestPairs: 0, sideSize: 1, formato: { kind: 'AUTO' } })
+      expect(shape.matches).toBe(16)
+    })
+  })
+})
+
+/**
+ * Cuántos invitados puede acomodar el sorteo, que es la cuenta que decide si
+ * "Generar parejas" se ofrece o se apaga.
+ *
+ * Espeja `assertSquadCoversLooseGuests` (db/validate.ts): el sorteo le da a
+ * cada invitado suelto un jugador del torneo DISTINTO mientras alcancen, y
+ * pasado eso el pigeonhole obliga a una pareja invitado-invitado que la fecha
+ * rebota. Sin este test, volver a poner el tope en uno —el defecto que esta
+ * tanda revierte— deja todo en verde y le saca al admin una opción que el
+ * dueño del producto pidió.
+ */
+describe('drawRoom', () => {
+  it('cuenta a los dos invitados sin compañero y al plantel que los puede acompañar', () => {
+    const room = drawRoom(squad, [{ partnerId: null }, { partnerId: null }], null)
+
+    expect(room).toEqual({ toTheDraw: 2, freeSquad: 2 })
+  })
+
+  it('no cuenta al invitado que ya tiene compañero elegido', () => {
+    const room = drawRoom(squad, [{ partnerId: 'a' }, { partnerId: null }], null)
+
+    expect(room.toTheDraw).toBe(1)
+  })
+
+  it('no cuenta como libre al jugador ya elegido como compañero', () => {
+    const room = drawRoom(squad, [{ partnerId: 'a' }], null)
+
+    expect(room.freeSquad).toBe(1)
+  })
+
+  it('no cuenta como libre al que avisó que no va', () => {
+    const room = drawRoom(squad, [], null)
+
+    expect(room.freeSquad).toBe(2)
+  })
+
+  it('deja ver cuándo los invitados pasan al plantel libre', () => {
+    const room = drawRoom(
+      squad,
+      [{ partnerId: null }, { partnerId: null }, { partnerId: null }],
+      null,
+    )
+
+    expect(room.toTheDraw > room.freeSquad).toBe(true)
+  })
+
+  // El mismo agujero que tenía `assertSquadCoversLooseGuests`: `buildPairs`
+  // arma `settled` con los defensores antes de que exista el pool, así que no
+  // son acompañantes disponibles. Sin este descuento la pantalla ofrecía
+  // "Generar parejas" para una fecha que el borde rebota.
+  it('no cuenta como libres a los defensores, que salen del pool antes del sorteo', () => {
+    const room = drawRoom(squad, [{ partnerId: null }], pair('a', 'b'))
+
+    expect(room.freeSquad).toBe(0)
+  })
+
+  it('cuenta a los defensores como libres si uno de los dos no viene', () => {
+    // Mismo criterio que `resolveDefenders`: sin los dos presentes la pareja se
+    // disuelve y el que sí vino vuelve al pool.
+    const room = drawRoom(squad, [{ partnerId: null }], pair('a', 'c'))
+
+    expect(room.freeSquad).toBe(2)
+  })
+
+  it('cuenta a los defensores como libres cuando no hay ninguno', () => {
+    const room = drawRoom(squad, [{ partnerId: null }], null)
+
+    expect(room.freeSquad).toBe(2)
+  })
+})
+
+/**
+ * El asiento que la paridad EXIGE, y por eso el único sin cruz: sacarlo es un
+ * no-op porque `removeLooseGuestSeat` cierra con `syncGuestSeat`, que lo repone
+ * en el acto.
+ *
+ * Vivía inline en `armado.tsx`, que es `'use client'` y no se puede importar
+ * desde la suite pura: decide qué asiento se puede sacar y cuál no, y nadie lo
+ * probaba.
+ */
+describe('parityGuestSeat', () => {
+  const impar: SeatVM[] = [
+    { entryId: 'a', name: 'Ana', playing: true },
+    { entryId: 'b', name: 'Beto', playing: true },
+    { entryId: 'c', name: 'Cami', playing: true },
+  ]
+
+  it('exige el asiento con el plantel impar y un solo suelto', () => {
+    expect(parityGuestSeat(impar, 1)).toBe(true)
+  })
+
+  it('no lo exige con el plantel par', () => {
+    expect(parityGuestSeat(squad, 1)).toBe(false)
+  })
+
+  it('no lo exige con un segundo suelto en pantalla', () => {
+    expect(parityGuestSeat(impar, 2)).toBe(false)
+  })
+
+  it('no lo exige cuando todavía no hay ningún suelto', () => {
+    expect(parityGuestSeat(impar, 0)).toBe(false)
+  })
+
+  it('mide la paridad sobre los que vienen, no sobre el plantel entero', () => {
+    // `squad` son tres asientos con uno ausente: dos confirmados, par.
+    expect(squad).toHaveLength(3)
+    expect(parityGuestSeat(squad, 1)).toBe(false)
+  })
+
+  // De a uno no hay parejas que armar (§8) y el servidor no repone ningún
+  // asiento (`syncGuestSeat` sólo corre con pair_size 2): un asiento "exigido
+  // por la paridad" no existe, y marcarlo así dejaba al único invitado sin cruz
+  // y con un cartel de parejas.
+  it('de a uno no exige ningún asiento: plantel impar y un solo suelto', () => {
+    expect(parityGuestSeat(impar, 1, 1)).toBe(false)
+  })
+
+  it('de a dos, pasarle el tamaño del lado explícito no cambia nada', () => {
+    expect(parityGuestSeat(impar, 1, 2)).toBe(true)
+  })
+})
+
+/**
+ * El aviso de "más invitados al sorteo que jugadores libres". El servidor
+ * (`assertSquadCoversLooseGuests`) lo hace cumplir también de a uno, pero el
+ * texto de las parejas manda a controles que de a uno no existen.
+ */
+describe('guestsOutnumberNote', () => {
+  it('de a dos dice lo de siempre, letra por letra', () => {
+    expect(guestsOutnumberNote(2, 3, 2)).toBe(
+      'Hay 3 invitados al sorteo y quedan 2 jugadores del torneo libres para acompañarlos. Elegiles compañero en “Juega con”, poné a los que sobran en una pareja invitada, o sacalos.',
+    )
+  })
+
+  it('de a uno no manda a "Juega con" ni a una pareja invitada', () => {
+    const note = guestsOutnumberNote(1, 3, 2)
+
+    expect(note).toContain('3 invitados')
+    expect(note).toContain('2 jugadores del torneo')
+    expect(note).not.toMatch(/juega con|pareja|compañero/i)
+  })
+})
+
+/**
+ * El compañero que el admin trabó y que después avisó que no va.
+ *
+ * `toggleAttendance` no toca `pair_locks`, así que el invitado queda trabado
+ * con un ausente: la fecha rebota en el borde y la tarjeta afirmaba que "los
+ * puntos de la pareja los cobra" alguien que no viene.
+ */
+describe('guestPartnerAbsent', () => {
+  it('es falso para el invitado que va al sorteo', () => {
+    expect(guestPartnerAbsent(squad, { partnerId: null })).toBe(false)
+  })
+
+  it('es falso cuando el compañero elegido viene', () => {
+    expect(guestPartnerAbsent(squad, { partnerId: 'a' })).toBe(false)
+  })
+
+  it('es verdadero cuando el compañero elegido avisó que no va', () => {
+    expect(guestPartnerAbsent(squad, { partnerId: 'c' })).toBe(true)
+  })
+
+  it('es verdadero cuando el compañero no está en el plantel dibujado', () => {
+    expect(guestPartnerAbsent(squad, { partnerId: 'fantasma' })).toBe(true)
+  })
+})
+
+// Las palabras del armado siguen a la modalidad (`sideSize`), no al deporte: de a
+// uno no hay "parejas invitadas" ni un compañero con quien jugar.
+describe('armadoWords', () => {
+  it('de a uno no hay sección de parejas invitadas ni "Juega con"', () => {
+    const words = armadoWords(1, ROUND_ROBIN, false)
+
+    expect(words.guestPairSection).toBe(false)
+    expect(words.guestPartner).toBe(false)
+    expect(words.sides).toBe('jugadores')
+  })
+
+  it('de a dos conserva el texto de siempre, con parejas invitadas y "Juega con"', () => {
+    const words = armadoWords(2, ROUND_ROBIN, false)
+
+    expect(words.guestPairSection).toBe(true)
+    expect(words.guestPartner).toBe(true)
+    expect(words.sides).toBe('parejas')
+    expect(words.addGuest).toBe('+ Agregar pareja invitada')
+  })
+})
+
+// Con parejas fijas no hay defensores ni cruce de tabla: la nota no puede prometerlos.
+describe('armadoWords — la nota del armado según la modalidad', () => {
+  const GRUPOS: MatchdayFormat = { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 }
+  const FIJAS = 'Cada pareja juega junta todo el torneo: sólo se arman los cruces.'
+
+  it('parejas fijas: dice que las parejas no cambian, sin defensores ni cruce de tabla', () => {
+    expect(armadoWords(2, ROUND_ROBIN, false, true).drawNote).toBe(FIJAS)
+  })
+
+  it('parejas fijas con grupos: la misma frase, más la de los grupos', () => {
+    expect(armadoWords(2, GRUPOS, false, true).drawNote).toBe(
+      `${FIJAS} Juegan por grupos: todos contra todos adentro de cada grupo, y los 2 primeros de cada uno pasan a la llave.`,
+    )
+  })
+
+  it('parejas que rotan e individual: el texto de siempre, letra por letra', () => {
+    expect(armadoWords(2, ROUND_ROBIN, false, false).drawNote).toBe(
+      'Los defensores quedan fijos. El resto se arma cruzando la tabla: 1° con último, 2° con anteúltimo, y así.',
+    )
+    expect(armadoWords(1, ROUND_ROBIN, false, false).drawNote).toBe('Juegan todos contra todos, en el orden de la tabla.')
+  })
+})
+
+// Fuera del armado, una fecha que se juega distinto que el deporte lo dice (§7).
+describe('formatoNotice', () => {
+  const aCuatro: MatchFormat = { setsToWin: 1, gamesPerSet: 4, tieBreak: false, openScore: false }
+  const aSeis: MatchFormat = { ...aCuatro, gamesPerSet: 6 }
+
+  it('nombra la fecha y a cuánto se juega cuando no es lo del deporte', () => {
+    expect(formatoNotice(3, aSeis, aCuatro, 'games')).toBe('Fecha 3 · 1 set a 6 games')
+  })
+
+  it('calla cuando la fecha se juega igual que el deporte', () => {
+    expect(formatoNotice(3, aCuatro, { ...aCuatro }, 'games')).toBeNull()
+  })
+})

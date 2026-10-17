@@ -1,7 +1,11 @@
 import type { ReactNode } from 'react'
-import { seasonHeader } from '@/db/read'
+import { disciplineSlugs } from '@/core'
+import { EdgeError } from '@/db/errors'
+import { primaryDiscipline, seasonHeader } from '@/db/read'
 import { serverClient } from '@/db/server'
+import { ChipsDeporte } from './chips-deporte'
 import { TorneoNav } from './nav'
+import { sportsOf } from './nav-state'
 
 interface TorneoLayoutProps {
   children: ReactNode
@@ -15,6 +19,12 @@ interface TorneoLayoutProps {
  * header de cada pantalla (kicker, título, botón) es contenido de cada
  * `page.tsx`, no de este layout.
  *
+ * Con 2+ deportes, arriba de todo va la fila de chips para cambiar de deporte
+ * (`ChipsDeporte`): vive acá y no en cada pantalla para que siga montada al
+ * cambiar de deporte, y va primero de todo —en Tabla, arriba del `Volver`— como
+ * selector de la sección entera. `ChipsDeporte` decide solo en qué rutas se
+ * dibuja.
+ *
  * **Sin sesión el layout no pregunta nada y no dibuja la nav.** Reglas es
  * pública y este layout la estaba frenando antes de que se montara. Las demás
  * pantallas del torneo siguen siendo privadas: lo único que cambia es QUIÉN las
@@ -25,8 +35,10 @@ interface TorneoLayoutProps {
  * La vuelta a Mis torneos NO vive acá. Estuvo, en las cuatro pestañas, y era de
  * más: Tabla, Fechas, Stats y Reglas son hermanas y la nav de abajo ya las
  * conecta, así que repetir la salida en las cuatro es ruido. Va sólo donde de
- * verdad se sube un nivel — `page.tsx` (Tabla) y `ajustes/page.tsx` — con el
- * componente `Volver`.
+ * verdad se sube un nivel, con el componente `Volver`: la Tabla (`page.tsx`,
+ * la global; `tabla-view.tsx`, la de cada disciplina) y Ajustes
+ * (`ajustes/page.tsx`, el contenedor; y desde Task 4,
+ * `[disciplina]/ajustes/page.tsx`, de vuelta al contenedor).
  */
 export default async function TorneoLayout({ children, params }: TorneoLayoutProps) {
   const { id } = await params
@@ -44,12 +56,26 @@ export default async function TorneoLayout({ children, params }: TorneoLayoutPro
     )
   }
 
-  await seasonHeader(supabase, id)
+  const header = await seasonHeader(supabase, id)
+  // Tabla, Fechas y Stats necesitan un destino con disciplina
+  // (`nav-state.ts`; las tres comparten el mismo fallback, Reglas no).
+  // Ésta es la disciplina [0] — el mismo fallback que ya usa
+  // `defaultDisciplineId`/`primaryDiscipline` — para cuando la pantalla
+  // actual no trae ninguna en su URL: el contenedor, Ajustes y Reglas son
+  // los únicos que no la tienen (Stats se mudó bajo `[disciplina]` en la
+  // Task 1 del plan de arquitectura de páginas). El `throw` es el mismo
+  // supuesto sin efecto práctico que `disciplineOf`/`primaryDiscipline`:
+  // garantizado por REQ-NR-4.
+  const defaultDisciplineSlug = disciplineSlugs(header.disciplines).get(primaryDiscipline(header).id)
+  if (defaultDisciplineSlug === undefined) throw new EdgeError('La disciplina de la temporada no existe.')
 
   return (
     <div className="flex min-h-dvh flex-col bg-bg text-text">
-      <main className="flex-1 px-5 pb-6">{children}</main>
-      <TorneoNav seasonId={id} />
+      <main className="flex-1 px-5 pb-6">
+        <ChipsDeporte seasonId={id} sports={sportsOf(header.disciplines)} />
+        {children}
+      </main>
+      <TorneoNav seasonId={id} defaultDisciplineSlug={defaultDisciplineSlug} />
     </div>
   )
 }

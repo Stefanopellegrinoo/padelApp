@@ -1,5 +1,6 @@
 import { MASTERS_SIZE } from './constants'
-import type { EntryId, MatchResult, Pair, RankingRow } from './types'
+import { members, pair } from './side'
+import type { EntryId, MatchResult, RankingRow, Side } from './types'
 
 export type MastersFour = [EntryId, EntryId, EntryId, EntryId]
 
@@ -25,12 +26,18 @@ export function mastersQualifiers(ranking: RankingRow[]): MastersFour {
  * This is what separates two players who spent the season winning together and
  * therefore finished on identical points.
  */
-export function mastersFixture(four: MastersFour): Array<{ pairA: Pair; pairB: Pair }> {
+/*
+ * El Masters se juega SIEMPRE de a parejas: son las tres formas de repartir
+ * los mismos cuatro clasificados. Por eso `pair()` con literal `size: 2` y no
+ * un `Side` de tamaño variable — una disciplina de a uno no arma Masters, y
+ * `generateMastersPairs` la corta antes con su propio guard (W39, ronda 12).
+ */
+export function mastersFixture(four: MastersFour): Array<{ sideA: Side; sideB: Side }> {
   const [one, two, three, fourth] = four
   return [
-    { pairA: { a: one, b: fourth }, pairB: { a: two, b: three } },
-    { pairA: { a: one, b: three }, pairB: { a: two, b: fourth } },
-    { pairA: { a: one, b: two }, pairB: { a: three, b: fourth } },
+    { sideA: pair(one, fourth), sideB: pair(two, three) },
+    { sideA: pair(one, three), sideB: pair(two, fourth) },
+    { sideA: pair(one, two), sideB: pair(three, fourth) },
   ]
 }
 
@@ -56,8 +63,8 @@ export function mastersChampion(four: MastersFour, matches: MatchResult[]): Entr
       else if (set.gamesB > set.gamesA) setsB++
     }
     if (setsA === setsB) continue
-    const winner = setsA > setsB ? match.pairA : match.pairB
-    for (const id of [winner.a, winner.b]) {
+    const winner = setsA > setsB ? match.sideA : match.sideB
+    for (const id of members(winner)) {
       if (!wins.has(id)) continue
       wins.set(id, (wins.get(id) ?? 0) + 1)
     }

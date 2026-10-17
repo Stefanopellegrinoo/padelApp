@@ -2,17 +2,17 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import type { SeasonConfig } from '@/core'
+import { isTournamentSport, type DisciplineId } from '@/core'
+import type { DisciplineRules } from '@/app/deporte/personalizar-reglas-state'
+import { offeredModalities } from '@/app/deporte/tarjeta-state'
+import { addDiscipline, updateDisciplineRules, writeDisciplineRules } from '@/db/discipline'
+import { addToDiscipline, removeFromDiscipline } from '@/db/discipline-entries'
+import { createTeam, deleteTeam } from '@/db/discipline-teams'
 import { addSquadSeat, claimOwnSeat, removeSeat, renameSeat, unlinkSeat } from '@/db/entries'
 import { EdgeError } from '@/db/errors'
-import {
-  deleteSeason,
-  renameSeason,
-  updateSeasonConfig,
-  updateSeasonPlayersCanScore,
-  updateSeasonRules,
-} from '@/db/season'
+import { deleteSeason, renameSeason, updateSeasonPlayersCanScore } from '@/db/season'
 import { serverClient } from '@/db/server'
+import { newSportOf, type NewSportInput } from './nuevo-deporte-state'
 
 export type WriteResult = { ok: true } | { ok: false; error: string }
 
@@ -124,16 +124,132 @@ export async function dropSeat(seasonId: string, entryId: string): Promise<Write
   })
 }
 
-/** Guarda al toque de cada `−`/`+`. `assertValidConfig` corre adentro y su mensaje se muestra en línea. */
-export async function saveConfig(seasonId: string, config: SeasonConfig): Promise<WriteResult> {
+/**
+ * "Listo" de la hoja "Personalizar reglas" (docs/torneos-deportes.md §5): escribe sólo lo que
+ * cambió entre lo que la hoja abrió (`before`) y lo que quedó (`next`). El diff y el orden
+ * (config, Masters, fecha por default) viven en `writeDisciplineRules` (`db/discipline.ts`), que
+ * se prueba contra la base; acá va el cliente de la sesión y la revalidación.
+ *
+ * Escribe `disciplines.*`, no `seasons.config` (PR 5/6): `seasonHeader` ya no lee de la
+ * temporada. `assertValidConfig` corre adentro y su mensaje vuelve a la hoja.
+ *
+ * ponytail: sin guard de FORMA del `formatoDefault` acá. La hoja sólo arma las tres opciones que
+ * acepta el CHECK `disciplines_formato_default_kind` (0074/0095), y sólo quien organiza llega
+ * hasta acá (RLS); un valor armado a mano volvería como el mensaje crudo de Postgres. Si hace
+ * falta: un guard de forma en `updateDisciplineFormatoDefault` que tire un `EdgeError` en español.
+ */
+export async function saveDisciplineRules(
+  seasonId: string,
+  disciplineId: DisciplineId,
+  before: DisciplineRules,
+  next: DisciplineRules,
+): Promise<WriteResult> {
   return onSeason(seasonId, async (supabase) => {
-    await updateSeasonConfig(supabase, seasonId, config)
+    await writeDisciplineRules(supabase, disciplineId, before, next)
   })
 }
 
-export async function saveRules(seasonId: string, text: string): Promise<WriteResult> {
+/**
+ * "+ Agregar un deporte" a un torneo YA EN CURSO (REQ-D1-2, docs/torneos-deportes.md §5): la misma
+ * tarjeta del paso 3 del wizard. A diferencia del wizard —una fila por `kind`, decisión #3823— acá NO
+ * se filtra el `kind` ya presente: un segundo PADEL es exactamente el caso que habilita el ordinal de
+ * `core/discipline-slug.ts` (`padel`, `padel-2`).
+ *
+ * `input` es JSON de cliente (Server Action): `kind` y `modality` se miran antes de `fichaSeed`, que
+ * tira un Error común —bug del llamador— si el deporte no ofrece esa modalidad. El resto lo valida
+ * `addDiscipline` antes de escribir (config, "Al azar" / "Igual que", plantel), y por eso la config
+ * llega del tamaño de `entryIds`: acá no se rehace, o un cliente torcido cambiaría los puntos en silencio.
+ *
+ * ponytail: sin guard de FORMA del `formatoDefault`, igual que `saveDisciplineRules`; un valor armado a
+ * mano vuelve como el mensaje crudo del CHECK de Postgres, y no deja nada creado.
+ */
+export async function addSportToSeason(seasonId: string, input: NewSportInput): Promise<WriteResult> {
   return onSeason(seasonId, async (supabase) => {
-    await updateSeasonRules(supabase, seasonId, text)
+    const { kind, modality, entryIds } = input
+    if (!isTournamentSport(kind) || !offeredModalities(kind).includes(modality) || !Array.isArray(entryIds)) {
+      throw new EdgeError('Elegí un deporte y una modalidad de la lista.')
+    }
+    await addDiscipline(supabase, seasonId, newSportOf(input), entryIds)
+  })
+}
+
+/**
+ * Suma un asiento del plantel a esta disciplina (§2.6 del diseño, "Quién
+ * juega"). `addToDiscipline` no valida a mano que `entryId` sea del plantel
+ * de `seasonId`: la FK compuesta `(entry_id, season_id) references entries
+ * (id, season_id)` de `discipline_entries` (0023:25) ya rechaza un `entryId`
+ * de otro torneo con un error de Postgres, y `is_season_admin(season_id)`
+ * (0023:60-62) exige además que quien llama organice ESTA temporada. El
+ * único caller de producción (`QuienJuega`) ni siquiera arma ese caso: sólo
+ * ofrece este botón para asientos que salen de `seasonSquadMembersOf(seasonId)`.
+ */
+export async function addDisciplineMember(
+  seasonId: string,
+  disciplineId: DisciplineId,
+  entryId: string,
+): Promise<WriteResult> {
+  return onSeason(seasonId, async (supabase) => {
+    await addToDiscipline(supabase, disciplineId, seasonId, entryId)
+  })
+}
+
+/**
+ * Saca un asiento de esta disciplina — no del plantel entero, ver
+ * `dropSeat` más arriba para eso. Las guardas ("ya jugó", pareja fija sin
+ * resolver, presentismo en una fecha sin armar) viven en
+ * `removeFromDiscipline` (`db/discipline-entries.ts`) y no nombran la
+ * disciplina — a propósito, mismo criterio que `PublicFormat.kind`
+ * (`db/read.ts:167`): `db/` no importa de `app/`, que es donde vive
+ * `DISCIPLINE_LABELS`. Acá SÍ hay `disciplineLabel` a mano (lo manda
+ * `QuienJuega`, que lo recibe de la página), así que la traducción es
+ * simplemente anteponerla — mismo formato que `mismatchMessages`
+ * (`../page.tsx:126`, `${label}: ${message}`) — y no reinterpretar el string
+ * de adentro.
+ */
+export async function dropDisciplineMember(
+  seasonId: string,
+  disciplineId: DisciplineId,
+  entryId: string,
+  disciplineLabel: string,
+): Promise<WriteResult> {
+  return onSeason(seasonId, async (supabase) => {
+    try {
+      await removeFromDiscipline(supabase, disciplineId, seasonId, entryId)
+    } catch (error) {
+      if (error instanceof EdgeError) throw new EdgeError(`${disciplineLabel}: ${error.message}`)
+      throw error
+    }
+  })
+}
+
+/**
+ * Arma un equipo fijo (docs/tipos-de-torneo.md §1, sección Equipos de
+ * Ajustes). Las guardas (misma persona, no juega la disciplina, disciplina
+ * sin `fixed_teams`, alguien que ya tiene equipo) viven en `createTeam`
+ * (`db/discipline-teams.ts`) y se muestran tal cual, mismo criterio que
+ * `dropSeat` con `removeSeat`.
+ */
+export async function addTeam(
+  seasonId: string,
+  disciplineId: DisciplineId,
+  entryA: string,
+  entryB: string,
+): Promise<WriteResult> {
+  return onSeason(seasonId, async (supabase) => {
+    await createTeam(supabase, disciplineId, seasonId, entryA, entryB)
+  })
+}
+
+/** Deshace un equipo — no toca `discipline_entries` ni lo ya jugado, ver `deleteTeam`. */
+export async function removeTeam(seasonId: string, teamId: string): Promise<WriteResult> {
+  return onSeason(seasonId, async (supabase) => {
+    await deleteTeam(supabase, teamId)
+  })
+}
+
+export async function saveRules(seasonId: string, disciplineId: DisciplineId, text: string): Promise<WriteResult> {
+  return onSeason(seasonId, async (supabase) => {
+    await updateDisciplineRules(supabase, seasonId, disciplineId, text)
   })
 }
 

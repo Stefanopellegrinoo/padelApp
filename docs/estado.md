@@ -1,6 +1,15 @@
 # Estado del proyecto
 
-**Última actualización:** 11 de agosto de 2026. Plan 4 terminado, base de producción creada, y cuatro cambios de producto encima.
+**Última actualización:** 31 de agosto de 2026. `torneo-multi-disciplina` terminada
+y verificada en la rama, **sin publicar** — con el hotfix de producción
+adentro (ver "Producción") y, desde ayer, con el SDD `reglas-por-disciplina`
+también cerrado encima (seis commits, `8f1f04d`..`1bae705`: las reglas pasan a
+ser por disciplina).
+
+> **Lo que este documento describe abajo —planes 2, 3 y 4— es la app que está
+> ONLINE hoy: un torneo, un deporte.** Encima de eso hay **una feature entera y todas las migraciones de la `0015` en adelante** en
+> `feature/torneo-multi-disciplina` que la vuelven multi-disciplina y que
+> todavía NO se publicaron. Lo de esa rama está en "Dónde estamos".
 
 Este documento es el punto de entrada. Dice qué está hecho, qué falta, y qué hay
 que decidir antes de seguir. Los detalles viven en los documentos que se enlazan.
@@ -9,11 +18,24 @@ que decidir antes de seguir. Los detalles viven en los documentos que se enlazan
 
 ## Producción
 
-La base de producción existe y está lista: proyecto **`padelApp`** en Supabase
-Cloud (`yttmhxcdnjknobiccvsp`, São Paulo), con las **10 migraciones aplicadas** y
-verificada con SQL, no asumida: 10 tablas, **las 10 con RLS**, 21 políticas, 15
-funciones `security definer`, **0 usuarios y 0 temporadas**, y sin rastro del
-usuario del seed.
+La base de producción existe y **tiene datos reales**: proyecto **`padelApp`** en
+Supabase Cloud (`<tu-proyecto-ref>`, São Paulo), con **14 migraciones aplicadas**
+—exactamente las de `main`— y **12 jugadores, 2 torneos activos, 3 fechas (2
+cerradas) y 15 premios otorgados**. Medido el 2026-08-24, no asumido.
+
+**`main` se movió el 28/08, y eso es nuevo desde esa foto.** El PR
+[#16](https://github.com/Stefanopellegrinoo/padelApp/pull/16) (`5dd5794`) arregló
+en producción que una fecha admita **más de un invitado suelto**, cada uno trabado
+a un jugador distinto del torneo. **No trajo ninguna migración**, así que las 14
+de arriba siguen siendo la cuenta exacta de `main` y no hace falta re-medir la
+base por esto. Ese hotfix ya está adentro de `feature/torneo-multi-disciplina`
+(merge `60c9418`, 30/08), probado en la app.
+
+> **Este párrafo decía "las 10 migraciones" y "0 usuarios y 0 temporadas" hasta
+> el 24/08.** Las dos cosas eran falsas y sobre ellas se armó un análisis de
+> riesgo equivocado para publicar. **Antes de decidir algo contra producción,
+> medila** — las dos consultas están en [`despliegue.md`](despliegue.md), que
+> manda sobre todo esto.
 
 **Lo que encontró subirla, y sólo pasa en la nube:** Supabase Cloud le otorga a
 `anon` select/insert/update/delete sobre cada tabla nueva del schema `public`.
@@ -28,7 +50,8 @@ función, `season_public_rules`.
 
 **El código está en GitHub:**
 [`Stefanopellegrinoo/padelApp`](https://github.com/Stefanopellegrinoo/padelApp),
-privado, con `main` y las tres ramas de plan.
+privado, con dos ramas: `main` y `feature/torneo-multi-disciplina`. Las
+ramas de plan se borraron el 30/08 — su contenido está entero adentro de `main`.
 
 **Lo que falta para que esté online está todo en
 [`despliegue.md`](despliegue.md)**, con las credenciales y los pasos exactos:
@@ -43,25 +66,50 @@ sólo se resume.
 
 | Plan | Qué produce | Estado |
 |---|---|---|
-| **1. `core/`** | Toda la lógica del campeonato, funciones puras | ✅ **Terminado y en `main`** |
-| **2. Datos y auth** | Schema Supabase, migraciones, RLS, login + Google | ✅ **Terminado**, rama `plan-2-data-and-auth` |
-| **3. Pantallas de lectura** | Tabla, Fechas, Estadísticas, Reglas, Perfil | ✅ **Terminado**, rama `plan-3-read-screens` |
-| **4. Pantallas de escritura** | Crear torneo, abrir fecha, cargar resultados, Ajustes, Masters | ✅ **Terminado** (13 de 14 tareas; la 7 se descartó), rama `plan-4-write-screens` |
+| **1. `core/`** | Toda la lógica del campeonato, funciones puras | [Completado] **Terminado y en `main`** |
+| **2. Datos y auth** | Schema Supabase, migraciones, RLS, login + Google | [Completado] **Terminado**, en `main` |
+| **3. Pantallas de lectura** | Tabla, Fechas, Estadísticas, Reglas, Perfil | [Completado] **Terminado**, en `main` |
+| **4. Pantallas de escritura** | Crear torneo, abrir fecha, cargar resultados, Ajustes, Masters | [Completado] **Terminado** (13 de 14 tareas; la 7 se descartó), en `main` |
+| **5. `torneo-multi-disciplina`** | Un torneo con VARIAS disciplinas: pádel y FIFA, de a dos y de a uno, cada una con su formato, su tabla y su Masters | **Terminada y verificada, SIN PUBLICAR.** Rama `feature/torneo-multi-disciplina`, todas las migraciones de la `0015` en adelante |
 
-> **Si estás retomando, el producto está terminado y en `main`.** No queda una
-> sola pantalla por construir: se juega una temporada entera, de crear el torneo
-> a coronar al campeón del año, y está recorrido con navegador, no deducido.
+> **Si estás retomando: hay DOS versiones de esta app y conviene no confundirlas.**
 >
-> **Lo próximo es ponerlo online, y eso está en [`despliegue.md`](despliegue.md)**
-> — son cuatro pasos y ninguno es de código.
+> **La que está ONLINE** es `main`: un torneo, un deporte. Terminada, jugada por
+> gente de verdad — 12 jugadores y 2 torneos en producción.
+>
+> **La que está EN LA RAMA** es multi-disciplina: todas las migraciones de la `0015` en adelante, terminada
+> y verificada (typecheck 0 · **826 tests · 446 tests de base** · navegador
+> de punta a punta con `scripts/smoke.mjs`), **y deliberadamente sin
+> publicar**. Los números subieron desde la foto anterior (770/425) porque
+> después de ella se cerró **`reglas-por-disciplina`** — ver el párrafo de
+> abajo. Publicarla son dos pasos que van JUNTOS —aplicar esas migraciones y
+> mergear a `main`— porque el código viejo no sobrevive al schema nuevo: hay
+> una ventana de unos 5 minutos con la app caída. El detalle está en
+> [`despliegue.md`](despliegue.md), con el backup ya hecho.
+>
+> **Lo que agregó `reglas-por-disciplina` (30-31/08), encima de la rama:** las
+> reglas dejaron de ser una sola por torneo. `disciplines.rules_text`
+> (migración `0069`) más `narrateRules(config, shape)` corriendo una vez por
+> disciplina hacen que la pantalla de Reglas —con sesión y sin ella— dibuje un
+> bloque por disciplina, cada uno con su propio Masters, su propia regla de
+> parejas, su propio empate y su propio tope de partidos. Con una sola
+> disciplina (el 100% de lo que hay hoy) la pantalla sale byte a byte como
+> salía antes — probado con `.toBe()` contra el HTML real, no asumido. Costo
+> de despliegue: cero — `0069` toca `season_public_formats`, una función que
+> todavía no existe en producción, así que no hay ventana que abrir. **No está
+> commiteado a `main` ni pusheado**: vive entero en
+> `feature/torneo-multi-disciplina`.
+>
+> **Lo que falta antes de publicar no es código: es que alguien la USE.** Los
+> gates los corrió un agente; nadie recorrió todavía la app nueva a mano.
 >
 > Si en cambio venís a tocar código, lo que queda es la deuda chica del final de
 > esta página. El detalle de cada decisión y cada desvío vive en "Dónde quedó la
 > ejecución" y "Aparecidos" del
-> [plan 4](superpowers/plans/2026-08-11-write-screens.md); esta página resume,
+> el plan 4 (borrado en el commit de public release); esta página resume,
 > ese documento manda.
 
-**`core/` en números:** 13 módulos, 145 tests, cero dependencias de producción.
+**`core/` en números:** 23 módulos, 403 tests, cero dependencias de producción. (Eran 13 y 145 antes de multi-disciplina; 391 antes de `reglas-por-disciplina`, que sumó los 12 de `narrate`.)
 Verificado de forma independiente: ningún archivo usa `Date`, `Math.random`,
 `fetch` ni `process`; nada importa fuera de `core/`; el grafo de dependencias es
 acíclico. Eso es lo que permite recalcular una fecha vieja y obtener exactamente
@@ -86,15 +134,15 @@ límite en silencio.
 
 | Documento | Qué es |
 |---|---|
-| [`superpowers/specs/2026-08-09-padel-championship-design.md`](superpowers/specs/2026-08-09-padel-championship-design.md) | **Las reglas del juego.** Fuente de verdad de todo lo que es el campeonato: formato, puntos, armado de parejas, desempates, Masters. Ante cualquier duda de comportamiento, manda este. |
+| _(borrado en el commit de public release)_ | **Las reglas del juego.** Fuente de verdad de todo lo que es el campeonato: formato, puntos, armado de parejas, desempates, Masters. Ante cualquier duda de comportamiento, manda este. |
 | [`despliegue.md`](despliegue.md) | **Producción.** Las credenciales, qué está hecho y qué falta para estar online: Vercel, las URLs de Auth, la confirmación de mail y Google. Manda sobre cualquier cosa de despliegue. |
 | [`ui-screens.md`](ui-screens.md) | **La app.** Las 13 pantallas con su contenido, roles y estados. La navegación y por qué es como es. |
 | [`hacia-una-app-de-torneos.md`](hacia-una-app-de-torneos.md) | **A futuro, sin fecha.** Qué costaría que esto sirva para cualquier juego, cualquier tamaño de equipo y otros formatos (zonas, llaves). Trae las mediciones hechas —qué parte del código ya es agnóstica al deporte y cuántos lugares asumen que el equipo son dos— para no tener que volver a medir. No es un plan: es la foto para decidir. |
 | [`padel_design/README.md`](padel_design/README.md) | **El handoff visual** de Google Stitch, ya adaptado al formato de 8 a 12. Colores, tipografía, medidas, copys. Los `.dc.html` muestran el caso de 8 y no se pueden regenerar. |
-| [`superpowers/plans/2026-08-10-core-championship-logic.md`](superpowers/plans/2026-08-10-core-championship-logic.md) | **El plan 1**, ya ejecutado. Su tabla final —"Qué queda afuera de este plan, a propósito"— es la lista de requisitos que hereda el plan 2. |
-| [`superpowers/plans/2026-08-10-data-and-auth.md`](superpowers/plans/2026-08-10-data-and-auth.md) | **El plan 2**, ejecutado. 14 tareas. Sus secciones "Las tres decisiones" y "Decisiones registradas" son las que mandan sobre cualquier cosa que diga este documento. Su "Aparecidos" tiene lo que quedó sin hacer. |
-| [`superpowers/plans/2026-08-10-read-screens.md`](superpowers/plans/2026-08-10-read-screens.md) | **El plan 3**, ejecutado. 11 tareas, formato liviano: interfaces y "qué NO hace", con bloques de código completos sólo donde había lógica nueva. Su "Aparecidos" es la deuda conocida de las pantallas. |
-| [`superpowers/plans/2026-08-11-write-screens.md`](superpowers/plans/2026-08-11-write-screens.md) | **El plan 4**, ejecutado: 13 de 14 tareas (la 7 se descartó). Su tabla "El trazado" dice qué dato necesita cada pantalla y de ahí salen las primeras cuatro tareas; sus "Decisiones registradas" mandan sobre lo que dice este documento —una de ellas corrige el alcance de acá abajo—. |
+| _(borrado en el commit de public release)_ | **El plan 1**, ya ejecutado. Su tabla final —"Qué queda afuera de este plan, a propósito"— es la lista de requisitos que hereda el plan 2. |
+| _(borrado en el commit de public release)_ | **El plan 2**, ejecutado. 14 tareas. Sus secciones "Las tres decisiones" y "Decisiones registradas" son las que mandan sobre cualquier cosa que diga este documento. Su "Aparecidos" tiene lo que quedó sin hacer. |
+| _(borrado en el commit de public release)_ | **El plan 3**, ejecutado. 11 tareas, formato liviano: interfaces y "qué NO hace", con bloques de código completos sólo donde había lógica nueva. Su "Aparecidos" es la deuda conocida de las pantallas. |
+| _(borrado en el commit de public release)_ | **El plan 4**, ejecutado: 13 de 14 tareas (la 7 se descartó). Su tabla "El trazado" dice qué dato necesita cada pantalla y de ahí salen las primeras cuatro tareas; sus "Decisiones registradas" mandan sobre lo que dice este documento —una de ellas corrige el alcance de acá abajo—. |
 | `.superpowers/sdd/2026-08-10-core-championship-logic/progress.md` | **El ledger de ejecución.** Cada fix round, cada minor diferido, cada decisión tomada y por qué. No está versionado (es scratch), pero es donde está el detalle de cada hallazgo. |
 
 ---
@@ -145,7 +193,7 @@ del plan 2.
 
 ## Lo que falta implementar, por plan
 
-### Plan 2 — datos y auth ✅
+### Plan 2 — datos y auth [Completado]
 
 Las 14 tareas están hechas. Lo que quedó construido: schema y migraciones, RLS
 sobre las diez tablas, auth con mail y contraseña más Google, reclamo de asiento
@@ -196,7 +244,7 @@ cerraron antes de arrancar:
 - **Reabrir borra la fecha siguiente si está vacía.** Si ya tiene asistencias,
   invitados o parejas, no la toca y hay que borrarla a mano.
 
-### Plan 3 — pantallas de lectura ✅
+### Plan 3 — pantallas de lectura [Completado]
 
 Las 11 tareas están hechas. Quedaron construidas las seis pantallas (Tabla con su
 sheet de desempate, Fechas, Fecha `[n]` con el acordeón de rondas, Estadísticas,
@@ -226,6 +274,27 @@ compila puede estar mintiendo en cada línea.** Hace falta un smoke test de
 navegador que abra cada ruta, asierte 200 y compare lo que dice contra el estado
 real de los datos.
 
+**Y hay una segunda mitad de esa lección, que costó veintiún días descubrir.**
+El 31/08 se encontró que **la app estuvo OSCURA SIEMPRE, para todos, desde el
+10/08**: `app/globals.css` tenía el tema oscuro adentro de un
+`@media (prefers-color-scheme: dark) { @theme { … } }`, y **`@theme` no es un
+bloque de CSS** — Tailwind v4 lo procesa en build, vuelca sus variables a
+`:root` y descarta el `@media` que lo envuelve. Los dos temas terminaban en
+`:root`, el oscuro segundo, pisando al claro. El tema claro estaba escrito y
+nunca se sirvió.
+
+Lo que importa no es el bug sino **por qué sobrevivió tres planes con todo en
+verde**: el paso 12 del smoke recorría las pantallas *"en claro y en oscuro"* y
+sólo asertaba **200**. Nunca comparó un color. Un recorrido de temas que no mira
+un píxel prueba que las rutas existen, no que el tema exista. Ahora compara el
+fondo computado de los dos esquemas y exige que sean distintos — verificado
+poniendo el bug de vuelta y viendo los dos chequeos en rojo.
+
+**Generalizado: asertar que una pantalla responde no es asertar que la pantalla
+está bien.** Es el mismo error de forma que dejó dos agujeros de RLS con los
+cuatro gates en verde (tests que consultaban con `service_role`, que saltea RLS
+por diseño).
+
 **Sobre el arreglo del JWT, para que nadie lo dé por probado:** la carrera **no se
 pudo reproducir a pedido**. Diez logins seguidos pasan igual con y sin el
 arreglo; la falla apareció con tres agentes cargando la máquina y no vuelve con
@@ -253,9 +322,9 @@ preguntas sobre quien mira: "¿estoy anotado?" y "¿cuál asiento soy yo?". Ante
 escribir el Plan 4, **trazar qué dato necesita cada pantalla y recién ahí definir
 las funciones de datos.**
 
-### Plan 4 — pantallas de escritura 🚧
+### Plan 4 — pantallas de escritura [Completado]
 
-**Hecho: 13 de las 14 tareas** (la 7 se descartó), rama `plan-4-write-screens`.
+**Hecho: 13 de las 14 tareas** (la 7 se descartó), en `main`.
 Toda la capa de datos, "Mis torneos", el wizard de crear torneo, **el flujo
 entero de jugar una fecha** —abrirla, tildar quién viene, el invitado con su
 compañero, el sorteo, confirmar, cargar los resultados en dos toques, cerrar y
@@ -391,21 +460,23 @@ falla que este documento ya tenía anotado del Plan 2.
 
 **Lo que el Plan 3 le dejó, con lo que ya se resolvió:**
 
-- ✅ **"Mis torneos".** Construida (`/torneos`). Después de entrar van todos ahí:
+- [Completado] **"Mis torneos".** Construida (`/torneos`). Después de entrar van todos ahí:
   el caso especial de "una sola temporada, directo a su tabla" se borró, porque
   un camino distinto para el mismo destino es una rama más que puede quedar mal.
-- ✅ **La lectura de asistencias** (`attendancesOf`), y el permiso para que un
-  jugador escriba la suya (`set_my_attendance`). **Falta el toggle en la Tabla**,
-  que es la Task 7 y está en la tanda B.
-- ⬜ **El flujo `DRAFT`** y **la carga de resultados**: son las Tasks 9 y 10, lo
-  próximo que hay que hacer. Todo lo que necesitan de `db/` ya está.
-- ⬜ **Editar las reglas** desde Ajustes: `updateSeasonRules` está hecha y
-  probada; falta la pantalla (Task 11, tanda B).
-- ⬜ **El flujo del Masters.** La base ya lo puede crear, armar, abrir y cerrar
-  —lo prueba `db/masters.db.test.ts` de punta a punta—; falta la pantalla
-  (Task 13, tanda B).
-- ⬜ **La página de Reglas pública.** `season_public_rules` está hecha y `anon` ya
-  la puede llamar; falta aflojar la guardia del layout (Task 12, tanda B).
+- [Completado] **La lectura de asistencias** (`attendancesOf`), y el permiso para que un
+  jugador escriba la suya (`set_my_attendance`). **La Task 7 (el toggle en la
+  Tabla) se descartó** por decisión de producto: el jugador no marca su propia
+  asistencia, la marca el admin en el armado.
+- [Completado] **El flujo `DRAFT`** y **la carga de resultados** (Tasks 9 y 10): abrir la
+  fecha, armar, cargar resultados en dos toques, cerrar y reabrir.
+- [Completado] **Editar las reglas** desde Ajustes (Task 11). La función que las escribe
+  ya no es `updateSeasonRules` — el SDD `reglas-por-disciplina` la reemplazó
+  por `updateDisciplineRules` (`db/discipline.ts`), que escribe por
+  disciplina y mantiene `seasons.rules_text` al día con un dual-write. Ver
+  "Dónde estamos".
+- [Completado] **El flujo del Masters** (Task 13): armar, abrir y cerrar, con su pantalla.
+- [Completado] **La página de Reglas pública** (Task 12): guardia del layout aflojada,
+  `anon` la lee vía `season_public_rules`.
 
 **Cómo escribirlo, aprendido a los golpes en el Plan 3:**
 
@@ -422,12 +493,12 @@ falla que este documento ya tenía anotado del Plan 2.
 ### Dos pantallas que cambiaron de layout y todavía nadie miró
 
 Al adaptar el diseño de Stitch al formato de 8 a 12, dos pantallas necesitaron
-un layout nuevo, no sólo otro copy. Están marcadas con 🔁 en el handoff:
+un layout nuevo, no sólo otro copy. Están marcadas con  en el handoff:
 
-- ✅ **Wizard paso 4:** los puntos eran 4 columnas. Con 12 jugadores son 6 valores
+- [Completado] **Wizard paso 4:** los puntos eran 4 columnas. Con 12 jugadores son 6 valores
   y no entran a lo ancho de un teléfono. Pasaron a filas — construido en la Task
   6 del Plan 4, una fila por posición con `−`/`+` de 34px.
-- ✅ **Fecha en juego:** eran 3 rondas × 2 partidos fijas. Con 6 parejas son 15
+- [Completado] **Fecha en juego:** eran 3 rondas × 2 partidos fijas. Con 6 parejas son 15
   partidos, así que las rondas pasaron a acordeón, con la ronda en curso abierta
   y las completas colapsadas — construido en la Task 8 del Plan 3
   (`fechas/[n]/rondas.tsx`). **La Task 10 del Plan 4 le enchufa la carga de
@@ -497,6 +568,31 @@ muchísimo más cuando se les pidió *calcular*: enumerar los ocho resultados
 posibles del Masters, trazar la rotación del round robin para 4 parejas, computar
 `floor((f-1)/k)` en los bordes. Un test y un código pueden estar equivocados de
 acuerdo, y eso ninguna suite lo detecta.
+
+**`jsdom` es la EXCEPCIÓN, y el resto sigue sin DOM.** `app/amigos/[playerId]/cargar.unit.test.ts`
+fue el primer archivo del repo en correr en `jsdom`, con un pragma
+`@vitest-environment` por archivo — `vitest.config.ts` no tiene override global
+y no hay que ponerle uno. Entró en 2b porque el formulario del partido casual se
+borraba entero en cada error de validación (React 19 llama
+`HTMLFormElement.reset()` nativo cuando una action termina) y **medimos que no
+había forma barata de pinearlo**: `value` y `defaultValue` serializan HTML
+idéntico, así que `renderToStaticMarkup` no distingue un input controlado de uno
+que no lo está.
+
+`app/torneo/[id]/[disciplina]/ajustes/quien-juega.unit.test.ts` es el segundo
+(ronda de fix de §2.6, "Quién juega"): mismo techo, otro síntoma —
+`renderToStaticMarkup` DESCARTA los props de evento, así que invertir a mano
+los dos `onClick` de `quien-juega.tsx` (Sacar llamando a `addDisciplineMember`,
+Agregar a `dropDisciplineMember`) daba el mismo HTML y la suite en verde. Sin
+un click de verdad no hay forma de pinear a qué función apunta cada botón.
+
+La regla, entonces: **`jsdom` se usa sólo para un componente con estado, o con un
+handler de evento, que no se puede invocar como función pura.** Todo lo demás
+—la enorme mayoría de la UI de este repo— se sigue testeando con
+`renderToStaticMarkup` y sin DOM. Si te encontrás agregando el pragma a un
+TERCER archivo, pará y preguntate si el componente de verdad lo necesita, o si
+alcanza con un pin más barato (`data-*` con el prop en juego, como
+`data-formato`/`data-quien-juega`) sobre `renderToStaticMarkup`.
 
 **Tres lecciones sobre tests, que costaron rondas:**
 

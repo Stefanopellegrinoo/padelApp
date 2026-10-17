@@ -1,15 +1,21 @@
+import { execFileSync } from 'node:child_process'
 import { describe, expect, it } from 'vitest'
 import {
   computeRanking,
   defaultConfig,
   mastersChampion,
   mastersQualifiers,
-  samePair,
+  members,
+  pair,
+  sameSide,
   snapshotForMatchday,
+  type DisciplineId,
   type MastersFour,
-  type Pair,
   type SeasonConfig,
+  type Side,
 } from '@/core'
+import type { Json } from './database.types'
+import { updateDisciplineConfig } from './discipline'
 import {
   addGuest,
   clearPairs,
@@ -21,13 +27,14 @@ import {
   lockPair,
   openMatchday,
   removeLooseGuestSeat,
+  reopenMatchday,
   saveResult,
   seedAttendances,
   setAttendance,
   setMyAttendance,
   syncGuestSeat,
 } from './matchday'
-import { attendancesOf, entriesOf, matchdayDetail, matchdaysOf, seasonHeader } from './read'
+import { attendancesOf, entriesOf, matchdayDetail, matchdaysOf, primaryDiscipline, seasonHeader } from './read'
 import { awardsBefore, squadSeedOrder } from './season'
 import { adminClient } from './test/admin'
 import { createSeason } from './test/factories'
@@ -55,10 +62,32 @@ async function fillerPlayers(count: number): Promise<string[]> {
   return ids
 }
 
+/**
+ * SQL crudo contra la Postgres local, adentro del contenedor del stack de
+ * Supabase. Mismo patrón y misma razón que `db/squad-position.db.test.ts`:
+ * forzar los GUCs del planner (`enable_indexscan`, etc.) sólo se puede desde
+ * una sesión de `psql`, no desde el cliente de test (PostgREST no expone
+ * `set`). Acá además impersona al admin con `request.jwt.claim.sub` — el
+ * mismo GUC que lee `auth.uid()` (0002_rls.sql) — porque `create_masters` es
+ * `security definer` y su propio guard (`is_season_admin`) depende de él.
+ */
+function localSql(sql: string): string {
+  return execFileSync(
+    'docker',
+    [
+      'exec', '-i', 'supabase_db_padelApp',
+      'psql', '-U', 'postgres', '-d', 'postgres',
+      '-X', '-q', '-A', '-t', '-v', 'ON_ERROR_STOP=1', '-f', '-',
+    ],
+    { input: sql, encoding: 'utf8' },
+  )
+}
+
 interface Scene {
   admin: TestUser
   player: TestUser
   seasonId: string
+  disciplineId: DisciplineId
   squad: string[]
 }
 
@@ -66,12 +95,12 @@ async function buildScene(config: SeasonConfig = shortSeason()): Promise<Scene> 
   const admin = await createTestUser()
   const player = await createTestUser()
   const filler = await fillerPlayers(config.squadSize - 1)
-  const { seasonId, entryIds } = await createSeason({
+  const { seasonId, disciplineId, entryIds } = await createSeason({
     admin,
     config,
     squad: [player.playerId, ...filler],
   })
-  return { admin, player, seasonId, squad: entryIds }
+  return { admin, player, seasonId, disciplineId, squad: entryIds }
 }
 
 async function matchIdsOf(matchdayId: string): Promise<string[]> {
@@ -85,11 +114,22 @@ async function matchIdsOf(matchdayId: string): Promise<string[]> {
   return (data ?? []).map((row) => row.id)
 }
 
-/** Juega y cierra la temporada regular entera para dejarla lista para el Masters. */
-async function playRegularSeason(admin: TestUser, seasonId: string, squad: string[]): Promise<void> {
-  const config = (await seasonHeader(admin.client, seasonId)).config
+/**
+ * Juega y cierra la temporada regular entera para dejarla lista para el Masters.
+ *
+ * `disciplineId` es opcional: todos los llamadores salvo el de N1 (heap
+ * invertido, dos disciplinas) usan `buildScene()`, de una sola disciplina —
+ * ahí omitirlo sigue sin ser ambiguo (S26, guarda de `createMatchday`).
+ */
+async function playRegularSeason(
+  admin: TestUser,
+  seasonId: string,
+  squad: string[],
+  disciplineId?: string,
+): Promise<void> {
+  const config = primaryDiscipline(await seasonHeader(admin.client, seasonId)).config
   for (let number = 1; number <= config.regularMatchdays; number++) {
-    const matchdayId = await createMatchday(admin.client, seasonId, '2026-03-05')
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-03-05', disciplineId)
     for (const entryId of squad) {
       await setAttendance(admin.client, matchdayId, entryId, 'PLAYING')
     }
@@ -102,74 +142,79 @@ async function playRegularSeason(admin: TestUser, seasonId: string, squad: strin
   }
 }
 
-async function qualifiersOf(admin: TestUser, seasonId: string, mastersNumber: number): Promise<MastersFour> {
-  const config = (await seasonHeader(admin.client, seasonId)).config
-  const seedOrder = await squadSeedOrder(admin.client, seasonId)
-  const awards = await awardsBefore(admin.client, seasonId, mastersNumber)
+async function qualifiersOf(
+  admin: TestUser,
+  seasonId: string,
+  disciplineId: DisciplineId,
+  mastersNumber: number,
+): Promise<MastersFour> {
+  const config = primaryDiscipline(await seasonHeader(admin.client, seasonId)).config
+  const seedOrder = await squadSeedOrder(admin.client, disciplineId)
+  const awards = await awardsBefore(admin.client, disciplineId, mastersNumber)
   const snapshot = snapshotForMatchday(mastersNumber, seedOrder, awards, config)
   return mastersQualifiers(computeRanking(awards, seedOrder, config, snapshot))
 }
 
-function pairKey(pair: Pair): string {
-  return [pair.a, pair.b].sort().join('~')
+function sideKey(side: Side): string {
+  return [...members(side)].sort().join('~')
 }
 
 // ── el Masters ──────────────────────────────────────────────────────────────
 
 describe('the masters', () => {
   it('lays out six pairs and three matches where everyone plays once with everyone', async () => {
-    const { admin, seasonId, squad } = await buildScene()
+    const { admin, seasonId, disciplineId, squad } = await buildScene()
     await playRegularSeason(admin, seasonId, squad)
 
-    const mastersId = await createMasters(admin.client, seasonId, '2026-12-20')
+    const mastersId = await createMasters(admin.client, disciplineId, '2026-12-20')
     await generateMastersPairs(admin.client, mastersId)
 
     const detail = await matchdayDetail(admin.client, mastersId)
-    expect(detail.pairs).toHaveLength(6)
+    expect(detail.sides).toHaveLength(6)
     expect(detail.matches).toHaveLength(3)
 
-    const four = await qualifiersOf(admin, seasonId, detail.matchday.number)
+    const four = await qualifiersOf(admin, seasonId, disciplineId, detail.matchday.number)
 
     // Las 6 parejas son las 6 combinaciones posibles de 4 jugadores, sin repetir.
     const expected = new Set<string>()
     for (let i = 0; i < 4; i++) {
-      for (let j = i + 1; j < 4; j++) expected.add(pairKey({ a: four[i]!, b: four[j]! }))
+      for (let j = i + 1; j < 4; j++) expected.add(sideKey(pair(four[i]!, four[j]!)))
     }
-    expect(new Set(detail.pairs.map(pairKey))).toEqual(expected)
+    expect(new Set(detail.sides.map(sideKey))).toEqual(expected)
 
     // Y cada clasificado aparece en exactamente 3 de ellas.
     for (const entryId of four) {
-      const appearances = detail.pairs.filter((pair) => pair.a === entryId || pair.b === entryId)
+      const appearances = detail.sides.filter((side) => members(side).includes(entryId))
       expect(appearances).toHaveLength(3)
     }
   })
 
   it('follows the fixture of the spec: 1+4 vs 2+3, 1+3 vs 2+4, 1+2 vs 3+4', async () => {
-    const { admin, seasonId, squad } = await buildScene()
+    const { admin, seasonId, disciplineId, squad } = await buildScene()
     await playRegularSeason(admin, seasonId, squad)
 
-    const mastersId = await createMasters(admin.client, seasonId, '2026-12-20')
+    const mastersId = await createMasters(admin.client, disciplineId, '2026-12-20')
     await generateMastersPairs(admin.client, mastersId)
 
     const detail = await matchdayDetail(admin.client, mastersId)
-    const [one, two, three, four] = await qualifiersOf(admin, seasonId, detail.matchday.number)
+    const [one, two, three, four] = await qualifiersOf(admin, seasonId, disciplineId, detail.matchday.number)
     const byRound = [...detail.matches].sort((left, right) => left.round - right.round)
 
     const facing = (round: number): Set<string> =>
-      new Set([pairKey(byRound[round]!.pairA), pairKey(byRound[round]!.pairB)])
+      new Set([sideKey(byRound[round]!.sideA), sideKey(byRound[round]!.sideB)])
 
-    expect(facing(0)).toEqual(new Set([pairKey({ a: one, b: four }), pairKey({ a: two, b: three })]))
-    expect(facing(1)).toEqual(new Set([pairKey({ a: one, b: three }), pairKey({ a: two, b: four })]))
-    expect(facing(2)).toEqual(new Set([pairKey({ a: one, b: two }), pairKey({ a: three, b: four })]))
+    expect(facing(0)).toEqual(new Set([sideKey(pair(one, four)), sideKey(pair(two, three))]))
+    expect(facing(1)).toEqual(new Set([sideKey(pair(one, three)), sideKey(pair(two, four))]))
+    expect(facing(2)).toEqual(new Set([sideKey(pair(one, two)), sideKey(pair(three, four))]))
   })
 
   // Antes de este plan `openMatchday` corría assertMatchdaySize sobre un
   // `present` vacío y el Masters no se podía abrir nunca.
   it('opens without a single attendance row', async () => {
-    const { admin, seasonId, squad } = await buildScene()
+    const { admin, seasonId, disciplineId, squad } = await buildScene()
     await playRegularSeason(admin, seasonId, squad)
 
-    const mastersId = await createMasters(admin.client, seasonId, '2026-12-20')
+    const mastersId = await createMasters(admin.client, disciplineId, '2026-12-20')
     await generateMastersPairs(admin.client, mastersId)
     expect(await attendancesOf(admin.client, mastersId)).toEqual(new Map())
 
@@ -182,10 +227,10 @@ describe('the masters', () => {
   // Antes de este plan closeMatchday mandaba seis awards y close_matchday los
   // rebotaba con "El Masters no reparte puntos": el año no podía terminar.
   it('closes without paying a single point, and ends the year', async () => {
-    const { admin, seasonId, squad } = await buildScene()
+    const { admin, seasonId, disciplineId, squad } = await buildScene()
     await playRegularSeason(admin, seasonId, squad)
 
-    const mastersId = await createMasters(admin.client, seasonId, '2026-12-20')
+    const mastersId = await createMasters(admin.client, disciplineId, '2026-12-20')
     await generateMastersPairs(admin.client, mastersId)
     await openMatchday(admin.client, mastersId)
     for (const matchId of await matchIdsOf(mastersId)) {
@@ -201,23 +246,62 @@ describe('the masters', () => {
       .eq('matchday_id', mastersId)
     expect(count).toBe(0)
     expect((await seasonHeader(admin.client, seasonId)).status).toBe('FINISHED')
+
+    //(0019_discipline_status_moves.sql): cerrar el Masters termina TAMBIÉN
+    // la disciplina que lo jugó, mismo trinquete que seasons.status de arriba.
+    const { data: discipline, error } = await db
+      .from('disciplines')
+      .select('status')
+      .eq('id', disciplineId)
+      .single()
+    if (error || discipline === null) throw new Error(error?.message)
+    expect(discipline.status).toBe('FINISHED')
+  })
+
+  //(0019_discipline_status_moves.sql): reabrir el Masters revierte
+  // disciplines.status a ACTIVE, gemelo del trinquete ya probado en
+  // db/season.db.test.ts para seasons.status.
+  it('reopening the masters returns disciplines.status to ACTIVE', async () => {
+    const { admin, disciplineId, seasonId, squad } = await buildScene()
+    await playRegularSeason(admin, seasonId, squad)
+
+    const mastersId = await createMasters(admin.client, disciplineId, '2026-12-20')
+    await generateMastersPairs(admin.client, mastersId)
+    await openMatchday(admin.client, mastersId)
+    for (const matchId of await matchIdsOf(mastersId)) {
+      await saveResult(admin.client, matchId, [{ gamesA: 4, gamesB: 0 }])
+    }
+    await closeMatchday(admin.client, mastersId)
+
+    const db = adminClient()
+    const disciplineStatus = async (): Promise<string> => {
+      const { data, error } = await db.from('disciplines').select('status').eq('id', disciplineId).single()
+      if (error || data === null) throw new Error(error?.message)
+      return data.status
+    }
+    expect(await disciplineStatus()).toBe('FINISHED')
+
+    await reopenMatchday(admin.client, mastersId)
+
+    expect(await disciplineStatus()).toBe('ACTIVE')
+    expect((await seasonHeader(admin.client, seasonId)).status).toBe('ACTIVE')
   })
 
   it('crowns the player who won the most matches', async () => {
-    const { admin, seasonId, squad } = await buildScene()
+    const { admin, seasonId, disciplineId, squad } = await buildScene()
     await playRegularSeason(admin, seasonId, squad)
 
-    const mastersId = await createMasters(admin.client, seasonId, '2026-12-20')
+    const mastersId = await createMasters(admin.client, disciplineId, '2026-12-20')
     await generateMastersPairs(admin.client, mastersId)
     await openMatchday(admin.client, mastersId)
 
     const detail = await matchdayDetail(admin.client, mastersId)
-    const four = await qualifiersOf(admin, seasonId, detail.matchday.number)
+    const four = await qualifiersOf(admin, seasonId, disciplineId, detail.matchday.number)
     const target = four[3]! // el 4º del año: sin él no se distingue de un empate roto por ranking
 
     // El 4º gana sus tres partidos, así que gana limpio y no por desempate.
     for (const match of detail.matches) {
-      const targetIsA = match.pairA.a === target || match.pairA.b === target
+      const targetIsA = members(match.sideA).includes(target)
       await saveResult(
         admin.client,
         match.id,
@@ -227,6 +311,253 @@ describe('the masters', () => {
 
     const after = await matchdayDetail(admin.client, mastersId)
     expect(mastersChampion(four, after.matches)).toBe(target)
+  })
+})
+
+
+describe('generateMastersPairs pair_size guard', () => {
+  it('rejects a MASTERS matchday of a pair_size=1 discipline with an honest message, before touching pairs', async () => {
+    const admin = await createTestUser()
+    const filler = await fillerPlayers(8)
+    const { seasonId, disciplineId } = await createSeason({
+      admin,
+      squad: filler,
+      disciplines: [{ kind: 'FIFA', pairSize: 1 }],
+    })
+    const db = adminClient()
+    const { data: matchday, error: matchdayError } = await db
+      .from('matchdays')
+      .insert({ season_id: seasonId, discipline_id: disciplineId, number: 1, kind: 'MASTERS', pair_size: 1 })
+      .select('id')
+      .single()
+    if (matchdayError || matchday === null) throw new Error(matchdayError?.message)
+
+    await expect(generateMastersPairs(admin.client, matchday.id)).rejects.toThrow(
+      'El Masters se juega de a parejas: una disciplina de a uno no lo arma.',
+    )
+  })
+})
+
+// ── W87 (verify-report-pre-contract #4026) ──────────────────────────────────
+// `create_masters` leía `seasons.config.regularMatchdays`, y `seasons.config`
+// no tiene escritor de producción desde PR6: `updateDisciplineConfig`
+// (db/discipline.ts), el único camino real de "Fechas" en Ajustes, sólo toca
+// `disciplines.config`. El portón del Masters y la pantalla (que SÍ lee
+// `discipline.config.regularMatchdays`, `fechas/page.tsx:114`) podían quedar
+// diciendo dos cosas distintas.
+function tenMatchdaySeason(): SeasonConfig {
+  return { ...defaultConfig(8), regularMatchdays: 10, countBestOf: 10 }
+}
+
+describe('create_masters reads disciplines.config, not seasons.config', () => {
+  it('lets the Masters be armed after the FECHAS the admin edited in Ajustes, not the stale value nobody writes back to seasons.config', async () => {
+    const { admin, seasonId, disciplineId, squad } = await buildScene(tenMatchdaySeason())
+
+    // "Fechas" en Ajustes: el único escritor real de producción, y sólo toca
+    // disciplines.config (docblock de updateDisciplineConfig). seasons.config
+    // se queda en regularMatchdays=10 para siempre.
+    await updateDisciplineConfig(admin.client, disciplineId, {
+      ...tenMatchdaySeason(),
+      regularMatchdays: 1,
+      countBestOf: 1,
+    })
+
+    // Juega y cierra sólo 1 fecha: playRegularSeason lee la config vigente de
+    // la DISCIPLINA (primaryDiscipline(header).config), que ahora dice 1.
+    await playRegularSeason(admin, seasonId, squad)
+
+    const mastersId = await createMasters(admin.client, disciplineId, '2026-12-20')
+
+    const db = adminClient()
+    const { data: matchday, error } = await db
+      .from('matchdays')
+      .select('kind, discipline_id')
+      .eq('id', mastersId)
+      .single()
+    if (error || matchday === null) throw new Error(error?.message)
+    expect(matchday.kind).toBe('MASTERS')
+    expect(matchday.discipline_id).toBe(disciplineId)
+  })
+})
+
+// ── C34 (verify-report-pre-contract #4026) + decisión #4027 ────────────────
+// `disciplines.has_masters` existe desde 0015 y ningún lector de producción
+// la consumía: una disciplina de a uno quedaba sin forma de terminar la
+// temporada, porque `close_matchday` sólo pone `disciplines.status =
+// 'FINISHED'` cuando cierra el Masters, y el Masters rechaza para siempre a
+// una disciplina pair_size=1 (`generateMastersPairs`, arriba). Stefano
+// decidió: una disciplina puede declarar que no juega Masters, y en ese caso
+// termina con su última fecha REGULAR.
+async function setHasMasters(disciplineId: DisciplineId, value: boolean): Promise<void> {
+  const db = adminClient()
+  const { error } = await db.from('disciplines').update({ has_masters: value }).eq('id', disciplineId)
+  if (error) throw new Error(error.message)
+}
+
+async function disciplineStatusOf(disciplineId: DisciplineId): Promise<string> {
+  const db = adminClient()
+  const { data, error } = await db.from('disciplines').select('status').eq('id', disciplineId).single()
+  if (error || data === null) throw new Error(error?.message)
+  return data.status
+}
+
+async function buildSoloScene(): Promise<Scene> {
+  const config = defaultConfig(8, 1)
+  const admin = await createTestUser()
+  const player = await createTestUser()
+  const filler = await fillerPlayers(config.squadSize - 1)
+  const { seasonId, disciplineId, entryIds } = await createSeason({
+    admin,
+    config: { ...config, regularMatchdays: 1, countBestOf: 1 },
+    squad: [player.playerId, ...filler],
+    disciplines: [{ kind: 'FIFA', pairSize: 1 }],
+  })
+  return { admin, player, seasonId, disciplineId, squad: entryIds }
+}
+
+describe('a discipline without a masters (has_masters=false)', () => {
+  it('finishes when its last regular matchday closes, with no Masters ever needed', async () => {
+    const { admin, seasonId, disciplineId, squad } = await buildSoloScene()
+    await setHasMasters(disciplineId, false)
+
+    await playRegularSeason(admin, seasonId, squad)
+
+    expect(await disciplineStatusOf(disciplineId)).toBe('FINISHED')
+  })
+
+  it('create_masters refuses to build one for it, even once its last fecha regular is closed', async () => {
+    const { admin, seasonId, disciplineId, squad } = await buildSoloScene()
+    await setHasMasters(disciplineId, false)
+    await playRegularSeason(admin, seasonId, squad)
+
+    await expect(createMasters(admin.client, disciplineId, '2026-12-20')).rejects.toThrow(
+      'Esta disciplina no juega Masters',
+    )
+  })
+
+  it('reopening that last regular matchday returns disciplines.status to ACTIVE', async () => {
+    const { admin, seasonId, disciplineId, squad } = await buildSoloScene()
+    await setHasMasters(disciplineId, false)
+    await playRegularSeason(admin, seasonId, squad)
+    expect(await disciplineStatusOf(disciplineId)).toBe('FINISHED')
+
+    const db = adminClient()
+    const { data: matchday, error } = await db
+      .from('matchdays')
+      .select('id')
+      .eq('discipline_id', disciplineId)
+      .eq('kind', 'REGULAR')
+      .order('number', { ascending: false })
+      .limit(1)
+      .single()
+    if (error || matchday === null) throw new Error(error?.message)
+
+    await reopenMatchday(admin.client, matchday.id)
+
+    expect(await disciplineStatusOf(disciplineId)).toBe('ACTIVE')
+  })
+})
+
+describe('create_masters discipline resolution', () => {
+  // 0016_matchday_scope.sql:85 resolvía `v_discipline` con un
+  // `select ... into` SIN `order by` ni `limit`: con una sola disciplina por
+  // temporada (el tripwire de 0015) daba siempre lo mismo por casualidad,
+  // pero con dos filas el resultado depende del plan que elija el planner.
+  // `defaultDisciplineId` (db/season.ts) ya tiene el criterio correcto
+  // (`position, created_at`); create_masters tiene que coincidir SIEMPRE, no
+  // sólo cuando el planner elige Index Scan.
+  it('picks the same discipline as defaultDisciplineId even under a Seq Scan over a reversed heap', async () => {
+    const config = shortSeason()
+    const admin = await createTestUser()
+    const filler = await fillerPlayers(config.squadSize - 1)
+    const { seasonId, entryIds: squad } = await createSeason({
+      admin,
+      config,
+      squad: [admin.playerId, ...filler],
+      disciplines: [{ kind: 'PADEL' }],
+    })
+
+    // Heap invertido respecto de `position`, mismo truco que
+    // squad-position.db.test.ts: un solo insert múltiple escribe las dos
+    // filas en el orden del array, así que FIFA (position 1) queda
+    // físicamente ANTES que PADEL (position 0). `order by position` sigue
+    // dando PADEL; un Seq Scan sin `order by` da FIFA.
+    const db = adminClient()
+    await db.from('disciplines').delete().eq('season_id', seasonId)
+    const { data: disciplines, error: disciplinesError } = await db
+      .from('disciplines')
+      .insert([
+        { season_id: seasonId, kind: 'FIFA', config: config as unknown as Json, position: 1 },
+        { season_id: seasonId, kind: 'PADEL', config: config as unknown as Json, position: 0 },
+      ])
+      .select('id, kind')
+    if (disciplinesError || disciplines === null) throw new Error(disciplinesError?.message)
+    const padelId = disciplines.find((row) => row.kind === 'PADEL')?.id
+    const fifaId = disciplines.find((row) => row.kind === 'FIFA')?.id
+    if (padelId === undefined || fifaId === undefined) throw new Error('Faltó una disciplina de test.')
+
+    // El heap quedó como se pide: no se asume, se mide (mismo criterio que
+    // squad-position.db.test.ts:228-230).
+    const heap = localSql(
+      `select kind from public.disciplines where season_id = '${seasonId}' order by ctid;`,
+    )
+      .trim()
+      .split('\n')
+    expect(heap).toEqual(['FIFA', 'PADEL'])
+
+    // El criterio correcto (el que ya usa defaultDisciplineId) sigue dando
+    // PADEL pase lo que pase con el heap: es la referencia contra la que
+    // create_masters tiene que coincidir.
+    const { data: authoritative } = await db
+      .from('disciplines')
+      .select('id')
+      .eq('season_id', seasonId)
+      .order('position', { ascending: true })
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+    expect(authoritative?.id).toBe(padelId)
+
+    // El `delete` de disciplines de arriba se llevó en cascada las filas de
+    // `discipline_entries` del plantel (PR 7): sin reponerlas para el padelId
+    // NUEVO, `setAttendance` (adentro de `playRegularSeason`) choca contra
+    // `attendances_entry_discipline` (PR 8) apenas intenta marcar presente.
+    const { error: seatsError } = await db.from('discipline_entries').insert(
+      squad.map((entryId, index) => ({
+        discipline_id: padelId,
+        entry_id: entryId,
+        season_id: seasonId,
+        seed_position: index,
+      })),
+    )
+    if (seatsError) throw new Error(seatsError.message)
+
+    // Cierra la única fecha regular de PADEL — FIFA se queda sin ninguna. Si
+    // create_masters resolviera FIFA por error, vería 0 fechas cerradas en
+    // vez de la 1 que pide `regularMatchdays` y explotaría con "faltan 1".
+    await playRegularSeason(admin, seasonId, squad, padelId)
+
+    // GUCs y llamada en la MISMA sesión de psql, mismo motivo que
+    // squad-position.db.test.ts:240-243: sin index scan ni bitmap scan al
+    // motor no le queda otra que el Seq Scan, que recorre el heap tal cual
+    // quedó escrito arriba.
+    const output = localSql(`
+      set enable_indexscan = off;
+      set enable_bitmapscan = off;
+      set enable_indexonlyscan = off;
+      set request.jwt.claim.sub = '${admin.userId}';
+      select public.create_masters('${seasonId}'::uuid, '2026-12-20'::date);
+    `)
+    const mastersId = output.trim()
+    expect(mastersId).toMatch(/^[0-9a-f-]{36}$/)
+
+    const { data: masters, error: mastersError } = await db
+      .from('matchdays')
+      .select('discipline_id')
+      .eq('id', mastersId)
+      .single()
+    if (mastersError || masters === null) throw new Error(mastersError?.message)
+    expect(masters.discipline_id).toBe(padelId)
   })
 })
 
@@ -386,12 +717,12 @@ describe('clearPairs', () => {
     const matchdayId = await createMatchday(admin.client, seasonId, '2026-03-05')
     await seedAttendances(admin.client, matchdayId)
     await generatePairs(admin.client, matchdayId)
-    expect((await matchdayDetail(admin.client, matchdayId)).pairs).toHaveLength(4)
+    expect((await matchdayDetail(admin.client, matchdayId)).sides).toHaveLength(4)
 
     await clearPairs(admin.client, matchdayId)
 
     const detail = await matchdayDetail(admin.client, matchdayId)
-    expect(detail.pairs).toEqual([])
+    expect(detail.sides).toEqual([])
     expect(detail.matches).toEqual([])
   })
 
@@ -403,7 +734,7 @@ describe('clearPairs', () => {
     await openMatchday(admin.client, matchdayId)
 
     await expect(clearPairs(admin.client, matchdayId)).rejects.toThrow(/en armado/)
-    expect((await matchdayDetail(admin.client, matchdayId)).pairs).toHaveLength(4)
+    expect((await matchdayDetail(admin.client, matchdayId)).sides).toHaveLength(4)
   })
 })
 
@@ -428,8 +759,163 @@ describe('a matchday drawn with a guest', () => {
     await openMatchday(admin.client, matchdayId)
 
     const detail = await matchdayDetail(admin.client, matchdayId)
-    expect(detail.pairs).toHaveLength(4)
+    expect(detail.sides).toHaveLength(4)
     expect(detail.guestIds).toEqual([guestId])
-    expect(detail.pairs.some((pair) => samePair(pair, { a: guestId, b: guestId }))).toBe(false)
+    expect(detail.sides.some((side) => sameSide(side, pair(guestId, guestId)))).toBe(false)
+  })
+})
+
+// ── C36: un torneo de DOS disciplinas tiene que poder terminar ──────────────
+// Decisión #4035: cada disciplina juega SU PROPIO Masters.
+//
+// Lo que midió `verify-report-go-no-go` (#4034): Pádel + FIFA, las dos en
+// "Parejas" —el DEFAULT del wizard (`wizard.tsx:397`)— dejaba un torneo que
+// NO PODÍA TERMINAR NUNCA:
+//
+//   * las dos nacen `has_masters = true`, así que su único camino a FINISHED
+//     es un Masters (el `elsif REGULAR` de `0056` exige `not v_has_masters`);
+//   * `create_masters` resolvía la disciplina con `order by position,
+//     created_at limit 1` (`0050:46-48`), o sea SIEMPRE la primaria;
+//   * el segundo llamado rebotaba con "Ya hay un Masters…", y FIFA quedaba
+//     ACTIVE para siempre. Con ella, la temporada.
+//
+// La base ya lo soportaba: `matchdays_one_masters` es unique sobre
+// `discipline_id`, no sobre `season_id`. Lo único que faltaba era que la
+// función recibiera QUIÉN lo pidió.
+describe('C36 — cada disciplina juega su propio Masters', () => {
+  it('las dos disciplinas de a dos llegan a FINISHED, y la temporada termina', async () => {
+    const admin = await createTestUser()
+    const config = shortSeason()
+    const { seasonId, disciplineIds } = await createSeason({
+      admin,
+      config,
+      squad: await fillerPlayers(config.squadSize),
+      // El default del wizard, textual: las dos en "Parejas".
+      disciplines: [
+        { kind: 'PADEL', config, pairSize: 2 },
+        { kind: 'FIFA', config, pairSize: 2 },
+      ],
+    })
+    const [padelId, fifaId] = disciplineIds
+    if (padelId === undefined || fifaId === undefined) throw new Error('La escena no armó las 2 disciplinas.')
+
+    const squad = (await entriesOf(admin.client, seasonId, padelId))
+      .filter((entry) => entry.kind === 'SQUAD')
+      .map((entry) => entry.id)
+
+    async function playMasters(disciplineId: DisciplineId): Promise<void> {
+      const mastersId = await createMasters(admin.client, disciplineId, '2026-12-20')
+      await generateMastersPairs(admin.client, mastersId)
+      await openMatchday(admin.client, mastersId)
+      for (const matchId of await matchIdsOf(mastersId)) {
+        await saveResult(admin.client, matchId, [{ gamesA: 4, gamesB: 0 }])
+      }
+      await closeMatchday(admin.client, mastersId)
+    }
+
+    await playRegularSeason(admin, seasonId, squad, padelId)
+    await playRegularSeason(admin, seasonId, squad, fifaId)
+
+    await playMasters(padelId)
+    expect(await disciplineStatusOf(padelId)).toBe('FINISHED')
+    // Acá se moría el torneo: el segundo Masters rebotaba y FIFA no tenía
+    // ningún otro camino a FINISHED.
+    expect(await disciplineStatusOf(fifaId)).toBe('ACTIVE')
+
+    await playMasters(fifaId)
+    expect(await disciplineStatusOf(fifaId)).toBe('FINISHED')
+
+    // REQ-D3-3: con TODAS en FINISHED, la temporada termina. Es lo que
+    // `/torneos` dibuja como "Terminado" y lo que #4034 midió diciendo
+    // "En curso" para siempre.
+    expect((await seasonHeader(admin.client, seasonId)).status).toBe('FINISHED')
+  })
+
+  it('el Masters de una disciplina no se puede armar desde otra que no terminó sus fechas', async () => {
+    const admin = await createTestUser()
+    const config = shortSeason()
+    const { seasonId, disciplineIds } = await createSeason({
+      admin,
+      config,
+      squad: await fillerPlayers(config.squadSize),
+      disciplines: [
+        { kind: 'PADEL', config, pairSize: 2 },
+        { kind: 'FIFA', config, pairSize: 2 },
+      ],
+    })
+    const [padelId, fifaId] = disciplineIds
+    if (padelId === undefined || fifaId === undefined) throw new Error('La escena no armó las 2 disciplinas.')
+
+    const squad = (await entriesOf(admin.client, seasonId, padelId))
+      .filter((entry) => entry.kind === 'SQUAD')
+      .map((entry) => entry.id)
+
+    // Sólo Pádel juega. FIFA no tiene ni una fecha cerrada, así que su
+    // Masters tiene que rebotar POR SU PROPIA cuenta de fechas — no por la de
+    // la primaria, que sí terminó.
+    await playRegularSeason(admin, seasonId, squad, padelId)
+
+    await expect(createMasters(admin.client, fifaId, '2026-12-20')).rejects.toThrow(
+      /El Masters se juega al terminar las 1 fechas: faltan 1\./,
+    )
+  })
+})
+
+// ── S97: los dos `if` que dependen de una premisa que sólo sostiene TS ──────
+// `0049` sacó el `if v_regular is null then raise` que `0021` tenía, al mudar
+// la lectura de `seasons` a `disciplines`. Sin él, un `disciplines.config` sin
+// `regularMatchdays` deja `v_regular` en NULL, y en SQL una comparación con
+// NULL no es falsa: es NULL, que el `if` trata como falso.
+//
+// Efecto medido acá abajo: la disciplina NO TERMINA NUNCA, sin un solo error.
+// Es el mismo síntoma que C36, por otra causa y sin nada que lo diga.
+//
+// Inalcanzable por la app (`SeasonConfig` declara `regularMatchdays` y
+// `assertValidConfig` valida `>= 1`), pero `close_matchday` es `security
+// definer` y se llega por RPC directo — la premisa la sostiene TypeScript, que
+// no corre del lado de la base.
+describe('S97 — close_matchday con un config sin regularMatchdays', () => {
+  it('no deja la disciplina sin terminar en silencio', async () => {
+    const { admin, seasonId, disciplineId, squad } = await buildSoloScene()
+    await setHasMasters(disciplineId, false)
+
+    // La fecha se arma y se juega ENTERA con el config sano: `generatePairs` y
+    // `openMatchday` validan la config y rebotarían antes de llegar acá.
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-03-05', disciplineId)
+    for (const entryId of squad) await setAttendance(admin.client, matchdayId, entryId, 'PLAYING')
+    await generatePairs(admin.client, matchdayId)
+    await openMatchday(admin.client, matchdayId)
+    for (const matchId of await matchIdsOf(matchdayId)) {
+      await saveResult(admin.client, matchId, [{ gamesA: 4, gamesB: 0 }])
+    }
+
+    // Recién ACÁ el config pierde `regularMatchdays`, sin pasar por ninguna
+    // función de escritura de la app — que es como llegaría en producción: un
+    // PATCH directo, o una fila anterior al campo.
+    const db = adminClient()
+    const { data: row, error: readError } = await db
+      .from('disciplines')
+      .select('config')
+      .eq('id', disciplineId)
+      .single()
+    if (readError || row === null) throw new Error(readError?.message)
+    const { regularMatchdays: _drop, ...sinFechas } = row.config as Record<string, unknown>
+    const { error: writeError } = await db
+      .from('disciplines')
+      .update({ config: sinFechas as never })
+      .eq('id', disciplineId)
+    if (writeError) throw new Error(writeError.message)
+
+    // RPC DIRECTO y no `closeMatchday` (#3989, guards en serie): el wrapper de
+    // TS valida la config antes y rebotaría con otro mensaje, dejando el guard
+    // SQL —el único que de verdad no se puede esquivar— sin ejercitar.
+    const { error } = await admin.client.rpc('close_matchday', {
+      p_matchday: matchdayId,
+      p_awards: [],
+    })
+
+    expect(error?.message).toMatch(/no tiene definida la cantidad de fechas/)
+    // Y no terminó a medias: la fecha sigue OPEN, la disciplina sin FINISHED.
+    expect(await disciplineStatusOf(disciplineId)).not.toBe('FINISHED')
   })
 })

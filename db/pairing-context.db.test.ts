@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { defaultConfig, type SeasonConfig } from '@/core'
+import { defaultConfig, pair, type SeasonConfig } from '@/core'
 import { EdgeError } from './errors'
 import { matchdayContextFor, pairingContextFor } from './matchday'
 import { adminClient } from './test/admin'
@@ -35,6 +35,14 @@ async function buildSeasonWithSquad(
   return { admin, seasonId, squad: entryIds }
 }
 
+// Una sola disciplina por temporada mientras el tripwire (0015) siga puesto.
+async function disciplineIdOf(seasonId: string): Promise<string> {
+  const db = adminClient()
+  const { data, error } = await db.from('disciplines').select('id').eq('season_id', seasonId).single()
+  if (error || data === null) throw new Error(error?.message)
+  return data.id
+}
+
 interface AwardInput {
   entryId: string
   position: number
@@ -55,9 +63,10 @@ async function closeMatchday(
   awards: AwardInput[],
 ): Promise<string> {
   const db = adminClient()
+  const disciplineId = await disciplineIdOf(seasonId)
   const { data: matchday, error } = await db
     .from('matchdays')
-    .insert({ season_id: seasonId, number, status: 'CLOSED' })
+    .insert({ season_id: seasonId, discipline_id: disciplineId, number, status: 'CLOSED' })
     .select('id')
     .single()
   if (error || matchday === null) throw new Error(error?.message)
@@ -91,23 +100,32 @@ async function openMatchday(
   status: 'DRAFT' | 'CLOSED' = 'DRAFT',
 ): Promise<string> {
   const db = adminClient()
+  const disciplineId = await disciplineIdOf(seasonId)
   const { data: matchday, error } = await db
     .from('matchdays')
-    .insert({ season_id: seasonId, number, status })
+    .insert({ season_id: seasonId, discipline_id: disciplineId, number, status })
     .select('id')
     .single()
   if (error || matchday === null) throw new Error(error?.message)
 
   for (const entryId of playing) {
-    const { error: attError } = await db
-      .from('attendances')
-      .insert({ matchday_id: matchday.id, season_id: seasonId, entry_id: entryId, status: 'PLAYING' })
+    const { error: attError } = await db.from('attendances').insert({
+      matchday_id: matchday.id,
+      season_id: seasonId,
+      discipline_id: disciplineId,
+      entry_id: entryId,
+      status: 'PLAYING',
+    })
     if (attError) throw new Error(attError.message)
   }
   for (const entryId of absent) {
-    const { error: attError } = await db
-      .from('attendances')
-      .insert({ matchday_id: matchday.id, season_id: seasonId, entry_id: entryId, status: 'ABSENT' })
+    const { error: attError } = await db.from('attendances').insert({
+      matchday_id: matchday.id,
+      season_id: seasonId,
+      discipline_id: disciplineId,
+      entry_id: entryId,
+      status: 'ABSENT',
+    })
     if (attError) throw new Error(attError.message)
   }
   return matchday.id
@@ -149,7 +167,7 @@ describe('pairingContextFor', () => {
     //   mejores 2 (countBestOf: 2): A = 20, B = 14 — gana A claramente.
     const config: SeasonConfig = {
       squadSize: 8,
-      matchFormat: { setsToWin: 1, gamesPerSet: 4, tieBreak: true },
+      matchFormat: { setsToWin: 1, gamesPerSet: 4, tieBreak: true, openScore: false },
       points: [10, 7, 5, 1],
       regularMatchdays: 4,
       countBestOf: 2,
@@ -244,9 +262,9 @@ describe('pairingContextFor', () => {
 
     const context = await pairingContextFor(admin.client, matchdayId)
 
-    expect(context.input.defenders).toEqual({ a: p1, b: p2 })
+    expect(context.input.defenders).toEqual(pair(p1, p2))
     expect(context.input.defendersAlreadyRepeated).toBe(false)
-    expect(context.input.previousPairs).toEqual([{ a: p1, b: p2 }])
+    expect(context.input.previousPairs).toEqual([pair(p1, p2)])
   })
 
   it('marks defendersAlreadyRepeated when the pair carried over two matchdays', async () => {
@@ -268,7 +286,7 @@ describe('pairingContextFor', () => {
 
     const context = await pairingContextFor(admin.client, matchdayId)
 
-    expect(context.input.defenders).toEqual({ a: p1, b: p2 })
+    expect(context.input.defenders).toEqual(pair(p1, p2))
     expect(context.input.defendersAlreadyRepeated).toBe(true)
   })
 
@@ -329,7 +347,7 @@ describe('pairingContextFor', () => {
 
     const context = await pairingContextFor(admin.client, matchdayId)
 
-    expect(context.input.fixedPairs).toEqual([{ a: guest, b: partner }])
+    expect(context.input.fixedPairs).toEqual([pair(guest, partner)])
   })
 
   it('ignores absent players', async () => {
@@ -480,5 +498,51 @@ describe('pairingContextFor', () => {
     await expect(pairingContextFor(admin.client, matchdayId)).rejects.toThrow(
       /no juega esta fecha/,
     )
+  })
+})
+
+// ── C37: el orden de entrada al sorteo es el de la DISCIPLINA ───────────────
+// `playingEntryIds` (`db/matchday.ts`) ordenaba `present` por
+// `entries.seed_position`, la numeración de LA TEMPORADA. Dos problemas en la
+// misma línea:
+//
+//   1. Esa columna se relaja para el SQUAD en el contract (C37) y su `?? 0`
+//      degradaba en SILENCIO — sin error, con el orden del sorteo al azar.
+//   2. Ya hoy es la numeración equivocada: el orden real del plantel de una
+//      disciplina vive en `discipline_entries` desde PR 7, y es el mismo
+//      defecto que C9 arregló en `entriesOf` sin llegar hasta acá.
+//
+// `attendances_entry_discipline` (FK a `discipline_entries`) garantiza que
+// todo presente tiene fila en la disciplina de la fecha, así que ordenar por
+// ahí no puede perder a nadie.
+describe('pairingContextFor > el orden de present (C37)', () => {
+  it('sale de discipline_entries, no de entries.seed_position', async () => {
+    const { admin, seasonId, squad } = await buildSeasonWithSquad(defaultConfig(8), 8)
+    const disciplineId = await disciplineIdOf(seasonId)
+    const matchdayId = await openMatchday(seasonId, 1, squad)
+
+    // La disciplina queda al revés que `entries.seed_position`, que sigue en
+    // 0..7. Parking de dos pasadas para no chocar `discipline_entries_seed`.
+    const db = adminClient()
+    const reversed = [...squad].reverse()
+    for (const [index, entryId] of reversed.entries()) {
+      const { error } = await db
+        .from('discipline_entries')
+        .update({ seed_position: index + 100 })
+        .eq('discipline_id', disciplineId)
+        .eq('entry_id', entryId)
+      if (error) throw new Error(error.message)
+    }
+    for (const [index, entryId] of reversed.entries()) {
+      const { error } = await db
+        .from('discipline_entries')
+        .update({ seed_position: index })
+        .eq('discipline_id', disciplineId)
+        .eq('entry_id', entryId)
+      if (error) throw new Error(error.message)
+    }
+
+    const context = await pairingContextFor(admin.client, matchdayId)
+    expect(context.input.present).toEqual(reversed)
   })
 })

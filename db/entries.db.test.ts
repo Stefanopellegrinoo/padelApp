@@ -9,8 +9,8 @@ import {
   saveResult,
   setAttendance,
 } from './matchday'
-import { entriesOf, seasonHeader, seasonRules } from './read'
-import { createSeason, deleteSeason, renameSeason, updateSeasonRules } from './season'
+import { entriesOf, seasonHeader } from './read'
+import { createSeason, deleteSeason, renameSeason } from './season'
 import { adminClient } from './test/admin'
 import { createSeason as buildSeasonScene } from './test/factories'
 import { createTestUser, type TestUser } from './test/users'
@@ -104,6 +104,36 @@ describe('createSeason', () => {
     expect(seats.map((seat) => seat.seedPosition)).toEqual([0, 1, 2, 3, 4, 5, 6, 7])
     expect(seats.every((seat) => seat.playerId === null)).toBe(true)
   })
+
+  // Antes, sólo `db/squad-position.db.test.ts` ejercitaba
+  // este backfill de rebote (removerlo tumbaba 1 test AJENO sobre posiciones
+  // de plantel, sin afirmar nada sobre createSeason en sí). `createMatchday`
+  // depende de esta disciplina para resolver `discipline_id` (0015/0016):
+  // sin ella, la primera fecha de cualquier torneo nuevo rompe con "No se
+  // pudo leer la disciplina de la temporada."
+  it('crea su propia disciplina PADEL con la config de la temporada', async () => {
+    const admin = await createTestUser()
+    const config = defaultConfig(8)
+
+    const { seasonId } = await createSeason(admin.client, {
+      name: 'Los Jueves 2026',
+      squadNames: ['Marce', 'Nico', 'Gastón', 'Juanma', 'Seba', 'Pablo', 'Fede', 'Diego'],
+      config,
+    })
+
+    const db = adminClient()
+    const { data, error } = await db
+      .from('disciplines')
+      .select('kind, status, config')
+      .eq('season_id', seasonId)
+    if (error) throw new Error(error.message)
+
+    expect(data).toHaveLength(1)
+    expect(data?.[0]?.kind).toBe('PADEL')
+    expect(data?.[0]?.status).toBe('SETUP')
+    expect(data?.[0]?.config).toEqual(config)
+  })
+
 
   // El que arma el torneo casi siempre lo juega. El asiento propio se reclama
   // en el mismo insert del plantel, así que lo que hay que probar es que cae en
@@ -237,7 +267,10 @@ describe('createSeason', () => {
   })
 })
 
-// ── renameSeason y updateSeasonRules ────────────────────────────────────────
+// ── renameSeason ─────────────────────────────────────────────────────────────
+// `updateSeasonRules` se probaba acá; se borró junto con la función
+// (rebanada 2 de "reglas por disciplina") -- su reemplazo,
+// `updateDisciplineRules`, tiene su propia batería en `db/discipline.db.test.ts`.
 
 describe('renameSeason', () => {
   it('changes the name and refuses an empty one', async () => {
@@ -252,24 +285,6 @@ describe('renameSeason', () => {
     expect((await seasonHeader(admin.client, seasonId)).name).toBe('Los Jueves 2026')
 
     await expect(renameSeason(admin.client, seasonId, '  ')).rejects.toThrow(/necesita un nombre/)
-  })
-})
-
-describe('updateSeasonRules', () => {
-  it('stores the text and stamps when it changed', async () => {
-    const admin = await createTestUser()
-    const { seasonId } = await createSeason(admin.client, {
-      name: 'Los Jueves 2026',
-      squadNames: squadNames(8),
-      config: defaultConfig(8),
-    })
-    expect((await seasonRules(admin.client, seasonId)).updatedAt).toBeNull()
-
-    await updateSeasonRules(admin.client, seasonId, 'Cancha 3, 20:30. Las pelotas las trae el último.')
-
-    const rules = await seasonRules(admin.client, seasonId)
-    expect(rules.text).toContain('Cancha 3')
-    expect(rules.updatedAt).not.toBeNull()
   })
 })
 
@@ -364,11 +379,27 @@ describe('the squad seats', () => {
     const seatId = entryIds[1]!
 
     await expect(addSquadSeat(player.client, seasonId, 'Colado')).rejects.toThrow()
-    // Un update o un delete que RLS filtra no es un error: no afecta ninguna
-    // fila. Por eso se asierta sobre el estado, no sobre el throw.
-    await renameSeat(player.client, seatId, 'Robado')
-    await unlinkSeat(player.client, entryIds[0]!)
-    await removeSeat(player.client, seatId)
+
+    // ANTES estas dos no tiraban. Un update que
+    // RLS filtra no afecta ninguna fila y eso NO es un error en PostgREST, así
+    // que a quien no organiza se le decía que guardó y al recargar volvía el
+    // valor viejo. Con `count: 'exact'` avisan, que es lo que la pantalla
+    // necesita para no mentir.
+    await expect(renameSeat(player.client, seatId, 'Robado')).rejects.toThrow(
+      /sólo puede hacerlo quien organiza/,
+    )
+    await expect(unlinkSeat(player.client, entryIds[0]!)).rejects.toThrow(
+      /sólo puede hacerlo quien organiza/,
+    )
+    // `removeSeat` ya no es un DELETE mudo. Era el único de los cuatro que
+    // callaba: RLS filtraba la fila, PostgREST no considera error un delete
+    // que no toca nada, y a quien no organiza se le decía que sacó al jugador
+    // mientras el plantel seguía intacto. Ahora la autorización vive en
+    // `remove_squad_seat` (0086) con un `raise` explícito, mismo criterio que
+    // `add_squad_seat` en la línea de arriba.
+    await expect(removeSeat(player.client, seatId)).rejects.toThrow(
+      /Sólo quien organiza la temporada/,
+    )
 
     const seats = await entriesOf(admin.client, seasonId)
     expect(seats.filter((e) => e.kind === 'SQUAD')).toHaveLength(8)
@@ -428,3 +459,4 @@ describe('deleteSeason', () => {
     expect(await seasonExists(seasonId)).toBe(true)
   })
 })
+

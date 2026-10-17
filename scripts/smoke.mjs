@@ -87,6 +87,14 @@ async function main() {
   const demoName = query(`select name from public.seasons where invite_token = 'demo'`)
   const demoId = query(`select id from public.seasons where invite_token = 'demo'`)
   check('la base tiene la temporada del seed', demoName !== '', demoName)
+  // `go` y no `page.content()` a secas: el `waitForURL` del login matchea en
+  // cuanto cambia la URL, ANTES de que el Server Component de /torneos haya
+  // terminado de renderizar — así que el contenido llegaba vacío y este check
+  // fallaba SIEMPRE. Falso positivo de las dos ramas, medido: la pantalla sí
+  // lista la temporada. Un tripwire que falla por su propia carrera enseña a
+  // ignorarlo, que es el mismo argumento con el que
+  // `db/discipline.db.test.ts` defiende contar del lado de Postgres.
+  await go(page, '/torneos')
   check(
     `la pantalla nombra "${demoName}"`,
     (await page.content()).includes(demoName),
@@ -94,20 +102,34 @@ async function main() {
   )
 
   // ── 4. Crear un torneo de 8 ────────────────────────────────────────────────
-  heading('Crear un torneo nuevo de 8, hasta el paso 5')
+  heading('Crear un torneo nuevo de pádel con 8 en el plantel, hasta "Ir al torneo"')
   const seasonName = `Smoke ${new Date().toISOString().slice(11, 19)}`
   const squad = ['Ana', 'Bruno', 'Caro', 'Diego', 'Emi', 'Fede', 'Gaby', 'Hernán']
+  // El wizard de 4 pasos (`app/torneos/nuevo/crear.tsx`). `continuar` es el mismo botón en todos
+  // los pasos menos el último, que es "Crear torneo".
+  const continuar = page.getByRole('button', { name: 'Continuar' })
   await go(page, '/torneos/nuevo')
-  await page.fill('input[placeholder="Los Jueves 2026"]', seasonName)
-  await page.getByRole('button', { name: 'Continuar' }).click()
+  await page.getByLabel('Nombre', { exact: true }).fill(seasonName)
+  await page.getByRole('button', { name: 'Pádel', exact: true }).click() // paso 1: el chip del deporte
+  await continuar.click() // → Jugadores
 
+  // El que arma el torneo ya está anotado en el primer asiento (`vos`): se lo pisa con el primer
+  // nombre, así el asiento propio sigue siendo el 1. Tipear en la última fila agrega la que sigue.
   const seats = page.locator('input[placeholder="Nombre"]')
   for (const [index, name] of squad.entries()) await seats.nth(index).fill(name)
-  await page.getByRole('button', { name: 'Continuar' }).click() // → orden inicial
-  await page.getByRole('button', { name: 'Continuar' }).click() // → formato
-  await page.getByRole('button', { name: 'Continuar' }).click() // → submit
+  await continuar.click() // → Cómo se juega
 
-  await page.getByRole('button', { name: 'Ir al torneo' }).waitFor({ timeout: 15000 })
+  // Pádel nace "Parejas que rotan" + primera fecha "Por nivel"; se la elige igual, explícita, para que
+  // el smoke no dependa de la ficha por defecto y siempre pase por el subpaso.
+  await page.getByRole('group', { name: 'Primera fecha' }).getByRole('button', { name: 'Por nivel' }).click()
+  await continuar.click() // → Ordená por nivel (subpaso; el orden es el del plantel)
+  await page.getByRole('heading', { name: 'Ordená por nivel' }).waitFor({ timeout: 5000 })
+  await continuar.click() // → Listo, así se juega
+  await page.getByRole('button', { name: 'Crear torneo' }).click()
+
+  // "Ir al torneo" es un link (`<Link>`), no un botón: aparece recién cuando `createTournament` contestó.
+  const irAlTorneo = page.getByRole('link', { name: 'Ir al torneo' })
+  await irAlTorneo.waitFor({ timeout: 15000 })
   const seasonId = query(`select id from public.seasons where name = '${seasonName}'`)
   check('la temporada quedó creada en la base', seasonId !== '', 'no hay fila en `seasons`')
   check(
@@ -115,10 +137,21 @@ async function main() {
     query(`select count(*) from public.entries where season_id = '${seasonId}' and kind = 'SQUAD'`) === '8',
     query(`select count(*) from public.entries where season_id = '${seasonId}' and kind = 'SQUAD'`),
   )
+  check(
+    'con una sola disciplina, la de pádel',
+    query(`select string_agg(kind, ',') from public.disciplines where season_id = '${seasonId}'`) === 'PADEL',
+    query(`select string_agg(kind, ',') from public.disciplines where season_id = '${seasonId}'`),
+  )
+  check('y "Ir al torneo" lleva a ese torneo', (await irAlTorneo.getAttribute('href')) === `/torneo/${seasonId}`)
 
   // ── 5. Abrir la fecha 1 ────────────────────────────────────────────────────
   heading('Abrir la fecha 1')
-  await go(page, `/torneo/${seasonId}/fechas`)
+  // Antes apuntaba al stub sin disciplina —
+  // pasaba (el meta refresh de 1s alcanza a resolver antes de `networkidle`)
+  // pero el `200` que `check()` asertaba era el del stub, no el de la lista.
+  // El wizard de arriba elige sólo el chip de Pádel, así que la única disciplina
+  // del torneo es PADEL y su slug es 'padel'.
+  await go(page, `/torneo/${seasonId}/padel/fechas`)
   const openCta = page.getByRole('button', { name: 'Abrir fecha 1' })
   check('el CTA dice el número que va a tener la fecha', (await openCta.count()) === 1)
   await openCta.click()
@@ -128,15 +161,25 @@ async function main() {
 
   // ── 6. Dejar 7 confirmados ────────────────────────────────────────────────
   heading('Tildar: dejar 7 y ver aparecer al invitado')
-  await go(page, `/torneo/${seasonId}/fechas/1`)
+  await go(page, `/torneo/${seasonId}/padel/fechas/1`)
   check('el panel arranca con los 8 del plantel', (await page.getByText('8 confirmados').count()) === 1)
   await page.getByRole('button', { name: squad[7] }).click()
   await page.waitForTimeout(1500)
   check('el panel dice 7 confirmados', (await page.getByText('7 confirmados').count()) === 1)
-  check(
-    'y avisa que se suma un invitado para quedar de 8',
-    (await page.getByText('Son impares. Se suma 1 invitado y la fecha queda de 8.').count()) === 1,
-  )
+  // Este check esperaba `'Son impares. Se suma 1 invitado y la fecha queda de
+  // 8.'` y fallaba SIEMPRE. Medido dumpeando el panel: ese texto no está ni en
+  // el DOM (`count === 0`). Es el copy de un estado TRANSITORIO —el de
+  // `needsLooseGuest`, entre destildar y que el invitado aparezca— y para
+  // cuando el script mira, `syncGuestSeat` ya lo agregó y el panel pasó a la
+  // rama completa: `'La fecha es de 8 · 4 parejas · 6 partidos'`.
+  //
+  // O sea: no era una carrera ni un problema de visibilidad, era un copy
+  // obsoleto. Se afirma lo que el paso dice probar ("dejar 7 y ver aparecer al
+  // invitado") contra lo que la pantalla dice HOY, y se espera el ESTADO en
+  // vez de confiar en el `waitForTimeout` de arriba.
+  const fechaDeOcho = page.getByText('La fecha es de 8', { exact: false })
+  await fechaDeOcho.waitFor({ state: 'visible', timeout: 10_000 }).catch(() => {})
+  check('y la fecha vuelve a quedar de 8 con el invitado adentro', await fechaDeOcho.isVisible())
   check(
     'la base agregó el asiento de invitado',
     query(`select count(*) from public.entries where matchday_id = '${matchdayId}' and kind = 'GUEST'`) === '1',
@@ -177,7 +220,7 @@ async function main() {
   // ── 8. Cargar los 6 resultados y cerrar ───────────────────────────────────
   heading('Cargar los 6 resultados en dos toques y cerrar la fecha')
   for (let loaded = 0; loaded < 6; loaded++) {
-    await go(page, `/torneo/${seasonId}/fechas/1`)
+    await go(page, `/torneo/${seasonId}/padel/fechas/1`)
     // Con 4 parejas el fixture son 3 rondas de 2, y el acordeón colapsa la ronda
     // completa: al recargar, los botones que quedan a la vista son los de las
     // rondas incompletas. Por eso el índice es `loaded % 2` y no `loaded`.
@@ -195,7 +238,7 @@ async function main() {
   )
   check('los 6 partidos quedaron cargados', loadedMatches === '6', loadedMatches)
 
-  await go(page, `/torneo/${seasonId}/fechas/1`)
+  await go(page, `/torneo/${seasonId}/padel/fechas/1`)
   const closeCta = page.getByRole('button', { name: 'Cerrar fecha', exact: true })
   check('el CTA de cerrar aparece sin el "faltan N"', (await closeCta.count()) === 1)
   await closeCta.click()
@@ -235,7 +278,7 @@ async function main() {
   check(
     'y aparece el botón de reabrir, porque es la última cerrada',
     await (async () => {
-      await go(page, `/torneo/${seasonId}/fechas/1`)
+      await go(page, `/torneo/${seasonId}/padel/fechas/1`)
       return (await page.getByRole('button', { name: 'Reabrir fecha' }).count()) === 1
     })(),
   )
@@ -253,13 +296,25 @@ async function main() {
   )
 
   await go(page, `/torneo/${seasonId}/ajustes`)
-  const rules = page.locator('textarea')
+  // `.first()`: desde la rebanada 2 de "reglas por disciplina" Ajustes dibuja
+  // UN textarea por disciplina. El torneo demo tiene una sola, así que hoy
+  // esto es puro blindaje (`page.locator('textarea')` a secas ya quedaría
+  // ambiguo en modo estricto en cuanto el demo sume una segunda).
+  const rules = page.locator('textarea').first()
   await rules.fill('Se juega **los jueves** a las 20. <script>alert(1)</script>')
   await rules.blur()
   await page.waitForTimeout(2500)
+  // `disciplines.rules_text`, no `seasons.rules_text` (0069): el escritor de
+  // Ajustes se mudó de tabla en esta rebanada. `seasons.rules_text` sigue
+  // recibiendo el mismo texto por el dual-write de `updateDisciplineRules`
+  // mientras la disciplina editada sea la default —la única que existe acá—,
+  // pero la columna que este check tiene que mirar es la nueva fuente real.
   check(
     'el texto de reglas quedó guardado',
-    query(`select rules_text like '%los jueves%' from public.seasons where id = '${seasonId}'`) === 't',
+    query(
+      `select rules_text like '%los jueves%' from public.disciplines
+        where season_id = '${seasonId}' order by position, created_at limit 1`,
+    ) === 't',
   )
   check(
     'y la vista previa escapa el markdown del admin',
@@ -268,18 +323,86 @@ async function main() {
   )
 
   // ── 11. Reglas sin sesión ─────────────────────────────────────────────────
+  //
+  // Este paso decía "salteado: es la Task 12 y está sin construir" hasta la
+  // rebanada de arreglos de "reglas por disciplina". La Task 12 se construyó en
+  // el Plan 4 y el salteo quedó mintiendo: el ÚNICO paso que mira la única
+  // superficie pública de la app estaba apagado por un motivo vencido.
+  //
+  // Y es el paso que más falta hacía. La rama anónima no lee `seasons` sino dos
+  // funciones `security definer`, así que es la que se rompe sin que ninguna
+  // otra pantalla se entere: `0069` hace `drop function` sobre
+  // `season_public_formats` y la vuelve a crear, y si el `grant` de después se
+  // olvidara, TODO ESTO daría error mientras la app con sesión sigue perfecta.
+  // `psql` puede probar el grant; esto prueba la pantalla.
   heading('Reglas sin login')
-  console.log('  – salteado: es la Task 12 y está sin construir')
+  const anon = await browser.newContext({ viewport: { width: 390, height: 844 } })
+  const anonPage = await anon.newPage()
+  anonPage.on('pageerror', (error) => errors.push(`[anon] ${String(error)}`))
+  anonPage.on('response', (response) => {
+    if (response.status() >= 500) errors.push(`[anon] ${response.status()} en ${response.url()}`)
+  })
+
+  await go(anonPage, `/torneo/${seasonId}/reglas`)
+  const anonHtml = await anonPage.content()
+
+  check('el texto que escribió quien organiza se ve sin cuenta', anonHtml.includes('los jueves'))
+  check(
+    'y su <script> sigue escapado para un extraño',
+    !anonHtml.includes('<script>alert(1)</script>'),
+    'el script del admin llegó crudo al DOM anónimo',
+  )
+  // La prosa generada es lo que prueba que `season_public_formats` sirvió las
+  // ocho columnas: sin `has_masters`/`pair_size`/`fixed_teams`/`allows_draw` el `shape` llega
+  // incompleto y `narrateRules` no puede armar estas filas.
+  check(
+    'y la prosa generada llega entera, no sólo el texto libre',
+    ['Puntos por posición', 'Orden de desempate', 'Masters'].every((row) => anonHtml.includes(row)),
+    'falta alguna fila del acordeón: el shape de la disciplina no llegó completo',
+  )
+
+  // El resto del torneo NO se abre sin cuenta: Reglas es la excepción, no la
+  // regla. Si esto empieza a devolver 200 con contenido, se filtró el torneo.
+  const tablaAnon = await anonPage.goto(`${BASE}/torneo/${seasonId}`, { waitUntil: 'networkidle' })
+  check(
+    'pero la Tabla del mismo torneo manda a login',
+    anonPage.url().includes('/login'),
+    `terminó en ${anonPage.url()} con status ${tablaAnon?.status()}`,
+  )
+
+  await anon.close()
 
   // ── 12. Las cuatro pestañas, en claro y en oscuro ─────────────────────────
   heading('Las cuatro pestañas del torneo demo, en claro y en oscuro')
+  // Este paso recorría los dos esquemas y sólo asertaba 200, así que la app
+  // estuvo OSCURA SIEMPRE del 10/08 al 31/08 y el smoke pasó entero todos los
+  // días. Un recorrido de temas que no compara un color prueba que las rutas
+  // existen, no que el tema exista.
+  const fondoDe = () =>
+    page.evaluate(() => getComputedStyle(document.body).backgroundColor)
+  const fondos = {}
   for (const scheme of ['light', 'dark']) {
     await page.emulateMedia({ colorScheme: scheme })
     for (const tab of ['', '/fechas', '/stats', '/reglas']) {
       await go(page, `/torneo/${demoId}${tab}`)
     }
-    console.log(`  · ${scheme} recorrido`)
+    fondos[scheme] = await fondoDe()
+    console.log(`  · ${scheme} recorrido — fondo ${fondos[scheme]}`)
   }
+  // El corazón del chequeo: que sean DISTINTOS. Da igual el valor exacto —
+  // los tokens del handoff pueden cambiar— pero si los dos esquemas pintan el
+  // mismo fondo, uno de los dos temas no se está sirviendo.
+  check(
+    'el tema claro y el oscuro pintan fondos distintos',
+    fondos.light !== fondos.dark,
+    `los dos dan ${fondos.light}: hay un solo tema sirviéndose`,
+  )
+  // Y que el claro sea CLARO, para que no pasen dos oscuros distintos.
+  check(
+    'y el claro es efectivamente claro',
+    fondos.light === 'rgb(255, 255, 255)',
+    `esperaba blanco y da ${fondos.light}`,
+  )
 
   await browser.close()
 

@@ -1,19 +1,27 @@
 import { describe, it, expect } from 'vitest'
 import { computeAwards } from './awards'
 import { defaultConfig } from './config'
-import type { Pair, PairStanding, SeasonConfig } from './types'
+import { ordinal } from './narrate'
+import { pair, single } from './side'
+import type { AwardLine, Side, SideStanding, SeasonConfig } from './types'
+
+// Misma frase que produce `computeAwards`: si algún día cambia, este test se
+// entera por construcción y no por un literal que se desincroniza en silencio.
+const line = (position: number, points: number): AwardLine[] => [
+  { reason: `${ordinal(position)} de la fecha`, points },
+]
 
 const CONFIG: SeasonConfig = {
   squadSize: 12,
-  matchFormat: { setsToWin: 1, gamesPerSet: 4, tieBreak: true },
+  matchFormat: { setsToWin: 1, gamesPerSet: 4, tieBreak: true, openScore: false },
   points: [10, 7, 5, 3, 2, 1],
   regularMatchdays: 10,
   countBestOf: 8,
   tiebreakSnapshotEvery: 3,
 }
 
-function standing(a: string, b: string, position: number): PairStanding {
-  return { pair: { a, b }, played: 3, won: 0, setsDiff: 0, gamesDiff: 0, position }
+function standing(a: string, b: string, position: number): SideStanding {
+  return { side: pair(a, b), played: 3, won: 0, drawn: 0, dayPoints: 0, setsDiff: 0, gamesDiff: 0, position }
 }
 
 describe('computeAwards', () => {
@@ -22,6 +30,25 @@ describe('computeAwards', () => {
     expect(awards).toHaveLength(2)
     expect(awards[0]?.points).toBe(10)
     expect(awards[1]?.points).toBe(10)
+  })
+
+  /*
+   * S89 (verify-report-pre-contract #4026): `lines` se armaba UNA sola vez,
+   * fuera del loop que reparte los dos `Award` de una pareja -- los dos
+   * apuntaban al MISMO array. Un `.toEqual` que sólo compara CONTENIDO pasa
+   * igual con el bug (los dos arrays arrancan iguales).
+   *
+   * S99: este test MUTABA el de uno (`first.lines.push(...)`) para mirar que
+   * el del otro no se moviera. Desde que `Award.lines` es `readonly` eso no
+   * compila -- que es exactamente el punto de S99: la garantía pasó de la
+   * disciplina al compilador. Comparar la IDENTIDAD de las dos referencias
+   * afirma lo mismo, directo y sin mutar nada.
+   */
+  it('no comparte la misma instancia de `lines` entre los dos miembros de una pareja', () => {
+    const awards = computeAwards([standing('a1', 'a2', 1)], CONFIG, [])
+    const [first, second] = awards
+    expect(first?.lines).not.toBe(second?.lines)
+    expect(second?.lines).toEqual([{ reason: `${ordinal(1)} de la fecha`, points: 10 }])
   })
 
   it('uses the leading values of the list for a four pair matchday', () => {
@@ -94,15 +121,47 @@ describe('computeAwards', () => {
     const tooMany = Array.from({ length: 7 }, (_, i) => standing(`p${i}a`, `p${i}b`, i + 1))
     expect(() => computeAwards(tooMany, CONFIG, [])).toThrow(/puntos/)
   })
+
+  /*
+   * S44: el mensaje decía "parejas" siempre, y en una
+   * disciplina de a uno eso manda a buscar un bug de parejas donde no las hay.
+   * Es el único rastro que queda en un log cuando el reparto no cierra — la
+   * ronda 14 lo encontró en el server.log como la firma de C21.
+   */
+  it('dice "competidores" y no "parejas" cuando el lado es de uno', () => {
+    const solos = ['s1', 's2', 's3', 's4', 's5', 's6', 's7'].map((id, index) => ({
+      side: single(id),
+      played: 0,
+      won: 0,
+      drawn: 0,
+      dayPoints: 0,
+      setsDiff: 0,
+      gamesDiff: 0,
+      position: index + 1,
+    }))
+    expect(() => computeAwards(solos, CONFIG, [])).toThrow(
+      /La fecha tiene 7 competidores del torneo pero la lista de puntos sólo tiene 6 valores\./,
+    )
+  })
+
+  it('sigue diciendo "parejas" cuando el lado es de dos (S44, no-regresión)', () => {
+    const tooMany = table([
+      pair('a1', 'a2'), pair('b1', 'b2'), pair('c1', 'c2'), pair('d1', 'd2'),
+      pair('e1', 'e2'), pair('f1', 'f2'), pair('g1', 'g2'),
+    ])
+    expect(() => computeAwards(tooMany, CONFIG, [])).toThrow(
+      /La fecha tiene 7 parejas del torneo pero la lista de puntos sólo tiene 6 valores\./,
+    )
+  })
 })
 
-const pair = (a: string, b: string): Pair => ({ a, b })
-
-const table = (pairs: Pair[]): PairStanding[] =>
-  pairs.map((p, index) => ({
-    pair: p,
+const table = (sides: Side[]): SideStanding[] =>
+  sides.map((p, index) => ({
+    side: p,
     played: 0,
     won: 0,
+    drawn: 0,
+    dayPoints: 0,
     setsDiff: 0,
     gamesDiff: 0,
     position: index + 1,
@@ -177,16 +236,37 @@ describe('computeAwards — guests', () => {
 describe('computeAwards — el teorema de la promoción (spec 3.1)', () => {
   // Pareja 1: p1 (plantel) y g1 (invitado). Pareja 2: p2 y p3, plantel las dos.
   // CONFIG.points = [10, 7, 5, 3, 2, 1] — literal del archivo, no derivado.
-  const standings: PairStanding[] = [standing('p1', 'g1', 1), standing('p2', 'p3', 2)]
+  const standings: SideStanding[] = [standing('p1', 'g1', 1), standing('p2', 'p3', 2)]
 
   it('con g1 invitado —el comportamiento real de close_matchday—, p1 se lleva 10 puntos y g1 no tiene award', () => {
     const awards = computeAwards(standings, CONFIG, ['g1'])
     // CONFIG.points[0] = 10, CONFIG.points[1] = 7: tipeados a mano, no calculados.
     expect(awards).toEqual([
-      { entryId: 'p1', position: 1, points: 10 },
-      { entryId: 'p2', position: 2, points: 7 },
-      { entryId: 'p3', position: 2, points: 7 },
+      { entryId: 'p1', position: 1, points: 10, lines: line(1, 10) },
+      { entryId: 'p2', position: 2, points: 7, lines: line(2, 7) },
+      { entryId: 'p3', position: 2, points: 7, lines: line(2, 7) },
     ])
+  })
+
+  // REQ-D10-1: hoy una sola fuente de puntos ⇒ una sola línea, con la misma
+  // suma que el total. El texto va TIPEADO A MANO acá (no vía `line()`, que
+  // reusa `ordinal` como el resto del archivo): es el único test que fija el
+  // string real, no una comparación de la función contra sí misma.
+  it('la línea del desglose dice "el 1º de la fecha" para quien salió primero', () => {
+    const awards = computeAwards(standings, CONFIG, ['g1'])
+    expect(awards.find((award) => award.entryId === 'p1')?.lines).toEqual([
+      { reason: 'el 1º de la fecha', points: 10 },
+    ])
+    expect(awards.find((award) => award.entryId === 'p2')?.lines).toEqual([
+      { reason: 'el 2º de la fecha', points: 7 },
+    ])
+  })
+
+  it('la suma de las líneas siempre da el total del award (REQ-D10-1)', () => {
+    for (const award of computeAwards(standings, CONFIG, ['g1'])) {
+      const sum = award.lines.reduce((total, l) => total + l.points, 0)
+      expect(sum).toBe(award.points)
+    }
   })
 
   // El teorema en sí: si g1 NO hubiera sido invitado —el hipotético "reabrir
@@ -200,13 +280,23 @@ describe('computeAwards — el teorema de la promoción (spec 3.1)', () => {
   it('si g1 no fuera invitado, se llevaría position 1 y 10 puntos: los mismos valores que ya tiene su pareja', () => {
     const awards = computeAwards(standings, CONFIG, [])
     const g1Award = awards.find((award) => award.entryId === 'g1')
-    expect(g1Award).toEqual({ entryId: 'g1', position: 1, points: 10 })
+    expect(g1Award).toEqual({ entryId: 'g1', position: 1, points: 10, lines: line(1, 10) })
   })
 
   it('y ningún otro award cambia entre las dos corridas: p2 y p3 siguen en position 2 con 7 puntos', () => {
     const awards = computeAwards(standings, CONFIG, [])
-    expect(awards.find((award) => award.entryId === 'p2')).toEqual({ entryId: 'p2', position: 2, points: 7 })
-    expect(awards.find((award) => award.entryId === 'p3')).toEqual({ entryId: 'p3', position: 2, points: 7 })
+    expect(awards.find((award) => award.entryId === 'p2')).toEqual({
+      entryId: 'p2',
+      position: 2,
+      points: 7,
+      lines: line(2, 7),
+    })
+    expect(awards.find((award) => award.entryId === 'p3')).toEqual({
+      entryId: 'p3',
+      position: 2,
+      points: 7,
+      lines: line(2, 7),
+    })
   })
 
   // ── el borde del teorema: dónde DEJA de valer ────────────────────────────
@@ -217,7 +307,7 @@ describe('computeAwards — el teorema de la promoción (spec 3.1)', () => {
   // que hace visible ese filtro — y de paso demuestra el contraejemplo por el
   // que `promote_guest` (0014_promote_guest.sql) REFUSA ese caso en vez de
   // saltearlo: ahí copiar el award congelado NO es lo que un recálculo daría.
-  const conParejaInvitada: PairStanding[] = [
+  const conParejaInvitada: SideStanding[] = [
     standing('p1', 'p2', 1),
     standing('g1', 'g2', 2),
     standing('p3', 'p4', 3),
@@ -227,21 +317,21 @@ describe('computeAwards — el teorema de la promoción (spec 3.1)', () => {
     const awards = computeAwards(conParejaInvitada, CONFIG, ['g1', 'g2'])
     // CONFIG.points = [10, 7, 5, 3, 2, 1]. Literales tipeados a mano.
     expect(awards).toEqual([
-      { entryId: 'p1', position: 1, points: 10 },
-      { entryId: 'p2', position: 1, points: 10 },
-      { entryId: 'p3', position: 2, points: 7 },
-      { entryId: 'p4', position: 2, points: 7 },
+      { entryId: 'p1', position: 1, points: 10, lines: line(1, 10) },
+      { entryId: 'p2', position: 1, points: 10, lines: line(1, 10) },
+      { entryId: 'p3', position: 2, points: 7, lines: line(2, 7) },
+      { entryId: 'p4', position: 2, points: 7, lines: line(2, 7) },
     ])
   })
 
   it('recalculado con g1 ya en el plantel: su pareja pasa a cobrar y p3 y p4 CAEN a position 3 con 5 — el teorema no vale acá', () => {
     const awards = computeAwards(conParejaInvitada, CONFIG, ['g2'])
     expect(awards).toEqual([
-      { entryId: 'p1', position: 1, points: 10 },
-      { entryId: 'p2', position: 1, points: 10 },
-      { entryId: 'g1', position: 2, points: 7 },
-      { entryId: 'p3', position: 3, points: 5 },
-      { entryId: 'p4', position: 3, points: 5 },
+      { entryId: 'p1', position: 1, points: 10, lines: line(1, 10) },
+      { entryId: 'p2', position: 1, points: 10, lines: line(1, 10) },
+      { entryId: 'g1', position: 2, points: 7, lines: line(2, 7) },
+      { entryId: 'p3', position: 3, points: 5, lines: line(3, 5) },
+      { entryId: 'p4', position: 3, points: 5, lines: line(3, 5) },
     ])
   })
 })

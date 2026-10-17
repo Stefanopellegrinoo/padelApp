@@ -7,11 +7,18 @@
  * la config desde acá dejaría una config inválida a mitad de camino, que es lo
  * que `assertValidConfig` existe para impedir.
  *
- * La guardia real es RLS: `entries_write` (0002_rls.sql) pide
- * `is_season_admin(season_id)` para insert, update y delete.
+ * La guardia real depende del verbo, y desde 0086 ya no es una sola:
+ *
+ *   - `update` (`renameSeat`, `unlinkSeat`) sigue apoyado en RLS:
+ *     `entries_write` (0002_rls.sql) pide `is_season_admin(season_id)`.
+ *   - `insert` (`addSquadSeat` → `add_squad_seat`, 0013) y `delete`
+ *     (`removeSeat` → `remove_squad_seat`, 0086) NO pasan por RLS: las dos
+ *     funciones son `security definer`, así que RLS no las filtra y el guard
+ *     es el `is_season_admin` explícito de cada una. Por eso avisan con un
+ *     `raise` en castellano y no con `count: 'exact'`.
  */
 import type { Client } from './client'
-import { EdgeError } from './errors'
+import { EdgeError, writeErrorMessage } from './errors'
 
 /**
  * Agrega un asiento al plantel. `beforeEntryId` es "antes de este asiento": el
@@ -56,7 +63,7 @@ export async function addSquadSeat(
   // está en el plantel." — dos oraciones peleadas — y, cuando el error no era
   // uno de los nuestros, pegaba el inglés crudo de Postgres atrás de una
   // frase en castellano.
-  if (error !== null) throw new EdgeError(error.message)
+  if (error !== null) throw new EdgeError(writeErrorMessage(error))
   // `data === null` con `error === null` no debería pasar —la función devuelve
   // el uuid del asiento— pero interpolarlo daba literalmente "undefined".
   if (data === null) throw new EdgeError('No se pudo agregar el jugador.')
@@ -91,7 +98,7 @@ export async function promoteGuest(
   // Sin prefijo, igual que `addSquadSeat` y el resto de las llamadas a RPC de
   // este archivo: los `raise` de `promote_guest` ya están en castellano y
   // pensados para que los lea el admin.
-  if (error !== null) throw new EdgeError(error.message)
+  if (error !== null) throw new EdgeError(writeErrorMessage(error))
 }
 
 /**
@@ -122,10 +129,20 @@ export async function claimOwnSeat(
     p_token: season.invite_token,
     p_entry: entryId,
   })
-  if (error !== null) throw new EdgeError(error.message)
+  if (error !== null) throw new EdgeError(writeErrorMessage(error))
 }
 
 /** Cambia el nombre del asiento. No toca `player_id`: renombrar no desvincula. */
+/**
+ * Cambia el nombre de un asiento.
+ *
+ * `count: 'exact'` por el mismo motivo que `setMatchdayDate` (W49):
+ * un update que no toca ninguna fila NO es un error
+ * en PostgREST. Estas escrituras se apoyan en RLS y no chequean admin por su
+ * cuenta, así que a un participante que no organiza le decían que guardó y al
+ * recargar volvía el valor viejo. La ronda 15 lo midió con un participante
+ * real en las cuatro.
+ */
 export async function renameSeat(
   supabase: Client,
   entryId: string,
@@ -134,17 +151,36 @@ export async function renameSeat(
   const name = displayName.trim()
   if (name.length === 0) throw new EdgeError('El asiento necesita un nombre.')
 
-  const { error } = await supabase
+  const { error, count } = await supabase
     .from('entries')
-    .update({ display_name: name })
+    .update({ display_name: name }, { count: 'exact' })
     .eq('id', entryId)
   if (error !== null) throw new EdgeError(`No se pudo cambiar el nombre: ${error.message}`)
+  if (count === 0) {
+    throw new EdgeError('No se pudo cambiar el nombre: sólo puede hacerlo quien organiza.')
+  }
 }
 
-/** Suelta el asiento de quien lo reclamó, dejándolo libre para otro. El nombre se queda. */
+/**
+ * Suelta el asiento de quien lo reclamó, dejándolo libre para otro. El nombre
+ * se queda.
+ *
+ * `count: 'exact'` por el mismo motivo que `setMatchdayDate` (W49):
+ * un update que no toca ninguna fila NO es un error
+ * en PostgREST. Estas escrituras se apoyan en RLS y no chequean admin por su
+ * cuenta, así que a un participante que no organiza le decían que guardó y al
+ * recargar volvía el valor viejo. La ronda 15 lo midió con un participante
+ * real en las cuatro.
+ */
 export async function unlinkSeat(supabase: Client, entryId: string): Promise<void> {
-  const { error } = await supabase.from('entries').update({ player_id: null }).eq('id', entryId)
+  const { error, count } = await supabase
+    .from('entries')
+    .update({ player_id: null }, { count: 'exact' })
+    .eq('id', entryId)
   if (error !== null) throw new EdgeError(`No se pudo desvincular el asiento: ${error.message}`)
+  if (count === 0) {
+    throw new EdgeError('No se pudo desvincular el asiento: sólo puede hacerlo quien organiza.')
+  }
 }
 
 /**
@@ -158,15 +194,58 @@ export async function unlinkSeat(supabase: Client, entryId: string): Promise<voi
  * El hueco que queda en `seed_position` no molesta: `squadSeedOrder` ordena por
  * esa columna y el índice pide único, no consecutivo. Renumerar sería reescribir
  * el orden de desempate inicial de todos los demás por sacar a uno.
+ *
+ * **Toma el advisory lock por temporada**, y por eso es una RPC y no un
+ * `delete` directo. Era el último escritor del plantel que no coordinaba con
+ * nada: la cascada de su `delete` (`entries` → `discipline_entries` y
+ * `entries` → `season_seed_order`, las dos `on delete cascade`) se cruzaba
+ * con los locks que `shift_seeds_up` (0023) y `shift_season_seeds_up` (0080)
+ * ya tenían tomados sobre otras filas de esas mismas tablas, y las dos
+ * transacciones se esperaban en círculo.
+ *
+ * Medido con dos sesiones psql y barrera de arranque
+ * (`npm run test:deadlock`), y leelo con cuidado porque las dos filas NO
+ * dicen lo mismo:
+ *
+ *   `add_squad_seat(p_before)` ‖ delete crudo ..... 60/60 deadlock
+ *   `add_squad_seat(p_before)` ‖ esta función ..... 0/60   ← cerrado
+ *   `shift_seeds_up` suelta    ‖ delete crudo ..... 60/60 deadlock
+ *   `shift_seeds_up` suelta    ‖ esta función ..... 60/60  ← SIGUE IGUAL
+ *
+ * La segunda carrera no se cierra y no se puede cerrar desde acá: el advisory
+ * serializa sólo a quien lo PIDE, y `shift_seeds_up` llamada suelta no lo
+ * pide. No es alcanzable desde la app —su ACL es `postgres=X/postgres`, y sus
+ * dos únicos callers (`add_squad_seat`, `promote_guest`) toman el advisory
+ * antes de llamarla—, así que es una llamada que ningún cliente puede hacer.
+ * Por eso ese par vive en la batería como CTRL-POS: es el control que prueba
+ * que el harness todavía sabe encontrar un deadlock. Si alguna vez se expone
+ * un camino que corra el orden de seeds sin tomar el advisory (una pantalla
+ * de "reordenar plantel", por ejemplo), esa fila deja de ser un control y
+ * pasa a ser un bug.
+ *
+ * El cliente de Supabase no puede tomar un advisory lock —no tiene
+ * transacciones—, así que el lock y el delete viajan juntos en la función,
+ * igual que en `addSquadSeat`.
+ *
+ * La autorización se mudó de RLS al `is_season_admin` explícito de la
+ * función, mismo camino que `addSquadSeat`. Eso cambia un mensaje y arregla
+ * un silencio: un delete que RLS filtraba NO es un error en PostgREST, así
+ * que a quien no organiza se le decía que sacó al jugador mientras el plantel
+ * seguía intacto. Ahora rebota.
  */
 export async function removeSeat(supabase: Client, entryId: string): Promise<void> {
-  const { error } = await supabase.from('entries').delete().eq('id', entryId)
+  const { error } = await supabase.rpc('remove_squad_seat', { p_entry: entryId })
   if (error === null) return
 
+  // La FK se chequea al final de la sentencia y sale de la función con su
+  // SQLSTATE intacto, así que este traductor sigue sirviendo tal cual.
   if (error.code === '23503') {
     throw new EdgeError(
       'Este jugador ya jugó alguna fecha, así que no se puede sacar: sus resultados quedarían colgados. Podés desvincular el reclamo y cambiarle el nombre.',
     )
   }
-  throw new EdgeError(`No se pudo sacar al jugador: ${error.message}`)
+  // Sin prefijo, igual que `addSquadSeat` y `promoteGuest`: los `raise` de
+  // `remove_squad_seat` ya están en castellano y escritos para que los lea el
+  // admin.
+  throw new EdgeError(writeErrorMessage(error))
 }

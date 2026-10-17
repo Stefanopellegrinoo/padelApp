@@ -3,7 +3,7 @@ import { titleStreaks } from './streak'
 import type { Award } from './types'
 
 function champion(entryId: string): Award[] {
-  return [{ entryId, position: 1, points: 10 }]
+  return [{ entryId, position: 1, points: 10, lines: [] }]
 }
 
 describe('titleStreaks', () => {

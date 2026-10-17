@@ -21,7 +21,15 @@ export interface TiebreakEntry {
 }
 
 interface DesempateProps {
-  seasonId: string
+  /**
+   * A qué URL navega cada fila (el `<div onClick>` de más abajo, no un
+   * `<a>`) al tocarla — `/torneo/{seasonId}/{disciplina}` cuando `rows` es
+   * de UNA disciplina (`tabla-view.tsx`). `null` en la tabla global
+   * (`page.tsx`), que suma puntos de TODAS las disciplinas por fila y no
+   * tiene un perfil al que apuntar: la fila no lleva `onClick` ni se
+   * dibuja clickeable.
+   */
+  base: string | null
   rows: StandingsRow[]
   mastersCutoff: number
   tiebreakOrder: TiebreakEntry[]
@@ -29,6 +37,22 @@ interface DesempateProps {
   /** `null` cuando todavía no hubo ningún refresco: rige el orden inicial del wizard. */
   asOfMatchday: number | null
   nextRefreshMatchday: number
+  /**
+   * Si el puesto 1 se resalta (fila `bg-chip` + avatar `bg-accent`). Default
+   * `true` — la Tabla de una disciplina (`tabla-view.tsx`) no lo pasa y sigue
+   * exactamente igual que siempre: ahí `position` nunca se comparte
+   * (`rankingWithMovement` da un `index + 1` único), así que sólo UNA fila
+   * puede ser el 1 y resaltarla siempre tiene sentido, jugado algo o no.
+   *
+   * La tabla global sí lo pasa (`page.tsx`, en `false` sin ninguna fecha
+   * cerrada): ahí `position` SE comparte (docs/tipos-de-torneo.md §2.4), y
+   * con nadie habiendo jugado todavía TODO el plantel empata en 0 puntos y
+   * comparte el puesto 1 — sin este apagador, `Desempate` resaltaría a cada
+   * jugador del torneo como si fuera el líder el mismo día que se crea.
+   */
+  highlightLeader?: boolean
+  /** El título de la sección. Default "Tabla general"; la Tabla de un deporte con 2+ en la temporada dice de cuál (`tabla-view.tsx`). */
+  title?: string
 }
 
 function movementLabel(movement: number | null): string | null {
@@ -42,15 +66,17 @@ function movementColor(movement: number | null): string {
   return movement > 0 ? 'text-up' : 'text-down'
 }
 
-/** Sección "Tabla general" + el sheet de desempate. Un solo componente porque ambos disparadores —el botón fijo y cada chip ⓘ— comparten el mismo estado de qué hay abierto. */
+/** Sección de la tabla ("Tabla general" o la de un deporte) + el sheet de desempate. Un solo componente porque ambos disparadores —el botón fijo y cada chip ⓘ— comparten el mismo estado de qué hay abierto. */
 export function Desempate({
-  seasonId,
+  base,
   rows,
   mastersCutoff,
   tiebreakOrder,
   tiebreakSnapshotEvery,
   asOfMatchday,
   nextRefreshMatchday,
+  highlightLeader = true,
+  title = 'Tabla general',
 }: DesempateProps) {
   const router = useRouter()
   const [openFor, setOpenFor] = useState<string | 'all' | null>(null)
@@ -87,7 +113,7 @@ export function Desempate({
   return (
     <>
       <div className="flex items-center justify-between">
-        <p className="text-[15px] font-extrabold tracking-[-.02em]">Tabla general</p>
+        <p className="text-[15px] font-extrabold tracking-[-.02em]">{title}</p>
         <button
           type="button"
           onClick={() => setOpenFor('all')}
@@ -98,18 +124,24 @@ export function Desempate({
       </div>
 
       <div className="flex flex-col">
-        {rows.map((row, index) => (
+        {rows.map((row, index) => {
+          const isLeader = row.position === 1 && highlightLeader
+          return (
           <div key={row.entryId}>
             <div
-              onClick={() => router.push(`/torneo/${seasonId}/jugador/${row.entryId}`)}
-              className={`flex cursor-pointer items-center gap-3 rounded-field p-3 ${
-                row.position === 1 ? 'bg-chip' : ''
+              onClick={base === null ? undefined : () => router.push(`${base}/jugador/${row.entryId}`)}
+              className={`flex items-center gap-3 rounded-field p-3${base === null ? '' : ' cursor-pointer'}${
+                isLeader ? ' bg-chip' : ''
               }`}
             >
-              <span className="w-4 shrink-0 text-[14px] font-extrabold text-muted">{row.position}</span>
+              {/* S85 (verify-report-pr21-cierre #4016): la tabla general de la
+                  temporada llega a 10+ jugadores sin techo propio -- `w-4`
+                  (16px) recorta "10"/"11"/"12" (18px medidos con Chromium
+                  real). `w-5` (20px) los contiene sin overflow. */}
+              <span className="w-5 shrink-0 text-[14px] font-extrabold text-muted">{row.position}</span>
               <span
                 className={`flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full text-[11px] font-extrabold ${
-                  row.position === 1 ? 'bg-accent text-accent-text' : 'bg-chip text-muted'
+                  isLeader ? 'bg-accent text-accent-text' : 'bg-chip text-muted'
                 }`}
               >
                 {row.initials}
@@ -144,7 +176,8 @@ export function Desempate({
               </div>
             )}
           </div>
-        ))}
+          )
+        })}
       </div>
 
       {openFor !== null && (

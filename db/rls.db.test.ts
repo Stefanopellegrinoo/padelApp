@@ -4,20 +4,43 @@ import type { Database, Json } from './database.types'
 import { adminClient } from './test/admin'
 import { createTestUser } from './test/users'
 import { createSeason } from './test/factories'
+import { createCasualMatch } from './friends'
 import { defaultConfig } from '../core/config'
 
 const TABLES = [
   'players',
   'seasons',
+  'disciplines',
   'matchdays',
   'entries',
   'attendances',
   'pair_locks',
+  'discipline_teams',
   'pairs',
   'matches',
   'match_sets',
   'awards',
+  'friendships',
+  // WU4 (tanda 3, round 2 review fix): `season_seed_order` (0080) nunca
+  // había entrado acá -- ninguno de los dos loops de abajo (anon, stranger)
+  // la ejercitaba, así que su RLS quedó fuera de esta suite desde que la
+  // tabla existe.
+  'season_seed_order',
+  // Review final de amigos-2v2: las tres tablas del partido casual (0072)
+  // tampoco entraban acá. El loop del extraño las ejercita con un partido
+  // sembrado de verdad (más abajo), no sobre tablas vacías.
+  'casual_matches',
+  'casual_match_players',
+  'casual_match_sets',
 ] as const
+
+// `match_participants` (0071) va en un array aparte, no adentro de `TABLES`:
+// es una VISTA, y el `.from()` que genera supabase-js separa Tablas y Vistas
+// en dos overloads distintos -- una unión que abarque los dos no matchea
+// ninguno de los dos (`TS2769`, medido al mezclarlos acá). Mismo motivo por
+// el que el loop de abajo corre dos veces, una por array, en vez de una sola
+// vez sobre `[...TABLES, ...VIEWS]`.
+const VIEWS = ['match_participants'] as const
 
 // Cliente sin sesión: es el rol `anon` de PostgREST, no un `authenticated` de
 // mentira. No confundir con `adminClient()`, que es `service_role`.
@@ -40,9 +63,18 @@ async function buildMatch(seasonId: string, entryIds: string[], status: 'OPEN' |
     throw new Error('Hacen falta 4 entries para armar un partido de test.')
   }
 
+  // Una sola disciplina por temporada mientras el tripwire (0015) siga
+  // puesto: no hace falta que el caller la pase, se la busca acá.
+  const { data: discipline, error: disciplineError } = await db
+    .from('disciplines')
+    .select('id')
+    .eq('season_id', seasonId)
+    .single()
+  if (disciplineError || discipline === null) throw new Error(disciplineError?.message)
+
   const { data: matchday, error: matchdayError } = await db
     .from('matchdays')
-    .insert({ season_id: seasonId, number: 1, status })
+    .insert({ season_id: seasonId, discipline_id: discipline.id, number: 1, status })
     .select('id')
     .single()
   if (matchdayError || matchday === null) throw new Error(matchdayError?.message)
@@ -71,9 +103,13 @@ async function buildMatch(seasonId: string, entryIds: string[], status: 'OPEN' |
   // Una fila en attendances, pair_locks y awards: son las tres tablas que
   // buildMatch todavía no tocaba, y los tests de cobertura por tabla las
   // necesitan pobladas.
-  const { error: attendanceError } = await db
-    .from('attendances')
-    .insert({ matchday_id: matchday.id, entry_id: a, season_id: seasonId, status: 'PLAYING' })
+  const { error: attendanceError } = await db.from('attendances').insert({
+    matchday_id: matchday.id,
+    entry_id: a,
+    season_id: seasonId,
+    discipline_id: discipline.id,
+    status: 'PLAYING',
+  })
   if (attendanceError) throw new Error(attendanceError.message)
 
   const { error: pairLockError } = await db
@@ -180,17 +216,23 @@ describe('RLS — lectura', () => {
     expect(error?.code).toBe('42501')
   })
 
-  it('anon no ve una sola fila de ninguna de las diez tablas', async () => {
+  it('anon no ve una sola fila de ninguna de las tablas', async () => {
     const anon = anonClient()
 
     for (const table of TABLES) {
       const { data, error } = await anon.from(table).select('*').limit(1)
-      // anon queda afuera del grant de base: no tiene ni el privilegio de
+      // Anon queda afuera del grant de base: no tiene ni el privilegio de
       // tabla, así que esto es un permission denied, no una lista vacía por
       // RLS. Si algún día `anon` entrara al grant, este assert dejaría de
       // pasar (pasaría a dar data: []) y avisaría del agujero.
       expect(data, `tabla ${table}`).toBeNull()
       expect(error?.code, `tabla ${table}`).toBe('42501')
+    }
+
+    for (const view of VIEWS) {
+      const { data, error } = await anon.from(view).select('*').limit(1)
+      expect(data, `vista ${view}`).toBeNull()
+      expect(error?.code, `vista ${view}`).toBe('42501')
     }
   })
 
@@ -206,6 +248,26 @@ describe('RLS — lectura', () => {
       .from('match_sets')
       .insert({ match_id: matchId, set_number: 1, games_a: 6, games_b: 3 })
     if (setError) throw new Error(setError.message)
+
+    // Un partido casual PADEL (con un set) de un tercero contra un invitado, para
+    // que el loop de abajo vea filas que existen y la RLS las esconde.
+    const jugador = await createTestUser()
+    await createCasualMatch(
+      jugador.client,
+      [{ side: 'theirs', playerId: null, guestName: 'Tano' }],
+      {
+        sport: 'PADEL',
+        playedOn: '2026-08-30',
+        outcome: '',
+        scoreMine: '',
+        scoreTheirs: '',
+        teamMine: '',
+        teamTheirs: '',
+        setsToWin: '1',
+        gamesPerSet: '6',
+        sets: JSON.stringify([{ mine: 6, theirs: 3 }]),
+      },
+    )
 
     // `players` queda afuera a propósito: `players_read` es `using (true)`
     // (Task 7), así que cualquier autenticado ve el plantel global sin ser
@@ -259,7 +321,7 @@ describe('RLS — escritura', () => {
 
   it('el admin escribe todo lo de su torneo', async () => {
     const admin = await createTestUser()
-    const { seasonId } = await createSeason({ admin })
+    const { seasonId, disciplineId } = await createSeason({ admin })
 
     const rename = await admin.client
       .from('seasons')
@@ -275,15 +337,26 @@ describe('RLS — escritura', () => {
         season_id: seasonId,
         display_name: 'Jugador nuevo',
         kind: 'SQUAD',
-        seed_position: 0,
       })
       .select()
     expect(newEntry.error).toBeNull()
     expect(newEntry.data).toHaveLength(1)
+    const newEntryId = newEntry.data?.[0]?.id
+    if (newEntryId === undefined) throw new Error('Falta el id del asiento recién insertado.')
+
+    // discipline_entries_write (0023) también deja escribir al admin del
+    // torneo — sin esto, este mismo insert es el scaffold que W8
+    // encontró dejando asientos huérfanos.
+    const newSeat = await admin.client
+      .from('discipline_entries')
+      .insert({ discipline_id: disciplineId, entry_id: newEntryId, season_id: seasonId, seed_position: 1 })
+      .select()
+    expect(newSeat.error).toBeNull()
+    expect(newSeat.data).toHaveLength(1)
 
     const newMatchday = await admin.client
       .from('matchdays')
-      .insert({ season_id: seasonId, number: 1 })
+      .insert({ season_id: seasonId, discipline_id: disciplineId, number: 1 })
       .select()
     expect(newMatchday.error).toBeNull()
     expect(newMatchday.data).toHaveLength(1)
@@ -298,7 +371,7 @@ describe('RLS — escritura', () => {
 
     const { data, error } = await adminA.client
       .from('entries')
-      .insert({ season_id: seasonBId, display_name: 'Intruso', kind: 'SQUAD', seed_position: 99 })
+      .insert({ season_id: seasonBId, display_name: 'Intruso', kind: 'SQUAD' })
       .select()
 
     expect(data).toBeNull()
@@ -307,11 +380,11 @@ describe('RLS — escritura', () => {
 
   it('nadie puede mover matchdays.status con un update directo', async () => {
     const admin = await createTestUser()
-    const { seasonId } = await createSeason({ admin })
+    const { seasonId, disciplineId } = await createSeason({ admin })
     const db = adminClient()
     const { data: matchday, error: matchdayError } = await db
       .from('matchdays')
-      .insert({ season_id: seasonId, number: 1 })
+      .insert({ season_id: seasonId, discipline_id: disciplineId, number: 1 })
       .select('id')
       .single()
     if (matchdayError || matchday === null) throw new Error(matchdayError?.message)
@@ -344,11 +417,11 @@ describe('RLS — escritura', () => {
     expect(error?.code).toBe('42501')
   })
 
-  it('a participant who is not the admin cannot insert into any of the ten tables', async () => {
+  it('a participant who is not the admin cannot insert into any of the twelve tables', async () => {
     const admin = await createTestUser()
     const member = await createTestUser()
     const filler = await fillerPlayers(3)
-    const { seasonId, entryIds } = await createSeason({
+    const { seasonId, disciplineId, entryIds } = await createSeason({
       admin,
       squad: [member.playerId, ...filler],
     })
@@ -373,30 +446,42 @@ describe('RLS — escritura', () => {
       .from('seasons')
       .insert({
         name: 'Temporada forjada',
-        config: defaultConfig(8) as unknown as Json,
         created_by: admin.userId,
       })
       .select()
     expect(seasons.data, 'tabla seasons').toBeNull()
     expect(seasons.error?.code, 'tabla seasons').toBe('42501')
 
+    const disciplines = await member.client
+      .from('disciplines')
+      .insert({ season_id: seasonId, kind: 'FIFA', config: {} })
+      .select()
+    expect(disciplines.data, 'tabla disciplines').toBeNull()
+    expect(disciplines.error?.code, 'tabla disciplines').toBe('42501')
+
     const matchdays = await member.client
       .from('matchdays')
-      .insert({ season_id: seasonId, number: 99 })
+      .insert({ season_id: seasonId, discipline_id: disciplineId, number: 99 })
       .select()
     expect(matchdays.data, 'tabla matchdays').toBeNull()
     expect(matchdays.error?.code, 'tabla matchdays').toBe('42501')
 
     const entries = await member.client
       .from('entries')
-      .insert({ season_id: seasonId, display_name: 'Intruso', kind: 'SQUAD', seed_position: 77 })
+      .insert({ season_id: seasonId, display_name: 'Intruso', kind: 'SQUAD' })
       .select()
     expect(entries.data, 'tabla entries').toBeNull()
     expect(entries.error?.code, 'tabla entries').toBe('42501')
 
     const attendances = await member.client
       .from('attendances')
-      .insert({ matchday_id: matchdayId, entry_id: b, season_id: seasonId, status: 'PLAYING' })
+      .insert({
+        matchday_id: matchdayId,
+        entry_id: b,
+        season_id: seasonId,
+        discipline_id: disciplineId,
+        status: 'PLAYING',
+      })
       .select()
     expect(attendances.data, 'tabla attendances').toBeNull()
     expect(attendances.error?.code, 'tabla attendances').toBe('42501')
@@ -457,6 +542,111 @@ describe('RLS — escritura', () => {
 
     expect(error).toBeNull()
     expect(data).toHaveLength(1)
+  })
+
+  // WU4 (tanda 3, round 2 review fix): ningún loop genérico de arriba ejercita
+  // la ESCRITURA de `season_seed_order` -- todos los escritores de producción
+  // (`createSeason`, `add_squad_seat`, `promote_guest`) la tocan desde una
+  // función `security definer` o desde `adminClient()` (`service_role`), y
+  // los dos saltean RLS por completo (dueño de la función / rol admin de
+  // Postgres). Estos tres tests son los ÚNICOS de toda la suite que le pegan a
+  // `season_seed_order_write` con un cliente `authenticated` de verdad.
+  // Confirmado a mano: cambiar `is_season_admin` por `is_participant` en esa
+  // política (0080) sólo lo agarra el primero de los dos.
+  //
+  // Los dos de arriba pasan por `.update`, que RLS filtra con `USING` --
+  // ninguno ejercita un INSERT, que `season_seed_order_write` gobierna SÓLO
+  // con `WITH CHECK` (no hay fila existente que un `USING` pueda filtrar).
+  // WU4 (tanda 5, round 3 review fix): medido, `alter policy
+  // season_seed_order_write ... with check (true)` deja la suite ENTERA en
+  // verde sin este tercer test -- un participante cualquiera podría insertar
+  // filas de `season_seed_order` de su temporada y reescribir el orden.
+  it('un participante que no organiza no puede escribir season_seed_order', async () => {
+    const admin = await createTestUser()
+    const member = await createTestUser()
+    const { seasonId, entryIds } = await createSeason({ admin, squad: [member.playerId] })
+    const entryId = entryIds[0]
+    if (entryId === undefined) throw new Error('Falta el asiento de test.')
+
+    const { data, error } = await member.client
+      .from('season_seed_order')
+      .update({ seed_position: 99 })
+      .eq('season_id', seasonId)
+      .eq('entry_id', entryId)
+      .select()
+
+    // Bloqueado por RLS en UPDATE: cero filas afectadas, no un error.
+    expect(error).toBeNull()
+    expect(data).toEqual([])
+  })
+
+  it('el admin sí puede escribir season_seed_order de su propio torneo', async () => {
+    const admin = await createTestUser()
+    const { seasonId, entryIds } = await createSeason({ admin, squad: [admin.playerId] })
+    const entryId = entryIds[0]
+    if (entryId === undefined) throw new Error('Falta el asiento de test.')
+
+    const { data, error } = await admin.client
+      .from('season_seed_order')
+      .update({ seed_position: 0 })
+      .eq('season_id', seasonId)
+      .eq('entry_id', entryId)
+      .select()
+
+    expect(error).toBeNull()
+    expect(data).toHaveLength(1)
+  })
+
+  // WU4 (tanda 5, round 3 review fix): el `insert` de acá abajo va sobre la
+  // fila que el backfill de `createSeason` ya escribió para `member` --
+  // borrada con `adminClient()` primero, para no chocar con la PK, y
+  // repuesta en el `finally` pase lo que pase (mismo criterio que WU5).
+  it('un participante que no organiza no puede insertar season_seed_order', async () => {
+    const admin = await createTestUser()
+    const member = await createTestUser()
+    const { seasonId, entryIds } = await createSeason({ admin, squad: [member.playerId] })
+    const entryId = entryIds[0]
+    if (entryId === undefined) throw new Error('Falta el asiento de test.')
+
+    const db = adminClient()
+    const { error: deleteError } = await db
+      .from('season_seed_order')
+      .delete()
+      .eq('season_id', seasonId)
+      .eq('entry_id', entryId)
+    if (deleteError) throw new Error(deleteError.message)
+
+    try {
+      const { data, error } = await member.client
+        .from('season_seed_order')
+        .insert({ season_id: seasonId, entry_id: entryId, seed_position: 0 })
+        .select()
+
+      // Bloqueado por RLS en INSERT (`WITH CHECK`): a diferencia de UPDATE,
+      // acá SÍ llega un error -- no hay fila existente que un `USING` pueda
+      // filtrar, así que Postgres rechaza la fila nueva de una, no la deja
+      // pasar con cero filas afectadas.
+      expect(error).not.toBeNull()
+      expect(data).toBeNull()
+
+      const { data: row, error: rowError } = await db
+        .from('season_seed_order')
+        .select('entry_id')
+        .eq('season_id', seasonId)
+        .eq('entry_id', entryId)
+        .maybeSingle()
+      if (rowError) throw new Error(rowError.message)
+      expect(row).toBeNull()
+    } finally {
+      // `upsert`, no `insert`: si el insert de `member` de arriba llegó a
+      // colarse (por ejemplo con la política mutada a `with check (true)`),
+      // la fila YA existe acá y un `insert` chocaría contra la PK,
+      // enmascarando el fallo real del `try` con un error de limpieza.
+      const { error: restoreError } = await db
+        .from('season_seed_order')
+        .upsert({ season_id: seasonId, entry_id: entryId, seed_position: 0 }, { onConflict: 'season_id,entry_id' })
+      if (restoreError) throw new Error(restoreError.message)
+    }
   })
 })
 

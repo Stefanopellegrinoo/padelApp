@@ -2,7 +2,7 @@
 
 import type { SeasonConfig } from '@/core'
 import { EdgeError } from '@/db/errors'
-import { createSeason } from '@/db/season'
+import { createSeason, type NewSeasonDiscipline } from '@/db/season'
 import { serverClient } from '@/db/server'
 
 export type CreateResult =
@@ -12,7 +12,7 @@ export type CreateResult =
 /**
  * El único momento en que el wizard escribe.
  *
- * Los cuatro primeros pasos no persisten nada: no hay temporada a medio hacer,
+ * Los pasos anteriores a "Crear torneo" no persisten nada: no hay temporada a medio hacer,
  * ni borrador en la base, ni autosave. Se usa una vez por año, y una fila
  * incompleta que nadie puede terminar es peor que volver a tipear ocho nombres.
  *
@@ -25,6 +25,14 @@ export async function createTournament(input: {
   config: SeasonConfig
   /** El asiento del que crea, o `null` si organiza sin jugar. Índice sobre `squadNames`. */
   mySeatIndex: number | null
+  /**
+   * Una fila de `disciplines` por deporte, en el orden de los chips del paso 1
+   * (`crearPayload`): cada una con su ficha copiada y lo que se tocó, y la
+   * primera fecha como `shuffle`/`sameOrderAs`/`seedOrder` (+ `teams` con
+   * parejas fijas). Sin esto, `createSeason` sigue creando la única PADEL de
+   * siempre — el default queda para quien llame sin wizard.
+   */
+  disciplines?: NewSeasonDiscipline[]
 }): Promise<CreateResult> {
   try {
     const supabase = await serverClient()

@@ -1,0 +1,45 @@
+-- ── disciplines.formato_default — grant de INSERT (docs/tipos-de-torneo.md §2.5) ─
+-- `0074_discipline_formato_default.sql:88-111` sólo dio `grant update
+-- (formato_default)`, a propósito: en ese momento ningún escritor de
+-- creación (`createSeason`/`addDiscipline`, `db/season.ts`/`db/discipline.ts`)
+-- mandaba esta columna al INSERTAR — toda disciplina nueva nacía con el
+-- default de columna (`ROUND_ROBIN`, 0074). Esta rebanada (slice 1 de 2,
+-- wizard multi-disciplina) le da a esos dos escritores un `formatoDefault`
+-- opcional por spec, así que ahora sí puede llegar un INSERT de
+-- `authenticated` que nombre `formato_default`. Sin este grant, ese insert
+-- falla con "permission denied for table disciplines" — mismo mensaje sin
+-- nombre de columna que ya documentó `0074_discipline_formato_default.sql:105-107`
+-- para el UPDATE equivalente.
+--
+-- ¿Additive o hay que revocar y re-listar como hizo `0020`? Additive. Las dos
+-- veces que esta cadena sumó una columna a un grant que YA era por columna,
+-- alcanzó con una sola sentencia nueva, sin tocar la anterior:
+--   · UPDATE: `0069_discipline_rules.sql:43-46` lo dice de una sobre esta
+--     misma tabla — "`0015_disciplines.sql:69` revoca UPDATE entero y `:70`
+--     regrant una lista de columnas con nombre. Los grants de columna son
+--     aditivos, así que esta única sentencia es todo el arreglo; `0015` no se
+--     edita (las migraciones son append-only)."
+--   · INSERT, el mismo verbo que acá: `0040_matchday_format.sql:73` sumó
+--     `grant insert (formato) on public.matchdays to authenticated` sobre un
+--     INSERT de `matchdays` que ya era por columna desde `0002_rls.sql:237`
+--     (`discipline_id` en 0015, `pair_size` en 0028 y `allows_draw` en 0034
+--     se sumaron con el mismo patrón, sin revoke — el propio 0040 las cuenta
+--     como las tres previas). Postgres trata el ACL de INSERT por columna
+--     igual que el de UPDATE: cada `grant` nuevo se une al array de columnas
+--     ya otorgadas, no lo reemplaza.
+--
+-- `0020_disciplines_grants.sql:43-45` SÍ hizo `revoke insert` + regrant con la
+-- lista completa, pero por un motivo que no se repite acá: en ese momento el
+-- INSERT de `authenticated` sobre `disciplines` todavía era de TABLA ENTERA
+-- (`0015_disciplines.sql:52`, `grant select, insert, update, delete ... to
+-- authenticated, service_role`), y un grant de tabla entera no se "angosta"
+-- agregando grants de columna encima — sigue permitiendo cualquier columna
+-- hasta que se revoca. Esa conversión de tabla-entera a por-columna ya
+-- ocurrió una sola vez, en 0020; esta migración arranca DESPUÉS, con el
+-- INSERT ya en régimen por columna, así que sumar `formato_default` es
+-- aditivo puro.
+--
+-- Test db obligatorio para este grant, con `authenticated`, nunca
+-- `service_role` (mismo criterio que `0040_matchday_format.sql` para
+-- `matchdays.formato` y que `0074` para el UPDATE de esta misma columna).
+grant insert (formato_default) on public.disciplines to authenticated;

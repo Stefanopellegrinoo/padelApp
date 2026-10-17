@@ -2,9 +2,13 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import {
   computeRanking,
   defaultConfig,
-  samePair,
+  members,
+  pair,
+  sameSide,
+  sideOfRow,
   snapshotForMatchday,
-  type Pair,
+  type DisciplineId,
+  type Side,
   type SeasonConfig,
 } from '@/core'
 import {
@@ -18,7 +22,7 @@ import {
   saveResult,
   setAttendance,
 } from './matchday'
-import { awardsBefore, squadSeedOrder, updateSeasonConfig } from './season'
+import { awardsBefore, squadSeedOrder } from './season'
 import { adminClient } from './test/admin'
 import { createSeason } from './test/factories'
 import { createTestUser, type TestUser } from './test/users'
@@ -56,18 +60,32 @@ async function createWalkthroughSeason(
   admin: TestUser,
   config: SeasonConfig,
   squadSize: number,
-): Promise<{ seasonId: string; entryIds: string[]; openSeatEntryId: string; inviteToken: string }> {
+): Promise<{
+  seasonId: string
+  disciplineId: DisciplineId
+  entryIds: string[]
+  openSeatEntryId: string
+  inviteToken: string
+}> {
   const db = adminClient()
   const { data: season, error: seasonError } = await db
     .from('seasons')
     .insert({
       name: `Temporada de test ${Date.now()}`,
-      config: config as unknown as Json,
       created_by: admin.userId,
     })
     .select('id, invite_token')
     .single()
   if (seasonError || season === null) throw new Error(seasonError?.message)
+
+  // createMatchday necesita una disciplina para resolver discipline_id: esta
+  // temporada no pasa por db/test/factories.ts, así que se arma acá.
+  const { data: discipline, error: disciplineError } = await db
+    .from('disciplines')
+    .insert({ season_id: season.id, kind: 'PADEL', config: config as unknown as Json })
+    .select('id')
+    .single()
+  if (disciplineError || discipline === null) throw new Error(disciplineError?.message)
 
   const players = await fillerPlayers(squadSize - 1)
   const entryIds: string[] = []
@@ -80,16 +98,40 @@ async function createWalkthroughSeason(
         player_id: playerId ?? null,
         display_name: playerId === undefined ? 'Asiento libre de test' : `Jugador de test ${index + 1}`,
         kind: 'SQUAD',
-        seed_position: index,
+        // Sin `seed_position` (C37): el orden se siembra en
+        // `discipline_entries`, unas líneas más abajo.
       })
       .select('id')
       .single()
     if (error || entry === null) throw new Error(error?.message)
     entryIds.push(entry.id)
   }
+
+  // Mismo motivo que el comentario de arriba: esta temporada no pasa por
+  // db/test/factories.ts, así que el backfill de discipline_entries (PR 7)
+  // se arma acá a mano — sin esto, marcar presente (PR 8,
+  // attendances_entry_discipline) rebota para todo el plantel.
+  const { error: seatsError } = await db.from('discipline_entries').insert(
+    entryIds.map((entryId, index) => ({
+      discipline_id: discipline.id,
+      entry_id: entryId,
+      season_id: season.id,
+      seed_position: index,
+    })),
+  )
+  if (seatsError) throw new Error(seatsError.message)
+
   const openSeatEntryId = entryIds[entryIds.length - 1]
   if (openSeatEntryId === undefined) throw new Error('Falta el asiento libre de test.')
-  return { seasonId: season.id, entryIds, openSeatEntryId, inviteToken: season.invite_token }
+  return {
+    seasonId: season.id,
+    // Único cast de esta función: esta temporada no pasa por
+    // db/test/factories.ts, así que nace su propio DisciplineId acá.
+    disciplineId: discipline.id as DisciplineId,
+    entryIds,
+    openSeatEntryId,
+    inviteToken: season.invite_token,
+  }
 }
 
 async function markPlaying(admin: TestUser, matchdayId: string, entryIds: string[]): Promise<void> {
@@ -98,9 +140,11 @@ async function markPlaying(admin: TestUser, matchdayId: string, entryIds: string
   }
 }
 
+//`entry_b: string | null` desde 0028 (REQ-D5-1): la fila real ya lo permite,
+// aunque esta suite sólo ejercita pádel (pair_size=2, siempre no-nulo).
 async function pairsOf(
   matchdayId: string,
-): Promise<Array<{ id: string; entry_a: string; entry_b: string }>> {
+): Promise<Array<{ id: string; entry_a: string; entry_b: string | null }>> {
   const db = adminClient()
   const { data, error } = await db
     .from('pairs')
@@ -150,22 +194,23 @@ const sortByEntry = <T extends { entry_id: string }>(rows: T[]): T[] =>
 async function rankingBefore(
   admin: TestUser,
   seasonId: string,
+  disciplineId: DisciplineId,
   matchdayNumber: number,
   config: SeasonConfig,
 ) {
-  const seedOrder = await squadSeedOrder(admin.client, seasonId)
-  const awardsByMatchday = await awardsBefore(admin.client, seasonId, matchdayNumber)
+  const seedOrder = await squadSeedOrder(admin.client, disciplineId)
+  const awardsByMatchday = await awardsBefore(admin.client, disciplineId, matchdayNumber)
   const snapshot = snapshotForMatchday(matchdayNumber, seedOrder, awardsByMatchday, config)
   return computeRanking(awardsByMatchday, seedOrder, config, snapshot)
 }
 
 /** La pareja que se quedó con la posición 1 de premios, o null si la fecha no pagó a nadie. */
-function championPairOf(awards: AwardRow[], pairs: Pair[]): Pair | null {
+function championPairOf(awards: AwardRow[], pairs: Side[]): Side | null {
   const winners = new Set(
     awards.filter((award) => award.position === 1).map((award) => award.entry_id),
   )
   if (winners.size === 0) return null
-  return pairs.find((pair) => winners.has(pair.a) || winners.has(pair.b)) ?? null
+  return pairs.find((side) => members(side).some((entryId) => winners.has(entryId))) ?? null
 }
 
 /**
@@ -177,20 +222,25 @@ function championPairOf(awards: AwardRow[], pairs: Pair[]): Pair | null {
 async function playByRankRule(
   admin: TestUser,
   seasonId: string,
+  disciplineId: DisciplineId,
   matchdayId: string,
   matchdayNumber: number,
   config: SeasonConfig,
 ): Promise<void> {
-  const ranking = await rankingBefore(admin, seasonId, matchdayNumber, config)
+  const ranking = await rankingBefore(admin, seasonId, disciplineId, matchdayNumber, config)
   const rankIndex = new Map(ranking.map((row, index) => [row.entryId, index]))
   const worst = ranking.length // los invitados quedan afuera del ranking del plantel: valen como el peor posible
 
+  //`requirePartner` retirado — `sideOfRow`
+  // (core/side.ts) es el hogar único. `2` es literal, no leído de la fila:
+  // esta suite sólo ejercita pádel (pair_size=2, siempre con `entry_b`).
   const pairs = await pairsOf(matchdayId)
   const pairRank = new Map(
-    pairs.map((pair) => [
-      pair.id,
-      Math.min(rankIndex.get(pair.entry_a) ?? worst, rankIndex.get(pair.entry_b) ?? worst),
-    ]),
+    pairs.map((pair) => {
+      const side = sideOfRow(2, pair.entry_a, pair.entry_b)
+      const partner = side.size === 2 ? side.b : pair.entry_a
+      return [pair.id, Math.min(rankIndex.get(pair.entry_a) ?? worst, rankIndex.get(partner) ?? worst)]
+    }),
   )
 
   const matches = await matchesOf(matchdayId)
@@ -216,6 +266,7 @@ interface PlayMatchdayOptions {
 async function playMatchday(
   admin: TestUser,
   seasonId: string,
+  disciplineId: DisciplineId,
   matchdayId: string,
   matchdayNumber: number,
   config: SeasonConfig,
@@ -239,7 +290,7 @@ async function playMatchday(
 
   await generatePairs(admin.client, matchdayId)
   await openMatchday(admin.client, matchdayId)
-  await playByRankRule(admin, seasonId, matchdayId, matchdayNumber, config)
+  await playByRankRule(admin, seasonId, disciplineId, matchdayId, matchdayNumber, config)
   await closeMatchday(admin.client, matchdayId)
 
   return { guestIds }
@@ -248,12 +299,13 @@ async function playMatchday(
 interface WalkthroughSeason {
   admin: TestUser
   seasonId: string
+  disciplineId: DisciplineId
   config: SeasonConfig
   squad: string[]
   openSeatEntryId: string
   inviteToken: string
   matchdayIds: string[] // índice 0 → fecha 1, ..., índice 9 → fecha 10
-  pairsByMatchday: Map<number, Pair[]>
+  pairsByMatchday: Map<number, Side[]>
   awardsRightAfterClose: Map<number, AwardRow[]>
   /** El del plantel que falta en la fecha 6 — nunca uno de los defensores que entran a esa fecha. */
   absentee: string
@@ -277,46 +329,54 @@ function matchdayIdOf(season: WalkthroughSeason, number: number): string {
 async function buildWalkthroughSeason(): Promise<WalkthroughSeason> {
   const admin = await createTestUser()
   let config = defaultConfig(8)
-  const { seasonId, entryIds: squad, openSeatEntryId, inviteToken } = await createWalkthroughSeason(
-    admin,
-    config,
-    8,
-  )
+  const {
+    seasonId,
+    disciplineId,
+    entryIds: squad,
+    openSeatEntryId,
+    inviteToken,
+  } = await createWalkthroughSeason(admin, config, 8)
 
   const matchdayIds: string[] = []
-  const pairsByMatchday = new Map<number, Pair[]>()
+  const pairsByMatchday = new Map<number, Side[]>()
   const awardsRightAfterClose = new Map<number, AwardRow[]>()
   const playedOn = (day: number) => `2026-01-${String(day).padStart(2, '0')}`
 
   const recordClose = async (matchdayId: string, number: number): Promise<void> => {
     matchdayIds[number - 1] = matchdayId
+    // Idem arriba — sideOfRow(2,...) inline.
     pairsByMatchday.set(
       number,
-      (await pairsOf(matchdayId)).map((row) => ({ a: row.entry_a, b: row.entry_b })),
+      (await pairsOf(matchdayId)).map((row) => {
+        return sideOfRow(2, row.entry_a, row.entry_b)
+      }),
     )
     awardsRightAfterClose.set(number, sortByEntry(await awardsOf(matchdayId)))
   }
 
   for (let number = 1; number <= 4; number++) {
     const matchdayId = await createMatchday(admin.client, seasonId, playedOn(number))
-    await playMatchday(admin, seasonId, matchdayId, number, config, { playing: squad })
+    await playMatchday(admin, seasonId, disciplineId, matchdayId, number, config, { playing: squad })
     await recordClose(matchdayId, number)
   }
 
-  // Fecha 5: cambia la escala de puntos antes de sortearla. Lo cerrado antes no se tiene que mover (test 5).
+  // Fecha 5: cambia la escala de puntos antes de sortearla. Lo cerrado antes
+  // no se tiene que mover (test 5). `config` es una variable LOCAL de este
+  // harness: `playMatchday` la usa directo, nunca releída de `seasons.config`
+  // (C35, #4034 — esa columna no tiene lectores de producción desde PR 5, y
+  // `updateSeasonConfig` era su único escritor de test, sin efecto real acá).
   config = { ...config, points: [12, 7, 4, 1] }
-  await updateSeasonConfig(admin.client, seasonId, config)
   const md5 = await createMatchday(admin.client, seasonId, playedOn(5))
-  await playMatchday(admin, seasonId, md5, 5, config, { playing: squad })
+  await playMatchday(admin, seasonId, disciplineId, md5, 5, config, { playing: squad })
   await recordClose(md5, 5)
 
   // Fecha 6: invitado suelto por el ausente — nunca uno de los defensores que entran a esta fecha.
   const md5Champion = championPairOf(awardsRightAfterClose.get(5) ?? [], pairsByMatchday.get(5) ?? [])
-  const defending = new Set(md5Champion === null ? [] : [md5Champion.a, md5Champion.b])
+  const defending = new Set(md5Champion === null ? [] : members(md5Champion))
   const absentee = squad.find((entryId) => !defending.has(entryId))
   if (absentee === undefined) throw new Error('No hay a quién ausentar sin tocar a los defensores.')
   const md6 = await createMatchday(admin.client, seasonId, playedOn(6))
-  const { guestIds: md6Guests } = await playMatchday(admin, seasonId, md6, 6, config, {
+  const { guestIds: md6Guests } = await playMatchday(admin, seasonId, disciplineId, md6, 6, config, {
     playing: squad.filter((entryId) => entryId !== absentee),
     guestNames: ['Invitado suelto'],
   })
@@ -326,12 +386,12 @@ async function buildWalkthroughSeason(): Promise<WalkthroughSeason> {
 
   // Fecha 7: vuelve el plantel completo.
   const md7 = await createMatchday(admin.client, seasonId, playedOn(7))
-  await playMatchday(admin, seasonId, md7, 7, config, { playing: squad })
+  await playMatchday(admin, seasonId, disciplineId, md7, 7, config, { playing: squad })
   await recordClose(md7, 7)
 
   // Fecha 8: equipo invitado — dos invitados trabados entre sí, plantel completo alrededor.
   const md8 = await createMatchday(admin.client, seasonId, playedOn(8))
-  const { guestIds: md8Guests } = await playMatchday(admin, seasonId, md8, 8, config, {
+  const { guestIds: md8Guests } = await playMatchday(admin, seasonId, disciplineId, md8, 8, config, {
     playing: squad,
     guestNames: ['Equipo invitado 1', 'Equipo invitado 2'],
     guestLock: [0, 1],
@@ -343,13 +403,14 @@ async function buildWalkthroughSeason(): Promise<WalkthroughSeason> {
   // Fechas 9-10: cierran la temporada regular con el plantel completo.
   for (let number = 9; number <= 10; number++) {
     const matchdayId = await createMatchday(admin.client, seasonId, playedOn(number))
-    await playMatchday(admin, seasonId, matchdayId, number, config, { playing: squad })
+    await playMatchday(admin, seasonId, disciplineId, matchdayId, number, config, { playing: squad })
     await recordClose(matchdayId, number)
   }
 
   return {
     admin,
     seasonId,
+    disciplineId,
     config,
     squad,
     openSeatEntryId,
@@ -370,7 +431,7 @@ async function playDeterministicSeason(
   const admin = await createTestUser()
   const config = defaultConfig(8)
   const players = await fillerPlayers(8)
-  const { seasonId, entryIds } = await createSeason({ admin, config, squad: players })
+  const { seasonId, disciplineId, entryIds } = await createSeason({ admin, config, squad: players })
   const seedPositionOf = new Map(entryIds.map((entryId, index) => [entryId, index]))
 
   const seasonAwards: Array<Array<{ seedPosition: number; position: number; points: number }>> = []
@@ -380,7 +441,7 @@ async function playDeterministicSeason(
       seasonId,
       `2026-02-${String(number).padStart(2, '0')}`,
     )
-    await playMatchday(admin, seasonId, matchdayId, number, config, { playing: entryIds })
+    await playMatchday(admin, seasonId, disciplineId, matchdayId, number, config, { playing: entryIds })
     const awards = await awardsOf(matchdayId)
     const bySeed = awards
       .map((award) => ({
@@ -406,7 +467,7 @@ describe('a whole season played end to end', () => {
       expect(await matchdayStatus(matchdayId)).toBe('CLOSED')
     }
 
-    const ranking = await rankingBefore(season.admin, season.seasonId, 11, season.config)
+    const ranking = await rankingBefore(season.admin, season.seasonId, season.disciplineId, 11, season.config)
     expect(ranking).toHaveLength(8)
     expect(new Set(ranking.map((row) => row.entryId)).size).toBe(8)
     for (const row of ranking) {
@@ -424,7 +485,7 @@ describe('a whole season played end to end', () => {
     for (let number = 2; number <= 10; number++) {
       const previous = season.pairsByMatchday.get(number - 1) ?? []
       const current = season.pairsByMatchday.get(number) ?? []
-      const repeated = current.filter((pair) => previous.some((old) => samePair(old, pair)))
+      const repeated = current.filter((pair) => previous.some((old) => sameSide(old, pair)))
 
       expect(repeated.length).toBeLessThanOrEqual(1)
       if (repeated.length === 1) {
@@ -433,7 +494,7 @@ describe('a whole season played end to end', () => {
         if (onlyRepeat === undefined || champion === null) {
           throw new Error('Bug de test: se esperaba una pareja repetida con campeón.')
         }
-        expect(samePair(onlyRepeat, champion)).toBe(true)
+        expect(sameSide(onlyRepeat, champion)).toBe(true)
       }
     }
   })
@@ -447,15 +508,15 @@ describe('a whole season played end to end', () => {
 
     const pairsMd2 = season.pairsByMatchday.get(2) ?? []
     const pairsMd3 = season.pairsByMatchday.get(3) ?? []
-    expect(pairsMd2.some((pair) => samePair(pair, champion1))).toBe(true)
-    expect(pairsMd3.some((pair) => samePair(pair, champion1))).toBe(false)
+    expect(pairsMd2.some((pair) => sameSide(pair, champion1))).toBe(true)
+    expect(pairsMd3.some((pair) => sameSide(pair, champion1))).toBe(false)
   })
 
   it("the table discards its worst results as of matchday 9's close", async () => {
-    const before9 = await rankingBefore(season.admin, season.seasonId, 9, season.config)
+    const before9 = await rankingBefore(season.admin, season.seasonId, season.disciplineId, 9, season.config)
     expect(before9.every((row) => row.discarded.length === 0)).toBe(true)
 
-    const before10 = await rankingBefore(season.admin, season.seasonId, 10, season.config)
+    const before10 = await rankingBefore(season.admin, season.seasonId, season.disciplineId, 10, season.config)
     const absenteeRow = before10.find((row) => row.entryId === season.absentee)
     expect(absenteeRow?.discarded.length).toBe(0)
 
@@ -507,9 +568,9 @@ describe('a whole season played end to end', () => {
     const md6Pairs = season.pairsByMatchday.get(6) ?? []
     const md6Awards = season.awardsRightAfterClose.get(6) ?? []
     expect(md6Pairs).toHaveLength(4)
-    expect(md6Pairs.some((pair) => pair.a === season.loneGuestEntryId || pair.b === season.loneGuestEntryId)).toBe(
-      true,
-    )
+    expect(
+      md6Pairs.some((side) => members(side).includes(season.loneGuestEntryId)),
+    ).toBe(true)
     expect(md6Awards.some((award) => award.entry_id === season.loneGuestEntryId)).toBe(false)
     expect(md6Awards.some((award) => award.entry_id === season.absentee)).toBe(false)
     expect(md6Awards).toHaveLength(7) // el plantel presente, sin el invitado
@@ -518,7 +579,7 @@ describe('a whole season played end to end', () => {
     const md8Awards = season.awardsRightAfterClose.get(8) ?? []
     const [guestA, guestB] = season.guestPairEntryIds
     expect(md8Pairs).toHaveLength(5)
-    expect(md8Pairs.some((pair) => samePair(pair, { a: guestA, b: guestB }))).toBe(true)
+    expect(md8Pairs.some((side) => sameSide(side, pair(guestA!, guestB!)))).toBe(true)
     expect(md8Awards.some((award) => award.entry_id === guestA || award.entry_id === guestB)).toBe(false)
     expect(md8Awards).toHaveLength(8) // el plantel completo, ninguno de los dos invitados
   })

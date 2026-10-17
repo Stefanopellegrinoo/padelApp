@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { defaultConfig, type Pair, type SeasonConfig } from '@/core'
+import { defaultConfig, members, type DisciplineId, type SeasonConfig, type Side } from '@/core'
 import {
   closeMatchday,
   createMasters,
@@ -40,11 +40,11 @@ async function fillerPlayers(count: number): Promise<string[]> {
 async function buildSeasonWithSquad(
   config: SeasonConfig,
   squadSize: number,
-): Promise<{ admin: TestUser; seasonId: string; squad: string[] }> {
+): Promise<{ admin: TestUser; seasonId: string; disciplineId: DisciplineId; squad: string[] }> {
   const admin = await createTestUser()
   const players = await fillerPlayers(squadSize)
-  const { seasonId, entryIds } = await createSeason({ admin, config, squad: players })
-  return { admin, seasonId, squad: entryIds }
+  const { seasonId, disciplineId, entryIds } = await createSeason({ admin, config, squad: players })
+  return { admin, seasonId, disciplineId, squad: entryIds }
 }
 
 async function markAllPlaying(admin: TestUser, matchdayId: string, entryIds: string[]): Promise<void> {
@@ -94,9 +94,16 @@ async function matchdayStatus(matchdayId: string): Promise<string> {
   return data.status
 }
 
-async function seasonStatus(seasonId: string): Promise<string> {
+// `seasons.status` ya no tiene escritor de producción (bloqueante #2 del
+// contract, db/season-status-writers.db.test.ts): el trinquete real vive en
+// `disciplines.status`.
+async function disciplineStatus(disciplineId: DisciplineId): Promise<string> {
   const db = adminClient()
-  const { data, error } = await db.from('seasons').select('status').eq('id', seasonId).single()
+  const { data, error } = await db
+    .from('disciplines')
+    .select('status')
+    .eq('id', disciplineId)
+    .single()
   if (error || data === null) throw new Error(error?.message)
   return data.status
 }
@@ -128,16 +135,22 @@ async function awardsOf(
 async function buildOpenMatchday(
   config: SeasonConfig,
   squadSize: number,
-): Promise<{ admin: TestUser; seasonId: string; squad: string[]; matchdayId: string }> {
-  const { admin, seasonId, squad } = await buildSeasonWithSquad(config, squadSize)
+): Promise<{
+  admin: TestUser
+  seasonId: string
+  disciplineId: DisciplineId
+  squad: string[]
+  matchdayId: string
+}> {
+  const { admin, seasonId, disciplineId, squad } = await buildSeasonWithSquad(config, squadSize)
   const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
   await markAllPlaying(admin, matchdayId, squad)
   await generatePairs(admin.client, matchdayId)
   await openMatchday(admin.client, matchdayId)
-  return { admin, seasonId, squad, matchdayId }
+  return { admin, seasonId, disciplineId, squad, matchdayId }
 }
 
-const sortPairs = (pairs: Pair[]): Pair[] => [...pairs].sort((left, right) => left.a.localeCompare(right.a))
+const sortSides = (sides: Side[]): Side[] => [...sides].sort((left, right) => left.a.localeCompare(right.a))
 
 /** Los premios de una fecha, indexados por la posición del jugador en el plantel en vez de por su entry_id: dos temporadas nunca comparten entries, pero comparten seed_position. */
 function awardsBySeed(
@@ -213,14 +226,14 @@ describe('redraftMatchday', () => {
     if (firstMatch === undefined) throw new Error('Falta un partido de test.')
     await saveResult(admin.client, firstMatch.id, [{ gamesA: 4, gamesB: 1 }])
 
-    const pairsBefore = sortPairs((await matchdayDetail(admin.client, matchdayId)).pairs)
+    const pairsBefore = sortSides((await matchdayDetail(admin.client, matchdayId)).sides)
     const matchesBefore = (await matchdayDetail(admin.client, matchdayId)).matches
     const attendancesBefore = await attendancesOf(admin.client, matchdayId)
 
     await redraftMatchday(admin.client, matchdayId)
 
     const detailAfter = await matchdayDetail(admin.client, matchdayId)
-    expect(sortPairs(detailAfter.pairs)).toEqual(pairsBefore)
+    expect(sortSides(detailAfter.sides)).toEqual(pairsBefore)
     expect(detailAfter.matches).toEqual(matchesBefore)
     expect(await attendancesOf(admin.client, matchdayId)).toEqual(attendancesBefore)
   })
@@ -239,12 +252,12 @@ describe('redraftMatchday', () => {
     expect(await matchdayStatus(matchdayId)).toBe('OPEN')
   })
 
-  it('no toca el estado de la temporada ni el invariante de una sola fecha sin cerrar', async () => {
-    const { admin, seasonId, matchdayId } = await buildOpenMatchday(defaultConfig(8), 8)
+  it('no toca el estado de la disciplina ni el invariante de una sola fecha sin cerrar', async () => {
+    const { admin, seasonId, disciplineId, matchdayId } = await buildOpenMatchday(defaultConfig(8), 8)
 
     await redraftMatchday(admin.client, matchdayId)
 
-    expect(await seasonStatus(seasonId)).toBe('ACTIVE')
+    expect(await disciplineStatus(disciplineId)).toBe('ACTIVE')
     expect(await nonClosedMatchdaysOf(seasonId)).toBe(1)
   })
 
@@ -260,7 +273,7 @@ describe('redraftMatchday', () => {
     await openMatchday(admin.client, matchdayId)
 
     expect(await matchdayStatus(matchdayId)).toBe('OPEN')
-    const playing = new Set((await matchdayDetail(admin.client, matchdayId)).pairs.flatMap((pair) => [pair.a, pair.b]))
+    const playing = new Set((await matchdayDetail(admin.client, matchdayId)).sides.flatMap((side) => [...members(side)]))
     for (const entryId of dropped) expect(playing.has(entryId)).toBe(false)
   })
 
@@ -276,7 +289,7 @@ describe('redraftMatchday', () => {
 
     expect(await matchdayStatus(matchdayId)).toBe('OPEN')
     const detailAfter = await matchdayDetail(admin.client, matchdayId)
-    expect(sortPairs(detailAfter.pairs)).toEqual(sortPairs(detailBefore.pairs))
+    expect(sortSides(detailAfter.sides)).toEqual(sortSides(detailBefore.sides))
     expect(detailAfter.matches).toEqual(detailBefore.matches)
   })
 
@@ -341,7 +354,7 @@ describe('redraftMatchday', () => {
     expect(await matchdayStatus(matchdayId)).toBe('OPEN')
 
     const playing = new Set(
-      (await matchdayDetail(admin.client, matchdayId)).pairs.flatMap((pair) => [pair.a, pair.b]),
+      (await matchdayDetail(admin.client, matchdayId)).sides.flatMap((side) => [...members(side)]),
     )
     expect(playing.has(dropped)).toBe(false)
     expect(playing.has(guestId)).toBe(true)
@@ -362,7 +375,7 @@ describe('redraftMatchday', () => {
 
   it('el Masters también vuelve al armado, y el sorteo del Masters vuelve a estar disponible', async () => {
     const config: SeasonConfig = { ...defaultConfig(8), regularMatchdays: 1, countBestOf: 1 }
-    const { admin, seasonId, squad } = await buildSeasonWithSquad(config, 8)
+    const { admin, seasonId, disciplineId, squad } = await buildSeasonWithSquad(config, 8)
     const md1 = await createMatchday(admin.client, seasonId, '2026-03-05')
     await markAllPlaying(admin, md1, squad)
     await generatePairs(admin.client, md1)
@@ -370,7 +383,7 @@ describe('redraftMatchday', () => {
     await playAllMatches(admin, md1, (pairA) => pairA)
     await closeMatchday(admin.client, md1)
 
-    const mastersId = await createMasters(admin.client, seasonId, '2026-12-20')
+    const mastersId = await createMasters(admin.client, disciplineId, '2026-12-20')
     await generateMastersPairs(admin.client, mastersId)
     await openMatchday(admin.client, mastersId)
     expect(await matchdayStatus(mastersId)).toBe('OPEN')
@@ -379,6 +392,46 @@ describe('redraftMatchday', () => {
 
     expect(await matchdayStatus(mastersId)).toBe('DRAFT')
     await generateMastersPairs(admin.client, mastersId)
-    expect((await matchdayDetail(admin.client, mastersId)).pairs).toHaveLength(6)
+    expect((await matchdayDetail(admin.client, mastersId)).sides).toHaveLength(6)
+  })
+})
+
+// ── El flake de N77, y su causa ─────────────────────────────────────────────
+// `no borra parejas, partidos, resultados ni presentismo` (arriba) venía
+// fallando de forma intermitente desde #3996, con `db:reset` previo: apareció
+// en 1 de ~10 corridas completas de esta sesión.
+//
+// La causa NO era el redraft. `matchdayDetail` (`db/read.ts`) ordenaba los
+// partidos SÓLO por `round`, y una fecha de 4 lados tiene DOS partidos por
+// ronda: el orden entre esos dos lo decidía el plan de Postgres. Cualquier
+// escritura que moviera las filas en el heap —y `redraftMatchday` hace
+// varias— podía devolverlos al revés, y el `expect(detailAfter.matches)
+// .toEqual(matchesBefore)` de arriba compara ARRAYS. Fallaba sin que nada
+// estuviera roto.
+//
+// LÍMITE HONESTO DE ESTE TEST: fija el CONTRATO (dentro de una ronda, por
+// `id`), no reproduce el flake. Un `update` con el mismo valor no alcanza para
+// forzar el reordenamiento —Postgres lo resuelve HOT, in-place— y no hay forma
+// de pedirle al planner el orden inverso desde PostgREST. Sin el `.order(id)`
+// del fix, este test pasa CASI siempre; con él, siempre. Su valor es dejar el
+// contrato escrito y la causa documentada, no cazar la regresión.
+describe('matchdayDetail devuelve los partidos en un orden estable', () => {
+  it('dentro de cada ronda van por id, no por lo que devuelva el plan', async () => {
+    const { admin, matchdayId } = await buildOpenMatchday(defaultConfig(8), 8)
+    const matches = (await matchdayDetail(admin.client, matchdayId)).matches
+
+    const porRonda = new Map<number, string[]>()
+    for (const match of matches) {
+      const bucket = porRonda.get(match.round)
+      if (bucket === undefined) porRonda.set(match.round, [match.id])
+      else bucket.push(match.id)
+    }
+    // El fixture tiene que tener al menos una ronda con 2+ partidos, o este
+    // test no estaría mirando nada.
+    expect([...porRonda.values()].some((ids) => ids.length > 1)).toBe(true)
+
+    for (const [round, ids] of porRonda) {
+      expect(ids, `ronda ${round}`).toEqual([...ids].sort())
+    }
   })
 })

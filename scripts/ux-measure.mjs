@@ -43,7 +43,7 @@ function ariaBusyGone(page) {
   })
 }
 
-// textContent, no innerText: varios labels ("¿Quién ganó?", "Paso N de 5")
+// textContent, no innerText: varios labels ("¿Quién ganó?", "Paso N de 4")
 // son CSS text-transform:uppercase, e innerText refleja esa transformación —
 // una búsqueda en minúscula/mayúscula mixta nunca matchearía. textContent
 // ignora el CSS por completo.
@@ -165,7 +165,7 @@ async function measureInteraction(page, label, runFn) {
  * más fina que el escalón puede distinguir eso de una regresión, y un gate que
  * falla sobre código sin cambios enseña a ignorarlo.
  *
- * Lo que el contrato pide tampoco es "no varió": es que el toque se conteste
+ *Lo que el contrato pide tampoco es "no varió": es que el toque se conteste
  * rápido. 150ms está muy por debajo de lo que este bug producía (300-800ms de
  * pantalla muerta) y muy por encima del escalón del instrumento, así que sólo
  * se enciende cuando algo se rompió de verdad. El delta contra el baseline
@@ -379,6 +379,10 @@ async function main() {
     .getByText('–', { exact: true })
     .first()
     .locator('xpath=ancestor::div[contains(@class,"rounded-[14px]")][1]')
+  // Se centra la tarjeta ANTES de medir. Los partidos de una ronda salen en el orden de sus ids (uuid
+  // al azar), así que según la escena el botón puede asomar bajo la barra de abajo: el toque anda, pero
+  // el panel se abre fuera de pantalla y no hay nada que ver (T_first_visible_change = null, medido).
+  await openMatchCard.evaluate((card) => card.scrollIntoView({ block: 'center' }))
   await measureInteraction(page, '11-cargar-resultado-open', async () => {
     await openMatchCard.locator('button', { hasText: 'Cargar resultado' }).click()
     await bodyIncludes(page, 'Quién ganó')
@@ -407,16 +411,22 @@ async function main() {
 
   // ================= 8) Pestañas de la nav =================
   await page.goto(closeBase, { waitUntil: 'networkidle' })
+  // La nav lleva la disciplina en el destino de Tabla, Fechas y Stats (`${base}/{slug}/…`, `navTabs`
+  // en `app/torneo/[id]/nav-state.ts`); sólo Reglas apunta al contenedor. Se leen los hrefs del DOM
+  // en vez de asumir el slug: robusto sin importar cuál sea la disciplina por defecto de la
+  // temporada sembrada.
+  const hrefDe = async (name) =>
+    new URL(await page.getByRole('navigation').getByRole('link', { name }).getAttribute('href'), closeBase).toString()
   const tabs = [
-    ['Fechas', `${closeBase}/fechas`],
-    ['Stats', `${closeBase}/stats`],
+    ['Fechas', await hrefDe('Fechas')],
+    ['Stats', await hrefDe('Stats')],
     ['Reglas', `${closeBase}/reglas`],
-    ['Tabla', closeBase],
+    ['Tabla', await hrefDe('Tabla')],
   ]
   let navIdx = 15
   for (const [name, url] of tabs) {
     await measureInteraction(page, `${navIdx}-nav-${name.toLowerCase()}`, async () => {
-      await page.getByRole('link', { name }).first().click()
+      await page.getByRole('navigation').getByRole('link', { name }).click()
       await page.waitForURL((u) => u.toString() === url || u.toString() === `${url}/`, { timeout: 10000 })
       await ariaBusyGone(page)
     })
@@ -424,13 +434,17 @@ async function main() {
   }
 
   // ================= 9) Wizard de creación de torneo =================
+  // El wizard de 4 pasos (`app/torneos/nuevo/crear.tsx`). Cada "Paso N de 4" del rótulo es el
+  // destino que se espera después de cada "Continuar".
   await page.goto(`${BASE}/torneos/nuevo`, { waitUntil: 'networkidle' })
-  await page.fill('input[placeholder="Los Jueves 2026"]', `UX Wizard ${Date.now()}`)
+  await page.getByLabel('Nombre', { exact: true }).fill(`UX Wizard ${Date.now()}`)
+  await page.getByRole('button', { name: 'Pádel', exact: true }).click() // el chip del deporte
   await measureInteraction(page, '19-wizard-step0-continuar', async () => {
     await page.locator('button', { hasText: 'Continuar' }).click()
-    await bodyIncludes(page, 'Paso 2 de 5')
+    await bodyIncludes(page, 'Paso 2 de 4')
   })
 
+  // El plantel arranca con el asiento propio y las filas en blanco que pide el piso del pádel.
   const nameInputs = page.locator('input[placeholder="Nombre"]')
   const count = await nameInputs.count()
   for (let i = 0; i < count; i++) {
@@ -438,26 +452,31 @@ async function main() {
   }
   await measureInteraction(page, '20-wizard-step1-continuar', async () => {
     await page.locator('button', { hasText: 'Continuar' }).click()
-    await bodyIncludes(page, 'Paso 3 de 5')
+    await bodyIncludes(page, 'Paso 3 de 4')
   })
 
+  // Sin medir (como el "Usar los defaults" de antes): el pádel nace con primera fecha "Por nivel", que
+  // intercala el subpaso "Ordená por nivel" antes de "Listo". "Al azar" lo saltea y deja los 5 toques de siempre.
+  await page.getByRole('group', { name: 'Primera fecha' }).getByRole('button', { name: 'Al azar' }).click()
   await measureInteraction(page, '21-wizard-step2-continuar', async () => {
     await page.locator('button', { hasText: 'Continuar' }).click()
-    await bodyIncludes(page, 'Paso 4 de 5')
+    await bodyIncludes(page, 'Paso 4 de 4')
   })
 
-  await page.locator('button', { hasText: 'Usar los defaults' }).click()
+  // El submit ya no es un "Continuar": el último paso tiene "Crear torneo". Se mantiene el label por el baseline.
   await measureInteraction(page, '22-wizard-step3-continuar-submit', async () => {
     await Promise.all([
       page.waitForResponse((r) => r.request().method() === 'POST', { timeout: 15000 }),
-      page.locator('button', { hasText: 'Continuar' }).click(),
+      page.getByRole('button', { name: 'Crear torneo' }).click(),
     ])
-    await bodyIncludes(page, 'Link de invitación')
+    await bodyIncludes(page, 'Copiar link de invitación')
   })
 
+  // "Ir al torneo" es un link (`<Link>`), no un botón.
   await measureInteraction(page, '23-wizard-ir-al-torneo', async () => {
-    await page.locator('button', { hasText: 'Ir al torneo' }).click()
-    await page.waitForURL(/\/torneo\/[0-9a-f-]+$/, { timeout: 15000 })
+    await page.getByRole('link', { name: 'Ir al torneo' }).click()
+    // `/torneo/<id>` con una sola disciplina redirige a su Tabla: se espera el destino final.
+    await page.waitForURL(/\/torneo\/[0-9a-f-]+\/padel$/, { timeout: 15000 })
     await ariaBusyGone(page)
   })
 

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { allMatchings } from './matchings'
+import { members, pair } from './side'
 
 describe('allMatchings', () => {
   it('returns a single empty matching for an empty pool', () => {
@@ -7,7 +8,7 @@ describe('allMatchings', () => {
   })
 
   it('returns the only matching for a pool of two', () => {
-    expect(allMatchings(['a', 'b'])).toEqual([[{ a: 'a', b: 'b' }]])
+    expect(allMatchings(['a', 'b'])).toEqual([[pair('a', 'b')]])
   })
 
   it('returns three matchings for a pool of four', () => {
@@ -29,7 +30,7 @@ describe('allMatchings', () => {
   it('uses every player exactly once in each matching', () => {
     const pool = ['a', 'b', 'c', 'd', 'e', 'f']
     for (const matching of allMatchings(pool)) {
-      const used = matching.flatMap((pair) => [pair.a, pair.b])
+      const used = matching.flatMap((side) => members(side))
       expect(used.sort()).toEqual([...pool].sort())
     }
   })
@@ -38,7 +39,7 @@ describe('allMatchings', () => {
     const pool = ['a', 'b', 'c', 'd', 'e', 'f']
     const keys = allMatchings(pool).map((matching) =>
       matching
-        .map((pair) => [pair.a, pair.b].sort().join('-'))
+        .map((side) => [...members(side)].sort().join('-'))
         .sort()
         .join('|'),
     )
@@ -49,7 +50,7 @@ describe('allMatchings', () => {
     expect(() => allMatchings(['a', 'b', 'c'])).toThrow(/par/)
   })
 
-  it('throws on a pool larger than MAX_PLAYERS instead of hanging', () => {
+  it('throws on a pool larger than MAX_PAIRING_POOL instead of hanging', () => {
     const pool = Array.from({ length: 14 }, (_, i) => `p${i}`)
     expect(() => allMatchings(pool)).toThrow()
   })

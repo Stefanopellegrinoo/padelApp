@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeRanking, defaultConfig, type SeasonConfig } from '@/core'
+import { computeRanking, defaultConfig, type DisciplineId, type SeasonConfig } from '@/core'
 import {
   addGuest,
   cancelMatchday,
@@ -39,11 +39,11 @@ async function fillerPlayers(count: number): Promise<string[]> {
 async function buildSeasonWithSquad(
   config: SeasonConfig,
   squadSize: number,
-): Promise<{ admin: TestUser; seasonId: string; squad: string[] }> {
+): Promise<{ admin: TestUser; seasonId: string; disciplineId: DisciplineId; squad: string[] }> {
   const admin = await createTestUser()
   const players = await fillerPlayers(squadSize)
-  const { seasonId, entryIds } = await createSeason({ admin, config, squad: players })
-  return { admin, seasonId, squad: entryIds }
+  const { seasonId, disciplineId, entryIds } = await createSeason({ admin, config, squad: players })
+  return { admin, seasonId, disciplineId, squad: entryIds }
 }
 
 async function markAllPlaying(admin: TestUser, matchdayId: string, entryIds: string[]): Promise<void> {
@@ -181,15 +181,15 @@ describe('reopenMatchday', () => {
 
   it('el ranking vuelve a lo que era antes de esa fecha', async () => {
     const config = defaultConfig(8)
-    const { admin, seasonId, squad } = await buildSeasonWithSquad(config, 8)
+    const { admin, seasonId, disciplineId, squad } = await buildSeasonWithSquad(config, 8)
     const md1 = await createMatchday(admin.client, seasonId, '2026-08-10')
     await playMatchdayToClose(admin, md1, squad)
 
     // El ranking "de cara a la fecha 3" es el mismo input que usaría un sorteo
     // de esa fecha: sólo lo cerrado antes de ella cuenta.
-    const seedOrder = await squadSeedOrder(admin.client, seasonId)
+    const seedOrder = await squadSeedOrder(admin.client, disciplineId)
     const rankingBeforeMd2 = computeRanking(
-      await awardsBefore(admin.client, seasonId, 3),
+      await awardsBefore(admin.client, disciplineId, 3),
       seedOrder,
       config,
       seedOrder,
@@ -199,7 +199,7 @@ describe('reopenMatchday', () => {
     await playMatchdayToClose(admin, md2, squad)
 
     const rankingWithMd2 = computeRanking(
-      await awardsBefore(admin.client, seasonId, 3),
+      await awardsBefore(admin.client, disciplineId, 3),
       seedOrder,
       config,
       seedOrder,
@@ -209,7 +209,7 @@ describe('reopenMatchday', () => {
     await reopenMatchday(admin.client, md2)
 
     const rankingAfterReopen = computeRanking(
-      await awardsBefore(admin.client, seasonId, 3),
+      await awardsBefore(admin.client, disciplineId, 3),
       seedOrder,
       config,
       seedOrder,

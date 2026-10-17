@@ -320,6 +320,33 @@ describe('season_public_rules', () => {
     expect(data).toEqual([])
   })
 
+  // PR 5 (0022, REQ-D2-1): la config real vive en `disciplines.config`.
+  //
+  // Este test PLANTABA una config divergente en `seasons.config` para probar
+  // que lo que volvía era la disciplina y no la temporada desincronizada. El
+  // CONTRACT (`0066`) dropeó esa columna, así que ya no hay de qué divergir:
+  // la afirmación pasó de "elige bien entre dos fuentes" a "devuelve la única
+  // que hay", y perdió su poder discriminante.
+  //
+  // Se conserva igual porque lo que sigue midiendo es real —que
+  // `season_public_rules`, la ÚNICA superficie pública de la app, devuelve la
+  // config correcta— pero conviene saber qué dejó de cubrir. Fue el único de
+  // los NUEVE guardias del contract que `test:db` no vio caer: pasaba en
+  // verde con la columna ya dropeada, y lo cazó el typecheck.
+  it('lee la config de la disciplina (PR 5)', async () => {
+    const admin = await createTestUser()
+    const padelConfig = defaultConfig(8)
+    const { seasonId } = await createSeason({ admin, config: padelConfig })
+
+    const { data, error } = await anonClient().rpc('season_public_rules', { p_season: seasonId })
+
+    expect(error).toBeNull()
+    const row = data?.[0]
+    expect((row?.config as SeasonConfig | undefined)?.regularMatchdays).toBe(
+      padelConfig.regularMatchdays,
+    )
+  })
+
   // Es la ÚNICA superficie pública de la app: que abra las reglas no puede
   // abrir de paso quién juega, quién ganó ni cuánto suma cada uno.
   it('does not open anything else to an anonymous reader', async () => {

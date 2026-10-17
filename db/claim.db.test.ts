@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest'
 import { defaultConfig } from '../core/config'
 import type { Database, Json } from './database.types'
 import { adminClient } from './test/admin'
+import { createSeason } from './test/factories'
 import { createTestUser, type TestUser } from './test/users'
 
 // Cliente sin sesión: es el rol `anon` de PostgREST, no un `authenticated` de
@@ -30,22 +31,46 @@ async function createOpenSeason(
     .from('seasons')
     .insert({
       name: `Temporada de test ${Date.now()}`,
-      config: defaultConfig(seatNames.length) as unknown as Json,
       created_by: admin.userId,
     })
     .select('id, invite_token')
     .single()
   if (seasonError || season === null) throw new Error(seasonError?.message)
 
+  const { data: discipline, error: disciplineError } = await db
+    .from('disciplines')
+    .insert({ season_id: season.id, kind: 'PADEL', config: defaultConfig(seatNames.length) as unknown as Json })
+    .select('id')
+    .single()
+  if (disciplineError || discipline === null) throw new Error(disciplineError?.message)
+
   const entryIds: string[] = []
-  for (const [index, name] of seatNames.entries()) {
+  for (const name of seatNames) {
     const { data: entry, error: entryError } = await db
       .from('entries')
-      .insert({ season_id: season.id, display_name: name, kind: 'SQUAD', seed_position: index })
+      // Sin `seed_position` (C37): el CHECK `entries_seed_shape` del contract
+      // lo prohíbe para el SQUAD. El orden lo pone `discipline_entries`, abajo.
+      .insert({ season_id: season.id, display_name: name, kind: 'SQUAD' })
       .select('id')
       .single()
     if (entryError || entry === null) throw new Error(entryError?.message)
     entryIds.push(entry.id)
+  }
+
+  // Cada asiento SQUAD entra también a la disciplina (W8, ronda
+  // 3): sin esto un asiento de este scaffold queda sin fila en
+  // discipline_entries y `seedAttendances` (que lee discipline_entries desde
+  // PR 8) lo trata como si no jugara nada.
+  if (entryIds.length > 0) {
+    const { error: seatsError } = await db.from('discipline_entries').insert(
+      entryIds.map((entryId, index) => ({
+        discipline_id: discipline.id,
+        entry_id: entryId,
+        season_id: season.id,
+        seed_position: index,
+      })),
+    )
+    if (seatsError) throw new Error(seatsError.message)
   }
 
   return { seasonId: season.id, token: season.invite_token, entryIds }
@@ -53,9 +78,16 @@ async function createOpenSeason(
 
 async function addGuestEntry(seasonId: string): Promise<string> {
   const db = adminClient()
+  const { data: discipline, error: disciplineError } = await db
+    .from('disciplines')
+    .select('id')
+    .eq('season_id', seasonId)
+    .single()
+  if (disciplineError || discipline === null) throw new Error(disciplineError?.message)
+
   const { data: matchday, error: matchdayError } = await db
     .from('matchdays')
-    .insert({ season_id: seasonId, number: 1 })
+    .insert({ season_id: seasonId, discipline_id: discipline.id, number: 1 })
     .select('id')
     .single()
   if (matchdayError || matchday === null) throw new Error(matchdayError?.message)
@@ -283,5 +315,85 @@ describe('season_invite', () => {
     const { error } = await anonClient().rpc('season_invite', { p_token: 'cualquier-token' })
 
     expect(error?.code).toBe('42501')
+  })
+
+  // PR 9 (0025): `disciplines` sale de discipline_entries, no de `entries`.
+  // `createOpenSeason` (scaffolding de este archivo) no lo llena — sólo le
+  // sirve a claim_seat, que no necesita disciplinas—, así que este caso usa
+  // la factory, que sí las llena desde PR 7.
+  it('devuelve las disciplinas de cada asiento', async () => {
+    const admin = await createTestUser()
+    const { seasonId } = await createSeason({ admin, squad: [admin.playerId] })
+    const db = adminClient()
+    const { data: season, error: seasonError } = await db
+      .from('seasons')
+      .select('invite_token')
+      .eq('id', seasonId)
+      .single()
+    if (seasonError || season === null) throw new Error(seasonError?.message)
+
+    const { data, error } = await admin.client.rpc('season_invite', { p_token: season.invite_token })
+
+    expect(error).toBeNull()
+    expect(data?.[0]?.disciplines).toEqual(['PADEL'])
+  })
+
+  // WU1 (tanda 3, round 2 review fix): la premisa que 0081/0082 escribieron
+  // ("no existe ningún flujo que deje elegir 'antes de quién' a nivel
+  // TEMPORADA") era falsa — `ajustes/plantel.tsx` y `fechas/[n]/sumar.tsx`
+  // ofrecen ese selector desde la pantalla de Ajustes, que es season-level, y
+  // el picker de Unirse (`season_invite`) lee exactamente lo que esa pantalla
+  // escribe (`season_seed_order`). Este test mide, contra los dos lugares a
+  // la vez, que "antes de Juan" corre la cola en los dos: en
+  // `discipline_entries` (nunca dejó de hacerlo) y ahora también en
+  // `season_seed_order`, restaurado por `shift_season_seeds_up`.
+  it('ordena por season_seed_order y discipline_entries: "antes de Juan" aparece antes de Juan en los dos', async () => {
+    const admin = await createTestUser()
+    const { seasonId, disciplineIds } = await createSeason({ admin, disciplines: [{ kind: 'PADEL' }] })
+    const [padelId] = disciplineIds
+    if (padelId === undefined) throw new Error('Falta la disciplina.')
+
+    const seat = async (name: string, before?: string): Promise<string> => {
+      const { data, error } = await admin.client.rpc('add_squad_seat', {
+        p_season: seasonId,
+        p_name: name,
+        p_disciplines: [padelId],
+        ...(before === undefined ? {} : { p_before: before }),
+      })
+      if (error !== null || data === null) throw new Error(error?.message)
+      return data
+    }
+
+    const juan = await seat('Juan')
+    const pedro = await seat('Pedro')
+    // "antes de Juan": corre la cola en discipline_entries Y en
+    // season_seed_order (WU1) -- Nuevo entra antes de Juan en los dos.
+    const nuevo = await seat('Nuevo', juan)
+
+    const db = adminClient()
+    const { data: season, error: seasonError } = await db
+      .from('seasons')
+      .select('invite_token')
+      .eq('id', seasonId)
+      .single()
+    if (seasonError || season === null) throw new Error(seasonError?.message)
+
+    const { data: picker, error: pickerError } = await admin.client.rpc('season_invite', {
+      p_token: season.invite_token,
+    })
+    if (pickerError) throw new Error(pickerError.message)
+
+    // El picker (season_seed_order): "antes de Juan" también lo adelanta.
+    expect((picker ?? []).map((row) => row.entry_id)).toEqual([nuevo, juan, pedro])
+
+    // Y DENTRO de la disciplina, "antes de Juan" sigue siendo real -- lo que
+    // este test medía originalmente y que WU1 no cambia.
+    const { data: seats, error: seatsError } = await db
+      .from('discipline_entries')
+      .select('entry_id')
+      .eq('discipline_id', padelId)
+      .order('seed_position', { ascending: true })
+    if (seatsError) throw new Error(seatsError.message)
+    expect((seats ?? []).map((row) => row.entry_id)).toEqual([nuevo, juan, pedro])
   })
 })

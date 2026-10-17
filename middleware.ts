@@ -1,6 +1,7 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
-import { fetchWithFreshTokenRetry } from './db/client'
+import { fetchWithFreshTokenRetry, type Client } from './db/client'
+import { legacyFechaRedirectTarget, parseLegacyFechaPath } from './db/legacy-fecha-redirect'
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request })
@@ -45,6 +46,37 @@ export async function middleware(request: NextRequest) {
     return redirect
   }
 
+  // REQ-NR-5: PnP-1000 tiene bookmarkeada `/torneo/{id}/fechas/{n}` (sin
+  // disciplina, PR 10). Se resuelve ACÁ y no en un `page.tsx` de esa ruta:
+  // así la mudanza de `fechas/[n]/` a `[disciplina]/fechas/[n]/` sigue siendo
+  // un rename de árbol limpio. Siempre después del gate de login: para este
+  // patrón `isPrivatePath` ya da `true`, así que sin sesión ya se volvió arriba.
+  //
+  // El contract (ff85c40) lo había retirado pensando en un deploy por etapas,
+  // con el redirect viviendo un tiempo en producción antes de irse. La rama va
+  // entera de una: sin esto, el link guardado da 404 el mismo día del deploy.
+  // ponytail: retirarlo cuando los links viejos dejen de llegar (logs).
+  //
+  // `NextResponse.redirect(url, 308)`: el segundo argumento ES el status (el
+  // default es 307). Mejor esfuerzo: si la temporada no resuelve (RLS sin fila)
+  // `legacyFechaRedirectTarget` tira y se cae a la resolución normal (404).
+  // Las cookies de un refresco viajan igual que en el redirect al login.
+  const legacy = parseLegacyFechaPath(request.nextUrl.pathname)
+  if (legacy !== null) {
+    try {
+      const target = await legacyFechaRedirectTarget(supabase as unknown as Client, legacy)
+      if (target !== null) {
+        const redirectUrl = request.nextUrl.clone()
+        redirectUrl.pathname = target
+        const redirect = NextResponse.redirect(redirectUrl, 308)
+        for (const cookie of response.cookies.getAll()) redirect.cookies.set(cookie)
+        return redirect
+      }
+    } catch {
+      // best-effort: cae a la resolución normal (404 o error.tsx del render).
+    }
+  }
+
   return response
 }
 
@@ -72,6 +104,10 @@ function isPrivatePath(pathname: string): boolean {
   // no haber hecho nada.
   const path = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname
   if (path === '/torneos') return true
+  // `/amigos` entero: sin sesión, `friendsOf`/`historyWith` tiran `EdgeError`
+  // ("Entrá con tu cuenta...") y sin nadie que lo agarre es la misma página
+  // blanca en inglés que motivó agregar `/torneos` acá arriba.
+  if (path === '/amigos' || path.startsWith('/amigos/')) return true
   return path.startsWith('/torneo/') && !path.endsWith('/reglas')
 }
 

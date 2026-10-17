@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { defaultConfig, type SeasonConfig } from '@/core'
+import { defaultConfig, sideOfRow, type SeasonConfig } from '@/core'
 import { addGuest, closeMatchday, createMatchday, generatePairs, openMatchday, saveResult, setAttendance } from './matchday'
 import { adminClient } from './test/admin'
 import { createSeason } from './test/factories'
 import { createTestUser, type TestUser } from './test/users'
+import { closedHistoryAll, matchdayDetail } from './read'
+import { closedHistory } from './season'
 
 // ── scaffolding local a este archivo ────────────────────────────────────────
 // No va a db/test/factories.ts: esa lista de archivos es la del plan, y estos
@@ -50,9 +52,11 @@ async function markAllPlaying(admin: TestUser, matchdayId: string, entryIds: str
   }
 }
 
+//`entry_b: string | null` desde 0028 (REQ-D5-1): la fila real ya lo permite,
+// aunque esta suite sólo ejercita pádel (pair_size=2, siempre no-nulo).
 async function pairsOf(
   matchdayId: string,
-): Promise<Array<{ id: string; entry_a: string; entry_b: string }>> {
+): Promise<Array<{ id: string; entry_a: string; entry_b: string | null }>> {
   const db = adminClient()
   const { data, error } = await db
     .from('pairs')
@@ -113,6 +117,31 @@ async function matchdayStatus(matchdayId: string): Promise<string> {
     .single()
   if (error || data === null) throw new Error(error?.message)
   return data.status
+}
+
+// PR18a hizo que `insertPairs` SÍ escriba una
+// fila `pair_size=1` (`generatePairs` ya arma sola una disciplina de a uno,
+// ver `full_matchday_proof` más abajo y `db/generate.db.test.ts`) — este
+// helper con service_role sigue siendo el más corto para ESTE test puntual:
+// arma la fecha con un solo `insert` en vez de todo el pipeline real
+//(asistencia/draw/apertura) que el escenario de G6/C17 de abajo no necesita.
+async function insertOpenSingleMatchday(seasonId: string, disciplineId: string, number: number): Promise<string> {
+  const db = adminClient()
+  const { data, error } = await db
+    .from('matchdays')
+    .insert({ season_id: seasonId, discipline_id: disciplineId, number, pair_size: 1, status: 'OPEN' })
+    .select('id')
+    .single()
+  if (error || data === null) throw new Error(error?.message)
+  return data.id
+}
+
+async function insertSingle(matchdayId: string, seasonId: string, entryId: string): Promise<void> {
+  const db = adminClient()
+  const { error } = await db
+    .from('pairs')
+    .insert({ matchday_id: matchdayId, season_id: seasonId, entry_a: entryId, entry_b: null, pair_size: 1 })
+  if (error) throw new Error(error.message)
 }
 
 /**
@@ -273,7 +302,12 @@ describe('closeMatchday', () => {
     const awards = await awardsOf(matchdayId)
     const pointsOf = new Map(awards.map((award) => [award.entry_id, award.points]))
     for (const pair of pairs) {
-      expect(pointsOf.get(pair.entry_a)).toBe(pointsOf.get(pair.entry_b))
+      //`requirePartner` retirado — `sideOfRow`
+      // (core/side.ts) es el hogar único. `2` es literal, no leído de la fila:
+      // esta suite sólo ejercita pádel (pair_size=2, siempre con `entry_b`).
+      const side = sideOfRow(2, pair.entry_a, pair.entry_b)
+      const partner = side.size === 2 ? side.b : pair.entry_a
+      expect(pointsOf.get(pair.entry_a)).toBe(pointsOf.get(partner))
     }
   })
 
@@ -398,6 +432,11 @@ describe('closeMatchday', () => {
     // entraba, la fecha cerraba, y este test se ponía rojo avisando que su
     // propia palanca ya no rompía nada. El negativo sigue sin significar nada y
     // sigue prohibido.
+    //
+    // `lines` con la MISMA suma negativa (#3989, guards en serie): desde
+    // 0047_award_lines.sql hay un guard de desglose ANTES del insert de
+    // awards -- sin este `lines` acá, ese guard nuevo dispara primero y este
+    // test deja de probar el `check` de la tabla que dice probar.
     const { admin, seasonId, squad } = await buildSeasonWithSquad(defaultConfig(8), 8)
     const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
     await markAllPlaying(admin, matchdayId, squad)
@@ -409,7 +448,7 @@ describe('closeMatchday', () => {
 
     const { error } = await admin.client.rpc('close_matchday', {
       p_matchday: matchdayId,
-      p_awards: [{ entryId, position: 1, points: -1 }],
+      p_awards: [{ entryId, position: 1, points: -1, lines: [{ reason: 'ajuste de test', points: -1 }] }],
     })
 
     expect(error).not.toBeNull()
@@ -452,6 +491,199 @@ describe('closeMatchday', () => {
     expect(await matchdayStatus(matchdayId)).toBe('OPEN')
   })
 
+  it('rejects a direct RPC call with an award for a player who did not play this matchday (pair_size=1)', async () => {
+    const admin = await createTestUser()
+    const filler = await fillerPlayers(3)
+    const { seasonId, disciplineIds, entryIds } = await createSeason({
+      admin,
+      squad: filler,
+      disciplines: [{ kind: 'FIFA', pairSize: 1 }],
+    })
+    const [fifaId] = disciplineIds
+    const [playerA, playerB, benched] = entryIds
+    if (fifaId === undefined || playerA === undefined || playerB === undefined || benched === undefined) {
+      throw new Error('Falta escenario de test.')
+    }
+    const matchdayId = await insertOpenSingleMatchday(seasonId, fifaId, 1)
+    await insertSingle(matchdayId, seasonId, playerA)
+    await insertSingle(matchdayId, seasonId, playerB)
+
+    const { error } = await admin.client.rpc('close_matchday', {
+      p_matchday: matchdayId,
+      p_awards: [{ entryId: benched, position: 1, points: 100 }],
+    })
+
+    expect(error?.message).toBe('Hay puntos para alguien que no jugó esta fecha.')
+    expect(await matchdayStatus(matchdayId)).toBe('OPEN')
+  })
+
+  /**
+   * PR18a: el mismo guard que arriba, pero bajo CARGA REAL en vez de una
+   * "fecha" armada a mano con service_role. El draw (`buildSides`, wired esta
+   * PR), la asistencia y los resultados pasan por los caminos TS reales
+   * (`generatePairs`/`setAttendance` vía `markAllPlaying`/`saveResult`), no
+   * por un insert directo en `pairs`. Antes de esta PR esto era imposible de
+   * armar: `generatePairs` moría en la FK `pairs_matchday_size` (W34) para
+   * cualquier disciplina `pair_size=1`. `closeMatchday()` (el wrapper TS) NO
+   * se usa acá: sigue llamando a `computeStandings`, cuyo límite público
+   * seguía `Pair` in/out hasta que `core/types.ts`/`app/**` migraron (design
+   * #3801 PUNTO 4) — `resultsOf` (db/matchday.ts) tira con un lado de uno por
+   * diseño (ver el comentario de `pairFromRow` ahí). Se llama al RPC
+   * `close_matchday` directo, con un payload armado a mano, igual que el
+   * resto de este describe.
+   */
+  it('C17 bajo carga real: el guard rechaza a quien no jugó una fecha de a uno armada por el flujo real', async () => {
+    const admin = await createTestUser()
+    const filler = await fillerPlayers(9)
+    const config: SeasonConfig = { ...defaultConfig(9), points: [9, 8, 7, 6, 5, 4, 3, 2, 1] }
+    const { seasonId, entryIds } = await createSeason({
+      admin,
+      squad: filler,
+      disciplines: [{ kind: 'FIFA', pairSize: 1, config }],
+    })
+    const playing = entryIds.slice(0, 8)
+    const benched = entryIds[8]
+    if (benched === undefined) throw new Error('Falta un jugador para el test.')
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
+    await markAllPlaying(admin, matchdayId, playing)
+
+    await generatePairs(admin.client, matchdayId)
+    await openMatchday(admin.client, matchdayId)
+    await playAllMatches(admin, matchdayId, (pairA) => pairA)
+
+    const { error } = await admin.client.rpc('close_matchday', {
+      p_matchday: matchdayId,
+      p_awards: [{ entryId: benched, position: 1, points: 100 }],
+    })
+
+    expect(error?.message).toBe('Hay puntos para alguien que no jugó esta fecha.')
+    expect(await matchdayStatus(matchdayId)).toBe('OPEN')
+  })
+
+  /**
+   * `full_matchday_proof` (PR18a): draw → asistencia → resultados → close,
+   * los cuatro pasos por el camino real, para una disciplina `pair_size=1`.
+   * `close_matchday` (el RPC) se llama directo con un payload legítimo — el
+   * wrapper TS `closeMatchday()` queda para 18b/19 (mismo corte que el test
+   * de arriba). Esto es lo que W34 describía como "todavía no puede": hoy
+   * puede, de punta a punta.
+   *
+   * C19: una sola fecha no alcanza para probar el
+   * lifecycle — `closedHistory` sólo entra en juego cuando existe una fecha
+   * CERRADA antes en el calendario de la disciplina, así que el bug recién
+   * aparece desde la fecha 2. Este test cierra la fecha 1 y después arma y
+   * abre la fecha 2, ejercitando el mismo camino que recorre cada draw real.
+   */
+  it('cierra la fecha 1 de una disciplina de a uno, y arma y abre la fecha 2 sin romperse', async () => {
+    const admin = await createTestUser()
+    const filler = await fillerPlayers(8)
+    const config: SeasonConfig = { ...defaultConfig(8), points: [8, 7, 6, 5, 4, 3, 2, 1] }
+    const { seasonId, entryIds } = await createSeason({
+      admin,
+      squad: filler,
+      disciplines: [{ kind: 'FIFA', pairSize: 1, config }],
+    })
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
+    await markAllPlaying(admin, matchdayId, entryIds)
+
+    await generatePairs(admin.client, matchdayId)
+    await openMatchday(admin.client, matchdayId)
+    await playAllMatches(admin, matchdayId, (pairA) => pairA)
+
+    // `lines` con la MISMA suma que `points` (#3989, guards en serie): sin
+    // esto, el guard de desglose de 0047_award_lines.sql rechaza este cierre
+    // legítimo -- `closeError` dejaría de ser `null`.
+    const awards = entryIds.map((entryId, index) => {
+      const points = config.points[index] ?? 0
+      return { entryId, position: index + 1, points, lines: [{ reason: `posición ${index + 1}`, points }] }
+    })
+    const { error: closeError } = await admin.client.rpc('close_matchday', {
+      p_matchday: matchdayId,
+      p_awards: awards,
+    })
+
+    expect(closeError).toBeNull()
+    expect(await matchdayStatus(matchdayId)).toBe('CLOSED')
+    const stored = await awardsOf(matchdayId)
+    expect(stored).toHaveLength(8)
+    expect(new Set(stored.map((row) => row.entry_id))).toEqual(new Set(entryIds))
+
+    // Con la fecha 1 CLOSED, el draw de la fecha 2 pasa por
+    // `pairingContextFor` → `closedHistory(discipline, 1)` — exactamente el
+    // camino que moría antes de este fix.
+    const matchday2Id = await createMatchday(admin.client, seasonId, '2026-08-17')
+    await markAllPlaying(admin, matchday2Id, entryIds)
+
+    await generatePairs(admin.client, matchday2Id)
+    await openMatchday(admin.client, matchday2Id)
+
+    const pairs2 = await pairsOf(matchday2Id)
+    expect(pairs2).toHaveLength(8)
+    expect(pairs2.every((pair) => pair.entry_b === null)).toBe(true)
+    expect(await matchdayStatus(matchday2Id)).toBe('OPEN')
+  })
+
+  /**
+   * W40 — el otro lado de C19, y el que quedó SIN
+   * PROBAR hasta acá: 18a habilitó ESCRIBIR una fecha de a uno que ninguna
+   * lectura podía devolver. `pairsAndMatchesOf` (db/read.ts), `resultsOf`
+   * (db/matchday.ts) y `closedHistory` (db/season.ts) componían `pairFromRow`,
+   * que tiraba con `pair_size=1`.
+   *
+   * Este test recorre las TRES lecturas sobre una fecha de a uno cerrada, y la
+   * cierra con el wrapper TS `closeMatchday()` —no con el RPC directo, que es
+   * lo que hace `full_matchday_proof`— porque ese wrapper es el que pasa por
+   * `resultsOf` + `computeStandings` + `computeAwards`. O sea: prueba de punta
+   * a punta que la tabla del día de una disciplina de a uno se calcula, se
+   * graba y se lee.
+   */
+  it('cierra una fecha de a uno con el wrapper TS y las tres lecturas la devuelven', async () => {
+    const admin = await createTestUser()
+    const filler = await fillerPlayers(8)
+    const config: SeasonConfig = { ...defaultConfig(8), points: [8, 7, 6, 5, 4, 3, 2, 1] }
+    const { seasonId, entryIds, disciplineId } = await createSeason({
+      admin,
+      squad: filler,
+      disciplines: [{ kind: 'FIFA', pairSize: 1, config }],
+    })
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
+    await markAllPlaying(admin, matchdayId, entryIds)
+    await generatePairs(admin.client, matchdayId)
+    await openMatchday(admin.client, matchdayId)
+    // El de `pair_a` gana siempre: con el round robin completo eso deja un
+    // orden total y estricto, así que la tabla del día no se resuelve por
+    // desempate y el primero es el que ganó de verdad — que es justo lo que
+    // decía que ningún test comprobaba.
+    await playAllMatches(admin, matchdayId, (pairA) => pairA)
+
+    // 1) `resultsOf` + `computeStandings` + `computeAwards`, por el wrapper.
+    await closeMatchday(admin.client, matchdayId)
+    expect(await matchdayStatus(matchdayId)).toBe('CLOSED')
+    const stored = await awardsOf(matchdayId)
+    expect(stored).toHaveLength(8)
+    expect(new Set(stored.map((row) => row.entry_id))).toEqual(new Set(entryIds))
+    // Los 8 puntos de la config se repartieron enteros y sin repetir: cada
+    // jugador es su propio lado, así que hay 8 posiciones pagas y no 4.
+    expect([...stored.map((row) => row.points)].sort((a, b) => b - a)).toEqual(config.points)
+
+    // 2) `matchdayDetail` (db/read.ts) — el que alimenta la pantalla de fecha.
+    const detail = await matchdayDetail(admin.client, matchdayId)
+    expect(detail.sides).toHaveLength(8)
+    expect(detail.sides.every((side) => side.size === 1)).toBe(true)
+    expect(new Set(detail.sides.map((side) => side.a))).toEqual(new Set(entryIds))
+    expect(detail.matches).toHaveLength(28)
+    expect(detail.matches.every((match) => match.sideA.size === 1 && match.sideB.size === 1)).toBe(true)
+
+    // 3) `closedHistory` (db/season.ts) — el que alimenta el draw siguiente,
+    // y `closedHistoryAll` (db/read.ts) — el que alimenta /stats y /jugador.
+    const history = await closedHistory(admin.client, disciplineId, 1)
+    expect(history?.sides).toHaveLength(8)
+    expect(history?.sides.every((side) => side.size === 1)).toBe(true)
+    const all = await closedHistoryAll(admin.client, seasonId)
+    expect(all).toHaveLength(1)
+    expect(all[0]?.sides.every((side) => side.size === 1)).toBe(true)
+  })
+
   it('rejects a direct RPC call when a match still has no result loaded', async () => {
     const { admin, seasonId, squad } = await buildSeasonWithSquad(defaultConfig(8), 8)
     const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
@@ -480,5 +712,64 @@ describe('closeMatchday', () => {
     })
 
     expect(error?.message).toBe('La lista de puntos llegó mal formada.')
+  })
+
+  // G1 no tenía ni un test — cancel.db.test.ts:528
+  // cubre la misma frase para `cancel_matchday`, una función distinta.
+  it('rejects a direct RPC call for a matchday that does not exist', async () => {
+    const { admin } = await buildSeasonWithSquad(defaultConfig(8), 8)
+
+    const { error } = await admin.client.rpc('close_matchday', {
+      p_matchday: '00000000-0000-0000-0000-000000000000',
+      p_awards: [],
+    })
+
+    expect(error?.message).toBe('La fecha no existe.')
+  })
+
+  // La mitad de G4 (`p_awards` no nulo pero tampoco array) no tenía test —
+  // sólo el caso `null`, arriba, cubría la otra mitad del `or`.
+  it('rejects a direct RPC call with a malformed (non-array) awards payload', async () => {
+    const { admin, seasonId, squad } = await buildSeasonWithSquad(defaultConfig(8), 8)
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-10')
+    await markAllPlaying(admin, matchdayId, squad)
+    await generatePairs(admin.client, matchdayId)
+    await openMatchday(admin.client, matchdayId)
+
+    const { error } = await admin.client.rpc('close_matchday', {
+      p_matchday: matchdayId,
+      p_awards: { not: 'an array' },
+    })
+
+    expect(error?.message).toBe('La lista de puntos llegó mal formada.')
+  })
+
+  // G6 tampoco tenía test de su `raise` — masters.db.test.ts:225 sólo
+  // prueba el paso a través con lista vacía. El premio tiene que ser para
+  // alguien que SÍ jugó: el guard de premios (G5) corre antes y taparía a G6.
+  it('rejects a direct RPC call awarding points on the Masters', async () => {
+    const admin = await createTestUser()
+    const filler = await fillerPlayers(2)
+    const { seasonId, disciplineId, entryIds } = await createSeason({ admin, squad: filler })
+    const [a, b] = entryIds
+    if (a === undefined || b === undefined) throw new Error('Falta escenario de test.')
+    const db = adminClient()
+    const { data: matchday, error: matchdayError } = await db
+      .from('matchdays')
+      .insert({ season_id: seasonId, discipline_id: disciplineId, number: 1, kind: 'MASTERS', status: 'OPEN' })
+      .select('id')
+      .single()
+    if (matchdayError || matchday === null) throw new Error(matchdayError?.message)
+    const { error: pairError } = await db
+      .from('pairs')
+      .insert({ matchday_id: matchday.id, season_id: seasonId, entry_a: a, entry_b: b })
+    if (pairError) throw new Error(pairError.message)
+
+    const { error } = await admin.client.rpc('close_matchday', {
+      p_matchday: matchday.id,
+      p_awards: [{ entryId: a, position: 1, points: 100 }],
+    })
+
+    expect(error?.message).toBe('El Masters no reparte puntos.')
   })
 })

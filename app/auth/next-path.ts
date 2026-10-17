@@ -12,8 +12,21 @@
  * alguien arregle una sola para que las otras queden abiertas.
  */
 export function safeNextPath(value: string | null | undefined): string {
-  if (typeof value !== 'string') return '/'
-  return value.startsWith('/') && !value.startsWith('//') ? value : '/'
+  if (typeof value !== 'string' || !value.startsWith('/')) return '/'
+  // Se resuelve como lo haría el navegador y se exige que no cambie de sitio:
+  // así caen `//host` y también `/\host`, que el navegador normaliza a `//host`
+  // y una comparación de prefijos deja pasar. Y que el path resuelto no empiece
+  // con `//`: `/..//host` es del mismo sitio, pero deja `//host`, que el router
+  // de Next reusa como URL. Se devuelve `value` y no el path resuelto, que en
+  // ese caso sería justo `//host`.
+  // `new URL` tira con un host inválido (`//%%`): eso tampoco es una ruta propia.
+  const base = 'http://padel.invalid'
+  try {
+    const url = new URL(value, base)
+    return url.origin === base && !url.pathname.startsWith('//') ? value : '/'
+  } catch {
+    return '/'
+  }
 }
 
 /**

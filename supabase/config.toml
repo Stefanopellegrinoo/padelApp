@@ -243,6 +243,11 @@ otp_expiry = 3600
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
 
+# Recuperar contraseña: el mismo mail que se pega en el dashboard de prod.
+[auth.email.template.recovery]
+subject = "Elegí tu contraseña nueva"
+content_path = "./supabase/templates/recovery.html"
+
 # Uncomment to customize email template
 # [auth.email.template.invite]
 # subject = "You have been invited"

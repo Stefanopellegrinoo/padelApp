@@ -70,6 +70,53 @@ export async function signIn(_state: FormState, form: FormData): Promise<FormSta
   redirect(await loginDestination(supabase, String(form.get('next') ?? '')))
 }
 
+export interface ResetState {
+  error: string | null
+  sent: boolean
+}
+
+/**
+ * Manda el mail con el link para elegir una contraseña nueva.
+ *
+ * Supabase contesta igual exista o no la cuenta, y acá también: un "ese mail no
+ * tiene cuenta" le confirmaría a cualquiera qué mails están registrados. Lo que
+ * sí se distingue es que el mail no haya salido (el límite de envíos o el SMTP
+ * caído): fingir que salió deja a la persona esperando un mail que no llega.
+ */
+export async function requestPasswordReset(_state: ResetState, form: FormData): Promise<ResetState> {
+  const email = String(form.get('email') ?? '').trim()
+  if (!EMAIL.test(email)) return { error: 'Escribí un mail válido, con @ y dominio.', sent: false }
+
+  const supabase = await serverClient()
+  const { error } = await supabase.auth.resetPasswordForEmail(email)
+  if (error?.status === 429) {
+    return { error: 'Pediste muchos links seguidos. Esperá un rato y probá de nuevo.', sent: false }
+  }
+  if (error !== null) return { error: 'No pudimos mandar el mail. Probá de nuevo en un rato.', sent: false }
+  return { error: null, sent: true }
+}
+
+/**
+ * Guarda la contraseña nueva con la sesión que dejó el link del mail
+ * (`app/auth/confirm/route.ts`) y entra directo.
+ */
+export async function setNewPassword(_state: FormState, form: FormData): Promise<FormState> {
+  const password = String(form.get('password') ?? '')
+  if (password.length < MIN_PASSWORD) return { error: `Mínimo ${MIN_PASSWORD} caracteres.` }
+
+  const supabase = await serverClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (user === null) return { error: 'El link venció. Pedí uno nuevo.' }
+
+  const { error } = await supabase.auth.updateUser({ password })
+  if (error?.code === 'same_password') return { error: 'Tiene que ser distinta de la que tenías.' }
+  if (error !== null) return { error: 'No pudimos guardar la contraseña. Probá de nuevo.' }
+
+  redirect(afterLogin(null))
+}
+
 export async function signOut(): Promise<void> {
   const supabase = await serverClient()
   await supabase.auth.signOut()

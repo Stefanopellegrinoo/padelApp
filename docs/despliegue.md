@@ -11,8 +11,8 @@ ningún otro lado: si este documento se pierde, hay que redescubrirlo.
 |---|---|
 | **Código en GitHub** | [`Stefanopellegrinoo/padelApp`](https://github.com/Stefanopellegrinoo/padelApp), **privado**. `main` es la rama por defecto. La otra rama subida es `feature/torneo-multi-disciplina`. Las ramas de plan se borraron el 30/08: su contenido está adentro de `main` |
 | **Base de producción** | Supabase Cloud, proyecto **`padelApp`** — ref `<tu-proyecto-ref>`, región `sa-east-1` (São Paulo), plan free |
-| **Las migraciones aplicadas** | **14** (`0001_schema` → `0014_promote_guest`), o sea **exactamente `main`**. 10 tablas, **las 10 con RLS**. Medido el 2026-08-24 contra `supabase_migrations.schema_migrations`. El PR #16 (28/08) movió `main` pero **no trajo migraciones**, así que el 14 sigue valiendo |
-| **La base TIENE datos reales** | 12 players · 2 torneos (los dos `ACTIVE`) · 22 entries · 3 fechas (2 cerradas) · 27 partidos · **15 premios otorgados**. `supabase/seed.sql` nunca corrió contra la nube: esto lo cargó gente usando la app |
+| **Las migraciones aplicadas** | **15**: de `0001` a `0014`, más la `0089` (el hotfix del 11/09), o sea **exactamente `main`**. **Están registradas con timestamps**, no con el número del archivo (`20260811191556 schema` … `20260911214125 seasons_players_can_score`), así que el CLI no las reconoce: ver [El corte a producción](#el-corte-a-producción). Medido el 2026-10-17 contra `supabase_migrations.schema_migrations` |
+| **La base TIENE datos reales** | Al 2026-10-17: 15 usuarios · 15 players · 2 torneos · 27 entries (22 del plantel) · 7 fechas (6 cerradas, 1 en armado) · 69 partidos · 54 sets · **52 premios otorgados**. `supabase/seed.sql` nunca corrió contra la nube: esto lo cargó gente usando la app |
 | **El trigger de alta** | Probado **en producción**: un alta de prueba creó su `players` con el nombre del metadata. Después se borró |
 
 > **Este cuadro es una FOTO, y ya mintió una vez.** Hasta el 2026-08-24 decía
@@ -31,35 +31,157 @@ ningún otro lado: si este documento se pierde, hay que redescubrirlo.
 
 ---
 
-## Lo que falta para que `main` funcione en producción
+## El corte a producción
 
-La rama `feature/torneo-multi-disciplina` tiene **todas las migraciones de la
-`0015` en adelante** sin aplicar contra la nube. El punto de corte es lo estable
-—producción está en la `0014`—; la CANTIDAD sube con cada migración nueva, así
-que contala vos y no la leas de acá. Tres cosas que conviene saber antes de
-mergear:
+`integracion/multi-disciplina-con-rapidos` trae de la `0015` a la `0099` (83
+archivos) sin aplicar contra la nube. **Nada automatiza el `db push`**: el CI
+levanta Supabase en el runner y no toca la nube. Y `vercel.json` no frena el
+deploy, así que un merge a `main` sale a producción solo.
 
-1. **Nada automatiza el `db push`.** El CI (`.github/workflows/ci.yml`) sólo
-   levanta Supabase *en el runner*; no toca la nube. Se aplican a mano.
-2. **`vercel.json` no desactiva el deploy**, así que un merge a `main` deploya
-   código que busca `disciplines`, `discipline_entries` y `award_lines` —
-   tres tablas que producción todavía no tiene.
-3. **No hay procedimiento de backup escrito en este repo.** Antes de aplicar
-   el CONTRACT (`0066`, irreversible: dropea dos columnas y anula 21
-   `seed_position`), sacar el dump:
+### Lo que demostró el ensayo (2026-10-17)
 
-   ```bash
-   npx supabase link --project-ref <tu-proyecto-ref>
-   npx supabase db dump --linked --data-only --use-copy -f prod-$(date +%F).sql
-   ```
+Con un dump de prod de ese día se armó una copia en un stack local aparte y se
+corrió encima **exactamente la secuencia de abajo**:
 
-   `link` deja `supabase/.temp/project-ref` escrito, y a partir de ahí un
-   `db push` distraído llega a la nube. Hoy el repo NO está linkeado.
+- **No se perdió ni cambió nada.** Cada fila de antes sigue igual en las
+  columnas que quedan, y las invariantes de `scripts/corte-prod/post.sql` dan
+  24/24 OK. Los puntos (228) y los games (363) suman lo mismo.
+- **Las pantallas son las mismas.** Se compararon 29: `main` sobre la copia sin
+  migrar contra `integracion` sobre la copia migrada. Tablas, posiciones,
+  puntos, fechas y stats de los dos torneos salieron idénticos byte a byte. Lo
+  único que cambió fue el orden de los partidos dentro de una ronda, y eso ya
+  está arreglado.
+- **El push tarda unos 9 segundos.**
 
-**La cadena ya se ensayó contra la forma real de producción** (2026-08-24): las
-52 aplicadas sobre los datos de prod preservaron todo — los 21 `seed_position`
-del plantel aparecieron intactos en `discipline_entries`, las 2 configs
-migraron a `disciplines.config` y los 15 premios quedaron donde estaban.
+Tres cosas que descubrió el ensayo y que el guion ya resuelve:
+
+1. **El historial de prod no coincide con los archivos.** Prod registró las
+   migraciones con timestamps, así que `db push` se niega a correr
+   (`Remote migration versions not found in local migrations directory`). Falla
+   sin tocar nada. Para alinearlo está `migration repair`, que toca sólo
+   `supabase_migrations.schema_migrations`. Se comprobó comparando el catálogo,
+   el dump del esquema y un hash de los datos antes y después.
+2. **Cada archivo corre en su propia transacción.** Si falla el archivo N,
+   quedan aplicados de la 0015 a N-1 y el resto no se intenta. **Después de la
+   `0066` no hay vuelta atrás sin restore**, porque borra `seasons.config` y
+   `seasons.status`. Antes las copia a `disciplines`, que es por qué no se pierde
+   nada.
+3. **Entre el push y el deploy, el código de `main` da 500 en todas las
+   páginas** (`column seasons.status does not exist`). Es una caída visible, no
+   escrituras silenciosas. Por eso el merge va inmediatamente después del push,
+   y nadie usa la app durante la ventana.
+
+### El día del corte
+
+Todo se corre desde un checkout de `integracion` con `node_modules`, para que
+`npx supabase` use el CLI fijado en el repo y no uno bajado al vuelo. **Nunca
+`supabase link`:** deja el repo apuntando a prod y un `db push` distraído
+llega a la nube.
+
+**0. Avisar al grupo:** unos 15 minutos sin usar la app. Sacar una captura de
+la tabla de cada torneo para comparar al final.
+
+**1. La URL de prod.** Sale de *Connect → Session pooler*; la conexión directa
+es sólo IPv6. La contraseña se escapa porque puede tener `@`. Pegar las líneas
+de a una (si se juntan dos, el `echo` imprime la contraseña):
+
+```bash
+printf 'Contraseña: '; read -rs PW; echo; ENC=$(printf %s "$PW" | python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.stdin.read(),safe=""))'); echo "largo: ${#ENC}"
+```
+
+```bash
+export PROD_DB_URL="postgresql://postgres.<tu-proyecto-ref>:${ENC}@aws-0-sa-east-1.pooler.supabase.com:5432/postgres"; unset PW ENC
+```
+
+**2. Backup fresco, más el historial aparte:**
+
+```bash
+B=~/backups/padelapp/$(date +%F)-corte; mkdir -p "$B"
+npx supabase db dump --db-url "$PROD_DB_URL" -f "$B/roles.sql" --role-only
+npx supabase db dump --db-url "$PROD_DB_URL" -f "$B/schema.sql"
+npx supabase db dump --db-url "$PROD_DB_URL" -f "$B/data.sql" --data-only --use-copy
+psql "$PROD_DB_URL" -c "\copy supabase_migrations.schema_migrations to '$B/schema_migrations.tsv'"
+rg -c '^COPY "auth"."users"' "$B/data.sql"   # tiene que dar 1
+```
+
+**3. PRE.** Congela todo en el schema `audit_pre` y chequea lo que haría fallar
+a alguna migración. Lo que dice "debe dar 0" tiene que dar 0, y todos los
+nombres tienen que dar `t`. Anotá las cantidades. Si algo no da, se para acá.
+
+```bash
+psql "$PROD_DB_URL" --single-transaction -f scripts/corte-prod/pre.sql
+```
+
+**4. Alinear el historial:**
+
+```bash
+npx supabase migration list --db-url "$PROD_DB_URL"   # los 15 timestamps aparecen sólo como remotos
+npx supabase migration repair --db-url "$PROD_DB_URL" --status reverted 20260811191556 20260811191630 20260811191646 20260811191704 20260811191738 20260811191747 20260811191812 20260811191827 20260811192144 20260811193416 20260813214453 20260816144332 20260816144347 20260816144415 20260911214125
+npx supabase migration repair --db-url "$PROD_DB_URL" --status applied 0001 0002 0003 0004 0005 0006 0007 0008 0009 0010 0011 0012 0013 0014 0089
+```
+
+**5. Dry run.** Tiene que listar 83 archivos, de la `0015` a la `0099`, **sin la
+`0089`**. Si lista otra cosa, se para acá.
+
+```bash
+npx supabase db push --db-url "$PROD_DB_URL" --include-all --dry-run
+```
+
+**6. El push** (pide `[Y/n]`):
+
+```bash
+npx supabase db push --db-url "$PROD_DB_URL" --include-all
+```
+
+**7. Inmediatamente:** merge de `integracion` a `main` y push. Vercel deploya
+solo.
+
+**8. POST.** La sección A tiene que dar 0 / 0, la B todo OK, la C sólo las dos
+constraints que nombra y la D vacía. Después, `migration list`: cada local con
+su remoto.
+
+```bash
+psql "$PROD_DB_URL" --single-transaction -f scripts/corte-prod/post.sql
+npx supabase migration list --db-url "$PROD_DB_URL"
+```
+
+**9.** Con el deploy nuevo arriba, comparar la tabla de cada torneo con las
+capturas del paso 0.
+
+**10. Limpiar.** Borrar `audit_pre`, que guarda una copia de los mails. Después
+`unset PROD_DB_URL` y resetear la contraseña de la base.
+
+```bash
+psql "$PROD_DB_URL" -c 'drop schema audit_pre cascade'
+```
+
+### Si algo sale mal
+
+- **Falla el PRE o el dry run.** No se tocó nada más que `audit_pre` (borrala).
+  Si ya se corrió el repair, se vuelve el historial a como estaba con el `.tsv`
+  del paso 2 (si cambiaste de terminal, volvé a definir `B`). Probado sobre la
+  copia:
+
+  ```bash
+  psql "$PROD_DB_URL" --single-transaction -c 'delete from supabase_migrations.schema_migrations' -c "\copy supabase_migrations.schema_migrations from '$B/schema_migrations.tsv'"
+  ```
+
+- **Falla el push en el archivo N.** Parar y no reintentar a ciegas. Quedan
+  aplicados de la 0015 a N-1. La app queda sin usar hasta que se arregle el
+  archivo en una rama, se re-ensaye sobre una copia y se vuelva a correr
+  `--include-all`, que sigue desde N. No se probó si el código de `main` anda
+  con una cadena aplicada a medias.
+- **El POST da FAIL o una tabla no coincide.** `audit_pre` tiene la foto de
+  antes y el paso 2 el dump completo. Restaurar el dump en prod o en un
+  proyecto nuevo (y cambiar las dos variables de Vercel) pide tres ajustes, los
+  mismos del ensayo:
+  - sacar de `roles.sql` el `GRANT SET ON PARAMETER "log_min_messages"`, que
+    sólo puede dar un superusuario;
+  - sacar de `data.sql` los bloques `COPY` de auth o storage con 0 filas cuyas
+    tablas no existan en la versión de destino;
+  - **recrear a mano el trigger `on_auth_user_created`** sobre `auth.users`
+    (está en `0003_new_user.sql`), porque `db dump` no exporta objetos del
+    schema `auth`.
 
 ---
 

@@ -50,7 +50,7 @@ corrió encima **exactamente la secuencia de abajo**:
   migrar contra `integracion` sobre la copia migrada. Tablas, posiciones,
   puntos, fechas y stats de los dos torneos salieron idénticos byte a byte. Lo
   único que cambió fue el orden de los partidos dentro de una ronda, que tenía
-  un desempate faltante y se arregló en `abc88ef`.
+  un desempate faltante y se arregló en `db/matchday.ts`.
 - **El push tarda unos 9 segundos.**
 
 Tres cosas que descubrió el ensayo y que el guion ya resuelve:
@@ -176,13 +176,16 @@ psql "$PROD_DB_URL" -c 'drop schema audit_pre cascade'
 
 ### Si algo sale mal
 
-- **Falla el PRE o el dry run.** El PRE no deja nada escrito. Si ya se corrió el
+- **Falla el PRE o el dry run.** Si falla el PRE, no queda nada escrito. Si
+  falla el dry run, quedó el `audit_pre` del PRE: borralo
+  (`drop schema audit_pre cascade`) antes de reintentar. Si ya se corrió el
   repair, se vuelve el historial a como estaba con el `.tsv` del paso 2: poné en
-  `B` la carpeta que anotaste. Si el archivo no existe o está vacío, el `test -s`
-  frena antes del `delete`. Probado sobre la copia:
+  `B` la carpeta que anotaste. Si el archivo no existe o está vacío, no se toca
+  nada y lo dice. Después, `migration list` tiene que mostrar los 15 timestamps
+  como remotos. Probado sobre la copia:
 
   ```bash
-  test -s "$B/schema_migrations.tsv" && psql "$PROD_DB_URL" -v ON_ERROR_STOP=1 --single-transaction -c 'delete from supabase_migrations.schema_migrations' -c "\copy supabase_migrations.schema_migrations from '$B/schema_migrations.tsv'"
+  if test -s "$B/schema_migrations.tsv"; then psql "$PROD_DB_URL" -v ON_ERROR_STOP=1 --single-transaction -c 'delete from supabase_migrations.schema_migrations' -c "\copy supabase_migrations.schema_migrations from '$B/schema_migrations.tsv'"; else echo "NO EXISTE o está vacío: $B/schema_migrations.tsv — no se tocó nada"; fi
   ```
 
 - **Falla el push en el archivo N.** Parar y no reintentar a ciegas. Quedan

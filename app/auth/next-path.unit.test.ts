@@ -21,6 +21,24 @@ describe('safeNextPath', () => {
     expect(safeNextPath('//el-atacante.com/robo')).toBe('/')
   })
 
+  // El mismo truco con barra invertida: el navegador normaliza `\` a `/`, así
+  // que `/\host` termina siendo `//host`. Pasaba la guarda vieja, que sólo
+  // miraba que no empezara con `//`.
+  it('rechaza la barra invertida, que el navegador lee como `//`', () => {
+    expect(safeNextPath('/\\el-atacante.com/robo')).toBe('/')
+    expect(safeNextPath('/\\/el-atacante.com')).toBe('/')
+    expect(safeNextPath('\\\\el-atacante.com')).toBe('/')
+  })
+
+  it('no rompe el login con algo que ni siquiera es una URL', () => {
+    expect(safeNextPath('//%%')).toBe('/')
+    expect(safeNextPath('/\\%%')).toBe('/')
+  })
+
+  it('deja pasar query y hash de una ruta propia', () => {
+    expect(safeNextPath('/torneo/abc?x=1#y')).toBe('/torneo/abc?x=1#y')
+  })
+
   it('rechaza lo que no es un string', () => {
     expect(safeNextPath(null)).toBe('/')
     expect(safeNextPath(undefined)).toBe('/')

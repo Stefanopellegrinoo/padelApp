@@ -398,7 +398,18 @@ describe('addSquadSeat colocando el nuevo asiento (spec 2.1, 2.2, 2.4, 2.5, 2.6)
   // `discipline_entries`, no `entries` — para no inventar entries sueltas que
   // ninguna FK compuesta (entry_id, season_id)/(entry_id, entry_kind) dejaría
   // pasar sin su fila real.
-  it('corre la cola desde 0 aunque el motor recorra las filas al revés (Seq Scan, heap descendente)', async () => {
+  //
+  // `retry: 2` no tapa nada. Postgres no deja fijar dónde caen las tuplas
+  // nuevas: si la página se llena a mitad de una pasada, el resto va a la que
+  // elija el free space map, que puede estar ANTES. Si pasa en la pasada 1, la
+  // pasada 2 ya no recorre al revés y el `+1` no chocaría: esa corrida no
+  // prueba nada, y la aserción del heap del final la marca en rojo (para eso
+  // está). Muy probablemente fue el rojo que se vio en CI con el espejo de
+  // `season_seed_order`: [3, 2, 1, 8, 7, 6, 5, 4]. Reintentar arma una
+  // temporada nueva de cero. Para pasar, UNA corrida tiene que dar los valores
+  // bien y el heap al revés antes y después de la llamada, o sea haber sido
+  // adversa; con el `+1` de vuelta esa corrida choca.
+  it('corre la cola desde 0 aunque el motor recorra las filas al revés (Seq Scan, heap descendente)', { retry: 2 }, async () => {
     const admin = await createTestUser()
     const { seasonId } = await createSeason(admin.client, {
       name: 'Los Jueves 2026',

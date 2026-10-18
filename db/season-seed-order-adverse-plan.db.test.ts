@@ -1,6 +1,6 @@
 /**
  * WU6 (tanda 5, round 3 review fix): mirror de la regresión del `+1` que
- * `db/squad-position.db.test.ts:401-479` prueba para `shift_seeds_up`
+ * `db/squad-position.db.test.ts` (el del heap descendente) prueba para `shift_seeds_up`
  * (0023, por disciplina), acá para `shift_season_seeds_up`
  * (0080_season_seed_order.sql, por temporada) — la misma función, el mismo
  * parking de dos pasadas, la misma tabla (`season_seed_order` en vez de
@@ -48,7 +48,10 @@ async function seasonSeedOrder(seasonId: string): Promise<Array<{ id: string; se
 }
 
 describe('shift_season_seeds_up bajo el plan adverso (WU6, mirror de shift_seeds_up)', () => {
-  it('corre la cola desde 0 aunque el motor recorra las filas al revés (Seq Scan, heap descendente)', async () => {
+  // `retry: 2`, mismo motivo que el test espejo de `db/squad-position.db.test.ts`:
+  // si la pasada 1 no dejó el heap al revés, el `+1` no chocaría y la corrida
+  // no prueba nada. El heap del final lo marca en rojo y se rearma de cero.
+  it('corre la cola desde 0 aunque el motor recorra las filas al revés (Seq Scan, heap descendente)', { retry: 2 }, async () => {
     const admin = await createTestUser()
     const squadNames = Array.from({ length: 8 }, (_, index) => `Jugador ${index + 1}`)
     const { seasonId } = await createSeason(admin.client, {

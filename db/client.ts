@@ -25,6 +25,26 @@ export function credentials(): { url: string; anonKey: string } {
   return { url, anonKey }
 }
 
+/**
+ * Opciones de las cookies de sesión de `@supabase/ssr`, compartidas por
+ * `serverClient` y `middleware.ts`. Viven acá y no copiadas en cada lugar por
+ * la misma razón que `safeNextPath`: si una copia queda abierta, queda abierta.
+ *
+ * `httpOnly: true` siempre: la sesión se lee sólo del lado del servidor. El
+ * único cliente de browser es el OAuth de Google, que no lee la cookie de
+ * sesión —sólo guarda el code-verifier del PKCE con `document.cookie`, que es
+ * OTRA cookie y no puede ser httpOnly.
+ *
+ * `secure` sólo en producción: en local la app corre por HTTP, y una cookie
+ * `Secure` no se enviaría —rompería el login de desarrollo—. `NODE_ENV` se
+ * inlinea en el build (ver abajo), así que no es un gate que se pueda prender
+ * por error desde el dashboard.
+ */
+export const sessionCookieOptions = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+}
+
 const JWT_ISSUED_AT_FUTURE = 'PGRST303'
 const RETRY_DELAY_MS = 300
 

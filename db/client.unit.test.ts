@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { fetchWithFreshTokenRetry } from './client'
+import { fetchWithFreshTokenRetry, sessionCookieOptions } from './client'
 
 /**
  * El reintento existe para una carrera que no se puede reproducir a pedido: sólo
@@ -83,5 +83,15 @@ describe('fetchWithFreshTokenRetry', () => {
 
     expect(response.status).toBe(401)
     expect(fetches.calls()).toBe(2)
+  })
+})
+
+describe('sessionCookieOptions', () => {
+  // El defecto que trajo esto: las cookies de sesión salían con los defaults de
+  // `@supabase/ssr` (httpOnly: false, sin secure). `httpOnly` tiene que quedar
+  // clavado en true: la sesión se lee sólo del servidor, y que un JS del browser
+  // pueda leerla es justo el vector que se quiere cerrar.
+  it('fuerza httpOnly, para que la sesión no la lea JS del browser', () => {
+    expect(sessionCookieOptions.httpOnly).toBe(true)
   })
 })

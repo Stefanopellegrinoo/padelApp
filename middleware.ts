@@ -1,6 +1,6 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
-import { fetchWithFreshTokenRetry, type Client } from './db/client'
+import { fetchWithFreshTokenRetry, sessionCookieOptions, type Client } from './db/client'
 import { legacyFechaRedirectTarget, parseLegacyFechaPath } from './db/legacy-fecha-redirect'
 
 export async function middleware(request: NextRequest) {
@@ -11,6 +11,7 @@ export async function middleware(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '',
     {
       global: { fetch: fetchWithFreshTokenRetry },
+      cookieOptions: sessionCookieOptions,
       cookies: {
         getAll() {
           return request.cookies.getAll()

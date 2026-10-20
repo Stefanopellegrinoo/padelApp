@@ -173,14 +173,11 @@ export async function renameSeat(
  * real en las cuatro.
  */
 export async function unlinkSeat(supabase: Client, entryId: string): Promise<void> {
-  const { error, count } = await supabase
-    .from('entries')
-    .update({ player_id: null }, { count: 'exact' })
-    .eq('id', entryId)
-  if (error !== null) throw new EdgeError(`No se pudo desvincular el asiento: ${error.message}`)
-  if (count === 0) {
-    throw new EdgeError('No se pudo desvincular el asiento: sólo puede hacerlo quien organiza.')
-  }
+  // S1 (security-hardening): `authenticated` ya no escribe `player_id` directo —
+  // el soltado va por `unlink_seat` (security definer, 0101), que además valida
+  // que sea el admin y un asiento SQUAD.
+  const { error } = await supabase.rpc('unlink_seat', { p_entry: entryId })
+  if (error !== null) throw new EdgeError(error.message)
 }
 
 /**

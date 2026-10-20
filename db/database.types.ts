@@ -1002,6 +1002,7 @@ export type Database = {
         Returns: string
       }
       cancel_matchday: { Args: { p_matchday: string }; Returns: undefined }
+      claim_creator_seat: { Args: { p_entry: string }; Returns: undefined }
       claim_seat: {
         Args: { p_entry: string; p_token: string }
         Returns: string
@@ -1109,6 +1110,7 @@ export type Database = {
         Args: { p_discipline: string; p_from: number }
         Returns: undefined
       }
+      unlink_seat: { Args: { p_entry: string }; Returns: undefined }
     }
     Enums: {
       [_ in never]: never

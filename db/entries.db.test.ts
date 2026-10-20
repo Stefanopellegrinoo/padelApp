@@ -302,6 +302,54 @@ describe('renameSeason', () => {
   })
 })
 
+// ── S1: player_id sellado (0101) ────────────────────────────────────────────
+
+describe('S1: player_id no se escribe por PostgREST directo', () => {
+  it('un admin no puede anotar a otro jugador actualizando player_id', async () => {
+    const admin = await createTestUser()
+    const victim = await createTestUser()
+    const { seasonId } = await createSeason(admin.client, {
+      name: 'Los Jueves',
+      squadNames: squadNames(4),
+      config: defaultConfig(4),
+    })
+
+    const { data: seat, error: seatError } = await admin.client
+      .from('entries')
+      .select('id')
+      .eq('season_id', seasonId)
+      .eq('kind', 'SQUAD')
+      .is('player_id', null)
+      .limit(1)
+      .maybeSingle()
+    if (seatError || seat === null) throw new Error(seatError?.message)
+
+    // El ataque: escribir `player_id = víctima` por update directo, sin claim_seat.
+    const { error } = await admin.client
+      .from('entries')
+      .update({ player_id: victim.playerId })
+      .eq('id', seat.id)
+
+    // El grant de columna está revocado: el update se rechaza y la víctima NO
+    // queda vinculada a la temporada del admin.
+    expect(error).not.toBeNull()
+
+    const { data: after } = await admin.client
+      .from('entries')
+      .select('player_id')
+      .eq('id', seat.id)
+      .single()
+    expect(after?.player_id).toBeNull()
+
+    const { data: victimEntries } = await admin.client
+      .from('entries')
+      .select('id')
+      .eq('season_id', seasonId)
+      .eq('player_id', victim.playerId)
+    expect(victimEntries ?? []).toHaveLength(0)
+  })
+})
+
 // ── db/entries.ts ───────────────────────────────────────────────────────────
 
 describe('the squad seats', () => {

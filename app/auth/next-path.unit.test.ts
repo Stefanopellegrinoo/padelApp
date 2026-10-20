@@ -21,6 +21,13 @@ describe('safeNextPath', () => {
     expect(safeNextPath('//el-atacante.com/robo')).toBe('/')
   })
 
+  // El backslash abre la misma puerta: el navegador normaliza `\` a `/`, así que
+  // `/\evil.com` se resuelve como `//evil.com` (protocol-relative) y el login
+  // vuelve a ser un redirector abierto.
+  it('rechaza el backslash, que el browser normaliza a slash', () => {
+    expect(safeNextPath('/\\evil.com')).toBe('/')
+  })
+
   it('rechaza lo que no es un string', () => {
     expect(safeNextPath(null)).toBe('/')
     expect(safeNextPath(undefined)).toBe('/')

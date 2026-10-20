@@ -529,6 +529,19 @@ describe('db/read', () => {
     it('does not go to the database for an empty list', async () => {
       expect(await playerNames(admin.client, [])).toEqual(new Map())
     })
+
+    it('un extraño sin contexto no resuelve el nombre de un jugador (S3)', async () => {
+      const names = await playerNames(stranger.client, [member.playerId])
+      expect(names.has(member.playerId)).toBe(false)
+    })
+
+    it('un select directo de players ya no devuelve el directorio (S3)', async () => {
+      const { data, error } = await admin.client.from('players').select('id, display_name')
+      // El select está revocado a `authenticated`: no devuelve filas, y el
+      // error confirma que es por permiso y no por una base vacía.
+      expect((data ?? []).length).toBe(0)
+      expect(error).not.toBeNull()
+    })
   })
 
   describe('publicRules', () => {

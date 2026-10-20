@@ -667,16 +667,15 @@ export async function myEntryId(supabase: Client, seasonId: string): Promise<Ent
   return data?.id ?? null
 }
 
-/** Display names by player id. `players` exposes only (id, display_name, created_at) to authenticated — that is all this needs. */
+/** Display names by player id. S3 (security-hardening): va por `player_display_names` (security definer, 0103), no por `players` directo. */
 export async function playerNames(
   supabase: Client,
   playerIds: readonly string[],
 ): Promise<Map<string, string>> {
   if (playerIds.length === 0) return new Map()
-  const { data, error } = await supabase
-    .from('players')
-    .select('id, display_name')
-    .in('id', [...playerIds])
+  const { data, error } = await supabase.rpc('player_display_names', {
+    p_ids: [...playerIds],
+  })
   if (error) throw new EdgeError(`No se pudieron leer los nombres: ${error.message}`)
   return new Map((data ?? []).map((row) => [row.id, row.display_name]))
 }

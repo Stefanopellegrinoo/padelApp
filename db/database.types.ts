@@ -1038,6 +1038,13 @@ export type Database = {
       matchday_season: { Args: { p_matchday: string }; Returns: string }
       my_player_id: { Args: never; Returns: string }
       open_matchday: { Args: { p_matchday: string }; Returns: undefined }
+      player_display_names: {
+        Args: { p_ids: string[] }
+        Returns: {
+          display_name: string
+          id: string
+        }[]
+      }
       players_can_score: { Args: { p_season: string }; Returns: boolean }
       promote_guest: {
         Args: { p_before?: string; p_entry: string }

@@ -73,7 +73,16 @@ function fakeClient(failTeams = false): { client: Client; calls: string[] } {
 
   const auth = { getUser: () => Promise.resolve({ data: { user: { id: 'admin-1' } }, error: null }) }
 
-  return { client: { from, auth } as unknown as Client, calls }
+  // S8: `createSeason` cierra pidiendo el token por `season_invite_token` (el
+  // insert ya no lo devuelve). El resto de RPC no se tocan en estos tests.
+  const rpc = (name: string) => {
+    if (name === 'season_invite_token') {
+      return Promise.resolve({ data: 'tok-1', error: null })
+    }
+    return Promise.resolve({ data: null, error: null })
+  }
+
+  return { client: { from, auth, rpc } as unknown as Client, calls }
 }
 
 describe('createSeason — orden de escritura de season_seed_order (WU1, tanda 7)', () => {

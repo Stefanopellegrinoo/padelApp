@@ -148,7 +148,8 @@ describe('RLS — lectura', () => {
     const stranger = await createTestUser()
     const { seasonId } = await createSeason({ admin })
 
-    const { data, error } = await stranger.client.from('seasons').select('*').eq('id', seasonId)
+    // S8: `seasons` ya no se lee con `*` (invite_token está revocado por columna).
+    const { data, error } = await stranger.client.from('seasons').select('id, name').eq('id', seasonId)
 
     // Bloqueado por RLS: lista vacía, no un error.
     expect(error).toBeNull()
@@ -175,7 +176,7 @@ describe('RLS — lectura', () => {
     const member = await createTestUser()
     const { seasonId } = await createSeason({ admin, squad: [member.playerId] })
 
-    const season = await member.client.from('seasons').select('*').eq('id', seasonId)
+    const season = await member.client.from('seasons').select('id, name').eq('id', seasonId)
     const entries = await member.client.from('entries').select('*').eq('season_id', seasonId)
 
     expect(season.error).toBeNull()
@@ -184,7 +185,7 @@ describe('RLS — lectura', () => {
     expect(entries.data).toHaveLength(1)
   })
 
-  it('nadie puede listar el invite_token de un torneo ajeno', async () => {
+  it('nadie puede leer el invite_token por PostgREST directo (S8: columna revocada)', async () => {
     const adminA = await createTestUser()
     const memberA = await createTestUser()
     await createSeason({ admin: adminA, squad: [memberA.playerId] })
@@ -197,8 +198,9 @@ describe('RLS — lectura', () => {
       .select('invite_token')
       .eq('id', seasonBId)
 
-    expect(error).toBeNull()
-    expect(data).toEqual([])
+    // La columna está revocada a `authenticated`: permiso denegado, no lista vacía.
+    expect(data).toBeNull()
+    expect(error?.code).toBe('42501')
   })
 
   it('nadie puede leer el user_id de otro jugador', async () => {
@@ -269,16 +271,18 @@ describe('RLS — lectura', () => {
       },
     )
 
-    // `players` queda afuera a propósito: `players_read` es `using (true)`
-    // (Task 7), así que cualquier autenticado ve el plantel global sin ser
-    // parte de esta temporada. No es RLS deshabilitado, es el diseño — ya lo
-    // cubre el test de escritura de abajo, donde un insert ajeno SÍ debe
-    // fallar.
-    for (const table of TABLES.filter((t) => t !== 'players')) {
+    // `players` y `seasons` quedan afuera a propósito: sus SELECT de columna
+    // están revocados (players entero en S3, `invite_token` en S8), así que
+    // `select('*')` da permiso denegado en vez de lista vacía. Se leen con
+    // columnas explícitas abajo.
+    for (const table of TABLES.filter((t) => t !== 'players' && t !== 'seasons')) {
       const { data, error } = await stranger.client.from(table).select('*').limit(1)
       expect(error, `tabla ${table}`).toBeNull()
       expect(data, `tabla ${table}`).toEqual([])
     }
+    const seasonsRead = await stranger.client.from('seasons').select('id, name').limit(1)
+    expect(seasonsRead.error, 'tabla seasons').toBeNull()
+    expect(seasonsRead.data, 'tabla seasons').toEqual([])
   })
 })
 
@@ -292,7 +296,7 @@ describe('RLS — escritura', () => {
       .from('seasons')
       .update({ name: 'Nombre robado' })
       .eq('id', seasonId)
-      .select()
+      .select('id')
 
     // Bloqueado por RLS en UPDATE: cero filas afectadas, no un error.
     expect(error).toBeNull()
@@ -327,7 +331,7 @@ describe('RLS — escritura', () => {
       .from('seasons')
       .update({ name: 'Nombre actualizado por el admin' })
       .eq('id', seasonId)
-      .select()
+      .select('id')
     expect(rename.error).toBeNull()
     expect(rename.data).toHaveLength(1)
 
@@ -524,7 +528,7 @@ describe('RLS — escritura', () => {
     // seasons_delete es la política más peligrosa de ensanchar: `using (true)`
     // dejaría a cualquier autenticado borrar el torneo entero en cascada.
     // Bloqueado por RLS en DELETE: cero filas afectadas, no un error.
-    const seasonDelete = await member.client.from('seasons').delete().eq('id', seasonId).select()
+    const seasonDelete = await member.client.from('seasons').delete().eq('id', seasonId).select('id')
     expect(seasonDelete.error, 'tabla seasons (delete)').toBeNull()
     expect(seasonDelete.data, 'tabla seasons (delete)').toEqual([])
   })
@@ -804,7 +808,7 @@ describe('RLS — los jugadores cargan los resultados', () => {
       .from('seasons')
       .update({ players_can_score: true })
       .eq('id', seasonId)
-      .select()
+      .select('id')
 
     // Bloqueado por `seasons_update` (created_by): cero filas, no un error.
     expect(error).toBeNull()

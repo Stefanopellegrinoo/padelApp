@@ -397,3 +397,56 @@ describe('season_invite', () => {
     expect((seats ?? []).map((row) => row.entry_id)).toEqual([nuevo, juan, pedro])
   })
 })
+
+describe('S8: invite_token sellado y regeneración', () => {
+  it('un participante no puede leer invite_token por PostgREST directo', async () => {
+    const admin = await createTestUser()
+    const member = await createTestUser()
+    const { seasonId, entryIds, token } = await createOpenSeason(admin, ['Ana', 'Beto'])
+    const entryId = entryIds[0]
+    if (entryId === undefined) throw new Error('Falta el asiento de test.')
+
+    // El member se une para ser participante de verdad.
+    await member.client.rpc('claim_seat', { p_token: token, p_entry: entryId })
+
+    const { data, error } = await member.client
+      .from('seasons')
+      .select('invite_token')
+      .eq('id', seasonId)
+      .maybeSingle()
+
+    // La columna está revocada a `authenticated`: no devuelve el token.
+    expect(data?.invite_token).toBeUndefined()
+    expect(error).not.toBeNull()
+  })
+
+  it('el admin regenera el token y el viejo deja de reclamar', async () => {
+    const admin = await createTestUser()
+    const joiner = await createTestUser()
+    const { seasonId, entryIds, token } = await createOpenSeason(admin, ['Ana'])
+    const entryId = entryIds[0]
+    if (entryId === undefined) throw new Error('Falta el asiento de test.')
+
+    const { data: newToken, error: regenError } = await admin.client.rpc('regenerate_invite_token', {
+      p_season: seasonId,
+    })
+    expect(regenError).toBeNull()
+    expect(newToken).toBeTruthy()
+    expect(newToken).not.toBe(token)
+    if (newToken === null) throw new Error('Falta el token regenerado.')
+
+    // El token viejo ya no reclama.
+    const { error: oldError } = await joiner.client.rpc('claim_seat', {
+      p_token: token,
+      p_entry: entryId,
+    })
+    expect(oldError).not.toBeNull()
+
+    // El nuevo sí.
+    const { error: newError } = await joiner.client.rpc('claim_seat', {
+      p_token: newToken,
+      p_entry: entryId,
+    })
+    expect(newError).toBeNull()
+  })
+})

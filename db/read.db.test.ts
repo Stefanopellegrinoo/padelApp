@@ -27,6 +27,7 @@ import {
   seasonAdminName,
   seasonAwardsOf,
   seasonHeader,
+  seasonInviteToken,
   seasonMatchdaysOf,
   seasonSquadMembersOf,
   seasonSquadOf,
@@ -504,11 +505,15 @@ describe('db/read', () => {
   })
 
   describe('seasonHeader', () => {
-    it('carries the invite token the wizard and the settings screen show', async () => {
+    it('ya no lleva el invite token (S8): el admin lo pide con seasonInviteToken', async () => {
       const header = await seasonHeader(admin.client, seasonId)
-      expect(header.inviteToken).toBeTruthy()
+      expect(header.inviteToken).toBeNull()
 
-      const { data } = await admin.client.rpc('season_invite', { p_token: header.inviteToken })
+      const token = await seasonInviteToken(admin.client, seasonId)
+      expect(token).toBeTruthy()
+      if (token === null) throw new Error('Falta el token del admin.')
+
+      const { data } = await admin.client.rpc('season_invite', { p_token: token })
       expect(data?.length).toBeGreaterThan(0)
     })
   })
@@ -568,7 +573,10 @@ describe('db/read', () => {
       // directo, mismo criterio que `entriesOf`/`matchdaysOf` de acá abajo —
       // RLS le da 0 filas al extraño, sin error.
       expect(await disciplineRulesOf(stranger.client, seasonId)).toEqual(new Map())
-      await expect(seasonAdminName(stranger.client, seasonId)).rejects.toThrow()
+      // S8: `seasonAdminName` ya no va por `seasons` (RLS) sino por
+      // `season_public_rules`, que es público — el nombre del organizador es
+      // público de todos modos (lo muestra Reglas sin sesión). Acá devuelve el
+      // nombre, no tira.
 
       expect(await entriesOf(stranger.client, seasonId)).toEqual([])
       expect(await matchdaysOf(stranger.client, seasonId)).toEqual([])

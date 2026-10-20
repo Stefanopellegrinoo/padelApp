@@ -101,8 +101,8 @@ export interface SeasonHeader {
    * escritor de producción; el `drop column` es del CONTRACT.
    */
   disciplines: DisciplineHeader[]
-  /** The share link's token. Every participant can already read this column; the wizard and the settings screen show it. */
-  inviteToken: string
+  /** El token del link para compartir, sólo para el admin (S8). `null` para quien no organiza. */
+  inviteToken: string | null
 }
 
 /**
@@ -239,7 +239,6 @@ interface SeasonRow {
   id: string
   name: string
   created_by: string
-  invite_token: string
   players_can_score: boolean
 }
 
@@ -327,7 +326,9 @@ function toSeasonHeader(
     regularMatchdays: primary.config.regularMatchdays,
     isAdmin: row.created_by === userId,
     disciplines,
-    inviteToken: row.invite_token,
+    // S8: el token ya no viaja en el header —sólo el admin lo ve, por
+    // `seasonInviteToken`. Acá siempre null; la pantalla de ajustes lo pide aparte.
+    inviteToken: null,
     playersCanScore: row.players_can_score,
   }
 }
@@ -355,7 +356,7 @@ function toMatchdaySummary(row: MatchdayRow): MatchdaySummary {
 // #4026): `seasons.status` ya no tiene lector de producción. `SeasonHeader.
 // status` deriva de `disciplines.status` (REQ-D3-3, `seasonStatusOf`), con la
 // MISMA fila que `DISCIPLINE_HEADER_COLUMNS` ya trae — sin una consulta más.
-const SEASON_HEADER_COLUMNS = 'id, name, created_by, invite_token, players_can_score'
+const SEASON_HEADER_COLUMNS = 'id, name, created_by, players_can_score'
 const DISCIPLINE_HEADER_COLUMNS =
   'id, season_id, kind, config, weight, pair_size, has_masters, allows_draw, formato_default, status'
 
@@ -458,21 +459,25 @@ export async function seasonHeader(supabase: Client, seasonId: string): Promise<
  * para este campo.
  */
 export async function seasonAdminName(supabase: Client, seasonId: string): Promise<string> {
-  const { data: season, error: seasonError } = await supabase
-    .from('seasons')
-    .select('invite_token')
-    .eq('id', seasonId)
-    .maybeSingle()
-  if (seasonError) throw new EdgeError(`No se pudo leer la temporada: ${seasonError.message}`)
-  if (season === null) throw new EdgeError('La temporada no existe.')
-
-  const { data: invite, error: inviteError } = await supabase
-    .rpc('season_invite', { p_token: season.invite_token })
-    .limit(1)
-  if (inviteError) throw new EdgeError(`No se pudo leer quién organiza: ${inviteError.message}`)
-  const adminName = invite?.[0]?.admin_name
+  // S8: ya no lee `invite_token` (revocado a `authenticated`). `season_public_rules`
+  // (0022) devuelve `admin_name`, es security definer y está abierta al público —
+  // el nombre del organizador es público de todos modos (lo muestra Reglas).
+  const { data, error } = await supabase.rpc('season_public_rules', { p_season: seasonId })
+  if (error) throw new EdgeError(`No se pudo leer quién organiza: ${error.message}`)
+  const adminName = data?.[0]?.admin_name
   if (adminName === undefined) throw new EdgeError('No se pudo leer quién organiza.')
   return adminName
+}
+
+/**
+ * El token del link de invitación, sólo para el admin (S8). `null` para quien
+ * no organiza —la función `season_invite_token` (0104) lo devuelve únicamente
+ * si `created_by = auth.uid()`.
+ */
+export async function seasonInviteToken(supabase: Client, seasonId: string): Promise<string | null> {
+  const { data, error } = await supabase.rpc('season_invite_token', { p_season: seasonId })
+  if (error) throw new EdgeError(`No se pudo leer el link: ${error.message}`)
+  return data ?? null
 }
 
 /**

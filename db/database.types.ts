@@ -1051,6 +1051,7 @@ export type Database = {
         Returns: undefined
       }
       redraft_matchday: { Args: { p_matchday: string }; Returns: undefined }
+      regenerate_invite_token: { Args: { p_season: string }; Returns: string }
       remove_squad_seat: { Args: { p_entry: string }; Returns: undefined }
       reopen_matchday: { Args: { p_matchday: string }; Returns: undefined }
       save_casual_match: {
@@ -1082,6 +1083,7 @@ export type Database = {
           squad_size: number
         }[]
       }
+      season_invite_token: { Args: { p_season: string }; Returns: string }
       season_public_formats: {
         Args: { p_season: string }
         Returns: {

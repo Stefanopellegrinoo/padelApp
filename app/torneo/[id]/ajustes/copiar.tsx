@@ -1,27 +1,52 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useTransition } from 'react'
+import { regenerateInviteLink } from './actions'
 
 /**
- * El valor de la fila "Link de invitación". Es su propio componente por lo
- * único que hace: el portapapeles es del navegador, así que la fila no puede
- * ser un Server Component. La URL se arma acá y no en el servidor porque el
- * origen sale de `window.location`, igual que en el paso 5 del wizard.
+ * La fila "Link de invitación": copiar y regenerar. Es un componente cliente por
+ * lo único que hace (portapapeles y un botón), y porque la URL se arma con
+ * `window.location.origin`. El "Regenerar" (S8) llama a la server action y
+ * reemplaza el token: el link viejo deja de reclamar asiento.
  */
-export function CopiarLink({ token }: { token: string }) {
+export function CopiarLink({ seasonId, token }: { seasonId: string; token: string }) {
+  const [current, setCurrent] = useState(token)
   const [copied, setCopied] = useState(false)
+  const [pending, startTransition] = useTransition()
+
+  function copy() {
+    const origin = typeof window === 'undefined' ? '' : window.location.origin
+    void navigator.clipboard.writeText(`${origin}/unirse/${current}`)
+    setCopied(true)
+  }
+
+  function regenerate() {
+    startTransition(async () => {
+      const result = await regenerateInviteLink(seasonId)
+      if (result.ok) {
+        setCurrent(result.token)
+        setCopied(false)
+      }
+    })
+  }
 
   return (
-    <button
-      type="button"
-      onClick={() => {
-        const origin = typeof window === 'undefined' ? '' : window.location.origin
-        void navigator.clipboard.writeText(`${origin}/unirse/${token}`)
-        setCopied(true)
-      }}
-      className="-my-3 flex min-h-[44px] shrink-0 items-center pl-3 text-[13px] font-[750] text-muted"
-    >
-      {copied ? 'Copiado ✓' : 'Copiar ›'}
-    </button>
+    <div className="flex shrink-0 items-center">
+      <button
+        type="button"
+        onClick={copy}
+        className="-my-3 flex min-h-[44px] shrink-0 items-center pl-3 text-[13px] font-[750] text-muted"
+      >
+        {copied ? 'Copiado ✓' : 'Copiar ›'}
+      </button>
+      <button
+        type="button"
+        onClick={regenerate}
+        disabled={pending}
+        className="-my-3 flex min-h-[44px] shrink-0 items-center pl-3 text-[13px] font-[750] text-muted"
+      >
+        {pending ? 'Regenerando…' : 'Regenerar'}
+      </button>
+    </div>
   )
 }

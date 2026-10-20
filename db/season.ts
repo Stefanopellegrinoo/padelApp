@@ -539,7 +539,7 @@ export async function createSeason(
   const { data: season, error: seasonError } = await supabase
     .from('seasons')
     .insert({ name: trimmed, created_by: userId })
-    .select('id, invite_token')
+    .select('id')
     .single()
   if (seasonError !== null || season === null) {
     throw new EdgeError(`No se pudo crear el torneo: ${seasonError?.message}`)
@@ -811,7 +811,15 @@ export async function createSeason(
     }
   }
 
-  return { seasonId: season.id, inviteToken: season.invite_token }
+  // S8: el token ya no se puede leer en el `.select()` del insert (revocado a
+  // `authenticated`). El creador —admin— lo recupera por `season_invite_token`.
+  const { data: inviteToken, error: tokenError } = await supabase.rpc('season_invite_token', {
+    p_season: season.id,
+  })
+  if (tokenError !== null || inviteToken === null) {
+    throw new EdgeError(`No se pudo leer el link de invitación: ${tokenError?.message}`)
+  }
+  return { seasonId: season.id, inviteToken }
 }
 
 /**
@@ -872,6 +880,14 @@ export async function renameSeason(
   if (count === 0) {
     throw new EdgeError('No se pudo cambiar el nombre: sólo puede hacerlo quien organiza.')
   }
+}
+
+/** Regenera el link de invitación (S8). Devuelve el token nuevo; sólo el admin puede. */
+export async function regenerateInviteToken(supabase: Client, seasonId: string): Promise<string> {
+  const { data, error } = await supabase.rpc('regenerate_invite_token', { p_season: seasonId })
+  if (error !== null) throw new EdgeError(error.message)
+  if (data === null) throw new EdgeError('No se pudo regenerar el link.')
+  return data
 }
 
 // `updateSeasonRules` se borró acá (rebanada 2 de "reglas por disciplina"):

@@ -112,23 +112,11 @@ export async function promoteGuest(
  * Existe porque el que crea el torneo no pasa por Unirse: no tiene por qué
  * pegarse su propio link de invitación para jugar el torneo que armó.
  */
-export async function claimOwnSeat(
-  supabase: Client,
-  seasonId: string,
-  entryId: string,
-): Promise<void> {
-  const { data: season, error: seasonError } = await supabase
-    .from('seasons')
-    .select('invite_token')
-    .eq('id', seasonId)
-    .maybeSingle()
-  if (seasonError) throw new EdgeError(`No se pudo leer el torneo: ${seasonError.message}`)
-  if (season === null) throw new EdgeError('El torneo no existe.')
-
-  const { error } = await supabase.rpc('claim_seat', {
-    p_token: season.invite_token,
-    p_entry: entryId,
-  })
+export async function claimOwnSeat(supabase: Client, entryId: string): Promise<void> {
+  // S8: ya no lee `invite_token` (revocado, 0104) para reusar `claim_seat`.
+  // `claim_creator_seat` (0102/0106) es el mismo reclamo del admin sin token,
+  // con el mismo guard "ya tenés un lugar en este torneo".
+  const { error } = await supabase.rpc('claim_creator_seat', { p_entry: entryId })
   if (error !== null) throw new EdgeError(writeErrorMessage(error))
 }
 

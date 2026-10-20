@@ -99,9 +99,11 @@ vi.mock('@/db/read', async (importOriginal) => {
       status: 'ACTIVE',
       regularMatchdays: 10,
       isAdmin: true,
-      inviteToken: 'token',
+      inviteToken: null,
       disciplines: escena.disciplines,
     }),
+    // S8: el token del link ya no viaja en el header; Ajustes lo pide aparte.
+    seasonInviteToken: async () => 'token',
     // Rebanada 2 de "reglas por disciplina": Ajustes lee esto para armar un
     // editor por disciplina (`disciplineId -> rules_text`). Reglas, con o sin
     // sesión, lee el texto de `publicFormats` (torneos-deportes, Tarea 7).

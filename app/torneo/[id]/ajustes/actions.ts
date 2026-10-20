@@ -10,7 +10,7 @@ import { addToDiscipline, removeFromDiscipline } from '@/db/discipline-entries'
 import { createTeam, deleteTeam } from '@/db/discipline-teams'
 import { addSquadSeat, claimOwnSeat, removeSeat, renameSeat, unlinkSeat } from '@/db/entries'
 import { EdgeError } from '@/db/errors'
-import { deleteSeason, renameSeason, updateSeasonPlayersCanScore } from '@/db/season'
+import { deleteSeason, regenerateInviteToken, renameSeason, updateSeasonPlayersCanScore } from '@/db/season'
 import { serverClient } from '@/db/server'
 import { newSportOf, type NewSportInput } from './nuevo-deporte-state'
 
@@ -101,7 +101,7 @@ export async function editSeatName(
  */
 export async function takeSeat(seasonId: string, entryId: string): Promise<WriteResult> {
   return onSeason(seasonId, async (supabase) => {
-    await claimOwnSeat(supabase, seasonId, entryId)
+    await claimOwnSeat(supabase, entryId)
   })
 }
 
@@ -110,6 +110,21 @@ export async function unlinkSeatOwner(seasonId: string, entryId: string): Promis
   return onSeason(seasonId, async (supabase) => {
     await unlinkSeat(supabase, entryId)
   })
+}
+
+/** Regenera el link de invitación (S8). Devuelve el token nuevo junto con el resultado. */
+export async function regenerateInviteLink(
+  seasonId: string,
+): Promise<{ ok: true; token: string } | { ok: false; error: string }> {
+  try {
+    const supabase = await serverClient()
+    const token = await regenerateInviteToken(supabase, seasonId)
+    revalidatePath(`/torneo/${seasonId}`, 'layout')
+    return { ok: true, token }
+  } catch (error) {
+    if (error instanceof EdgeError) return { ok: false, error: error.message }
+    throw error
+  }
 }
 
 /**

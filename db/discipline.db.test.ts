@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { describe, it, expect } from 'vitest'
 import { defaultConfig } from '@/core'
+import { MAX_RULES_TEXT_LENGTH } from '@/core/input-limits'
 import { createMatchday, matchdayContextFor } from './matchday'
 import {
   addDiscipline,
@@ -1012,6 +1013,18 @@ describe('updateDisciplineRules (rebanada 2, R8/R12)', () => {
     await expect(
       updateDisciplineRules(member.client, seasonId, disciplineId, 'texto ajeno'),
     ).rejects.toThrow(/sólo puede hacerlo quien organiza/)
+
+    const { data } = await adminClient().from('disciplines').select('rules_text').eq('id', disciplineId).single()
+    expect(data?.rules_text).toBe('')
+  })
+
+  it(`rechaza un texto de más de ${MAX_RULES_TEXT_LENGTH} caracteres antes de escribir`, async () => {
+    const admin = await createTestUser()
+    const { seasonId, disciplineId } = await createSeason({ admin })
+
+    await expect(
+      updateDisciplineRules(admin.client, seasonId, disciplineId, 'x'.repeat(MAX_RULES_TEXT_LENGTH + 1)),
+    ).rejects.toThrow(/no pueden pasar/)
 
     const { data } = await adminClient().from('disciplines').select('rules_text').eq('id', disciplineId).single()
     expect(data?.rules_text).toBe('')

@@ -1,4 +1,5 @@
 import { isTournamentSport, shuffled, sideOfRow, sportFormatError } from '@/core'
+import { MAX_SEASON_NAME_LENGTH } from '@/core/input-limits'
 import type {
   Award,
   DisciplineId,
@@ -524,6 +525,9 @@ export async function createSeason(
 
   const trimmed = name.trim()
   if (trimmed.length === 0) throw new EdgeError('El torneo necesita un nombre.')
+  if (trimmed.length > MAX_SEASON_NAME_LENGTH) {
+    throw new EdgeError(`El nombre no puede pasar de ${MAX_SEASON_NAME_LENGTH} caracteres.`)
+  }
   if (mySeatIndex !== null && (mySeatIndex < 0 || mySeatIndex >= squadNames.length)) {
     throw new EdgeError('El asiento que elegiste no está en el plantel.')
   }
@@ -532,23 +536,10 @@ export async function createSeason(
   const userId = auth.user?.id
   if (userId === undefined) throw new EdgeError('Hay que entrar antes de crear un torneo.')
 
-  // El asiento propio se reclama en el MISMO insert del plantel, no con un
-  // `claim_seat` después: acá no hay carrera que ganar —los asientos todavía no
-  // existen para nadie más, el link de invitación se reparte recién en el paso
-  // 5— y una segunda escritura es una segunda forma de quedar a medias.
-  let myPlayerId: string | null = null
-  if (mySeatIndex !== null) {
-    const { data, error } = await supabase.rpc('my_player_id')
-    if (error !== null || data === null) {
-      throw new EdgeError('No se pudo encontrar tu jugador para anotarte en el plantel.')
-    }
-    myPlayerId = data
-  }
-
   const { data: season, error: seasonError } = await supabase
     .from('seasons')
     .insert({ name: trimmed, created_by: userId })
-    .select('id, invite_token')
+    .select('id')
     .single()
   if (seasonError !== null || season === null) {
     throw new EdgeError(`No se pudo crear el torneo: ${seasonError?.message}`)
@@ -613,13 +604,12 @@ export async function createSeason(
   // `null` en el medio del array es alcanzable desde afuera, no un caso de
   // laboratorio. Hoisteado y con su propio `try` de acá abajo, ese throw SÍ
   // dispara el rollback.
-  let squadRows: { season_id: string; display_name: string; kind: 'SQUAD'; player_id: string | null }[]
+  let squadRows: { season_id: string; display_name: string; kind: 'SQUAD' }[]
   try {
-    squadRows = squadNames.map((seat, index) => ({
+    squadRows = squadNames.map((seat) => ({
       season_id: season.id,
       display_name: seat.trim(),
       kind: 'SQUAD' as const,
-      player_id: index === mySeatIndex ? myPlayerId : null,
     }))
   } catch (err) {
     await supabase.from('seasons').delete().eq('id', season.id)
@@ -637,6 +627,23 @@ export async function createSeason(
         ? 'Falta un nombre del plantel.'
         : `No se pudo cargar el plantel: ${entriesError?.message}`,
     )
+  }
+
+  // S1 (security-hardening): el `player_id` del creador ya no viaja en el insert
+  // —`authenticated` perdió el grant de esa columna—. Se reclama por
+  // `claim_creator_seat` (security definer, 0101), el mismo guard que
+  // `claim_seat`: la fila tiene que estar libre y el reclamante ser el admin.
+  if (mySeatIndex !== null) {
+    const creatorSeat = entryRows[mySeatIndex]
+    if (creatorSeat !== undefined) {
+      const { error: claimError } = await supabase.rpc('claim_creator_seat', {
+        p_entry: creatorSeat.id,
+      })
+      if (claimError !== null) {
+        await supabase.from('seasons').delete().eq('id', season.id)
+        throw new EdgeError(`No se pudo reclamar tu lugar: ${claimError.message}`)
+      }
+    }
   }
 
   // `season_seed_order` (0080_season_seed_order.sql, torneo-multi-disciplina
@@ -804,7 +811,15 @@ export async function createSeason(
     }
   }
 
-  return { seasonId: season.id, inviteToken: season.invite_token }
+  // S8: el token ya no se puede leer en el `.select()` del insert (revocado a
+  // `authenticated`). El creador —admin— lo recupera por `season_invite_token`.
+  const { data: inviteToken, error: tokenError } = await supabase.rpc('season_invite_token', {
+    p_season: season.id,
+  })
+  if (tokenError !== null || inviteToken === null) {
+    throw new EdgeError(`No se pudo leer el link de invitación: ${tokenError?.message}`)
+  }
+  return { seasonId: season.id, inviteToken }
 }
 
 /**
@@ -853,6 +868,9 @@ export async function renameSeason(
 ): Promise<void> {
   const trimmed = name.trim()
   if (trimmed.length === 0) throw new EdgeError('El torneo necesita un nombre.')
+  if (trimmed.length > MAX_SEASON_NAME_LENGTH) {
+    throw new EdgeError(`El nombre no puede pasar de ${MAX_SEASON_NAME_LENGTH} caracteres.`)
+  }
 
   const { error, count } = await supabase
     .from('seasons')
@@ -862,6 +880,14 @@ export async function renameSeason(
   if (count === 0) {
     throw new EdgeError('No se pudo cambiar el nombre: sólo puede hacerlo quien organiza.')
   }
+}
+
+/** Regenera el link de invitación (S8). Devuelve el token nuevo; sólo el admin puede. */
+export async function regenerateInviteToken(supabase: Client, seasonId: string): Promise<string> {
+  const { data, error } = await supabase.rpc('regenerate_invite_token', { p_season: seasonId })
+  if (error !== null) throw new EdgeError(error.message)
+  if (data === null) throw new EdgeError('No se pudo regenerar el link.')
+  return data
 }
 
 // `updateSeasonRules` se borró acá (rebanada 2 de "reglas por disciplina"):

@@ -13,7 +13,11 @@
  */
 export function safeNextPath(value: string | null | undefined): string {
   if (typeof value !== 'string') return '/'
-  return value.startsWith('/') && !value.startsWith('//') ? value : '/'
+  // El backslash también hay que rechazarlo: el browser lo normaliza a `/`, así
+  // que `/\evil.com` se resuelve como `//evil.com` y reabre el redirector.
+  return value.startsWith('/') && !value.startsWith('//') && !value.includes('\\')
+    ? value
+    : '/'
 }
 
 /**

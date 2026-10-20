@@ -5,13 +5,11 @@ import type { Client } from '@/db/client'
 import { mySeasons } from '@/db/read'
 import { serverClient } from '@/db/server'
 import { afterLogin } from './next-path'
+import { signInError, signUpError } from './validate'
 
 export interface FormState {
   error: string | null
 }
-
-const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
-const MIN_PASSWORD = 6
 
 /**
  * A dónde mandar a alguien que recién entró.
@@ -39,9 +37,8 @@ export async function signUp(_state: FormState, form: FormData): Promise<FormSta
   const email = String(form.get('email') ?? '').trim()
   const password = String(form.get('password') ?? '')
 
-  if (displayName.length === 0) return { error: 'Escribí tu nombre.' }
-  if (!EMAIL.test(email)) return { error: 'Escribí un mail válido, con @ y dominio.' }
-  if (password.length < MIN_PASSWORD) return { error: `Mínimo ${MIN_PASSWORD} caracteres.` }
+  const validation = signUpError(displayName, email, password)
+  if (validation !== null) return { error: validation }
 
   const supabase = await serverClient()
   const { error } = await supabase.auth.signUp({
@@ -59,6 +56,9 @@ export async function signUp(_state: FormState, form: FormData): Promise<FormSta
 export async function signIn(_state: FormState, form: FormData): Promise<FormState> {
   const email = String(form.get('email') ?? '').trim()
   const password = String(form.get('password') ?? '')
+
+  const validation = signInError(email, password)
+  if (validation !== null) return { error: validation }
 
   const supabase = await serverClient()
   const { error } = await supabase.auth.signInWithPassword({ email, password })

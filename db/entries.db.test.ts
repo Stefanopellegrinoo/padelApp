@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { defaultConfig } from '@/core'
+import { MAX_SEASON_NAME_LENGTH } from '@/core/input-limits'
 import { addSquadSeat, removeSeat, renameSeat, unlinkSeat } from './entries'
 import {
   closeMatchday,
@@ -285,6 +286,67 @@ describe('renameSeason', () => {
     expect((await seasonHeader(admin.client, seasonId)).name).toBe('Los Jueves 2026')
 
     await expect(renameSeason(admin.client, seasonId, '  ')).rejects.toThrow(/necesita un nombre/)
+  })
+
+  it(`rechaza un nombre de más de ${MAX_SEASON_NAME_LENGTH} caracteres`, async () => {
+    const admin = await createTestUser()
+    const { seasonId } = await createSeason(admin.client, {
+      name: 'Los Jueves',
+      squadNames: squadNames(8),
+      config: defaultConfig(8),
+    })
+
+    await expect(renameSeason(admin.client, seasonId, 'x'.repeat(MAX_SEASON_NAME_LENGTH + 1))).rejects.toThrow(
+      /no puede pasar/,
+    )
+  })
+})
+
+// ── S1: player_id sellado (0101) ────────────────────────────────────────────
+
+describe('S1: player_id no se escribe por PostgREST directo', () => {
+  it('un admin no puede anotar a otro jugador actualizando player_id', async () => {
+    const admin = await createTestUser()
+    const victim = await createTestUser()
+    const { seasonId } = await createSeason(admin.client, {
+      name: 'Los Jueves',
+      squadNames: squadNames(4),
+      config: defaultConfig(4),
+    })
+
+    const { data: seat, error: seatError } = await admin.client
+      .from('entries')
+      .select('id')
+      .eq('season_id', seasonId)
+      .eq('kind', 'SQUAD')
+      .is('player_id', null)
+      .limit(1)
+      .maybeSingle()
+    if (seatError || seat === null) throw new Error(seatError?.message)
+
+    // El ataque: escribir `player_id = víctima` por update directo, sin claim_seat.
+    const { error } = await admin.client
+      .from('entries')
+      .update({ player_id: victim.playerId })
+      .eq('id', seat.id)
+
+    // El grant de columna está revocado: el update se rechaza y la víctima NO
+    // queda vinculada a la temporada del admin.
+    expect(error).not.toBeNull()
+
+    const { data: after } = await admin.client
+      .from('entries')
+      .select('player_id')
+      .eq('id', seat.id)
+      .single()
+    expect(after?.player_id).toBeNull()
+
+    const { data: victimEntries } = await admin.client
+      .from('entries')
+      .select('id')
+      .eq('season_id', seasonId)
+      .eq('player_id', victim.playerId)
+    expect(victimEntries ?? []).toHaveLength(0)
   })
 })
 

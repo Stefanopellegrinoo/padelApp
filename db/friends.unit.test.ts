@@ -119,7 +119,14 @@ function fakeClient(options: {
     if (table === 'players') return builderFor(options.players, table)
     throw new Error(`fakeClient: tabla no soportada en este test: ${table}`)
   }
-  const rpc = () => Promise.resolve({ data: options.me, error: null })
+  // S3: `playerNames` ahora va por `player_display_names` (RPC), no por
+  // `.from('players')`. El fake responde esa RPC con la tabla `players`.
+  const rpc = (name: string) => {
+    if (name === 'player_display_names') {
+      return Promise.resolve({ data: options.players?.rows ?? [], error: null })
+    }
+    return Promise.resolve({ data: options.me, error: null })
+  }
 
   return { from, rpc } as unknown as Client
 }
@@ -423,9 +430,17 @@ describe('historyWith — tripwire de truncamiento de PostgREST', () => {
     await expect(historyWith(client, AMIGO)).rejects.toThrow(/completo de jugadores casuales/)
   })
 
-  it('nombres: falla ruidoso si el select de players viene truncado', async () => {
-    const client = fakeClient({ ...casualCompleto(), players: { rows: [], count: 2 } })
-    await expect(historyWith(client, AMIGO)).rejects.toThrow(/completo de nombres/)
+  it('nombres: un id sin nombre falla ruidoso (requireName, ya no hay select de players truncable)', async () => {
+    // S3: los nombres ya no salen de un select de `players` truncable, sino de
+    // `player_display_names` (RPC acotada por los ids pedidos). El tripwire de
+    // truncado no aplica; lo que sigue fallando ruidoso es el nombre FALTANTE,
+    // vía `requireName`.
+    const completo = casualCompleto()
+    const client = fakeClient({
+      ...completo,
+      players: { rows: [{ id: ME, display_name: 'Yo' }], count: 1 },
+    })
+    await expect(historyWith(client, AMIGO)).rejects.toThrow(/No se pudo leer el nombre de/)
   })
 
   it('sets casuales: falla ruidoso si el select de casual_match_sets viene truncado', async () => {

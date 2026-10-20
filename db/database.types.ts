@@ -1002,6 +1002,7 @@ export type Database = {
         Returns: string
       }
       cancel_matchday: { Args: { p_matchday: string }; Returns: undefined }
+      claim_creator_seat: { Args: { p_entry: string }; Returns: undefined }
       claim_seat: {
         Args: { p_entry: string; p_token: string }
         Returns: string
@@ -1037,12 +1038,20 @@ export type Database = {
       matchday_season: { Args: { p_matchday: string }; Returns: string }
       my_player_id: { Args: never; Returns: string }
       open_matchday: { Args: { p_matchday: string }; Returns: undefined }
+      player_display_names: {
+        Args: { p_ids: string[] }
+        Returns: {
+          display_name: string
+          id: string
+        }[]
+      }
       players_can_score: { Args: { p_season: string }; Returns: boolean }
       promote_guest: {
         Args: { p_before?: string; p_entry: string }
         Returns: undefined
       }
       redraft_matchday: { Args: { p_matchday: string }; Returns: undefined }
+      regenerate_invite_token: { Args: { p_season: string }; Returns: string }
       remove_squad_seat: { Args: { p_entry: string }; Returns: undefined }
       reopen_matchday: { Args: { p_matchday: string }; Returns: undefined }
       save_casual_match: {
@@ -1074,6 +1083,7 @@ export type Database = {
           squad_size: number
         }[]
       }
+      season_invite_token: { Args: { p_season: string }; Returns: string }
       season_public_formats: {
         Args: { p_season: string }
         Returns: {
@@ -1109,6 +1119,7 @@ export type Database = {
         Args: { p_discipline: string; p_from: number }
         Returns: undefined
       }
+      unlink_seat: { Args: { p_entry: string }; Returns: undefined }
     }
     Enums: {
       [_ in never]: never

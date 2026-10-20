@@ -1,5 +1,6 @@
 import { isDeepStrictEqual } from 'node:util'
 import { isTournamentSport, shuffled, sportFormatError } from '@/core'
+import { MAX_RULES_TEXT_LENGTH } from '@/core/input-limits'
 import type { DisciplineId, MatchdayFormatSetting, SeasonConfig, SideSize, TournamentSport } from '@/core'
 import type { Client } from './client'
 import type { Json } from './database.types'
@@ -331,6 +332,9 @@ export async function updateDisciplineRules(
   disciplineId: DisciplineId,
   text: string,
 ): Promise<void> {
+  if (text.length > MAX_RULES_TEXT_LENGTH) {
+    throw new EdgeError(`Las reglas no pueden pasar de ${MAX_RULES_TEXT_LENGTH} caracteres.`)
+  }
   const { error, count } = await supabase
     .from('disciplines')
     .update({ rules_text: text }, { count: 'exact' })

@@ -4,6 +4,7 @@ import {
 } from '@/core'
 import { EdgeError } from './errors'
 import { matchError } from './validate'
+import { playerNames } from './read'
 import type { Client } from './client'
 import type { Database } from './database.types'
 
@@ -522,22 +523,16 @@ async function casualesEntre(supabase: Client, me: string, friendPlayerId: strin
     else bucket.push(fila)
   }
 
-  // `players_read` está abierta (0002_rls.sql), así que todo id real tiene
-  // nombre: si falta, es un corte o una inconsistencia, y `requireName` lo dice.
+  // S3 (security-hardening): los nombres salen de `player_display_names`
+  // (security definer, 0103), no de `players` directo. Todos estos ids son el
+  // propio usuario, su amigo o alguien de un partido casual compartido.
   const nombreIds = [
     ...new Set([
       ...jugadores.flatMap((fila) => (fila.player_id === null ? [] : [fila.player_id])),
       ...partidos.flatMap((row) => [row.created_by, row.updated_by]),
     ]),
   ]
-  const nombresResult = await supabase
-    .from('players')
-    .select('id, display_name', { count: 'exact' })
-    .in('id', nombreIds)
-    .order('id', { ascending: true })
-  const nombrePorId = new Map(
-    assertComplete(nombresResult, 'nombres').map((row) => [row.id, row.display_name] as const),
-  )
+  const nombrePorId = await playerNames(supabase, nombreIds)
 
   const setsPorPartido = new Map<string, Array<{ games_a: number; games_b: number }>>()
   const setsResult = await supabase
@@ -717,17 +712,7 @@ export async function friendsOf(supabase: Client): Promise<Friend[]> {
     fila.player_a === me ? fila.player_b : fila.player_a
 
   const otros = (filas ?? []).map(otroDe)
-  const nombrePor = new Map<string, string>()
-  if (otros.length > 0) {
-    const { data: jugadores, error: jugadoresError } = await supabase
-      .from('players')
-      .select('id, display_name')
-      .in('id', otros)
-    if (jugadoresError !== null) {
-      throw new EdgeError(`No se pudieron leer tus amigos: ${jugadoresError.message}`)
-    }
-    for (const jugador of jugadores ?? []) nombrePor.set(jugador.id, jugador.display_name)
-  }
+  const nombrePor = await playerNames(supabase, otros)
 
   return (filas ?? []).map((fila) => {
     const playerId = otroDe(fila)

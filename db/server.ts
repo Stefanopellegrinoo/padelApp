@@ -1,6 +1,6 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
-import { credentials, fetchWithFreshTokenRetry, type Client } from './client'
+import { credentials, fetchWithFreshTokenRetry, sessionCookieOptions, type Client } from './client'
 import type { Database } from './database.types'
 
 /**
@@ -23,6 +23,7 @@ export async function serverClient(): Promise<Client> {
   // el tipo con el que TypeScript lo ve.
   const client = createServerClient<Database>(url, anonKey, {
     global: { fetch: fetchWithFreshTokenRetry },
+    cookieOptions: sessionCookieOptions,
     cookies: {
       getAll() {
         return store.getAll()

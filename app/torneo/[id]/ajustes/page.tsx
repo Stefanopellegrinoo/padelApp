@@ -6,6 +6,7 @@ import {
   myEntryId,
   playerNames,
   seasonHeader,
+  seasonInviteToken,
   seasonMatchdaysOf,
   seasonSquadMembersOf,
 } from '@/db/read'
@@ -85,6 +86,10 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
     seasonSquadMembersOf(supabase, seasonId),
   ])
   if (!header.isAdmin) redirect(`/torneo/${seasonId}`)
+
+  // S8: el token ya no viaja en el header (revocado a no-admins). Acá, ya
+  // confirmado el admin, se pide aparte por `season_invite_token`.
+  const inviteToken = (await seasonInviteToken(supabase, seasonId)) ?? ''
 
   // Task 4: con una sola disciplina esta pantalla sigue mostrando sus
   // paneles inline (ver el docblock de arriba); con 2+, se muestran en
@@ -227,7 +232,7 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
 
           <div className={`${ROW} border-t border-line`}>
             <span className={LABEL}>Link de invitación</span>
-            <CopiarLink token={header.inviteToken} />
+            <CopiarLink seasonId={seasonId} token={inviteToken} />
           </div>
 
           {/* Lo único que abre: cargar el resultado de un partido de una fecha

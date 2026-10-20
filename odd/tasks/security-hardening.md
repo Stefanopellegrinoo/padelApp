@@ -121,8 +121,8 @@ Checks: `npm test:db`.
 - T1 [S1] Restringir `entries_write` (column grants) para que `player_id` sólo se vincule vía `claim_seat`. Ruta: delegado (escritor). Commit: —
 - T2 [S2] Migración: revocar `TRUNCATE` en tablas públicas. Ruta: inline. Commit: —
 - T3 [S3] Reemplazar `players_read using(true)` por funciones `security definer` de resolución de nombres. Ruta: delegado (escritor). Commit: —
-- T4 [S4] `safeNextPath` rechaza backslash + test. Ruta: inline. Commit: —
-- T5 [S5] Configurar `secure`/`httpOnly` en cookies (prod vs dev). Ruta: inline. Commit: —
+- T4 [S4] `safeNextPath` rechaza backslash + test. Ruta: inline. Commit: 35ace08
+- T5 [S5] Configurar `secure`/`httpOnly` en cookies (prod vs dev). Ruta: inline. Commit: 50c2cfa
 - T6 [S6] Cabeceras de seguridad en `next.config.ts`. Ruta: inline. Commit: —
 - T7 [S7] Límites de longitud en inputs. Ruta: inline. Commit: —
 - T8 [S8] Expiración/regeneración de `invite_token` + lectura restringida al admin. Ruta: delegado (escritor). Commit: —
@@ -145,3 +145,5 @@ Checks: `npm test:db`.
 - L7 (2026-10-20) — **Camino de deploy verificado** (`docs/despliegue.md:46-64,144-146`): CLI, no pipeline. Para migraciones nuevas: backup (`db dump` roles/schema/data) → `supabase db push --db-url "$PROD_DB_URL" --dry-run` → `supabase db push --db-url "$PROD_DB_URL"` → merge a `main` (Vercel deploya solo). **NUNCA `supabase link`** (deja el repo apuntando a prod). `PROD_DB_URL` = URI del Session pooler con contraseña escapada. Nada automatiza el push: CI no toca la nube.
 - L8 (2026-10-20) — Corrección a S9: la confirmación de email **ya está prendida en producción** (`docs/despliegue.md:237-244`), en local no. S9 queda reducido a habilitar captcha (config de dashboard, no migración). También: `docs/despliegue.md:311-338` advierte que `.env.local` está fallando el parse con `LegacyDbConfigLoadError` y rompe `db:reset`/`test:db` local — hay que arreglarlo antes de correr las suites contra la base.
 - L9 (2026-10-20) — **Retomada la feature.** Baseline verificado verde al arrancar: `db:reset` EXIT=0, `test:db` 675/675, `npm test` 1606/1606, `typecheck` limpio. El bloqueo de `.env.local` (L8) **ya no reproduce**; no hizo falta ningún cambio de repo. Rama `feat/security-hardening` creada desde `main` (63376fa, ya al día con origin). Causa raíz del error original sigue sin determinar (probable ambiental/transitoria). `docs/despliegue.md:311` quedó obsoleta.
+- L10 (2026-10-20) — S4 hecho (commit 35ace08): `safeNextPath` ahora rechaza `\` además de `//`. TDD RED→GREEN verificado (test falló con `'/\evil.com'` antes de la fix, 8/8 después). Suite unitaria 1607/1607 sin regresiones. Ruta inline, sin verifier (cambio contenido, función pura con test propio).
+- L11 (2026-10-20) — S5 hecho (commit 50c2cfa): cookies de sesión con `httpOnly: true` (siempre) y `Secure` (sólo prod) vía `cookieOptions` compartido en `db/client.ts`, aplicado en `db/server.ts` y `middleware.ts`. Verificado: `getUser` sólo se llama server-side, `browserClient` sólo se usa para el OAuth de Google (no lee la cookie de sesión), así que `httpOnly` no rompe el browser. typecheck + build + 1608 unit verdes. Falta la verificación MANUAL de cabeceras en prod (no reproducible local).

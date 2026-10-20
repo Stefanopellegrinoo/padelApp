@@ -123,7 +123,7 @@ Checks: `npm test:db`.
 - T3 [S3] Reemplazar `players_read using(true)` por funciones `security definer` de resolución de nombres. Ruta: delegado (escritor). Commit: —
 - T4 [S4] `safeNextPath` rechaza backslash + test. Ruta: inline. Commit: 35ace08
 - T5 [S5] Configurar `secure`/`httpOnly` en cookies (prod vs dev). Ruta: inline. Commit: 50c2cfa
-- T6 [S6] Cabeceras de seguridad en `next.config.ts`. Ruta: inline. Commit: —
+- T6 [S6] Cabeceras de seguridad en `next.config.ts`. Ruta: inline. Commit: c6e605b
 - T7 [S7] Límites de longitud en inputs. Ruta: inline. Commit: —
 - T8 [S8] Expiración/regeneración de `invite_token` + lectura restringida al admin. Ruta: delegado (escritor). Commit: —
 - T9 [S9] Habilitar captcha (config dashboard, no migración; requiere decisión de proveedor hcaptcha vs turnstile). Ruta: pendiente. Commit: —
@@ -147,3 +147,4 @@ Checks: `npm test:db`.
 - L9 (2026-10-20) — **Retomada la feature.** Baseline verificado verde al arrancar: `db:reset` EXIT=0, `test:db` 675/675, `npm test` 1606/1606, `typecheck` limpio. El bloqueo de `.env.local` (L8) **ya no reproduce**; no hizo falta ningún cambio de repo. Rama `feat/security-hardening` creada desde `main` (63376fa, ya al día con origin). Causa raíz del error original sigue sin determinar (probable ambiental/transitoria). `docs/despliegue.md:311` quedó obsoleta.
 - L10 (2026-10-20) — S4 hecho (commit 35ace08): `safeNextPath` ahora rechaza `\` además de `//`. TDD RED→GREEN verificado (test falló con `'/\evil.com'` antes de la fix, 8/8 después). Suite unitaria 1607/1607 sin regresiones. Ruta inline, sin verifier (cambio contenido, función pura con test propio).
 - L11 (2026-10-20) — S5 hecho (commit 50c2cfa): cookies de sesión con `httpOnly: true` (siempre) y `Secure` (sólo prod) vía `cookieOptions` compartido en `db/client.ts`, aplicado en `db/server.ts` y `middleware.ts`. Verificado: `getUser` sólo se llama server-side, `browserClient` sólo se usa para el OAuth de Google (no lee la cookie de sesión), así que `httpOnly` no rompe el browser. typecheck + build + 1608 unit verdes. Falta la verificación MANUAL de cabeceras en prod (no reproducible local).
+- L12 (2026-10-20) — S6 hecho (commit c6e605b): cabeceras de seguridad (CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, HSTS) vía `headers()` en `next.config.ts`, lógica pura en `core/security-headers.ts` (testeable). CSP verificada contra lo que la app realmente carga: todo `self` salvo `connect-src` a Supabase (derivado de `NEXT_PUBLIC_SUPABASE_URL`); `'unsafe-eval'` sólo en dev. Smoke test con `next start` confirmó las 6 cabeceras en la respuesta real. Verificación manual de navegación en prod aún pendiente.

@@ -1,4 +1,5 @@
 import { isTournamentSport, shuffled, sideOfRow, sportFormatError } from '@/core'
+import { MAX_SEASON_NAME_LENGTH } from '@/core/input-limits'
 import type {
   Award,
   DisciplineId,
@@ -524,6 +525,9 @@ export async function createSeason(
 
   const trimmed = name.trim()
   if (trimmed.length === 0) throw new EdgeError('El torneo necesita un nombre.')
+  if (trimmed.length > MAX_SEASON_NAME_LENGTH) {
+    throw new EdgeError(`El nombre no puede pasar de ${MAX_SEASON_NAME_LENGTH} caracteres.`)
+  }
   if (mySeatIndex !== null && (mySeatIndex < 0 || mySeatIndex >= squadNames.length)) {
     throw new EdgeError('El asiento que elegiste no está en el plantel.')
   }
@@ -853,6 +857,9 @@ export async function renameSeason(
 ): Promise<void> {
   const trimmed = name.trim()
   if (trimmed.length === 0) throw new EdgeError('El torneo necesita un nombre.')
+  if (trimmed.length > MAX_SEASON_NAME_LENGTH) {
+    throw new EdgeError(`El nombre no puede pasar de ${MAX_SEASON_NAME_LENGTH} caracteres.`)
+  }
 
   const { error, count } = await supabase
     .from('seasons')

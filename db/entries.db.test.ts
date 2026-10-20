@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { defaultConfig } from '@/core'
+import { MAX_SEASON_NAME_LENGTH } from '@/core/input-limits'
 import { addSquadSeat, removeSeat, renameSeat, unlinkSeat } from './entries'
 import {
   closeMatchday,
@@ -285,6 +286,19 @@ describe('renameSeason', () => {
     expect((await seasonHeader(admin.client, seasonId)).name).toBe('Los Jueves 2026')
 
     await expect(renameSeason(admin.client, seasonId, '  ')).rejects.toThrow(/necesita un nombre/)
+  })
+
+  it(`rechaza un nombre de más de ${MAX_SEASON_NAME_LENGTH} caracteres`, async () => {
+    const admin = await createTestUser()
+    const { seasonId } = await createSeason(admin.client, {
+      name: 'Los Jueves',
+      squadNames: squadNames(8),
+      config: defaultConfig(8),
+    })
+
+    await expect(renameSeason(admin.client, seasonId, 'x'.repeat(MAX_SEASON_NAME_LENGTH + 1))).rejects.toThrow(
+      /no puede pasar/,
+    )
   })
 })
 

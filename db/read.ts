@@ -948,16 +948,22 @@ export async function seasonAwardsOf(
 
 /** Pairs, matches and full sets of one matchday. Empty pairs/matches — not an error — for a matchday still in DRAFT. */
 export async function matchdayDetail(supabase: Client, matchdayId: string): Promise<MatchdayDetail> {
-  const { data: matchdayRow, error: matchdayError } = await supabase
-    .from('matchdays')
-    .select('id, number, kind, status, played_on, discipline_id, allows_draw, formato, match_format')
-    .eq('id', matchdayId)
-    .maybeSingle()
+  // La fila de la fecha, los lados/partidos y los invitados son independientes:
+  // van en paralelo. El error "La fecha no existe" se resuelve igual, sólo que
+  // después de que las otras lecturas (vacías para una fecha inexistente) ya
+  // hayan vuelto.
+  const [matchdayResult, { sides, matches }, guestIds] = await Promise.all([
+    supabase
+      .from('matchdays')
+      .select('id, number, kind, status, played_on, discipline_id, allows_draw, formato, match_format')
+      .eq('id', matchdayId)
+      .maybeSingle(),
+    pairsAndMatchesOf(supabase, matchdayId),
+    guestIdsOf(supabase, matchdayId),
+  ])
+  const { data: matchdayRow, error: matchdayError } = matchdayResult
   if (matchdayError) throw new EdgeError(`No se pudo leer la fecha: ${matchdayError.message}`)
   if (matchdayRow === null) throw new EdgeError('La fecha no existe.')
-
-  const { sides, matches } = await pairsAndMatchesOf(supabase, matchdayId)
-  const guestIds = await guestIdsOf(supabase, matchdayId)
 
   return { matchday: toMatchdaySummary(matchdayRow), sides, matches, guestIds }
 }
@@ -985,11 +991,12 @@ export async function closedHistoryAll(
     .order('number', { ascending: true })
   if (error) throw new EdgeError(`No se pudieron leer las fechas cerradas: ${error.message}`)
 
-  const history: PlayedMatchday[] = []
-  for (const row of data ?? []) {
-    const { sides, matches } = await pairsAndMatchesOf(supabase, row.id)
-    history.push({ number: row.number, sides, matches })
-  }
+  const history: PlayedMatchday[] = await Promise.all(
+    (data ?? []).map(async (row) => {
+      const { sides, matches } = await pairsAndMatchesOf(supabase, row.id)
+      return { number: row.number, sides, matches }
+    }),
+  )
   return history
 }
 
@@ -1052,11 +1059,28 @@ async function pairsAndMatchesOf(
   supabase: Client,
   matchdayId: string,
 ): Promise<{ sides: Side[]; matches: MatchWithId[] }> {
-  const { data: pairRows, error: pairsError } = await supabase
-    .from('pairs')
-    .select('id, entry_a, entry_b, pair_size')
-    .eq('matchday_id', matchdayId)
+  // Pares y partidos no se dependen: van en paralelo. Los sets sí dependen de
+  // los partidos (`matchIds`), así que se leen después.
+  const [{ data: pairRows, error: pairsError }, { data: matchRows, error: matchesError }] = await Promise.all([
+    supabase
+      .from('pairs')
+      .select('id, entry_a, entry_b, pair_size')
+      .eq('matchday_id', matchdayId),
+    supabase
+      .from('matches')
+      .select('id, round, pair_a, pair_b, fase, grupo')
+      .eq('matchday_id', matchdayId)
+      .order('round', { ascending: true })
+      // Desempate por `id` (N77): `round` solo NO alcanza — una fecha de 4 lados
+      // tiene DOS partidos por ronda, y sin un segundo criterio el orden entre
+      // ellos lo decide el plan de Postgres. Es la causa del flake intermitente
+      // de `db/redraft.db.test.ts`, que comparaba el array de partidos con
+      // `toEqual` antes y después de un redraft: las escrituras movían las filas
+      // en el heap y a veces volvían al revés, sin que nada estuviera roto.
+      .order('id', { ascending: true }),
+  ])
   if (pairsError) throw new EdgeError(`No se pudieron leer las parejas: ${pairsError.message}`)
+  if (matchesError) throw new EdgeError(`No se pudieron leer los partidos: ${matchesError.message}`)
 
   const sideById = new Map(
     (pairRows ?? []).map((row) => [
@@ -1064,20 +1088,6 @@ async function pairsAndMatchesOf(
       sideOfRow(row.pair_size as SideSize, row.entry_a, row.entry_b),
     ]),
   )
-
-  const { data: matchRows, error: matchesError } = await supabase
-    .from('matches')
-    .select('id, round, pair_a, pair_b, fase, grupo')
-    .eq('matchday_id', matchdayId)
-    .order('round', { ascending: true })
-    // Desempate por `id` (N77): `round` solo NO alcanza — una fecha de 4 lados
-    // tiene DOS partidos por ronda, y sin un segundo criterio el orden entre
-    // ellos lo decide el plan de Postgres. Es la causa del flake intermitente
-    // de `db/redraft.db.test.ts`, que comparaba el array de partidos con
-    // `toEqual` antes y después de un redraft: las escrituras movían las filas
-    // en el heap y a veces volvían al revés, sin que nada estuviera roto.
-    .order('id', { ascending: true })
-  if (matchesError) throw new EdgeError(`No se pudieron leer los partidos: ${matchesError.message}`)
 
   const matchIds = (matchRows ?? []).map((row) => row.id)
   const { data: setRows, error: setsError } =

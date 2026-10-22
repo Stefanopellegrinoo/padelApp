@@ -9,6 +9,13 @@ const archivo = Archivo({
 
 export const metadata: Metadata = {
   title: 'Padel Liga',
+  description: 'El campeonato del grupo: la tabla, las fechas y los resultados.',
+  openGraph: {
+    title: 'Padel Liga',
+    description: 'El campeonato del grupo: la tabla, las fechas y los resultados.',
+    locale: 'es_AR',
+    type: 'website',
+  },
   // `appleWebApp` es lo que iOS mira, porque hasta hace poco ignoraba el
   // manifest para esto. `statusBarStyle: 'default'` deja que iOS se ocupe de la
   // barra de estado en vez de meter el contenido abajo: `black-translucent`

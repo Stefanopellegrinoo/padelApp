@@ -26,7 +26,17 @@ export default function manifest(): MetadataRoute.Manifest {
     short_name: 'Padel',
     description: 'El campeonato del grupo: la tabla, las fechas y los resultados.',
     lang: 'es-AR',
+    // Igual a `start_url` a propósito: es la identidad de la app, y con este
+    // valor las instalaciones que ya existen (que la derivaban de `start_url`)
+    // no se duplican ni se pierden al agregar el campo.
+    id: '/torneos',
     start_url: '/torneos',
+    categories: ['sports'],
+    shortcuts: [
+      { name: 'Mis torneos', url: '/torneos' },
+      { name: 'Torneo rápido', url: '/rapido' },
+      { name: 'Amigos', url: '/amigos' },
+    ],
     scope: '/',
     display: 'standalone',
     orientation: 'portrait',

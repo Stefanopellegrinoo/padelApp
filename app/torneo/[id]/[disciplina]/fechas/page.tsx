@@ -179,7 +179,8 @@ export default async function FechasPage({ params }: PageProps) {
             `regularMatchdays` filas al crear la temporada. Esta lista dibuja
             las que faltan a partir de esa config — un número sin fila real en
             `matchdays` sale como "Por jugarse", dimmed, sin link a una fecha
-            que todavía no existe. */}
+            que todavía no existe. Se apaga con borde punteado y NO con `opacity`:
+            ésta daba 2.18:1 de contraste en claro y 3.14 en oscuro. */}
         {Array.from({ length: discipline.config.regularMatchdays }, (_, index) => index + 1).map((number) => {
           const matchday = regularMatchdays.find((candidate) => candidate.number === number) ?? null
 
@@ -187,7 +188,7 @@ export default async function FechasPage({ params }: PageProps) {
             return (
               <div
                 key={number}
-                className="block rounded-[14px] border border-line bg-surface p-[14px] opacity-[0.62]"
+                className="block rounded-[14px] border border-dashed border-line bg-surface p-[14px]"
               >
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
@@ -238,7 +239,7 @@ export default async function FechasPage({ params }: PageProps) {
               <div className="flex items-center justify-between gap-2">
                 <p
                   className={`text-[10.5px] font-extrabold uppercase tracking-[.14em] ${
-                    live ? 'opacity-75' : 'text-muted'
+                    live ? 'opacity-90' : 'text-muted'
                   }`}
                 >
                   {notice ?? `Fecha ${matchday.number}`}

@@ -8,15 +8,15 @@
   --color-chip: #eaefea;
   --color-line: #e4e9e5;
   --color-text: #10231a;
-  --color-muted: #6b7a72;
+  --color-muted: #5f6e66;
   --color-accent: #0e5c3f;
   --color-accent-text: #ffffff;
   --color-accent-link: #0e5c3f;
-  --color-live: #d1462f;
+  --color-live: #c13d27;
   --color-live-bg: #fbeae6;
-  --color-up: #2f8a5b;
+  --color-up: #27794e;
   --color-ok-bg: #e6f2ea;
-  --color-down: #c0553a;
+  --color-down: #b24b31;
   --color-warn-bg: #f8ece4;
   --color-scrim: rgba(10, 25, 18, 0.45);
 
@@ -62,6 +62,24 @@
     --color-warn-bg: #2a2016;
     --color-scrim: rgba(0, 0, 0, 0.6);
   }
+}
+
+html {
+  /* Controles nativos (scrollbars, selects, autofill) siguen al sistema igual
+     que las variables de arriba. `manipulation` mata el delay y el doble-tap
+     zoom; `overscroll-behavior-y: none` evita el rebote/pull-to-refresh que
+     delata a una web en modo standalone. El pinch-zoom sigue andando. */
+  color-scheme: light dark;
+  touch-action: manipulation;
+  overscroll-behavior-y: none;
+}
+
+/* Nav y botones se tocan, no se seleccionan: sin el menú de "copiar" al
+   mantener apretado. El texto de las pantallas sigue seleccionable. */
+nav,
+button {
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 
 body {

@@ -95,7 +95,7 @@ export function Jugar({ torneo, onCargarMarcador, onNuevoTorneo }: JugarProps) {
 
       {acabo && ganador !== null && (
         <div className="rounded-card bg-accent p-4 text-accent-text">
-          <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] opacity-75">Campeón</p>
+          <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] opacity-90">Campeón</p>
           <p className="mt-1 text-[19px] font-extrabold">{ganador.jugadores.join(' y ')}</p>
         </div>
       )}

@@ -28,6 +28,13 @@ describe('safeNextPath', () => {
     expect(safeNextPath('/\\evil.com')).toBe('/')
   })
 
+  // El parser de URL del navegador borra tabs y saltos de línea antes de
+  // resolver: `/<TAB>/evil.com` termina siendo `//evil.com`.
+  it('rechaza el tab o salto de línea que el browser borra', () => {
+    expect(safeNextPath('/\t/evil.com')).toBe('/')
+    expect(safeNextPath('/\n/evil.com')).toBe('/')
+  })
+
   it('rechaza lo que no es un string', () => {
     expect(safeNextPath(null)).toBe('/')
     expect(safeNextPath(undefined)).toBe('/')

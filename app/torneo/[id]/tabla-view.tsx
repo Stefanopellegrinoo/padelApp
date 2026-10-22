@@ -146,7 +146,7 @@ export function TablaView({
 
       {liveMatchday !== null && (
         <div className="rounded-card bg-accent p-4 text-accent-text">
-          <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] opacity-75">
+          <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] opacity-90">
             Próxima fecha
           </p>
           <p className="text-[21px] font-extrabold">

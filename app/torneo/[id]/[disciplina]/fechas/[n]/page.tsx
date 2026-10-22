@@ -864,7 +864,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
         {champion !== null ? (
           <div className="flex flex-col gap-2">
             <div className="rounded-card bg-accent p-5 text-center text-accent-text">
-              <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] opacity-75">
+              <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] opacity-90">
                 Campeón del año
               </p>
               <p className="mt-1 text-[26px] font-extrabold tracking-[-.03em]">{champion.name}</p>

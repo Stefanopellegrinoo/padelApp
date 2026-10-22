@@ -468,7 +468,7 @@ export function CierreFecha({
             complete && !pending ? 'bg-accent text-accent-text' : 'bg-chip text-muted'
           } ${pending ? '' : 'disabled:opacity-100'}`}
         >
-          {complete ? 'Cerrar fecha' : `Cerrar fecha · faltan ${remaining} partidos`}
+          {complete ? 'Cerrar fecha' : `Cerrar fecha · ${remaining === 1 ? 'falta 1 partido' : `faltan ${remaining} partidos`}`}
         </button>
       )}
 

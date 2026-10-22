@@ -690,7 +690,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
     // Excluye un `TERCER_PUESTO` sin jugar (decisiones #3979/#3988): la RPC
     // `close_matchday` (0041) ya tolera cerrar con ese único partido vacío, y
     // el botón "Cerrar fecha" de más abajo tiene que estar de acuerdo — si
-    // no, queda deshabilitado para siempre con "faltan 1 partidos" aunque el
+    // no, queda deshabilitado para siempre con "falta 1 partido" aunque el
     // servidor acepte cerrar. `isUnplayedThirdPlace` (core/knockout.ts): la
     // misma regla vive también en `closeMatchday` (db/matchday.ts) y en 0041
     // (SQL) — refactor sobre PR21 D2, sin esto la regla quedaba escrita tres

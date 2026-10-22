@@ -322,7 +322,7 @@ describe('la fecha GROUPS_KNOCKOUT en juego — fase y llave (REQ-D8-1, decisió
 
     expect(html).not.toContain('>Cerrar fase<')
     expect(html).toContain('>Cerrar fecha<')
-    expect(html).not.toContain('faltan 1 partidos')
+    expect(html).not.toContain('falta 1 partido')
   })
 })
 

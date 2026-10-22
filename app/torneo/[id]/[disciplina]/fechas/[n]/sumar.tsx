@@ -62,13 +62,13 @@ export function SumarInvitado({
             )
           case 'PAREJA_INVITADA':
             return (
-              <p key={guest.entryId} className="text-[11.5px] font-[600] text-muted">
+              <p key={guest.entryId} className="text-[12px] font-[600] text-muted">
                 {`${guest.name} jugó esta fecha en una pareja que no cobró puntos —lo habitual es que haya jugado con otro invitado—. Sumarlo desde acá le cambiaría los puntos a los demás, por eso no se puede: si va a jugar el torneo, agregalo al plantel desde Ajustes › Plantel.`}
               </p>
             )
           case 'SIN_PAREJA':
             return (
-              <p key={guest.entryId} className="text-[11.5px] font-[600] text-muted">
+              <p key={guest.entryId} className="text-[12px] font-[600] text-muted">
                 {`${guest.name} no quedó en ninguna pareja de esta fecha, así que no hay ningún punto suyo que conservar. Si va a jugar el torneo, agregalo al plantel desde Ajustes › Plantel.`}
               </p>
             )

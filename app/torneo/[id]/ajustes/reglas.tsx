@@ -34,7 +34,7 @@ export function Reglas({
 
   return (
     <section className="flex flex-col gap-2">
-      <h2 className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
+      <h2 className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">
         {disciplineLabel === null ? 'Reglas de la casa' : `Reglas de la casa · ${disciplineLabel}`}
       </h2>
 

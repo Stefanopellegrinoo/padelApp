@@ -153,7 +153,7 @@ export function RulesBody({ seasonId, disciplines, adminName, isAdmin }: RulesBo
 
             {hasText && (
               <div className="flex flex-col gap-1">
-                <h3 className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
+                <h3 className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">
                   Reglas de la casa
                 </h3>
                 <div

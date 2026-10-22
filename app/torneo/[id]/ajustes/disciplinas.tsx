@@ -31,7 +31,7 @@ export interface SquadMemberVM {
   name: string
 }
 
-const ROTULO = 'text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted'
+const ROTULO = 'text-[12px] font-extrabold uppercase tracking-[.14em] text-muted'
 
 /** Una tarjeta nueva, con la ficha del deporte para `squadSize` jugadores y su primera modalidad. */
 const tarjetaNueva = (kind: TournamentSport, squadSize: number): DeporteElegido => elegirDeporte([], kind, squadSize)[0]!
@@ -123,7 +123,7 @@ export function NuevoDeporte({
       />
 
       <fieldset className="flex flex-col gap-1.5 rounded-card border border-line bg-surface p-4">
-        <legend className="float-left mb-1.5 w-full text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
+        <legend className="float-left mb-1.5 w-full text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">
           Quién juega ({playing.length})
         </legend>
         {squad.map((member) => (
@@ -286,7 +286,7 @@ export function Disciplinas({
 
   return (
     <section id="disciplinas" className="flex flex-col gap-2 scroll-mt-4">
-      <h2 className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">Disciplinas</h2>
+      <h2 className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">Disciplinas</h2>
 
       <div className="overflow-hidden rounded-[14px] border border-line bg-surface">
         {disciplines.map((discipline, index) => (

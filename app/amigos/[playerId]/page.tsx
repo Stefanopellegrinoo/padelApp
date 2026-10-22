@@ -17,13 +17,13 @@ function Cuenta({ label, registro }: { label: string; registro: Registro }) {
   const tono = registro.won > registro.lost ? 'text-up' : registro.lost > registro.won ? 'text-down' : ''
   return (
     <div className="rounded-[14px] border border-line bg-surface p-[14px]">
-      <span className="block text-[9.5px] font-extrabold uppercase tracking-[.13em] text-muted">{label}</span>
+      <span className="block text-[12px] font-extrabold uppercase tracking-[.13em] text-muted">{label}</span>
       <span className={`mt-1 block text-[24px] leading-[1.1] font-extrabold tabular-nums ${tono}`}>
         {registro.won} – {registro.lost}
       </span>
-      <span className="block text-[11px] font-semibold text-muted">ganados – perdidos</span>
+      <span className="block text-[12px] font-semibold text-muted">ganados – perdidos</span>
       {registro.drew > 0 && (
-        <span className="block text-[11px] font-semibold text-muted">
+        <span className="block text-[12px] font-semibold text-muted">
           y {registro.drew} {registro.drew === 1 ? 'empate' : 'empates'}
         </span>
       )}

@@ -50,7 +50,7 @@ import {
   type Squad,
 } from './wizard-state'
 
-const ROTULO = 'text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted'
+const ROTULO = 'text-[12px] font-extrabold uppercase tracking-[.14em] text-muted'
 const AYUDA = 'text-pretty text-[13.5px] font-[550] leading-[1.5] text-muted'
 const TITLES = ['Nuevo torneo', 'Jugadores', 'Cómo se juega', 'Listo, así se juega']
 const LINK = 'min-h-[44px] text-center text-[14px] font-extrabold text-accent-link'
@@ -97,7 +97,7 @@ function Aviso({ children }: { children: string }) {
 /** La marca del asiento propio. Es lo único que distingue una fila de la otra. */
 function Vos() {
   return (
-    <span className="shrink-0 rounded-full bg-accent px-2 py-[3px] text-[10px] font-extrabold text-accent-text">
+    <span className="shrink-0 rounded-full bg-accent px-2 py-[3px] text-[12px] font-extrabold text-accent-text">
       vos
     </span>
   )
@@ -455,8 +455,8 @@ export function Crear({ myName }: { myName: string }) {
         {pantalla === 1 && (
           <>
             <div className="flex items-center justify-between">
-              <p className="text-[11.5px] font-extrabold uppercase tracking-[.14em] text-muted">El plantel</p>
-              <p className="text-[11.5px] font-extrabold text-muted">{`${filled} jugadores`}</p>
+              <p className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">El plantel</p>
+              <p className="text-[12px] font-extrabold text-muted">{`${filled} jugadores`}</p>
             </div>
             {/* Tipear en la última fila agrega la que sigue (`namesAfterEdit`): la lista se estira sola. */}
             {names.map((seat, index) => (

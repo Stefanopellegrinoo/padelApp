@@ -60,7 +60,7 @@ export default async function UnirsePage({ params, searchParams }: PageProps) {
   return (
     <main className="flex min-h-dvh flex-col gap-5 bg-bg px-6 pt-4 pb-[26px] text-text">
       <div className="flex flex-col gap-1">
-        <p className="text-[11.5px] font-extrabold text-muted">Te invitaron a</p>
+        <p className="text-[12px] font-extrabold text-muted">Te invitaron a</p>
         <h1 className="text-[32px] font-extrabold tracking-[-.03em]">{first.season_name}</h1>
         <p className="text-[14px] font-[550] text-muted">
           {seats.length} jugadores · organiza {first.admin_name}

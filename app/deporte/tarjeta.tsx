@@ -5,7 +5,7 @@ import { fichaLine, isSportId, modalityLabel, sportLabel, sportOf, type Modality
 import type { DisciplineRules } from './personalizar-reglas-state'
 import { offeredModalities, primeraFechaKey, type PrimeraFecha } from './tarjeta-state'
 
-const ROTULO = 'text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted'
+const ROTULO = 'text-[12px] font-extrabold uppercase tracking-[.14em] text-muted'
 
 /** Un botón de una elección excluyente, como los de /rapido; con `sub`, una segunda línea más chica. */
 function Opcion({
@@ -29,7 +29,7 @@ function Opcion({
       }`}
     >
       {children}
-      {sub != null && <span className="mt-0.5 block text-[11px] font-semibold opacity-80">{sub}</span>}
+      {sub != null && <span className="mt-0.5 block text-[12px] font-semibold opacity-80">{sub}</span>}
     </button>
   )
 }

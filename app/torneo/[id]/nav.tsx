@@ -55,7 +55,7 @@ function Pestana({ label, active }: { label: string; active: boolean }) {
   return (
     <span className={`flex flex-col items-center gap-1 ${lit ? 'text-accent-link' : 'text-muted'}`}>
       <span className={`h-[19px] w-[19px] border-2 border-current ${lit ? 'bg-current' : ''}`} />
-      <span className="text-[9.5px] font-extrabold">{label}</span>
+      <span className="text-[12px] font-extrabold">{label}</span>
     </span>
   )
 }

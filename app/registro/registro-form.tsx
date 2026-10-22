@@ -71,7 +71,7 @@ export default function RegistroForm() {
         >
           Continuar con Google
         </button>
-        <div className="flex items-center gap-3 text-[11.5px] font-[600] text-muted">
+        <div className="flex items-center gap-3 text-[12px] font-[600] text-muted">
           <span className="h-px flex-1 bg-line" />
           o
           <span className="h-px flex-1 bg-line" />
@@ -80,7 +80,7 @@ export default function RegistroForm() {
         <form action={formAction} className="flex flex-col gap-4">
           <input type="hidden" name="next" value={next} />
           <div className="flex flex-col gap-1">
-            <label htmlFor="displayName" className="text-[11.5px] font-extrabold text-muted">
+            <label htmlFor="displayName" className="text-[12px] font-extrabold text-muted">
               Tu nombre
             </label>
             <input
@@ -93,7 +93,7 @@ export default function RegistroForm() {
           </div>
 
           <div className="flex flex-col gap-1">
-            <label htmlFor="email" className="text-[11.5px] font-extrabold text-muted">
+            <label htmlFor="email" className="text-[12px] font-extrabold text-muted">
               Mail
             </label>
             <input
@@ -110,7 +110,7 @@ export default function RegistroForm() {
           </div>
 
           <div className="flex flex-col gap-1">
-            <label htmlFor="password" className="text-[11.5px] font-extrabold text-muted">
+            <label htmlFor="password" className="text-[12px] font-extrabold text-muted">
               Contraseña
             </label>
             <div
@@ -129,7 +129,7 @@ export default function RegistroForm() {
               <button
                 type="button"
                 onClick={() => setShowPassword((value) => !value)}
-                className="text-[11.5px] font-extrabold text-muted"
+                className="text-[12px] font-extrabold text-muted"
               >
                 {showPassword ? 'Ocultar' : 'Ver'}
               </button>
@@ -149,7 +149,7 @@ export default function RegistroForm() {
             Crear cuenta
           </button>
 
-          <p className="text-center text-[11.5px] font-[550] text-muted">
+          <p className="text-center text-[12px] font-[550] text-muted">
             Al crear la cuenta aceptás los términos y la política de privacidad.
           </p>
         </form>

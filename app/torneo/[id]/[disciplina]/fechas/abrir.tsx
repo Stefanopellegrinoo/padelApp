@@ -83,7 +83,7 @@ export function AbrirFecha({ seasonId, disciplineId, number, sportName }: AbrirF
         >
           Abrir fecha {number}
           {/* Renglón propio y más chico: al lado del selector de fecha no entra en uno. */}
-          {sportName !== undefined && <span className="block text-[11.5px] font-bold"> de {sportName}</span>}
+          {sportName !== undefined && <span className="block text-[12px] font-bold"> de {sportName}</span>}
         </button>
       </div>
 

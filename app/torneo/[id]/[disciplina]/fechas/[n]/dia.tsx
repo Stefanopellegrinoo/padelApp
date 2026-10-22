@@ -50,7 +50,7 @@ export function DiaDeLaFecha({
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center gap-2">
-        <label htmlFor="dia" className="text-[11.5px] font-extrabold text-muted">
+        <label htmlFor="dia" className="text-[12px] font-extrabold text-muted">
           Se juega el
         </label>
         <input

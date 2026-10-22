@@ -85,7 +85,7 @@ export function Equipos({
 
   return (
     <section data-equipos={disciplineId} data-equipos-season={seasonId} className="flex flex-col gap-2">
-      <h2 className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">Equipos</h2>
+      <h2 className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">Equipos</h2>
 
       {teams.length > 0 && (
         <div className="overflow-hidden rounded-[14px] border border-line bg-surface">

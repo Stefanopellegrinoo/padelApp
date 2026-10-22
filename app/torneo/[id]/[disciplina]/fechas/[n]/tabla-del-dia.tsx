@@ -58,7 +58,7 @@ export function TablaDelDia({
   return (
     <div className="overflow-hidden rounded-[14px] border border-line">
       <div
-        className={`grid ${grid} gap-2 bg-chip px-3 py-2 text-[9.5px] font-extrabold uppercase tracking-[.13em] text-muted`}
+        className={`grid ${grid} gap-2 bg-chip px-3 py-2 text-[12px] font-extrabold uppercase tracking-[.13em] text-muted`}
       >
         <span>{tituloLado}</span>
         <span className="text-right">PG</span>
@@ -76,7 +76,7 @@ export function TablaDelDia({
           <span className="flex items-center gap-1.5 font-bold">
             {fila.nombre}
             {fila.esInvitado && (
-              <span className="shrink-0 rounded-full border border-line px-1.5 py-0.5 text-[9px] font-extrabold text-muted">
+              <span className="shrink-0 rounded-full border border-line px-1.5 py-0.5 text-[12px] font-extrabold text-muted">
                 Invitado
               </span>
             )}

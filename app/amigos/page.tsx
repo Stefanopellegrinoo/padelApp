@@ -11,7 +11,7 @@ interface PageProps {
   searchParams: Promise<{ error?: string }>
 }
 
-const SECTION_LABEL = 'text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted'
+const SECTION_LABEL = 'text-[12px] font-extrabold uppercase tracking-[.14em] text-muted'
 const LIST = 'overflow-hidden rounded-card border border-line bg-surface'
 const ROW = 'flex min-h-[64px] items-center gap-3 px-4 py-3'
 
@@ -34,7 +34,7 @@ function SectionTitle({ children, count }: { children: string; count?: number })
     <h2 className={`flex items-center gap-2 ${SECTION_LABEL}`}>
       {children}
       {count !== undefined && (
-        <span className="rounded-full bg-chip px-2 py-0.5 text-[10.5px] tracking-normal">{count}</span>
+        <span className="rounded-full bg-chip px-2 py-0.5 text-[12px] tracking-normal">{count}</span>
       )}
     </h2>
   )
@@ -137,7 +137,7 @@ export default async function AmigosPage({ searchParams }: PageProps) {
               <div key={amigo.friendshipId} className={`${ROW} ${index > 0 ? 'border-t border-line' : ''}`}>
                 <Avatar name={amigo.displayName} />
                 <span className="min-w-0 flex-1 truncate text-[15px] font-bold text-muted">{amigo.displayName}</span>
-                <span className="shrink-0 rounded-full bg-chip px-2.5 py-1 text-[10.5px] font-extrabold text-muted">
+                <span className="shrink-0 rounded-full bg-chip px-2.5 py-1 text-[12px] font-extrabold text-muted">
                   Pendiente
                 </span>
               </div>
@@ -154,7 +154,7 @@ export default async function AmigosPage({ searchParams }: PageProps) {
           </p>
           <MiId playerId={myPlayerId ?? ''} />
           <form action={sendFriendRequest} className="flex flex-col gap-2">
-            <label htmlFor="friendPlayerId" className="text-[11.5px] font-extrabold text-muted">
+            <label htmlFor="friendPlayerId" className="text-[12px] font-extrabold text-muted">
               El ID de tu amigo
             </label>
             <input

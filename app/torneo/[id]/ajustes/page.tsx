@@ -180,14 +180,14 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
           sacaría del torneo a quien sólo quiso cerrar los ajustes. */}
       <Volver href={`/torneo/${seasonId}`} label="Tabla" />
       <header className="flex flex-col gap-[3px]">
-        <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
+        <p className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">
           {header.name}
         </p>
         <h1 className="text-[26px] font-extrabold tracking-[-.03em]">Ajustes</h1>
       </header>
 
       <section className="flex flex-col gap-2">
-        <h2 className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">Torneo</h2>
+        <h2 className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">Torneo</h2>
 
         <div className="overflow-hidden rounded-[14px] border border-line bg-surface">
           {/* El nombre se manda con un form y sin JavaScript: es un campo y un
@@ -252,7 +252,7 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
         )}
 
         {single && (
-          <p className="text-[11.5px] font-[600] text-muted">
+          <p className="text-[12px] font-[600] text-muted">
             Cambiar el formato con fechas ya jugadas no recalcula la tabla vieja.
           </p>
         )}

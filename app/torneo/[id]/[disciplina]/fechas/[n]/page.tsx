@@ -823,7 +823,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
             return (
               <span
                 key={sideKey(side)}
-                className={`rounded-full px-3 py-1.5 text-[11.5px] font-[750] ${
+                className={`rounded-full px-3 py-1.5 text-[12px] font-[750] ${
                   defending ? 'bg-ok-bg text-up' : 'bg-chip text-muted'
                 }`}
               >
@@ -864,7 +864,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
         {champion !== null ? (
           <div className="flex flex-col gap-2">
             <div className="rounded-card bg-accent p-5 text-center text-accent-text">
-              <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] opacity-90">
+              <p className="text-[12px] font-extrabold uppercase tracking-[.14em] opacity-90">
                 Campeón del año
               </p>
               <p className="mt-1 text-[26px] font-extrabold tracking-[-.03em]">{champion.name}</p>
@@ -886,7 +886,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
             <div className="flex flex-col gap-4">
               {groupedStandings.map((rows, index) => (
                 <div key={`grupo-${index + 1}`} className="flex flex-col gap-1.5">
-                  <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
+                  <p className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">
                     Grupo {index + 1}
                   </p>
                   <TablaDelDia
@@ -954,7 +954,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
           )}
 
           {anyGuestInTable && (
-            <p className="text-[11.5px] font-[600] text-muted">
+            <p className="text-[12px] font-[600] text-muted">
               El invitado no suma para el campeonato; su compañero sí.
             </p>
           )}
@@ -995,7 +995,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
         <Link href={`/torneo/${seasonId}/${disciplina}/fechas`} className="-mt-2 mb-1 flex min-h-[44px] w-fit items-center text-[12.5px] font-bold text-accent-link">
           ← Volver
         </Link>
-        <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">{kicker}</p>
+        <p className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">{kicker}</p>
         <h1 className="text-[26px] font-extrabold tracking-[-.03em]">
           {isMasters ? 'Masters' : `Fecha ${matchday.number}`}
         </h1>

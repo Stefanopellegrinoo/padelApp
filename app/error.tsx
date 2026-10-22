@@ -37,7 +37,7 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
       </Link>
 
       {error.digest !== undefined && (
-        <p className="mt-2 text-center text-[10.5px] font-[600] text-muted">
+        <p className="mt-2 text-center text-[12px] font-[600] text-muted">
           Referencia: {error.digest}
         </p>
       )}

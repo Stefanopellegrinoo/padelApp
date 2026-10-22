@@ -41,7 +41,7 @@ export default async function HomePage() {
         <div className="flex flex-col gap-[9px] pt-[10px]">
           {BULLETS.map((bullet) => (
             <div key={bullet} className="flex items-start gap-[11px]">
-              <span className="mt-[1px] flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full bg-ok-bg text-[11px] font-extrabold text-up">
+              <span className="mt-[1px] flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full bg-ok-bg text-[12px] font-extrabold text-up">
                 ✓
               </span>
               <span className="text-pretty text-[14px] leading-[1.45] font-semibold">{bullet}</span>

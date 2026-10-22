@@ -171,11 +171,11 @@ function porMes(partidos: readonly SharedMatch[]): { mes: string; partidos: Shar
 
 const CARD = 'relative flex flex-col gap-2 rounded-[14px] border border-line bg-surface p-[14px]'
 const META = 'flex min-w-0 items-center gap-1.5 text-[12px] font-bold text-muted'
-const CHIP = 'shrink-0 rounded-full bg-chip px-2 py-0.5 text-[10.5px] font-extrabold text-text'
+const CHIP = 'shrink-0 rounded-full bg-chip px-2 py-0.5 text-[12px] font-extrabold text-text'
 const TITULAR = 'text-[15px] leading-[1.3] font-extrabold tracking-[-.02em]'
 const QUIENES = 'font-semibold text-muted'
 const DETALLE = 'text-[12.5px] font-semibold text-muted'
-const AUTORIA = 'text-[11.5px] font-semibold text-muted'
+const AUTORIA = 'text-[12px] font-semibold text-muted'
 
 /** El color del resultado: los de la Tabla y Stats. Empate y sin resultado no toman partido. */
 const TONO: Record<Resultado, string> = { won: 'text-up', lost: 'text-down', drew: 'text-text' }
@@ -215,7 +215,7 @@ function Marcador({ partido, leyenda }: { partido: SharedMatch; leyenda: string 
           {partido.score !== null ? `${partido.score.mine}-${partido.score.theirs}` : '–'}
         </p>
       )}
-      <p className={`text-[11.5px] font-extrabold ${partido.outcome === 'drew' ? 'text-muted' : tono}`}>{leyenda}</p>
+      <p className={`text-[12px] font-extrabold ${partido.outcome === 'drew' ? 'text-muted' : tono}`}>{leyenda}</p>
     </div>
   )
 }
@@ -276,7 +276,7 @@ export function Historial({ nombre, friendPlayerId, partidos }: HistorialProps) 
       {porMes(partidos).map((grupo, index) => (
         <section key={`${grupo.mes}-${index}`} className="flex flex-col gap-2">
           <div className="flex items-center gap-3">
-            <h3 className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">{grupo.mes}</h3>
+            <h3 className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">{grupo.mes}</h3>
             <span className="h-px flex-1 bg-line" />
           </div>
           {grupo.partidos.map((partido) => {

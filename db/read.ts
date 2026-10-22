@@ -10,6 +10,7 @@
  * of its own: RLS is what keeps a stranger from reading a season that is not
  * theirs, and that only holds if the query actually runs as the caller.
  */
+import { notFound } from 'next/navigation'
 import { seasonStatusOf, sideOfRow } from '@/core'
 import type {
   Award,
@@ -434,8 +435,12 @@ export async function seasonHeader(supabase: Client, seasonId: string): Promise<
       .order('created_at', { ascending: true }),
     currentUserId(supabase),
   ])
+  // Sólo la temporada que no está es un 404 (y no un 500): `null` es "no existe
+  // o RLS no te la deja ver" y `22P02` es un id que ni es un UUID. Los demás
+  // errores siguen siendo EdgeError: ésos sí son fallas.
+  if (error?.code === '22P02') notFound()
   if (error) throw new EdgeError(`No se pudo leer la temporada: ${error.message}`)
-  if (data === null) throw new EdgeError('La temporada no existe.')
+  if (data === null) notFound()
   if (disciplinesError) {
     throw new EdgeError(`No se pudieron leer las disciplinas: ${disciplinesError.message}`)
   }

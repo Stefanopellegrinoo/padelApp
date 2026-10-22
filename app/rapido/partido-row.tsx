@@ -12,7 +12,7 @@ interface PartidoRowProps {
 }
 
 const TAP = 'min-h-[44px] rounded-field bg-chip px-3 text-[13.5px] font-extrabold'
-const ROTULO = 'text-[11.5px] font-extrabold uppercase tracking-[.14em] text-muted'
+const ROTULO = 'text-[12px] font-extrabold uppercase tracking-[.14em] text-muted'
 
 /**
  * Una fila de partido y su carga en dos toques, el mismo patrón que ya usa la

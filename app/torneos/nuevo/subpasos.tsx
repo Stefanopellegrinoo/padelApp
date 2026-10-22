@@ -46,7 +46,7 @@ export function ArmarParejas({
             className={`${FILA} flex min-h-[52px] items-center justify-between gap-3 px-4 py-3 text-left`}
           >
             <span className="min-w-0 break-words text-[15px] font-extrabold leading-tight">{pareja}</span>
-            <span className="shrink-0 rounded-full bg-chip px-2 py-[3px] text-[10.5px] font-extrabold text-muted">
+            <span className="shrink-0 rounded-full bg-chip px-2 py-[3px] text-[12px] font-extrabold text-muted">
               {`pareja ${numero}`}
             </span>
           </button>
@@ -183,7 +183,7 @@ export function OrdenarPorNivel({
               }`}
             >
               <span className="w-4 shrink-0 text-center text-[13px] font-extrabold text-muted">{(lugares?.indexOf(position) ?? position) + 1}</span>
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-chip text-[11px] font-extrabold text-muted">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-chip text-[12px] font-extrabold text-muted">
                 {jugadores.length === 1 ? initials(nombre) : jugadores.map((jugador) => initials(jugador)[0] ?? '').join('')}
               </span>
               <span className="min-w-0 flex-1 break-words text-[15px] font-extrabold leading-tight">{nombre}</span>

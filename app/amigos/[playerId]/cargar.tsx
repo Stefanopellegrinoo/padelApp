@@ -293,7 +293,7 @@ export function CasualForm({
                 (vos siempre estás), el otro abajo, un "vs" en el medio. */}
             <div className="flex flex-col gap-2 rounded-field bg-ok-bg p-3">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-up">Tu lado</span>
+                <span className="text-[12px] font-extrabold uppercase tracking-[.14em] text-up">Tu lado</span>
                 <span className="rounded-full bg-accent px-3 py-1.5 text-[12.5px] font-extrabold text-accent-text">
                   Vos
                 </span>
@@ -302,11 +302,11 @@ export function CasualForm({
             </div>
             <div aria-hidden className="flex items-center gap-3">
               <span className="h-px flex-1 bg-line" />
-              <span className="text-[11px] font-extrabold uppercase tracking-[.14em] text-muted">vs</span>
+              <span className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">vs</span>
               <span className="h-px flex-1 bg-line" />
             </div>
             <div className="flex flex-col gap-2 rounded-field bg-chip p-3">
-              <span className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">El otro lado</span>
+              <span className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">El otro lado</span>
               {slotKeys.filter((key) => key !== 'partner').map(slotField)}
             </div>
           </>
@@ -448,7 +448,7 @@ export function CasualMatchRow({
           setMenuOpen(!menuOpen)
           setConfirmingDelete(false)
         }}
-        className={`absolute top-1.5 right-1.5 flex h-10 w-10 items-center justify-center rounded-full text-[18px] leading-none font-extrabold text-muted ${
+        className={`absolute top-0.5 right-0.5 flex h-11 w-11 items-center justify-center rounded-full text-[18px] leading-none font-extrabold text-muted ${
           menuOpen ? 'bg-chip text-text' : ''
         }`}
       >

@@ -210,14 +210,14 @@ export default async function MisTorneosPage() {
               >
                 <div className="flex items-start justify-between gap-2">
                   <p className="text-[18px] font-extrabold tracking-[-.02em]">{card.name}</p>
-                  <span className="shrink-0 rounded-full bg-ok-bg px-[10px] py-[6px] text-[10.5px] font-extrabold text-up">
+                  <span className="shrink-0 rounded-full bg-ok-bg px-[10px] py-[6px] text-[12px] font-extrabold text-up">
                     {card.estado}
                   </span>
                 </div>
 
                 <div className="mt-3 flex items-center gap-4">
                   <div className="flex flex-col gap-[2px]">
-                    <p className="text-[9.5px] font-extrabold uppercase tracking-[.13em] text-muted">
+                    <p className="text-[12px] font-extrabold uppercase tracking-[.13em] text-muted">
                       Mi posición
                     </p>
                     <p className="text-[15px] font-extrabold">
@@ -226,7 +226,7 @@ export default async function MisTorneosPage() {
                   </div>
                   <span className="h-[26px] w-px shrink-0 bg-line" />
                   <div className="flex flex-col gap-[2px]">
-                    <p className="text-[9.5px] font-extrabold uppercase tracking-[.13em] text-muted">
+                    <p className="text-[12px] font-extrabold uppercase tracking-[.13em] text-muted">
                       Próxima fecha
                     </p>
                     <p className="text-[15px] font-extrabold">
@@ -243,7 +243,7 @@ export default async function MisTorneosPage() {
           {finished.length > 0 && (
             <>
               <div className="mt-3 flex items-center gap-3">
-                <p className="text-[9.5px] font-extrabold uppercase tracking-[.13em] text-muted">
+                <p className="text-[12px] font-extrabold uppercase tracking-[.13em] text-muted">
                   Terminados
                 </p>
                 <span className="h-px flex-1 bg-line" />

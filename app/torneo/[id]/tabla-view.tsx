@@ -127,7 +127,7 @@ export function TablaView({
       <header className="flex items-start justify-between">
         <div>
           {estado !== null && (
-            <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
+            <p className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">
               Fecha {activeMatchdayNumber} de {config.regularMatchdays} · {estado}
             </p>
           )}
@@ -146,7 +146,7 @@ export function TablaView({
 
       {liveMatchday !== null && (
         <div className="rounded-card bg-accent p-4 text-accent-text">
-          <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] opacity-90">
+          <p className="text-[12px] font-extrabold uppercase tracking-[.14em] opacity-90">
             Próxima fecha
           </p>
           <p className="text-[21px] font-extrabold">
@@ -164,7 +164,7 @@ export function TablaView({
               Ganaron la fecha {defenders.matchdayNumber} · les queda 1 defensa
             </p>
           </div>
-          <span className="shrink-0 rounded-full bg-ok-bg px-2.5 py-1 text-[10.5px] font-extrabold text-up">
+          <span className="shrink-0 rounded-full bg-ok-bg px-2.5 py-1 text-[12px] font-extrabold text-up">
             Repiten
           </span>
         </div>

@@ -86,10 +86,10 @@ export function Rondas({
         return (
           <div key={round.number} className="flex flex-col gap-2">
             <div className="flex items-center justify-between">
-              <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
+              <p className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">
                 Ronda {round.number} de {totalRounds}
               </p>
-              <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
+              <p className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">
                 {round.loadedCount}/{round.totalCount} cargados
               </p>
             </div>
@@ -100,7 +100,7 @@ export function Rondas({
                   <MatchCard key={match.key} match={match} carga={carga} />
                 ))}
                 {round.restingPairName !== null && (
-                  <p className="rounded-field bg-chip px-3 py-2 text-[11.5px] font-bold text-muted">
+                  <p className="rounded-field bg-chip px-3 py-2 text-[12px] font-bold text-muted">
                     Descansa esta ronda: {round.restingPairName}
                   </p>
                 )}
@@ -112,12 +112,12 @@ export function Rondas({
                 className="flex flex-col gap-1 rounded-[14px] border border-line bg-surface p-[13px] text-left"
               >
                 {round.matches.map((match) => (
-                  <span key={match.key} className="text-[11.5px] font-[650] text-muted">
+                  <span key={match.key} className="text-[12px] font-[650] text-muted">
                     {match.pairAName} {match.scoreA}–{match.scoreB} {match.pairBName}
                   </span>
                 ))}
                 {round.restingPairName !== null && (
-                  <span className="text-[11.5px] font-[650] text-muted">
+                  <span className="text-[12px] font-[650] text-muted">
                     Descansa esta ronda: {round.restingPairName}
                   </span>
                 )}

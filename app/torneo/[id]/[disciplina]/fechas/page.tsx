@@ -168,7 +168,7 @@ export default async function FechasPage({ params }: PageProps) {
       )}
 
       <header className="flex flex-col gap-[3px]">
-        <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
+        <p className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">
           {discipline.config.regularMatchdays} fechas · {closedMatchdays.length} jugadas
         </p>
         <h1 className="text-[26px] font-extrabold tracking-[-.03em]">Fechas</h1>
@@ -191,10 +191,10 @@ export default async function FechasPage({ params }: PageProps) {
                 className="block rounded-[14px] border border-dashed border-line bg-surface p-[14px]"
               >
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
+                  <p className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">
                     Fecha {number}
                   </p>
-                  <span className="shrink-0 rounded-full px-[10px] py-[6px] text-[10.5px] font-extrabold text-muted">
+                  <span className="shrink-0 rounded-full px-[10px] py-[6px] text-[12px] font-extrabold text-muted">
                     Por jugarse
                   </span>
                 </div>
@@ -238,14 +238,14 @@ export default async function FechasPage({ params }: PageProps) {
             >
               <div className="flex items-center justify-between gap-2">
                 <p
-                  className={`text-[10.5px] font-extrabold uppercase tracking-[.14em] ${
+                  className={`text-[12px] font-extrabold uppercase tracking-[.14em] ${
                     live ? 'opacity-90' : 'text-muted'
                   }`}
                 >
                   {notice ?? `Fecha ${matchday.number}`}
                   {matchday.playedOn !== null ? ` · ${matchdayDay(matchday.playedOn)}` : ''}
                 </p>
-                <span className={`shrink-0 rounded-full px-[10px] py-[6px] text-[10.5px] font-extrabold ${tagClass}`}>
+                <span className={`shrink-0 rounded-full px-[10px] py-[6px] text-[12px] font-extrabold ${tagClass}`}>
                   {tagLabel}
                 </span>
               </div>
@@ -253,7 +253,7 @@ export default async function FechasPage({ params }: PageProps) {
               {champion !== null && (
                 <div className="mt-2 flex flex-col gap-1">
                   <p className="text-[15px] font-extrabold">{champion.names}</p>
-                  <p className="text-[11.5px] font-bold text-muted">{champion.record}</p>
+                  <p className="text-[12px] font-bold text-muted">{champion.record}</p>
                 </div>
               )}
 
@@ -287,7 +287,7 @@ export default async function FechasPage({ params }: PageProps) {
           (`DisciplineHeader.hasMasters`) y esta pantalla no lo leía. */}
       {discipline.hasMasters && (
         <div className="rounded-[18px] border-[1.5px] border-dashed border-line bg-surface px-[18px] py-5">
-          <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">Cierre del año</p>
+          <p className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">Cierre del año</p>
           <h2 className="mt-1 text-[24px] font-extrabold">Masters</h2>
           <p className="mt-2 text-[13.5px] font-medium leading-[1.5]">
             Se juega con los {MASTERS_SIZE} primeros de la tabla al terminar las{' '}
@@ -300,14 +300,14 @@ export default async function FechasPage({ params }: PageProps) {
           {mastersMatchday !== null ? (
             <Link
               href={`/torneo/${seasonId}/${disciplina}/fechas/${mastersMatchday.number}`}
-              className="mt-3 inline-block rounded-full bg-ok-bg px-[10px] py-[6px] text-[10.5px] font-extrabold text-up"
+              className="mt-3 inline-block rounded-full bg-ok-bg px-[10px] py-[6px] text-[12px] font-extrabold text-up"
             >
               {mastersMatchday.status === 'CLOSED' ? 'Jugado' : 'En juego'}
             </Link>
           ) : header.isAdmin && remainingForMasters === 0 && !hasLiveMatchday ? (
             <ArmarMasters seasonId={seasonId} disciplineId={discipline.id} />
           ) : (
-            <span className="mt-3 inline-block rounded-full bg-chip px-[10px] py-[6px] text-[10.5px] font-extrabold text-muted">
+            <span className="mt-3 inline-block rounded-full bg-chip px-[10px] py-[6px] text-[12px] font-extrabold text-muted">
               Bloqueado
             </span>
           )}

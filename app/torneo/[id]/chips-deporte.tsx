@@ -26,7 +26,7 @@ export function ChipsDeporte({ seasonId, sports }: ChipsDeporteProps) {
           key={chip.href}
           href={chip.href}
           aria-current={chip.isActive ? 'page' : undefined}
-          className={`flex min-h-[44px] shrink-0 items-center whitespace-nowrap rounded-full px-[15px] text-[11.5px] font-extrabold ${
+          className={`flex min-h-[44px] shrink-0 items-center whitespace-nowrap rounded-full px-[15px] text-[12px] font-extrabold ${
             chip.isActive ? 'bg-accent text-accent-text' : 'bg-chip text-muted'
           }`}
         >

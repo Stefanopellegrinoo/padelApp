@@ -68,7 +68,7 @@ export default function LoginForm() {
         {googleError && (
           <p className="text-[12px] font-bold text-live">No pudimos entrar con Google. Probá de nuevo.</p>
         )}
-        <div className="flex items-center gap-3 text-[11.5px] font-[600] text-muted">
+        <div className="flex items-center gap-3 text-[12px] font-[600] text-muted">
           <span className="h-px flex-1 bg-line" />
           o
           <span className="h-px flex-1 bg-line" />
@@ -77,7 +77,7 @@ export default function LoginForm() {
         <form action={formAction} className="flex flex-col gap-4">
           <input type="hidden" name="next" value={next} />
           <div className="flex flex-col gap-1">
-            <label htmlFor="email" className="text-[11.5px] font-extrabold text-muted">
+            <label htmlFor="email" className="text-[12px] font-extrabold text-muted">
               Mail
             </label>
             <input
@@ -94,7 +94,7 @@ export default function LoginForm() {
           </div>
 
           <div className="flex flex-col gap-1">
-            <label htmlFor="password" className="text-[11.5px] font-extrabold text-muted">
+            <label htmlFor="password" className="text-[12px] font-extrabold text-muted">
               Contraseña
             </label>
             <div className="flex items-center rounded-field border-[1.5px] border-line bg-surface pr-[15px]">
@@ -109,7 +109,7 @@ export default function LoginForm() {
               <button
                 type="button"
                 onClick={() => setShowPassword((value) => !value)}
-                className="text-[11.5px] font-extrabold text-muted"
+                className="text-[12px] font-extrabold text-muted"
               >
                 {showPassword ? 'Ocultar' : 'Ver'}
               </button>

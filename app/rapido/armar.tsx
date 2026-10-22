@@ -1,6 +1,6 @@
 'use client'
 
-import Link from 'next/link'
+import { Volver } from '@/app/torneo/[id]/volver'
 import { useId, useState } from 'react'
 import {
   ARMADO_INICIAL,
@@ -23,7 +23,7 @@ const MODO_PAREJAS_LABEL: Record<ModoParejas, string> = {
   ROTATIVAS: 'Rotativas',
 }
 
-const ROTULO = 'text-[11.5px] font-extrabold uppercase tracking-[.14em] text-muted'
+const ROTULO = 'text-[12px] font-extrabold uppercase tracking-[.14em] text-muted'
 const CHIP =
   'flex min-h-[44px] items-center justify-center rounded-field px-3 text-[13.5px] font-extrabold'
 
@@ -161,9 +161,7 @@ export function Armar({ onEmpezar }: { onEmpezar: (armado: Armado) => void }) {
   return (
     <div className="flex flex-1 flex-col gap-4 px-6 pt-4 pb-[26px]">
       <div className="flex items-center justify-between">
-        <Link href="/" className="rounded-full bg-chip px-[14px] py-2 text-[12.5px] font-bold">
-          ← Inicio
-        </Link>
+        <Volver href="/" label="Inicio" />
       </div>
 
       <h1 className="text-[26px] font-extrabold tracking-[-.03em]">Torneo rápido</h1>
@@ -209,7 +207,7 @@ export function Armar({ onEmpezar }: { onEmpezar: (armado: Armado) => void }) {
           <div className="flex items-center justify-between rounded-field border border-line px-3 py-2.5">
             <div>
               <p className="text-[14px] font-bold">Rondas</p>
-              <p className="text-[11.5px] font-semibold text-muted">Cuántas fechas se juegan.</p>
+              <p className="text-[12px] font-semibold text-muted">Cuántas fechas se juegan.</p>
             </div>
             <StepperRondas value={armado.rondas} onChange={(rondas) => setArmado({ ...armado, rondas })} />
           </div>
@@ -217,7 +215,7 @@ export function Armar({ onEmpezar }: { onEmpezar: (armado: Armado) => void }) {
 
         <div className="flex items-center justify-between">
           <span className={ROTULO}>Jugadores</span>
-          <span className="text-[11.5px] font-extrabold text-muted">{jugadoresFiltrados.length}</span>
+          <span className="text-[12px] font-extrabold text-muted">{jugadoresFiltrados.length}</span>
         </div>
         {armado.jugadores.map((nombre, indice) => (
           <div key={indice} className="flex items-center gap-2">
@@ -266,7 +264,7 @@ export function Armar({ onEmpezar }: { onEmpezar: (armado: Armado) => void }) {
             <div className="flex flex-col gap-2">
               {chips.parejas.map(({ numero, jugadores }) => (
                 <div key={numero} className="flex items-center gap-2">
-                  <span className="w-[68px] shrink-0 text-[10.5px] font-extrabold uppercase tracking-[.04em] text-muted">
+                  <span className="w-[68px] shrink-0 text-[12px] font-extrabold uppercase tracking-[.04em] text-muted">
                     Pareja {numero}
                   </span>
                   {jugadores.map(({ indice, nombre }) => (

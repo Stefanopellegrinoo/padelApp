@@ -117,7 +117,7 @@ export function Desempate({
         <button
           type="button"
           onClick={() => setOpenFor('all')}
-          className="flex min-h-[44px] items-center rounded-full border border-line bg-surface px-3.5 text-[11.5px] font-extrabold text-muted"
+          className="flex min-h-[44px] items-center rounded-full border border-line bg-surface px-3.5 text-[12px] font-extrabold text-muted"
         >
           Orden de desempate ⇅
         </button>
@@ -140,7 +140,7 @@ export function Desempate({
                   real). `w-5` (20px) los contiene sin overflow. */}
               <span className="w-5 shrink-0 text-[14px] font-extrabold text-muted">{row.position}</span>
               <span
-                className={`flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full text-[11px] font-extrabold ${
+                className={`flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full text-[12px] font-extrabold ${
                   isLeader ? 'bg-accent text-accent-text' : 'bg-chip text-muted'
                 }`}
               >
@@ -155,7 +155,7 @@ export function Desempate({
                       event.stopPropagation()
                       setOpenFor(row.entryId)
                     }}
-                    className="flex h-11 min-w-11 items-center justify-center text-[10px] font-extrabold"
+                    className="flex h-11 min-w-11 items-center justify-center text-[12px] font-extrabold"
                   >
                     ⓘ
                   </button>
@@ -169,7 +169,7 @@ export function Desempate({
             {index === mastersCutoff - 1 && index < rows.length - 1 && (
               <div className="flex items-center gap-2 py-2">
                 <span className="h-px flex-1 bg-line" />
-                <span className="text-[9.5px] font-extrabold uppercase tracking-[.13em] text-muted">
+                <span className="text-[12px] font-extrabold uppercase tracking-[.13em] text-muted">
                   Clasifican al Masters
                 </span>
                 <span className="h-px flex-1 bg-line" />
@@ -192,7 +192,7 @@ export function Desempate({
             onClick={(event) => event.stopPropagation()}
           >
             <div className="mx-auto mb-4 h-1 w-[38px] rounded-full bg-line" />
-            <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
+            <p className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">
               Orden de desempate
             </p>
             <h2 className="text-[20px] font-extrabold">Quién va antes</h2>

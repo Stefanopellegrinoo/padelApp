@@ -132,7 +132,7 @@ export function MastersDraft({
                 misma forma copiada tres veces y conviene que las tres digan
                 lo mismo. */}
             <span className="w-5 shrink-0 text-[14px] font-extrabold text-muted">{index + 1}</span>
-            <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full bg-chip text-[11px] font-extrabold text-muted">
+            <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full bg-chip text-[12px] font-extrabold text-muted">
               {initials(row.name)}
             </span>
             <span className="flex-1 text-[14.5px] font-bold">{row.name}</span>

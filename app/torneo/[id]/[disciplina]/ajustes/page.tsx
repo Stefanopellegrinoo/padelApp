@@ -173,7 +173,7 @@ export default async function DisciplinaAjustesPage({ params }: PageProps) {
     <div className="flex flex-col gap-4 pt-3">
       <Volver href={`/torneo/${seasonId}/ajustes`} label="Ajustes" />
       <header className="flex flex-col gap-[3px]">
-        <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">{header.name}</p>
+        <p className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">{header.name}</p>
         <h1 className="text-[26px] font-extrabold tracking-[-.03em]">
           Ajustes{disciplineLabel !== null ? ` · ${disciplineLabel}` : ''}
         </h1>
@@ -195,7 +195,7 @@ export default async function DisciplinaAjustesPage({ params }: PageProps) {
         rules={{ config: discipline.config, hasMasters: discipline.hasMasters, formatoDefault: discipline.formatoDefault }}
       />
 
-      <p className="text-[11.5px] font-[600] text-muted">
+      <p className="text-[12px] font-[600] text-muted">
         Cambiar el formato con fechas ya jugadas no recalcula la tabla vieja.
       </p>
 

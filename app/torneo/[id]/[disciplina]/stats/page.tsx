@@ -106,7 +106,7 @@ function bestMatchdayFor(awardsByMatchday: Map<number, Award[]>, entryId: EntryI
 function StatCard({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="rounded-[14px] border border-line bg-surface p-[14px]">
-      <p className="text-[9.5px] font-extrabold uppercase tracking-[.13em] text-muted">{label}</p>
+      <p className="text-[12px] font-extrabold uppercase tracking-[.13em] text-muted">{label}</p>
       <p className="mt-1 text-[22px] font-extrabold">{value}</p>
     </div>
   )
@@ -124,7 +124,7 @@ function BarRanking({ title, rows, base, nameOf }: { title: string; rows: BarRow
   if (rows.length === 0) return null
   return (
     <section className="flex flex-col gap-2.5">
-      <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">{title}</p>
+      <p className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">{title}</p>
       <div className="flex flex-col gap-2.5">
         {rows.map((row, index) => (
           <Link key={row.entryId} href={`${base}/jugador/${row.entryId}`} className="flex min-h-[44px] flex-col justify-center gap-1">
@@ -149,7 +149,7 @@ function Duplas({ title, rows, base, nameOf }: { title: string; rows: PartnerRec
   if (rows.length === 0) return null
   return (
     <section className="flex flex-col gap-2.5">
-      <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">{title}</p>
+      <p className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">{title}</p>
       <div className="rounded-[14px] border border-line bg-surface px-[14px]">
         {rows.map((record) => {
           const eff = effectiveness(record)
@@ -164,10 +164,10 @@ function Duplas({ title, rows, base, nameOf }: { title: string; rows: PartnerRec
                   {' y '}
                   <PlayerLink base={base} entryId={record.partner} nameOf={nameOf} />
                 </p>
-                <p className="text-[11.5px] font-semibold text-muted">jugaron {record.together} fechas</p>
+                <p className="text-[12px] font-semibold text-muted">jugaron {record.together} fechas</p>
               </div>
               <span
-                className={`shrink-0 rounded-full px-2.5 py-1 text-[10.5px] font-extrabold ${
+                className={`shrink-0 rounded-full px-2.5 py-1 text-[12px] font-extrabold ${
                   eff >= 50 ? 'bg-ok-bg text-up' : 'bg-chip text-muted'
                 }`}
               >
@@ -362,7 +362,7 @@ export default async function StatsPage({ params, searchParams }: PageProps) {
       <div className="flex gap-2">
         <Link
           href={statsBase}
-          className={`flex min-h-[44px] items-center rounded-full px-[15px] text-[11.5px] font-extrabold ${
+          className={`flex min-h-[44px] items-center rounded-full px-[15px] text-[12px] font-extrabold ${
             activeTab === 'torneo' ? 'bg-accent text-accent-text' : 'bg-chip text-muted'
           }`}
         >
@@ -370,7 +370,7 @@ export default async function StatsPage({ params, searchParams }: PageProps) {
         </Link>
         <Link
           href={statsBase + '?tab=mias'}
-          className={`flex min-h-[44px] items-center rounded-full px-[15px] text-[11.5px] font-extrabold ${
+          className={`flex min-h-[44px] items-center rounded-full px-[15px] text-[12px] font-extrabold ${
             activeTab === 'mias' ? 'bg-accent text-accent-text' : 'bg-chip text-muted'
           }`}
         >

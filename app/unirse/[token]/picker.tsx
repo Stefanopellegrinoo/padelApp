@@ -31,7 +31,7 @@ export function Picker({ token, seats, initialSelected, claimError, adminName }:
 
   return (
     <>
-      <p className="text-[11.5px] font-extrabold text-muted">¿Cuál sos vos?</p>
+      <p className="text-[12px] font-extrabold text-muted">¿Cuál sos vos?</p>
 
       <div className="flex flex-col gap-2">
         {seats.map((seat) => {
@@ -43,11 +43,11 @@ export function Picker({ token, seats, initialSelected, claimError, adminName }:
                 disabled
                 className="flex items-center gap-3 rounded-field border border-line bg-surface p-3"
               >
-                <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full bg-chip text-[11px] font-extrabold">
+                <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full bg-chip text-[12px] font-extrabold">
                   {initials(seat.display_name)}
                 </span>
                 <span className="flex-1 text-[15px] font-[650]">{seat.display_name}</span>
-                <span className="text-[11.5px] font-extrabold text-muted">Ya entró</span>
+                <span className="text-[12px] font-extrabold text-muted">Ya entró</span>
               </button>
             )
           }
@@ -63,7 +63,7 @@ export function Picker({ token, seats, initialSelected, claimError, adminName }:
               }`}
             >
               <span
-                className={`flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full text-[11px] font-extrabold ${
+                className={`flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full text-[12px] font-extrabold ${
                   isSelected ? 'bg-accent text-accent-text' : 'bg-chip text-text'
                 }`}
               >
@@ -72,7 +72,7 @@ export function Picker({ token, seats, initialSelected, claimError, adminName }:
               <span className={`flex-1 text-[15px] ${isSelected ? 'font-extrabold' : 'font-[650]'}`}>
                 {seat.display_name}
               </span>
-              {isSelected && <span className="text-[11.5px] font-extrabold text-up">Sos vos</span>}
+              {isSelected && <span className="text-[12px] font-extrabold text-up">Sos vos</span>}
             </button>
           )
         })}

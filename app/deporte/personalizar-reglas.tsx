@@ -28,7 +28,7 @@ import {
   type FormatoChoice,
 } from './personalizar-reglas-state'
 
-const ROTULO = 'text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted'
+const ROTULO = 'text-[12px] font-extrabold uppercase tracking-[.14em] text-muted'
 const TITULO_FILA = 'text-[15px] font-extrabold'
 const AYUDA = 'text-pretty text-[12.5px] font-semibold leading-snug text-muted'
 const FILA = 'flex items-center justify-between gap-3 py-3'
@@ -200,7 +200,7 @@ function ComoSeArma({
             onClick={() => onChange(withFormatoChoice(rules, choice))}
           >
             {label}
-            {sub !== undefined && <span className="mt-0.5 block text-[11px] font-semibold opacity-80">{sub}</span>}
+            {sub !== undefined && <span className="mt-0.5 block text-[12px] font-semibold opacity-80">{sub}</span>}
           </Opcion>
         ))}
       </div>
@@ -255,7 +255,7 @@ function PuntosPorPosicion({
             }`}
           >
             <span className="text-[20px] font-extrabold leading-none tracking-[-.02em]">{value}</span>
-            <span className="text-[11px] font-bold text-muted">{`${i + 1}°`}</span>
+            <span className="text-[12px] font-bold text-muted">{`${i + 1}°`}</span>
           </button>
         ))}
       </div>

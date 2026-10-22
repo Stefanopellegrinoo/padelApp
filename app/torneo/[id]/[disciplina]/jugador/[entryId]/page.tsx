@@ -60,10 +60,10 @@ function Trayectoria({
   return (
     <div className="flex flex-col gap-2 rounded-[14px] border border-line bg-surface p-[14px]">
       <div className="flex items-baseline justify-between gap-2">
-        <p className="text-[9.5px] font-extrabold uppercase tracking-[.13em] text-muted">
+        <p className="text-[12px] font-extrabold uppercase tracking-[.13em] text-muted">
           Cómo viene
         </p>
-        <p className="text-[11.5px] font-[600] text-muted">
+        <p className="text-[12px] font-[600] text-muted">
           Arrancó {first.position}° · va {last.position}°
         </p>
       </div>
@@ -89,7 +89,7 @@ function Trayectoria({
 
       <div className="flex justify-between">
         {trail.map((step) => (
-          <span key={step.number} className="text-[9.5px] font-bold text-muted">
+          <span key={step.number} className="text-[12px] font-bold text-muted">
             F{step.number}
           </span>
         ))}
@@ -357,23 +357,23 @@ export default async function JugadorPage({ params }: PageProps) {
 
       <div className="grid grid-cols-3 gap-2">
         <div className="rounded-[14px] border border-line bg-surface p-[14px]">
-          <p className="text-[9.5px] font-extrabold uppercase tracking-[.13em] text-muted">Efectividad</p>
+          <p className="text-[12px] font-extrabold uppercase tracking-[.13em] text-muted">Efectividad</p>
           <p className="mt-1 text-[20px] font-extrabold">{efectividad}%</p>
         </div>
         <div className="rounded-[14px] border border-line bg-surface p-[14px]">
-          <p className="text-[9.5px] font-extrabold uppercase tracking-[.13em] text-muted">Fechas ganadas</p>
+          <p className="text-[12px] font-extrabold uppercase tracking-[.13em] text-muted">Fechas ganadas</p>
           <p className="mt-1 text-[20px] font-extrabold">{fechasGanadas}</p>
         </div>
         <div className="rounded-[14px] border border-line bg-surface p-[14px]">
-          <p className="text-[9.5px] font-extrabold uppercase tracking-[.13em] text-muted">{`Dif. ${unit}`}</p>
+          <p className="text-[12px] font-extrabold uppercase tracking-[.13em] text-muted">{`Dif. ${unit}`}</p>
           <p className="mt-1 text-[20px] font-extrabold">{formatSigned(difGames)}</p>
         </div>
         <div className="rounded-[14px] border border-line bg-surface p-[14px]">
-          <p className="text-[9.5px] font-extrabold uppercase tracking-[.13em] text-muted">Racha</p>
+          <p className="text-[12px] font-extrabold uppercase tracking-[.13em] text-muted">Racha</p>
           <p className="mt-1 text-[20px] font-extrabold">{longestStreak}</p>
         </div>
         <div className="rounded-[14px] border border-line bg-surface p-[14px]">
-          <p className="text-[9.5px] font-extrabold uppercase tracking-[.13em] text-muted">Partidos</p>
+          <p className="text-[12px] font-extrabold uppercase tracking-[.13em] text-muted">Partidos</p>
           <p className="mt-1 text-[20px] font-extrabold">
             {tally.matchesWon}-{matchesLost}
           </p>
@@ -395,7 +395,7 @@ export default async function JugadorPage({ params }: PageProps) {
               >
                 {mark.points ?? '–'}
               </div>
-              <p className="text-[9.5px] font-bold text-muted">F{mark.number}</p>
+              <p className="text-[12px] font-bold text-muted">F{mark.number}</p>
             </div>
           ))}
         </div>
@@ -411,7 +411,7 @@ export default async function JugadorPage({ params }: PageProps) {
               const positive = record.won - record.lost > 0
               return (
                 <div key={record.partner} className="flex items-center gap-3 p-2">
-                  <span className="flex h-[28px] w-[28px] shrink-0 items-center justify-center rounded-full bg-chip text-[10px] font-extrabold text-muted">
+                  <span className="flex h-[28px] w-[28px] shrink-0 items-center justify-center rounded-full bg-chip text-[12px] font-extrabold text-muted">
                     {initials(nameById.get(record.partner) ?? '')}
                   </span>
                   <span className="flex-1 text-[14px] font-bold">{nameById.get(record.partner) ?? ''}</span>

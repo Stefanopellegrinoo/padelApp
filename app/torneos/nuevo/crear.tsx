@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { Volver } from '@/app/torneo/[id]/volver'
 import { useEffect, useId, useState, useTransition } from 'react'
 import {
   TOURNAMENT_SPORTS,
@@ -50,7 +51,7 @@ import {
   type Squad,
 } from './wizard-state'
 
-const ROTULO = 'text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted'
+const ROTULO = 'text-[12px] font-extrabold uppercase tracking-[.14em] text-muted'
 const AYUDA = 'text-pretty text-[13.5px] font-[550] leading-[1.5] text-muted'
 const TITLES = ['Nuevo torneo', 'Jugadores', 'Cómo se juega', 'Listo, así se juega']
 const LINK = 'min-h-[44px] text-center text-[14px] font-extrabold text-accent-link'
@@ -97,7 +98,7 @@ function Aviso({ children }: { children: string }) {
 /** La marca del asiento propio. Es lo único que distingue una fila de la otra. */
 function Vos() {
   return (
-    <span className="shrink-0 rounded-full bg-accent px-2 py-[3px] text-[10px] font-extrabold text-accent-text">
+    <span className="shrink-0 rounded-full bg-accent px-2 py-[3px] text-[12px] font-extrabold text-accent-text">
       vos
     </span>
   )
@@ -417,15 +418,13 @@ export function Crear({ myName }: { myName: string }) {
     <main className="mx-auto flex min-h-dvh w-full max-w-lg flex-col gap-4 bg-bg px-6 pt-4 pb-[26px] text-text">
       <div className="flex items-center justify-between">
         {pantalla === 0 ? (
-          <Link href="/torneos" className="rounded-full bg-chip px-[14px] py-2 text-[12.5px] font-bold">
-            ← Volver
-          </Link>
+          <Volver href="/torneos" label="Volver" />
         ) : created === null ? (
           <button
             type="button"
             disabled={pending}
             onClick={() => go(secuencia[secuencia.indexOf(pantalla) - 1])}
-            className="rounded-full bg-chip px-[14px] py-2 text-[12.5px] font-bold disabled:opacity-40"
+            className="relative rounded-full bg-chip px-[14px] py-2 text-[12.5px] font-bold after:absolute after:inset-x-0 after:-inset-y-[5px] disabled:opacity-40"
           >
             ← Volver
           </button>
@@ -455,8 +454,8 @@ export function Crear({ myName }: { myName: string }) {
         {pantalla === 1 && (
           <>
             <div className="flex items-center justify-between">
-              <p className="text-[11.5px] font-extrabold uppercase tracking-[.14em] text-muted">El plantel</p>
-              <p className="text-[11.5px] font-extrabold text-muted">{`${filled} jugadores`}</p>
+              <p className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">El plantel</p>
+              <p className="text-[12px] font-extrabold text-muted">{`${filled} jugadores`}</p>
             </div>
             {/* Tipear en la última fila agrega la que sigue (`namesAfterEdit`): la lista se estira sola. */}
             {names.map((seat, index) => (

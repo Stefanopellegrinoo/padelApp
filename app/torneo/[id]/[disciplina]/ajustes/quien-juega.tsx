@@ -74,7 +74,7 @@ export function QuienJuega({
       data-quien-juega-label={disciplineLabel}
       className="flex flex-col gap-2"
     >
-      <h2 className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">Quién juega</h2>
+      <h2 className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">Quién juega</h2>
 
       <div className="overflow-hidden rounded-[14px] border border-line bg-surface">
         {members.map((member, index) => (

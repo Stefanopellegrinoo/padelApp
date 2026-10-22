@@ -38,7 +38,7 @@ export interface CargaContext {
 
 const TAP = 'min-h-[44px] rounded-field bg-chip px-3 py-2.5 text-[13.5px] font-extrabold'
 const ERROR_NOTE = 'rounded-field bg-live-bg px-3 py-2.5 text-[12.5px] font-bold text-live'
-const PROMPT = 'text-[11.5px] font-extrabold uppercase tracking-[.14em] text-muted'
+const PROMPT = 'text-[12px] font-extrabold uppercase tracking-[.14em] text-muted'
 const cap = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
 
 /**

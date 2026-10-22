@@ -1,6 +1,6 @@
 'use client'
 
-import Link from 'next/link'
+import { Volver } from '@/app/torneo/[id]/volver'
 import { useEffect, useRef, useState } from 'react'
 import { campeon, tabla, terminado, type TorneoRapido } from './rapido-state'
 import { agruparPorRonda } from './jugar-logic'
@@ -88,14 +88,12 @@ export function Jugar({ torneo, onCargarMarcador, onNuevoTorneo }: JugarProps) {
   return (
     <div className="flex flex-1 flex-col gap-4 px-6 pt-4 pb-[26px]">
       <div className="flex items-center justify-between">
-        <Link href="/" className="rounded-full bg-chip px-[14px] py-2 text-[12.5px] font-bold">
-          ← Inicio
-        </Link>
+        <Volver href="/" label="Inicio" />
       </div>
 
       {acabo && ganador !== null && (
         <div className="rounded-card bg-accent p-4 text-accent-text">
-          <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] opacity-90">Campeón</p>
+          <p className="text-[12px] font-extrabold uppercase tracking-[.14em] opacity-90">Campeón</p>
           <p className="mt-1 text-[19px] font-extrabold">{ganador.jugadores.join(' y ')}</p>
         </div>
       )}
@@ -107,7 +105,7 @@ export function Jugar({ torneo, onCargarMarcador, onNuevoTorneo }: JugarProps) {
       <div className="flex flex-1 flex-col gap-5 overflow-y-auto">
         {grupos.map((grupo) => (
           <section key={grupo.ronda} className="flex flex-col gap-2">
-            <p className="text-[11.5px] font-extrabold uppercase tracking-[.14em] text-muted">
+            <p className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">
               Ronda {grupo.ronda}
             </p>
             <div className="flex flex-col gap-2">
@@ -125,7 +123,7 @@ export function Jugar({ torneo, onCargarMarcador, onNuevoTorneo }: JugarProps) {
         ))}
 
         <section className="flex flex-col gap-2">
-          <p className="text-[11.5px] font-extrabold uppercase tracking-[.14em] text-muted">Tabla</p>
+          <p className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">Tabla</p>
           <Tabla filas={filas} />
         </section>
       </div>

@@ -19,7 +19,7 @@ import Link from 'next/link'
 export function Volver({ href, label }: { href: string; label: string }) {
   return (
     <Link href={href} className="-mt-1.5 -mb-1.5 flex min-h-[44px] w-fit items-center">
-      <span className="rounded-full bg-chip px-3 py-1.5 text-[11.5px] font-bold">← {label}</span>
+      <span className="rounded-full bg-chip px-3 py-1.5 text-[12px] font-bold">← {label}</span>
     </Link>
   )
 }

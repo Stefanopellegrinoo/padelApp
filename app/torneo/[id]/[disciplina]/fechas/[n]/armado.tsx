@@ -402,13 +402,13 @@ export function Armado({
         <section className="flex flex-col gap-3 rounded-card border border-line bg-surface p-4">
           <div className="flex flex-col gap-1">
             <h2 className={STEP_TITLE}>Cómo quedan los grupos</h2>
-            <p className="text-[11.5px] font-[600] text-muted">
+            <p className="text-[12px] font-[600] text-muted">
               Con el orden de hoy. Si cambia quién viene, puede cambiar el reparto.
             </p>
           </div>
           {groupPreview.map((group) => (
             <div key={group.number} className="flex flex-col gap-1.5">
-              <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
+              <p className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">
                 Grupo {group.number}
               </p>
               <p className="text-[13.5px] font-[650]">{group.names.join(' · ')}</p>
@@ -445,7 +445,7 @@ export function Armado({
               seat.playing ? '' : 'text-muted'
             }`}
           >
-            <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full bg-chip text-[11px] font-extrabold text-muted">
+            <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full bg-chip text-[12px] font-extrabold text-muted">
               {initials(seat.name)}
             </span>
             <span className="flex flex-1 flex-col">
@@ -453,10 +453,10 @@ export function Armado({
               {/* ponytail: `attendances` no guarda quién escribió la fila, así que
                   "avisó" es todo ausente. Si algún día importa distinguir al que
                   avisó del que sacó el admin, es una columna nueva. */}
-              {!seat.playing && <span className="text-[11.5px] font-[600] text-muted">Avisó que no va</span>}
+              {!seat.playing && <span className="text-[12px] font-[600] text-muted">Avisó que no va</span>}
             </span>
             <span
-              className={`shrink-0 rounded-full px-[10px] py-[6px] text-[10.5px] font-extrabold ${
+              className={`shrink-0 rounded-full px-[10px] py-[6px] text-[12px] font-extrabold ${
                 seat.playing ? 'bg-ok-bg text-up' : 'bg-chip text-muted'
               }`}
             >
@@ -543,7 +543,7 @@ export function Armado({
 
           {label.guestPairSection && (
             <>
-              <p className="text-[11.5px] font-[600] text-muted">{label.guestNote}</p>
+              <p className="text-[12px] font-[600] text-muted">{label.guestNote}</p>
 
               <button
                 type="button"
@@ -575,18 +575,18 @@ export function Armado({
               <span className="w-5 shrink-0 text-[14px] font-extrabold text-muted">{index + 1}</span>
               <span className="flex-1 text-[14.5px] font-[750]">{pair.names}</span>
               {pair.defending && (
-                <span className="shrink-0 rounded-full bg-ok-bg px-[10px] py-[6px] text-[10.5px] font-extrabold text-up">
+                <span className="shrink-0 rounded-full bg-ok-bg px-[10px] py-[6px] text-[12px] font-extrabold text-up">
                   Defensora
                 </span>
               )}
               {pair.withGuest && (
-                <span className="shrink-0 rounded-full bg-chip px-[10px] py-[6px] text-[10.5px] font-extrabold text-muted">
+                <span className="shrink-0 rounded-full bg-chip px-[10px] py-[6px] text-[12px] font-extrabold text-muted">
                   Invitado
                 </span>
               )}
             </div>
           ))}
-          <p className="text-[11.5px] font-[600] text-muted">{label.drawNote}</p>
+          <p className="text-[12px] font-[600] text-muted">{label.drawNote}</p>
         </section>
       )}
 
@@ -712,7 +712,7 @@ export function Armado({
 const FORMATO_BOTON = 'flex-1 rounded-field border-[1.5px] p-3 text-[13.5px] font-extrabold'
 const FORMATO_ELEGIDO = 'border-accent bg-accent text-accent-text'
 const FORMATO_LIBRE = 'border-line'
-const AUTOMATICO_LINEA = 'mt-0.5 block text-[11.5px] font-semibold opacity-80'
+const AUTOMATICO_LINEA = 'mt-0.5 block text-[12px] font-semibold opacity-80'
 
 /**
  * El selector de formato de la fecha (REQ-D8-1): "todos contra todos"
@@ -1119,7 +1119,7 @@ function GuestCard({
             de verdad pide una columna nueva en `entries` (ver
             `addLooseGuestSeat`), así que el texto dice lo que la pantalla SÍ
             sabe: si la paridad exige ese asiento, o si se lo puede llevar. */}
-        <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
+        <p className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">
           {required ? 'Falta uno para armar parejas' : 'Lo podés sacar'}
         </p>
 
@@ -1188,13 +1188,13 @@ function GuestCard({
           // Sin pareja el invitado no cobra ni le hace cobrar a nadie, y el
           // sorteo de a uno lo manda al final: esta nota reemplaza a las tres de
           // abajo (puntos de la pareja, "va último", "elegile compañero").
-          <p className="text-[11.5px] font-[600] text-muted">
+          <p className="text-[12px] font-[600] text-muted">
             Juega solo y no suma puntos para el campeonato. Va al final del orden: nadie sabe cómo juega.
           </p>
         ) : partnerAbsent ? (
           <p
             role="alert"
-            className="rounded-field bg-live-bg px-3 py-2.5 text-[11.5px] font-bold text-live"
+            className="rounded-field bg-live-bg px-3 py-2.5 text-[12px] font-bold text-live"
           >
             {partnerName ?? 'El compañero elegido'} no juega esta fecha. Elegile otro compañero, o
             dejalo al sorteo.
@@ -1203,7 +1203,7 @@ function GuestCard({
           /* La diferencia que le cambia el campeonato al admin: un invitado
              suelto le hace cobrar puntos a su compañero del torneo, y una
              pareja invitada no le hace cobrar a ninguno de los dos. */
-          <p className="text-[11.5px] font-[600] text-muted">
+          <p className="text-[12px] font-[600] text-muted">
             Los puntos de la pareja los cobra{' '}
             {partnerName === null ? 'el que salga en el sorteo' : partnerName}. En una pareja
             invitada no cobra ninguno de los dos.
@@ -1224,7 +1224,7 @@ function GuestCard({
             mismo y sólo uno lo es: el ÚLTIMO de la lista es el que cae con el
             líder de la tabla (ver `PairingInput.guestIds`). */}
         {partner && guest.partnerId === null && (
-          <p className="text-[11.5px] font-[600] text-muted">
+          <p className="text-[12px] font-[600] text-muted">
             {toTheDraw > 1
               ? 'Va al fondo del sorteo, con los otros invitados: nadie sabe cómo juegan. Si lo conocés, elegile compañero.'
               : 'Va último en el sorteo: nadie sabe cómo juega. Si lo conocés, elegile compañero.'}

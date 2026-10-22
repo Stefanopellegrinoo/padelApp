@@ -67,18 +67,18 @@ export function Plantel({
 
   return (
     <section id="plantel" className="flex flex-col gap-2 scroll-mt-4">
-      <h2 className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">Plantel</h2>
+      <h2 className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">Plantel</h2>
 
       <div className="overflow-hidden rounded-[14px] border border-line bg-surface">
         {seats.map((seat, index) => (
           <div key={seat.entryId} className={`flex flex-col gap-2 p-3 ${index > 0 ? 'border-t border-line' : ''}`}>
             <div className="flex items-center gap-3">
-              <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full bg-chip text-[11px] font-extrabold text-muted">
+              <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full bg-chip text-[12px] font-extrabold text-muted">
                 {initials(seat.name)}
               </span>
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="truncate text-[14px] font-bold">{seat.name}</span>
-                <span className="text-[11.5px] font-[600] text-muted">
+                <span className="text-[12px] font-[600] text-muted">
                   {seat.ownerName ?? 'Sin dueño'}
                 </span>
               </span>

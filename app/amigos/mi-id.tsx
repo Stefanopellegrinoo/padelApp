@@ -28,7 +28,7 @@ export function MiId({ playerId }: { playerId: string }) {
       className="flex min-h-[56px] items-center justify-between gap-3 rounded-field border-[1.5px] border-dashed border-line bg-bg px-[13px] py-2.5 text-left"
     >
       <span className="min-w-0 flex-1">
-        <span className="block text-[11.5px] font-extrabold text-muted">Tu ID</span>
+        <span className="block text-[12px] font-extrabold text-muted">Tu ID</span>
         <span className="block truncate text-[12.5px] font-[600] text-text">{playerId}</span>
       </span>
       <span

@@ -113,14 +113,14 @@ export function Llave({
   return (
     <div className="flex flex-col gap-4">
       {phase !== null && (
-        <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">
+        <p className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">
           Fase actual: {FASE_LABEL[phase]}
         </p>
       )}
 
       {sections.map((section) => (
         <div key={section.title} className="flex flex-col gap-2">
-          <p className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">{section.title}</p>
+          <p className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">{section.title}</p>
           <div className="flex flex-col gap-2">
             {section.matches.map((match) => (
               <MatchCard key={match.key} match={match} carga={carga} />

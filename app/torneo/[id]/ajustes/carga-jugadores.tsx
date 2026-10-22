@@ -32,7 +32,7 @@ export function CargaDeJugadores({ seasonId, enabled }: { seasonId: string; enab
 
   return (
     <span className="-my-3 flex min-h-[44px] shrink-0 items-center gap-2 pl-3">
-      {error !== null && <span className="text-[11.5px] font-bold text-live">{error}</span>}
+      {error !== null && <span className="text-[12px] font-bold text-live">{error}</span>}
       <label className="flex min-h-[44px] cursor-pointer items-center">
         <input
           type="checkbox"

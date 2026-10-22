@@ -44,7 +44,7 @@ export function EliminarTorneo({
 
   return (
     <section className="flex flex-col gap-2">
-      <h2 className="text-[10.5px] font-extrabold uppercase tracking-[.14em] text-muted">Torneo</h2>
+      <h2 className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">Torneo</h2>
       <div className="overflow-hidden rounded-[14px] border border-line bg-surface">
         <button
           type="button"
@@ -54,7 +54,7 @@ export function EliminarTorneo({
           Eliminar torneo
         </button>
       </div>
-      <p className="text-[11.5px] font-[600] text-muted">
+      <p className="text-[12px] font-[600] text-muted">
         Se borra para todos y no se puede deshacer.
       </p>
 
@@ -70,7 +70,7 @@ export function EliminarTorneo({
 
             <label
               htmlFor="confirmar-nombre"
-              className="mt-4 block text-[11.5px] font-extrabold text-muted"
+              className="mt-4 block text-[12px] font-extrabold text-muted"
             >
               Escribí {name} para confirmar
             </label>

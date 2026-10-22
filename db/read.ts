@@ -475,6 +475,21 @@ export async function seasonAdminName(supabase: Client, seasonId: string): Promi
 }
 
 /**
+ * `seasonHeader` para quien puede NO tener lugar en la temporada (Reglas es
+ * pública y la ve también un logueado que no participa): `null` cuando RLS la
+ * oculta o no existe, en vez de tirar. Un error de base de datos tampoco corta
+ * acá: el resto de las pantallas vuelven a leer y lo muestran ellas.
+ */
+export async function seasonHeaderOrNull(supabase: Client, seasonId: string): Promise<SeasonHeader | null> {
+  try {
+    return await seasonHeader(supabase, seasonId)
+  } catch (error) {
+    if (error instanceof EdgeError) return null
+    throw error
+  }
+}
+
+/**
  * El token del link de invitación, sólo para el admin (S8). `null` para quien
  * no organiza —la función `season_invite_token` (0104) lo devuelve únicamente
  * si `created_by = auth.uid()`.

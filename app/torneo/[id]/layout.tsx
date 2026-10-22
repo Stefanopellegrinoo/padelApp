@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { disciplineSlugs } from '@/core'
 import { EdgeError } from '@/db/errors'
-import { primaryDiscipline, seasonHeader } from '@/db/read'
+import { primaryDiscipline, seasonHeaderOrNull } from '@/db/read'
 import { serverClient } from '@/db/server'
 import { ChipsDeporte } from './chips-deporte'
 import { TorneoNav } from './nav'
@@ -25,7 +25,7 @@ interface TorneoLayoutProps {
  * selector de la sección entera. `ChipsDeporte` decide solo en qué rutas se
  * dibuja.
  *
- * **Sin sesión el layout no pregunta nada y no dibuja la nav.** Reglas es
+ * **Sin sesión —o con sesión pero sin lugar en la temporada— no dibuja la nav.** Reglas es
  * pública y este layout la estaba frenando antes de que se montara. Las demás
  * pantallas del torneo siguen siendo privadas: lo único que cambia es QUIÉN las
  * frena — antes el layout, ahora la query, que para un anónimo no devuelve nada
@@ -48,7 +48,11 @@ export default async function TorneoLayout({ children, params }: TorneoLayoutPro
     data: { user },
   } = await supabase.auth.getUser()
 
-  if (user === null) {
+  // Un logueado que no participa queda igual que un anónimo: sin nav. Reglas
+  // la ve igual (es pública) y las demás las frena su propia query.
+  const header = user === null ? null : await seasonHeaderOrNull(supabase, id)
+
+  if (header === null) {
     return (
       <div className="flex min-h-dvh flex-col bg-bg text-text">
         <main className="flex-1 px-5 pb-6">{children}</main>
@@ -56,7 +60,6 @@ export default async function TorneoLayout({ children, params }: TorneoLayoutPro
     )
   }
 
-  const header = await seasonHeader(supabase, id)
   // Tabla, Fechas y Stats necesitan un destino con disciplina
   // (`nav-state.ts`; las tres comparten el mismo fallback, Reglas no).
   // Ésta es la disciplina [0] — el mismo fallback que ya usa

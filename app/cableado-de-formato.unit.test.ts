@@ -55,6 +55,8 @@ const escena = vi.hoisted(() => ({
   disciplines: [] as DisciplineHeader[],
   /** `null` = nadie logueado, que es la rama pública de Reglas (S76). */
   user: { id: 'admin' } as { id: string } | null,
+  /** `false` = logueado pero RLS le oculta la temporada (`seasonHeaderOrNull` -> `null`). */
+  participante: true,
   // Rebanada 3a de "reglas por disciplina": `hasMasters`/`pairSize`/
   // `allowsDraw` reales (0069), mismo criterio que `disciplina()` abajo — sin
   // esto la rama anónima le pasaría `undefined` a `RulesBody.shape`.
@@ -102,6 +104,18 @@ vi.mock('@/db/read', async (importOriginal) => {
       inviteToken: null,
       disciplines: escena.disciplines,
     }),
+    seasonHeaderOrNull: async () =>
+      escena.participante
+        ? {
+            id: 's1',
+            name: 'Torneo de prueba',
+            status: 'ACTIVE',
+            regularMatchdays: 10,
+            isAdmin: true,
+            inviteToken: null,
+            disciplines: escena.disciplines,
+          }
+        : null,
     // S8: el token del link ya no viaja en el header; Ajustes lo pide aparte.
     seasonInviteToken: async () => 'token',
     // Rebanada 2 de "reglas por disciplina": Ajustes lee esto para armar un
@@ -251,6 +265,21 @@ describe('Reglas con sesión — la página entera, no el componente suelto', ()
     expect(fifa.slice(fifa.indexOf('<details'))).toContain('Marcador de goles')
     // La frase combinada de antes de 3b ya no existe en ningún lado.
     expect(html).not.toContain('Pádel: 1 set a 4 games · FIFA: Marcador de goles')
+  })
+
+  /** Logueado sin lugar en la temporada: ve lo mismo que un anónimo (reglas públicas, sin `isAdmin`, con "Ir al inicio"). */
+  it('un logueado que no participa ve las reglas como un anónimo', async () => {
+    escena.user = { id: 'otro' }
+    escena.participante = false
+    escena.publicFormats = [publicFormat('PADEL', PADEL)]
+    try {
+      const html = await reglas(SOLO_PADEL)
+      expect(html).toContain('>Pádel</h2>')
+      expect(html).not.toContain('Editar reglas')
+      expect(html).toContain('Ir al inicio')
+    } finally {
+      escena.participante = true
+    }
   })
 
   /**

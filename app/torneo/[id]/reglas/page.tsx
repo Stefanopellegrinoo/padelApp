@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { reglamento, sportLabel, unitOf } from '@/core'
-import { publicFormats, publicRules, seasonAdminName, seasonHeader, type PublicFormat } from '@/db/read'
+import { publicFormats, publicRules, seasonHeaderOrNull, type PublicFormat } from '@/db/read'
 import { serverClient } from '@/db/server'
 import { RulesBody, type RulesBlock } from './rules-body'
 
@@ -54,54 +54,51 @@ export default async function ReglasPage({ params }: ReglasPageProps) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  if (user === null) {
-    // Dos RPC y no uno, y es la forma BARATA (S76): `season_public_rules`
-    // (0022) trae quién organiza y su `null` es el link roto; los deportes
-    // vienen de `season_public_formats` (0038/0099). En paralelo: son dos
-    // viajes independientes.
-    const [rules, formats] = await Promise.all([
-      publicRules(supabase, id),
-      publicFormats(supabase, id),
-    ])
-    if (rules === null) {
-      // Ya no es "no hay sesión" —eso ahora se muestra—: es link roto o
-      // temporada borrada, que es exactamente lo que dice la frase.
-      return (
-        <div className="flex flex-col gap-4 pt-4">
-          <h1 className="text-[26px] font-extrabold tracking-[-.03em]">Reglas</h1>
-          <p className="text-pretty text-[13.5px] leading-[1.5] font-medium text-muted">
-            Para ver las reglas de este torneo necesitás el link que te pasó tu grupo.
-          </p>
-          <Link href="/" className="text-[12.5px] font-bold text-accent-link">
-            Ir al inicio
-          </Link>
-        </div>
-      )
-    }
+  // Dos RPC y no uno, y es la forma BARATA (S76): `season_public_rules`
+  // (0022) trae quién organiza y su `null` es el link roto; los deportes
+  // vienen de `season_public_formats` (0038/0099). Se leen SIEMPRE, con o sin
+  // sesión, así que un logueado que no participa ve exactamente lo mismo que
+  // un anónimo. `header` sólo aporta si es participante (y si es admin); es
+  // `null` para el anónimo y para quien RLS le oculta la temporada.
+  const [rules, formats, header] = await Promise.all([
+    publicRules(supabase, id),
+    publicFormats(supabase, id),
+    user === null ? null : seasonHeaderOrNull(supabase, id),
+  ])
 
-    // `formats` no puede estar vacío acá: `season_public_rules` (que ya devolvió
-    // `rules !== null`) es un INNER JOIN contra `disciplines`, así que las dos
-    // funciones ven la misma fila o ninguna.
+  if (rules === null) {
+    // Ya no es "no hay sesión" —eso ahora se muestra—: es link roto o
+    // temporada borrada, que es exactamente lo que dice la frase.
     return (
-      <>
-        <RulesBody seasonId={id} disciplines={blocksOf(formats)} adminName={rules.adminName} isAdmin={false} />
-        {/* Sin nav de torneo: quien llega por el link no tiene a dónde ir. */}
-        <Link href="/" className="mt-4 text-[12.5px] font-bold text-accent-link">
+      <div className="flex flex-col gap-4 pt-4">
+        <h1 className="text-[26px] font-extrabold tracking-[-.03em]">Reglas</h1>
+        <p className="text-pretty text-[13.5px] leading-[1.5] font-medium text-muted">
+          Para ver las reglas de este torneo necesitás el link que te pasó tu grupo.
+        </p>
+        <Link href="/" className="inline-flex min-h-11 items-center text-[12.5px] font-bold text-accent-link">
           Ir al inicio
         </Link>
-      </>
+      </div>
     )
   }
 
-  // Con sesión se sigue leyendo lo mismo que sin ella (`publicFormats` está
-  // abierta a `authenticated`); `seasonHeader` sólo aporta si es admin.
-  const [header, formats, adminName] = await Promise.all([
-    seasonHeader(supabase, id),
-    publicFormats(supabase, id),
-    seasonAdminName(supabase, id),
-  ])
-
+  // `formats` no puede estar vacío acá: `season_public_rules` (que ya devolvió
+  // `rules !== null`) es un INNER JOIN contra `disciplines`, así que las dos
+  // funciones ven la misma fila o ninguna.
   return (
-    <RulesBody seasonId={id} disciplines={blocksOf(formats)} adminName={adminName} isAdmin={header.isAdmin} />
+    <>
+      <RulesBody
+        seasonId={id}
+        disciplines={blocksOf(formats)}
+        adminName={rules.adminName}
+        isAdmin={header?.isAdmin ?? false}
+      />
+      {/* Sin nav de torneo: quien llega por el link no tiene a dónde ir. */}
+      {header === null && (
+        <Link href="/" className="mt-4 inline-flex min-h-11 items-center text-[12.5px] font-bold text-accent-link">
+          Ir al inicio
+        </Link>
+      )}
+    </>
   )
 }

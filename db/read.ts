@@ -425,6 +425,17 @@ export async function mySeasons(supabase: Client): Promise<SeasonHeader[]> {
 }
 
 export async function seasonHeader(supabase: Client, seasonId: string): Promise<SeasonHeader> {
+  // Sólo la temporada que no está es un 404 (y no un 500): ver `seasonHeaderOrNull`.
+  return (await seasonHeaderOrNull(supabase, seasonId)) ?? notFound()
+}
+
+/**
+ * `seasonHeader` para quien puede NO tener lugar en la temporada (Reglas es
+ * pública y la ve también un logueado que no participa): `null` cuando no
+ * existe, RLS la oculta (`data === null`) o el id ni es un UUID (`22P02`).
+ * Un error de base de datos sí tira: ése es una falla, no un "no está".
+ */
+export async function seasonHeaderOrNull(supabase: Client, seasonId: string): Promise<SeasonHeader | null> {
   const [{ data, error }, { data: disciplineRows, error: disciplinesError }, userId] = await Promise.all([
     supabase.from('seasons').select(SEASON_HEADER_COLUMNS).eq('id', seasonId).maybeSingle(),
     supabase
@@ -435,12 +446,9 @@ export async function seasonHeader(supabase: Client, seasonId: string): Promise<
       .order('created_at', { ascending: true }),
     currentUserId(supabase),
   ])
-  // Sólo la temporada que no está es un 404 (y no un 500): `null` es "no existe
-  // o RLS no te la deja ver" y `22P02` es un id que ni es un UUID. Los demás
-  // errores siguen siendo EdgeError: ésos sí son fallas.
-  if (error?.code === '22P02') notFound()
+  if (error?.code === '22P02') return null
   if (error) throw new EdgeError(`No se pudo leer la temporada: ${error.message}`)
-  if (data === null) notFound()
+  if (data === null) return null
   if (disciplinesError) {
     throw new EdgeError(`No se pudieron leer las disciplinas: ${disciplinesError.message}`)
   }
@@ -472,21 +480,6 @@ export async function seasonAdminName(supabase: Client, seasonId: string): Promi
   const adminName = data?.[0]?.admin_name
   if (adminName === undefined) throw new EdgeError('No se pudo leer quién organiza.')
   return adminName
-}
-
-/**
- * `seasonHeader` para quien puede NO tener lugar en la temporada (Reglas es
- * pública y la ve también un logueado que no participa): `null` cuando RLS la
- * oculta o no existe, en vez de tirar. Un error de base de datos tampoco corta
- * acá: el resto de las pantallas vuelven a leer y lo muestran ellas.
- */
-export async function seasonHeaderOrNull(supabase: Client, seasonId: string): Promise<SeasonHeader | null> {
-  try {
-    return await seasonHeader(supabase, seasonId)
-  } catch (error) {
-    if (error instanceof EdgeError) return null
-    throw error
-  }
 }
 
 /**

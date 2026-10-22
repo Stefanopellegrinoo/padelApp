@@ -29,7 +29,7 @@ export default async function UnirsePage({ params, searchParams }: PageProps) {
         <p className="text-[14px] font-[550] text-muted">
           Pedile al organizador que te pase el link de nuevo.
         </p>
-        <Link href="/" className="mt-4 text-[12.5px] font-[750] text-accent-link">
+        <Link href="/" className="mt-4 inline-flex min-h-11 items-center text-[12.5px] font-[750] text-accent-link">
           Volver al inicio
         </Link>
       </main>

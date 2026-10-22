@@ -448,7 +448,7 @@ export function CasualMatchRow({
           setMenuOpen(!menuOpen)
           setConfirmingDelete(false)
         }}
-        className={`absolute top-1.5 right-1.5 flex h-10 w-10 items-center justify-center rounded-full text-[18px] leading-none font-extrabold text-muted ${
+        className={`absolute top-0.5 right-0.5 flex h-11 w-11 items-center justify-center rounded-full text-[18px] leading-none font-extrabold text-muted ${
           menuOpen ? 'bg-chip text-text' : ''
         }`}
       >

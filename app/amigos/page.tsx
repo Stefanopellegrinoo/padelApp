@@ -86,7 +86,7 @@ export default async function AmigosPage({ searchParams }: PageProps) {
                 </span>
                 <form action={accept}>
                   <input type="hidden" name="friendshipId" value={amigo.friendshipId} />
-                  <SubmitButton className="min-h-[40px] shrink-0 rounded-field bg-accent px-4 text-[13px] font-extrabold text-accent-text disabled:opacity-60">
+                  <SubmitButton className="min-h-11 shrink-0 rounded-field bg-accent px-4 text-[13px] font-extrabold text-accent-text disabled:opacity-60">
                     Aceptar
                   </SubmitButton>
                 </form>

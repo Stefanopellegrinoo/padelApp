@@ -1,6 +1,6 @@
 'use client'
 
-import Link from 'next/link'
+import { Volver } from '@/app/torneo/[id]/volver'
 import { useEffect, useRef, useState } from 'react'
 import { campeon, tabla, terminado, type TorneoRapido } from './rapido-state'
 import { agruparPorRonda } from './jugar-logic'
@@ -88,9 +88,7 @@ export function Jugar({ torneo, onCargarMarcador, onNuevoTorneo }: JugarProps) {
   return (
     <div className="flex flex-1 flex-col gap-4 px-6 pt-4 pb-[26px]">
       <div className="flex items-center justify-between">
-        <Link href="/" className="rounded-full bg-chip px-[14px] py-2 text-[12.5px] font-bold">
-          ← Inicio
-        </Link>
+        <Volver href="/" label="Inicio" />
       </div>
 
       {acabo && ganador !== null && (

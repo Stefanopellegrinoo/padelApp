@@ -32,7 +32,7 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
       >
         Probar de nuevo
       </button>
-      <Link href="/" className="text-center text-[12.5px] font-bold text-accent-link">
+      <Link href="/" className="flex min-h-11 items-center justify-center text-[12.5px] font-bold text-accent-link">
         Ir al inicio
       </Link>
 

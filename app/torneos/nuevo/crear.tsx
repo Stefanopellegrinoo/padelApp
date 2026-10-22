@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { Volver } from '@/app/torneo/[id]/volver'
 import { useEffect, useId, useState, useTransition } from 'react'
 import {
   TOURNAMENT_SPORTS,
@@ -417,15 +418,13 @@ export function Crear({ myName }: { myName: string }) {
     <main className="mx-auto flex min-h-dvh w-full max-w-lg flex-col gap-4 bg-bg px-6 pt-4 pb-[26px] text-text">
       <div className="flex items-center justify-between">
         {pantalla === 0 ? (
-          <Link href="/torneos" className="rounded-full bg-chip px-[14px] py-2 text-[12.5px] font-bold">
-            ← Volver
-          </Link>
+          <Volver href="/torneos" label="Volver" />
         ) : created === null ? (
           <button
             type="button"
             disabled={pending}
             onClick={() => go(secuencia[secuencia.indexOf(pantalla) - 1])}
-            className="rounded-full bg-chip px-[14px] py-2 text-[12.5px] font-bold disabled:opacity-40"
+            className="relative rounded-full bg-chip px-[14px] py-2 text-[12.5px] font-bold after:absolute after:inset-x-0 after:-inset-y-[5px] disabled:opacity-40"
           >
             ← Volver
           </button>

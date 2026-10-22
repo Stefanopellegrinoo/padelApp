@@ -12,12 +12,15 @@
  * alguien arregle una sola para que las otras queden abiertas.
  */
 export function safeNextPath(value: string | null | undefined): string {
-  if (typeof value !== 'string') return '/'
-  // El backslash también hay que rechazarlo: el browser lo normaliza a `/`, así
-  // que `/\evil.com` se resuelve como `//evil.com` y reabre el redirector.
-  return value.startsWith('/') && !value.startsWith('//') && !value.includes('\\')
-    ? value
-    : '/'
+  if (typeof value !== 'string' || !value.startsWith('/')) return '/'
+  // Se resuelve con el mismo parser de URL que usa el navegador, en vez de
+  // listar a mano los trucos (`//`, `/\`, un tab en el medio...): si el host
+  // sigue siendo el nuestro, es una ruta de esta app.
+  try {
+    return new URL(value, 'http://app.invalid').host === 'app.invalid' ? value : '/'
+  } catch {
+    return '/'
+  }
 }
 
 /**

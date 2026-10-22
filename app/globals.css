@@ -64,6 +64,24 @@
   }
 }
 
+html {
+  /* Controles nativos (scrollbars, selects, autofill) siguen al sistema igual
+     que las variables de arriba. `manipulation` mata el delay y el doble-tap
+     zoom; `overscroll-behavior-y: none` evita el rebote/pull-to-refresh que
+     delata a una web en modo standalone. El pinch-zoom sigue andando. */
+  color-scheme: light dark;
+  touch-action: manipulation;
+  overscroll-behavior-y: none;
+}
+
+/* Nav y botones se tocan, no se seleccionan: sin el menú de "copiar" al
+   mantener apretado. El texto de las pantallas sigue seleccionable. */
+nav,
+button {
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
 body {
   background: var(--color-bg);
   color: var(--color-text);

@@ -32,6 +32,7 @@ export const metadata: Metadata = {
     locale: 'es_AR',
     type: 'website',
   },
+  twitter: { card: 'summary_large_image' },
   // `appleWebApp` es lo que iOS mira, porque hasta hace poco ignoraba el
   // manifest para esto. `statusBarStyle: 'default'` deja que iOS se ocupe de la
   // barra de estado en vez de meter el contenido abajo: `black-translucent`

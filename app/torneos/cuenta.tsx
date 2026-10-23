@@ -71,6 +71,20 @@ export function Cuenta({ name }: { name: string }) {
           >
             Amigos
           </Link>
+          <Link
+            href="/privacidad"
+            role="menuitem"
+            className="block w-full border-b border-line px-3 py-3 text-left text-[14px] font-[750] text-text"
+          >
+            Privacidad
+          </Link>
+          <Link
+            href="/cuenta/borrar"
+            role="menuitem"
+            className="block w-full border-b border-line px-3 py-3 text-left text-[14px] font-[750] text-text"
+          >
+            Borrar cuenta
+          </Link>
           <form action={signOut}>
             <SubmitButton
               role="menuitem"

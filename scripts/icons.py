@@ -14,6 +14,8 @@ La marca ocupa el 58% del lienzo a propósito: los íconos se declaran
 mismo archivo sirve recortado y sin recortar.
 """
 
+import os
+
 from PIL import Image, ImageDraw
 
 VERDE = (14, 92, 63)
@@ -78,6 +80,34 @@ def raqueta() -> Image.Image:
     return img
 
 
+# Pantallas de arranque de iOS (`apple-touch-startup-image`). iOS no usa el
+# `background_color` del manifest: sin estas imágenes, la app instalada queda
+# en negro hasta que llega el HTML, y en un arranque en frío del servidor eso
+# son segundos. Una por tamaño de iPhone en vertical (ancho y alto en puntos,
+# densidad), en claro y en oscuro con el `--color-bg` de cada tema. Un iPhone
+# nuevo que no esté acá vuelve al negro: se agrega su fila.
+IPHONES = [
+    (320, 568, 2), (375, 667, 2), (414, 736, 3), (375, 812, 3), (414, 896, 2),
+    (414, 896, 3), (390, 844, 3), (428, 926, 3), (393, 852, 3), (430, 932, 3),
+    (402, 874, 3), (440, 956, 3), (420, 912, 3),
+]
+FONDOS = {"light": (255, 255, 255), "dark": (13, 21, 18)}
+
+
+def splash(base: Image.Image) -> None:
+    os.makedirs(f"{SALIDA}/splash", exist_ok=True)
+    lado = 0.28  # del ancho: el ícono de la pantalla de inicio, un poco más grande.
+    for w, h, dpr in IPHONES:
+        for tema, fondo in FONDOS.items():
+            img = Image.new("RGB", (w * dpr, h * dpr), fondo)
+            n = int(w * dpr * lado)
+            icono = base.resize((n, n), Image.LANCZOS)
+            mascara = Image.new("L", (n, n), 0)
+            ImageDraw.Draw(mascara).rounded_rectangle([0, 0, n, n], radius=n // 4, fill=255)
+            img.paste(icono, ((w * dpr - n) // 2, (h * dpr - n) // 2), mascara)
+            img.save(f"{SALIDA}/splash/{w}x{h}@{dpr}-{tema}.png", optimize=True)
+
+
 def main() -> None:
     base = raqueta()
     for size, nombre in [
@@ -88,6 +118,8 @@ def main() -> None:
     ]:
         base.resize((size, size), Image.LANCZOS).save(nombre)
         print(f"  {nombre}  {size}x{size}")
+    splash(base)
+    print(f"  {SALIDA}/splash/  {len(IPHONES) * len(FONDOS)} pantallas de arranque")
 
 
 if __name__ == "__main__":

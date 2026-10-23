@@ -7,6 +7,21 @@ const archivo = Archivo({
   weight: ['400', '500', '600', '700', '800'],
 })
 
+// Las pantallas de arranque de iOS que genera `scripts/icons.py` (misma lista
+// que `IPHONES` allá): sin ellas, la app instalada queda en negro hasta que
+// llega el HTML. iOS elige por media query, así que cada tamaño va por tema.
+const IPHONES: [number, number, number][] = [
+  [320, 568, 2], [375, 667, 2], [414, 736, 3], [375, 812, 3], [414, 896, 2],
+  [414, 896, 3], [390, 844, 3], [428, 926, 3], [393, 852, 3], [430, 932, 3],
+  [402, 874, 3], [440, 956, 3], [420, 912, 3],
+]
+const startupImage = IPHONES.flatMap(([w, h, dpr]) =>
+  (['light', 'dark'] as const).map((tema) => ({
+    url: `/splash/${w}x${h}@${dpr}-${tema}.png`,
+    media: `(device-width: ${w}px) and (device-height: ${h}px) and (-webkit-device-pixel-ratio: ${dpr}) and (orientation: portrait) and (prefers-color-scheme: ${tema})`,
+  })),
+)
+
 export const metadata: Metadata = {
   title: 'Padel Liga',
   description: 'El campeonato del grupo: la tabla, las fechas y los resultados.',
@@ -22,7 +37,7 @@ export const metadata: Metadata = {
   // daría el look a pantalla completa pero exige pagar `env(safe-area-inset-top)`
   // a mano en cada pantalla, y una sola que se olvide queda con el título
   // debajo de la isla dinámica.
-  appleWebApp: { capable: true, title: 'Padel', statusBarStyle: 'default' },
+  appleWebApp: { capable: true, title: 'Padel', statusBarStyle: 'default', startupImage },
 }
 
 /**

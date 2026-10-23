@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import { regenerateInviteLink } from './actions'
 
 /**
@@ -9,14 +9,24 @@ import { regenerateInviteLink } from './actions'
  * `window.location.origin`. El "Regenerar" (S8) llama a la server action y
  * reemplaza el token: el link viejo deja de reclamar asiento.
  */
-export function CopiarLink({ seasonId, token }: { seasonId: string; token: string }) {
+export function CopiarLink({ seasonId, seasonName, token }: { seasonId: string; seasonName: string; token: string }) {
   const [current, setCurrent] = useState(token)
   const [copied, setCopied] = useState(false)
   const [pending, startTransition] = useTransition()
+  // En el celular, el menú de compartir del sistema (WhatsApp a un toque, y
+  // trae "Copiar" adentro). Se decide después de montar: en el servidor no hay
+  // `navigator`, y decidirlo en el render rompería la hidratación.
+  const [canShare, setCanShare] = useState(false)
+  useEffect(() => setCanShare(typeof navigator.share === 'function'), [])
 
   function copy() {
-    const origin = typeof window === 'undefined' ? '' : window.location.origin
-    void navigator.clipboard.writeText(`${origin}/unirse/${current}`)
+    const url = `${window.location.origin}/unirse/${current}`
+    if (canShare) {
+      // Cancelar el menú también rechaza: no es un error.
+      navigator.share({ title: seasonName, text: `Sumate a ${seasonName} en Padel Liga`, url }).catch(() => {})
+      return
+    }
+    void navigator.clipboard.writeText(url)
     setCopied(true)
   }
 
@@ -40,7 +50,7 @@ export function CopiarLink({ seasonId, token }: { seasonId: string; token: strin
         onClick={copy}
         className="-my-3 flex min-h-[44px] shrink-0 items-center pl-3 text-[13px] font-[750] text-muted"
       >
-        {copied ? 'Copiado ✓' : 'Copiar ›'}
+        {canShare ? 'Compartir ›' : copied ? 'Copiado ✓' : 'Copiar ›'}
       </button>
       <button
         type="button"

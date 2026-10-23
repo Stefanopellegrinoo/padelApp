@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { Archivo } from 'next/font/google'
 import './globals.css'
+import { PullToRefresh } from './pull-to-refresh'
 import { ServiceWorker } from './service-worker'
 
 const archivo = Archivo({
@@ -75,6 +76,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className={archivo.className}>
         {children}
         <ServiceWorker />
+        <PullToRefresh />
       </body>
     </html>
   )

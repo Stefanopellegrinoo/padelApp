@@ -21,6 +21,9 @@ export function CopiarLink({ seasonId, token }: { seasonId: string; token: strin
   }
 
   function regenerate() {
+    // Está pegado a "Copiar" y no tiene vuelta: el link que ya circula en el
+    // grupo deja de servir. Un toque de más no puede bastar.
+    if (!window.confirm('¿Regenerar el link? El que ya compartiste deja de funcionar.')) return
     startTransition(async () => {
       const result = await regenerateInviteLink(seasonId)
       if (result.ok) {

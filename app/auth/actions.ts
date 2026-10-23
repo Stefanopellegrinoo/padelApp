@@ -1,7 +1,9 @@
 'use server'
 
 import { redirect } from 'next/navigation'
+import { deleteMyAccount } from '@/db/account'
 import type { Client } from '@/db/client'
+import { EdgeError } from '@/db/errors'
 import { mySeasons } from '@/db/read'
 import { serverClient } from '@/db/server'
 import { afterLogin } from './next-path'
@@ -73,5 +75,29 @@ export async function signIn(_state: FormState, form: FormData): Promise<FormSta
 export async function signOut(): Promise<void> {
   const supabase = await serverClient()
   await supabase.auth.signOut()
+  redirect('/')
+}
+
+/**
+ * Borra la cuenta (S2-S3, `odd/tasks/borrar-cuenta.md`). Si quien llama
+ * organiza algún torneo, la base no borra nada y el mensaje —que dice cuáles—
+ * vuelve por la query, el mismo patrón que `renameTournament`. El `redirect`
+ * va fuera del `try`: adentro, el `catch` se lo comería.
+ *
+ * `scope: 'local'` al salir: el usuario ya no existe, así que avisarle al
+ * servidor de auth no tiene sentido; lo único que falta es limpiar la cookie.
+ */
+export async function deleteAccount(): Promise<void> {
+  const supabase = await serverClient()
+  let problem: string | null = null
+  try {
+    await deleteMyAccount(supabase)
+  } catch (error) {
+    if (!(error instanceof EdgeError)) throw error
+    problem = error.message
+  }
+  if (problem !== null) redirect(`/cuenta/borrar?error=${encodeURIComponent(problem)}`)
+
+  await supabase.auth.signOut({ scope: 'local' })
   redirect('/')
 }

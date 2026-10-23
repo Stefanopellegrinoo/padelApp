@@ -232,7 +232,7 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
 
           <div className={`${ROW} border-t border-line`}>
             <span className={LABEL}>Link de invitación</span>
-            <CopiarLink seasonId={seasonId} token={inviteToken} />
+            <CopiarLink seasonId={seasonId} seasonName={header.name} token={inviteToken} />
           </div>
 
           {/* Lo único que abre: cargar el resultado de un partido de una fecha

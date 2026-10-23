@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { Archivo } from 'next/font/google'
 import './globals.css'
+import { ServiceWorker } from './service-worker'
 
 const archivo = Archivo({
   subsets: ['latin'],
@@ -70,7 +71,10 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="es">
-      <body className={archivo.className}>{children}</body>
+      <body className={archivo.className}>
+        {children}
+        <ServiceWorker />
+      </body>
     </html>
   )
 }

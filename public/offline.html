@@ -26,6 +26,28 @@
   <body>
     <h1>Sin conexión</h1>
     <p>No hay internet. Cuando vuelva la señal, probá de nuevo.</p>
-    <button type="button" onclick="location.reload()">Reintentar</button>
+    <p id="estado" role="status"></p>
+    <button type="button" id="reintentar">Reintentar</button>
+    <script>
+      // Antes de recargar se prueba la red con un pedido común (no una
+      // navegación, así el worker no lo intercepta): si falla, recargar sólo
+      // volvería a dibujar esta misma pantalla y parecería que el botón no hace
+      // nada. Cuando vuelve la conexión, se reintenta solo.
+      const estado = document.getElementById('estado')
+      const boton = document.getElementById('reintentar')
+      async function reintentar() {
+        boton.disabled = true
+        estado.textContent = 'Probando…'
+        try {
+          await fetch('/manifest.webmanifest', { cache: 'no-store' })
+          location.reload()
+        } catch {
+          estado.textContent = 'Todavía sin conexión.'
+          boton.disabled = false
+        }
+      }
+      boton.addEventListener('click', reintentar)
+      addEventListener('online', reintentar)
+    </script>
   </body>
 </html>

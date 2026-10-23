@@ -150,7 +150,11 @@ export default function RegistroForm() {
           </button>
 
           <p className="text-center text-[12px] font-[550] text-muted">
-            Al crear la cuenta aceptás los términos y la política de privacidad.
+            Al crear la cuenta aceptás la{' '}
+            <Link href="/privacidad" className="font-bold text-accent-link underline">
+              política de privacidad
+            </Link>
+            .
           </p>
         </form>
       </div>

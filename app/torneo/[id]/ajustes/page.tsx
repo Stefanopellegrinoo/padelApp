@@ -15,6 +15,7 @@ import { serverClient } from '@/db/server'
 import { renameTournament } from './actions'
 import { CargaDeJugadores } from './carga-jugadores'
 import { CopiarLink } from './copiar'
+import { PasarAdmin } from './pasar-admin'
 import { Disciplinas } from './disciplinas'
 import { EliminarTorneo } from './eliminar'
 import { Plantel, type SeatVM } from './plantel'
@@ -229,6 +230,18 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
             <span className={LABEL}>Disciplinas</span>
             <span className={VALUE}>{header.disciplines.length} ›</span>
           </a>
+
+          <div className={`${ROW} border-t border-line`}>
+            <span className={LABEL}>Organiza</span>
+            {/* Sólo asientos reclamados (`playerId` no nulo = alguien con
+                cuenta lo tomó con el link) y no el propio. */}
+            <PasarAdmin
+              seasonId={seasonId}
+              candidates={squadMembers
+                .filter((member) => member.playerId !== null && member.id !== myEntry)
+                .map((member) => ({ entryId: member.id, name: member.displayName }))}
+            />
+          </div>
 
           <div className={`${ROW} border-t border-line`}>
             <span className={LABEL}>Link de invitación</span>

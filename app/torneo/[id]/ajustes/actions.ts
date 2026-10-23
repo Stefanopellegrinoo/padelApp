@@ -8,6 +8,7 @@ import { offeredModalities } from '@/app/deporte/tarjeta-state'
 import { addDiscipline, updateDisciplineRules, writeDisciplineRules } from '@/db/discipline'
 import { addToDiscipline, removeFromDiscipline } from '@/db/discipline-entries'
 import { createTeam, deleteTeam } from '@/db/discipline-teams'
+import { transferSeasonAdmin } from '@/db/account'
 import { addSquadSeat, claimOwnSeat, removeSeat, renameSeat, unlinkSeat } from '@/db/entries'
 import { EdgeError } from '@/db/errors'
 import { deleteSeason, regenerateInviteToken, renameSeason, updateSeasonPlayersCanScore } from '@/db/season'
@@ -305,4 +306,15 @@ export async function removeTournament(seasonId: string): Promise<WriteResult> {
 
   revalidatePath('/torneos')
   redirect('/torneos')
+}
+
+/**
+ * Pasa la administración al jugador del asiento `entryId` (S1,
+ * `odd/tasks/borrar-cuenta.md`). Si sale bien, Ajustes ya no es de quien
+ * llama: se lo manda al torneo.
+ */
+export async function transferAdmin(seasonId: string, entryId: string): Promise<WriteResult> {
+  const result = await onSeason(seasonId, (supabase) => transferSeasonAdmin(supabase, seasonId, entryId))
+  if (result.ok) redirect(`/torneo/${seasonId}`)
+  return result
 }

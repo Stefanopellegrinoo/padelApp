@@ -1028,6 +1028,7 @@ export type Database = {
         Args: { p_played_on: string; p_season: string }
         Returns: string
       }
+      delete_my_account: { Args: never; Returns: undefined }
       is_casual_participant: { Args: { p_match: string }; Returns: boolean }
       is_participant: { Args: { p_season: string }; Returns: boolean }
       is_season_admin: { Args: { p_season: string }; Returns: boolean }
@@ -1117,6 +1118,10 @@ export type Database = {
       }
       shift_seeds_up: {
         Args: { p_discipline: string; p_from: number }
+        Returns: undefined
+      }
+      transfer_season_admin: {
+        Args: { p_entry: string; p_season: string }
         Returns: undefined
       }
       unlink_seat: { Args: { p_entry: string }; Returns: undefined }

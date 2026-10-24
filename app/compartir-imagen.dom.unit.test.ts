@@ -40,17 +40,19 @@ afterEach(() => {
   delete (navigator as { canShare?: unknown }).canShare
 })
 
-async function render() {
+const TABLA = [
+  { nombre: '1. Juan', puntos: 12 },
+  { nombre: '2. Pedro', puntos: '1' },
+]
+
+async function render(filas: Parameters<typeof CompartirImagen>[0]['filas'] = TABLA) {
   await act(async () =>
     root.render(
       createElement(CompartirImagen, {
         archivo: 'liga-jueves',
         titulo: 'Liga Jueves',
         subtitulo: 'Tabla · fecha 3 de 10',
-        filas: [
-          { nombre: '1. Juan', puntos: 12 },
-          { nombre: '2. Pedro', puntos: '1' },
-        ],
+        filas,
       }),
     ),
   )
@@ -71,6 +73,17 @@ describe('CompartirImagen', () => {
     expect(title).toBe('Liga Jueves')
     expect(files.map((file) => [file.name, file.type])).toEqual([['liga-jueves.png', 'image/png']])
     expect(textos).toEqual(expect.arrayContaining(['Liga Jueves', 'Tabla · fecha 3 de 10', '1. Juan', '12 pts', '2. Pedro', '1 pt']))
+  })
+
+  it('los partidos de una fecha: títulos de ronda y filas sin puntos', async () => {
+    await render([
+      { nombre: 'Ronda 1', titulo: true },
+      { nombre: 'Juan & Pedro  vs  Luis & Ana' },
+      { nombre: 'Libre: Tomi & Nico' },
+    ])
+
+    expect(textos).toEqual(expect.arrayContaining(['Ronda 1', 'Juan & Pedro  vs  Luis & Ana', 'Libre: Tomi & Nico']))
+    expect(textos.filter((texto) => /\bpts?\b/.test(texto))).toEqual([])
   })
 
   it('sin menú de compartir: descarga la imagen', async () => {

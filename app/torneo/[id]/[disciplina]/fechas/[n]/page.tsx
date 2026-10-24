@@ -155,6 +155,8 @@ export default async function FechaDetailPage({ params }: PageProps) {
   // "Fecha 3 · 1 set a 6 games" en la cabecera de una fecha fuera del armado
   // que se juega distinto que el deporte (§7). Lo calcula la rama no-DRAFT.
   let notice: string | null = null
+  // "Compartir" de la fecha en juego: los partidos para el grupo. Lo arma la rama no-DRAFT.
+  let compartirPartidos: ReactNode = null
 
   let body: ReactNode = (
     <div className="rounded-card bg-chip p-4 text-center text-[13px] font-[550] text-muted">
@@ -674,6 +676,21 @@ export default async function FechaDetailPage({ params }: PageProps) {
       }
     })
 
+    if (status === 'OPEN' && !isGroupsKnockout && totalRounds > 0) {
+      compartirPartidos = (
+        <CompartirImagen
+          archivo={`fecha-${matchday.number}-partidos`}
+          titulo={isMasters ? 'Masters' : `Fecha ${matchday.number}`}
+          subtitulo={`${header.name}${matchday.playedOn !== null ? ` · ${matchdayFull(matchday.playedOn)}` : ''}`}
+          filas={rounds.flatMap((round) => [
+            { nombre: `Ronda ${round.number}`, titulo: true },
+            ...round.matches.map((match) => ({ nombre: `${match.pairAName}  vs  ${match.pairBName}` })),
+            ...(round.restingPairName !== null ? [{ nombre: `Libre: ${round.restingPairName}` }] : []),
+          ])}
+        />
+      )
+    }
+
     // Cerrar y reabrir son de quien organiza. La fecha cerrada no se carga más
     // —el handoff §9c: "sin botones de carga"—, y sólo se reabre la última
     // cerrada: las parejas de las que siguen salieron de esta tabla.
@@ -1013,9 +1030,12 @@ export default async function FechaDetailPage({ params }: PageProps) {
           ← Volver
         </Link>
         <p className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">{kicker}</p>
-        <h1 className="text-[26px] font-extrabold tracking-[-.03em]">
-          {isMasters ? 'Masters' : `Fecha ${matchday.number}`}
-        </h1>
+        <div className="flex items-center justify-between gap-2">
+          <h1 className="text-[26px] font-extrabold tracking-[-.03em]">
+            {isMasters ? 'Masters' : `Fecha ${matchday.number}`}
+          </h1>
+          {compartirPartidos}
+        </div>
         {notice !== null && <p className="text-[12.5px] font-bold text-muted">{notice}</p>}
       </header>
 

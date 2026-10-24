@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { rankingWithMovement, snapshotForMatchday, type Award, type EntryId } from '@/core'
 import type { DisciplineHeader, EntryRow, MatchdaySummary, SeasonHeader } from '@/db/read'
+import { CompartirImagen } from '@/app/compartir-imagen'
 import { initials, matchdayDay } from '@/app/format'
 import { Desempate, type StandingsRow, type TiebreakEntry } from './desempate'
 import { sportsOf } from './nav-state'
@@ -133,15 +134,25 @@ export function TablaView({
           )}
           <h1 className="text-[26px] font-extrabold tracking-[-.03em]">{header.name}</h1>
         </div>
-        {header.isAdmin && (
-          <Link
-            href={`/torneo/${header.id}/ajustes`}
-            aria-label="Ajustes"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-chip text-[18px]"
-          >
-            ⚙
-          </Link>
-        )}
+        <div className="flex shrink-0 gap-2">
+          {hasClosedMatchday && (
+            <CompartirImagen
+              archivo="tabla"
+              titulo={header.name}
+              subtitulo={`${sportName === undefined ? 'Tabla' : `Tabla de ${sportName}`} · ${closedRegular.length} de ${config.regularMatchdays} fechas jugadas`}
+              filas={rows.map((row) => ({ nombre: `${row.position}. ${row.displayName}`, puntos: row.points }))}
+            />
+          )}
+          {header.isAdmin && (
+            <Link
+              href={`/torneo/${header.id}/ajustes`}
+              aria-label="Ajustes"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-chip text-[18px]"
+            >
+              ⚙
+            </Link>
+          )}
+        </div>
       </header>
 
       {liveMatchday !== null && (

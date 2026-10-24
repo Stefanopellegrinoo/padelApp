@@ -48,6 +48,7 @@ import { TablaDelDia } from './tabla-del-dia'
 import { awardsBefore, closedHistory, frozenPointsOf, type FrozenAward } from '@/db/season'
 import { serverClient } from '@/db/server'
 import { EdgeError } from '@/db/errors'
+import { CompartirImagen } from '@/app/compartir-imagen'
 import { matchdayFull } from '@/app/format'
 import { Rondas, type RoundMatchVM, type RoundVM } from './rondas'
 import { Armado, type DraftPairVM, type GroupPreviewVM, type GuestPairVM, type GuestVM, type SeatVM } from './armado'
@@ -815,6 +816,16 @@ export default async function FechaDetailPage({ params }: PageProps) {
             .sort((a, b) => a.seedPosition - b.seedPosition)
             .map((entry) => ({ entryId: entry.id, name: entry.displayName }))
 
+    // La columna `Pts` de la tabla del día (el porqué, donde se usa abajo).
+    const ptsOf = (side: Side) =>
+      status === 'OPEN'
+        ? '—'
+        : String(
+            members(side)
+              .map((entryId) => pointsByEntry.get(entryId)?.points)
+              .find((points) => points !== undefined) ?? 0,
+          )
+
     body = (
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap gap-1.5">
@@ -875,7 +886,20 @@ export default async function FechaDetailPage({ params }: PageProps) {
           </div>
         ) : (
         <div className="flex flex-col gap-2">
-          <p className="text-[15px] font-extrabold tracking-[-.02em]">Tabla de la fecha</p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[15px] font-extrabold tracking-[-.02em]">Tabla de la fecha</p>
+            {status === 'CLOSED' && groupedStandings.length === 0 && (
+              <CompartirImagen
+                archivo={`fecha-${matchday.number}`}
+                titulo={`Fecha ${matchday.number}`}
+                subtitulo={`${header.name}${matchday.playedOn !== null ? ` · ${matchdayFull(matchday.playedOn)}` : ''}`}
+                filas={tableRows.map((row, index) => ({
+                  nombre: `${index + 1}. ${sideName(row.side)}`,
+                  puntos: ptsOf(row.side),
+                }))}
+              />
+            )}
+          </div>
           {/* S82 (verify-report-pr21 #4004): sólo OPEN se parte por grupo —
               `groupedStandings` (arriba) está VACÍO fuera de
               `OPEN && GROUPS_KNOCKOUT`, así que ROUND_ROBIN y la fecha
@@ -931,14 +955,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
                 // del invitado los dos no cobran lo mismo (el invitado 0), y en un
                 // lado de uno hay un solo miembro y es el suyo. `members` recorre
                 // los que haya, así que la regla es la misma para las dos formas.
-                pts:
-                  status === 'OPEN'
-                    ? '—'
-                    : String(
-                        members(row.side)
-                          .map((entryId) => pointsByEntry.get(entryId)?.points)
-                          .find((points) => points !== undefined) ?? 0,
-                      ),
+                pts: ptsOf(row.side),
               }))}
             />
           )}

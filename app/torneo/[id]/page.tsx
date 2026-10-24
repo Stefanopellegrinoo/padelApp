@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { computeGlobalRanking, computeRanking, disciplineSlugs, sportLabel, type DisciplineRanking } from '@/core'
 import { seasonAwardsOf, seasonHeader, seasonMatchdaysOf, seasonSquadMembersOf } from '@/db/read'
 import { serverClient } from '@/db/server'
+import { CompartirImagen } from '@/app/compartir-imagen'
 import { initials } from '@/app/format'
 import { Desempate, type StandingsRow } from './desempate'
 import { singleDisciplineRedirect } from './tabla-state'
@@ -156,15 +157,25 @@ export default async function TablaGlobalPage({ params }: PageProps) {
       <Volver href="/torneos" label="Mis torneos" />
       <header className="flex items-start justify-between">
         <h1 className="text-[26px] font-extrabold tracking-[-.03em]">{header.name}</h1>
-        {header.isAdmin && (
-          <Link
-            href={`/torneo/${seasonId}/ajustes`}
-            aria-label="Ajustes"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-chip text-[18px]"
-          >
-            ⚙
-          </Link>
-        )}
+        <div className="flex shrink-0 gap-2">
+          {anyClosed && (
+            <CompartirImagen
+              archivo="tabla"
+              titulo={header.name}
+              subtitulo="Tabla general"
+              filas={rows.map((row) => ({ nombre: `${row.position}. ${row.displayName}`, puntos: row.points }))}
+            />
+          )}
+          {header.isAdmin && (
+            <Link
+              href={`/torneo/${seasonId}/ajustes`}
+              aria-label="Ajustes"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-chip text-[18px]"
+            >
+              ⚙
+            </Link>
+          )}
+        </div>
       </header>
 
       <div className="flex flex-col gap-2">

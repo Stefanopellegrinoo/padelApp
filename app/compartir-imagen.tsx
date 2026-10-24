@@ -101,6 +101,7 @@ async function dibujar(titulo: string, subtitulo: string, filas: readonly FilaIm
   ctx.fillText(recortar(ctx, subtitulo, ANCHO - 2 * MARGEN), MARGEN, 158)
 
   let franja = 0
+  const lider = filas.findIndex((fila) => fila.puntos !== undefined)
   filas.forEach((fila, index) => {
     const y = CABECERA + index * ALTO_FILA
     const centro = y + ALTO_FILA / 2
@@ -120,7 +121,7 @@ async function dibujar(titulo: string, subtitulo: string, filas: readonly FilaIm
     if (fila.puntos !== undefined) {
       const der = `${fila.puntos} ${Number(fila.puntos) === 1 ? 'pt' : 'pts'}`
       ctx.font = `800 34px ${fuente}`
-      ctx.fillStyle = index === 0 ? ACENTO : TEXTO
+      ctx.fillStyle = index === lider ? ACENTO : TEXTO
       ctx.textAlign = 'right'
       ctx.fillText(der, ANCHO - MARGEN, centro)
       anchoDer = ctx.measureText(der).width

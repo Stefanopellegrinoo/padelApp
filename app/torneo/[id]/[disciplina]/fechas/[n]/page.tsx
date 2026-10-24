@@ -155,8 +155,9 @@ export default async function FechaDetailPage({ params }: PageProps) {
   // "Fecha 3 · 1 set a 6 games" en la cabecera de una fecha fuera del armado
   // que se juega distinto que el deporte (§7). Lo calcula la rama no-DRAFT.
   let notice: string | null = null
-  // "Compartir" de la fecha en juego: los partidos para el grupo. Lo arma la rama no-DRAFT.
-  let compartirPartidos: ReactNode = null
+  // "Compartir" para el grupo: los partidos de la fecha en juego, o el campeón con la
+  // tabla del año en el Masters cerrado. Lo arma la rama no-DRAFT.
+  let compartir: ReactNode = null
 
   let body: ReactNode = (
     <div className="rounded-card bg-chip p-4 text-center text-[13px] font-[550] text-muted">
@@ -626,6 +627,17 @@ export default async function FechaDetailPage({ params }: PageProps) {
       // línea que diga por qué es él, se lee como un bug.
       const tied = four.filter((entryId) => winsOf(entryId) === wins)
       const others = tied.filter((entryId) => entryId !== championId).map((id) => nameOf.get(id) ?? '?')
+      compartir = (
+        <CompartirImagen
+          archivo="campeon"
+          titulo={`Campeón: ${nameOf.get(championId) ?? '?'}`}
+          subtitulo={header.name}
+          filas={[
+            { nombre: 'Tabla del año', titulo: true },
+            ...ranking.map((row, index) => ({ nombre: `${index + 1}. ${nameOf.get(row.entryId) ?? '?'}`, puntos: row.points })),
+          ]}
+        />
+      )
       champion = {
         name: nameOf.get(championId) ?? '?',
         tiebreak:
@@ -677,7 +689,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
     })
 
     if (status === 'OPEN' && !isGroupsKnockout && totalRounds > 0) {
-      compartirPartidos = (
+      compartir = (
         <CompartirImagen
           archivo={`fecha-${matchday.number}-partidos`}
           titulo={isMasters ? 'Masters' : `Fecha ${matchday.number}`}
@@ -1034,7 +1046,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
           <h1 className="text-[26px] font-extrabold tracking-[-.03em]">
             {isMasters ? 'Masters' : `Fecha ${matchday.number}`}
           </h1>
-          {compartirPartidos}
+          {compartir}
         </div>
         {notice !== null && <p className="text-[12.5px] font-bold text-muted">{notice}</p>}
       </header>

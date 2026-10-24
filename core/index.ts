@@ -235,8 +235,8 @@ export { rankingWithMovement } from './movement'
 
 // Counts only. The percentages are the screen's job, which also keeps the
 // divide-by-zero decision out of here.
-export type { PlayedMatchday, PartnerRecord, PlayerTally } from './playerstats'
-export { tallyPlayers, partnerRecords, bestPair } from './playerstats'
+export type { PlayedMatchday, PartnerRecord, PlayerTally, RivalRecord } from './playerstats'
+export { tallyPlayers, partnerRecords, bestPair, rivalRecords } from './playerstats'
 
 // ── Splitting a pool into pairs ──────────────────────────────────────────────
 // Dejó de ser interno el día que el torneo rápido (`app/rapido`) necesitó

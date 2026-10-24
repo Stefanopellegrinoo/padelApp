@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import {
   computeRanking,
   partnerRecords,
+  rivalRecords,
   rankingWithMovement,
   resolveDisciplineBySlug,
   snapshotForMatchday,
@@ -327,6 +328,10 @@ export default async function JugadorPage({ params }: PageProps) {
   const myRecords = partnerRecords(history)
     .filter((record) => record.entryId === entryId)
     .sort((a, b) => b.won - b.lost - (a.won - a.lost) || b.together - a.together)
+  // Los que más veces tuvo enfrente primero: el cara a cara que más se repite es el que se discute.
+  const rivals = rivalRecords(history, entryId).sort(
+    (a, b) => b.won + b.lost - (a.won + a.lost) || b.won - b.lost - (a.won - a.lost),
+  )
 
   return (
     <div className="flex flex-col gap-3 pt-4">
@@ -416,6 +421,30 @@ export default async function JugadorPage({ params }: PageProps) {
                   </span>
                   <span className="flex-1 text-[14px] font-bold">{nameById.get(record.partner) ?? ''}</span>
                   <span className={`text-[12.5px] font-extrabold ${positive ? 'text-up' : 'text-muted'}`}>
+                    {record.won}-{record.lost}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {rivals.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <p className="text-[15px] font-extrabold tracking-[-.02em]">Cara a cara</p>
+          <div className="flex flex-col">
+            {rivals.map((record) => {
+              const balance = record.won - record.lost
+              return (
+                <div key={record.rival} className="flex items-center gap-3 p-2">
+                  <span className="flex h-[28px] w-[28px] shrink-0 items-center justify-center rounded-full bg-chip text-[12px] font-extrabold text-muted">
+                    {initials(nameById.get(record.rival) ?? '')}
+                  </span>
+                  <span className="flex-1 text-[14px] font-bold">{nameById.get(record.rival) ?? ''}</span>
+                  <span
+                    className={`text-[12.5px] font-extrabold ${balance > 0 ? 'text-up' : balance < 0 ? 'text-down' : 'text-muted'}`}
+                  >
                     {record.won}-{record.lost}
                   </span>
                 </div>

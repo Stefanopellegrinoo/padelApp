@@ -4,7 +4,10 @@ import { useEffect, useState } from 'react'
 
 export interface FilaImagen {
   nombre: string
-  puntos: number | string
+  /** Sin puntos, la fila es sólo el texto (los partidos de una fecha). */
+  puntos?: number | string
+  /** Encabezado de sección ("Ronda 1"): sin fondo y en gris. */
+  titulo?: boolean
 }
 
 interface CompartirImagenProps {
@@ -97,23 +100,39 @@ async function dibujar(titulo: string, subtitulo: string, filas: readonly FilaIm
   ctx.font = `600 30px ${fuente}`
   ctx.fillText(recortar(ctx, subtitulo, ANCHO - 2 * MARGEN), MARGEN, 158)
 
+  let franja = 0
   filas.forEach((fila, index) => {
     const y = CABECERA + index * ALTO_FILA
-    if (index % 2 === 0) {
+    const centro = y + ALTO_FILA / 2
+    ctx.textAlign = 'left'
+    if (fila.titulo) {
+      franja = 0
+      ctx.fillStyle = TENUE
+      ctx.font = `800 28px ${fuente}`
+      ctx.fillText(recortar(ctx, fila.nombre, ANCHO - 2 * MARGEN), MARGEN, centro + 8)
+      return
+    }
+    if (franja++ % 2 === 0) {
       ctx.fillStyle = SUPERFICIE
       ctx.fillRect(MARGEN / 2, y, ANCHO - MARGEN, ALTO_FILA)
     }
-    const centro = y + ALTO_FILA / 2
-    const der = `${fila.puntos} ${Number(fila.puntos) === 1 ? 'pt' : 'pts'}`
-    ctx.font = `800 34px ${fuente}`
-    ctx.fillStyle = index === 0 ? ACENTO : TEXTO
-    ctx.textAlign = 'right'
-    ctx.fillText(der, ANCHO - MARGEN, centro)
-    const anchoDer = ctx.measureText(der).width
-    ctx.font = `700 34px ${fuente}`
+    let anchoDer = -32
+    if (fila.puntos !== undefined) {
+      const der = `${fila.puntos} ${Number(fila.puntos) === 1 ? 'pt' : 'pts'}`
+      ctx.font = `800 34px ${fuente}`
+      ctx.fillStyle = index === 0 ? ACENTO : TEXTO
+      ctx.textAlign = 'right'
+      ctx.fillText(der, ANCHO - MARGEN, centro)
+      anchoDer = ctx.measureText(der).width
+      ctx.textAlign = 'left'
+    }
+    const ancho = ANCHO - 2 * MARGEN - anchoDer - 32
+    // Un partido de parejas es largo: achicar antes de que el "…" se coma al rival.
+    let tamaño = 34
+    do ctx.font = `700 ${tamaño--}px ${fuente}`
+    while (fila.puntos === undefined && tamaño >= 24 && ctx.measureText(fila.nombre).width > ancho)
     ctx.fillStyle = TEXTO
-    ctx.textAlign = 'left'
-    ctx.fillText(recortar(ctx, fila.nombre, ANCHO - 2 * MARGEN - anchoDer - 32), MARGEN, centro)
+    ctx.fillText(recortar(ctx, fila.nombre, ancho), MARGEN, centro)
   })
 
   ctx.fillStyle = TENUE

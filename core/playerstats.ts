@@ -187,3 +187,31 @@ export function bestPair(history: readonly PlayedMatchday[]): PartnerRecord | nu
   const best = tallies.reduce((top, tally) => (isBetterPartnership(tally, top) ? tally : top))
   return { entryId: best.pair.a, partner: best.pair.b, together: best.together, won: best.won, lost: best.lost }
 }
+
+export interface RivalRecord {
+  rival: EntryId
+  won: number
+  lost: number
+}
+
+/**
+ * `entryId`'s record against each person who stood across the net, in order of first meeting.
+ * In pairs both opponents count as rivals; draws and unplayed matches count for nobody.
+ */
+export function rivalRecords(history: readonly PlayedMatchday[], entryId: EntryId): RivalRecord[] {
+  const records = new Map<EntryId, RivalRecord>()
+  for (const matchday of history) {
+    for (const match of matchday.matches) {
+      if (match.sets.length === 0) continue // not played yet
+      const { winner } = matchOutcome(match)
+      if (winner === 'tie') continue
+      const mine = members(match.sideA).includes(entryId) ? 'A' : members(match.sideB).includes(entryId) ? 'B' : null
+      if (mine === null) continue
+      for (const rival of members(mine === 'A' ? match.sideB : match.sideA)) {
+        const record = records.get(rival) ?? { rival, won: 0, lost: 0 }
+        records.set(rival, winner === mine ? { ...record, won: record.won + 1 } : { ...record, lost: record.lost + 1 })
+      }
+    }
+  }
+  return [...records.values()]
+}

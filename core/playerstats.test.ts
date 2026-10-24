@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { tallyPlayers, partnerRecords, bestPair } from './playerstats'
+import { tallyPlayers, partnerRecords, bestPair, rivalRecords } from './playerstats'
 import type { PlayedMatchday } from './playerstats'
 import { pair, single } from './side'
 import type { MatchResult, Side } from './types'
@@ -190,5 +190,41 @@ describe('lados de uno (pair_size=1)', () => {
     const records = partnerRecords(mixed)
     expect(records.map((row) => row.entryId).sort()).toEqual(['d1', 'd2', 'r1', 'r2'])
     expect(bestPair(mixed)?.entryId).toBe('d1')
+  })
+})
+
+describe('rivalRecords', () => {
+  it('one on one: counts wins and losses against each rival, from both sides', () => {
+    const a = single('a')
+    const b = single('b')
+    const c = single('c')
+    const history: PlayedMatchday[] = [
+      { number: 1, sides: [a, b, c], matches: [match(a, b, 3, 1), match(b, a, 2, 0), match(c, a, 0, 1)] },
+      { number: 2, sides: [a, b], matches: [match(b, a, 0, 2)] },
+    ]
+    expect(rivalRecords(history, 'a')).toEqual([
+      { rival: 'b', won: 2, lost: 1 },
+      { rival: 'c', won: 1, lost: 0 },
+    ])
+    expect(rivalRecords(history, 'b')).toEqual([{ rival: 'a', won: 1, lost: 2 }])
+  })
+
+  it('in pairs, both players across the net are rivals and the partner is not', () => {
+    const pairA = pair('a1', 'a2')
+    const pairB = pair('b1', 'b2')
+    const history: PlayedMatchday[] = [{ number: 1, sides: [pairA, pairB], matches: [match(pairA, pairB, 4, 2)] }]
+    expect(rivalRecords(history, 'a1')).toEqual([
+      { rival: 'b1', won: 1, lost: 0 },
+      { rival: 'b2', won: 1, lost: 0 },
+    ])
+  })
+
+  it('skips draws and matches not played yet', () => {
+    const a = single('a')
+    const b = single('b')
+    const history: PlayedMatchday[] = [
+      { number: 1, sides: [a, b], matches: [match(a, b, 1, 1), { ...match(a, b, 0, 0), sets: [] }] },
+    ]
+    expect(rivalRecords(history, 'a')).toEqual([])
   })
 })

@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { computeGlobalRanking, computeRanking, disciplineSlugs, sportLabel, type DisciplineRanking } from '@/core'
+import { computeGlobalRanking, computeRanking, type DisciplineRanking } from '@/core'
 import { seasonAwardsOf, seasonHeader, seasonMatchdaysOf, seasonSquadMembersOf } from '@/db/read'
 import { serverClient } from '@/db/server'
 import { CompartirImagen } from '@/app/compartir-imagen'
@@ -150,8 +150,6 @@ export default async function TablaGlobalPage({ params }: PageProps) {
     }
   })
 
-  const slugOf = disciplineSlugs(header.disciplines)
-
   return (
     <div className="flex flex-col gap-3 pt-4">
       <Volver href="/torneos" label="Mis torneos" />
@@ -177,19 +175,6 @@ export default async function TablaGlobalPage({ params }: PageProps) {
           )}
         </div>
       </header>
-
-      <div className="flex flex-col gap-2">
-        {header.disciplines.map((discipline) => (
-          <Link
-            key={discipline.id}
-            href={`/torneo/${seasonId}/${slugOf.get(discipline.id)}`}
-            className="flex items-center justify-between rounded-card border border-line bg-surface p-4"
-          >
-            <p className="text-[15px] font-extrabold">Tabla de {sportLabel(discipline.kind)}</p>
-            <span className="text-muted">{slugOf.get(discipline.id)} ›</span>
-          </Link>
-        ))}
-      </div>
 
       <Desempate
         // Sin disciplina: `rows` acá suma puntos de TODAS, no hay un perfil

@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { redirect } from 'next/navigation'
+import { redirect, RedirectType } from 'next/navigation'
 import { isTournamentSport, type DisciplineId } from '@/core'
 import type { DisciplineRules } from '@/app/deporte/personalizar-reglas-state'
 import { offeredModalities } from '@/app/deporte/tarjeta-state'
@@ -64,6 +64,9 @@ export async function renameTournament(formData: FormData): Promise<void> {
     problem === null
       ? `/torneo/${seasonId}/ajustes`
       : `/torneo/${seasonId}/ajustes?error=${encodeURIComponent(problem)}`,
+    // En una Server Action `redirect` apila por defecto: cada guardado sumaba
+    // otro Ajustes al historial y "atrás" no salía nunca de acá.
+    RedirectType.replace,
   )
 }
 

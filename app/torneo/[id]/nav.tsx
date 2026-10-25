@@ -29,6 +29,7 @@ export function TorneoNav({ seasonId, defaultDisciplineSlug }: TorneoNavProps) {
         <Link
           key={tab.label}
           href={tab.href}
+          replace={tab.replace}
           prefetch
           className="flex min-h-[44px] flex-1 items-center justify-center"
         >

@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { disciplineSlugs, formatsLabel, sportLabel, unitOf, validateConfig } from '@/core'
 import { disciplineConfig } from '@/db/discipline'
@@ -209,10 +210,11 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
             />
           </form>
 
-          <a href="#plantel" className={`${ROW} border-t border-line`}>
+          {/* `replace`: saltar a un panel de esta misma pantalla no suma entradas al historial — "atrás" sale de Ajustes. */}
+          <Link href="#plantel" replace className={`${ROW} border-t border-line`}>
             <span className={LABEL}>Plantel</span>
             <span className={VALUE}>{seats.length} ›</span>
-          </a>
+          </Link>
 
           {/* Sólo con una disciplina (Task 4): con 2+ el panel al que este
               ancla apunta ya no vive en esta pantalla -- se mudó a
@@ -220,16 +222,16 @@ export default async function AjustesPage({ params, searchParams }: PageProps) {
               quedar apuntando a un `#formato` que ya no existe acá (el
               defecto medido: el ancla siempre caía en la disciplina [0]). */}
           {single && (
-            <a href="#formato" className={`${ROW} border-t border-line`}>
+            <Link href="#formato" replace className={`${ROW} border-t border-line`}>
               <span className={LABEL}>Formato</span>
               <span className={VALUE}>{formatoLabel} ›</span>
-            </a>
+            </Link>
           )}
 
-          <a href="#disciplinas" className={`${ROW} border-t border-line`}>
+          <Link href="#disciplinas" replace className={`${ROW} border-t border-line`}>
             <span className={LABEL}>Disciplinas</span>
             <span className={VALUE}>{header.disciplines.length} ›</span>
-          </a>
+          </Link>
 
           <div className={`${ROW} border-t border-line`}>
             <span className={LABEL}>Organiza</span>

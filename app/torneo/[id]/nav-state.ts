@@ -21,6 +21,12 @@ export interface NavTab {
   label: string
   href: string
   isActive: boolean
+  /**
+   * Ajustes es un desvío desde la Tabla (el ⚙): salir de ahí por el nav
+   * reemplaza la entrada en vez de apilarla, así "atrás" vuelve a la Tabla y
+   * no a Ajustes.
+   */
+  replace: boolean
 }
 
 /**
@@ -60,8 +66,9 @@ export function navTabs(seasonId: string, defaultDisciplineSlug: string, pathnam
   // significar "tocarlo de nuevo no te mueve de acá", no "hay algo parecido".
   const tablaSegment = /^\/([^/]+)$/.exec(rest)?.[1]
   const isTabla = tablaSegment !== undefined && !NON_DISCIPLINE_SEGMENTS.has(tablaSegment)
+  const replace = rest.endsWith('/ajustes')
 
-  return [
+  const tabs = [
     { label: 'Tabla', href: `${base}/${slug}`, isActive: isTabla },
     {
       label: 'Fechas',
@@ -83,6 +90,7 @@ export function navTabs(seasonId: string, defaultDisciplineSlug: string, pathnam
       isActive: pathname.startsWith(`${base}/reglas`),
     },
   ]
+  return tabs.map((tab) => ({ ...tab, replace }))
 }
 
 export interface SportChip {

@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import { Volver } from '@/app/torneo/[id]/volver'
 import { notFound } from 'next/navigation'
 import type { ReactNode } from 'react'
 import {
@@ -1038,9 +1038,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
   return (
     <div className="flex flex-col gap-4 pt-3">
       <header className="flex flex-col gap-[3px]">
-        <Link href={`/torneo/${seasonId}/${disciplina}/fechas`} className="-mt-2 mb-1 flex min-h-[44px] w-fit items-center text-[12.5px] font-bold text-accent-link">
-          ← Volver
-        </Link>
+        <Volver href={`/torneo/${seasonId}/${disciplina}/fechas`} />
         <p className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">{kicker}</p>
         <div className="flex items-center justify-between gap-2">
           <h1 className="text-[26px] font-extrabold tracking-[-.03em]">

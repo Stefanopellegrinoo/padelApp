@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { Archivo } from 'next/font/google'
 import './globals.css'
+import { Historial } from './torneo/[id]/volver'
 import { PullToRefresh } from './pull-to-refresh'
 import { ServiceWorker } from './service-worker'
 
@@ -76,6 +77,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className={archivo.className}>
         {children}
         <ServiceWorker />
+        <Historial />
         <PullToRefresh />
       </body>
     </html>

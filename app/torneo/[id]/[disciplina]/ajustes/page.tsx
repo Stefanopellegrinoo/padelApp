@@ -171,7 +171,7 @@ export default async function DisciplinaAjustesPage({ params }: PageProps) {
 
   return (
     <div className="flex flex-col gap-4 pt-3">
-      <Volver href={`/torneo/${seasonId}/ajustes`} label="Ajustes" />
+      <Volver href={`/torneo/${seasonId}/ajustes`} />
       <header className="flex flex-col gap-[3px]">
         <p className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">{header.name}</p>
         <h1 className="text-[26px] font-extrabold tracking-[-.03em]">

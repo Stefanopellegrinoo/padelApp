@@ -2,17 +2,24 @@
 
 import Link, { useLinkStatus } from 'next/link'
 import { usePathname } from 'next/navigation'
-import { navTabs } from './nav-state'
+import { useState } from 'react'
+import { currentDisciplineSlug, navTabs } from './nav-state'
 
 interface TorneoNavProps {
   seasonId: string
-  /** Disciplina [0] de la temporada — a dónde apuntan Tabla, Fechas y Stats cuando la URL actual no trae ninguna (contenedor, Ajustes, Reglas). */
+  /** Disciplina [0] de la temporada — a dónde apuntan Tabla, Fechas y Stats cuando la URL actual no trae ninguna (contenedor, Ajustes, Reglas) y todavía no se pasó por ningún deporte. */
   defaultDisciplineSlug: string
 }
 
 export function TorneoNav({ seasonId, defaultDisciplineSlug }: TorneoNavProps) {
   const pathname = usePathname()
-  const tabs = navTabs(seasonId, defaultDisciplineSlug, pathname)
+  // El último deporte que se miró. Reglas y Ajustes no llevan deporte en la
+  // URL; sin esto, pasar por ahí te devolvía al primero. Vive en el layout del
+  // torneo, que no se desmonta al navegar entre sus pantallas.
+  const current = currentDisciplineSlug(`/torneo/${seasonId}`, pathname)
+  const [lastSlug, setLastSlug] = useState(defaultDisciplineSlug)
+  if (current !== null && current !== lastSlug) setLastSlug(current)
+  const tabs = navTabs(seasonId, current ?? lastSlug, pathname)
 
   return (
     <nav className="sticky bottom-0 flex border-t border-line bg-bg px-[22px] pt-2 pb-[max(1.5rem,env(safe-area-inset-bottom))]">

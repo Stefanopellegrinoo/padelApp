@@ -62,6 +62,16 @@ describe('navTabs — Tabla, Fechas y Stats llevan la disciplina en el href', ()
   })
 })
 
+describe('navTabs — desde Ajustes la pestaña reemplaza la entrada del historial', () => {
+  it.each([`${base}/ajustes`, `${base}/padel/ajustes`])('en %s todas reemplazan: atrás vuelve a la Tabla, no a Ajustes', (pathname) => {
+    expect(navTabs(seasonId, defaultDisciplineSlug, pathname).every((tab) => tab.replace)).toBe(true)
+  })
+
+  it.each([`${base}/padel`, `${base}/padel/fechas/3`, `${base}/reglas`])('fuera de Ajustes (%s) apilan como siempre', (pathname) => {
+    expect(navTabs(seasonId, defaultDisciplineSlug, pathname).some((tab) => tab.replace)).toBe(false)
+  })
+})
+
 describe('navTabs — Reglas queda apuntando al contenedor siempre', () => {
   it('no lleva disciplina, ni con una en la URL actual', () => {
     const reglas = navTabs(seasonId, defaultDisciplineSlug, `${base}/fifa/fechas/2`).find(

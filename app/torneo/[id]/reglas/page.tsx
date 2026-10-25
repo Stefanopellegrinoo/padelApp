@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { reglamento, sportLabel, unitOf } from '@/core'
 import { publicFormats, publicRules, seasonHeaderOrNull, type PublicFormat } from '@/db/read'
 import { serverClient } from '@/db/server'
+import { sportsOf } from '../nav-state'
 import { RulesBody, type RulesBlock } from './rules-body'
 
 interface ReglasPageProps {
@@ -85,11 +86,13 @@ export default async function ReglasPage({ params }: ReglasPageProps) {
   // `formats` no puede estar vacío acá: `season_public_rules` (que ya devolvió
   // `rules !== null`) es un INNER JOIN contra `disciplines`, así que las dos
   // funciones ven la misma fila o ninguna.
+  // Mismo orden (`position, created_at`) en `formats` y en `header.disciplines`.
+  const slugs = header === null ? [] : sportsOf(header.disciplines).map((sport) => sport.slug)
   return (
     <>
       <RulesBody
         seasonId={id}
-        disciplines={blocksOf(formats)}
+        disciplines={blocksOf(formats).map((block, index) => ({ ...block, slug: slugs[index] }))}
         adminName={rules.adminName}
         isAdmin={header?.isAdmin ?? false}
       />

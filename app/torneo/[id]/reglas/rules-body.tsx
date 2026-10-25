@@ -105,6 +105,8 @@ export interface RulesBlock {
   unit: string
   /** Las reglas de la casa: el texto libre de quien organiza, de ESTA disciplina. */
   text: string
+  /** Slug de URL del deporte, para su "Editar reglas". Sólo la rama con sesión lo sabe. */
+  slug?: string
 }
 
 export interface RulesBodyProps {
@@ -131,6 +133,8 @@ export interface RulesBodyProps {
  * sin una línea de JS, y llega cerrado.
  */
 export function RulesBody({ seasonId, disciplines, adminName, isAdmin }: RulesBodyProps) {
+  // Con 2+ deportes las reglas se editan en el Ajustes de cada uno, no en el general.
+  const single = disciplines.length === 1
   return (
     <div className="flex flex-col gap-4 pt-4">
       <h1 className="text-[26px] font-extrabold tracking-[-.03em]">Reglas</h1>
@@ -177,13 +181,22 @@ export function RulesBody({ seasonId, disciplines, adminName, isAdmin }: RulesBo
                 rows={rulesRowsOf(discipline.config, discipline.shape, discipline.label, discipline.unit)}
               />
             </details>
+
+            {isAdmin && !single && discipline.slug !== undefined && (
+              <Link
+                href={`/torneo/${seasonId}/${discipline.slug}/ajustes`}
+                className="rounded-field border-[1.5px] border-line p-4 text-center text-[14px] font-extrabold"
+              >
+                Editar reglas
+              </Link>
+            )}
           </section>
         )
       })}
 
       <p className="text-pretty text-[12.5px] leading-[1.5] font-[550] text-muted">{FECHA_ESPECIAL}</p>
 
-      {isAdmin && (
+      {isAdmin && single && (
         <Link
           href={`/torneo/${seasonId}/ajustes`}
           className="rounded-field border-[1.5px] border-line p-4 text-center text-[14px] font-extrabold"

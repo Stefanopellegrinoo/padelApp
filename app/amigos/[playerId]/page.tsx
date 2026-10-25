@@ -75,7 +75,7 @@ export default async function AmigoPage({ params, searchParams }: PageProps) {
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-lg flex-col gap-5 bg-bg px-5 pb-8 text-text">
       <header className="flex flex-col gap-3 pt-4">
-        <Volver href="/amigos" label="Amigos" />
+        <Volver href="/amigos" />
         <div className="flex items-center gap-3.5">
           <span className="flex h-[56px] w-[56px] shrink-0 items-center justify-center rounded-full bg-accent text-[20px] font-extrabold text-accent-text">
             {initials(nombre)}

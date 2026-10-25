@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import { Volver } from '@/app/torneo/[id]/volver'
 import { notFound } from 'next/navigation'
 import {
   computeRanking,
@@ -255,14 +255,7 @@ export default async function JugadorPage({ params }: PageProps) {
   if (entry === undefined) {
     return (
       <div className="flex flex-col gap-3 pt-4">
-        <div className="flex justify-end">
-          <Link
-            href={volverHref}
-            className="flex h-11 shrink-0 items-center rounded-full bg-chip px-[14px] text-[13px] font-bold"
-          >
-            ← Volver
-          </Link>
-        </div>
+        <Volver href={volverHref} />
         <div className="flex items-center gap-3 rounded-card border border-line bg-surface p-4">
           <span className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full bg-accent text-[19px] font-extrabold text-accent-text">
             {initials(member.displayName)}
@@ -335,14 +328,7 @@ export default async function JugadorPage({ params }: PageProps) {
 
   return (
     <div className="flex flex-col gap-3 pt-4">
-      <div className="flex justify-end">
-        <Link
-          href={volverHref}
-          className="flex h-11 shrink-0 items-center rounded-full bg-chip px-[14px] text-[13px] font-bold"
-        >
-          ← Volver
-        </Link>
-      </div>
+      <Volver href={volverHref} />
 
       <div className="flex items-center gap-3 rounded-card border border-line bg-surface p-4">
         <span className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full bg-accent text-[19px] font-extrabold text-accent-text">

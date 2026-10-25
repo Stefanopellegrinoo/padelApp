@@ -25,7 +25,7 @@ function litLabel(pathname: string): string | null {
  */
 describe('navTabs — qué pestaña enciende cada ruta', () => {
   it.each([
-    ['1. contenedor', `${base}`, null],
+    ['1. tabla general', `${base}`, 'Tabla'],
     ['2. tabla de una disciplina', `${base}/padel`, 'Tabla'],
     ['3. fechas de una disciplina', `${base}/padel/fechas`, 'Fechas'],
     ['4. una fecha puntual', `${base}/padel/fechas/3`, 'Fechas'],
@@ -43,7 +43,7 @@ describe('navTabs — qué pestaña enciende cada ruta', () => {
 
 describe('navTabs — Tabla, Fechas y Stats llevan la disciplina en el href', () => {
   it('sin disciplina en la URL, caen a la [0] de la temporada', () => {
-    const [tabla, fechas, stats] = navTabs(seasonId, defaultDisciplineSlug, `${base}`)
+    const [tabla, fechas, stats] = navTabs(seasonId, defaultDisciplineSlug, `${base}/reglas`)
     expect(tabla?.href).toBe(`${base}/padel`)
     expect(fechas?.href).toBe(`${base}/padel/fechas`)
     expect(stats?.href).toBe(`${base}/padel/stats`)
@@ -59,6 +59,11 @@ describe('navTabs — Tabla, Fechas y Stats llevan la disciplina en el href', ()
   it('Tabla apunta directo a la disciplina, no al contenedor — sin el redirect de una sola disciplina', () => {
     const [tabla] = navTabs(seasonId, defaultDisciplineSlug, `${base}/padel`)
     expect(tabla?.href).not.toBe(base)
+  })
+
+  it('en la tabla general, Tabla se queda ahí: tocarla de nuevo no te mueve', () => {
+    const [tabla] = navTabs(seasonId, defaultDisciplineSlug, `${base}`)
+    expect(tabla?.href).toBe(base)
   })
 })
 
@@ -113,18 +118,18 @@ describe('sportChips — cuándo se muestran', () => {
   })
 
   it.each([
-    ['tabla', `${base}/padel`],
-    ['fechas', `${base}/padel/fechas`],
-    ['stats', `${base}/padel/stats`],
-  ])('en la raíz de %s (%s) hay un chip por deporte', (_section, pathname) => {
-    expect(sportChips(seasonId, sports, pathname)).toHaveLength(2)
+    ['tabla', `${base}/padel`, 3],
+    ['la tabla general', `${base}`, 3],
+    ['fechas', `${base}/padel/fechas`, 2],
+    ['stats', `${base}/padel/stats`, 2],
+  ])('en %s (%s) hay un chip por deporte, más "General" en las tablas', (_section, pathname, count) => {
+    expect(sportChips(seasonId, sports, pathname)).toHaveLength(count)
   })
 
   it.each([
     ['una fecha puntual', `${base}/padel/fechas/3`],
     ['perfil de jugador', `${base}/padel/jugador/x`],
     ['ajustes del deporte', `${base}/padel/ajustes`],
-    ['la tabla global', `${base}`],
     ['reglas', `${base}/reglas`],
     ['ajustes del torneo', `${base}/ajustes`],
     ['un slug que no es de la temporada', `${base}/basquet/fechas`],
@@ -135,10 +140,19 @@ describe('sportChips — cuándo se muestran', () => {
 })
 
 describe('sportChips — a dónde apunta cada chip', () => {
-  it('en Tabla cambia sólo el deporte', () => {
+  it('en Tabla cambia sólo el deporte, con "General" primero para volver a la tabla general', () => {
     expect(sportChips(seasonId, sports, `${base}/padel`).map((chip) => chip.href)).toEqual([
+      base,
       `${base}/padel`,
       `${base}/fifa`,
+    ])
+  })
+
+  it('en la tabla general: "General" encendido y un chip por deporte', () => {
+    expect(sportChips(seasonId, sports, base).map((chip) => [chip.label, chip.href, chip.isActive])).toEqual([
+      ['General', base, true],
+      ['Pádel', `${base}/padel`, false],
+      ['FIFA', `${base}/fifa`, false],
     ])
   })
 
@@ -172,7 +186,12 @@ describe('sportChips — el chip encendido y el orden', () => {
       { slug: 'padel-2', label: 'Pádel 2' },
       { slug: 'fifa', label: 'FIFA' },
     ]
-    expect(sportChips(seasonId, three, `${base}/fifa`).map((chip) => chip.label)).toEqual(['Pádel', 'Pádel 2', 'FIFA'])
+    expect(sportChips(seasonId, three, `${base}/fifa`).map((chip) => chip.label)).toEqual([
+      'General',
+      'Pádel',
+      'Pádel 2',
+      'FIFA',
+    ])
   })
 
   it('en el deporte repetido se enciende sólo ése, no el primero del mismo kind', () => {

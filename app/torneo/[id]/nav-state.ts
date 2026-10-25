@@ -60,16 +60,17 @@ export function navTabs(seasonId: string, defaultDisciplineSlug: string, pathnam
   const slug = currentDisciplineSlug(base, pathname) ?? defaultDisciplineSlug
 
   // Activa con exactamente un segmento después de `base` que no sea uno de
-  // los no-disciplina — o sea `${base}/{slug}`, la Tabla de esa disciplina.
-  // El contenedor (`base` a secas) NO la enciende: su `href` ya no es `base`
-  // sino una disciplina puntual, así que un tab encendido tiene que
-  // significar "tocarlo de nuevo no te mueve de acá", no "hay algo parecido".
+  // los no-disciplina — o sea `${base}/{slug}`, la Tabla de esa disciplina —,
+  // o en la tabla general (`base` a secas, sólo existe con 2+ deportes). Ahí
+  // el `href` pasa a ser `base`: un tab encendido significa "tocarlo de nuevo
+  // no te mueve de acá".
+  const isGeneral = rest === ''
   const tablaSegment = /^\/([^/]+)$/.exec(rest)?.[1]
-  const isTabla = tablaSegment !== undefined && !NON_DISCIPLINE_SEGMENTS.has(tablaSegment)
+  const isTabla = isGeneral || (tablaSegment !== undefined && !NON_DISCIPLINE_SEGMENTS.has(tablaSegment))
   const replace = rest.endsWith('/ajustes')
 
   const tabs = [
-    { label: 'Tabla', href: `${base}/${slug}`, isActive: isTabla },
+    { label: 'Tabla', href: isGeneral ? base : `${base}/${slug}`, isActive: isTabla },
     {
       label: 'Fechas',
       href: `${base}/${slug}/fechas`,
@@ -113,9 +114,12 @@ const SECTION_ROOTS = new Set(['', '/fechas', '/stats'])
  *
  * Sólo en las tres raíces de sección. Más abajo (`/fechas/{n}`, `/jugador/…`,
  * `/ajustes`) cambiar de deporte no tiene un destino equivalente —la fecha 3
- * de pádel no existe en FIFA— y en el contenedor, Reglas y Ajustes del torneo
- * no hay deporte que cambiar. Con un solo deporte, tampoco. Y un slug que no
- * es de la temporada (la página ya hace `notFound()`) no enciende nada.
+ * de pádel no existe en FIFA— y en Reglas y Ajustes del torneo no hay deporte
+ * que cambiar. Con un solo deporte, tampoco. Y un slug que no es de la
+ * temporada (la página ya hace `notFound()`) no enciende nada.
+ *
+ * En las tablas va primero "General", la tabla general (`base`): es la única
+ * forma de volver a ella con un toque, y en ella es el chip encendido.
  */
 export function sportChips(
   seasonId: string,
@@ -123,7 +127,13 @@ export function sportChips(
   pathname: string,
 ): SportChip[] {
   const base = `/torneo/${seasonId}`
-  if (sports.length < 2 || !pathname.startsWith(`${base}/`)) return []
+  if (sports.length < 2) return []
+
+  const general = { label: 'General', href: base, isActive: pathname === base }
+  if (general.isActive) {
+    return [general, ...sports.map((sport) => ({ label: sport.label, href: `${base}/${sport.slug}`, isActive: false }))]
+  }
+  if (!pathname.startsWith(`${base}/`)) return []
 
   const current = currentDisciplineSlug(base, pathname)
   if (current === null || !sports.some((sport) => sport.slug === current)) return []
@@ -131,11 +141,12 @@ export function sportChips(
   const section = pathname.slice(`${base}/${current}`.length)
   if (!SECTION_ROOTS.has(section)) return []
 
-  return sports.map((sport) => ({
+  const chips = sports.map((sport) => ({
     label: sport.label,
     href: `${base}/${sport.slug}${section}`,
     isActive: sport.slug === current,
   }))
+  return section === '' ? [general, ...chips] : chips
 }
 
 /**

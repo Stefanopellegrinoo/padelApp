@@ -142,6 +142,13 @@ describe('Reglas — un bloque por deporte, con el reglamento arriba', () => {
     expect(html([PADEL()])).not.toContain('Editar reglas')
     expect(html([PADEL()], 'Marce', true)).toContain('href="/torneo/season-1/ajustes"')
   })
+
+  it('con 2+ deportes, cada bloque lleva su "Editar reglas" al Ajustes de ese deporte', () => {
+    const out = html([{ ...PADEL(), slug: 'padel' }, { ...FIFA(), slug: 'fifa' }], 'Marce', true)
+    expect(bloqueDe(out, 'Pádel')).toContain('href="/torneo/season-1/padel/ajustes"')
+    expect(bloqueDe(out, 'FIFA')).toContain('href="/torneo/season-1/fifa/ajustes"')
+    expect(out).not.toContain('href="/torneo/season-1/ajustes"')
+  })
 })
 
 describe('Reglas — "Más detalle", cerrado, con el acordeón de siempre', () => {

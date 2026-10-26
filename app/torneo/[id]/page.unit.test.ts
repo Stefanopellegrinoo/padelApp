@@ -16,12 +16,8 @@ import { seasonAwardsOf, seasonSquadMembersOf, type DisciplineHeader, type Squad
  * `singleDisciplineRedirect` (`tabla-state.ts`) redirige antes de llegar a
  * este JSX — el camino bajo prueba sólo existe con 2+.
  *
- * UNA reversión puntual tiene que romper esta suite — verificado corriendo
- * la mutación (fix round 2, jd-judge):
- *
- * 1. `page.tsx` vuelve a pasarle a `Desempate` `base={`/torneo/${seasonId}`}`
- *    en vez de `base={null}` — la fila recupera `cursor-pointer` y el test
- *    de abajo se pone en ROJO.
+ * Decisión del dueño (2026-10-26): la fila de la global abre el perfil del
+ * jugador en el primer deporte; los chips de deporte cambian desde ahí.
  */
 
 const D_PADEL = 'd-padel' as DisciplineId
@@ -99,13 +95,13 @@ async function render(): Promise<string> {
   return renderToStaticMarkup(await TablaGlobalPage({ params: Promise.resolve({ id: 's1' }) }))
 }
 
-describe('Tabla global (2+ disciplinas) — la fila no es clickeable', () => {
-  it('con 2 disciplinas, la fila de la tabla global no lleva cursor-pointer', async () => {
+describe('Tabla global (2+ disciplinas) — la fila abre el perfil en el primer deporte', () => {
+  it('con 2 disciplinas, la fila de la tabla global es clickeable', async () => {
     const html = await render()
 
     expect(html).toContain('Jugador Uno')
     const fila = /<div class="[^"]*rounded-field p-3[^"]*"/.exec(html)?.[0] ?? ''
-    expect(fila).not.toContain('cursor-pointer')
+    expect(fila).toContain('cursor-pointer')
   })
 })
 

@@ -6,6 +6,7 @@ import { serverClient } from '@/db/server'
 import { CompartirImagen } from '@/app/compartir-imagen'
 import { initials } from '@/app/format'
 import { Desempate, type StandingsRow } from './desempate'
+import { sportsOf } from './nav-state'
 import { singleDisciplineRedirect } from './tabla-state'
 import { Volver } from './volver'
 
@@ -38,14 +39,8 @@ interface PageProps {
  * zero points") — y acá se le pasa SIEMPRE el plantel de la temporada
  * entera, no el de una disciplina, así que nadie queda afuera del global.
  *
- * Lo que este listado completo NO da: navegación. Un squad member que no
- * está en las entries de NINGUNA disciplina aparece acá con 0 puntos pero no
- * tiene ningún camino a su propio perfil en toda la UI — la fila de esta
- * tabla no es clickeable (ver `Desempate` abajo), y las únicas otras que
- * enlazan a `jugador/{entryId}` (`tabla-view.tsx`, `[disciplina]/stats/page.tsx`)
- * salen de `entriesOf`, que lo deja afuera por la misma razón. No es un
- * defecto — el dueño pidió la fila no clickeable acá — pero listarlo sin
- * darle destino es la otra cara de esa decisión.
+ * Cada fila abre el perfil del jugador en la primera disciplina; quien no
+ * la juega ve "Todavía no jugó {disciplina}" y cambia con los chips.
  *
  * "Próxima fecha" y "Campeones defensores" no aparecen acá: son conceptos
  * por-disciplina (cada una se juega el día que quiera, decisión #3796) sin
@@ -177,11 +172,9 @@ export default async function TablaGlobalPage({ params }: PageProps) {
       </header>
 
       <Desempate
-        // Sin disciplina: `rows` acá suma puntos de TODAS, no hay un perfil
-        // de UNA disciplina al que apuntar. Decisión del dueño: la fila NO
-        // es clickeable en la tabla global (`base: null` se lo dice a
-        // `Desempate`, que no le pone `onClick` ni `cursor-pointer`).
-        base={null}
+        // `rows` suma TODAS las disciplinas; la fila abre el perfil en la
+        // primera (decisión del dueño), y desde ahí los chips cambian de deporte.
+        base={`/torneo/${seasonId}/${sportsOf(header.disciplines)[0]?.slug}`}
         rows={rows}
         // Fuera de rango a propósito: el corte de Masters es por-disciplina.
         mastersCutoff={rows.length + 1}

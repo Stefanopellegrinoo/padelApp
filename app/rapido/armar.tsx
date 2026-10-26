@@ -161,7 +161,7 @@ export function Armar({ onEmpezar }: { onEmpezar: (armado: Armado) => void }) {
   return (
     <div className="flex flex-1 flex-col gap-4 px-6 pt-4 pb-[26px]">
       <div className="flex items-center justify-between">
-        <Volver href="/" label="Inicio" />
+        <Volver href="/" />
       </div>
 
       <h1 className="text-[26px] font-extrabold tracking-[-.03em]">Torneo rápido</h1>

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { Volver } from '@/app/torneo/[id]/volver'
 
 export const metadata: Metadata = { title: 'Política de privacidad · Padel Liga' }
 
@@ -48,9 +49,7 @@ export default function PrivacidadPage() {
         </li>
       </Seccion>
 
-      <Link href="/" className="inline-flex min-h-11 items-center text-[12.5px] font-bold text-accent-link">
-        ← Volver al inicio
-      </Link>
+      <Volver href="/" />
     </main>
   )
 }

@@ -88,7 +88,7 @@ export function Jugar({ torneo, onCargarMarcador, onNuevoTorneo }: JugarProps) {
   return (
     <div className="flex flex-1 flex-col gap-4 px-6 pt-4 pb-[26px]">
       <div className="flex items-center justify-between">
-        <Volver href="/" label="Inicio" />
+        <Volver href="/" />
       </div>
 
       {acabo && ganador !== null && (

@@ -163,6 +163,13 @@ describe('sportChips — a dónde apunta cada chip', () => {
     ])
   })
 
+  it('en Stats Mías se queda en Mías', () => {
+    expect(sportChips(seasonId, sports, `${base}/padel/stats`, '?tab=mias').map((chip) => chip.href)).toEqual([
+      `${base}/padel/stats?tab=mias`,
+      `${base}/fifa/stats?tab=mias`,
+    ])
+  })
+
   it('en Stats se queda en Stats', () => {
     expect(sportChips(seasonId, sports, `${base}/fifa/stats`).map((chip) => chip.href)).toEqual([
       `${base}/padel/stats`,

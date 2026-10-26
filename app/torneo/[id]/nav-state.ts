@@ -118,8 +118,9 @@ const SECTION_ROOTS = new Set(['', '/fechas', '/stats'])
  * deporte de la temporada, en el orden que llega, cada uno apuntando a la
  * MISMA sección del otro deporte (`/padel/fechas` → `/fifa/fechas`).
  *
- * Sólo en las tres raíces de sección. Más abajo (`/fechas/{n}`, `/jugador/…`,
- * `/ajustes`) cambiar de deporte no tiene un destino equivalente —la fecha 3
+ * En las tres raíces de sección y en el perfil de un jugador (el mismo id en
+ * todos los deportes). Más abajo (`/fechas/{n}`, `/ajustes`) cambiar de
+ * deporte no tiene un destino equivalente —la fecha 3
  * de pádel no existe en FIFA— y en Reglas y Ajustes del torneo no hay deporte
  * que cambiar. Con un solo deporte, tampoco. Y un slug que no es de la
  * temporada (la página ya hace `notFound()`) no enciende nada.
@@ -147,7 +148,7 @@ export function sportChips(
   if (current === null || !sports.some((sport) => sport.slug === current)) return []
 
   const section = pathname.slice(`${base}/${current}`.length)
-  if (!SECTION_ROOTS.has(section)) return []
+  if (!SECTION_ROOTS.has(section) && !/^\/jugador\/[^/]+$/.test(section)) return []
 
   const chips = sports.map((sport) => ({
     label: sport.label,

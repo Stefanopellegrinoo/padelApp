@@ -22,9 +22,8 @@ interface PageProps {
  * Estadísticas: a la disciplina `[0]` (`position, created_at`), no a una
  * "adivinada".
  *
- * La Tabla GLOBAL (`app/torneo/[id]/page.tsx`) YA NO pasa por acá: sus
- * filas no son clickeables (`base: null` en `Desempate`, decisión del
- * dueño — no hay un perfil de UNA disciplina al que apuntar). Este redirect
+ * La Tabla GLOBAL (`app/torneo/[id]/page.tsx`) no pasa por acá: enlaza
+ * directo a la primera disciplina. Este redirect
  * queda como compatibilidad para bookmarks y links viejos a esta ruta,
  * compartidos antes de la migración de rutas de Task 2. No es un camino
  * muerto: sigue siendo el único destino de esos links.

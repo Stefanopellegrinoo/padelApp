@@ -128,7 +128,6 @@ describe('sportChips — cuándo se muestran', () => {
 
   it.each([
     ['una fecha puntual', `${base}/padel/fechas/3`],
-    ['perfil de jugador', `${base}/padel/jugador/x`],
     ['ajustes del deporte', `${base}/padel/ajustes`],
     ['reglas', `${base}/reglas`],
     ['ajustes del torneo', `${base}/ajustes`],
@@ -167,6 +166,13 @@ describe('sportChips — a dónde apunta cada chip', () => {
     expect(sportChips(seasonId, sports, `${base}/padel/stats`, '?tab=mias').map((chip) => chip.href)).toEqual([
       `${base}/padel/stats?tab=mias`,
       `${base}/fifa/stats?tab=mias`,
+    ])
+  })
+
+  it('en el perfil de un jugador se queda en su perfil', () => {
+    expect(sportChips(seasonId, sports, `${base}/padel/jugador/x`).map((chip) => chip.href)).toEqual([
+      `${base}/padel/jugador/x`,
+      `${base}/fifa/jugador/x`,
     ])
   })
 

@@ -1,7 +1,7 @@
 'use client'
 
 import Link, { useLinkStatus } from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 import { useState, type ReactNode } from 'react'
 import { currentDisciplineSlug, navTabs } from './nav-state'
 
@@ -19,7 +19,12 @@ export function TorneoNav({ seasonId, defaultDisciplineSlug }: TorneoNavProps) {
   const current = currentDisciplineSlug(`/torneo/${seasonId}`, pathname)
   const [lastSlug, setLastSlug] = useState(defaultDisciplineSlug)
   if (current !== null && current !== lastSlug) setLastSlug(current)
-  const tabs = navTabs(seasonId, current ?? lastSlug, pathname)
+  // Lo mismo con "Mías" de Stats: se recuerda la última pestaña que se miró ahí.
+  const searchParams = useSearchParams()
+  const [statsQuery, setStatsQuery] = useState('')
+  const statsNow = searchParams.get('tab') === 'mias' ? '?tab=mias' : ''
+  if (pathname.endsWith('/stats') && statsNow !== statsQuery) setStatsQuery(statsNow)
+  const tabs = navTabs(seasonId, current ?? lastSlug, pathname, statsQuery)
 
   return (
     <nav className="sticky bottom-0 flex border-t border-line bg-bg px-[22px] pt-2 pb-[max(1.5rem,env(safe-area-inset-bottom))]">

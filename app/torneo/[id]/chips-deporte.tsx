@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 import { sportChips } from './nav-state'
 
 interface ChipsDeporteProps {
@@ -12,7 +12,8 @@ interface ChipsDeporteProps {
 
 export function ChipsDeporte({ seasonId, sports }: ChipsDeporteProps) {
   const pathname = usePathname()
-  const chips = sportChips(seasonId, sports, pathname)
+  const statsQuery = useSearchParams().get('tab') === 'mias' ? '?tab=mias' : ''
+  const chips = sportChips(seasonId, sports, pathname, statsQuery)
   if (chips.length === 0) return null
 
   return (

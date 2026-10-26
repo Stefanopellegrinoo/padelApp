@@ -54,7 +54,13 @@ export function currentDisciplineSlug(base: string, pathname: string): string | 
  * del torneo pública (`middleware.ts:80`, diseño §3.1) y es el link que se
  * comparte; partirla en uno por disciplina rompería eso.
  */
-export function navTabs(seasonId: string, defaultDisciplineSlug: string, pathname: string): NavTab[] {
+export function navTabs(
+  seasonId: string,
+  defaultDisciplineSlug: string,
+  pathname: string,
+  /** `?tab=mias` si la última vez se miró "Mías" en Stats; vacío si no. */
+  statsQuery = '',
+): NavTab[] {
   const base = `/torneo/${seasonId}`
   const rest = pathname.slice(base.length)
   const slug = currentDisciplineSlug(base, pathname) ?? defaultDisciplineSlug
@@ -82,7 +88,7 @@ export function navTabs(seasonId: string, defaultDisciplineSlug: string, pathnam
     },
     {
       label: 'Stats',
-      href: `${base}/${slug}/stats`,
+      href: `${base}/${slug}/stats${statsQuery}`,
       isActive: pathname.startsWith(base) && rest.includes('/stats'),
     },
     {
@@ -125,6 +131,8 @@ export function sportChips(
   seasonId: string,
   sports: readonly { slug: string; label: string }[],
   pathname: string,
+  /** La query de Stats (`?tab=mias`), que se conserva al cambiar de deporte en Stats. */
+  statsQuery = '',
 ): SportChip[] {
   const base = `/torneo/${seasonId}`
   if (sports.length < 2) return []
@@ -143,7 +151,7 @@ export function sportChips(
 
   const chips = sports.map((sport) => ({
     label: sport.label,
-    href: `${base}/${sport.slug}${section}`,
+    href: `${base}/${sport.slug}${section}${section === '/stats' ? statsQuery : ''}`,
     isActive: sport.slug === current,
   }))
   return section === '' ? [general, ...chips] : chips

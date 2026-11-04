@@ -23,11 +23,13 @@ import {
   changeMatchFormat,
   confirmMatchday,
   drawPairs,
+  lockHandPair,
   removeGuestPair,
   removeLooseGuest,
   saveGuestName,
   setGuestPartner,
   toggleAttendance,
+  unlockHandPair,
   type WriteResult,
 } from './actions'
 import {
@@ -36,6 +38,8 @@ import {
   drawRoom,
   guestPartnerAbsent,
   guestsOutnumberNote,
+  handPairAbsent,
+  handPairOptions,
   matchdayShape,
   matchFormatLabel,
   parityGuestSeat,
@@ -61,6 +65,15 @@ export interface GuestPairVM {
   lockId: string
   a: { entryId: string; name: string }
   b: { entryId: string; name: string }
+}
+
+/** Una pareja armada a mano: dos del plantel trabados antes del sorteo. */
+export interface HandPairVM {
+  lockId: string
+  a: { entryId: string; name: string }
+  b: { entryId: string; name: string }
+  /** Ya jugaron juntos en las fechas que mira la regla de no repetir. Se permite, pero se avisa. */
+  repeated: boolean
 }
 
 export interface DraftPairVM {
@@ -110,6 +123,7 @@ interface ArmadoProps {
    */
   looseGuests: GuestVM[]
   guestPairs: GuestPairVM[]
+  handPairs: HandPairVM[]
   pairs: DraftPairVM[]
   /**
    * Los defensores del título, ya filtrados por la repetición: `null` cuando
@@ -183,6 +197,7 @@ export function Armado({
   seats,
   looseGuests,
   guestPairs,
+  handPairs,
   pairs,
   defenders,
   loadedResults,
@@ -292,7 +307,11 @@ export function Armado({
   // ("Alguien está fijado en dos parejas a la vez"), el defecto que ya apareció
   // en "Reabrir fecha". Incluye al compañero propio: el filtro lo readmite
   // aparte, o el select no podría mostrar su propio valor.
-  const partnersTaken = partnersTakenBy(looseGuests)
+  // Los de una pareja a mano tampoco: ya están trabados.
+  const partnersTaken = new Set([
+    ...partnersTakenBy(looseGuests),
+    ...handPairs.flatMap((hand) => [hand.a.entryId, hand.b.entryId]),
+  ])
 
   // Cada invitado tiene las DOS opciones: compañero elegido a mano, o el
   // sorteo. Que varios vayan al sorteo es válido y está soportado — `orderPool`
@@ -305,7 +324,7 @@ export function Armado({
   // cuenta vive en `armado-state.ts` y espeja a la del borde, defensores
   // incluidos: la pareja que defiende sale del pool antes del sorteo y no
   // acompaña a nadie.
-  const { toTheDraw, freeSquad } = drawRoom(optimisticSeats, looseGuests, defenders)
+  const { toTheDraw, freeSquad } = drawRoom(optimisticSeats, looseGuests, defenders, handPairs)
   const guestsOutnumberSquad = toTheDraw > freeSquad
 
   // El compañero que el admin trabó y que después avisó que no va: el lock
@@ -322,7 +341,11 @@ export function Armado({
   // y el botón tiene que apagarse en vez de rebotar con el mismo texto que la
   // banda ya muestra arriba. Sólo en parejas: de a uno cada persona es su lado
   // y la base acepta impares (`assertMatchdaySize`).
+  // Mismo caso que `someGuestPartnerAbsent`, en una pareja a mano.
+  const someHandPairAbsent = handPairs.some((hand) => handPairAbsent(optimisticSeats, hand))
+
   const canDraw =
+    !someHandPairAbsent &&
     !tooFew &&
     !tooManyToPair &&
     (sideSize === 1 || eventualSize % 2 === 0) &&
@@ -558,6 +581,18 @@ export function Armado({
         </section>
       )}
 
+      {/* De a uno no hay parejas, y con equipos fijos ya están armadas para todo el torneo. */}
+      {sideSize === 2 && !fixedTeams && (
+        <ParejasAMano
+          handPairs={handPairs}
+          seats={optimisticSeats}
+          options={handPairOptions(optimisticSeats, looseGuests, handPairs)}
+          pending={pending}
+          onLock={(a, b) => run(() => lockHandPair(seasonId, matchdayId, matchdayNumber, a, b))}
+          onUnlock={(lockId) => run(() => unlockHandPair(seasonId, matchdayId, matchdayNumber, lockId))}
+        />
+      )}
+
       {pairs.length > 0 && (
         <section className="flex flex-col gap-2">
           <h2 className={`${STEP_TITLE} border-b border-line pb-2`}>{label.drawn}</h2>
@@ -587,6 +622,9 @@ export function Armado({
             </div>
           ))}
           <p className="text-[12px] font-[600] text-muted">{label.drawNote}</p>
+          {handPairs.length > 0 && (
+            <p className="text-[12px] font-[600] text-muted">Las parejas a mano quedan como las armaste.</p>
+          )}
         </section>
       )}
 
@@ -762,6 +800,133 @@ const AUTOMATICO_LINEA = 'mt-0.5 block text-[12px] font-semibold opacity-80'
  * `armado-state.ts`) mientras que `sides` acá es el tamaño de HOY; en el
  * hueco donde los dos difieren, la línea calla en vez de mentir.
  */
+/**
+ * Armar parejas a mano (dos del plantel). Las que no se armen salen del
+ * sorteo; si se arman todas, la fecha queda entera a mano. Repetir una pareja
+ * de las fechas anteriores se permite —el admin manda— pero se avisa.
+ */
+export function ParejasAMano({
+  handPairs,
+  seats,
+  options,
+  pending,
+  onLock,
+  onUnlock,
+}: {
+  handPairs: HandPairVM[]
+  seats: SeatVM[]
+  options: SeatVM[]
+  pending: boolean
+  onLock: (a: string, b: string) => void
+  onUnlock: (lockId: string) => void
+}) {
+  const [first, setFirst] = useState('')
+  const [second, setSecond] = useState('')
+  // Un elegido que dejó de estar disponible (lo trabaron, avisó que no va) no
+  // cuenta: el `<select>` ya no lo muestra y el botón no puede mandarlo.
+  const available = new Set(options.map((seat) => seat.entryId))
+  const a = available.has(first) ? first : ''
+  const b = available.has(second) && second !== a ? second : ''
+  const canLock = a !== '' && b !== '' && !pending
+  const selectClass =
+    'min-h-11 w-full rounded-field border border-line bg-surface p-[10px] text-[13.5px] font-bold outline-none'
+
+  return (
+    <section className="flex flex-col gap-2">
+      <h2 className={`${STEP_TITLE} border-b border-line pb-2`}>Parejas a mano</h2>
+      <p className="text-[12px] font-[600] text-muted">
+        Armá las parejas que quieras. Las que no armes salen del sorteo; si las armás todas, la fecha
+        queda entera a mano.
+      </p>
+
+      {handPairs.map((hand) => {
+        const absent = handPairAbsent(seats, hand)
+        return (
+          <div key={hand.lockId} className="flex flex-col gap-1.5 rounded-field border border-line bg-surface p-3">
+            <div className="flex items-center gap-3">
+              <span className="flex-1 text-[14.5px] font-[750]">
+                {hand.a.name} y {hand.b.name}
+              </span>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => onUnlock(hand.lockId)}
+                aria-label={`Deshacer la pareja de ${hand.a.name} y ${hand.b.name}`}
+                className="min-h-11 shrink-0 rounded-field border-[1.5px] border-line px-3 text-[12.5px] font-extrabold"
+              >
+                Deshacer
+              </button>
+            </div>
+            {absent ? (
+              <p role="alert" className="text-[12px] font-bold text-live">
+                Uno de los dos no viene. Deshacé la pareja para poder sortear.
+              </p>
+            ) : (
+              hand.repeated && (
+                <p className="text-[12px] font-bold text-muted">Ya jugaron juntos hace poco. Igual se puede.</p>
+              )
+            )}
+          </div>
+        )
+      })}
+
+      {options.length >= 2 ? (
+        <div className="flex flex-col gap-2 rounded-field border-[1.5px] border-dashed border-line p-3">
+          <select
+            value={a}
+            disabled={pending}
+            onChange={(event) => setFirst(event.target.value)}
+            aria-label="Primer jugador de la pareja"
+            className={selectClass}
+          >
+            <option value="">Elegí un jugador</option>
+            {options.map((seat) => (
+              <option key={seat.entryId} value={seat.entryId}>
+                {seat.name}
+              </option>
+            ))}
+          </select>
+          <select
+            value={b}
+            disabled={pending}
+            onChange={(event) => setSecond(event.target.value)}
+            aria-label="Segundo jugador de la pareja"
+            className={selectClass}
+          >
+            <option value="">Con quién juega</option>
+            {options
+              .filter((seat) => seat.entryId !== a)
+              .map((seat) => (
+                <option key={seat.entryId} value={seat.entryId}>
+                  {seat.name}
+                </option>
+              ))}
+          </select>
+          <button
+            type="button"
+            disabled={!canLock}
+            onClick={() => {
+              onLock(a, b)
+              setFirst('')
+              setSecond('')
+            }}
+            className={`min-h-11 rounded-field p-3 text-[13.5px] font-extrabold ${
+              canLock ? 'bg-accent text-accent-text' : 'bg-chip text-muted'
+            }`}
+          >
+            Armar pareja
+          </button>
+        </div>
+      ) : (
+        options.length === 0 &&
+        handPairs.length > 0 && (
+          <p className="text-[12px] font-bold text-up">No queda nadie para el sorteo: las armaste a mano.</p>
+        )
+      )}
+    </section>
+  )
+}
+
 export function SelectorDeFormato({
   formato,
   sides,

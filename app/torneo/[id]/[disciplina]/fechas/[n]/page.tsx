@@ -20,6 +20,7 @@ import {
   PHASE_ORDER,
   previousContext,
   resolveDisciplineBySlug,
+  pair,
   sameSide,
   sideWords,
   snapshotForMatchday,
@@ -51,7 +52,15 @@ import { EdgeError } from '@/db/errors'
 import { CompartirImagen } from '@/app/compartir-imagen'
 import { matchdayFull } from '@/app/format'
 import { Rondas, type RoundMatchVM, type RoundVM } from './rondas'
-import { Armado, type DraftPairVM, type GroupPreviewVM, type GuestPairVM, type GuestVM, type SeatVM } from './armado'
+import {
+  Armado,
+  type DraftPairVM,
+  type GroupPreviewVM,
+  type GuestPairVM,
+  type GuestVM,
+  type HandPairVM,
+  type SeatVM,
+} from './armado'
 import { CierreFecha } from './carga'
 import { DiaDeLaFecha } from './dia'
 import { Llave, type LlaveMatchVM } from './llave'
@@ -220,9 +229,31 @@ export default async function FechaDetailPage({ params }: PageProps) {
       disciplineConfig(supabase, matchday.disciplineId),
     ])
 
-    const { defenders, defendersAlreadyRepeated } = previousContext(lastHistory, beforeLastHistory)
-    // Con parejas fijas el sorteo no tiene defensores (`pairingContextFor` los anula): no se dibuja ninguno.
-    const effectiveDefenders = !fixedTeams && defenders !== null && !defendersAlreadyRepeated ? defenders : null
+    const { defenders, defendersAlreadyRepeated, previousPairs } = previousContext(lastHistory, beforeLastHistory)
+    // Las parejas a mano: dos del plantel trabados. Las que tienen un invitado
+    // son de `looseGuests`/`guestPairs`, más abajo.
+    const squadIds = new Set(entries.filter((entry) => entry.kind === 'SQUAD').map((entry) => entry.id))
+    const nameOf = new Map(entries.map((entry) => [entry.id, entry.displayName]))
+    const handPairs: HandPairVM[] = locks
+      .filter((lock) => squadIds.has(lock.a) && squadIds.has(lock.b))
+      .map((lock) => ({
+        lockId: lock.id,
+        a: { entryId: lock.a, name: nameOf.get(lock.a) ?? '' },
+        b: { entryId: lock.b, name: nameOf.get(lock.b) ?? '' },
+        repeated: previousPairs.some((previous) => sameSide(previous, pair(lock.a, lock.b))),
+      }))
+    const handLocked = new Set(handPairs.flatMap((hand) => [hand.a.entryId, hand.b.entryId]))
+    // Con parejas fijas el sorteo no tiene defensores (`pairingContextFor` los
+    // anula), y una pareja a mano que toma a un defensor los disuelve
+    // (`resolveSettled`, core/pairing.ts): en los dos casos no se dibuja ninguno.
+    const effectiveDefenders =
+      !fixedTeams &&
+      defenders !== null &&
+      !defendersAlreadyRepeated &&
+      !handLocked.has(defenders.a) &&
+      !handLocked.has(defenders.b)
+        ? defenders
+        : null
     // Los defensores ya llegan como `Side` (PR19): `previousContext` devuelve
     // `null` en una disciplina de a uno —no hay con quién repetir— así que
     // ningún lado se marca como defensor ahí. Antes esto los subía de `Pair` a
@@ -372,6 +403,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
         seats={seats}
         looseGuests={looseGuests}
         guestPairs={guestPairs}
+        handPairs={handPairs}
         pairs={draftPairs}
         // El mismo dato que marca el chip "Defensora". La pantalla lo necesita
         // además para la cuenta de invitados que puede el sorteo: `buildPairs`

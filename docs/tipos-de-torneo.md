@@ -92,6 +92,8 @@ equipo fijo violaría por definición:
   incluya a un invitado**. El motivo escrito en `0001_schema.sql:122` es que dos
   del plantel trabados a mano saltearían la regla de no repetir — *que es
   exactamente la regla que equipos fijos apaga a propósito*.
+  (Esta guarda ya no existe: desde las parejas a mano, 2026-11-04, es
+  `assertLocksDisjoint` y sólo exige que nadie esté en dos trabas.)
 - `promote_guest` **borra locks** en ocho migraciones distintas (`0014`, `0023`,
   `0025`, `0031`, `0032`, `0033`, `0048`, `0062`).
 

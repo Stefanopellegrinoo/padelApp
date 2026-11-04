@@ -58,7 +58,7 @@ import {
 } from './season'
 import {
   assertGuestsNamed,
-  assertLocksAndGuests,
+  assertLocksDisjoint,
   assertLocksArePlaying,
   assertSquadCoversLooseGuests,
   assertMatchdaySize,
@@ -140,7 +140,7 @@ export async function matchdayContextFor(
 
   const guests = await guestsOf(supabase, matchdayId)
   const locks = await locksOf(supabase, matchdayId)
-  assertLocksAndGuests(guests, locks)
+  assertLocksDisjoint(locks)
 
   return { matchday, config, pairSize, seedOrder, awardsByMatchday, snapshot, guests, locks, fixedTeams }
 }
@@ -793,7 +793,7 @@ export async function addGuest(
   return data.id
 }
 
-/** Traba una pareja antes del sorteo. Pasa por `assertLocksAndGuests` antes de escribir. */
+/** Traba una pareja antes del sorteo. Pasa por `assertLocksDisjoint` antes de escribir. */
 export async function lockPair(
   supabase: Client,
   matchdayId: string,
@@ -801,9 +801,8 @@ export async function lockPair(
   entryB: string,
 ): Promise<void> {
   const matchday = await requireMatchday(supabase, matchdayId)
-  const guests = await guestsOf(supabase, matchdayId)
   const locks = await locksOf(supabase, matchdayId)
-  assertLocksAndGuests(guests, [...locks, { a: entryA, b: entryB }])
+  assertLocksDisjoint([...locks, { a: entryA, b: entryB }])
 
   const { error } = await supabase.from('pair_locks').insert({
     matchday_id: matchdayId,

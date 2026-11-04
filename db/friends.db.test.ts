@@ -238,9 +238,9 @@ function comoTorneo(
  *
  * Por qué NO se usa `lockPair`: es la vía obvia para fijar una pareja antes
  * del sorteo, y se descartó porque no aplica acá.
- * `assertLocksAndGuests` (`db/validate.ts:207-211`) exige que toda pareja
- * fijada a mano incluya a un invitado -- "dos jugadores del torneo no se
- * pueden poner juntos" -- y un invitado (`addGuest`, `db/matchday.ts` arriba
+ * Cuando se escribió, `lockPair` exigía que toda pareja fijada a mano
+ * incluyera a un invitado (hoy ya no: dos del plantel se pueden trabar, y
+ * este helper sigue valiendo igual porque no depende de eso) -- y un invitado (`addGuest`, `db/matchday.ts` arriba
  * de `lockPair`) se crea SIN `player_id`. `match_participants` exige
  * `player_id is not null` (0071): un invitado nunca aparece ahí. Fijar a
  * `admin`+`otro` con un lock es imposible sin volver a uno de los dos un

@@ -3,7 +3,7 @@ import { defaultMaxMatches } from '@/core'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import type { MatchdayFormat, MatchdayFormatSetting, MatchFormat } from '@/core'
-import { EstaFechaSeJuegaA, SelectorDeFormato } from './armado'
+import { EstaFechaSeJuegaA, ParejasAMano, SelectorDeFormato, type HandPairVM, type SeatVM } from './armado'
 
 /**
  * El selector de formato de la fecha (REQ-D8-1), RENDERIZADO — no la lógica
@@ -261,5 +261,57 @@ describe('EstaFechaSeJuegaA (§7)', () => {
 
   it('en un deporte de goles no se dibuja: no hay a cuánto jugar', () => {
     expect(render('FIFA', { ...aCuatro, openScore: true })).toBe('')
+  })
+})
+
+describe('ParejasAMano', () => {
+  const seats: SeatVM[] = [
+    { entryId: 'a', name: 'Ana', playing: true },
+    { entryId: 'b', name: 'Beto', playing: true },
+    { entryId: 'c', name: 'Cami', playing: true },
+    { entryId: 'd', name: 'Dani', playing: true },
+  ]
+  const anaYBeto: HandPairVM = {
+    lockId: 'l1',
+    a: { entryId: 'a', name: 'Ana' },
+    b: { entryId: 'b', name: 'Beto' },
+    repeated: false,
+  }
+  const render = (handPairs: HandPairVM[], options: SeatVM[], drawn = seats) =>
+    renderToStaticMarkup(
+      createElement(ParejasAMano, {
+        handPairs,
+        seats: drawn,
+        options,
+        pending: false,
+        onLock: () => {},
+        onUnlock: () => {},
+      }),
+    )
+
+  it('muestra la pareja armada y ofrece armar otra con los que quedan', () => {
+    const markup = render([anaYBeto], seats.slice(2))
+
+    expect(markup).toContain('Ana y Beto')
+    expect(markup).toContain('Deshacer')
+    expect(markup).toContain('Armar pareja')
+    expect(markup).toContain('Cami')
+  })
+
+  it('avisa que repiten, sin impedirlo', () => {
+    expect(render([{ ...anaYBeto, repeated: true }], [])).toContain('Ya jugaron juntos hace poco')
+  })
+
+  it('dice que la fecha quedó entera a mano cuando no queda nadie', () => {
+    const markup = render([anaYBeto, { ...anaYBeto, lockId: 'l2', a: seats[2]!, b: seats[3]! }], [])
+
+    expect(markup).toContain('las armaste a mano')
+    expect(markup).not.toContain('Armar pareja')
+  })
+
+  it('avisa cuando uno de la pareja no viene', () => {
+    const absent = seats.map((seat) => (seat.entryId === 'b' ? { ...seat, playing: false } : seat))
+
+    expect(render([anaYBeto], [], absent)).toContain('Uno de los dos no viene')
   })
 })

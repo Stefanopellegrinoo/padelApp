@@ -292,10 +292,41 @@ describe('buildPairs — fixed pairs', () => {
     ).toThrow(/p2 está en más de una pareja fija/)
   })
 
-  it('fails if a fixed pair overlaps with the defenders', () => {
-    expect(() =>
-      buildPairs(input({ defenders: pair('p1', 'p2'), fixedPairs: [pair('p2', 'p3')] })),
-    ).toThrow(/p2 ya está en la pareja defensora/)
+  it('a fixed pair that takes a defender dissolves the defenders', () => {
+    // The admin pairs by hand and that wins: the other defender goes to the draw.
+    const pairs = buildPairs(input({ defenders: pair('p1', 'p2'), fixedPairs: [pair('p2', 'p3')] }))
+    expect(keys(pairs)).toContain('p2-p3')
+    expect(keys(pairs)).not.toContain('p1-p2')
+    expect(pairs).toHaveLength(4)
+  })
+
+  it('keeps two squad players fixed by hand and draws the rest', () => {
+    const pairs = buildPairs(input({ fixedPairs: [pair('p1', 'p2')] }))
+    expect(keys(pairs)).toEqual(['p1-p2', 'p3-p8', 'p4-p7', 'p5-p6'])
+  })
+
+  it('builds the whole matchday by hand when every pair is fixed', () => {
+    const pairs = buildPairs(
+      input({
+        present: ['p1', 'p2', 'p3', 'p4'],
+        fixedPairs: [pair('p1', 'p4'), pair('p2', 'p3')],
+        previousPairs: [pair('p1', 'p4')],
+      }),
+    )
+    expect(keys(pairs)).toEqual(['p1-p4', 'p2-p3'])
+  })
+
+  it('repeats a pair when the hand-fixed pairs leave no other way', () => {
+    // Locking by hand can corner the draw: p3 and p4 are the only ones left
+    // and they played together last time. Refusing would be a dead end.
+    const pairs = buildPairs(
+      input({
+        present: ['p1', 'p2', 'p3', 'p4'],
+        fixedPairs: [pair('p1', 'p2')],
+        previousPairs: [pair('p3', 'p4')],
+      }),
+    )
+    expect(keys(pairs)).toEqual(['p1-p2', 'p3-p4'])
   })
 
   it('respects two simultaneous guest+squad locks, each guest with a different partner', () => {

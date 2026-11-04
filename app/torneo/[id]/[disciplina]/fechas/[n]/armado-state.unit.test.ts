@@ -7,6 +7,8 @@ import {
   formatoNotice,
   guestPartnerAbsent,
   guestsOutnumberNote,
+  handPairAbsent,
+  handPairOptions,
   matchdayShape,
   parityGuestSeat,
   type SeatVM,
@@ -509,5 +511,43 @@ describe('formatoNotice', () => {
 
   it('calla cuando la fecha se juega igual que el deporte', () => {
     expect(formatoNotice(3, aCuatro, { ...aCuatro }, 'games')).toBeNull()
+  })
+})
+
+describe('parejas a mano', () => {
+  const four: SeatVM[] = [
+    { entryId: 'a', name: 'Ana', playing: true },
+    { entryId: 'b', name: 'Beto', playing: true },
+    { entryId: 'c', name: 'Cami', playing: true },
+    { entryId: 'd', name: 'Dani', playing: false },
+  ]
+
+  it('ofrece sólo a los que vienen y no están trabados con nadie', () => {
+    const options = handPairOptions(four, [{ partnerId: 'a' }], [])
+
+    expect(options.map((seat) => seat.entryId)).toEqual(['b', 'c'])
+  })
+
+  it('no ofrece a los que ya están en una pareja a mano', () => {
+    const options = handPairOptions(four, [], [{ a: { entryId: 'a' }, b: { entryId: 'b' } }])
+
+    expect(options.map((seat) => seat.entryId)).toEqual(['c'])
+  })
+
+  it('los de una pareja a mano no quedan libres para acompañar invitados', () => {
+    const room = drawRoom(four, [{ partnerId: null }], null, [{ a: { entryId: 'a' }, b: { entryId: 'b' } }])
+
+    expect(room).toEqual({ toTheDraw: 1, freeSquad: 1 })
+  })
+
+  it('un invitado trabado con un defensor libera al otro defensor', () => {
+    const room = drawRoom(four, [{ partnerId: 'a' }, { partnerId: null }], pair('a', 'b'))
+
+    expect(room).toEqual({ toTheDraw: 1, freeSquad: 2 })
+  })
+
+  it('avisa cuando alguien de la pareja a mano no viene', () => {
+    expect(handPairAbsent(four, { a: { entryId: 'a' }, b: { entryId: 'd' } })).toBe(true)
+    expect(handPairAbsent(four, { a: { entryId: 'a' }, b: { entryId: 'b' } })).toBe(false)
   })
 })

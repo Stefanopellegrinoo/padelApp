@@ -108,14 +108,19 @@ export function buildPairs(input: PairingInput): Duo[] {
   // A pool of six leaves eight legal draws out of fifteen, and the worst case,
   // a pool of four, still leaves two. If nothing survives here it is a bug, and
   // it must fail loudly rather than pair at random.
-  let best = legal[0]
+  //
+  // Pairs fixed by hand void that proof: they can leave a pool of two that
+  // played together last time. The admin chose to corner the draw, so the
+  // repeat is allowed instead of a dead end.
+  const pickable = legal.length === 0 && fixedPairs.length > 0 ? candidates : legal
+  let best = pickable[0]
   if (best === undefined) {
     throw new Error(
       `No quedó ningún armado legal para ${ordered.length} jugadores. Esto es un bug: siempre tiene que existir al menos uno.`,
     )
   }
   let bestScore = imbalance(best, position, idealSum)
-  for (const matching of legal.slice(1)) {
+  for (const matching of pickable.slice(1)) {
     const score = imbalance(matching, position, idealSum)
     if (score < bestScore) {
       best = matching
@@ -195,7 +200,12 @@ function resolveSettled(
     settled.push(side)
   }
 
-  const defending = resolveDefenders(present, defenders, alreadyRepeated)
+  // A pair fixed by hand wins over the defenders: if it takes one of them,
+  // the defenders dissolve and the other one goes to the draw.
+  const fixedEntries = new Set(fixedPairs.flatMap((side) => members(side)))
+  const resolved = resolveDefenders(present, defenders, alreadyRepeated)
+  const defending =
+    resolved !== null && !fixedEntries.has(resolved.a) && !fixedEntries.has(resolved.b) ? resolved : null
   if (defending !== null) {
     take(defending, 'La pareja defensora')
     defendingEntries.add(defending.a)

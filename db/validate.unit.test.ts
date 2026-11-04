@@ -6,7 +6,7 @@ import {
   setError,
   matchError,
   assertMatchdaySize,
-  assertLocksAndGuests,
+  assertLocksDisjoint,
   assertLocksArePlaying,
   assertSquadCoversLooseGuests,
   assertPointsCoverMatchday,
@@ -234,68 +234,20 @@ describe('assertMatchdaySize', () => {
   })
 })
 
-describe('assertLocksAndGuests', () => {
-  it('accepts a lone guest', () => {
-    const guests: GuestSeat[] = [{ entryId: 'g1', displayName: 'G1' }]
-    expect(() => assertLocksAndGuests(guests, [])).not.toThrow()
+describe('assertLocksDisjoint', () => {
+  it('accepts no locks', () => {
+    expect(() => assertLocksDisjoint([])).not.toThrow()
   })
 
-  it('accepts two guests locked to each other', () => {
-    const guests: GuestSeat[] = [
-      { entryId: 'g1', displayName: 'G1' },
-      { entryId: 'g2', displayName: 'G2' },
+  // Any two may be locked: a guest pair, a guest with a squad player, or two
+  // squad players paired by hand. What is not locked still goes to the draw.
+  it('accepts any disjoint locks: guest pair, guest with squad, squad with squad', () => {
+    const locks: PairLock[] = [
+      { a: 'g1', b: 'g2' },
+      { a: 'g3', b: 'player1' },
+      { a: 'player2', b: 'player3' },
     ]
-    const locks: PairLock[] = [{ a: 'g1', b: 'g2' }]
-    expect(() => assertLocksAndGuests(guests, locks)).not.toThrow()
-  })
-
-  it('accepts a guest locked with a squad player', () => {
-    const guests: GuestSeat[] = [{ entryId: 'g1', displayName: 'G1' }]
-    const locks: PairLock[] = [{ a: 'g1', b: 'player1' }]
-    expect(() => assertLocksAndGuests(guests, locks)).not.toThrow()
-  })
-
-  it('accepts a guest pair plus a lone guest', () => {
-    const guests: GuestSeat[] = [
-      { entryId: 'g1', displayName: 'G1' },
-      { entryId: 'g2', displayName: 'G2' },
-      { entryId: 'g3', displayName: 'G3' },
-    ]
-    const locks: PairLock[] = [{ a: 'g1', b: 'g2' }]
-    expect(() => assertLocksAndGuests(guests, locks)).not.toThrow()
-  })
-
-  // El caso canónico de "más de un invitado suelto": dos invitados en la fecha,
-  // uno con compañero elegido a mano y el otro librado al sorteo. Es lo que
-  // estrena el botón "+ Agregar invitado".
-  it('accepts two loose guests when one is locked to a squad player', () => {
-    const guests: GuestSeat[] = [
-      { entryId: 'g1', displayName: 'G1' },
-      { entryId: 'g2', displayName: 'G2' },
-    ]
-    const locks: PairLock[] = [{ a: 'g1', b: 'player1' }]
-    expect(() => assertLocksAndGuests(guests, locks)).not.toThrow()
-  })
-
-  // Las DOS opciones para cada invitado: elegirle compañero a mano, o tirarlo
-  // al sorteo. Que dos vayan al sorteo es válido y el sorteo los separa —
-  // `orderPool` los manda al fondo del pool y `buildPairs` empareja el fondo
-  // con la cabeza (`core/pairing.test.ts:186`). Cuántos entran es una cuenta de
-  // plantel, y la hace `assertSquadCoversLooseGuests`: acá no se cuenta nada.
-  it('accepts two guests left to the draw: counting them is not this function', () => {
-    const guests: GuestSeat[] = [
-      { entryId: 'g1', displayName: 'G1' },
-      { entryId: 'g2', displayName: 'G2' },
-    ]
-    expect(() => assertLocksAndGuests(guests, [])).not.toThrow()
-  })
-
-  it('rejects locking two squad players together', () => {
-    // This is the rule that protects the format: two squad players locked by
-    // hand would skip the no-repeat rule, the one thing the draw exists to
-    // enforce.
-    const locks: PairLock[] = [{ a: 'player1', b: 'player2' }]
-    expect(() => assertLocksAndGuests([], locks)).toThrow(/incluir a un invitado/)
+    expect(() => assertLocksDisjoint(locks)).not.toThrow()
   })
 
   it('rejects someone locked into two pairs', () => {
@@ -304,7 +256,7 @@ describe('assertLocksAndGuests', () => {
       { a: 'g1', b: 'player1' },
       { a: 'g1', b: 'player2' },
     ]
-    expect(() => assertLocksAndGuests(guests, locks)).toThrow(/fijado en dos parejas/)
+    expect(() => assertLocksDisjoint(locks)).toThrow(/fijado en dos parejas/)
   })
 })
 
@@ -356,6 +308,15 @@ describe('assertSquadCoversLooseGuests', () => {
     const guests = guestSeats(6)
     const present = [...players(2), ...guests.map((guest) => guest.entryId)]
     expect(() => assertSquadCoversLooseGuests(present, guests, [], null)).toThrow(EdgeError)
+  })
+
+  it('a hand pair that takes a defender frees the other defender for the guests', () => {
+    // p0 is locked by hand with p2, so the defenders p0-p1 dissolve
+    // (`resolveSettled`) and p1 goes to the draw, where g1 can take him.
+    const guests = guestSeats(1)
+    const present = [...players(3), 'g1']
+    const locks: PairLock[] = [{ a: 'p0', b: 'p2' }]
+    expect(() => assertSquadCoversLooseGuests(present, guests, locks, pair('p0', 'p1'))).not.toThrow()
   })
 
   it('accepts the same guests once the extras are locked into guest pairs', () => {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { defaultConfig, type MatchdayFormat, type SeasonConfig } from '@/core'
-import { addGuest, createMatchday, generatePairs, openMatchday, setAttendance } from './matchday'
+import { addGuest, createMatchday, generatePairs, lockPair, openMatchday, setAttendance } from './matchday'
 import { adminClient } from './test/admin'
 import type { Json } from './database.types'
 import { createSeason } from './test/factories'
@@ -225,6 +225,45 @@ describe('generatePairs', () => {
         (pair.entry_a === partner && pair.entry_b === guest),
     )
     expect(mixedPair).toBe(true)
+  })
+
+  it('arma a mano parejas de dos del plantel y sortea el resto', async () => {
+    const { admin, seasonId, squad } = await buildSeasonWithSquad(defaultConfig(8), 8)
+    const [p1, p2, p3, p4] = squad
+    if (p1 === undefined || p2 === undefined || p3 === undefined || p4 === undefined) {
+      throw new Error('Faltan jugadores para el test.')
+    }
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-11')
+    await markAllPlaying(admin, matchdayId, squad)
+    await lockPair(admin.client, matchdayId, p1, p2)
+    await lockPair(admin.client, matchdayId, p3, p4)
+
+    await generatePairs(admin.client, matchdayId)
+
+    const keys = (await pairsOf(matchdayId)).map((row) => [row.entry_a, row.entry_b].sort().join('-'))
+    expect(keys).toHaveLength(4)
+    expect(keys).toContain([p1, p2].sort().join('-'))
+    expect(keys).toContain([p3, p4].sort().join('-'))
+  })
+
+  it('arma la fecha entera a mano cuando están todas trabadas', async () => {
+    const { admin, seasonId, squad } = await buildSeasonWithSquad(defaultConfig(8), 8)
+    const matchdayId = await createMatchday(admin.client, seasonId, '2026-08-12')
+    await markAllPlaying(admin, matchdayId, squad)
+    const wanted: Array<[string, string]> = []
+    for (let i = 0; i < squad.length; i += 2) {
+      const a = squad[i]
+      // Vecinos de siembra: justo lo que el sorteo NO arma (empareja 1 con 8).
+      const b = squad[i + 1]
+      if (a === undefined || b === undefined) throw new Error('Faltan jugadores para el test.')
+      wanted.push([a, b])
+      await lockPair(admin.client, matchdayId, a, b)
+    }
+
+    await generatePairs(admin.client, matchdayId)
+
+    const keys = (await pairsOf(matchdayId)).map((row) => [row.entry_a, row.entry_b].sort().join('-')).sort()
+    expect(keys).toEqual(wanted.map((duo) => [...duo].sort().join('-')).sort())
   })
 
   /**

@@ -202,30 +202,19 @@ export function assertMatchdaySize(present: readonly string[], sideSize: SideSiz
 }
 
 /**
- * What the admin is allowed to settle before the draw, and what they are not.
- *
- * Every lock must include a guest. Two squad players locked by hand would skip
- * the no-repeat rule, and that rule IS the format: it is the one thing the whole
- * pairing algorithm exists to enforce.
+ * Nobody sits in two locks at once. Any two players may be locked by hand —
+ * squad players included: the admin can build some pairs, or all of them, and
+ * whatever is left still goes to the draw under the no-repeat rule.
  *
  * How MANY guests may be left to the draw is NOT decided here. Every guest gets
  * both options — a partner picked by hand, or the draw (spec 2.6) — and how many
  * the draw can take is a count of who is playing, which this function never
  * sees. That count lives in `assertSquadCoversLooseGuests`, below.
  */
-export function assertLocksAndGuests(
-  guests: readonly GuestSeat[],
-  locks: readonly PairLock[],
-): void {
-  const isGuest = new Set(guests.map((guest) => guest.entryId))
+export function assertLocksDisjoint(locks: readonly PairLock[]): void {
   const locked = new Set<string>()
 
   for (const lock of locks) {
-    if (!isGuest.has(lock.a) && !isGuest.has(lock.b)) {
-      throw new EdgeError(
-        'Una pareja fijada a mano tiene que incluir a un invitado: dos jugadores del torneo no se pueden poner juntos.',
-      )
-    }
     for (const entryId of [lock.a, lock.b]) {
       if (locked.has(entryId)) {
         throw new EdgeError('Alguien está fijado en dos parejas a la vez.')
@@ -294,7 +283,7 @@ export function assertLocksArePlaying(
  * of them have to be `present`: that is exactly `resolveDefenders`, the
  * function that decides it on the other side.
  *
- * Lives apart from `assertLocksAndGuests` because it needs the attendance, and
+ * Lives apart from `assertLocksDisjoint` because it needs the attendance, and
  * that is only read on the draw path (`pairingContextFor`): asking for it in
  * `matchdayContextFor` would run a draw validation while CLOSING a matchday,
  * which is how a matchday gets stuck.
@@ -308,8 +297,14 @@ export function assertSquadCoversLooseGuests(
 ): void {
   const isGuest = new Set(guests.map((guest) => guest.entryId))
   const locked = new Set(locks.flatMap((lock) => [lock.a, lock.b]))
+  // A lock that takes a defender dissolves the defenders (`resolveSettled`):
+  // the other one goes back to the draw and can take a guest.
   const defending = new Set(
-    defenders !== null && present.includes(defenders.a) && present.includes(defenders.b)
+    defenders !== null &&
+      present.includes(defenders.a) &&
+      present.includes(defenders.b) &&
+      !locked.has(defenders.a) &&
+      !locked.has(defenders.b)
       ? [defenders.a, defenders.b]
       : [],
   )

@@ -238,9 +238,12 @@ cerraron antes de arrancar:
 - **`pair_locks` reemplaza a `guest_team`.** Una tabla de parejas trabadas antes
   del sorteo cubre las dos cosas con un mecanismo: el equipo invitado que juega
   junto, y el invitado puesto con alguien en concreto — que es la regla del
-  spec §2.6 que el modelo anterior dejaba sin implementar. Con un límite: toda
-  pareja trabada tiene que incluir a un invitado, o el admin podría saltearse la
-  regla de no repetir.
+  spec §2.6 que el modelo anterior dejaba sin implementar. Nació con un límite
+  —toda pareja trabada tenía que incluir a un invitado— que se levantó con las
+  **parejas a mano** (2026-11-04): el admin puede trabar a dos del plantel, o
+  armar la fecha entera, y lo que no traba sigue saliendo del sorteo con la
+  regla de no repetir. Una pareja a mano que repite se permite y se avisa; si
+  toma a un defensor, la pareja defensora se disuelve.
 - **Reabrir borra la fecha siguiente si está vacía.** Si ya tiene asistencias,
   invitados o parejas, no la toca y hay que borrarla a mano.
 

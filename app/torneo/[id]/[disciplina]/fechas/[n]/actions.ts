@@ -149,6 +149,37 @@ export async function setGuestPartner(
 }
 
 /**
+ * Arma a mano una pareja de dos del plantel. Lo que no se arme a mano sale del
+ * sorteo; si se arman todas, la fecha queda entera a mano. Borra las parejas
+ * ya sorteadas por el mismo motivo que `setGuestPartner`.
+ */
+export async function lockHandPair(
+  seasonId: string,
+  matchdayId: string,
+  matchdayNumber: number,
+  entryA: string,
+  entryB: string,
+): Promise<WriteResult> {
+  return inDraft(seasonId, matchdayId, matchdayNumber, async (supabase) => {
+    await lockPair(supabase, matchdayId, entryA, entryB)
+    await clearPairs(supabase, matchdayId)
+  })
+}
+
+/** Deshace una pareja a mano: los dos vuelven al sorteo. */
+export async function unlockHandPair(
+  seasonId: string,
+  matchdayId: string,
+  matchdayNumber: number,
+  lockId: string,
+): Promise<WriteResult> {
+  return inDraft(seasonId, matchdayId, matchdayNumber, async (supabase) => {
+    await unlockPair(supabase, lockId)
+    await clearPairs(supabase, matchdayId)
+  })
+}
+
+/**
  * Lo mismo que `inDraft` pero sin sembrar asistencias: la fecha ya no está en
  * armado y `seedAttendances` rebotaría con "El presentismo sólo se toca con la
  * fecha en armado".

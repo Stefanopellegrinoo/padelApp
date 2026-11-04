@@ -518,8 +518,8 @@ describe('discipline_entries — pareja fija sin resolver bloquea sacar (ronda d
     const [target] = entryIds
     if (target === undefined) throw new Error('Falta el plantel.')
 
-    // `lockPair` sólo exige que UNO de los dos lados sea invitado
-    // (`assertLocksAndGuests`, `db/validate.ts:216-236`) -- no hace falta
+    // `lockPair` sólo exige que nadie esté en dos trabas
+    // (`assertLocksDisjoint`, `db/validate.ts`) -- no hace falta
     // presentismo para armar el lock, así que esta fixture no toca
     // `attendances` y prueba el chequeo de `pair_locks` aislado del de
     // presentismo (que es el describe de abajo).

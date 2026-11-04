@@ -234,12 +234,19 @@ export function drawRoom(
   looseGuests: readonly { partnerId: string | null }[],
   /** Los defensores YA filtrados por la repetición: `null` si la gastaron. */
   defenders: Duo | null,
+  /** Las parejas a mano: van trabadas antes del sorteo y no acompañan a nadie. */
+  handPairs: readonly HandPairSeats[] = [],
 ): DrawRoom {
-  const taken = partnersTakenBy(looseGuests)
+  const taken = new Set([...partnersTakenBy(looseGuests), ...handPairMembers(handPairs)])
   const playing = seats.filter((seat) => seat.playing)
   const isPlaying = new Set(playing.map((seat) => seat.entryId))
+  // Mismo criterio que el borde: una traba que toma a un defensor los disuelve.
   const defending = new Set(
-    defenders !== null && isPlaying.has(defenders.a) && isPlaying.has(defenders.b)
+    defenders !== null &&
+      isPlaying.has(defenders.a) &&
+      isPlaying.has(defenders.b) &&
+      !taken.has(defenders.a) &&
+      !taken.has(defenders.b)
       ? [defenders.a, defenders.b]
       : [],
   )
@@ -323,6 +330,41 @@ export function partnersTakenBy(
   return new Set(
     looseGuests.flatMap((guest) => (guest.partnerId === null ? [] : [guest.partnerId])),
   )
+}
+
+/** Los dos asientos de una pareja armada a mano (dos del plantel trabados). */
+export interface HandPairSeats {
+  a: { entryId: string }
+  b: { entryId: string }
+}
+
+function handPairMembers(handPairs: readonly HandPairSeats[]): string[] {
+  return handPairs.flatMap((pair) => [pair.a.entryId, pair.b.entryId])
+}
+
+/**
+ * A quiénes se puede poner en una pareja a mano: los que vienen y no están
+ * trabados con nadie todavía, ni con un invitado ni en otra pareja a mano.
+ * Ofrecer a un trabado es ofrecer algo que rebota con "Alguien está fijado en
+ * dos parejas a la vez". Los defensores SÍ se ofrecen: la pareja a mano les
+ * gana y los disuelve (`resolveSettled`, core/pairing.ts).
+ */
+export function handPairOptions(
+  seats: readonly SeatVM[],
+  looseGuests: readonly { partnerId: string | null }[],
+  handPairs: readonly HandPairSeats[],
+): SeatVM[] {
+  const taken = new Set([...partnersTakenBy(looseGuests), ...handPairMembers(handPairs)])
+  return seats.filter((seat) => seat.playing && !taken.has(seat.entryId))
+}
+
+/**
+ * Alguien de la pareja a mano avisó que no va. El destilde no borra la traba,
+ * y `assertLocksArePlaying` rebotaría el sorteo: la pantalla lo dice antes.
+ */
+export function handPairAbsent(seats: readonly SeatVM[], pair: HandPairSeats): boolean {
+  const playing = new Set(seats.filter((seat) => seat.playing).map((seat) => seat.entryId))
+  return !playing.has(pair.a.entryId) || !playing.has(pair.b.entryId)
 }
 
 /** El vocabulario del armado: lo que `armadoWords` le devuelve a la pantalla. */

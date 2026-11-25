@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { agruparChips, nombresValidos, seCaenLasParejas, tocarJugador } from './armar-state'
+import { agruparChips, enterEnJugador, nombresValidos, seCaenLasParejas, tocarJugador } from './armar-state'
 
 describe('nombresValidos', () => {
   it('descarta los nombres vacíos o con sólo espacios', () => {
@@ -101,5 +101,24 @@ describe('agruparChips', () => {
         { indice: 1, nombre: 'Beto' },
       ],
     })
+  })
+})
+
+describe('enterEnJugador', () => {
+  it('Enter en una fila del medio pasa a la siguiente, sin tocar la lista', () => {
+    expect(enterEnJugador(['Ana', '', ''], 0)).toEqual({ jugadores: ['Ana', '', ''], foco: 1 })
+  })
+
+  it('Enter en la última con nombre agrega un casillero vacío y va ahí', () => {
+    expect(enterEnJugador(['Ana', 'Beto'], 1)).toEqual({ jugadores: ['Ana', 'Beto', ''], foco: 2 })
+  })
+
+  it('Enter en la última vacía no agrega otra: ahí se terminó la lista', () => {
+    expect(enterEnJugador(['Ana', '  '], 1)).toEqual({ jugadores: ['Ana', '  '], foco: null })
+  })
+
+  it('no agrega por arriba del techo de jugadores', () => {
+    const doce = Array.from({ length: 12 }, (_, i) => `J${i}`)
+    expect(enterEnJugador(doce, 11)).toEqual({ jugadores: doce, foco: null })
   })
 })

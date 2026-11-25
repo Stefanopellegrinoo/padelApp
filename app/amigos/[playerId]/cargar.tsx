@@ -1,38 +1,52 @@
 'use client'
 
-import { useActionState, useId, useState, useTransition, type ReactNode } from 'react'
+import { useActionState, useEffect, useId, useRef, useState, useTransition, type ReactNode, type RefObject } from 'react'
 import { SPORTS, SPORT_IDS, isSportId, sportLabel, sportOf, type MatchFormat, type SportId } from '@/core'
 import type { CasualMatch } from '@/db/friends'
 import { isComplete, startLoad, type LoadState } from '@/app/torneo/[id]/[disciplina]/fechas/[n]/carga-state'
 import { SubmitButton } from '@/app/submit-button'
+import { button } from '@/app/ui/button'
+import { Sheet } from '@/app/ui/sheet'
 import { editCasualMatch, removeCasualMatch, type CasualFormState } from '../actions'
 import {
+  RECUERDO_KEY,
   formatForSport,
+  formatoInicial,
+  hoyISO,
+  leerRecuerdo,
+  outcomeDelMarcador,
   playersFrom,
+  resumenPartido,
+  setsField,
   slotsError,
   slotsFor,
   type Mode,
+  type Recuerdo,
   type Slot,
   type SlotKey,
 } from './cargar-state'
-import { INPUT, LABEL, LEGEND, OPTION } from './estilos'
+import { INPUT, LABEL, OPTION } from './estilos'
 import { ResultadoGoles, type GoalsFields } from './resultado-goles'
 import { ResultadoSets } from './resultado-sets'
 
 const INITIAL_STATE: CasualFormState = { error: null }
 
-const ERROR_NOTE = 'rounded-field bg-live-bg px-3 py-2.5 text-[12.5px] font-bold text-live'
+const ERROR_NOTE = 'rounded-btn bg-live-bg px-3 py-2.5 text-[15px] font-semibold text-live'
 const GUEST = '__guest__'
+const SIN_GOLES: GoalsFields = { outcome: '', scoreMine: '', scoreTheirs: '', teamMine: '', teamTheirs: '' }
 
 const MODES: { value: Mode; label: string }[] = [
   { value: '1v1', label: '1 vs 1' },
   { value: '2v2', label: '2 vs 2' },
 ]
 const SLOT_LABELS: Record<SlotKey, string> = {
-  partner: 'Tu compañero',
-  rival1: 'Rival 1',
-  rival2: 'Rival 2',
+  partner: 'Tu pareja',
+  rival1: 'Rival',
+  rival2: 'Otro rival',
 }
+
+/** El nombre de pila: en la hoja los lados se leen cortos ("Vos y Lucas"). */
+const corto = (name: string) => name.trim().split(/\s+/)[0] ?? name
 
 /**
  * Los campos de texto plano con los que se prellena el formulario al editar
@@ -53,6 +67,9 @@ export interface CasualFormInitial {
   roster: string
   /** Sólo deportes de sets: los sets guardados, en mi orientación. */
   sets?: ReadonlyArray<{ mine: number; theirs: number }>
+  /** Cómo se jugó y cómo se llaman los lados en los botones; sin dato, 1 vs 1 contra "Rival". */
+  mode?: Mode
+  otherName?: string
 }
 
 export interface CasualFormFriend {
@@ -71,66 +88,90 @@ function slotOf({ choice, name }: SlotChoice): Slot | null {
   return choice === GUEST ? { kind: 'guest', name } : { kind: 'friend', playerId: choice }
 }
 
+/** Lo último que se usó, si hay y sirve. Sin `window` (o con el storage bloqueado), nada. */
+function recordado(): Recuerdo | null {
+  try {
+    return leerRecuerdo(window.localStorage.getItem(RECUERDO_KEY))
+  } catch {
+    return null
+  }
+}
+
+function recordar(recuerdo: Recuerdo): void {
+  try {
+    window.localStorage.setItem(RECUERDO_KEY, JSON.stringify(recuerdo))
+  } catch {
+    // Modo privado o storage lleno: la próxima vez arranca con pádel, nada más.
+  }
+}
+
 /**
- * El formulario de cargar/editar un partido casual (diseño §4), compartido
- * por las dos operaciones -- lo único que cambia entre cargar y editar es
- * `action` (qué server action llamar) e `initial` (si hay algo que
- * prellenar). Al editar no hay sección de jugadores: el plantel es fijo.
+ * El formulario de cargar/editar un partido con un amigo (diseño §4),
+ * compartido por las dos operaciones -- lo único que cambia entre cargar y
+ * editar es `action` (qué server action llamar) e `initial` (si hay algo que
+ * prellenar). Al editar no hay jugadores que elegir: el plantel es fijo.
+ * Vive adentro de una hoja (`CargarConAmigo`, `CasualMatchRow`) y se monta al
+ * abrirla, así que lee `localStorage` y la fecha de hoy sin pelear con el
+ * render del servidor.
+ *
+ * La menor cantidad de pasos (S8e): la fecha viene en hoy; el deporte, el
+ * modo y el formato, en los últimos que usaste (`RECUERDO_KEY`); en 1 vs 1 el
+ * rival es el amigo de la pantalla y no hay nada que elegir. Con sets, el
+ * toque que cierra el partido guarda; con goles, el primer número arranca
+ * enfocado, el marcador elige quién ganó y Enter en el segundo guarda. Si a
+ * ese toque le falta algo (los jugadores de un 2 vs 2), lo dice y queda
+ * "Guardar". Un error deja todo como estaba, con "Guardar" para reintentar.
  *
  * `useActionState`, no el patrón `<form action={fn}>` sin estado de
  * `app/amigos/actions.ts`: acá hay una validación real (`parseCasualResult`,
- * `db/friends.ts`) que puede fallar y hay que mostrarla en la misma pantalla.
+ * `db/friends.ts`) que puede fallar y hay que mostrarla en la misma hoja. Y
+ * todos los campos son CONTROLADOS -- cada uno con su `useState` --, porque
+ * toda action de un `<form action={fn}>` -- también una que TERMINA en error
+ * -- dispara un `HTMLFormElement.reset()` nativo (verificado en React 19:
+ * `startHostTransition` → `requestFormReset$1` → `fiber.stateNode.reset()`)
+ * que deja radios y `<select>` en su primer valor aunque el estado siga bien
+ * (lo prueba `cargar.unit.test.ts`). Por eso el envío es
+ * `startTransition(() => formAction(data))` con el `FormData` armado a mano,
+ * y no `<form action>`: la action corre igual, pero React nunca pide el reset.
  *
- * Todos los campos son CONTROLADOS -- cada uno con su propio `useState`,
- * seedeado desde `initial` --, NO por lo que arma el hook de arriba. Toda
- * action de un `<form action={fn}>` -- también una que TERMINA en error --
- * dispara un `HTMLFormElement.reset()` nativo (verificado en React 19:
- * `startHostTransition` → `requestFormReset$1` → `fiber.stateNode.reset()`).
- * Los inputs de TEXTO controlados lo sobreviven (React mantiene su valor por
- * defecto sincronizado con el estado), pero los radios y los `<select>`
- * controlados NO: el reset los deja visualmente en su primer valor aunque el
- * estado siga bien (lo prueba `cargar.unit.test.ts`). Por eso el envío es
- * `onSubmit` + `startTransition(() => formAction(data))` y no `<form
- * action>`: la action corre igual, pero React nunca pide el reset. Mismo
- * criterio que `app/torneo/[id]/ajustes/disciplinas.tsx` (líneas 177 y 224),
- * que dispara su escritura desde un `startTransition` y no desde `<form
- * action>`. Sólo el `players` oculto viaja en el FormData, armado del estado.
- *
- * El resultado lo dibuja la familia del deporte (`core/sports.ts`):
- * `ResultadoSets` (formato + sets en dos toques; el ganador sale de los sets,
- * `parseCasualResult`) o `ResultadoGoles` ("quién ganó" + marcador). Los dos
- * son controlados desde acá. Cambiar un stepper vacía los sets: pueden dejar
- * de ser válidos y es más simple que revalidarlos.
+ * Cuando la action vuelve sin error, avisa con `onSaved` y el resumen de lo
+ * que se guardó ("Ganaste 6-4 6-3"): la hoja se cierra y lo dice abajo.
  */
 export function CasualForm({
   friendPlayerId,
   friends = [],
   action,
   initial,
-  onCancel,
   submitLabel,
+  onSaved,
+  primerCampo,
 }: {
-  /** El amigo de la pantalla: viene preseleccionado como rival 1. */
+  /** El amigo de la pantalla: viene elegido como rival. */
   friendPlayerId: string
   /** Amigos aceptados entre los que se puede elegir. */
   friends?: readonly CasualFormFriend[]
   action: (state: CasualFormState, formData: FormData) => Promise<CasualFormState>
   initial?: CasualFormInitial
-  onCancel?: () => void
   submitLabel: string
+  onSaved?: (resumen: string) => void
+  /** El primer número de un deporte de goles: la hoja lo enfoca al abrirse. */
+  primerCampo?: RefObject<HTMLInputElement | null>
 }) {
   const [state, formAction, pending] = useActionState(action, INITIAL_STATE)
   // Un id propio por instancia: dos `CasualForm` pueden convivir en la misma
-  // pantalla (el de "cargar nuevo" y uno "editando" en una fila).
+  // pantalla (el de "cargar nuevo" y uno corrigiendo un partido).
   const uid = useId()
   const [, startTransition] = useTransition()
+  const formRef = useRef<HTMLFormElement>(null)
+  const scoreMineRef = useRef<HTMLInputElement | null>(null)
+  const [recuerdo] = useState(() => (initial === undefined ? recordado() : null))
 
   const initialSport = initial?.sport ?? ''
-  const [sport, setSport] = useState<'' | SportId>(
-    isSportId(initialSport) ? initialSport : initial === undefined ? 'PADEL' : '',
+  const [sport, setSport] = useState<'' | SportId>(() =>
+    initial === undefined ? (recuerdo?.sport ?? 'PADEL') : isSportId(initialSport) ? initialSport : '',
   )
   const info = sport === '' ? null : sportOf(sport)
-  const [mode, setMode] = useState<Mode>('1v1')
+  const [mode, setMode] = useState<Mode>(initial?.mode ?? recuerdo?.mode ?? '1v1')
   const [slots, setSlots] = useState<Record<SlotKey, SlotChoice>>({
     partner: { choice: '', name: '' },
     rival1: {
@@ -139,7 +180,7 @@ export function CasualForm({
     },
     rival2: { choice: '', name: '' },
   })
-  const [playedOn, setPlayedOn] = useState(initial?.playedOn ?? '')
+  const [playedOn, setPlayedOn] = useState(() => initial?.playedOn ?? hoyISO())
   const [goals, setGoals] = useState<GoalsFields>({
     outcome: initial?.outcome ?? '',
     scoreMine: initial?.scoreMine ?? '',
@@ -147,25 +188,30 @@ export function CasualForm({
     teamMine: initial?.teamMine ?? '',
     teamTheirs: initial?.teamTheirs ?? '',
   })
-  // `info` todavía es el deporte de `initial`: este inicializador corre una sola vez.
-  const [format, setFormat] = useState<MatchFormat>(() =>
-    info?.family === 'sets' && initial?.sets !== undefined ? formatForSport(info, initial.sets) : SPORTS.PADEL.format,
-  )
+  // `info` todavía es el deporte de arranque: este inicializador corre una sola vez.
+  const [format, setFormat] = useState<MatchFormat>(() => {
+    if (info?.family !== 'sets' || sport === '') return SPORTS.PADEL.format
+    return initial?.sets !== undefined ? formatForSport(info, initial.sets) : formatoInicial(info, sport, recuerdo)
+  })
   const [load, setLoad] = useState<LoadState>(() => ({
-    sets: (initial?.sets ?? []).map((set) => ({
-      gamesA: set.mine,
-      gamesB: set.theirs,
-    })),
+    sets: (initial?.sets ?? []).map((set) => ({ gamesA: set.mine, gamesB: set.theirs })),
     pendingWinner: null,
   }))
+  // Elegir un deporte de goles lleva el foco al primer número (S8e).
+  const [enfocar, setEnfocar] = useState(0)
+  useEffect(() => {
+    if (enfocar > 0) scoreMineRef.current?.focus()
+  }, [enfocar])
+
   // Cambiar de deporte arranca el resultado de cero: nada del anterior (formato,
   // sets, empate, equipos) viaja escondido en el FormData.
   const chooseSport = (id: SportId) => {
     const next = sportOf(id)
     setSport(id)
-    if (next.family === 'sets') setFormat(next.format)
+    if (next.family === 'sets') setFormat(formatoInicial(next, id, recuerdo))
+    else setEnfocar((n) => n + 1)
     setLoad(startLoad())
-    setGoals({ outcome: '', scoreMine: '', scoreTheirs: '', teamMine: '', teamTheirs: '' })
+    setGoals(SIN_GOLES)
   }
   const setFormatKey = (key: 'setsToWin' | 'gamesPerSet', value: number) => {
     setFormat((current) => ({ ...current, [key]: value }))
@@ -177,20 +223,92 @@ export function CasualForm({
     rival1: slotOf(slots.rival1),
     rival2: slotOf(slots.rival2),
   }
-  // En 1v1 con un amigo de rival, "el otro lado" es ese amigo; en 2v2 es una pareja.
-  const rival1Name =
-    mode === '1v1' ? friends.find((friend) => friend.playerId === slots.rival1.choice)?.displayName : undefined
-  const otherSide = rival1Name ?? 'el otro lado'
+  const nombreDe = (key: SlotKey): string | null => {
+    const { choice, name } = slots[key]
+    if (choice === GUEST) return name.trim() === '' ? null : corto(name)
+    const friend = friends.find((candidate) => candidate.playerId === choice)
+    return friend === undefined ? null : corto(friend.displayName)
+  }
+  // Los dos lados como se leen en la hoja. Al editar, los trae `initial`.
+  const otherName =
+    initial !== undefined
+      ? (initial.otherName ?? (initial.mode === '2v2' ? 'Ellos' : 'Rival'))
+      : mode === '1v1'
+        ? (nombreDe('rival1') ?? 'Rival')
+        : nombreDe('rival1') !== null && nombreDe('rival2') !== null
+          ? `${nombreDe('rival1')} y ${nombreDe('rival2')}`
+          : 'Ellos'
+  const mineName = mode === '1v1' ? 'Vos' : `Vos y ${(initial === undefined ? nombreDe('partner') : null) ?? 'tu pareja'}`
+
   const pageFriend = {
     playerId: friendPlayerId,
     name: friends.find((friend) => friend.playerId === friendPlayerId)?.displayName ?? 'este amigo',
   }
-  const slotProblem = initial === undefined ? slotsError(mode, slotValues, pageFriend) : null
-  const problem =
-    slotProblem ??
+  // Lo que falta para guardar, sin contar el resultado: si esto es `null`, el
+  // toque que cierra los sets guarda.
+  const faltaAlgo =
+    (initial === undefined ? slotsError(mode, slotValues, pageFriend) : null) ??
     // Sólo al editar un id que salió del registro: no hay chip elegido ni resultado que dibujar.
     (info === null ? 'Elegí el deporte para cargar el resultado.' : null) ??
-    (info?.family === 'sets' && !isComplete(load, format) ? 'Cargá los sets hasta cerrar el partido.' : null)
+    (playedOn === '' ? 'Falta la fecha.' : null)
+  const setsCompletos = info?.family === 'sets' && isComplete(load, format)
+  const problem =
+    faltaAlgo ??
+    (info?.family === 'sets' && !setsCompletos ? 'Cargá los sets hasta cerrar el partido.' : null) ??
+    (info?.family === 'goals' && goals.outcome === '' ? 'Falta quién ganó.' : null)
+
+  // El resumen se arma al enviar: cuando vuelve la action, el formulario ya
+  // pudo cambiar (y el aviso tiene que decir lo que se guardó).
+  const resumen = useRef('')
+  const ultimoEstado = useRef(state)
+  const avisar = useRef(onSaved)
+  avisar.current = onSaved
+  useEffect(() => {
+    if (state === ultimoEstado.current) return
+    ultimoEstado.current = state
+    if (state.error === null) avisar.current?.(resumen.current)
+  }, [state])
+
+  const enviar = (carga: LoadState = load) => {
+    const form = formRef.current
+    if (form === null || pending) return
+    const data = new FormData(form)
+    if (info?.family === 'sets') data.set('sets', setsField(carga))
+    resumen.current =
+      info?.family === 'sets'
+        ? resumenPartido(mode, {
+            family: 'sets',
+            sets: carga.sets.map((set) => ({ mine: set.gamesA, theirs: set.gamesB })),
+          })
+        : goals.outcome === ''
+          ? ''
+          : resumenPartido(mode, { family: 'goals', ...goals, outcome: goals.outcome })
+    if (initial === undefined && sport !== '') {
+      recordar({
+        sport,
+        mode,
+        formats: { ...recuerdo?.formats, ...(info?.family === 'sets' ? { [sport]: format } : {}) },
+      })
+    }
+    startTransition(() => formAction(data))
+  }
+
+  const onLoad = (next: LoadState) => {
+    setLoad(next)
+    if (faltaAlgo === null && !isComplete(load, format) && isComplete(next, format)) enviar(next)
+  }
+
+  const onScore = (side: 'scoreMine' | 'scoreTheirs', value: string) => {
+    setGoals((current) => {
+      const next = { ...current, [side]: value }
+      const derived = outcomeDelMarcador(next.scoreMine, next.scoreTheirs)
+      if (derived !== null) return { ...next, outcome: derived }
+      // Empatado: puede haber penales, no se adivina (salvo que ya dijeras empate).
+      const empatado = next.scoreMine.trim() !== '' && next.scoreMine.trim() === next.scoreTheirs.trim()
+      return empatado && current.outcome !== 'drew' ? { ...next, outcome: '' } : next
+    })
+  }
+
   const setSlot = (key: SlotKey, next: Partial<SlotChoice>) =>
     setSlots((current) => ({
       ...current,
@@ -198,7 +316,7 @@ export function CasualForm({
     }))
 
   const slotField = (key: SlotKey) => (
-    <div key={key} className="flex flex-col gap-1">
+    <div key={key} className="flex min-w-0 flex-1 flex-col gap-1.5">
       <label htmlFor={`${uid}-${key}`} className={LABEL}>
         {SLOT_LABELS[key]}
       </label>
@@ -222,6 +340,7 @@ export function CasualForm({
           data-slot-name={key}
           aria-label={`Nombre de ${SLOT_LABELS[key].toLowerCase()}`}
           placeholder="Nombre"
+          autoComplete="off"
           value={slots[key].name}
           onChange={(e) => setSlot(key, { name: e.target.value })}
           className={INPUT}
@@ -229,17 +348,21 @@ export function CasualForm({
       )}
     </div>
   )
-  const slotKeys = slotsFor(mode)
+  // En 1 vs 1 el rival es el amigo de la pantalla: sólo hay que elegirlo si
+  // no está entre tus amigos (un perfil al que se llegó de otro lado).
+  const rivalFijo = mode === '1v1' && slots.rival1.choice === friendPlayerId
+  const unit = info === null ? '' : info.unit
 
   return (
     <form
+      ref={formRef}
       // Ver el JSDoc de arriba: sin `<form action>` para que React no resetee radios ni selects.
       onSubmit={(event) => {
         event.preventDefault()
-        const data = new FormData(event.currentTarget)
-        startTransition(() => formAction(data))
+        enviar()
       }}
-      className="flex flex-col gap-5 rounded-card border border-line bg-surface p-4"
+      data-deporte={sport === '' ? undefined : sport}
+      className="flex flex-col pt-3"
     >
       <input type="hidden" name="friendPlayerId" value={friendPlayerId} />
       {initial !== undefined && <input type="hidden" name="matchId" value={initial.matchId} />}
@@ -247,12 +370,13 @@ export function CasualForm({
         <input type="hidden" name="players" value={JSON.stringify(playersFrom(mode, slotValues))} />
       )}
 
-      <fieldset className="flex flex-col gap-2">
-        <legend className={`${LEGEND} pb-2`}>Deporte</legend>
-        {/* 5 chips en 390px: 3 + 2 (un `flex` los aplasta). */}
-        <div className="grid grid-cols-3 gap-2">
+      <fieldset>
+        <legend className="sr-only">Deporte</legend>
+        {/* Cinco deportes no entran en 390: la fila se desliza de costado y
+            el último asoma. Casi siempre ya está el que usaste. */}
+        <div className="-mx-4 flex snap-x scroll-px-4 gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
           {SPORT_IDS.map((id) => (
-            <label key={id} className={OPTION}>
+            <label key={id} className={`${OPTION} flex-none snap-start px-4`}>
               <input
                 type="radio"
                 name="sport"
@@ -268,14 +392,13 @@ export function CasualForm({
         </div>
       </fieldset>
 
-      <div className="flex flex-col gap-2">
-        <span className={LEGEND}>Quiénes jugaron</span>
+      <div className="mt-3 grid grid-cols-2 gap-3">
         {initial === undefined ? (
-          <>
-            <fieldset className="flex gap-2">
-              <legend className="sr-only">Formato</legend>
+          <fieldset className="flex min-w-0 flex-col gap-1.5">
+            <legend className={`${LABEL} mb-1.5`}>Juegan</legend>
+            <div className="flex gap-1.5">
               {MODES.map((candidate) => (
-                <label key={candidate.value} className={OPTION}>
+                <label key={candidate.value} className={`${OPTION} px-1`}>
                   <input
                     type="radio"
                     name="mode"
@@ -287,206 +410,238 @@ export function CasualForm({
                   {candidate.label}
                 </label>
               ))}
-            </fieldset>
-
-            {/* Los dos lados como en un marcador: el tuyo arriba en verde
-                (vos siempre estás), el otro abajo, un "vs" en el medio. */}
-            <div className="flex flex-col gap-2 rounded-field bg-ok-bg p-3">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[12px] font-extrabold uppercase tracking-[.14em] text-up">Tu lado</span>
-                <span className="rounded-full bg-accent px-3 py-1.5 text-[12.5px] font-extrabold text-accent-text">
-                  Vos
-                </span>
-              </div>
-              {slotKeys.filter((key) => key === 'partner').map(slotField)}
             </div>
-            <div aria-hidden className="flex items-center gap-3">
-              <span className="h-px flex-1 bg-line" />
-              <span className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">vs</span>
-              <span className="h-px flex-1 bg-line" />
-            </div>
-            <div className="flex flex-col gap-2 rounded-field bg-chip p-3">
-              <span className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">El otro lado</span>
-              {slotKeys.filter((key) => key !== 'partner').map(slotField)}
-            </div>
-          </>
+          </fieldset>
         ) : (
-          <p className="rounded-field bg-chip px-3 py-2.5 text-[13.5px] font-bold">{initial.roster}</p>
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <span className={LABEL}>Jugaron</span>
+            <p className="flex min-h-[48px] items-center text-[16px] font-bold">{initial.roster}</p>
+          </div>
         )}
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <label htmlFor={`${uid}-fecha`} className={LABEL}>
+            Fecha
+          </label>
+          <input
+            id={`${uid}-fecha`}
+            name="playedOn"
+            type="date"
+            value={playedOn}
+            onChange={(e) => setPlayedOn(e.target.value)}
+            required
+            className={`${INPUT} dark:scheme-dark`}
+          />
+        </div>
       </div>
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor={`${uid}-fecha`} className={LEGEND}>
-          Fecha
-        </label>
-        <input
-          id={`${uid}-fecha`}
-          name="playedOn"
-          type="date"
-          value={playedOn}
-          onChange={(e) => setPlayedOn(e.target.value)}
-          required
-          className={`${INPUT} dark:scheme-dark`}
-        />
-      </div>
+      {initial === undefined && !rivalFijo && (
+        <div className="mt-3 flex flex-col gap-3">
+          {mode === '2v2' && slotField('partner')}
+          <div className="flex gap-2">{slotsFor(mode).filter((key) => key !== 'partner').map(slotField)}</div>
+        </div>
+      )}
 
       {info?.family === 'sets' && (
         <ResultadoSets
           sport={info}
           format={format}
           load={load}
-          otherSide={otherSide}
+          mineName={mineName}
+          otherName={otherName}
+          pending={pending}
           onFormat={setFormatKey}
-          onLoad={setLoad}
+          onLoad={onLoad}
         />
       )}
       {info?.family === 'goals' && (
         <ResultadoGoles
           sport={info}
           uid={uid}
-          otherSide={otherSide}
-          rival1Name={rival1Name}
+          mineLabel={mode === '1v1' ? `Tus ${unit}` : `${cap(unit)} de ustedes`}
+          otherLabel={`${cap(unit)} de ${mode === '1v1' ? otherName : 'ellos'}`}
+          outcomes={
+            mode === '1v1'
+              ? { won: 'Ganaste', lost: `Ganó ${otherName}`, drew: 'Empate' }
+              : { won: 'Ustedes', lost: 'Ellos', drew: 'Empate' }
+          }
           {...goals}
+          scoreMineRef={(el) => {
+            scoreMineRef.current = el
+            if (primerCampo !== undefined) primerCampo.current = el
+          }}
           onChange={(patch) => setGoals((current) => ({ ...current, ...patch }))}
+          onScore={onScore}
+          onEnter={() => {
+            if (problem === null) enviar()
+          }}
         />
       )}
 
-      <div className="flex flex-col gap-2">
-        {state.error !== null && <p className={ERROR_NOTE}>{state.error}</p>}
-        {problem !== null && state.error === null && (
-          <p className="text-[12px] font-bold text-muted">{problem}</p>
+      <div className="mt-4 flex flex-col gap-2.5">
+        {state.error !== null && (
+          <p role="alert" className={ERROR_NOTE}>
+            {state.error}
+          </p>
         )}
-        <div className="flex gap-2">
-          <button
-            type="submit"
-            disabled={pending || problem !== null}
-            className="flex-1 rounded-field bg-accent p-4 text-center text-[15px] font-extrabold text-accent-text disabled:bg-chip disabled:text-muted disabled:opacity-100"
-          >
-            {submitLabel}
-          </button>
-          {onCancel !== undefined && (
-            <button
-              type="button"
-              onClick={onCancel}
-              className="rounded-field border border-line px-4 text-[14px] font-extrabold text-text"
-            >
-              Cancelar
-            </button>
-          )}
-        </div>
+        <p aria-live="polite" className="min-h-5 text-[15px] text-muted empty:hidden">
+          {pending ? 'Guardando…' : state.error === null ? hintDe(problem, faltaAlgo, info?.family, load, format) : ''}
+        </p>
+        <button
+          type="submit"
+          disabled={pending || problem !== null}
+          className={`${button('primary', { size: 'lg', full: true })} disabled:bg-chip disabled:text-muted disabled:opacity-100`}
+        >
+          {submitLabel}
+        </button>
       </div>
     </form>
   )
 }
 
-const ROW_ACTION = 'min-h-[40px] flex-1 rounded-field bg-chip px-4 text-[13px] font-extrabold'
+const cap = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
 
 /**
- * Una fila casual de `Historial` (`app/amigos/historial.tsx`), con Editar y
- * Borrar (§3.1, §3.3 -- los dos pueden). `children` es la tarjeta de lectura
- * que `Historial` ya sabe armar (fecha, lados, marcador, autoría); este
- * componente pone el borde y los controles, para no duplicar el copy acá.
+ * La línea de abajo, que dice qué falta o qué hace el próximo toque. Con sets
+ * en curso y nada más que pedir, avisa que el toque guarda (como en la fecha).
+ */
+function hintDe(
+  problem: string | null,
+  faltaAlgo: string | null,
+  family: 'sets' | 'goals' | undefined,
+  load: LoadState,
+  format: MatchFormat,
+): string {
+  if (faltaAlgo !== null) return faltaAlgo
+  if (family === 'sets' && !isComplete(load, format)) {
+    if (load.pendingWinner === null) return 'Tocá primero quién ganó.'
+    return format.setsToWin > 1 ? 'Se guarda cuando se define el partido.' : 'Con este toque se guarda.'
+  }
+  return problem ?? ''
+}
+
+/** "Vos y Cami contra Juan y Beto": el plantel fijo de un partido ya cargado. */
+function plantelDe(partido: CasualMatch): string {
+  const mios = ['Vos', ...partido.partners.map(corto)]
+  return `${mios.join(' y ')} contra ${partido.rivals.map(corto).join(' y ')}`
+}
+
+/**
+ * Una fila casual de `Historial` (`app/amigos/historial.tsx`): tocarla abre
+ * la hoja con el partido precargado para corregirlo, y desde ahí se borra
+ * (§3.1, §3.3 -- los dos pueden). `children` es la fila de lectura que
+ * `Historial` ya sabe armar (resultado, marcador, deporte, autoría); este
+ * componente pone el botón y la hoja, para no duplicar el copy acá.
  *
- * Los controles viven detrás de un "⋯" (arriba a la derecha): la tarjeta es
- * para leer el partido, y dos botones de colores en cada fila competían con
- * el marcador. Tocarlo despliega Editar / Borrar dentro de la misma tarjeta.
+ * El botón es una capa debajo de la fila (`absolute inset-0`) y no la
+ * envuelve: un `<button>` no puede tener `<p>` adentro, y la fila se sigue
+ * leyendo como texto. Su nombre es el resumen ("Corregir: Ganaste 6-4").
  *
- * Todo el estado es `useState` LOCAL, sin levantarlo a `Historial`: cada
- * fila decide el suyo, y `Historial` sigue siendo la función pura que prueba
- * `historial.unit.test.ts` llamándola directo (sin JSX).
+ * Todo el estado es `useState` LOCAL, sin levantarlo a `Historial`: cada fila
+ * decide el suyo, y `Historial` sigue siendo la función pura que prueba
+ * `historial.unit.test.ts` llamándola directo.
  *
- * Borrar pide confirmación en dos pasos inline (`Borrar` -> `¿Borrar? Sí / No`):
- * el borrado saca el partido para todos los participantes (§3.3) y no se deshace.
+ * Borrar pide confirmación en dos pasos (`Borrar partido` -> `¿Borrar el
+ * partido? Sí, borrar / No`): el borrado saca el partido para todos los
+ * participantes (§3.3) y no se deshace.
  */
 export function CasualMatchRow({
   friendPlayerId,
   partido,
+  resumen,
+  desde,
+  dataDeporte,
   children,
 }: {
   friendPlayerId: string
   partido: CasualMatch
+  /** El deporte de la fila (`data-deporte`): su nombre va en su color. */
+  dataDeporte?: string
+  /** "Perdiste 1-2": el nombre del botón. */
+  resumen: string
+  /** `'amigos'` si al perfil se llegó desde la lista: Borrar vuelve con el mismo Volver. */
+  desde?: string
   children: ReactNode
 }) {
-  const [menuOpen, setMenuOpen] = useState(false)
-  const [editing, setEditing] = useState(false)
+  // `vez` cambia en cada apertura: la hoja arranca de lo guardado aunque se
+  // reabra después de un intento con error.
+  const [hoja, setHoja] = useState({ open: false, vez: 0 })
   const [confirmingDelete, setConfirmingDelete] = useState(false)
-
-  if (editing) {
-    return (
-      <CasualForm
-        friendPlayerId={friendPlayerId}
-        action={editCasualMatch}
-        submitLabel="Guardar cambios"
-        onCancel={() => {
-          setEditing(false)
-          setMenuOpen(false)
-        }}
-        initial={{
-          matchId: partido.matchId,
-          sport: partido.sport,
-          playedOn: partido.playedOn,
-          outcome: partido.outcome,
-          scoreMine: partido.score !== null ? String(partido.score.mine) : '',
-          scoreTheirs: partido.score !== null ? String(partido.score.theirs) : '',
-          sets: partido.sets ?? undefined,
-          teamMine: partido.teams.mine ?? '',
-          teamTheirs: partido.teams.theirs ?? '',
-          roster: `${partido.partners.length > 0 ? `con ${partido.partners.join(', ')} · ` : ''}vs ${partido.rivals.join(', ')}`,
-        }}
-      />
-    )
-  }
+  const cerrar = () => setHoja((prev) => ({ ...prev, open: false }))
+  const dosContraDos = partido.partners.length > 0 || partido.rivals.length > 1
 
   return (
-    <div className="relative flex flex-col gap-2 rounded-[14px] border border-line bg-surface p-[14px]">
-      {children}
+    <li data-deporte={dataDeporte} className="relative border-t border-line first:border-t-0">
       <button
         type="button"
-        aria-label="Opciones del partido"
-        aria-expanded={menuOpen}
+        aria-label={`Corregir: ${resumen}`}
         onClick={() => {
-          setMenuOpen(!menuOpen)
           setConfirmingDelete(false)
+          setHoja((prev) => ({ open: true, vez: prev.vez + 1 }))
         }}
-        className={`absolute top-0.5 right-0.5 flex h-11 w-11 items-center justify-center rounded-full text-[18px] leading-none font-extrabold text-muted ${
-          menuOpen ? 'bg-chip text-text' : ''
-        }`}
-      >
-        ⋯
-      </button>
-      {menuOpen &&
-        (confirmingDelete ? (
-          <form
-            action={removeCasualMatch}
-            role="group"
-            aria-label="Confirmar borrado"
-            className="flex items-center gap-2 rounded-field bg-live-bg py-1 pr-1 pl-3"
-          >
-            <input type="hidden" name="friendPlayerId" value={friendPlayerId} />
-            <input type="hidden" name="matchId" value={partido.matchId} />
-            <span className="flex-1 text-[12.5px] font-extrabold text-live">¿Borrar?</span>
-            <SubmitButton className="min-h-[40px] rounded-[9px] bg-live px-4 text-[13px] font-extrabold text-bg disabled:opacity-60">
-              Sí
-            </SubmitButton>
-            <button
-              type="button"
-              autoFocus
-              onClick={() => setConfirmingDelete(false)}
-              className="min-h-[40px] rounded-[9px] bg-bg px-4 text-[13px] font-extrabold text-text"
-            >
-              No
-            </button>
-          </form>
-        ) : (
-          <div className="flex gap-2">
-            <button type="button" onClick={() => setEditing(true)} className={`${ROW_ACTION} text-accent-link`}>
-              Editar
-            </button>
-            <button type="button" onClick={() => setConfirmingDelete(true)} className={`${ROW_ACTION} text-live`}>
-              Borrar
-            </button>
+        className="press-fila absolute inset-0 h-full w-full active:scale-100"
+      />
+      <div className="pointer-events-none relative">{children}</div>
+      <Sheet open={hoja.open} onClose={cerrar} title="Corregir partido">
+        {hoja.vez > 0 && (
+          <div key={hoja.vez}>
+            <CasualForm
+              friendPlayerId={friendPlayerId}
+              action={editCasualMatch}
+              submitLabel="Guardar cambios"
+              onSaved={cerrar}
+              initial={{
+                matchId: partido.matchId,
+                sport: partido.sport,
+                playedOn: partido.playedOn,
+                outcome: partido.outcome,
+                scoreMine: partido.score !== null ? String(partido.score.mine) : '',
+                scoreTheirs: partido.score !== null ? String(partido.score.theirs) : '',
+                sets: partido.sets ?? undefined,
+                teamMine: partido.teams.mine ?? '',
+                teamTheirs: partido.teams.theirs ?? '',
+                roster: plantelDe(partido),
+                mode: dosContraDos ? '2v2' : '1v1',
+                otherName: dosContraDos ? partido.rivals.map(corto).join(' y ') : corto(partido.rivals[0] ?? 'Rival'),
+              }}
+            />
+            <div className="mt-5 border-t border-line pt-4">
+              {confirmingDelete ? (
+                <form
+                  action={removeCasualMatch}
+                  role="group"
+                  aria-label="Confirmar borrado"
+                  className="flex flex-col gap-3 rounded-tile bg-live-bg p-4"
+                >
+                  <input type="hidden" name="friendPlayerId" value={friendPlayerId} />
+                  <input type="hidden" name="matchId" value={partido.matchId} />
+                  {desde !== undefined && <input type="hidden" name="desde" value={desde} />}
+                  <p className="text-[17px] font-bold text-live">¿Borrar el partido?</p>
+                  <p className="-mt-2 text-[15px] text-text">Se borra para todos los que jugaron.</p>
+                  <div className="flex gap-2">
+                    <SubmitButton className={`${button('primary')} flex-1 bg-live! text-bg!`}>Sí, borrar</SubmitButton>
+                    <button
+                      type="button"
+                      autoFocus
+                      onClick={() => setConfirmingDelete(false)}
+                      className={`${button('secondary')} flex-1 bg-surface-2!`}
+                    >
+                      No
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setConfirmingDelete(true)}
+                  className={button('danger', { full: true })}
+                >
+                  Borrar partido
+                </button>
+              )}
+            </div>
           </div>
-        ))}
-    </div>
+        )}
+      </Sheet>
+    </li>
   )
 }

@@ -56,11 +56,13 @@ function partidoCasual(overrides: Partial<CasualMatch> = {}): SharedMatch {
   }
 }
 
-// Texto EXACTO de cada <p> de la tarjeta, en orden (las etiquetas de adentro,
-// como la pastilla del deporte o la de cada set, se sacan): una línea de más o
-// un reordenamiento rompe la comparación (un `toContain` los dejaría pasar).
-// Orden de la tarjeta: fecha+deporte, titular (lado + quiénes), equipo (FIFA,
-// si hay), autoría, marcador, leyenda del resultado.
+// Texto EXACTO de cada <p> de la fila, en orden (las etiquetas de adentro,
+// como el deporte en su color, se sacan): una línea de más o un
+// reordenamiento rompe la comparación (un `toContain` los dejaría pasar).
+// Orden de la fila (la `.game` del prototipo): el resultado, el marcador,
+// deporte+fecha(+torneo), quiénes (2 vs 2), equipo (FIFA, si hay), autoría.
+// De qué lado jugaron ya no va en la fila: lo dice la sección ("Juntos") y el
+// verbo ("Ganaron" la pareja, "Ganaste" vos).
 const lineas = (p: SharedMatch): string[] =>
   [
     ...renderToStaticMarkup(Historial({ nombre: 'Juan', friendPlayerId: 'amigo-1', partidos: [p] })).matchAll(
@@ -84,7 +86,7 @@ describe('Historial', () => {
     // Forma exacta del ejemplo de diseño (§4.4): fecha, deporte (label, no el
     // kind crudo) y torneo en la misma línea -- una fila de cada clase deja
     // de ser la única que se distingue por CALLAR el deporte.
-    expect(lineas(partido())[0]).toBe(`${matchdayDay('2026-08-14')} Pádel torneo Los Jueves`)
+    expect(lineas(partido())[2]).toBe(`Pádel, ${matchdayDay('2026-08-14')}, Los Jueves`)
     // El marcador COMO LO LEE una persona -- "6-3", no un dígito suelto que
     // matchea cualquier cosa (hasta un `text-[13.5px]` tiene un "3").
     expect(html).toContain('6-3')
@@ -126,33 +128,26 @@ describe('Historial', () => {
     expect(html.indexOf('SinFecha')).toBeLessThan(html.indexOf('ConFecha'))
   })
 
-  it('dice si jugaron juntos, en cada fila', () => {
+  it('de compañeros el resultado es el de LA PAREJA: "Ganaron", no "Ganaste"', () => {
     const juntos = partido({ together: true })
-    const html = renderToStaticMarkup(Historial({ nombre: 'Juan', friendPlayerId: 'amigo-1', partidos: [juntos] }))
-    expect(html).toContain('Juntos')
-    // De compañeros el resultado es el de LA PAREJA: "ganaron", no "ganaste".
-    expect(lineas(juntos).slice(1)).toEqual(['Juntos', '6-3', 'Ganaron'])
+    expect(lineas(juntos).slice(0, 2)).toEqual(['Ganaron', '6-3'])
   })
 
-  it('dice si se enfrentaron, en cada fila, con el resultado en primera persona', () => {
+  it('enfrentados el resultado es en primera persona', () => {
     const enContra = partido({ together: false, outcome: 'lost', score: { mine: 3, theirs: 6 } })
-    const html = renderToStaticMarkup(Historial({ nombre: 'Juan', friendPlayerId: 'amigo-1', partidos: [enContra] }))
-    expect(html).toContain('En contra')
-    expect(lineas(enContra).slice(1)).toEqual(['En contra', '3-6', 'Perdiste'])
+    expect(lineas(enContra).slice(0, 2)).toEqual(['Perdiste', '3-6'])
   })
 
   it('un empate de compañeros dice "empataron" -- el resultado de la pareja', () => {
     const empateJuntos = partido({ together: true, outcome: 'drew', score: { mine: 2, theirs: 2 } })
-    const html = renderToStaticMarkup(Historial({ nombre: 'Juan', friendPlayerId: 'amigo-1', partidos: [empateJuntos] }))
-    expect(lineas(empateJuntos).slice(1)).toEqual(['Juntos', '2-2', 'Empataron'])
+    expect(lineas(empateJuntos).slice(0, 2)).toEqual(['Empataron', '2-2'])
   })
 
   it('un empate enfrentados dice "empataste" -- en primera persona, no el verbo de la pareja', () => {
     // Migración 0034 (`match_sets_no_draw` condicionado por `allows_draw`):
     // un empate es un resultado real y guardable, no un caso hipotético.
     const empateContra = partido({ together: false, outcome: 'drew', score: { mine: 2, theirs: 2 } })
-    const html = renderToStaticMarkup(Historial({ nombre: 'Juan', friendPlayerId: 'amigo-1', partidos: [empateContra] }))
-    expect(lineas(empateContra).slice(1)).toEqual(['En contra', '2-2', 'Empataste'])
+    expect(lineas(empateContra).slice(0, 2)).toEqual(['Empataste', '2-2'])
   })
 
   it('un partido de torneo sin resultado no inventa uno', () => {
@@ -162,12 +157,12 @@ describe('Historial', () => {
     expect(html).not.toContain('Perdiste')
     expect(html).not.toContain('Ganaron')
     expect(html).not.toContain('Perdieron')
-    expect(lineas(sinJugar).slice(1)).toEqual(['En contra', '–', 'Sin resultado'])
+    expect(lineas(sinJugar).slice(0, 2)).toEqual(['Sin resultado', '–'])
   })
 
   it('con un amigo sin partidos dice qué falta, no una tabla vacía', () => {
     const html = renderToStaticMarkup(Historial({ nombre: 'Juan', friendPlayerId: 'amigo-1', partidos: [] }))
-    expect(html).toContain('Todavía no jugaron')
+    expect(html).toContain('Sin partidos todavía')
   })
 
   it('no suma nada a un contador -- no queda "Juntos N" ni "En contra M"', () => {
@@ -241,8 +236,7 @@ describe('Historial', () => {
       updatedById: 'juan-id',
     })
     const html = renderToStaticMarkup(Historial({ nombre: 'Juan', friendPlayerId: 'amigo-1', partidos: [editadoPorOtro] }))
-    expect(html).toContain('Cargó Fede')
-    expect(html).toContain('editó Juan')
+    expect(html).toContain('Cargó Fede, editó Juan')
   })
 
   it('cuando cargó y editó la misma persona, lo dice una sola vez', () => {
@@ -255,6 +249,17 @@ describe('Historial', () => {
     const html = renderToStaticMarkup(Historial({ nombre: 'Juan', friendPlayerId: 'amigo-1', partidos: [mismaPersona] }))
     expect(html).toContain('Cargó Fede')
     expect(html).not.toContain('editó')
+  })
+
+  it('lo que cargaste vos (y nadie editó) no lo dice: la línea es para cuando fue otro', () => {
+    const mio = partidoCasual({ createdById: 'yo', updatedById: 'yo', createdBy: 'Martín', updatedBy: 'Martín' })
+    const html = renderToStaticMarkup(Historial({ nombre: 'Juan', friendPlayerId: 'amigo-1', partidos: [mio], yo: 'yo' }))
+    expect(html).not.toContain('Cargó')
+    const editadoPorJuan = partidoCasual({ createdById: 'yo', updatedById: 'juan-id', createdBy: 'Martín', updatedBy: 'Juan' })
+    const html2 = renderToStaticMarkup(
+      Historial({ nombre: 'Juan', friendPlayerId: 'amigo-1', partidos: [editadoPorJuan], yo: 'yo' }),
+    )
+    expect(html2).toContain('Cargó Martín, editó Juan')
   })
 
   it('dos amigos DISTINTOS con el mismo display_name no colapsan la autoría -- review final, Important 2', () => {
@@ -306,23 +311,22 @@ describe('Historial', () => {
         }),
       ),
     ).toEqual([
-      `${matchdayDay('2026-08-23')} FIFA`,
-      // Juan es el amigo de la pantalla: ya está en el encabezado, no se repite.
-      'Juntos vs Ana, Beto',
-      'Cargó Fede',
-      '4-2',
       'Ganaron',
+      '4-2',
+      `FIFA, ${matchdayDay('2026-08-23')}`,
+      // Juan es el amigo de la pantalla: ya está en el encabezado, no se repite.
+      'contra Ana y Beto',
+      'Cargó Fede',
     ])
   })
 
-  it('1v1 en contra FIFA con marcador empatado nombra al ganador y omite "con"', () => {
+  it('1v1 en contra FIFA con marcador empatado: sin plantel (son ustedes dos), con tu equipo', () => {
     expect(lineas(partidoCasual({ outcome: 'won', score: { mine: 2, theirs: 2 }, rivals: ['Juan'] }))).toEqual([
-      `${matchdayDay('2026-08-23')} FIFA`,
-      'En contra',
+      'Ganaste',
+      '2-2',
+      `FIFA, ${matchdayDay('2026-08-23')}`,
       'con Boca',
       'Cargó Fede',
-      '2-2',
-      'Ganaste',
     ])
   })
 
@@ -336,7 +340,13 @@ describe('Historial', () => {
         rivals: ['Juan', 'Beto'],
       }),
     )
-    expect(l.slice(1)).toEqual(['En contra con Cami · su pareja Beto', 'Cargó Fede', '2-2', 'Ganaron Juan, Beto'])
+    expect(l).toEqual([
+      'Ganaron Juan y Beto',
+      '2-2',
+      `FIFA, ${matchdayDay('2026-08-23')}`,
+      'Vos y Cami contra Juan y Beto',
+      'Cargó Fede',
+    ])
   })
 
   it('together + marcador empatado + perdieron: "Perdieron", sin "Ganó"', () => {
@@ -350,18 +360,22 @@ describe('Historial', () => {
         rivals: ['Ana', 'Beto'],
       }),
     )
-    expect(l.slice(-2)).toEqual(['2-2', 'Perdieron'])
+    expect(l.slice(0, 2)).toEqual(['Perdieron', '2-2'])
     expect(l.join('|')).not.toContain('Ganó')
   })
 
-  it('el amigo se saca una sola vez: un invitado homónimo del otro lado sigue apareciendo', () => {
-    const l = lineas(partidoCasual({ partners: ['Cami'], rivals: ['Juan', 'Juan'], teams: { mine: null, theirs: null } }))
-    expect(l[1]).toBe('En contra con Cami · su pareja Juan')
+  it('juntos, el amigo se saca una sola vez: un invitado homónimo de tu lado sigue apareciendo', () => {
+    const l = lineas(
+      partidoCasual({ together: true, partners: ['Juan', 'Juan'], rivals: ['Ana'], teams: { mine: null, theirs: null } }),
+    )
+    expect(l[3]).toBe('con Juan, contra Ana')
   })
 
-  it('2v2 en contra sin pareja tuya cargada nombra sólo la suya', () => {
-    const l = lineas(partidoCasual({ partners: [], rivals: ['Juan', 'Nico'], teams: { mine: null, theirs: null } }))
-    expect(l[1]).toBe('En contra su pareja Nico')
+  it('2v2 en contra: el plantel entero, también sin pareja tuya cargada', () => {
+    const conPareja = lineas(partidoCasual({ partners: ['Cami'], rivals: ['Juan', 'Juan'], teams: { mine: null, theirs: null } }))
+    expect(conPareja[3]).toBe('Vos y Cami contra Juan y Juan')
+    const sinPareja = lineas(partidoCasual({ partners: [], rivals: ['Juan', 'Nico'], teams: { mine: null, theirs: null } }))
+    expect(sinPareja[3]).toBe('Vos contra Juan y Nico')
   })
 
   it('PADEL muestra el deporte y los sets en mi orientación', () => {
@@ -380,25 +394,20 @@ describe('Historial', () => {
           rivals: ['Juan'],
         }),
       ),
-    ).toEqual([`${matchdayDay('2026-08-23')} Pádel`, 'En contra', 'Cargó Fede', '6-3 4-6 6-5', 'Ganaste'])
+    ).toEqual(['Ganaste', '6-3 4-6 6-5', `Pádel, ${matchdayDay('2026-08-23')}`, 'Cargó Fede'])
   })
 
   it('un deporte del registro muestra su etiqueta; uno que no está, su id tal cual y su marcador', () => {
     const base = { teams: { mine: null, theirs: null }, rivals: ['Juan'] }
     const basquet = lineas(partidoCasual({ ...base, sport: 'BASQUET', score: { mine: 80, theirs: 70 }, outcome: 'won' }))
-    expect(basquet[0]).toBe(`${matchdayDay('2026-08-23')} Básquet`)
+    expect(basquet[2]).toBe(`Básquet, ${matchdayDay('2026-08-23')}`)
     const tejo = lineas(partidoCasual({ ...base, sport: 'TEJO', score: { mine: 3, theirs: 1 }, outcome: 'won' }))
-    expect(tejo[0]).toBe(`${matchdayDay('2026-08-23')} TEJO`)
+    expect(tejo[2]).toBe(`TEJO, ${matchdayDay('2026-08-23')}`)
     expect(tejo.join('|')).toContain('3-1')
   })
 
   it('la fila de torneo tiene la misma forma, sin nombres ni autoría', () => {
-    expect(lineas(partido())).toEqual([
-      `${matchdayDay('2026-08-14')} Pádel torneo Los Jueves`,
-      'En contra',
-      '6-3',
-      'Ganaste',
-    ])
+    expect(lineas(partido())).toEqual(['Ganaste', '6-3', `Pádel, ${matchdayDay('2026-08-14')}, Los Jueves`])
   })
 })
 

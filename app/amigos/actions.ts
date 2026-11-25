@@ -64,6 +64,19 @@ export async function accept(formData: FormData): Promise<void> {
 
 export interface CasualFormState {
   error: string | null
+  /**
+   * Cuántas veces se guardó desde que se abrió el formulario. Cargar y
+   * corregir ya no redirigen (la hoja se cierra y avisa, S8e): cada guardado
+   * bueno devuelve un estado nuevo, y la hoja lo nota por eso.
+   */
+  saved?: number
+}
+
+/** Lo que cambia cuando se guarda un partido con un amigo: su perfil, la lista y los amigos de Inicio. */
+function revalidarPartido(path: string): void {
+  revalidatePath(path)
+  revalidatePath('/amigos')
+  revalidatePath('/torneos')
 }
 
 /**
@@ -77,7 +90,7 @@ export interface CasualFormState {
  * argumento -- mismo criterio que `next` en `registro-form.tsx`: este repo no
  * tiene precedente de `action.bind()`.
  */
-export async function loadCasualMatch(_state: CasualFormState, formData: FormData): Promise<CasualFormState> {
+export async function loadCasualMatch(state: CasualFormState, formData: FormData): Promise<CasualFormState> {
   const friendPlayerId = String(formData.get('friendPlayerId') ?? '')
   try {
     const supabase = await serverClient()
@@ -88,11 +101,13 @@ export async function loadCasualMatch(_state: CasualFormState, formData: FormDat
     await createCasualMatch(supabase, players, casualInputFrom(formData))
   } catch (error) {
     if (!(error instanceof EdgeError)) throw error
-    return { error: error.message }
+    return { error: error.message, saved: state.saved }
   }
 
-  revalidatePath(`/amigos/${friendPlayerId}`)
-  redirect(`/amigos/${friendPlayerId}`)
+  // Sin redirect: la pantalla es la misma, y la hoja se cierra sola al ver
+  // el estado nuevo. `revalidatePath` trae el partido a la lista.
+  revalidarPartido(`/amigos/${friendPlayerId}`)
+  return { error: null, saved: (state.saved ?? 0) + 1 }
 }
 
 /**
@@ -103,7 +118,7 @@ export async function loadCasualMatch(_state: CasualFormState, formData: FormDat
  * mano no puede mandar a cualquier página); si no, al `friendPlayerId` que
  * DEVUELVE `updateCasualMatch`.
  */
-export async function editCasualMatch(_state: CasualFormState, formData: FormData): Promise<CasualFormState> {
+export async function editCasualMatch(state: CasualFormState, formData: FormData): Promise<CasualFormState> {
   const matchId = String(formData.get('matchId') ?? '')
   const submitted = String(formData.get('friendPlayerId') ?? '')
   let path: string
@@ -114,10 +129,13 @@ export async function editCasualMatch(_state: CasualFormState, formData: FormDat
     path = redirectTarget(submitted, ids, fromDb)
   } catch (error) {
     if (!(error instanceof EdgeError)) throw error
-    return { error: error.message }
+    return { error: error.message, saved: state.saved }
   }
 
-  revalidatePath(path)
+  revalidarPartido(path)
+  // Si el partido sigue en esta pantalla, se queda acá (la hoja se cierra
+  // sola); si no, va a la del amigo que sí está.
+  if (path === `/amigos/${submitted}`) return { error: null, saved: (state.saved ?? 0) + 1 }
   redirect(path)
 }
 
@@ -134,6 +152,8 @@ export async function editCasualMatch(_state: CasualFormState, formData: FormDat
 export async function removeCasualMatch(formData: FormData): Promise<void> {
   const matchId = String(formData.get('matchId') ?? '')
   const submitted = String(formData.get('friendPlayerId') ?? '')
+  // De dónde se llegó al perfil (`?desde=amigos`): que Volver siga diciendo lo mismo.
+  const desde = formData.get('desde') === 'amigos' ? 'desde=amigos' : null
   let path = `/amigos/${submitted}`
   let problem: string | null = null
   try {
@@ -146,6 +166,7 @@ export async function removeCasualMatch(formData: FormData): Promise<void> {
     problem = error.message
   }
 
-  revalidatePath(path)
-  redirect(problem === null ? path : `${path}?error=${encodeURIComponent(problem)}`)
+  revalidarPartido(path)
+  const query = [desde, problem === null ? null : `error=${encodeURIComponent(problem)}`].filter((q) => q !== null)
+  redirect(query.length === 0 ? path : `${path}?${query.join('&')}`)
 }

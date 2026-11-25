@@ -10,7 +10,7 @@ import {
   opcionesPrimeraFecha,
   type DeporteElegido,
 } from './crear-state'
-import { PasoComoSeJuega, PasoListo, PasoNuevo, copiarLink, encabezado } from './crear'
+import { PasoComoSeJuega, PasoListo, PasoNuevo, copiarLink, encabezado, volverA } from './crear'
 
 /**
  * Los pasos del wizard nuevo, RENDERIZADOS (sin clicks no se llega a cada paso: entran con props).
@@ -47,7 +47,7 @@ function comoSeJuega(cards: readonly DeporteElegido[], over: Partial<ComponentPr
 function listo(cards: readonly DeporteElegido[], over: Partial<ComponentProps<typeof PasoListo>> = {}): string {
   return renderToStaticMarkup(
     createElement(PasoListo, {
-      disciplines: crearPayload('Los Jueves', SEIS, cards).disciplines,
+      ...crearPayload('Los Jueves', SEIS, cards),
       created: null,
       pending: false,
       error: null,
@@ -64,17 +64,33 @@ describe('PasoNuevo', () => {
     for (const chip of chips) expect(chip.attrs).toContain('aria-pressed="false"')
   })
 
-  it('los chips son grandes, de a tres por fila, en un grupo con título', () => {
+  it('los chips son bloques grandes, de a tres por fila, en un grupo con título', () => {
     const html = nuevo()
     expect(html).toContain('grid grid-cols-3 gap-2')
     expect(html).toMatch(/role="group"[^>]*aria-labelledby="[^"]+"/)
-    expect(html).toContain('¿Qué deportes?')
-    expect(html).toContain('Podés elegir más de uno. Cada deporte tiene su tabla, y además hay una tabla general.')
+    expect(html).toContain('¿A qué juegan?')
+    expect(html).toContain('Podés elegir más de uno: cada uno tiene su tabla y hay una general.')
+    for (const chip of buttons(html).filter((b) => b.attrs.includes('aria-pressed'))) {
+      expect(Number(/min-h-\[(\d+)px\]/.exec(chip.attrs)?.[1])).toBeGreaterThanOrEqual(44)
+    }
   })
 
-  it('el deporte elegido queda marcado, el resto no', () => {
-    const pressed = buttons(nuevo({ picked: ['FIFA'] })).filter((b) => b.attrs.includes('aria-pressed="true"'))
+  it('cada chip en el color de su deporte; el elegido, lleno, y el resto en su tinte', () => {
+    const chips = buttons(nuevo({ picked: ['FIFA'] })).filter((b) => b.attrs.includes('aria-pressed'))
+    for (const kind of TOURNAMENT_SPORTS) {
+      expect(chips.find((b) => b.text === sportLabel(kind))?.attrs).toContain(`data-deporte="${kind}"`)
+    }
+    const pressed = chips.filter((b) => b.attrs.includes('aria-pressed="true"'))
     expect(pressed.map((b) => b.text)).toEqual([sportLabel('FIFA')])
+    expect(pressed[0]?.attrs).toContain('bg-sport text-on-sport')
+    for (const chip of chips.filter((b) => b.attrs.includes('aria-pressed="false"'))) {
+      expect(chip.attrs).toContain('bg-sport-tint')
+    }
+  })
+
+  it('el campo del nombre mide 16px o más (sin zoom en iOS)', () => {
+    const input = /<input[^>]*>/.exec(nuevo())?.[0] ?? ''
+    expect(Number(/text-\[(\d+)px\]/.exec(input)?.[1])).toBeGreaterThanOrEqual(16)
   })
 
   it('el nombre tiene su rótulo y el valor que viene', () => {
@@ -109,15 +125,30 @@ describe('PasoComoSeJuega', () => {
 })
 
 describe('PasoListo', () => {
-  it('cada deporte con su título y cada línea de su reglamento con ✓, y "Crear torneo"', () => {
+  it('arriba, el torneo como datos: el nombre, cuántos juegan y quiénes (el tuyo marcado)', () => {
+    const html = listo(PADEL_FIFA)
+    expect(html).toContain('>Los Jueves<')
+    expect(html).toMatch(/<span[^>]*font-cond[^>]*>6<\/span>/)
+    for (const name of SEIS.names) expect(html).toContain(`>${name}<`)
+    expect(html).toMatch(/<span[^>]*marca-vos[^>]*>Martina<\/span>/)
+  })
+
+  it('cada deporte en su color con su título y su reglamento; los puntos como casilleros; y "Crear torneo"', () => {
     const html = listo(PADEL_FIFA)
     const disciplines = crearPayload('Los Jueves', SEIS, PADEL_FIFA).disciplines
-    const lines = disciplines.flatMap((d) => reglamento(d))
-    for (const d of disciplines) expect(html).toContain(`>${sportLabel(d.kind)}<`)
-    for (const line of lines) expect(html).toContain(line.text)
-    expect(html.match(/✓/g)).toHaveLength(lines.length)
-    expect(html).toContain('text-up')
+    for (const d of disciplines) {
+      expect(html).toMatch(new RegExp(`<section[^>]*data-deporte="${d.kind}"`))
+      expect(html).toContain(`>${sportLabel(d.kind)}<`)
+      for (const line of reglamento(d).filter((l) => l.key !== 'puntos')) expect(html).toContain(line.text)
+      expect(html).toMatch(new RegExp(`<span[^>]*font-cond[^>]*>${d.config.points[0]}</span>`))
+    }
+    expect(html).not.toContain('✓')
     expect(buttons(html).map((b) => b.text)).toEqual(['Crear torneo'])
+  })
+
+  it('"Crear torneo" va fijo abajo, al alcance del pulgar', () => {
+    const barra = /<div[^>]*class="([^"]*)"[^>]*>(?:(?!<div).)*<button[^>]*>Crear torneo<\/button>/.exec(listo(PADEL_FIFA))?.[1] ?? ''
+    expect(barra.split(' ')).toEqual(expect.arrayContaining(['fixed', 'bottom-0']))
   })
 
   it('la primera fecha que cuenta es la de la tarjeta, no la de la ficha', () => {
@@ -189,22 +220,39 @@ describe('Pádel + Ping pong + FIFA', () => {
 })
 
 describe('encabezado', () => {
-  it('los cuatro pasos, con su número y su título', () => {
-    expect(encabezado(0)).toEqual({ paso: 0, rotulo: 'Paso 1 de 4', titulo: 'Nuevo torneo' })
-    expect(encabezado(3)).toEqual({ paso: 3, rotulo: 'Paso 4 de 4', titulo: 'Listo, así se juega' })
+  it('los cuatro pasos, con su número y su título (una pregunta por paso)', () => {
+    expect(encabezado(0)).toEqual({ paso: 0, rotulo: 'Paso 1 de 4', titulo: 'Nuevo torneo', motivo: null })
+    expect(encabezado(1)).toEqual({ paso: 1, rotulo: 'Paso 2 de 4', titulo: '¿Quiénes juegan?', motivo: null })
+    expect(encabezado(2)).toEqual({ paso: 2, rotulo: 'Paso 3 de 4', titulo: '¿Cómo se juega?', motivo: null })
+    expect(encabezado(3)).toEqual({ paso: 3, rotulo: 'Paso 4 de 4', titulo: 'Así queda', motivo: null })
   })
 
-  it('los subpasos son parte del paso 3 y dicen por qué aparecen', () => {
+  it('los subpasos son parte del paso 3 y dicen por qué aparecen, aparte del número', () => {
     expect(encabezado('PAREJAS')).toEqual({
       paso: 2,
-      rotulo: 'Paso 3 de 4 · Sólo si elegiste "parejas fijas"',
+      rotulo: 'Paso 3 de 4',
       titulo: 'Armá las parejas',
+      motivo: 'Porque elegiste parejas fijas',
     })
     expect(encabezado('NIVEL')).toEqual({
       paso: 2,
-      rotulo: 'Paso 3 de 4 · Sólo si elegiste "por nivel"',
+      rotulo: 'Paso 3 de 4',
       titulo: 'Ordená por nivel',
+      motivo: 'Porque elegiste por nivel',
     })
+  })
+})
+
+describe('volverA', () => {
+  it('"Volver" nombra la pantalla de antes; en la primera no hay pantalla de antes', () => {
+    const secuencia = [0, 1, 2, 'PAREJAS', 'NIVEL', 3] as const
+    expect(volverA(secuencia, 0)).toBeNull()
+    expect(volverA(secuencia, 1)).toBe('Nuevo torneo')
+    expect(volverA(secuencia, 2)).toBe('Jugadores')
+    expect(volverA(secuencia, 'PAREJAS')).toBe('Cómo se juega')
+    expect(volverA(secuencia, 'NIVEL')).toBe('Parejas')
+    expect(volverA(secuencia, 3)).toBe('Orden')
+    expect(volverA([0, 1, 2, 3], 3)).toBe('Cómo se juega')
   })
 })
 

@@ -14,3 +14,9 @@ export function offeredModalities(kind: string): Modality[] {
   const offered = new Set(ficha?.modalities.map((option) => option.id))
   return MODALITY_ORDER.filter((modality) => offered.has(modality))
 }
+
+/** La modalidad elegida en una línea, en palabras de todos los días (los botones dicen sólo el nombre). */
+export function modalityHint(modality: Modality): string {
+  if (modality === 'INDIVIDUAL') return 'Cada uno juega por su cuenta.'
+  return modality === 'FIJAS' ? 'Siempre con el mismo compañero.' : 'Cada fecha se cambia de compañero.'
+}

@@ -15,6 +15,7 @@ import {
   type SideSize,
 } from '@/core'
 import { Stepper } from '@/app/stepper'
+import { button } from '@/app/ui/button'
 import {
   GROUP_COUNTS,
   formatoChoice,
@@ -28,29 +29,25 @@ import {
   type FormatoChoice,
 } from './personalizar-reglas-state'
 
-const ROTULO = 'text-[12px] font-extrabold uppercase tracking-[.14em] text-muted'
-const TITULO_FILA = 'text-[15px] font-extrabold'
-const AYUDA = 'text-pretty text-[12.5px] font-semibold leading-snug text-muted'
-const FILA = 'flex items-center justify-between gap-3 py-3'
+const TITULO_BLOQUE = 'mb-2 text-[17px] font-bold'
+const TITULO_FILA = 'text-[16px] font-semibold'
+const AYUDA = 'text-pretty text-[14px] leading-snug text-muted'
+const FILA = 'flex items-center justify-between gap-3 py-3.5'
 
 const cap = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
 
 /**
- * Un bloque de la hoja: rótulo + tarjeta de filas con `border-t`. La tarjeta es un `<fieldset>`
+ * Un bloque de la hoja: título + grupo de filas divididas por `line`. El grupo es un `<fieldset>`
  * a propósito: `disabled` traba de una vez todos los botones de adentro (steppers, mosaicos, switch).
  */
 function Bloque({ titulo, disabled, children }: { titulo: string; disabled: boolean; children: ReactNode }) {
   const id = useId()
   return (
-    <div className="flex flex-col gap-2">
-      <h3 id={id} className={ROTULO}>
+    <div>
+      <h3 id={id} className={TITULO_BLOQUE}>
         {titulo}
       </h3>
-      <fieldset
-        disabled={disabled}
-        aria-labelledby={id}
-        className="min-w-0 divide-y divide-line rounded-card border border-line bg-surface px-4"
-      >
+      <fieldset disabled={disabled} aria-labelledby={id} className="min-w-0 divide-y divide-line rounded-tile bg-surface px-4">
         {children}
       </fieldset>
     </div>
@@ -142,7 +139,7 @@ export function BloquePartido({
           />
         ) : (
           <Fila key={key} fixed={key} titulo={titulo} hint={hints[key]}>
-            <span className="flex h-9 min-w-11 shrink-0 items-center justify-center rounded-[9px] bg-chip px-2.5 text-[14px] font-extrabold text-muted">
+            <span className="flex h-11 min-w-11 shrink-0 items-center justify-center rounded-btn bg-chip px-2.5 font-cond text-[28px] text-muted">
               {format[key]}
             </span>
           </Fila>
@@ -152,18 +149,31 @@ export function BloquePartido({
   )
 }
 
-/** Un botón de una elección excluyente, como los de /rapido. */
-function Opcion({ elegido, onClick, children }: { elegido: boolean; onClick: () => void; children: ReactNode }) {
+/** Un botón de una elección excluyente: el tinte del deporte, lleno con su color al elegirlo (como la tarjeta). */
+function Opcion({
+  elegido,
+  sub,
+  onClick,
+  children,
+}: {
+  elegido: boolean
+  sub?: string
+  onClick: () => void
+  children: ReactNode
+}) {
   return (
     <button
       type="button"
       aria-pressed={elegido}
       onClick={onClick}
-      className={`min-h-[44px] flex-1 rounded-field p-3 text-center text-[14px] font-extrabold leading-tight disabled:opacity-40 ${
-        elegido ? 'bg-accent text-accent-text' : 'bg-chip text-text'
+      className={`min-h-[56px] flex-1 rounded-btn px-1.5 py-2.5 text-center text-[15px] font-bold leading-tight disabled:opacity-40 ${
+        elegido ? 'bg-sport text-on-sport' : 'bg-sport-tint text-text dark:shadow-[inset_0_0_0_1.5px_color-mix(in_srgb,var(--color-sport)_40%,transparent)]'
       }`}
     >
       {children}
+      {sub !== undefined && (
+        <span className={`mt-0.5 block text-[13px] font-medium ${elegido ? '' : 'text-muted'}`}>{sub}</span>
+      )}
     </button>
   )
 }
@@ -187,7 +197,7 @@ function ComoSeArma({
   const gruposId = useId()
   const { formatoDefault } = rules
   return (
-    <div className="py-3">
+    <div className="py-3.5">
       <p id={tituloId} className={TITULO_FILA}>
         Cómo se arma
       </p>
@@ -197,10 +207,10 @@ function ComoSeArma({
           <Opcion
             key={choice}
             elegido={formatoChoice(formatoDefault) === choice}
+            sub={sub}
             onClick={() => onChange(withFormatoChoice(rules, choice))}
           >
             {label}
-            {sub !== undefined && <span className="mt-0.5 block text-[12px] font-semibold opacity-80">{sub}</span>}
           </Opcion>
         ))}
       </div>
@@ -222,7 +232,10 @@ function ComoSeArma({
   )
 }
 
-/** Un mosaico por puesto de la fecha; el elegido se edita con el `Stepper` de abajo (0–99). */
+/**
+ * Un mosaico por puesto de la fecha, con el número en la cara de marcador (como en Reglas); el
+ * elegido se edita con el `Stepper` de abajo (0–99).
+ */
 function PuntosPorPosicion({
   points,
   hint,
@@ -236,9 +249,9 @@ function PuntosPorPosicion({
   const [selected, setSelected] = useState(0)
   const index = Math.min(selected, points.length - 1)
   return (
-    <div className="py-3">
+    <div className="py-3.5">
       <p id={tituloId} className={TITULO_FILA}>
-        Puntos por posición
+        Puntos por puesto
       </p>
       <p className={AYUDA}>{hint}</p>
       <div role="group" aria-labelledby={tituloId} className="mt-3 grid grid-cols-4 gap-2">
@@ -250,17 +263,17 @@ function PuntosPorPosicion({
             aria-pressed={i === index}
             aria-label={`${i + 1}° puesto: ${value === 1 ? '1 punto' : `${value} puntos`}`}
             onClick={() => setSelected(i)}
-            className={`flex min-h-[56px] flex-col items-center justify-center gap-0.5 rounded-field border-2 bg-bg disabled:opacity-40 ${
-              i === index ? 'border-accent' : 'border-line'
+            className={`flex min-h-[60px] flex-col items-start justify-center gap-1 rounded-btn px-2.5 disabled:opacity-40 ${
+              i === index ? 'bg-sport text-on-sport' : 'bg-sport-tint text-sport dark:shadow-[inset_0_0_0_1.5px_color-mix(in_srgb,var(--color-sport)_40%,transparent)]'
             }`}
           >
-            <span className="text-[20px] font-extrabold leading-none tracking-[-.02em]">{value}</span>
-            <span className="text-[12px] font-bold text-muted">{`${i + 1}°`}</span>
+            <span className={`text-[13px] font-semibold ${i === index ? '' : 'text-muted'}`}>{`${i + 1}°`}</span>
+            <span className="font-cond text-[28px]">{value}</span>
           </button>
         ))}
       </div>
       <div className="mt-3 flex items-center justify-between gap-3">
-        <span className="text-[13.5px] font-bold">{`Puntos del ${index + 1}° puesto`}</span>
+        <span className="text-[15px] font-semibold">{`Puntos del ${index + 1}° puesto`}</span>
         <Stepper
           value={points[index] ?? 0}
           min={0}
@@ -290,10 +303,10 @@ function FilaMasters({ checked, hint, onChange }: { checked: boolean; hint: stri
         onClick={() => onChange(!checked)}
         className="flex h-11 w-14 shrink-0 items-center justify-center disabled:opacity-40"
       >
-        <span className={`relative h-7 w-12 rounded-full ${checked ? 'bg-accent' : 'bg-chip'}`}>
+        <span className={`relative h-7 w-12 rounded-full ${checked ? 'bg-sport' : 'bg-line'}`}>
           <span
             className={`absolute left-0.5 top-0.5 h-6 w-6 rounded-full transition-transform motion-reduce:transition-none ${
-              checked ? 'translate-x-5 bg-accent-text' : 'bg-muted'
+              checked ? 'translate-x-5 bg-on-sport' : 'bg-muted'
             }`}
           />
         </span>
@@ -303,17 +316,23 @@ function FilaMasters({ checked, hint, onChange }: { checked: boolean; hint: stri
 }
 
 function Aviso({ children }: { children: string }) {
-  return <p className="rounded-field bg-live-bg px-3 py-2.5 text-[12.5px] font-bold text-live">{children}</p>
+  return <p className="rounded-btn bg-live-bg px-3.5 py-3 text-[15px] font-semibold text-live">{children}</p>
 }
 
 /**
  * La hoja "Personalizar reglas" de UN deporte (docs/torneos-deportes.md §5): la MISMA en el wizard
  * y en Ajustes. Controlada: `rules` viene de afuera y cada toque llama `onChange` con las reglas nuevas.
  *
- * Es un `<dialog>` nativo abierto con `showModal()` (como `ConfirmarNuevo` de /rapido): el foco, el
- * trap, el fondo inerte y el Escape los pone la plataforma. `onClose` cubre el Escape y la cruz
- * (tocar el fondo NO cierra: un toque de más tiraría lo tocado), y quien la monta la DESMONTA ahí:
- * se abre sólo al montarse, así que una hoja cerrada que sigue montada no vuelve a abrir.
+ * Es un `<dialog>` nativo abierto con `showModal()` con la cara de la hoja de abajo de `app/ui`
+ * (la clase `.hoja`: sube desde el borde, con su movimiento y el reducido), pero no es `Sheet`:
+ * acá tocar el fondo NO cierra (un toque de más tiraría lo tocado) y no se arrastra para cerrar,
+ * por lo mismo. El foco, el trap, el fondo inerte y el Escape los pone la plataforma; el foco entra
+ * al diálogo y no al primer botón, como en `Sheet`. `onClose` cubre el Escape y "Cerrar", y quien
+ * la monta la DESMONTA ahí: se abre sólo al montarse, así que una hoja cerrada que sigue montada no
+ * vuelve a abrir.
+ *
+ * Arriba, fijo, el título con los datos del plantel y "Cerrar"; abajo, fijo y al alcance del
+ * pulgar, "Listo". En el medio, los tres bloques y "Así queda", en el color del deporte.
  */
 export function PersonalizarReglas({
   kind,
@@ -346,6 +365,7 @@ export function PersonalizarReglas({
   const tituloId = useId()
   useEffect(() => {
     dialogo.current?.showModal()
+    dialogo.current?.focus({ preventScroll: true })
   }, [])
 
   const { config } = rules
@@ -368,122 +388,128 @@ export function PersonalizarReglas({
       role="dialog"
       aria-modal="true"
       aria-labelledby={tituloId}
+      tabIndex={-1}
+      data-deporte={kind}
       onClose={onClose}
-      className="m-0 mt-auto w-full max-w-none border-0 bg-transparent p-0 text-text backdrop:bg-scrim sm:m-auto sm:max-w-lg"
+      className="hoja"
     >
-      <div className="max-h-[92dvh] overflow-y-auto rounded-t-card bg-bg sm:rounded-card">
-        <div className="sticky top-0 z-10 flex items-start justify-between gap-3 bg-bg px-5 pb-3 pt-5">
-          <div className="min-w-0">
-            <h2 id={tituloId} className="text-[22px] font-extrabold tracking-[-.02em]">
-              {`Reglas de ${sportLabel(kind)}`}
-            </h2>
-            <p className="text-[13.5px] font-semibold text-muted">
-              {`${modalityLabel(kind, modality)} · ${config.squadSize} jugadores`}
-            </p>
-          </div>
+      <div className="sticky top-0 z-10 flex items-start justify-between gap-3 bg-surface-2 px-4 pt-4 pb-3">
+        <div className="min-w-0">
+          <h2 id={tituloId} className="font-titulo text-[26px]">
+            {`Reglas de ${sportLabel(kind)}`}
+          </h2>
+          <p className="mt-2 flex flex-wrap gap-2 text-[14px] font-semibold">
+            <span className="rounded-full bg-sport-tint px-2.5 py-1 text-sport">{modalityLabel(kind, modality)}</span>
+            <span className="rounded-full bg-chip px-2.5 py-1">{`${config.squadSize} jugadores`}</span>
+          </p>
+        </div>
+        <button
+          type="button"
+          aria-label="Cerrar"
+          onClick={onClose}
+          className="-mr-1 min-h-[44px] shrink-0 rounded-[12px] px-2 font-semibold text-accent-link"
+        >
+          Cerrar
+        </button>
+      </div>
+
+      <div className="flex flex-col gap-6 px-4 pt-2 pb-5">
+        <BloquePartido
+          kind={kind}
+          format={config.matchFormat}
+          disabled={pending}
+          onChange={(matchFormat) => setConfig({ matchFormat })}
+        />
+
+        <Bloque titulo="La fecha" disabled={pending}>
+          <ComoSeArma rules={rules} hint={hints.formato} onChange={onChange} />
+          <PuntosPorPosicion points={config.points} hint={hints.points} onChange={(points) => setConfig({ points })} />
+          <FilaStepper
+            stepper="maxMatches"
+            titulo="Partidos por fecha"
+            hint={hints.maxMatches}
+            value={maxMatchesOf(config, pairSize)}
+            min={1}
+            max={66}
+            onChange={(maxMatches) => setConfig({ maxMatches })}
+          />
+        </Bloque>
+
+        <Bloque titulo="La temporada" disabled={pending}>
+          <FilaStepper
+            stepper="regularMatchdays"
+            titulo="Fechas"
+            hint={hints.regularMatchdays}
+            value={config.regularMatchdays}
+            min={1}
+            max={24}
+            onChange={(regularMatchdays) => setConfig({ regularMatchdays })}
+          />
+          <FilaStepper
+            stepper="countBestOf"
+            titulo="Cuentan las mejores"
+            hint={hints.countBestOf}
+            value={config.countBestOf}
+            min={1}
+            max={Math.max(1, config.regularMatchdays)}
+            onChange={(countBestOf) => setConfig({ countBestOf })}
+          />
+          {pairSize === 2 && (
+            <FilaMasters
+              checked={rules.hasMasters}
+              hint={hints.masters}
+              onChange={(hasMasters) => onChange({ ...rules, hasMasters })}
+            />
+          )}
+          <FilaStepper
+            stepper="tiebreakSnapshotEvery"
+            titulo="Desempate"
+            hint={hints.tiebreak}
+            value={config.tiebreakSnapshotEvery}
+            min={1}
+            max={6}
+            onChange={(tiebreakSnapshotEvery) => setConfig({ tiebreakSnapshotEvery })}
+          />
+        </Bloque>
+
+        <div>
+          <h3 className={TITULO_BLOQUE}>Así queda</h3>
+          <ul className="flex flex-col gap-2.5">
+            {lines.map((line) => (
+              <li key={line.key} className="border-l-4 border-sport pl-3 text-pretty text-[16px] leading-snug">
+                {line.text}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {errors.map((message) => (
+          <Aviso key={message}>{message}</Aviso>
+        ))}
+        {error !== null && <Aviso>{error}</Aviso>}
+        {note !== null && <p className={AYUDA}>{note}</p>}
+
+        {ficha !== null && (
           <button
             type="button"
-            aria-label="Cerrar"
-            onClick={onClose}
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-chip text-[20px] font-extrabold"
-          >
-            ×
-          </button>
-        </div>
-
-        <div className="flex flex-col gap-4 px-5 pb-6">
-          <BloquePartido
-            kind={kind}
-            format={config.matchFormat}
             disabled={pending}
-            onChange={(matchFormat) => setConfig({ matchFormat })}
-          />
+            onClick={() => onChange(ficha)}
+            className={button('ghost', { full: true })}
+          >
+            {`Volver a las reglas de ${sportLabel(kind)}`}
+          </button>
+        )}
+      </div>
 
-          <Bloque titulo="La fecha" disabled={pending}>
-            <ComoSeArma rules={rules} hint={hints.formato} onChange={onChange} />
-            <PuntosPorPosicion points={config.points} hint={hints.points} onChange={(points) => setConfig({ points })} />
-            <FilaStepper
-              stepper="maxMatches"
-              titulo="Partidos por fecha"
-              hint={hints.maxMatches}
-              value={maxMatchesOf(config, pairSize)}
-              min={1}
-              max={66}
-              onChange={(maxMatches) => setConfig({ maxMatches })}
-            />
-          </Bloque>
-
-          <Bloque titulo="La temporada" disabled={pending}>
-            <FilaStepper
-              stepper="regularMatchdays"
-              titulo="Fechas"
-              hint={hints.regularMatchdays}
-              value={config.regularMatchdays}
-              min={1}
-              max={24}
-              onChange={(regularMatchdays) => setConfig({ regularMatchdays })}
-            />
-            <FilaStepper
-              stepper="countBestOf"
-              titulo="Cuentan las mejores"
-              hint={hints.countBestOf}
-              value={config.countBestOf}
-              min={1}
-              max={Math.max(1, config.regularMatchdays)}
-              onChange={(countBestOf) => setConfig({ countBestOf })}
-            />
-            {pairSize === 2 && (
-              <FilaMasters
-                checked={rules.hasMasters}
-                hint={hints.masters}
-                onChange={(hasMasters) => onChange({ ...rules, hasMasters })}
-              />
-            )}
-            <FilaStepper
-              stepper="tiebreakSnapshotEvery"
-              titulo="Desempate"
-              hint={hints.tiebreak}
-              value={config.tiebreakSnapshotEvery}
-              min={1}
-              max={6}
-              onChange={(tiebreakSnapshotEvery) => setConfig({ tiebreakSnapshotEvery })}
-            />
-          </Bloque>
-
-          <p className="text-pretty rounded-card bg-surface p-4 text-[14px] font-semibold leading-snug">
-            <span className="font-extrabold">Así queda:</span>{' '}
-            {lines.map((line) => (
-              <span key={line.key}>{line.text} </span>
-            ))}
-          </p>
-
-          {errors.map((message) => (
-            <Aviso key={message}>{message}</Aviso>
-          ))}
-          {error !== null && <Aviso>{error}</Aviso>}
-          {note !== null && <p className={AYUDA}>{note}</p>}
-
-          <div className="flex flex-col gap-1">
-            <button
-              type="button"
-              disabled={pending || errors.length > 0}
-              onClick={onDone}
-              className="min-h-[44px] rounded-field bg-accent p-3.5 text-center text-[14.5px] font-extrabold text-accent-text disabled:opacity-40"
-            >
-              Listo
-            </button>
-            {ficha !== null && (
-              <button
-                type="button"
-                disabled={pending}
-                onClick={() => onChange(ficha)}
-                className="min-h-[44px] text-center text-[14px] font-extrabold text-accent-link disabled:opacity-40"
-              >
-                {`Volver a las reglas de ${sportLabel(kind)}`}
-              </button>
-            )}
-          </div>
-        </div>
+      <div className="sticky bottom-0 z-10 border-t border-line bg-surface-2 px-4 pt-3 pb-[calc(12px+env(safe-area-inset-bottom))]">
+        <button
+          type="button"
+          disabled={pending || errors.length > 0}
+          onClick={onDone}
+          className={button('primary', { size: 'lg', full: true })}
+        >
+          Listo
+        </button>
       </div>
     </dialog>
   )

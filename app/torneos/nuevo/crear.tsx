@@ -1,8 +1,12 @@
 'use client'
 
 import Link from 'next/link'
+import { useEffect, useId, useRef, useState, useTransition, type KeyboardEvent, type ReactNode } from 'react'
 import { Volver } from '@/app/torneo/[id]/volver'
-import { useEffect, useId, useState, useTransition } from 'react'
+import { Reglamento } from '@/app/torneo/[id]/reglas/reglamento-vista'
+import { IconoDeporte } from '@/app/torneos/inicio/iconos'
+import { button } from '@/app/ui/button'
+import { Sheet } from '@/app/ui/sheet'
 import {
   TOURNAMENT_SPORTS,
   modalityShape,
@@ -51,23 +55,42 @@ import {
   type Squad,
 } from './wizard-state'
 
-const ROTULO = 'text-[12px] font-extrabold uppercase tracking-[.14em] text-muted'
-const AYUDA = 'text-pretty text-[13.5px] font-[550] leading-[1.5] text-muted'
-const TITLES = ['Nuevo torneo', 'Jugadores', 'Cómo se juega', 'Listo, así se juega']
-const LINK = 'min-h-[44px] text-center text-[14px] font-extrabold text-accent-link'
+const TITLES = ['Nuevo torneo', '¿Quiénes juegan?', '¿Cómo se juega?', 'Así queda']
+/** El nombre corto de cada pantalla, el que dice "Volver" en la que sigue. */
+const CORTOS: Record<Pantalla, string> = {
+  0: 'Nuevo torneo',
+  1: 'Jugadores',
+  2: 'Cómo se juega',
+  PAREJAS: 'Parejas',
+  NIVEL: 'Orden',
+  3: 'Así queda',
+}
+const PREGUNTA = 'text-[17px] font-bold'
+const AYUDA = 'text-pretty text-[15px] text-muted'
 
-/** Una pantalla del wizard: los 4 pasos (0..3) y, entre el 3 y "Listo", los subpasos que hagan falta. */
+/** Una pantalla del wizard: los 4 pasos (0..3) y, entre el 3 y "Así queda", los subpasos que hagan falta. */
 type Pantalla = 0 | 1 | 2 | Subpaso | 3
 
-const SUBPASO: Record<Subpaso, { rotulo: string; titulo: string }> = {
-  PAREJAS: { rotulo: 'Paso 3 de 4 · Sólo si elegiste "parejas fijas"', titulo: 'Armá las parejas' },
-  NIVEL: { rotulo: 'Paso 3 de 4 · Sólo si elegiste "por nivel"', titulo: 'Ordená por nivel' },
+const SUBPASO: Record<Subpaso, { titulo: string; motivo: string }> = {
+  PAREJAS: { titulo: 'Armá las parejas', motivo: 'Porque elegiste parejas fijas' },
+  NIVEL: { titulo: 'Ordená por nivel', motivo: 'Porque elegiste por nivel' },
 }
 
-/** El rótulo y el título de una pantalla, y qué paso marca la barra (los subpasos son parte del 3). */
-export function encabezado(pantalla: Pantalla): { paso: number; rotulo: string; titulo: string } {
-  if (typeof pantalla === 'string') return { paso: 2, ...SUBPASO[pantalla] }
-  return { paso: pantalla, rotulo: `Paso ${pantalla + 1} de ${TITLES.length}`, titulo: TITLES[pantalla]! }
+/**
+ * El número, el título y qué paso marcan los puntitos (los subpasos son parte del 3). Un subpaso
+ * dice por qué aparece (`motivo`), aparte del número: sólo aparece si hace falta.
+ */
+export function encabezado(pantalla: Pantalla): { paso: number; rotulo: string; titulo: string; motivo: string | null } {
+  const paso = typeof pantalla === 'string' ? 2 : pantalla
+  const rotulo = `Paso ${paso + 1} de ${TITLES.length}`
+  if (typeof pantalla === 'string') return { paso, rotulo, ...SUBPASO[pantalla] }
+  return { paso, rotulo, titulo: TITLES[pantalla]!, motivo: null }
+}
+
+/** Adónde lleva "Volver": el nombre corto de la pantalla de antes, o `null` en la primera (ahí se vuelve a Inicio). */
+export function volverA(secuencia: readonly Pantalla[], pantalla: Pantalla): string | null {
+  const antes = secuencia[secuencia.indexOf(pantalla) - 1]
+  return antes === undefined ? null : CORTOS[antes]
 }
 
 /** Copia el link de invitación; false si no hay portapapeles o lo rechaza (y entonces se muestra el link). */
@@ -81,64 +104,117 @@ export async function copiarLink(url: string, clipboard: Pick<Clipboard, 'writeT
   }
 }
 
-function Progress({ step }: { step: number }) {
+/**
+ * El encabezado en bloque de `app/ui/hero.tsx`, con lo que el wizard necesita y `Hero` no tiene:
+ * un "Volver" que es un botón (desanda un paso, no navega) y los puntitos del paso. "Volver" nombra
+ * siempre adónde lleva: Inicio en el primer paso, el paso de antes en los demás.
+ */
+function Encabezado({
+  rotulo,
+  paso,
+  titulo,
+  motivo,
+  back,
+}: {
+  rotulo: string
+  paso: number
+  titulo: string
+  motivo: string | null
+  back: ReactNode
+}) {
   return (
-    <div className="flex gap-1.5">
-      {TITLES.map((title, index) => (
-        <span key={title} className={`h-1 flex-1 rounded-full ${index <= step ? 'bg-accent' : 'bg-line'}`} />
-      ))}
+    <header className="rounded-b-block bg-block px-4 pt-[calc(6px+env(safe-area-inset-top))] pb-5 text-on-block [--color-focus:var(--color-on-block)]">
+      {back}
+      <div className="mt-2 flex items-center justify-between gap-3 text-[15px] font-semibold text-on-block-soft">
+        <span>{rotulo}</span>
+        <span aria-hidden="true" className="flex gap-1.5">
+          {TITLES.map((title, index) => (
+            <span
+              key={title}
+              data-pip={index <= paso ? 'hecho' : 'falta'}
+              className={`h-2 w-7 rounded-full ${
+                index <= paso ? 'bg-on-block' : 'shadow-[inset_0_0_0_1.5px_var(--color-on-block-soft)]'
+              }`}
+            />
+          ))}
+        </span>
+      </div>
+      <h1 className="mt-1 font-titulo text-[34px] text-balance">{titulo}</h1>
+      {motivo !== null && <p className="mt-1.5 text-[15px] text-on-block-soft">{motivo}</p>}
+    </header>
+  )
+}
+
+/** "Volver" a la pantalla de antes del wizard: la cara de `Volver`, pero desanda un paso en vez de navegar. */
+function VolverPaso({ label, disabled, onClick }: { label: string; disabled: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className="-my-1.5 -ml-1 flex min-h-[44px] w-fit items-center gap-1 rounded-[12px] pr-3 pl-0.5 text-[16px] font-semibold active:bg-current/15"
+    >
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 24 24"
+        className="h-6 w-6 shrink-0 fill-none stroke-current stroke-2 [stroke-linecap:round] [stroke-linejoin:round]"
+      >
+        <path d="M15 5l-7 7 7 7" />
+      </svg>
+      {label}
+    </button>
+  )
+}
+
+/** La barra de abajo con la acción principal del paso: fija, al alcance del pulgar, como "Cargar partido" de Inicio. */
+function BarraAbajo({ children }: { children: ReactNode }) {
+  return (
+    <div className="fixed inset-x-0 bottom-0 z-40 mx-auto flex max-w-lg flex-col gap-1 border-t border-line bg-surface px-4 pt-3 pb-[calc(12px+env(safe-area-inset-bottom))]">
+      {children}
     </div>
   )
 }
 
 function Aviso({ children }: { children: string }) {
-  return <p className="rounded-field bg-live-bg px-3 py-2.5 text-[12.5px] font-bold text-live">{children}</p>
+  return <p className="rounded-btn bg-live-bg px-3.5 py-3 text-[15px] font-semibold text-live">{children}</p>
 }
 
-/** La marca del asiento propio. Es lo único que distingue una fila de la otra. */
-function Vos() {
+/** La única confirmación del wizard: explica qué significa la cruz de la fila propia (organizar sin jugar). */
+function SalirDelPlantel({ open, onConfirm, onCancel }: { open: boolean; onConfirm: () => void; onCancel: () => void }) {
   return (
-    <span className="shrink-0 rounded-full bg-accent px-2 py-[3px] text-[12px] font-extrabold text-accent-text">
-      vos
-    </span>
+    <Sheet open={open} onClose={onCancel} title="¿No jugás el torneo?">
+      <p className="mt-2 text-pretty text-[16px] leading-snug">
+        Seguís organizando: abrís las fechas, armás las parejas y cargás los resultados. No aparecés en la tabla.
+      </p>
+      <div className="mt-5 flex flex-col gap-2">
+        <button type="button" onClick={onConfirm} className={button('danger', { size: 'lg', full: true })}>
+          Sacame del plantel
+        </button>
+        <button type="button" onClick={onCancel} className={button('secondary', { size: 'lg', full: true })}>
+          Me quedo
+        </button>
+      </div>
+    </Sheet>
+  )
+}
+
+/** La tilde del deporte elegido. */
+function Tilde() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className="h-6 w-6 shrink-0 fill-none stroke-current stroke-[2.5] [stroke-linecap:round] [stroke-linejoin:round]"
+    >
+      <path d="M5 12.5l4.5 4.5L19 7.5" />
+    </svg>
   )
 }
 
 /**
- * La única confirmación del wizard: explica qué significa la cruz de la fila propia (organizar sin jugar).
- * Copiada de `wizard.tsx`, que se borra entero en la Tarea 16.
+ * Paso 1: el nombre y los deportes. Cada deporte es un bloque en su color (`data-deporte`): en su
+ * tinte sin elegir, lleno al elegirlo, con su ícono y la tilde. Se puede elegir más de uno.
  */
-function SalirDelPlantel({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-scrim px-6 pb-[26px]">
-      <div className="w-full max-w-lg rounded-card border border-line bg-surface p-5">
-        <h2 className="text-[19px] font-extrabold tracking-[-.02em]">¿No jugás el torneo?</h2>
-        <p className="mt-2 text-pretty text-[13.5px] font-[550] leading-[1.5] text-muted">
-          Te saco del plantel. Vas a seguir organizando —abrís las fechas, armás las parejas y cargás los
-          resultados— pero no vas a estar en la tabla.
-        </p>
-        <div className="mt-4 flex flex-col gap-2">
-          <button
-            type="button"
-            onClick={onConfirm}
-            className="rounded-field bg-chip p-3.5 text-center text-[14.5px] font-extrabold"
-          >
-            Sacame del plantel
-          </button>
-          <button
-            type="button"
-            onClick={onCancel}
-            className="rounded-field bg-accent p-3.5 text-center text-[14.5px] font-extrabold text-accent-text"
-          >
-            Me quedo
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/** Paso 1: el nombre y los deportes, chips grandes como los de /rapido (se puede elegir más de uno). */
 export function PasoNuevo({
   name,
   picked,
@@ -156,8 +232,8 @@ export function PasoNuevo({
   const deportesId = useId()
   return (
     <>
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor={nombreId} className={ROTULO}>
+      <div>
+        <label htmlFor={nombreId} className={`${PREGUNTA} mb-2 block`}>
           Nombre
         </label>
         <input
@@ -165,13 +241,14 @@ export function PasoNuevo({
           value={name}
           onChange={(event) => onName(event.target.value)}
           placeholder="Los Jueves 2026"
-          className="rounded-field border-[1.5px] border-accent bg-surface p-[15px] text-[17px] font-[750] outline-none placeholder:font-medium placeholder:text-muted"
+          autoComplete="off"
+          className="block min-h-[56px] w-full rounded-btn border-[1.5px] border-line bg-bg px-4 text-[18px] font-semibold text-text outline-none placeholder:font-normal placeholder:text-muted focus:border-sport"
         />
       </div>
-      <div className="flex flex-col gap-1.5">
-        <span id={deportesId} className={ROTULO}>
-          ¿Qué deportes?
-        </span>
+      <div>
+        <p id={deportesId} className={`${PREGUNTA} mb-2`}>
+          ¿A qué juegan?
+        </p>
         <div role="group" aria-labelledby={deportesId} className="grid grid-cols-3 gap-2">
           {TOURNAMENT_SPORTS.map((kind) => {
             const elegido = picked.includes(kind)
@@ -179,24 +256,144 @@ export function PasoNuevo({
               <button
                 key={kind}
                 type="button"
+                data-deporte={kind}
                 aria-pressed={elegido}
                 onClick={() => onToggle(kind)}
-                className={`min-h-[44px] rounded-field p-3 text-center text-[14px] font-extrabold ${
-                  elegido ? 'bg-accent text-accent-text' : 'bg-chip text-text'
+                className={`flex min-h-[104px] flex-col justify-between rounded-tile p-3 text-left ${
+                  elegido ? 'bg-sport text-on-sport' : 'bg-sport-tint text-sport dark:shadow-[inset_0_0_0_1.5px_color-mix(in_srgb,var(--color-sport)_40%,transparent)]'
                 }`}
               >
-                {sportLabel(kind)}
+                <span className="flex w-full items-start justify-between">
+                  <IconoDeporte kind={kind} className="h-7 w-7" />
+                  {elegido && <Tilde />}
+                </span>
+                <span className="text-[17px] font-bold leading-tight">{sportLabel(kind)}</span>
               </button>
             )
           })}
         </div>
-        <p className={AYUDA}>Podés elegir más de uno. Cada deporte tiene su tabla, y además hay una tabla general.</p>
+        <p className={`${AYUDA} mt-2`}>Podés elegir más de uno: cada uno tiene su tabla y hay una general.</p>
       </div>
       {warning !== null && <Aviso>{warning}</Aviso>}
     </>
   )
 }
 
+/**
+ * Paso 2: el plantel, para cargarlo de corrido. Enter (el "siguiente" del teclado del teléfono)
+ * pasa al renglón que sigue y, en el último con un nombre, abre uno nuevo; tipear en el último
+ * también lo abre (`namesAfterEdit`). Controlada: cada cambio llama a `onChange` con el plantel nuevo.
+ */
+export function PasoJugadores({
+  squad,
+  myName,
+  floor,
+  warning,
+  onChange,
+  onLeave,
+}: {
+  squad: Squad
+  myName: string
+  floor: number
+  warning: string | null
+  onChange: (next: Squad) => void
+  /** La cruz del asiento propio: pregunta antes de sacarte. */
+  onLeave: () => void
+}) {
+  const { names, mySeat } = squad
+  const filled = filledCount(names)
+  const campos = useRef<Array<HTMLInputElement | null>>([])
+  // El renglón que Enter acaba de abrir: se enfoca cuando ya está dibujado.
+  const [enfocar, setEnfocar] = useState<number | null>(null)
+  useEffect(() => {
+    if (enfocar === null) return
+    campos.current[enfocar]?.focus()
+    setEnfocar(null)
+  }, [enfocar])
+
+  const siguiente = (index: number, event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== 'Enter') return
+    event.preventDefault()
+    if (index + 1 < names.length) campos.current[index + 1]?.focus()
+    else if (names[index]!.trim().length > 0) {
+      onChange(addBlankSeat(squad))
+      setEnfocar(index + 1)
+    }
+  }
+
+  return (
+    <>
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="flex items-baseline gap-2 text-[17px] font-semibold">
+          <span className="font-cond text-[44px]">{filled}</span>
+          {filled === 1 ? 'jugador' : 'jugadores'}
+        </p>
+        <p className="text-[15px] text-muted">{`Mínimo ${floor}`}</p>
+      </div>
+      <ol className="flex flex-col gap-2">
+        {names.map((seat, index) => (
+          <li key={index} className="flex items-center gap-2">
+            <span aria-hidden="true" className="w-7 shrink-0 text-center font-cond text-[24px] text-muted">
+              {index + 1}
+            </span>
+            <div className="relative min-w-0 flex-1">
+              <input
+                ref={(input) => {
+                  campos.current[index] = input
+                }}
+                aria-label={`Jugador ${index + 1}`}
+                value={seat}
+                onChange={(event) => onChange({ ...squad, names: namesAfterEdit(names, index, event.target.value) })}
+                onKeyDown={(event) => siguiente(index, event)}
+                enterKeyHint="next"
+                autoComplete="off"
+                autoCapitalize="words"
+                placeholder="Nombre"
+                className={`block min-h-[52px] w-full rounded-btn border-[1.5px] border-line bg-bg px-3.5 text-[17px] font-semibold text-text outline-none placeholder:font-normal placeholder:text-muted focus:border-sport ${
+                  index === mySeat ? 'pr-14' : ''
+                }`}
+              />
+              {index === mySeat && (
+                <span className="marca-vos pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-[14px] font-bold">
+                  vos
+                </span>
+              )}
+            </div>
+            {/* La cruz propia está siempre: sacarse no es achicar el plantel, es organizar sin jugar. */}
+            {index === mySeat || names.length > floor ? (
+              <button
+                type="button"
+                aria-label={index === mySeat ? 'Sacarme del plantel' : `Sacar al jugador ${index + 1}`}
+                onClick={() => (index === mySeat ? onLeave() : onChange(removeSeatAt(squad, index)))}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-btn text-muted active:bg-chip"
+              >
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 24 24"
+                  className="h-5 w-5 fill-none stroke-current stroke-2 [stroke-linecap:round]"
+                >
+                  <path d="M6 6l12 12M18 6L6 18" />
+                </svg>
+              </button>
+            ) : (
+              <span aria-hidden="true" className="w-11 shrink-0" />
+            )}
+          </li>
+        ))}
+      </ol>
+      <button type="button" onClick={() => onChange(addBlankSeat(squad))} className={button('secondary', { full: true })}>
+        + Agregar jugador
+      </button>
+      {mySeat === null && myName.trim().length > 0 && (
+        <button type="button" onClick={() => onChange(addMySeat(squad, myName))} className={button('ghost', { full: true })}>
+          Participar en el torneo
+        </button>
+      )}
+      {warning !== null && <Aviso>{warning}</Aviso>}
+      <p className={AYUDA}>Después cada uno se suma con el link de invitación.</p>
+    </>
+  )
+}
 /** Paso 3: una tarjeta por deporte elegido. El aviso de modalidades va en las de parejas, que son las que lo causan. */
 export function PasoComoSeJuega({
   cards,
@@ -240,16 +437,24 @@ export function PasoComoSeJuega({
 }
 
 /**
- * Paso 4: el reglamento de cada deporte, contado desde lo que se manda a crear (`crearPayload`):
- * así la primera fecha dice la que eligió el usuario, no la de la ficha.
+ * Paso 4: todo lo que se va a crear, como datos, antes de "Crear torneo": el nombre, quiénes juegan
+ * (el tuyo marcado) y el reglamento de cada deporte en su color, contado desde lo que se manda a crear
+ * (`crearPayload`): así la primera fecha dice la que eligió el usuario, no la de la ficha. El
+ * reglamento se dibuja con `Reglamento`, el mismo de la pantalla Reglas (los puntos en casilleros).
  */
 export function PasoListo({
+  name,
+  squadNames,
+  mySeatIndex,
   disciplines,
   created,
   pending,
   error,
   onCreate,
 }: {
+  name: string
+  squadNames: readonly string[]
+  mySeatIndex: number | null
   disciplines: readonly ReglamentoInput[]
   created: { inviteUrl: string; href: string } | null
   pending: boolean
@@ -259,38 +464,49 @@ export function PasoListo({
   const [copia, setCopia] = useState<'nada' | 'copiado' | 'fallo'>('nada')
   return (
     <>
-      {disciplines.map((discipline) => (
-        <section key={discipline.kind} className="rounded-card border border-line bg-surface p-4">
-          <h2 className="text-[17px] font-extrabold">{sportLabel(discipline.kind)}</h2>
-          <ul className="mt-2 flex flex-col gap-2">
-            {reglamento(discipline).map((line) => (
-              <li key={line.key} className="flex gap-2 text-pretty text-[14px] font-semibold leading-snug">
-                <span aria-hidden="true" className="font-extrabold text-up">
-                  ✓
-                </span>
-                <span>{line.text}</span>
+      {created !== null && (
+        <p role="status" className="rounded-tile bg-sport-tint p-4 text-[17px] font-semibold">
+          Compartí el link: cada uno entra y elige su nombre.
+        </p>
+      )}
+      <div className="rounded-tile bg-surface p-4">
+        <p className="font-titulo text-[30px] text-balance">{name}</p>
+        <p className="mt-3 flex items-baseline gap-2 text-[17px] font-semibold">
+          <span className="font-cond text-[40px]">{squadNames.length}</span>
+          {squadNames.length === 1 ? 'jugador' : 'jugadores'}
+        </p>
+        <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1.5 text-[16px]">
+          {squadNames.map((player, index) =>
+            index === mySeatIndex ? (
+              <li key={index}>
+                <span className="marca-vos font-semibold">{player}</span>
               </li>
-            ))}
-          </ul>
+            ) : (
+              <li key={index}>{player}</li>
+            ),
+          )}
+        </ul>
+      </div>
+      {disciplines.map((discipline) => (
+        <section key={discipline.kind} data-deporte={discipline.kind} className="pt-1">
+          <h2 className="mb-3 font-titulo text-[26px] text-sport">{sportLabel(discipline.kind)}</h2>
+          <Reglamento lines={reglamento(discipline)} points={discipline.config.points} />
         </section>
       ))}
       {error !== null && <Aviso>{error}</Aviso>}
-      <div className="mt-auto flex flex-col gap-1 pt-1">
+      <BarraAbajo>
         {created === null ? (
           <button
             type="button"
             disabled={pending}
             onClick={onCreate}
-            className="rounded-field bg-accent p-4 text-center text-[15px] font-extrabold text-accent-text"
+            className={button('primary', { size: 'lg', full: true })}
           >
             {pending ? 'Creando…' : 'Crear torneo'}
           </button>
         ) : (
           <>
-            <Link
-              href={created.href}
-              className="rounded-field bg-accent p-4 text-center text-[15px] font-extrabold text-accent-text"
-            >
+            <Link href={created.href} className={button('primary', { size: 'lg', full: true })}>
               Ir al torneo
             </Link>
             <button
@@ -300,21 +516,21 @@ export function PasoListo({
                 const clipboard = (navigator as { clipboard?: Clipboard }).clipboard
                 setCopia((await copiarLink(created.inviteUrl, clipboard)) ? 'copiado' : 'fallo')
               }}
-              className={LINK}
+              className={button('ghost', { full: true })}
             >
-              {copia === 'copiado' ? 'Copiado ✓' : 'Copiar link de invitación'}
+              {copia === 'copiado' ? 'Link copiado' : 'Copiar link de invitación'}
             </button>
             {copia === 'fallo' && (
-              <p className="flex flex-col gap-1 text-[12.5px] font-bold text-muted">
+              <p className="flex flex-col gap-1 text-[14px] text-muted">
                 No se pudo copiar. Copialo de acá:
-                <span className="select-all break-all rounded-field bg-surface p-3 text-[13.5px] text-text">
+                <span className="select-all break-all rounded-btn bg-bg p-3 text-[15px] text-text">
                   {created.inviteUrl}
                 </span>
               </p>
             )}
           </>
         )}
-      </div>
+      </BarraAbajo>
     </>
   )
 }
@@ -324,6 +540,9 @@ const sideSizeOf = (card: DeporteElegido) => modalityShape(card.modality).pairSi
 /**
  * El wizard de 4 pasos (docs/torneos-deportes.md §4): cada deporte arranca con su ficha y el usuario
  * cambia sólo lo que quiere. No escribe nada hasta "Crear torneo" (`createTournament`, todo o nada).
+ *
+ * Una pregunta por pantalla, con el encabezado en bloque (el número del paso, los puntitos y "Volver"
+ * con su destino) y una sola acción principal, fija abajo.
  */
 export function Crear({ myName }: { myName: string }) {
   const [pending, startTransition] = useTransition()
@@ -335,7 +554,7 @@ export function Crear({ myName }: { myName: string }) {
     mySeat: myName.trim().length === 0 ? null : 0,
   }))
   const [cards, setCards] = useState<DeporteElegido[]>([])
-  // La hoja abierta y lo que se va tocando: "Listo" lo pasa a la tarjeta; la cruz o Escape lo tiran.
+  // La hoja abierta y lo que se va tocando: "Listo" lo pasa a la tarjeta; "Cerrar" o Escape lo tiran.
   const [hoja, setHoja] = useState<{ kind: TournamentSport; rules: DisciplineRules } | null>(null)
   const [leaving, setLeaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -343,13 +562,13 @@ export function Crear({ myName }: { myName: string }) {
   // Sólo en "Armá las parejas": quién espera su pareja, y de qué deporte.
   const [pendiente, setPendiente] = useState<{ kind: TournamentSport; at: number } | null>(null)
 
-  // Cada pantalla arranca de arriba: el botón de seguir queda abajo de todo y la siguiente se leería por la mitad.
+  // Cada pantalla arranca de arriba: la anterior pudo quedar scrolleada y la siguiente se leería por la mitad.
   useEffect(() => {
     window.scrollTo(0, 0)
   }, [pantalla])
 
-  const { paso, rotulo, titulo } = encabezado(pantalla)
-  // "← Volver" desanda esta misma secuencia: los subpasos aparecen sólo si hacen falta.
+  const { paso, rotulo, titulo, motivo } = encabezado(pantalla)
+  // "Volver" desanda esta misma secuencia: los subpasos aparecen sólo si hacen falta.
   const secuencia: Pantalla[] = [0, 1, 2, ...subpasos(cards), 3]
   const go = (next: Pantalla | undefined) => {
     if (next === undefined) return
@@ -357,20 +576,21 @@ export function Crear({ myName }: { myName: string }) {
     setPendiente(null)
   }
   const { names, mySeat } = squad
-  const { squadNames } = submitSeats(squad)
+  const payloadSeats = submitSeats(squad)
+  const { squadNames } = payloadSeats
   const filled = filledCount(names)
   const sideSizes = cards.map(sideSizeOf)
   const floor = effectiveFloor(sideSizes)
   const plantelWarning = squadWarning(names, floor, sideSizes.includes(2))
   const modalidadesError = errorDeModalidades(cards, names)
   const hojaCard = hoja === null ? undefined : cards.find((card) => card.kind === hoja.kind)
+  const atras = volverA(secuencia, pantalla)
 
   // Todo cambio del plantel pasa por acá: las tarjetas ponen sus puntos al tamaño nuevo (`plantelCambio`).
   const setSquad = (next: Squad) => {
     setSquadState(next)
     setCards((current) => plantelCambio(current, filledCount(next.names)))
   }
-  const removeSeat = (index: number) => setSquad(removeSeatAt(squad, index))
 
   const blocked =
     (pantalla === 0 && (name.trim().length === 0 || cards.length === 0)) ||
@@ -407,40 +627,27 @@ export function Crear({ myName }: { myName: string }) {
     })
   }
 
-  const help =
-    pantalla === 1
-      ? mySeat !== null
-        ? 'Ya estás anotado en el plantel: agregá al resto del grupo. Después compartís un link y cada uno elige el suyo.'
-        : `Tipeá los nombres del grupo, al menos ${floor}. Después compartís un link y cada uno elige el suyo. No hace falta que vayan todos a todas las fechas.`
-      : null
-
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-lg flex-col gap-4 bg-bg px-6 pt-4 pb-[26px] text-text">
-      <div className="flex items-center justify-between">
-        {pantalla === 0 ? (
-          <Volver href="/torneos" label="Volver" />
-        ) : created === null ? (
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() => go(secuencia[secuencia.indexOf(pantalla) - 1])}
-            className="relative rounded-full bg-chip px-[14px] py-2 text-[12.5px] font-bold after:absolute after:inset-x-0 after:-inset-y-[5px] disabled:opacity-40"
-          >
-            ← Volver
-          </button>
-        ) : (
-          <span />
-        )}
-      </div>
+    <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-bg text-text">
+      <Encabezado
+        rotulo={rotulo}
+        paso={paso}
+        titulo={created === null ? titulo : 'Torneo creado'}
+        motivo={motivo}
+        back={
+          atras === null || created !== null ? (
+            <Volver href="/torneos" label="Inicio" />
+          ) : (
+            <VolverPaso label={atras} disabled={pending} onClick={() => go(secuencia[secuencia.indexOf(pantalla) - 1])} />
+          )
+        }
+      />
 
-      <Progress step={paso} />
-
-      <header className="flex flex-col gap-[3px]">
-        <p className={ROTULO}>{rotulo}</p>
-        <h1 className="text-[30px] font-extrabold tracking-[-.03em]">{titulo}</h1>
-      </header>
-
-      <div className="flex flex-1 flex-col gap-3">
+      <main
+        className={`flex flex-1 flex-col gap-5 px-4 pt-5 ${
+          pantalla === 3 ? 'pb-[calc(170px+env(safe-area-inset-bottom))]' : 'pb-[calc(104px+env(safe-area-inset-bottom))]'
+        }`}
+      >
         {pantalla === 0 && (
           <PasoNuevo
             name={name}
@@ -452,57 +659,14 @@ export function Crear({ myName }: { myName: string }) {
         )}
 
         {pantalla === 1 && (
-          <>
-            <div className="flex items-center justify-between">
-              <p className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">El plantel</p>
-              <p className="text-[12px] font-extrabold text-muted">{`${filled} jugadores`}</p>
-            </div>
-            {/* Tipear en la última fila agrega la que sigue (`namesAfterEdit`): la lista se estira sola. */}
-            {names.map((seat, index) => (
-              <div key={index} className="flex items-center gap-2">
-                <span className="w-5 shrink-0 text-[13px] font-extrabold text-muted">{index + 1}</span>
-                <input
-                  value={seat}
-                  onChange={(event) => setSquad({ ...squad, names: namesAfterEdit(names, index, event.target.value) })}
-                  placeholder="Nombre"
-                  className={`min-w-0 flex-1 rounded-field border-[1.5px] bg-surface p-[15px] text-[16px] font-[700] outline-none placeholder:font-medium placeholder:text-muted ${
-                    seat.trim().length === 0 ? 'border-accent' : 'border-line'
-                  }`}
-                />
-                {index === mySeat && <Vos />}
-                {/* La cruz propia está siempre: sacarse no es achicar el plantel, es organizar sin jugar. */}
-                {(index === mySeat || names.length > floor) && (
-                  <button
-                    type="button"
-                    aria-label={index === mySeat ? 'Sacarme del plantel' : `Sacar al jugador ${index + 1}`}
-                    onClick={() => (index === mySeat ? setLeaving(true) : removeSeat(index))}
-                    className="flex h-11 w-11 shrink-0 items-center justify-center"
-                  >
-                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-chip text-[13px] font-extrabold text-muted">
-                      ✕
-                    </span>
-                  </button>
-                )}
-              </div>
-            ))}
-            <button
-              type="button"
-              onClick={() => setSquad(addBlankSeat(squad))}
-              className="rounded-field border-[1.5px] border-line p-[13px] text-[14px] font-[750] text-muted"
-            >
-              + Agregar jugador
-            </button>
-            {mySeat === null && myName.trim().length > 0 && (
-              <button
-                type="button"
-                onClick={() => setSquad(addMySeat(squad, myName))}
-                className="rounded-field border-[1.5px] border-accent p-[13px] text-[14px] font-extrabold text-accent-link"
-              >
-                Participar en el torneo
-              </button>
-            )}
-            {plantelWarning !== null && <Aviso>{plantelWarning}</Aviso>}
-          </>
+          <PasoJugadores
+            squad={squad}
+            myName={myName}
+            floor={floor}
+            warning={plantelWarning}
+            onChange={setSquad}
+            onLeave={() => setLeaving(true)}
+          />
         )}
 
         {pantalla === 2 && (
@@ -538,26 +702,41 @@ export function Crear({ myName }: { myName: string }) {
               />
             ))}
 
-        {pantalla === 'NIVEL' &&
-          cards
-            .filter((card) => card.primeraFecha === 'NIVEL')
-            .map((card) => (
-              <OrdenarPorNivel
-                key={card.kind}
-                card={card}
-                names={squadNames}
-                onMover={(from, to) =>
-                  setCards(
-                    cards.map((other) =>
-                      other === card ? { ...card, order: moverEnOrden(ordenInicial(card, squadNames.length), from, to) } : other,
-                    ),
-                  )
-                }
-              />
-            ))}
+        {pantalla === 'NIVEL' && (
+          <>
+            {cards
+              .filter((card) => card.primeraFecha === 'NIVEL')
+              .map((card) => (
+                <OrdenarPorNivel
+                  key={card.kind}
+                  card={card}
+                  names={squadNames}
+                  onMover={(from, to) =>
+                    setCards(
+                      cards.map((other) =>
+                        other === card ? { ...card, order: moverEnOrden(ordenInicial(card, squadNames.length), from, to) } : other,
+                      ),
+                    )
+                  }
+                />
+              ))}
+            <button
+              type="button"
+              onClick={() => {
+                setCards(sorteaLaApp(cards))
+                go(3)
+              }}
+              className={button('ghost', { full: true })}
+            >
+              Mejor que lo sortee la app
+            </button>
+          </>
+        )}
 
         {pantalla === 3 && (
           <PasoListo
+            {...payloadSeats}
+            name={name.trim()}
             disciplines={crearPayload(name, squad, cards).disciplines}
             created={created}
             pending={pending}
@@ -565,45 +744,24 @@ export function Crear({ myName }: { myName: string }) {
             onCreate={submit}
           />
         )}
-
-        {help !== null && <p className={AYUDA}>{help}</p>}
-      </div>
+      </main>
 
       {pantalla !== 3 && (
-        <button
-          type="button"
-          disabled={blocked}
-          onClick={advance}
-          className={`rounded-field p-4 text-center text-[15px] font-extrabold ${
-            blocked ? 'bg-chip text-muted' : 'bg-accent text-accent-text'
-          }`}
-        >
-          Continuar
-        </button>
+        <BarraAbajo>
+          <button type="button" disabled={blocked} onClick={advance} className={button('primary', { size: 'lg', full: true })}>
+            Continuar
+          </button>
+        </BarraAbajo>
       )}
 
-      {pantalla === 'NIVEL' && (
-        <button
-          type="button"
-          onClick={() => {
-            setCards(sorteaLaApp(cards))
-            go(3)
-          }}
-          className={`${LINK} -mt-2`}
-        >
-          Mejor que lo sortee la app
-        </button>
-      )}
-
-      {leaving && (
-        <SalirDelPlantel
-          onCancel={() => setLeaving(false)}
-          onConfirm={() => {
-            if (mySeat !== null) removeSeat(mySeat)
-            setLeaving(false)
-          }}
-        />
-      )}
+      <SalirDelPlantel
+        open={leaving}
+        onCancel={() => setLeaving(false)}
+        onConfirm={() => {
+          if (mySeat !== null) setSquad(removeSeatAt(squad, mySeat))
+          setLeaving(false)
+        }}
+      />
 
       {hoja !== null && hojaCard !== undefined && (
         <PersonalizarReglas
@@ -623,6 +781,6 @@ export function Crear({ myName }: { myName: string }) {
           onClose={() => setHoja(null)}
         />
       )}
-    </main>
+    </div>
   )
 }

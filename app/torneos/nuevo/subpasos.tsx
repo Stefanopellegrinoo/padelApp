@@ -4,13 +4,19 @@ import { useRef, useState, type PointerEvent } from 'react'
 import { modalityShape, sportLabel } from '@/core'
 import { initials } from '@/app/format'
 import { agruparChips } from '@/app/rapido/armar-state'
+import { button } from '@/app/ui/button'
 import { filaDestino, moverEnOrden, ordenInicial, type DeporteElegido } from './crear-state'
 
-const AYUDA = 'text-pretty text-[13.5px] font-[550] leading-[1.5] text-muted'
-const FILA = 'rounded-field border border-line bg-surface'
-const CHIP = 'flex min-h-[44px] items-center justify-center rounded-field px-3 text-[13.5px] font-extrabold'
+const AYUDA = 'text-pretty text-[15px] text-muted'
+const FILA = 'rounded-tile bg-surface'
+const CHIP = 'flex min-h-[48px] flex-col items-center justify-center rounded-btn px-4 text-[16px] font-bold leading-tight'
 const FLECHA =
-  'flex h-11 w-11 shrink-0 items-center justify-center rounded-[9px] text-[17px] font-extrabold text-muted disabled:opacity-30'
+  'flex h-11 w-11 shrink-0 items-center justify-center rounded-btn bg-chip text-[18px] font-bold text-text disabled:opacity-30'
+
+/** El nombre del deporte, en su color, arriba de lo suyo: con dos deportes, cada lista dice de cuál es. */
+function Deporte({ children }: { children: string }) {
+  return <h2 className="font-titulo text-[26px] text-sport">{children}</h2>
+}
 
 /**
  * "Armá las parejas" de UN deporte con parejas fijas (docs/torneos-deportes.md §4, mockup 3c). Como en
@@ -33,8 +39,9 @@ export function ArmarParejas({
   const deporte = sportLabel(card.kind)
   const { parejas, sueltos } = agruparChips(names, card.pairs)
   return (
-    <section aria-label={`Parejas de ${deporte}`} className="flex flex-col gap-2">
-      <p className={AYUDA}>{`${deporte} · Juegan juntas todo el torneo. La tabla de ${deporte} va a ser por pareja.`}</p>
+    <section data-deporte={card.kind} aria-label={`Parejas de ${deporte}`} className="flex flex-col gap-2">
+      <Deporte>{deporte}</Deporte>
+      <p className={`${AYUDA} mb-1`}>{`Juegan juntas todo el torneo. La tabla de ${deporte} va por pareja.`}</p>
       {parejas.map(({ numero, jugadores }) => {
         const pareja = jugadores.map((jugador) => jugador.nombre).join(' & ')
         return (
@@ -43,10 +50,10 @@ export function ArmarParejas({
             type="button"
             aria-label={`${pareja}, pareja ${numero}. Tocá para separarlas.`}
             onClick={() => onTocar(jugadores[0]!.indice)}
-            className={`${FILA} flex min-h-[52px] items-center justify-between gap-3 px-4 py-3 text-left`}
+            className={`${FILA} press-fila flex min-h-[56px] items-center justify-between gap-3 px-4 py-3 text-left active:scale-100`}
           >
-            <span className="min-w-0 break-words text-[15px] font-extrabold leading-tight">{pareja}</span>
-            <span className="shrink-0 rounded-full bg-chip px-2 py-[3px] text-[12px] font-extrabold text-muted">
+            <span className="min-w-0 break-words text-[17px] font-bold leading-tight">{pareja}</span>
+            <span className="shrink-0 rounded-full bg-sport-tint px-2.5 py-1 text-[14px] font-semibold text-sport">
               {`pareja ${numero}`}
             </span>
           </button>
@@ -64,16 +71,19 @@ export function ArmarParejas({
                   aria-pressed={esperando}
                   aria-label={esperando ? `${nombre}, esperando pareja` : `${nombre}, sin pareja`}
                   onClick={() => onTocar(indice)}
-                  className={`${CHIP} border-[1.5px] bg-surface ${
-                    esperando ? 'border-accent text-accent-link' : 'border-line text-text'
+                  className={`${CHIP} ${
+                    esperando
+                      ? 'bg-sport text-on-sport'
+                      : 'bg-sport-tint text-text dark:shadow-[inset_0_0_0_1.5px_color-mix(in_srgb,var(--color-sport)_40%,transparent)]'
                   }`}
                 >
-                  {esperando ? `${nombre} · esperando` : nombre}
+                  {nombre}
+                  {esperando && <span className="text-[13px] font-medium">esperando</span>}
                 </button>
               )
             })}
           </div>
-          <p className="text-pretty text-[12.5px] font-bold text-muted">
+          <p className={AYUDA}>
             {`Faltan emparejar ${sueltos.length}. Tocá a dos para juntarlas; tocá una pareja para separarla.`}
           </p>
         </>
@@ -81,7 +91,7 @@ export function ArmarParejas({
       <button
         type="button"
         onClick={onSortear}
-        className="min-h-[44px] text-center text-[14px] font-extrabold text-accent-link"
+        className={button('secondary', { full: true })}
       >
         Sortear parejas
       </button>
@@ -158,9 +168,10 @@ export function OrdenarPorNivel({
   const lugares = arrastre === null ? null : moverEnOrden(filas.map((_, at) => at), arrastre.from, arrastre.to)
 
   return (
-    <section aria-label={`Orden de ${deporte}`} className="flex flex-col gap-2">
-      <p className={AYUDA}>
-        {`${deporte} · Arriba el que mejor juega. Sólo arma ${pairSize === 2 && !fixedTeams ? 'las parejas de ' : ''}la primera fecha: después manda la tabla.`}
+    <section data-deporte={card.kind} aria-label={`Orden de ${deporte}`} className="flex flex-col gap-2">
+      <Deporte>{deporte}</Deporte>
+      <p className={`${AYUDA} mb-1`}>
+        {`Arriba el que mejor juega. Sólo arma ${pairSize === 2 && !fixedTeams ? 'las parejas de ' : ''}la primera fecha: después manda la tabla.`}
       </p>
       <ol className="flex select-none flex-col gap-2">
         {filas.map(({ unit, jugadores }, position) => {
@@ -174,19 +185,19 @@ export function OrdenarPorNivel({
                 refs.current[position] = row
               }}
               style={offset === 0 ? undefined : { transform: `translateY(${offset}px)` }}
-              className={`${FILA} flex items-center gap-2 py-1 pl-3 pr-1 ${
+              className={`${FILA} flex min-h-[56px] items-center gap-2 py-1.5 pl-3 pr-1 ${
                 agarrada
-                  ? 'relative z-10 border-accent shadow-[0_10px_24px_var(--color-scrim)]'
+                  ? 'relative z-10 shadow-[0_10px_24px_var(--color-scrim),inset_0_0_0_2px_var(--color-sport)]'
                   : arrastre !== null
                     ? 'transition-transform duration-150'
                     : ''
               }`}
             >
-              <span className="w-4 shrink-0 text-center text-[13px] font-extrabold text-muted">{(lugares?.indexOf(position) ?? position) + 1}</span>
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-chip text-[12px] font-extrabold text-muted">
+              <span className="w-6 shrink-0 text-center font-cond text-[26px]">{(lugares?.indexOf(position) ?? position) + 1}</span>
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sport-tint text-[13px] font-bold text-sport">
                 {jugadores.length === 1 ? initials(nombre) : jugadores.map((jugador) => initials(jugador)[0] ?? '').join('')}
               </span>
-              <span className="min-w-0 flex-1 break-words text-[15px] font-extrabold leading-tight">{nombre}</span>
+              <span className="min-w-0 flex-1 break-words text-[17px] font-bold leading-tight">{nombre}</span>
               <button
                 type="button"
                 aria-label={`Subir a ${nombre}`}

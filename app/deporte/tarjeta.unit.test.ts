@@ -3,14 +3,14 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { fichaLine, fichaSeed, type Modality, type SportId } from '@/core'
 import { rulesFromSeed } from './personalizar-reglas-state'
-import { offeredModalities, primeraFechaKey, type PrimeraFecha } from './tarjeta-state'
+import { modalityHint, offeredModalities, primeraFechaKey, type PrimeraFecha } from './tarjeta-state'
 import { TarjetaDeporte } from './tarjeta'
 
 type Props = ComponentProps<typeof TarjetaDeporte>
 type Option = Props['primeraFechaOptions'][number]
 
-const POR_NIVEL: Option = { value: 'NIVEL', label: 'Por nivel', sub: 'las ordenás vos' }
-const AL_AZAR: Option = { value: 'SORTEO', label: 'Al azar', sub: 'sorteo' }
+const POR_NIVEL: Option = { value: 'NIVEL', label: 'Por nivel', sub: 'vos los ordenás' }
+const AL_AZAR: Option = { value: 'SORTEO', label: 'Al azar', sub: 'sortea la app' }
 const IGUAL_QUE_PADEL: Option = { value: { igualQue: 'PADEL' }, label: 'Igual que Pádel', sub: null }
 
 function card(kind: SportId, squad: number, modality: Modality, override: Partial<Props> = {}): string {
@@ -53,6 +53,14 @@ describe('offeredModalities', () => {
   })
 })
 
+describe('modalityHint', () => {
+  it('cada modalidad en una línea, sin jerga', () => {
+    expect(modalityHint('INDIVIDUAL')).toBe('Cada uno juega por su cuenta.')
+    expect(modalityHint('FIJAS')).toBe('Siempre con el mismo compañero.')
+    expect(modalityHint('ROTAN')).toBe('Cada fecha se cambia de compañero.')
+  })
+})
+
 describe('primeraFechaKey', () => {
   it('es la misma clave para el mismo valor y distinta para cada "igual que"', () => {
     const values: PrimeraFecha[] = ['NIVEL', 'SORTEO', { igualQue: 'PADEL' }, { igualQue: 'FIFA' }]
@@ -61,9 +69,10 @@ describe('primeraFechaKey', () => {
 })
 
 describe('TarjetaDeporte', () => {
-  it('arriba van el nombre del deporte y la pastilla con el plantel', () => {
+  it('arriba van el nombre del deporte y la pastilla con el plantel, en el color del deporte', () => {
     const html = card('PADEL', 6, 'ROTAN')
-    expect(html).toMatch(/<h3[^>]*font-extrabold[^>]*>Pádel<\/h3>/)
+    expect(html).toMatch(/<h3[^>]*>Pádel<\/h3>/)
+    expect(html).toMatch(/^<section[^>]*data-deporte="PADEL"/)
     const pill = html.match(/<span[^>]*>6 jugadores<\/span>/)?.[0] ?? ''
     expect(pill).toContain('bg-chip')
     expect(pill).toContain('rounded-full')
@@ -85,12 +94,18 @@ describe('TarjetaDeporte', () => {
     expect(html).toMatch(/<button[^>]*aria-pressed="true"[^>]*>Individual<\/button>/)
   })
 
-  it('los botones son los de /rapido: 44px, y la letra no se achica', () => {
+  it('las elecciones son bloques grandes: 44px o más, y la letra no se achica de 14', () => {
     const html = card('PING_PONG', 6, 'INDIVIDUAL')
     const tag = html.match(/<button[^>]*>Individual<\/button>/)?.[0] ?? ''
-    expect(tag).toContain('min-h-[44px]')
-    expect(tag).toContain('text-[14px]')
-    expect(tag).toContain('font-extrabold')
+    expect(Number(/min-h-\[(\d+)px\]/.exec(tag)?.[1])).toBeGreaterThanOrEqual(44)
+    expect(Number(/text-\[(\d+)px\]/.exec(tag)?.[1])).toBeGreaterThanOrEqual(14)
+    expect(tag).toMatch(/font-(bold|extrabold)/)
+  })
+
+  it('la modalidad elegida se explica en una línea debajo de los botones', () => {
+    expect(card('PADEL', 6, 'ROTAN')).toContain(modalityHint('ROTAN'))
+    expect(card('PADEL', 6, 'FIJAS')).toContain(modalityHint('FIJAS'))
+    expect(card('PADEL', 6, 'FIJAS')).not.toContain(modalityHint('ROTAN'))
   })
 
   it('cada elección es un grupo con su título', () => {
@@ -102,19 +117,22 @@ describe('TarjetaDeporte', () => {
 
   it('con onModality null no hay botones de modalidad y se lee como texto', () => {
     const html = card('PADEL', 6, 'ROTAN', { onModality: null })
-    expect(html).toContain('Parejas que rotan · se elige al crear el torneo')
+    expect(html).toMatch(/>Parejas que rotan</)
+    expect(html).toContain('Se elige al crear el torneo')
+    expect(html).not.toContain(' · ')
     expect(html).not.toContain('Parejas fijas')
-    expect(pressed(html)).toEqual(['Por nivellas ordenás vos'])
+    expect(pressed(html)).toEqual(['Por nivelvos los ordenás'])
   })
 
-  it('primera fecha: el rótulo, sus botones con subtítulo y el marcado', () => {
+  it('primera fecha: la pregunta, sus botones con subtítulo, el marcado y qué pasa después', () => {
     const html = card('PADEL', 6, 'ROTAN')
-    expect(html).toContain('Primera fecha')
+    expect(html).toContain('¿Cómo se arma la primera fecha?')
     expect(html).toContain('Por nivel<span')
-    expect(html).toContain('las ordenás vos')
+    expect(html).toContain('vos los ordenás')
     expect(html).toContain('Al azar<span')
-    expect(html).toContain('sorteo')
-    expect(pressed(html)).toEqual(['Parejas que rotan', 'Por nivellas ordenás vos'])
+    expect(html).toContain('sortea la app')
+    expect(html).toContain('Después, manda la tabla.')
+    expect(pressed(html)).toEqual(['Parejas que rotan', 'Por nivelvos los ordenás'])
   })
 
   it('con dos opciones de primera fecha no aparece "Igual que"', () => {
@@ -130,7 +148,7 @@ describe('TarjetaDeporte', () => {
 
   /** El grupo de botones de "Primera fecha", recortado del HTML por su `aria-labelledby`. */
   const grupoPrimeraFecha = (html: string) => {
-    const id = /<span id="([^"]+)"[^>]*>Primera fecha<\/span>/.exec(html)?.[1]
+    const id = /<p id="([^"]+)"[^>]*>¿Cómo se arma la primera fecha\?<\/p>/.exec(html)?.[1]
     return new RegExp(`<div role="group" aria-labelledby="${id}" class="([^"]*)"`).exec(html)?.[1] ?? ''
   }
 
@@ -147,7 +165,7 @@ describe('TarjetaDeporte', () => {
     }
   })
 
-  it('la ficha va en una línea, la misma que arma fichaLine', () => {
+  it('la ficha va como datos, uno por renglón de la lista: lo mismo que arma fichaLine, sin "·"', () => {
     const seed = fichaSeed('PADEL', 6, 'ROTAN')
     const line = fichaLine({
       kind: 'PADEL',
@@ -159,7 +177,9 @@ describe('TarjetaDeporte', () => {
       config: seed.config,
     })
     expect(line).toBe('1 set a 4 games · 10 fechas · cuentan las 8 mejores · Masters al final')
-    expect(card('PADEL', 6, 'ROTAN')).toMatch(new RegExp(`<p[^>]*text-muted[^>]*>${line}</p>`))
+    const html = card('PADEL', 6, 'ROTAN')
+    for (const dato of line.split(' · ')) expect(html).toMatch(new RegExp(`<li[^>]*>${dato}</li>`))
+    expect(html).not.toContain(' · ')
   })
 
   it('la ficha sigue a las reglas que le pasan, no a las del deporte', () => {
@@ -172,7 +192,8 @@ describe('TarjetaDeporte', () => {
     const html = card('PADEL', 6, 'ROTAN')
     const tag = html.match(/<button[^>]*aria-label="Personalizar reglas de Pádel"[^>]*>/)?.[0] ?? ''
     expect(tag).toContain('min-h-[44px]')
-    expect(tag).toContain('text-accent-link')
+    // Color de link, el del deporte de la tarjeta (azul en pádel, verde en FIFA).
+    expect(tag).toContain('text-sport')
     expect(tag).toContain('font-extrabold')
     expect(html).toContain('Personalizar reglas ›')
   })
@@ -186,7 +207,8 @@ describe('TarjetaDeporte', () => {
   it('un deporte fuera del registro (una disciplina vieja en Ajustes) no tira: nombre tal cual y modalidad genérica', () => {
     const html = card('PADEL', 6, 'ROTAN', { kind: 'RAYUELA', onModality: null })
     expect(html).toMatch(/<h3[^>]*>RAYUELA<\/h3>/)
-    expect(html).toContain('Parejas que rotan · se elige al crear el torneo')
-    expect(html).toContain('1 set a 4 games · 10 fechas')
+    expect(html).toContain('Se elige al crear el torneo')
+    expect(html).toMatch(/<li[^>]*>1 set a 4 games<\/li>/)
+    expect(html).toMatch(/<li[^>]*>10 fechas<\/li>/)
   })
 })

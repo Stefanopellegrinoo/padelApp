@@ -86,10 +86,10 @@ export function opcionesPrimeraFecha(
     ? []
     : cards
         .filter((card) => card.kind !== kind && !isIgualQue(card.primeraFecha))
-        .map((card) => ({ value: { igualQue: card.kind }, label: `Igual que ${sportLabel(card.kind)}`, sub: null }))
+        .map((card) => ({ value: { igualQue: card.kind }, label: `Igual que ${sportLabel(card.kind)}`, sub: 'el mismo orden' }))
   return [
-    { value: 'NIVEL', label: 'Por nivel', sub: 'las ordenás vos' },
-    { value: 'SORTEO', label: 'Al azar', sub: 'sorteo' },
+    { value: 'NIVEL', label: 'Por nivel', sub: 'vos los ordenás' },
+    { value: 'SORTEO', label: 'Al azar', sub: 'sortea la app' },
     ...igualQue,
   ]
 }

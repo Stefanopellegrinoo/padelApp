@@ -12,19 +12,28 @@ import { CompartirImagen } from './compartir-imagen'
 let host: HTMLDivElement
 let root: Root
 let textos: string[]
+let colores: string[]
 
 beforeEach(() => {
   host = document.createElement('div')
   document.body.append(host)
   root = createRoot(host)
   textos = []
-  // jsdom no dibuja: un contexto que anota lo que se escribe alcanza para saber qué lleva la imagen.
+  colores = []
+  // jsdom no dibuja: un contexto que anota lo que se escribe (y con qué colores) alcanza para
+  // saber qué lleva la imagen.
   const ctx = new Proxy(
     {
       fillText: (texto: string) => textos.push(texto),
       measureText: (texto: string) => ({ width: texto.length * 10 }),
     },
-    { get: (target, key) => (key in target ? target[key as keyof typeof target] : () => {}), set: () => true },
+    {
+      get: (target, key) => (key in target ? target[key as keyof typeof target] : () => {}),
+      set: (_, key, value) => {
+        if (key === 'fillStyle') colores.push(String(value).toLowerCase())
+        return true
+      },
+    },
   )
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(ctx as never)
   vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((callback) =>
@@ -84,6 +93,16 @@ describe('CompartirImagen', () => {
 
     expect(textos).toEqual(expect.arrayContaining(['Ronda 1', 'Juan & Pedro  vs  Luis & Ana', 'Libre: Tomi & Nico']))
     expect(textos.filter((texto) => /\bpts?\b/.test(texto))).toEqual([])
+  })
+
+  it('con la paleta del prototipo: el bloque azul cancha arriba y nada del verde viejo', async () => {
+    await render()
+
+    // Lo primero que se pinta después del fondo es el bloque del encabezado.
+    expect(colores[0]).toBe('#ffffff')
+    expect(colores[1]).toBe('#1f45e0')
+    expect(colores).toContain('#0e1a4a')
+    for (const viejo of ['#0d1512', '#16201c', '#eaf2ee', '#8ea298', '#34c08a']) expect(colores).not.toContain(viejo)
   })
 
   it('sin menú de compartir: descarga la imagen', async () => {

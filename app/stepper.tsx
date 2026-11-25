@@ -3,6 +3,10 @@
 /**
  * Un número con − y + de 44px: el wizard, la hoja "Personalizar reglas" y el resultado de un partido casual lo comparten.
  * El número va en la cara de marcador (`font-cond`), como los games del prototipo.
+ *
+ * Los botones llevan un borde de `muted` al 60 %: el relleno `chip` solo casi no se distingue de la
+ * hoja (`surface-2`), blanca en claro y azul noche en oscuro. Así el borde da 3:1 contra el fondo en
+ * los dos temas. Es una sombra interior y no un `border`, para que el botón siga midiendo 44.
  */
 export function Stepper({
   value,
@@ -15,7 +19,8 @@ export function Stepper({
   max: number
   onChange: (next: number) => void
 }) {
-  const button = 'h-[44px] w-[44px] shrink-0 rounded-btn bg-chip text-[18px] font-extrabold disabled:opacity-40'
+  const button =
+    'h-[44px] w-[44px] shrink-0 rounded-btn bg-chip text-[18px] font-extrabold shadow-[inset_0_0_0_1.5px_color-mix(in_srgb,var(--color-muted)_60%,transparent)] disabled:opacity-40'
   return (
     <div className="flex shrink-0 items-center gap-2">
       <button type="button" className={button} disabled={value <= min} onClick={() => onChange(value - 1)}>

@@ -3,7 +3,7 @@
 // pueden quedar en el teléfono. Lo único guardado es `offline.html`, que se
 // muestra cuando una navegación falla por falta de red — en vez del error
 // genérico de Safari, que es lo que más delata "esto es una web".
-const CACHE = 'offline-v2'
+const CACHE = 'offline-v3'
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.add('/offline.html')))

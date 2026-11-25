@@ -165,4 +165,26 @@ describe('Crear: el encabezado de cada paso', () => {
     act(() => boton('Nuevo torneo')!.click())
     expect(host.querySelector('h1')?.textContent).toBe('Nuevo torneo')
   })
+
+  /**
+   * T17: al llegar al plantel faltan nombres, y eso no es un error todavía: es lo que hay que hacer.
+   * Se ve en gris; pasa a rojo cuando ya se está cargando el plantel y sigue faltando.
+   */
+  it('paso 2: "Faltan N nombres" arranca en gris y pasa a rojo cuando se toca el plantel', () => {
+    act(() => root.render(createElement(Crear, { myName: 'Colo' })))
+    tipear(host.querySelector('input')!, 'Los Jueves')
+    act(() => boton('Pádel')!.click())
+    act(() => boton('Continuar')!.click())
+
+    const aviso = () => [...host.querySelectorAll('main p')].find((p) => p.textContent?.startsWith('Falta')) as HTMLElement
+    expect(aviso().textContent).toBe('Faltan 3 nombres. El plantel arranca en 4.')
+    expect(aviso().className.split(' ')).toContain('text-muted')
+    expect(aviso().className.split(' ')).not.toContain('text-live')
+    expect(boton('Continuar')?.disabled).toBe(true)
+
+    tipear(campos()[1]!, 'Nico')
+    expect(aviso().textContent).toBe('Faltan 2 nombres. El plantel arranca en 4.')
+    expect(aviso().className.split(' ')).toContain('text-live')
+    expect(aviso().className.split(' ')).not.toContain('text-muted')
+  })
 })

@@ -762,7 +762,7 @@ const AUTOMATICO_LINEA = 'mt-0.5 block text-[14px] font-semibold'
  *
  * "Automático" (§7) va arriba, a lo ancho: es una opción más del radiogroup
  * (`aria-checked` con `AUTO` guardado) y su segunda línea dice lo que
- * elegiría con los que vienen, `→ 2 grupos + llave (vienen 8)`. Esa línea es
+ * elegiría con los que vienen, `2 grupos + llave (vienen 8)`. Esa línea es
  * lo que antes era la leyenda "Sugerido: …" (W77, decisión #4022): sigue
  * siendo TEXTO, nunca un `aria-checked` sobre el botón de ese formato, para
  * que no repita el error de S81 — "lo que elegiría Automático" y "lo
@@ -861,10 +861,7 @@ export function ParejasAMano({
   return (
     <section className="flex flex-col gap-2">
       <h2 className={STEP_TITLE}>Parejas a mano</h2>
-      <p className={NOTA}>
-        Armá las parejas que quieras. Las que no armes salen del sorteo; si las armás todas, la fecha
-        queda entera a mano.
-      </p>
+      <p className={NOTA}>Las que no armes salen del sorteo.</p>
 
       {handPairs.map((hand) => {
         const absent = handPairAbsent(seats, hand)
@@ -1020,7 +1017,7 @@ export function SelectorDeFormato({
             <span className={`${AUTOMATICO_LINEA} invisible`}>{'\u00a0'}</span>
           ) : (
             resolvedIsShown && (
-              <span className={AUTOMATICO_LINEA}>{`→ ${matchdayFormatLabel(resolved)} (vienen ${headcount})`}</span>
+              <span className={AUTOMATICO_LINEA}>{`${matchdayFormatLabel(resolved)} (vienen ${headcount})`}</span>
             )
           )}
         </button>

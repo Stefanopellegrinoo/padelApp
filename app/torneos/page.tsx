@@ -157,6 +157,9 @@ function hoyISO(): string {
 /** Hasta cuántos amigos van en Inicio: el resto está en "Ver todos". */
 const AMIGOS_EN_INICIO = 4
 
+/** Hasta cuántos amigos van en la hoja "Cargar partido": el resto, en "Ver todos". */
+const AMIGOS_EN_LA_HOJA = 6
+
 /**
  * Inicio — la entrada de la app (estructura B, `design/inicio/02`, con el
  * lenguaje del prototipo): arriba, en el bloque, la fecha más cercana de tus
@@ -299,7 +302,14 @@ export default async function InicioPage() {
 
       {/* Sin fechas para cargar ni amigos no hay partido que cargar: el botón
           competiría con "Crear torneo" sin llevar a ningún lado. */}
-      {user !== null && (cargables.length > 0 || amigos.length > 0) && <CargarPartido fechas={cargables} />}
+      {user !== null && (cargables.length > 0 || amigos.length > 0) && (
+        <CargarPartido
+          fechas={cargables}
+          amigos={amigos
+            .slice(0, AMIGOS_EN_LA_HOJA)
+            .map((amigo) => ({ playerId: amigo.playerId, displayName: amigo.displayName }))}
+        />
+      )}
     </main>
   )
 }

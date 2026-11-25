@@ -286,7 +286,8 @@ describe('la fecha GROUPS_KNOCKOUT en juego — fase y llave (REQ-D8-1, decisió
 
     const html = await render()
 
-    expect(html).toContain('Fase actual: Fase de grupos')
+    // La fase la dicen los títulos de sus secciones; "Fase actual: …" la repetía (S8d, T17).
+    expect(html).not.toContain('Fase actual')
     expect(html).toContain('Grupo 1')
     expect(html).toContain('Grupo 2')
     expect(html).not.toContain('>Cerrar fase<')
@@ -1037,7 +1038,7 @@ describe('el armado en DRAFT — Automático antes de sortear (§7, hallazgo de 
 
     const btnAutomatico = /<button[^>]*>Automático/.exec(html)?.[0] ?? ''
     expect(btnAutomatico).toContain('aria-checked="true"')
-    expect(html).toContain('→ 4 grupos + llave (vienen 12)')
+    expect(html).toContain('4 grupos + llave (vienen 12)')
     expect(html).toContain('20 partidos')
     expect(html).not.toContain('66 partidos')
     expect(html).toContain('Cómo quedan los grupos')

@@ -631,6 +631,29 @@ describe('CargarConAmigo: el botón de abajo y la hoja', () => {
     }
   }
 
+  it('desde el atajo de Inicio (`?cargar=1`) llega con la hoja abierta y saca el parámetro, sin tocar el resto', async () => {
+    history.replaceState(null, '', '/amigos/amigo-1?desde=amigos&cargar=1')
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    await act(async () => {
+      root?.render(
+        createElement(CargarConAmigo, { friendPlayerId: 'amigo-1', nombre: 'Fede Paz', friends: AMIGOS, abrirAlEntrar: true }),
+      )
+    })
+    const dialogo = container.querySelector('dialog') as HTMLDialogElement
+    expect(dialogo.open).toBe(true)
+    expect(dialogo.textContent).toContain('Partido con Fede')
+    // Volver atrás o recargar no la reabre.
+    expect(location.pathname + location.search).toBe('/amigos/amigo-1?desde=amigos')
+    history.replaceState(null, '', '/')
+  })
+
+  it('sin el atajo llega con la hoja cerrada', async () => {
+    const f = await montarPantalla()
+    expect(f.dialogo().open).toBe(false)
+  })
+
   it('el botón nombra al amigo y abre la hoja con el formulario', async () => {
     const f = await montarPantalla()
     expect(f.dialogo().open).toBe(false)
@@ -649,6 +672,26 @@ describe('CargarConAmigo: el botón de abajo y la hoja', () => {
     expect(f.dialogo().open).toBe(true)
     expect(f.el.textContent).toContain('Elegí una fecha real.')
     expect(Array.from(f.el.querySelectorAll('[aria-label^="Set "]')).map((p) => p.textContent)).toEqual(['4-1'])
+  })
+
+  it('sin conexión (el fetch de la action rechaza) la hoja queda abierta con lo cargado, lo dice, y "Guardar" reintenta', async () => {
+    vi.mocked(loadCasualMatch).mockReset()
+    vi.mocked(loadCasualMatch)
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockImplementation(async (state) => ({ error: null, saved: (state.saved ?? 0) + 1 }))
+    const f = await montarPantalla()
+    await tocar(f.boton('Cargar partido con Fede'))
+    await tocar(f.boton('Vos'))
+    await tocar(f.boton('1'))
+
+    expect(f.dialogo().open).toBe(true)
+    expect(f.dialogo().querySelector('[role="alert"]')?.textContent).toBe('Sin conexión. Probá de nuevo.')
+    expect(Array.from(f.el.querySelectorAll('[aria-label^="Set "]')).map((p) => p.textContent)).toEqual(['4-1'])
+
+    await tocar(f.boton('Guardar'))
+    expect(loadCasualMatch).toHaveBeenCalledTimes(2)
+    expect(f.dialogo().open).toBe(false)
+    expect(f.el.querySelector('[role="status"]')?.textContent).toBe('Guardado: Ganaste 4-1')
   })
 
   it('guardar cierra la hoja, avisa qué se guardó y la próxima vez arranca de cero', async () => {

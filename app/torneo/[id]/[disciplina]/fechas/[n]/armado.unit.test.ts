@@ -169,12 +169,14 @@ describe('SelectorDeFormato', () => {
   describe('lo que elegiría "Automático" (W77, decisión #4022, §7)', () => {
     it('nombra el formato que elegiría en la línea de Automático, separada de los botones', () => {
       const markup = html(ROUND_ROBIN, 6, GROUPS_2)
-      expect(markup).toContain('→ 2 grupos + llave')
+      // Texto llano, sin flecha (S8d, T17).
+      expect(markup).toContain('2 grupos + llave (vienen')
+      expect(markup).not.toContain('→')
     })
 
     it('también nombra "todos contra todos" cuando es lo que elegiría', () => {
       const markup = html(GROUPS_2, 4, ROUND_ROBIN)
-      expect(markup).toContain('→ Todos contra todos')
+      expect(markup).toContain('Todos contra todos (vienen')
     })
 
     /**
@@ -190,7 +192,7 @@ describe('SelectorDeFormato', () => {
       const markup = html(ROUND_ROBIN, 6, GROUPS_2)
       const btnGrupos2 = /<button[^>]*>2 grupos \+ llave<\/button>/.exec(markup)?.[0] ?? ''
       expect(btnGrupos2).toContain('aria-checked="false"') // lo automático, no lo elegido
-      expect(markup).toContain('→ 2 grupos + llave')
+      expect(markup).toContain('2 grupos + llave (vienen')
     })
 
     /**
@@ -217,7 +219,7 @@ describe('SelectorDeFormato — Automático (§7)', () => {
     const markup = html(AUTO, 8, GROUPS_2, TECHO_DE_A_UNO, 8)
 
     expect(markup).toContain('Automático')
-    expect(markup).toContain('→ 2 grupos + llave (vienen 8)')
+    expect(markup).toContain('2 grupos + llave (vienen 8)')
     expect(botonAutomatico(markup)).toContain('aria-checked="true"')
     // La fila de hoy sigue, sin marcar: Automático no es ninguno de los dos.
     const btnGrupos2 = /<button[^>]*>2 grupos \+ llave<\/button>/.exec(markup)?.[0] ?? ''
@@ -291,6 +293,10 @@ describe('ParejasAMano', () => {
 
   it('muestra la pareja armada y ofrece armar otra con los que quedan', () => {
     const markup = render([anaYBeto], seats.slice(2))
+
+    // Una línea que dice lo que importa, sin narrar (S8d, T17).
+    expect(markup).toContain('Las que no armes salen del sorteo.')
+    expect(markup).not.toContain('Armá las parejas que quieras')
 
     expect(markup).toContain('Ana y Beto')
     expect(markup).toContain('Deshacer')

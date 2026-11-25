@@ -194,10 +194,8 @@ describe('goalsError', () => {
     expect(goalsError('3', '1')).toBeNull()
   })
 
-  it('explica el rechazo, y nombra el caso del 3-1 en un solo campo', () => {
-    const message = goalsError('3-1', '')
-    expect(message).toContain('un número entero por lado')
-    expect(message).toContain('3-1')
+  it('explica el rechazo en una oración, y nombra el caso del 3-1 en un solo campo', () => {
+    expect(goalsError('3-1', '')).toBe('Un número por lado: un 3-1 se carga 3 y 1.')
   })
 
   it('da igual de qué lado esté el error', () => {

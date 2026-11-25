@@ -175,8 +175,19 @@ function BarraAbajo({ children }: { children: ReactNode }) {
   )
 }
 
-function Aviso({ children }: { children: string }) {
-  return <p className="rounded-btn bg-live-bg px-3.5 py-3 text-[15px] font-semibold text-live">{children}</p>
+/**
+ * Lo que impide seguir. `neutro` es lo que todavía no es un error, sólo lo que
+ * falta hacer: "Faltan 3 nombres" al llegar al plantel no se dice en rojo
+ * antes de que alguien toque nada (T17).
+ */
+function Aviso({ children, neutro = false }: { children: string; neutro?: boolean }) {
+  return (
+    <p
+      className={`rounded-btn px-3.5 py-3 text-[15px] font-semibold ${neutro ? 'bg-surface text-muted' : 'bg-live-bg text-live'}`}
+    >
+      {children}
+    </p>
+  )
 }
 
 /** La única confirmación del wizard: explica qué significa la cruz de la fila propia (organizar sin jugar). */
@@ -289,6 +300,7 @@ export function PasoJugadores({
   myName,
   floor,
   warning,
+  warningNeutro = false,
   onChange,
   onLeave,
 }: {
@@ -296,6 +308,8 @@ export function PasoJugadores({
   myName: string
   floor: number
   warning: string | null
+  /** Todavía nadie tocó el plantel: lo que falta se dice en gris, no como error. */
+  warningNeutro?: boolean
   onChange: (next: Squad) => void
   /** La cruz del asiento propio: pregunta antes de sacarte. */
   onLeave: () => void
@@ -389,7 +403,7 @@ export function PasoJugadores({
           Participar en el torneo
         </button>
       )}
-      {warning !== null && <Aviso>{warning}</Aviso>}
+      {warning !== null && <Aviso neutro={warningNeutro}>{warning}</Aviso>}
       <p className={AYUDA}>Después cada uno se suma con el link de invitación.</p>
     </>
   )
@@ -557,6 +571,8 @@ export function Crear({ myName }: { myName: string }) {
   // La hoja abierta y lo que se va tocando: "Listo" lo pasa a la tarjeta; "Cerrar" o Escape lo tiran.
   const [hoja, setHoja] = useState<{ kind: TournamentSport; rules: DisciplineRules } | null>(null)
   const [leaving, setLeaving] = useState(false)
+  // Si ya se tocó el plantel: hasta entonces lo que falta no es un error (`Aviso` neutro).
+  const [plantelTocado, setPlantelTocado] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [created, setCreated] = useState<{ inviteUrl: string; href: string } | null>(null)
   // Sólo en "Armá las parejas": quién espera su pareja, y de qué deporte.
@@ -588,6 +604,7 @@ export function Crear({ myName }: { myName: string }) {
 
   // Todo cambio del plantel pasa por acá: las tarjetas ponen sus puntos al tamaño nuevo (`plantelCambio`).
   const setSquad = (next: Squad) => {
+    setPlantelTocado(true)
     setSquadState(next)
     setCards((current) => plantelCambio(current, filledCount(next.names)))
   }
@@ -664,6 +681,7 @@ export function Crear({ myName }: { myName: string }) {
             myName={myName}
             floor={floor}
             warning={plantelWarning}
+            warningNeutro={!plantelTocado}
             onChange={setSquad}
             onLeave={() => setLeaving(true)}
           />

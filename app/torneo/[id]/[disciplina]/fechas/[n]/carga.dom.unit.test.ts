@@ -271,6 +271,25 @@ describe('pádel: el par ganador y los games del perdedor, y se guarda en el úl
     expect(dialogo().open).toBe(false)
   })
 
+  it('sin conexión (la acción ni llega: el fetch rechaza) la hoja queda abierta con lo elegido; volver a tocar reintenta', async () => {
+    saveMatchResult.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    await montar(PADEL)
+    await tocar(botonLlamado('Cargar Ana & Beto contra Caro & Dani'))
+    await tocar(pareja('Ana & Beto'))
+    await tocar(games('2'))
+
+    expect(dialogo().open).toBe(true)
+    expect(dialogo().querySelector('[role="alert"]')?.textContent).toBe('Sin conexión. Probá de nuevo.')
+    expect(pareja('Ana & Beto').getAttribute('aria-pressed')).toBe('true')
+    expect(games('2').getAttribute('aria-pressed')).toBe('true')
+    expect(games('2').disabled).toBe(false)
+
+    await tocar(games('2'))
+    expect(saveMatchResult).toHaveBeenCalledTimes(2)
+    expect(dialogo().open).toBe(false)
+    expect(aviso().textContent).toContain('Guardado: Ana & Beto 4-2')
+  })
+
   it('un partido cargado se corrige con la hoja precargada', async () => {
     const cargado = partido('p1', 'Ana & Beto', 'Caro & Dani', [{ gamesA: 4, gamesB: 2 }])
     await montar(PADEL, [cargado, P2])
@@ -371,6 +390,24 @@ describe('FIFA: dos campos, el primero enfocado, y el paso al segundo', () => {
     expect(dialogo().open).toBe(true)
     expect(dialogo().querySelector('[role="alert"]')?.textContent).toBe('Esta disciplina no admite empates.')
     expect(campos().map((campo) => campo.value)).toEqual(['0', '0'])
+  })
+
+  it('sin conexión la hoja queda abierta con lo tipeado, y "Guardar" reintenta', async () => {
+    saveMatchResult.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    await montar(FIFA)
+    await tocar(botonLlamado('Cargar Ana & Beto contra Caro & Dani'))
+    const [golesA, golesB] = campos()
+    await tipear(golesA!, '3')
+    await tipear(golesB!, '1')
+    await tocar(botonDe('Guardar', dialogo()))
+
+    expect(dialogo().open).toBe(true)
+    expect(dialogo().querySelector('[role="alert"]')?.textContent).toBe('Sin conexión. Probá de nuevo.')
+    expect(campos().map((campo) => campo.value)).toEqual(['3', '1'])
+
+    await tocar(botonDe('Guardar', dialogo()))
+    expect(saveMatchResult).toHaveBeenCalledTimes(2)
+    expect(dialogo().open).toBe(false)
   })
 
   it('corregir un FIFA cargado trae los goles puestos', async () => {

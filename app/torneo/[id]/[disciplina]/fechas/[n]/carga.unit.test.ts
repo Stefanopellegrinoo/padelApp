@@ -29,25 +29,25 @@ function html(a: string, b: string): string {
 
 describe('panel de goles — por qué el botón está apagado', () => {
   it('mientras se tipea no reta a nadie', () => {
-    expect(html('', '')).not.toContain('un número entero por lado')
-    expect(html('3', '')).not.toContain('un número entero por lado')
+    expect(html('', '')).not.toContain('Un número por lado')
+    expect(html('3', '')).not.toContain('Un número por lado')
     expect(html('3', '')).not.toContain('aria-invalid')
   })
 
   it('un 3-1 en un solo campo se explica, y el campo queda marcado', () => {
     const panel = html('3-1', '')
-    expect(panel).toContain('un número entero por lado')
+    expect(panel).toContain('Un número por lado')
     expect(panel).toContain('aria-invalid="true"')
   })
 
   it('las letras y los decimales también', () => {
-    expect(html('abc', '2')).toContain('un número entero por lado')
-    expect(html('1', '1.5')).toContain('un número entero por lado')
+    expect(html('abc', '2')).toContain('Un número por lado')
+    expect(html('1', '1.5')).toContain('Un número por lado')
   })
 
   it('con el marcador completo no queda nada marcado ni nada que explicar', () => {
     const panel = html('3', '1')
-    expect(panel).not.toContain('un número entero por lado')
+    expect(panel).not.toContain('Un número por lado')
     expect(panel).not.toContain('aria-invalid')
   })
 })

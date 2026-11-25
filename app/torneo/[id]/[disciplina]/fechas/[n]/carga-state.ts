@@ -71,10 +71,8 @@ export function goalsRejected(text: string): boolean {
  */
 export function goalsError(goalsA: string, goalsB: string): string | null {
   if (!goalsRejected(goalsA) && !goalsRejected(goalsB)) return null
-  return (
-    `Va un número entero por lado, de hasta ${MAX_GOAL_DIGITS} dígitos. ` +
-    `Un 3-1 se carga como 3 en un lado y 1 en el otro.`
-  )
+  // Una oración (S8d): el tope de dígitos ya lo pone el `maxLength` del campo.
+  return 'Un número por lado: un 3-1 se carga 3 y 1.'
 }
 
 /**

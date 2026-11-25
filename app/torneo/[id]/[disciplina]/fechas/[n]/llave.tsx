@@ -5,7 +5,7 @@ import type { Phase } from '@/core'
 import { button } from '@/app/ui/button'
 import { closePhase } from './actions'
 import { CargaDeLaFecha, TarjetaPartido, type CargaContext, type PartidoVM } from './carga'
-import { FASE_LABEL, sectionTitle } from './secciones'
+import { sectionTitle } from './secciones'
 
 export interface LlaveMatchVM extends PartidoVM {
   fase: Phase
@@ -24,12 +24,15 @@ export interface LlaveMatchVM extends PartidoVM {
  * `matches` ya viene ordenado por `(fase, grupo, round)` desde `page.tsx`: acá
  * sólo se agrupa por sección, preservando ese orden. La carga es la misma
  * hoja que en `Rondas` (`CargaDeLaFecha`).
+ *
+ * La fase en juego no lleva una línea propia ("Fase actual: …" se fue en
+ * T17): la dicen los títulos de las secciones ("Grupo 1", "Semifinal") y sus
+ * partidos sin cargar.
  */
 export function Llave({
   seasonId,
   matchdayId,
   matchdayNumber,
-  phase,
   matches,
   canClosePhase,
   carga,
@@ -37,7 +40,6 @@ export function Llave({
   seasonId: string
   matchdayId: string
   matchdayNumber: number
-  phase: Phase | null
   matches: LlaveMatchVM[]
   /** `phaseIsComplete` sobre la fase actual, ya sin `FINAL` (ahí se cierra la fecha entera, no se avanza de fase) y ya filtrado por admin. */
   canClosePhase: boolean
@@ -70,10 +72,6 @@ export function Llave({
   return (
     <CargaDeLaFecha context={carga} partidos={matches}>
       <div className="flex flex-col gap-5">
-        {phase !== null && (
-          <p className="text-[15px] font-semibold text-sport">{`Fase actual: ${FASE_LABEL[phase]}`}</p>
-        )}
-
         {sections.map((section) => (
           <section key={section.title} className="flex flex-col gap-2.5">
             <h2 className="font-titulo text-[24px]">{section.title}</h2>

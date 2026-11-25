@@ -946,14 +946,12 @@ export default async function FechaDetailPage({ params }: PageProps) {
             cada grupo y en cada fase de la llave). Con `Rondas` una fecha
             CERRADA perdía la palabra "Semifinal" o "Final" y el registro de
             la llave desaparecía justo cuando la fecha pasa a ser historia
-            (W70). `phase` sólo se le pasa mientras está OPEN: una fecha
-            CERRADA ya jugó todas. */}
+            (W70). */}
         {isGroupsKnockout ? (
           <Llave
             seasonId={seasonId}
             matchdayId={matchday.id}
             matchdayNumber={matchday.number}
-            phase={status === 'OPEN' ? phase : null}
             matches={llaveMatches}
             canClosePhase={canClosePhase}
             carga={cargaContext}

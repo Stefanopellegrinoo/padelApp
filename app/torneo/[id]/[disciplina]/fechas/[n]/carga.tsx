@@ -41,6 +41,7 @@ import {
   type WriteResult,
 } from './actions'
 import { BorrarFecha } from './borrar'
+import { mensajeDeFalla } from './sin-conexion'
 
 /** Lo que la carga necesita saber de la fecha, igual para todos sus partidos. */
 export interface CargaContext {
@@ -301,7 +302,11 @@ function HojaDeCarga({
   const guardar = (sets: SetScore[], siFalla: () => void) => {
     setError(null)
     startTransition(async () => {
-      const result = await saveMatchResult(seasonId, matchdayNumber, partido.matchId, sets)
+      // Sin red la action no vuelve: tira, y sin este `catch` la página entera
+      // pasaba a `app/error.tsx` con lo cargado perdido (`sin-conexion.ts`).
+      const result: WriteResult = await saveMatchResult(seasonId, matchdayNumber, partido.matchId, sets).catch(
+        (falla: unknown) => ({ ok: false as const, error: mensajeDeFalla(falla) }),
+      )
       if (!result.ok) {
         // Lo cargado NO se tira (S8e): el rebote esperable es una regla del
         // marcador o la red, y se arregla con un toque, no cargando todo de nuevo.
@@ -811,7 +816,7 @@ export function CierreFecha({
   const run = (work: () => Promise<WriteResult>) => {
     setError(null)
     startTransition(async () => {
-      const result = await work()
+      const result: WriteResult = await work().catch((falla: unknown) => ({ ok: false as const, error: mensajeDeFalla(falla) }))
       if (!result.ok) {
         setError(result.error)
         return

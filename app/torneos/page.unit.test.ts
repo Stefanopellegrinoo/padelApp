@@ -238,15 +238,26 @@ describe('Inicio, cargar partido', () => {
   const abierta = () => [matchday({ id: 'md2', number: 2, status: 'OPEN', playedOn: '2026-11-18' })]
   const detalle = () => ({ matchday: abierta()[0]!, sides: [], matches: [], guestIds: [] })
 
-  it('ofrece la fecha en juego si podés cargar, y el partido con un amigo', async () => {
+  it('ofrece la fecha en juego si podés cargar, y cada amigo con su hoja ya abierta', async () => {
     vi.mocked(mySeasons).mockResolvedValueOnce([header({ playersCanScore: true })])
     vi.mocked(seasonMatchdaysOf).mockResolvedValueOnce(abierta())
     vi.mocked(matchdayDetail).mockResolvedValueOnce(detalle())
+    vi.mocked(amigosDeInicio).mockResolvedValueOnce([NICO])
     const html = await render()
     const hoja = html.slice(html.indexOf('<dialog'), html.indexOf('</dialog>'))
     expect(html).toMatch(/<button[^>]*>.*Cargar partido<\/button>/)
     expect(linkA(hoja, '/torneo/s1/padel/fechas/2')).toContain('Torneo de prueba')
-    expect(linkA(hoja, '/amigos')).toContain('Partido con un amigo')
+    expect(linkA(hoja, '/amigos/p-nico?cargar=1')).toContain('Nico Arias')
+    expect(linkA(hoja, '/amigos')).toContain('Ver todos')
+  })
+
+  it('en la hoja van hasta seis amigos, en el orden de Inicio (el más reciente primero)', async () => {
+    const amigos = ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((id) => ({ ...NICO, playerId: `p-${id}`, displayName: id.toUpperCase() }))
+    vi.mocked(amigosDeInicio).mockResolvedValueOnce(amigos)
+    const html = await render()
+    const hoja = html.slice(html.indexOf('<dialog'), html.indexOf('</dialog>'))
+    const hrefs = [...hoja.matchAll(/href="\/amigos\/(p-[a-z])\?cargar=1"/g)].map((m) => m[1])
+    expect(hrefs).toEqual(['p-a', 'p-b', 'p-c', 'p-d', 'p-e', 'p-f'])
   })
 
   it('sin permiso para cargar, esa fecha no está en la hoja', async () => {

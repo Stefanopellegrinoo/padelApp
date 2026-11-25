@@ -25,10 +25,13 @@ function side(entryId: string): Side {
   return { size: 1, a: entryId }
 }
 
+/** De a cuántos se juega el pádel del fixture: 2 sólo en el caso de las duplas. */
+let padelPairSize: 1 | 2 = 1
+
 function header(): DisciplineHeader[] {
   const shape = { weight: 1, pairSize: 1 as const, hasMasters: false, allowsDraw: false, formatoDefault: { kind: 'ROUND_ROBIN' as const } }
   return [
-    { id: D_PADEL, kind: 'PADEL', config: defaultConfig(2, 1), ...shape },
+    { id: D_PADEL, kind: 'PADEL', config: defaultConfig(2, 1), ...shape, pairSize: padelPairSize },
     { id: D_FIFA, kind: 'FIFA', config: defaultConfig(2, 1), ...shape },
   ]
 }
@@ -214,6 +217,35 @@ describe('Stats: lo tuyo y los links al perfil', () => {
     expect(mine.length).toBeGreaterThan(0)
     expect(mine.every((row) => />vos</.test(row))).toBe(true)
     expect(theirs.some((row) => />vos</.test(row))).toBe(false)
+  })
+
+  /**
+   * Los nombres de una dupla son links en texto corrido: el blanco de 44 lo da el relleno vertical
+   * (medido en el navegador, T17: con `py-3` medían 41-43 px; con 14 px de cada lado, 45 o más).
+   */
+  it('cada nombre de una dupla es un link a su perfil con relleno para medir 44 o más', async () => {
+    const { closedHistoryAll } = await import('@/db/read')
+    const pareja = (a: string, b: string): Side => ({ size: 2, a, b })
+    const fecha = (number: number): PlayedMatchday => ({
+      number,
+      sides: [pareja('p1', 'p2'), pareja('p3', 'p4')],
+      matches: [
+        { round: 1, fase: 'GRUPO', grupo: 1, sideA: pareja('p1', 'p2'), sideB: pareja('p3', 'p4'), sets: [{ gamesA: 4, gamesB: 1 }] },
+      ],
+    })
+    vi.mocked(closedHistoryAll).mockResolvedValueOnce([fecha(1), fecha(2)])
+    padelPairSize = 2
+    const html = await render('padel').finally(() => {
+      padelPairSize = 1
+    })
+    expect(html).toContain('Mejor dupla del torneo')
+    expect(html).toContain('Las demás duplas')
+    const duplas = html.slice(html.indexOf('Mejor dupla del torneo'))
+    const nombres = duplas.match(/<a [^>]*><span[^>]*>[^<]*<\/span><\/a>/g) ?? []
+    expect(nombres.length).toBeGreaterThan(0)
+    for (const link of nombres) {
+      expect(link).toMatch(/class="[^"]*\bpy-3\.5\b/)
+    }
   })
 
   it('los perfiles se abren sabiendo de dónde vinieron (?desde=stats), para que su Volver diga Estadísticas', async () => {

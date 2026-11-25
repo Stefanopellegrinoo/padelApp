@@ -244,12 +244,14 @@ function Movimiento({ movement }: { movement: number }) {
  * Un nombre de la dupla: link a su perfil, con la marca si es el que mira. Es
  * texto corrido (los dos nombres pueden partirse en dos líneas), así que el
  * blanco de 44 lo da el relleno vertical y no la caja; la marca va en el
- * nombre, no en el relleno.
+ * nombre, no en el relleno. El relleno de un `<a>` en línea no mueve las
+ * líneas: 14 por lado sobre la letra (17-19 px de caja) da 45 o más; con 12
+ * medía 41-43 (T17).
  */
 function NombreDupla({ entryId, gente }: { entryId: EntryId; gente: Gente }) {
   const name = gente.nameOf.get(entryId) ?? ''
   return (
-    <Link href={perfilHref(gente.base, entryId, gente.desde)} className="py-3">
+    <Link href={perfilHref(gente.base, entryId, gente.desde)} className="py-3.5">
       <span className={entryId === gente.viewer ? 'marca-vos' : undefined}>{name}</span>
     </Link>
   )

@@ -465,6 +465,7 @@ describe('armadoWords', () => {
     expect(words.guestPairSection).toBe(false)
     expect(words.guestPartner).toBe(false)
     expect(words.sides).toBe('jugadores')
+    expect(words.guestNote).toBe('No suman puntos. Entran de a dos.')
   })
 
   it('de a dos conserva el texto de siempre, con parejas invitadas y "Juega con"', () => {
@@ -474,6 +475,8 @@ describe('armadoWords', () => {
     expect(words.guestPartner).toBe(true)
     expect(words.sides).toBe('parejas')
     expect(words.addGuest).toBe('+ Agregar pareja invitada')
+    // Lo que importa, sin narrar (S8d, T17).
+    expect(words.guestNote).toBe('No suman puntos.')
   })
 })
 

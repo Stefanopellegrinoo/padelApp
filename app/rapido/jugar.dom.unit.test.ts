@@ -159,6 +159,32 @@ it('con el último partido guardado no hay "Siguiente" y aparece el campeón', (
   expect(host.querySelector('header')?.textContent).toContain('Ana')
 })
 
+// T17: el aviso no se queda encima del campeón que acaba de mostrar.
+it('"Ver campeón" lleva el foco al campeón y cierra el aviso', () => {
+  // jsdom no scrollea: `verCampeon` sube la pantalla con `scrollTo`.
+  const scroll = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+  montar({
+    ...TORNEO,
+    partidos: [
+      { ...TORNEO.partidos[0]!, marcador: { a: 4, b: 0 } },
+      { ...TORNEO.partidos[1]!, marcador: { a: 4, b: 1 } },
+      TORNEO.partidos[2]!,
+    ],
+  })
+  tocar(porEtiqueta('Cargar Beto contra Cami'))
+  tocar(enHoja('Beto'))
+  tocar(enHoja('3'))
+  expect(aviso().dataset.visible).toBe('true')
+
+  tocar([...aviso().querySelectorAll('button')].find((b) => b.textContent === 'Ver campeón'))
+
+  expect(document.activeElement?.textContent).toContain('Campeón')
+  expect(aviso().dataset.visible).toBe('false')
+  expect(aviso().textContent).toBe('')
+  expect(scroll).toHaveBeenCalled()
+  scroll.mockRestore()
+})
+
 it('un partido cargado abre precargado: el ganador elegido y su número marcado; un toque corrige', () => {
   montar({ ...TORNEO, partidos: [{ ...TORNEO.partidos[0]!, marcador: { a: 4, b: 3 } }, ...TORNEO.partidos.slice(1)] })
   tocar(porEtiqueta('Corregir Ana 4, Beto 3'))

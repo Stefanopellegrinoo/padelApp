@@ -436,8 +436,7 @@ export function armadoWords(
       ? {
           sides: 'jugadores',
           guestSection: 'Jugadores invitados',
-          guestNote:
-            'Juegan solos, como todos, y no suman puntos para el campeonato. Entran de a dos.',
+          guestNote: 'No suman puntos. Entran de a dos.',
           addGuest: '+ Agregar 2 invitados',
           guestPairNoun: 'los dos invitados',
           draw: 'Ordenar jugadores',
@@ -449,8 +448,7 @@ export function armadoWords(
       : {
           sides: 'parejas',
           guestSection: 'Parejas invitadas',
-          guestNote:
-            'Juegan juntos y no suman puntos para el campeonato: es un amistoso adentro de la fecha.',
+          guestNote: 'No suman puntos.',
           addGuest: '+ Agregar pareja invitada',
           guestPairNoun: 'la pareja invitada',
           draw: 'Generar parejas',

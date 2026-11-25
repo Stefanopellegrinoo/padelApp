@@ -40,10 +40,12 @@ export function MiId({ playerId }: { playerId: string }) {
       <span className="text-[15px] font-semibold text-muted">Tu ID</span>
       <div className="flex items-center gap-2 rounded-tile bg-surface p-2 pl-3">
         <code className="min-w-0 flex-1 truncate font-mono text-[15px] text-text">{playerId}</code>
+        {/* En oscuro el azul de link sobre `opcion` queda en 4,50: justo en el
+            borde de AA (T17). Ahí va en `text`, como las opciones de la hoja. */}
         <button
           type="button"
           onClick={() => void compartir()}
-          className="min-h-[44px] shrink-0 rounded-btn bg-opcion px-4 text-[16px] font-bold text-accent-link shadow-[inset_0_0_0_1.5px_var(--color-opcion-borde)]"
+          className="min-h-[44px] shrink-0 rounded-btn bg-opcion px-4 text-[16px] font-bold text-accent-link shadow-[inset_0_0_0_1.5px_var(--color-opcion-borde)] dark:text-text"
         >
           Compartir
         </button>

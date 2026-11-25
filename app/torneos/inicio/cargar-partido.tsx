@@ -2,7 +2,9 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
+import { Avatar } from '@/app/ui/avatar'
 import { button } from '@/app/ui/button'
+import { rowPress } from '@/app/ui/row'
 import { Sheet } from '@/app/ui/sheet'
 import { Icono } from './iconos'
 
@@ -19,17 +21,31 @@ export interface FechaParaCargar {
   sport: string
 }
 
+/** Un amigo de la hoja: con quién jugaste hace menos primero (`ordenarAmigos`). */
+export interface AmigoParaCargar {
+  playerId: string
+  displayName: string
+}
+
 /**
  * "Cargar partido", fijo abajo de Inicio, como en el prototipo: abre la hoja
- * con los caminos más cortos para cargar un resultado. "Partido con un amigo"
- * va primero (es corto y con muchas fechas abiertas quedaría abajo de todo) y
- * lleva a Amigos, donde se elige con quién. Después, cada fecha en juego donde
- * podés cargar, derecho a su pantalla, que abre la hoja de carga con un toque
- * al partido (T8).
+ * con los caminos más cortos para cargar un resultado. Primero tus amigos
+ * (van primero porque con muchas fechas abiertas quedarían abajo de todo):
+ * cada uno lleva a su perfil con la hoja del partido ya abierta
+ * (`?cargar=1`, ver `CargarConAmigo`), así que de Inicio a cargar un partido
+ * casual son dos toques (T17). Hasta seis, los que llegan; el resto, en "Ver
+ * todos". Después, cada fecha en juego donde podés cargar, derecho a su
+ * pantalla, que abre la hoja de carga con un toque al partido (T8).
  *
  * Es el único pedazo de cliente de Inicio: la hoja necesita estado.
  */
-export function CargarPartido({ fechas }: { fechas: readonly FechaParaCargar[] }) {
+export function CargarPartido({
+  fechas,
+  amigos,
+}: {
+  fechas: readonly FechaParaCargar[]
+  amigos: readonly AmigoParaCargar[]
+}) {
   const [open, setOpen] = useState(false)
   return (
     <>
@@ -44,14 +60,37 @@ export function CargarPartido({ fechas }: { fechas: readonly FechaParaCargar[] }
         </button>
       </div>
       <Sheet open={open} onClose={() => setOpen(false)} title="Cargar partido">
-        <Link
-          href="/amigos"
-          className="press mt-3 flex min-h-[56px] items-center gap-3 rounded-tile border-[1.5px] border-line py-2 pr-3 pl-4"
-        >
-          <Icono name="amigos" />
-          <span className="min-w-0 flex-1 text-[17px] font-bold">Partido con un amigo</span>
-          <Icono name="chev" className="h-6 w-6 text-muted" />
-        </Link>
+        {amigos.length === 0 ? (
+          <Link
+            href="/amigos"
+            className="press mt-3 flex min-h-[56px] items-center gap-3 rounded-tile border-[1.5px] border-line py-2 pr-3 pl-4"
+          >
+            <Icono name="amigos" />
+            <span className="min-w-0 flex-1 text-[17px] font-bold">Sumá un amigo</span>
+            <Icono name="chev" className="h-6 w-6 text-muted" />
+          </Link>
+        ) : (
+          <>
+            <h3 className="mt-3 mb-1 text-[15px] font-semibold text-muted">Con un amigo</h3>
+            <ul className="-mx-4">
+              {amigos.map((amigo) => (
+                <li key={amigo.playerId}>
+                  <Link href={`/amigos/${amigo.playerId}?cargar=1`} className={rowPress}>
+                    <Avatar name={amigo.displayName} />
+                    <span className="min-w-0 flex-1 truncate text-[17px] font-bold">{amigo.displayName}</span>
+                    <Icono name="chev" className="h-6 w-6 text-muted" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+            <Link
+              href="/amigos"
+              className="press flex min-h-[44px] items-center text-[16px] font-bold text-accent-link"
+            >
+              Ver todos
+            </Link>
+          </>
+        )}
         {fechas.length > 0 && (
           <>
             <h3 className="mt-5 mb-2 text-[15px] font-semibold text-muted">Fechas en juego</h3>

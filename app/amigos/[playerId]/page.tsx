@@ -20,8 +20,11 @@ interface PageProps {
    *
    * `?desde=amigos`: se llegó desde la lista de Amigos, y Volver lleva ahí.
    * Sin él (desde Inicio, o un link compartido) Volver va a Inicio.
+   *
+   * `?cargar=1`: el atajo de "Cargar partido" de Inicio. Llega con la hoja
+   * del partido abierta (`CargarConAmigo`, que después lo saca de la URL).
    */
-  searchParams: Promise<{ error?: string; desde?: string }>
+  searchParams: Promise<{ error?: string; desde?: string; cargar?: string }>
 }
 
 /** Cuántos resultados entran en la racha del bloque, como en el prototipo. */
@@ -62,7 +65,7 @@ function deportesDe(partidos: readonly SharedMatch[]): { kinds: string[]; texto:
  */
 export default async function AmigoPage({ params, searchParams }: PageProps) {
   const { playerId } = await params
-  const { error, desde } = await searchParams
+  const { error, desde, cargar } = await searchParams
   const supabase = await serverClient()
 
   const [nombres, partidos, amigos, { data: yo }] = await Promise.all([
@@ -139,6 +142,7 @@ export default async function AmigoPage({ params, searchParams }: PageProps) {
       <CargarConAmigo
         friendPlayerId={playerId}
         nombre={nombre}
+        abrirAlEntrar={cargar === '1'}
         friends={amigos
           .filter((amigo) => amigo.accepted)
           .map((amigo) => ({ playerId: amigo.playerId, displayName: amigo.displayName }))}

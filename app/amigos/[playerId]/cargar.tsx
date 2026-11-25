@@ -4,6 +4,7 @@ import { useActionState, useEffect, useId, useRef, useState, useTransition, type
 import { SPORTS, SPORT_IDS, isSportId, sportLabel, sportOf, type MatchFormat, type SetScore, type SportId } from '@/core'
 import type { CasualMatch } from '@/db/friends'
 import { isComplete, startLoad, toqueDelSet, type LoadState } from '@/app/torneo/[id]/[disciplina]/fechas/[n]/carga-state'
+import { mensajeDeFalla } from '@/app/torneo/[id]/[disciplina]/fechas/[n]/sin-conexion'
 import { SubmitButton } from '@/app/submit-button'
 import { button } from '@/app/ui/button'
 import { Sheet } from '@/app/ui/sheet'
@@ -163,7 +164,16 @@ export function CasualForm({
   /** El primer número de un deporte de goles: la hoja lo enfoca al abrirse. */
   primerCampo?: RefObject<HTMLInputElement | null>
 }) {
-  const [state, formAction, pending] = useActionState(action, INITIAL_STATE)
+  // Sin red la action no vuelve: tira, y sin atraparla la página pasaba a
+  // `app/error.tsx` con lo cargado perdido. Así vuelve como un error más, la
+  // hoja queda abierta y "Guardar" reintenta (`sin-conexion.ts`).
+  const [state, formAction, pending] = useActionState(async (prev: CasualFormState, data: FormData) => {
+    try {
+      return await action(prev, data)
+    } catch (falla) {
+      return { error: mensajeDeFalla(falla), saved: prev.saved }
+    }
+  }, INITIAL_STATE)
   // Un id propio por instancia: dos `CasualForm` pueden convivir en la misma
   // pantalla (el de "cargar nuevo" y uno corrigiendo un partido).
   const uid = useId()

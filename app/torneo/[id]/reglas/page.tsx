@@ -2,7 +2,10 @@ import Link from 'next/link'
 import { reglamento, sportLabel, unitOf } from '@/core'
 import { publicFormats, publicRules, seasonHeaderOrNull, type PublicFormat } from '@/db/read'
 import { serverClient } from '@/db/server'
+import { button } from '@/app/ui/button'
+import { Hero } from '@/app/ui/hero'
 import { sportsOf } from '../nav-state'
+import { volverDestination } from '../tabla-state'
 import { RulesBody, type RulesBlock } from './rules-body'
 
 interface ReglasPageProps {
@@ -25,6 +28,7 @@ function blocksOf(formats: PublicFormat[]): RulesBlock[] {
     }
     return {
       label: sportLabel(format.kind),
+      kind: format.kind,
       lines: reglamento({ kind: format.kind, ...shape, formatoDefault: format.formatoDefault, config: format.config }),
       config: format.config,
       shape,
@@ -71,14 +75,11 @@ export default async function ReglasPage({ params }: ReglasPageProps) {
     // Ya no es "no hay sesión" —eso ahora se muestra—: es link roto o
     // temporada borrada, que es exactamente lo que dice la frase.
     return (
-      <div className="flex flex-col gap-4 pt-4">
-        <h1 className="text-[26px] font-extrabold tracking-[-.03em]">Reglas</h1>
-        <p className="text-pretty text-[13.5px] leading-[1.5] font-medium text-muted">
+      <div className="pb-6">
+        <Hero back={{ href: '/', label: 'Inicio' }} title="Reglas" />
+        <p className="px-4 pt-6 text-pretty text-[17px] leading-[1.5] text-muted">
           Para ver las reglas de este torneo necesitás el link que te pasó tu grupo.
         </p>
-        <Link href="/" className="inline-flex min-h-11 items-center text-[12.5px] font-bold text-accent-link">
-          Ir al inicio
-        </Link>
       </div>
     )
   }
@@ -88,19 +89,27 @@ export default async function ReglasPage({ params }: ReglasPageProps) {
   // funciones ven la misma fila o ninguna.
   // Mismo orden (`position, created_at`) en `formats` y en `header.disciplines`.
   const slugs = header === null ? [] : sportsOf(header.disciplines).map((sport) => sport.slug)
+  // Volver: con lugar en el torneo, el mismo destino que las otras pestañas
+  // (Fechas, Stats); quien llega por el link, sin nav de torneo, va al inicio.
+  const back = header === null ? { href: '/', label: 'Inicio' } : volverDestination(id, header.disciplines.length)
   return (
     <>
       <RulesBody
         seasonId={id}
+        seasonName={rules.name}
+        back={back}
         disciplines={blocksOf(formats).map((block, index) => ({ ...block, slug: slugs[index] }))}
         adminName={rules.adminName}
         isAdmin={header?.isAdmin ?? false}
       />
-      {/* Sin nav de torneo: quien llega por el link no tiene a dónde ir. */}
+      {/* Quien llega por el link no tiene la barra del torneo: abajo de todo,
+          la puerta a la app. */}
       {header === null && (
-        <Link href="/" className="mt-4 inline-flex min-h-11 items-center text-[12.5px] font-bold text-accent-link">
-          Ir al inicio
-        </Link>
+        <div className="px-4 pb-6">
+          <Link href="/" className={button('secondary', { full: true })}>
+            Ir al inicio
+          </Link>
+        </div>
       )}
     </>
   )

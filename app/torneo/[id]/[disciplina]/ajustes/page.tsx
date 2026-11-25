@@ -2,7 +2,8 @@ import { notFound, redirect } from 'next/navigation'
 import { resolveDisciplineBySlug, sportLabel, validateConfig } from '@/core'
 import { Reglas } from '@/app/torneo/[id]/ajustes/reglas'
 import { ReglasDeporte } from '@/app/torneo/[id]/ajustes/reglas-deporte'
-import { Volver } from '@/app/torneo/[id]/volver'
+import { Aviso } from '@/app/torneo/[id]/ajustes/piezas'
+import { Hero } from '@/app/ui/hero'
 import { disciplineConfig } from '@/db/discipline'
 import { teamsOf } from '@/db/discipline-teams'
 import { disciplineRulesOf, seasonHeader, seasonSquadMembersOf } from '@/db/read'
@@ -51,6 +52,10 @@ interface PageProps {
  * contenedor usa con una sola disciplina; `Reglas` lleva `disciplineLabel: null`
  * porque acá no hace falta desambiguar — el título de la página ya nombra la
  * disciplina cuando hace falta (2+).
+ *
+ * Se ve como el contenedor: `Hero` del color del deporte con "Volver" a
+ * Ajustes, y una sección por tema (reglas, texto de la casa, quién juega,
+ * equipos).
  *
  * La guarda es `header.isAdmin`, igual que el contenedor
  * (`../../ajustes/page.tsx`) — cortesía de UI, no la guarda de verdad: las
@@ -170,20 +175,21 @@ export default async function DisciplinaAjustesPage({ params }: PageProps) {
       : validateConfig({ ...discipline.config, squadSize: squadSizeHere }, discipline.pairSize)
 
   return (
-    <div className="flex flex-col gap-4 pt-3">
-      <Volver href={`/torneo/${seasonId}/ajustes`} />
-      <header className="flex flex-col gap-[3px]">
-        <p className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">{header.name}</p>
-        <h1 className="text-[26px] font-extrabold tracking-[-.03em]">
-          Ajustes{disciplineLabel !== null ? ` · ${disciplineLabel}` : ''}
-        </h1>
-      </header>
+    <div className="pb-6">
+      <Hero
+        back={{ href: `/torneo/${seasonId}/ajustes`, label: 'Ajustes' }}
+        kicker={header.name}
+        title={disciplineLabel === null ? 'Ajustes' : `Ajustes de ${disciplineLabel}`}
+        sport={discipline.kind}
+      />
 
-      {mismatch.map((message) => (
-        <p key={message} className="rounded-field bg-live-bg px-3 py-2.5 text-[12.5px] font-bold text-live">
-          {message}
-        </p>
-      ))}
+      {mismatch.length > 0 && (
+        <div className="flex flex-col gap-2 px-4 pt-5">
+          {mismatch.map((message) => (
+            <Aviso key={message}>{message}</Aviso>
+          ))}
+        </div>
+      )}
 
       <ReglasDeporte
         seasonId={seasonId}
@@ -194,10 +200,6 @@ export default async function DisciplinaAjustesPage({ params }: PageProps) {
         allowsDraw={discipline.allowsDraw}
         rules={{ config: discipline.config, hasMasters: discipline.hasMasters, formatoDefault: discipline.formatoDefault }}
       />
-
-      <p className="text-[12px] font-[600] text-muted">
-        Cambiar el formato con fechas ya jugadas no recalcula la tabla vieja.
-      </p>
 
       <Reglas
         seasonId={seasonId}

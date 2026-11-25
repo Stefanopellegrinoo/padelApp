@@ -97,7 +97,8 @@ describe('ReglasDeporte — la tarjeta', () => {
 
     expect(page.querySelector('[data-reglas-deporte="d-padel"]')).not.toBeNull()
     expect(text).toContain('Reglas de Pádel')
-    expect(text).toContain('Parejas que rotan · se elige al crear el torneo')
+    expect(text).toContain('Parejas que rotan')
+    expect(text).toContain('La modalidad se elige al crear el torneo')
     expect(text).toContain('Cada fecha, todos contra todos.')
     expect(text).toContain('Masters al final con los 4 mejores.')
     expect(text).not.toMatch(/primera fecha/i)
@@ -113,7 +114,8 @@ describe('ReglasDeporte — la tarjeta', () => {
     const text = page.textContent ?? ''
 
     expect(text).toContain('Reglas de FIFA')
-    expect(text).toContain('Individual · se elige al crear el torneo')
+    expect(text).toContain('Individual')
+    expect(text).toContain('La modalidad se elige al crear el torneo')
     expect(text).toContain('Partidos a goles; se puede empatar.')
     expect(text).not.toContain('Masters')
   })

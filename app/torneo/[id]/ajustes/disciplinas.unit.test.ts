@@ -36,7 +36,6 @@ function html(overrides: Partial<Parameters<typeof NuevoDeporte>[0]> = {}): stri
       onPersonalizar: () => {},
       onToggle: () => {},
       onSubmit: () => {},
-      onCancel: () => {},
       ...overrides,
     }),
   )

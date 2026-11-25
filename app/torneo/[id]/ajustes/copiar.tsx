@@ -1,11 +1,13 @@
 'use client'
 
 import { useEffect, useState, useTransition } from 'react'
+import { button } from '@/app/ui/button'
 import { regenerateInviteLink } from './actions'
 
 /**
- * La fila "Link de invitación": copiar y regenerar. Es un componente cliente por
- * lo único que hace (portapapeles y un botón), y porque la URL se arma con
+ * El bloque "Link de invitación", arriba del plantel: compartir (o copiar) y
+ * regenerar. Es un componente cliente por lo único que hace (portapapeles y un
+ * botón), y porque la URL se arma con
  * `window.location.origin`. El "Regenerar" (S8) llama a la server action y
  * reemplaza el token: el link viejo deja de reclamar asiento.
  */
@@ -44,22 +46,17 @@ export function CopiarLink({ seasonId, seasonName, token }: { seasonId: string; 
   }
 
   return (
-    <div className="flex shrink-0 items-center">
-      <button
-        type="button"
-        onClick={copy}
-        className="-my-3 flex min-h-[44px] shrink-0 items-center pl-3 text-[13px] font-[750] text-muted"
-      >
-        {canShare ? 'Compartir ›' : copied ? 'Copiado ✓' : 'Copiar ›'}
-      </button>
-      <button
-        type="button"
-        onClick={regenerate}
-        disabled={pending}
-        className="-my-3 flex min-h-[44px] shrink-0 items-center pl-3 text-[13px] font-[750] text-muted"
-      >
-        {pending ? 'Regenerando…' : 'Regenerar'}
-      </button>
+    <div className="mb-3 rounded-tile bg-sport-tint p-4">
+      <p className="text-[17px] font-bold">Link de invitación</p>
+      <p className="text-[15px] text-muted">Quien entra con el link elige su asiento</p>
+      <div className="mt-3 flex gap-2">
+        <button type="button" onClick={copy} className={`${button('primary')} flex-1`}>
+          {canShare ? 'Compartir link' : copied ? 'Copiado ✓' : 'Copiar link'}
+        </button>
+        <button type="button" onClick={regenerate} disabled={pending} className={button('ghost')}>
+          {pending ? 'Regenerando…' : 'Regenerar'}
+        </button>
+      </div>
     </div>
   )
 }

@@ -351,10 +351,15 @@ function panelDeReglas(html: string): string {
 }
 
 describe('Ajustes — la página entera', () => {
-  /** PIN de no-regresión: con una sola disciplina la fila dice lo de siempre. */
-  it('con una sola disciplina la fila dice exactamente lo de siempre', async () => {
+  /**
+   * PIN de no-regresión: con una sola disciplina el formato del partido se
+   * sigue viendo en Ajustes, sin el prefijo del deporte. Desde el rediseño
+   * (odd/tasks/rediseno-app.md, T10) ya no hay fila resumen con ancla: el
+   * formato vive en las reglas del deporte, que están en la misma página.
+   */
+  it('con una sola disciplina el formato del partido se ve en sus reglas, sin prefijo', async () => {
     const html = await ajustes(SOLO_PADEL)
-    expect(html).toContain('1 set a 4 games ›')
+    expect(panelDeReglas(html)).toContain('Partidos a 1 set de 4 games.')
     expect(html).not.toContain('Pádel: 1 set a 4 games')
   })
 
@@ -397,10 +402,14 @@ describe('Ajustes — la página entera', () => {
     expect(html).toContain('href="/torneo/s1/fifa/ajustes"')
   })
 
-  /** Con una sola, el link de siempre a la tabla -- no hay una segunda pantalla de ajustes a la que apuntar. */
-  it('con una sola disciplina la lista de Disciplinas linkea a la tabla, sin cambio', async () => {
+  /**
+   * Con una sola no hay lista de deportes: no hay una segunda pantalla de
+   * ajustes a la que apuntar, y una fila que lleva a la Tabla no es un ajuste
+   * (rediseño, T10). Las reglas del único deporte están en la misma página.
+   */
+  it('con una sola disciplina no hay lista de deportes: ni fila a la tabla ni a un segundo Ajustes', async () => {
     const html = await ajustes(SOLO_PADEL)
-    expect(html).toContain('href="/torneo/s1/padel"')
+    expect(html).not.toContain('href="/torneo/s1/padel"')
     expect(html).not.toContain('href="/torneo/s1/padel/ajustes"')
   })
 })

@@ -7,13 +7,14 @@ import { signOut } from '@/app/auth/actions'
 import { SubmitButton } from '@/app/submit-button'
 
 /**
- * El círculo con la inicial, arriba a la derecha de Mis torneos, y su menú.
+ * El círculo con las iniciales, arriba a la derecha de Inicio (sobre el
+ * bloque de color), y su menú.
  *
  * Es el ÚNICO lugar de la app donde un jugador puede cerrar sesión. Antes
  * estaban los dos peores posibles: la landing `/`, que después de entrar no se
  * vuelve a ver, y Ajustes del torneo, que redirige a quien no es admin — o sea
- * que un jugador común no tenía ninguno. Mis torneos es la pantalla de entrada
- * y la única que está por encima de todos los torneos, así que la cuenta va acá.
+ * que un jugador común no tenía ninguno. Inicio es la pantalla de entrada y la
+ * única que está por encima de todos los torneos, así que la cuenta va acá.
  *
  * Cliente por el desplegable, y por nada más: la sesión la cierra `signOut`, que
  * es una Server Action.
@@ -41,6 +42,11 @@ export function Cuenta({ name }: { name: string }) {
     }
   }, [open])
 
+  // Las filas del menú: 48 de alto, texto de 16. El menú es una superficie
+  // propia encima del bloque, así que el texto y el anillo de foco vuelven a
+  // ser los de la pantalla y no el blanco del bloque.
+  const item = 'flex min-h-[48px] w-full items-center border-t border-line first:border-t-0 px-4 text-left text-[16px] font-semibold'
+
   return (
     <div ref={box} className="relative shrink-0">
       <button
@@ -49,7 +55,7 @@ export function Cuenta({ name }: { name: string }) {
         aria-expanded={open}
         aria-label={name === '' ? 'Tu cuenta' : `Tu cuenta, ${name}`}
         onClick={() => setOpen(!open)}
-        className="flex h-11 w-11 items-center justify-center rounded-full bg-chip text-[13px] font-extrabold text-text"
+        className="flex h-11 w-11 items-center justify-center rounded-full bg-on-block text-[15px] font-[750] text-block dark:bg-white/15 dark:text-on-block"
       >
         {initials(name)}
       </button>
@@ -57,39 +63,20 @@ export function Cuenta({ name }: { name: string }) {
       {open && (
         <div
           role="menu"
-          className="absolute right-0 z-50 mt-2 w-[210px] overflow-hidden rounded-[14px] border border-line bg-surface"
+          className="absolute right-0 z-50 mt-2 w-[240px] overflow-hidden rounded-tile border-[1.5px] border-line bg-surface-2 text-text [--color-focus:var(--color-text)]"
         >
-          {name !== '' && (
-            <p className="truncate border-b border-line px-3 py-2.5 text-[12.5px] font-bold text-muted">
-              {name}
-            </p>
-          )}
-          <Link
-            href="/amigos"
-            role="menuitem"
-            className="block w-full border-b border-line px-3 py-3 text-left text-[14px] font-[750] text-text"
-          >
+          {name !== '' && <p className="truncate px-4 pt-3 pb-2.5 text-[14px] font-semibold text-muted">{name}</p>}
+          <Link href="/amigos" role="menuitem" className={`${item} press-fila`}>
             Amigos
           </Link>
-          <Link
-            href="/privacidad"
-            role="menuitem"
-            className="block w-full border-b border-line px-3 py-3 text-left text-[14px] font-[750] text-text"
-          >
+          <Link href="/privacidad" role="menuitem" className={`${item} press-fila`}>
             Privacidad
           </Link>
-          <Link
-            href="/cuenta/borrar"
-            role="menuitem"
-            className="block w-full border-b border-line px-3 py-3 text-left text-[14px] font-[750] text-text"
-          >
+          <Link href="/cuenta/borrar" role="menuitem" className={`${item} press-fila`}>
             Borrar cuenta
           </Link>
           <form action={signOut}>
-            <SubmitButton
-              role="menuitem"
-              className="w-full px-3 py-3 text-left text-[14px] font-[750] text-live"
-            >
+            <SubmitButton role="menuitem" className={`${item} press-fila font-bold text-live`}>
               Cerrar sesión
             </SubmitButton>
           </form>

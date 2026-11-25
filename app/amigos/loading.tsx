@@ -1,27 +1,32 @@
+import { Skeleton } from '@/app/ui/skeleton'
+
 /**
  * El esqueleto de Amigos, y de `/amigos/[playerId]` que cuelga de esta carpeta.
  *
  * Mismo criterio que `app/torneos/loading.tsx`: la pantalla es su propio
- * `<main>`, así que el esqueleto trae el mismo contenedor o parpadea de ancho
- * al llegar el contenido.
+ * `<main>`, así que el esqueleto trae el mismo contenedor y el bloque de
+ * arriba (el `Hero`), o parpadea de ancho y de alto al llegar el contenido.
  */
-function Barra({ className }: { className: string }) {
-  return <div className={`animate-pulse rounded-field bg-chip ${className}`} />
-}
-
 export default function Loading() {
   return (
     <main
-      className="mx-auto flex min-h-dvh w-full max-w-lg flex-col gap-3 bg-bg px-5 pb-6 text-text"
+      className="mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-bg text-text"
       aria-busy="true"
       aria-label="Cargando"
     >
-      <div className="flex items-center justify-between gap-3 pt-4">
-        <Barra className="h-[30px] w-[150px]" />
-        <Barra className="h-11 w-11 shrink-0 rounded-full" />
+      <Skeleton className="h-[180px] rounded-t-none rounded-b-block" />
+      <div className="flex flex-col gap-3 px-4 pt-5">
+        <Skeleton className="h-[26px] w-[150px]" />
+        {[0, 1, 2, 3].map((index) => (
+          <div key={index} className="flex items-center gap-3 py-3">
+            <Skeleton className="h-11 w-11 shrink-0 rounded-full!" />
+            <div className="flex flex-1 flex-col gap-2">
+              <Skeleton className="h-4 w-[60%]" />
+              <Skeleton className="h-3.5 w-[40%]" />
+            </div>
+          </div>
+        ))}
       </div>
-      <Barra className="h-[54px]" />
-      <Barra className="h-[200px] rounded-card" />
     </main>
   )
 }

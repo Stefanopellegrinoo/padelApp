@@ -1,17 +1,16 @@
 import type { CasualMatch, SharedMatch, TournamentMatch } from '@/db/friends'
 import { matchdayDay } from '@/app/format'
 import { sportLabel } from '@/core'
-import { Fragment, type ReactNode } from 'react'
 import { CasualMatchRow } from './[playerId]/cargar'
 
 export interface HistorialProps {
   nombre: string
   /**
-   * El id del amigo de esta pantalla -- Task 4 lo necesita para Editar/Borrar
-   * (`CasualMatchRow`, `[playerId]/cargar.tsx`): el formulario de edición
-   * manda un `friendPlayerId` oculto, y borrar redirige a
-   * `/amigos/{friendPlayerId}`, no a la lista. No hace falta para las filas
-   * de torneo, pero `HistorialProps` es una sola interfaz para las dos clases.
+   * El id del amigo de esta pantalla -- lo necesita `CasualMatchRow`
+   * (`[playerId]/cargar.tsx`) para corregir y borrar: el formulario manda un
+   * `friendPlayerId` oculto, y borrar redirige a `/amigos/{friendPlayerId}`,
+   * no a la lista. No hace falta para las filas de torneo, pero
+   * `HistorialProps` es una sola interfaz para las dos clases.
    */
   friendPlayerId: string
   /**
@@ -23,10 +22,13 @@ export interface HistorialProps {
    * mismo historial.
    */
   partidos: readonly SharedMatch[]
+  /** `'amigos'` si al perfil se llegó desde la lista (`?desde=amigos`): borrar vuelve igual. */
+  desde?: string
+  /** Tu `players.id`: lo que cargaste vos (y nadie editó) no lleva la línea de autoría. */
+  yo?: string
 }
 
 type Resultado = NonNullable<TournamentMatch['outcome']>
-
 
 // De compañeros el resultado es el de LA PAREJA ("Ganaron"); enfrentados es
 // el TUYO contra él ("Ganaste") -- diseño §4.4, y es lo que separa un
@@ -35,14 +37,11 @@ const VERBOS_JUNTOS: Record<Resultado, string> = { won: 'Ganaron', lost: 'Perdie
 const VERBOS_CONTRA: Record<Resultado, string> = { won: 'Ganaste', lost: 'Perdiste', drew: 'Empataste' }
 
 // Reusa `matchdayDay` (`app/format.ts`), la misma fecha que ya se lee en
-// Fechas, la tarjeta de próxima fecha y Mis torneos.
-function fechaDe(partido: TournamentMatch): string {
-  return partido.playedOn !== null ? matchdayDay(partido.playedOn) : `Fecha ${partido.matchdayNumber}`
-}
-
-/** El titular corto de la tarjeta: de qué lado jugaron. */
-function ladoDe(partido: SharedMatch): string {
-  return partido.together ? 'Juntos' : 'En contra'
+// Fechas, la tarjeta de próxima fecha e Inicio. Una fecha de torneo sin
+// jugar no tiene día: dice su número.
+function fechaDe(partido: SharedMatch): string {
+  if (partido.playedOn !== null) return matchdayDay(partido.playedOn)
+  return partido.kind === 'tournament' ? `Fecha ${partido.matchdayNumber}` : ''
 }
 
 /**
@@ -60,7 +59,7 @@ export function leyendaDe(partido: SharedMatch, nombreAmigo: string): string {
   if (partido.kind === 'tournament') return verbo
   const marcadorEmpatado = partido.score !== null && partido.score.mine === partido.score.theirs
   if (marcadorEmpatado && partido.outcome === 'lost' && !partido.together) {
-    return partido.rivals.length > 1 ? `Ganaron ${partido.rivals.join(', ')}` : `Ganó ${nombreAmigo}`
+    return partido.rivals.length > 1 ? `Ganaron ${partido.rivals.join(' y ')}` : `Ganó ${nombreAmigo}`
   }
   return verbo
 }
@@ -72,28 +71,25 @@ function sinElAmigo(nombres: readonly string[], nombre: string): string[] {
 }
 
 /**
- * Con quién más jugaron, SIN el amigo de la pantalla: su nombre ya está en el
- * encabezado, repetirlo en cada tarjeta es ruido. Juntos: "vs Lucas, Nico".
- * En contra: tu pareja y la suya, sólo si existen ("con Ana · su pareja
- * Beto"); un 1v1 en contra no agrega nada y queda vacío.
+ * Con quién jugaron, cuando hay algo que decir (un 2 vs 2). Juntos, el amigo
+ * de la pantalla se saca (ya está en el encabezado): "contra Ana y Beto", o
+ * "con Lucas, contra Ana y Beto" si eran más de tu lado. Enfrentados, el
+ * plantel entero: "Vos y Cami contra Juan y Beto" se lee de un vistazo, y
+ * partirlo en "tu pareja" y "su pareja" era una oración. Un 1 vs 1 en contra
+ * son ustedes dos: no agrega nada y queda vacío.
  *
  * `CasualMatch` trae nombres, no ids, de los jugadores. Sacar UNA aparición
- * del nombre del lado donde jugó el amigo (`together` dice cuál) es correcto
- * aunque haya otro jugador homónimo en ese lado: lo que queda se lee igual.
+ * del nombre del lado donde jugó el amigo es correcto aunque haya otro
+ * jugador homónimo en ese lado: lo que queda se lee igual.
  */
 export function quienesDe(partido: CasualMatch, nombreAmigo: string): string {
+  const y = (nombres: readonly string[]) => nombres.join(' y ')
   if (partido.together) {
     const otros = sinElAmigo(partido.partners, nombreAmigo)
-    const con = otros.length > 0 ? `con ${otros.join(', ')} ` : ''
-    return `${con}vs ${partido.rivals.join(', ')}`
+    return `${otros.length > 0 ? `con ${y(otros)}, ` : ''}contra ${y(partido.rivals)}`
   }
-  const suPareja = sinElAmigo(partido.rivals, nombreAmigo)
-  return [
-    partido.partners.length > 0 ? `con ${partido.partners.join(', ')}` : null,
-    suPareja.length > 0 ? `su pareja ${suPareja.join(' y ')}` : null,
-  ]
-    .filter((parte) => parte !== null)
-    .join(' · ')
+  if (partido.partners.length === 0 && partido.rivals.length <= 1) return ''
+  return `${y(['Vos', ...partido.partners])} contra ${y(partido.rivals)}`
 }
 
 // El equipo con el que jugaste VOS (§4.4: "jugaste con Boca"); el del amigo
@@ -105,9 +101,11 @@ function equipoDe(partido: CasualMatch): string | null {
 // §3.2: dos datos y una línea, no un log de auditoría. La comparación es por
 // ID, NUNCA por nombre -- `display_name` no es único (review final de 2b,
 // Important 2): dos Fede distintos no pueden leerse como "nadie editó".
-function autoriaDe(partido: CasualMatch): string {
-  if (partido.createdById === partido.updatedById) return `Cargó ${partido.createdBy}`
-  return `Cargó ${partido.createdBy} · editó ${partido.updatedBy}`
+function autoriaDe(partido: CasualMatch, yo?: string): string | null {
+  if (partido.createdById === partido.updatedById) {
+    return partido.createdById === yo ? null : `Cargó ${partido.createdBy}`
+  }
+  return `Cargó ${partido.createdBy}, editó ${partido.updatedBy}`
 }
 
 export interface Registro {
@@ -169,164 +167,102 @@ function porMes(partidos: readonly SharedMatch[]): { mes: string; partidos: Shar
 }
 
 
-const CARD = 'relative flex flex-col gap-2 rounded-[14px] border border-line bg-surface p-[14px]'
-const META = 'flex min-w-0 items-center gap-1.5 text-[12px] font-bold text-muted'
-const CHIP = 'shrink-0 rounded-full bg-chip px-2 py-0.5 text-[12px] font-extrabold text-text'
-const TITULAR = 'text-[15px] leading-[1.3] font-extrabold tracking-[-.02em]'
-const QUIENES = 'font-semibold text-muted'
-const DETALLE = 'text-[12.5px] font-semibold text-muted'
-const AUTORIA = 'text-[12px] font-semibold text-muted'
+/** El color del resultado, como en el prototipo: ganar en azul, perder en tinta. */
+const TONO: Record<Resultado, string> = { won: 'text-up', lost: 'text-text', drew: 'text-text' }
+const META = 'col-start-1 text-[14px] text-muted'
 
-/** El color del resultado: los de la Tabla y Stats. Empate y sin resultado no toman partido. */
-const TONO: Record<Resultado, string> = { won: 'text-up', lost: 'text-down', drew: 'text-text' }
+/** El marcador como se canta: los sets uno al lado del otro ("6-4 6-3"), o el número. */
+export function marcadorDe(partido: SharedMatch): string | null {
+  const sets = partido.kind === 'casual' ? partido.sets : null
+  if (sets !== null && sets.length > 0) return sets.map((set) => `${set.mine}-${set.theirs}`).join(' ')
+  return partido.score === null ? null : `${partido.score.mine}-${partido.score.theirs}`
+}
 
 /**
- * El marcador, que es lo que uno viene a mirar: grande y a la derecha, como
- * los números de `PartidoRow` en `/rapido`. Pádel son pastillas por set
- * (verde llena si el set fue de tu lado, como las marcas de la ficha del
- * jugador); FIFA y torneo, un número. Debajo, el hecho en palabras -- el color
- * solo no alcanza para quien no lo ve.
- *
- * Los `{' '}` entre pastillas no se dibujan (son hijos de un flex) pero dejan
- * el texto legible para un lector de pantalla: "6-3 4-6 6-5", no "6-34-66-5".
+ * Una fila (la `.game` del prototipo): arriba el resultado ("Ganaste", en
+ * azul si ganaste) y a la derecha el marcador en la cara condensada; abajo,
+ * en gris, el deporte en su color, el día y el torneo; en un casual, con
+ * quiénes (2 vs 2), tu equipo y quién lo cargó. Datos, no oraciones.
  */
-function Marcador({ partido, leyenda }: { partido: SharedMatch; leyenda: string }) {
+function Fila({ partido, nombre, yo }: { partido: SharedMatch; nombre: string; yo?: string }) {
   const tono = partido.outcome === null ? 'text-muted' : TONO[partido.outcome]
-  const sets = partido.kind === 'casual' ? partido.sets : null
+  const marcador = marcadorDe(partido)
+  const fecha = fechaDe(partido)
+  const extra =
+    partido.kind === 'casual'
+      ? [quienesDe(partido, nombre), equipoDe(partido), autoriaDe(partido, yo)].filter((x): x is string => x !== null && x !== '')
+      : []
   return (
-    <div className="flex shrink-0 flex-col items-end gap-1 text-right">
-      {sets !== null ? (
-        <p className="flex flex-wrap justify-end gap-1">
-          {sets.map((set, index) => (
-            <Fragment key={index}>
-              {index > 0 ? ' ' : ''}
-              <span
-                className={`inline-flex h-[30px] min-w-[38px] items-center justify-center rounded-[8px] px-1.5 text-[15px] font-extrabold tabular-nums ${
-                  set.mine > set.theirs ? 'bg-accent text-accent-text' : 'bg-chip text-muted'
-                }`}
-              >
-                {set.mine}-{set.theirs}
-              </span>
-            </Fragment>
-          ))}
+    <div className="grid min-h-[64px] grid-cols-[1fr_auto] items-center gap-x-3 gap-y-0.5 px-4 py-3">
+      <p className={`col-start-1 text-[17px] font-bold ${tono}`}>{leyendaDe(partido, nombre)}</p>
+      <p
+        className={`font-cond col-start-2 row-span-2 row-start-1 text-right text-[30px] [word-spacing:4px] ${
+          marcador === null ? 'text-muted' : 'text-text'
+        }`}
+      >
+        {marcador ?? '–'}
+      </p>
+      <p className={META}>
+        <span className="font-semibold text-sport">{sportLabel(partido.sport)}</span>
+        {fecha !== '' && `, ${fecha}`}
+        {partido.kind === 'tournament' && `, ${partido.seasonName}`}
+      </p>
+      {extra.map((linea, index) => (
+        <p key={index} className={`${META} col-span-2`}>
+          {linea}
         </p>
-      ) : (
-        <p className={`text-[26px] leading-none font-extrabold tracking-[-.02em] tabular-nums ${tono}`}>
-          {partido.score !== null ? `${partido.score.mine}-${partido.score.theirs}` : '–'}
-        </p>
-      )}
-      <p className={`text-[12px] font-extrabold ${partido.outcome === 'drew' ? 'text-muted' : tono}`}>{leyenda}</p>
+      ))}
     </div>
   )
 }
 
-/**
- * La tarjeta de un partido, igual para torneo y casual: a la izquierda qué
- * fue (fecha, deporte, de qué lado, con quién), a la derecha cómo salió.
- * `conMenu` le deja lugar al "⋯" de `CasualMatchRow`, que va arriba a la derecha.
- */
-function Tarjeta({
-  partido,
-  nombre,
-  meta,
-  conMenu,
-  children,
-}: {
-  partido: SharedMatch
-  nombre: string
-  meta: ReactNode
-  conMenu: boolean
-  children?: ReactNode
-}) {
-  return (
-    <>
-      <p className={`${META} ${conMenu ? 'pr-9' : ''}`}>{meta}</p>
-      <div className="flex items-start gap-3">
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">{children}</div>
-        <Marcador partido={partido} leyenda={leyendaDe(partido, nombre)} />
-      </div>
-    </>
-  )
+/** "Ganaste 6-4 6-3": el nombre del botón que corrige una fila casual. */
+function resumenFila(partido: SharedMatch, nombre: string): string {
+  const marcador = marcadorDe(partido)
+  return `${leyendaDe(partido, nombre)}${marcador === null ? '' : ` ${marcador}`}, ${sportLabel(partido.sport)}, ${fechaDe(partido)}`
 }
 
 /**
  * El historial (torneo + casual) con un amigo, sin leer nada -- recibe
- * `SharedMatch[]` ya mezclado y ordenado por props (`historyWith`, Task 2).
- * Mismo reparto que `rules-body.tsx`: la página lee, esto dibuja.
+ * `SharedMatch[]` ya mezclado y ordenado por props (`historyWith`). Mismo
+ * reparto que `rules-body.tsx`: la página lee, esto dibuja. La página lo usa
+ * dos veces: los partidos enfrentados y los de compañeros.
  *
- * Una lista agrupada por mes (diseño §4.4: *"un historial para acordarte
- * bien de cada partido que jugaste"*); cada tarjeta, una fila de marcador.
- * `historial.unit.test.ts` fija el texto de cada `<p>` línea por línea.
+ * Agrupada por mes (diseño §4.4: *"un historial para acordarte bien de cada
+ * partido que jugaste"*); cada partido, una fila. Una fila casual se toca
+ * para corregirla (`CasualMatchRow`). `historial.unit.test.ts` fija el texto
+ * de cada `<p>` línea por línea.
  */
-export function Historial({ nombre, friendPlayerId, partidos }: HistorialProps) {
+export function Historial({ nombre, friendPlayerId, partidos, desde, yo }: HistorialProps) {
   if (partidos.length === 0) {
-    // Estado vacío: dice qué falta, no dibuja una tabla sin filas.
-    return (
-      <div className="flex flex-col gap-1 rounded-card border border-dashed border-line p-5 text-center">
-        <p className="text-pretty text-[15px] font-extrabold tracking-[-.02em]">
-          Todavía no jugaron ningún partido juntos.
-        </p>
-        <p className="text-pretty text-[13px] font-[550] text-muted">Cargá el primero y queda acá.</p>
-      </div>
-    )
+    return <p className="px-4 py-3 text-[15px] text-muted">Sin partidos todavía</p>
   }
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col">
       {porMes(partidos).map((grupo, index) => (
-        <section key={`${grupo.mes}-${index}`} className="flex flex-col gap-2">
-          <div className="flex items-center gap-3">
-            <h3 className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">{grupo.mes}</h3>
-            <span className="h-px flex-1 bg-line" />
-          </div>
-          {grupo.partidos.map((partido) => {
-            // `sportLabel` sirve para torneo y casual, y devuelve el id tal
-            // cual si el registro ya no conoce ese deporte.
-            const deporte = <span className={CHIP}>{sportLabel(partido.sport)}</span>
-            if (partido.kind === 'tournament') {
-              return (
-                <div key={partido.matchId} className={CARD}>
-                  <Tarjeta
-                    partido={partido}
-                    nombre={nombre}
-                    conMenu={false}
-                    meta={
-                      <>
-                        {fechaDe(partido)} {deporte}
-                        <span className="truncate"> torneo {partido.seasonName}</span>
-                      </>
-                    }
-                  >
-                    <p className={TITULAR}>{ladoDe(partido)}</p>
-                  </Tarjeta>
-                </div>
-              )
-            }
-
-            const equipo = equipoDe(partido)
-            const quienes = quienesDe(partido, nombre)
-            return (
-              <CasualMatchRow key={partido.matchId} friendPlayerId={friendPlayerId} partido={partido}>
-                <Tarjeta
+        <section key={`${grupo.mes}-${index}`}>
+          <h3 className="px-4 pt-3 pb-1 text-[15px] font-semibold text-muted">{grupo.mes}</h3>
+          <ul>
+            {grupo.partidos.map((partido) =>
+              partido.kind === 'tournament' ? (
+                <li key={partido.matchId} data-deporte={partido.sport} className="border-t border-line first:border-t-0">
+                  <Fila partido={partido} nombre={nombre} />
+                </li>
+              ) : (
+                <CasualMatchRow
+                  key={partido.matchId}
+                  friendPlayerId={friendPlayerId}
                   partido={partido}
-                  nombre={nombre}
-                  conMenu
-                  meta={
-                    <>
-                      {matchdayDay(partido.playedOn)} {deporte}
-                    </>
-                  }
+                  resumen={resumenFila(partido, nombre)}
+                  desde={desde}
+                  dataDeporte={partido.sport}
                 >
-                  <p className={TITULAR}>
-                    {ladoDe(partido)}
-                    {quienes !== '' && <span className={QUIENES}> {quienes}</span>}
-                  </p>
-                  {equipo !== null && <p className={DETALLE}>{equipo}</p>}
-                  <p className={AUTORIA}>{autoriaDe(partido)}</p>
-                </Tarjeta>
-              </CasualMatchRow>
-            )
-          })}
+                  <Fila partido={partido} nombre={nombre} yo={yo} />
+                </CasualMatchRow>
+              ),
+            )}
+          </ul>
         </section>
       ))}
     </div>

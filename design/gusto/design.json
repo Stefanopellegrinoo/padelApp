@@ -1,0 +1,14 @@
+{
+  "title": "Test de gusto",
+  "brief": "El mismo contenido en 14 estilos bien distintos, para calibrar el gusto antes de seguir diseñando.",
+  "feature": "odd/tasks/rediseno-app.md",
+  "artboards": [
+    {
+      "file": "01-test.html",
+      "title": "14 estilos",
+      "tradeoff": "No es un diseño: sirve para elegir qué estilos te gustan y cuáles no",
+      "width": 800,
+      "height": 3540
+    }
+  ]
+}

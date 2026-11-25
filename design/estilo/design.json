@@ -1,0 +1,13 @@
+{
+  "title": "Estilo · tres direcciones",
+  "brief": "La misma pantalla de entrada (estructura B) con tres estilos distintos, para elegir personalidad, color, tipografía y densidad aparte de la estructura. Se apartan a propósito del sistema actual (design/system.md).",
+  "feature": "odd/tasks/rediseno-app.md",
+  "artboards": [
+    { "file": "01-cancha.html", "title": "1 · Cancha", "tradeoff": "Evoluciona lo actual (mismo verde, más aire, números grandes); seguro y prolijo, poca personalidad nueva", "width": 390, "height": 980 },
+    { "file": "02-noche-de-club.html", "title": "2 · Noche de club", "tradeoff": "Oscuro con color pelota y números de marcador; identidad deportiva fuerte, menos cálido y peor bajo el sol", "width": 390, "height": 980 },
+    { "file": "03-grupo-de-amigos.html", "title": "3 · Grupo de amigos", "tradeoff": "Cálido, cada amigo con su color y tono de charla; muy social, menos deportivo y puede verse informal", "width": 390, "height": 1040 },
+    { "file": "04-limpio.html", "title": "4 · Limpio", "tradeoff": "Blanco, letra grande y líneas finas, el verde solo de detalle; calmo y moderno, puede sentirse frío y con poca cara de práctica deportiva", "width": 390, "height": 1120 },
+    { "file": "05-energico.html", "title": "5 · Enérgico", "tradeoff": "Azul cancha, números pesados y líneas de cancha en el hero; el más deportivo y el que mejor se lee al sol, cambia el color de siempre y es más ruidoso", "width": 390, "height": 1120 },
+    { "file": "06-pulido.html", "title": "6 · Pulido", "tradeoff": "Como una app nativa de iPhone: grupos blancos, filas con flecha, sombras suaves; cómodo y familiar, pero genérico y con poca identidad propia", "width": 390, "height": 1010 }
+  ]
+}

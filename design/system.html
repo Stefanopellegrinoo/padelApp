@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sistema actual — Padel Liga</title>
+<style>
+  :root {
+    --bg: #ffffff; --surface: #f4f6f3; --chip: #eaefea; --line: #e4e9e5;
+    --text: #10231a; --muted: #5f6e66; --accent: #0e5c3f; --accent-text: #ffffff;
+    --accent-link: #0e5c3f; --live: #c13d27; --live-bg: #fbeae6; --up: #27794e;
+    --ok-bg: #e6f2ea; --down: #b24b31; --warn-bg: #f8ece4;
+    --r-field: 12px; --r-card: 16px;
+    font-family: Archivo, ui-sans-serif, system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: #fafbfa; color: var(--text); width: 1440px; padding: 48px 56px 64px; }
+  h1 { font-size: 34px; font-weight: 800; letter-spacing: -.03em; }
+  .lead { color: var(--muted); font-size: 15px; font-weight: 550; margin-top: 6px; }
+  section { margin-top: 44px; }
+  h2 { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .13em; color: var(--muted); margin-bottom: 16px; }
+  .swatches { display: grid; grid-template-columns: repeat(8, 1fr); gap: 14px; }
+  .sw { border: 1px solid var(--line); border-radius: var(--r-card); overflow: hidden; background: #fff; }
+  .sw .pair { display: flex; height: 64px; }
+  .sw .pair span { flex: 1; }
+  .sw p { font-size: 12px; font-weight: 700; padding: 8px 10px 0; }
+  .sw small { display: block; font-size: 11px; color: var(--muted); padding: 2px 10px 10px; font-weight: 550; }
+  .type { display: grid; grid-template-columns: 260px 1fr; gap: 14px 24px; align-items: baseline; }
+  .type dt { font-size: 12px; color: var(--muted); font-weight: 650; }
+  .row { display: flex; gap: 28px; align-items: flex-start; flex-wrap: wrap; }
+  .space { display: flex; gap: 18px; align-items: flex-end; }
+  .space div { background: var(--ok-bg); border: 1px solid var(--line); }
+  .space p { font-size: 11px; color: var(--muted); font-weight: 650; margin-top: 6px; text-align: center; }
+  .radius div { width: 110px; height: 72px; background: var(--surface); border: 1px solid var(--line); display: grid; place-items: center; font-size: 12px; font-weight: 700; color: var(--muted); }
+  .phone { width: 360px; background: var(--bg); border: 1px solid var(--line); border-radius: 22px; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+  .btn { display: block; width: 100%; border-radius: var(--r-field); padding: 16px; text-align: center; font-size: 15px; font-weight: 800; font-family: inherit; }
+  .btn.primary { background: var(--accent); color: var(--accent-text); border: 0; }
+  .btn.secondary { background: transparent; color: var(--text); border: 1px solid var(--line); }
+  .btn small { display: block; padding-top: 3px; font-size: 12px; font-weight: 600; color: var(--muted); }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); padding: 16px; }
+  .card .top { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
+  .card .name { font-size: 18px; font-weight: 800; letter-spacing: -.02em; }
+  .pill { border-radius: 999px; background: var(--ok-bg); color: var(--up); padding: 6px 10px; font-size: 12px; font-weight: 800; white-space: nowrap; }
+  .facts { display: flex; gap: 16px; align-items: center; margin-top: 12px; }
+  .micro { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .13em; color: var(--muted); }
+  .val { font-size: 15px; font-weight: 800; }
+  .vline { width: 1px; height: 26px; background: var(--line); }
+  .list { border: 1px solid var(--line); border-radius: var(--r-card); background: var(--surface); }
+  .li { display: flex; gap: 12px; align-items: center; padding: 12px 14px; }
+  .li + .li { border-top: 1px solid var(--line); }
+  .av { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 800; background: var(--ok-bg); color: var(--up); flex-shrink: 0; }
+  .li b { display: block; font-size: 15px; }
+  .li span.sub { display: block; font-size: 12px; font-weight: 600; color: var(--muted); }
+  .chev { margin-left: auto; color: var(--muted); font-size: 20px; font-weight: 700; }
+  nav.tabs { display: flex; border-top: 1px solid var(--line); padding: 8px 22px 14px; background: var(--bg); width: 360px; border-radius: 0 0 22px 22px; border: 1px solid var(--line); }
+  nav.tabs a { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; min-height: 44px; justify-content: center; color: var(--muted); text-decoration: none; font-size: 12px; font-weight: 800; }
+  nav.tabs a.on { color: var(--accent-link); }
+  nav.tabs svg { width: 22px; height: 22px; }
+  a:focus-visible, button:focus-visible { outline: 3px solid var(--accent-link); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Sistema actual de Padel Liga</h1>
+  <p class="lead">Lo que la app usa hoy, sacado de app/globals.css, app/layout.tsx y los componentes. Plano, sin sombras, bordes de 1px.</p>
+</header>
+
+<main>
+<section aria-labelledby="c">
+  <h2 id="c">Colores · claro / oscuro</h2>
+  <div class="swatches">
+    <div class="sw"><div class="pair"><span style="background:#ffffff"></span><span style="background:#0d1512"></span></div><p>bg</p><small>#ffffff · #0d1512</small></div>
+    <div class="sw"><div class="pair"><span style="background:#f4f6f3"></span><span style="background:#16201c"></span></div><p>surface</p><small>#f4f6f3 · #16201c</small></div>
+    <div class="sw"><div class="pair"><span style="background:#eaefea"></span><span style="background:#1b2823"></span></div><p>chip</p><small>#eaefea · #1b2823</small></div>
+    <div class="sw"><div class="pair"><span style="background:#e4e9e5"></span><span style="background:#21302a"></span></div><p>line</p><small>#e4e9e5 · #21302a</small></div>
+    <div class="sw"><div class="pair"><span style="background:#10231a"></span><span style="background:#eaf2ee"></span></div><p>text</p><small>#10231a · #eaf2ee</small></div>
+    <div class="sw"><div class="pair"><span style="background:#5f6e66"></span><span style="background:#8ea298"></span></div><p>muted</p><small>#5f6e66 · #8ea298</small></div>
+    <div class="sw"><div class="pair"><span style="background:#0e5c3f"></span><span style="background:#0f6b48"></span></div><p>accent</p><small>#0e5c3f · #0f6b48</small></div>
+    <div class="sw"><div class="pair"><span style="background:#ffffff"></span><span style="background:#dbf5e8"></span></div><p>accent-text</p><small>#ffffff · #dbf5e8</small></div>
+    <div class="sw"><div class="pair"><span style="background:#0e5c3f"></span><span style="background:#34c08a"></span></div><p>accent-link</p><small>#0e5c3f · #34c08a</small></div>
+    <div class="sw"><div class="pair"><span style="background:#c13d27"></span><span style="background:#ff8368"></span></div><p>live</p><small>#c13d27 · #ff8368</small></div>
+    <div class="sw"><div class="pair"><span style="background:#fbeae6"></span><span style="background:#2a1a15"></span></div><p>live-bg</p><small>#fbeae6 · #2a1a15</small></div>
+    <div class="sw"><div class="pair"><span style="background:#27794e"></span><span style="background:#34c08a"></span></div><p>up</p><small>#27794e · #34c08a</small></div>
+    <div class="sw"><div class="pair"><span style="background:#e6f2ea"></span><span style="background:#12291f"></span></div><p>ok-bg</p><small>#e6f2ea · #12291f</small></div>
+    <div class="sw"><div class="pair"><span style="background:#b24b31"></span><span style="background:#ff9a6b"></span></div><p>down</p><small>#b24b31 · #ff9a6b</small></div>
+    <div class="sw"><div class="pair"><span style="background:#f8ece4"></span><span style="background:#2a2016"></span></div><p>warn-bg</p><small>#f8ece4 · #2a2016</small></div>
+    <div class="sw"><div class="pair"><span style="background:rgba(10,25,18,.45)"></span><span style="background:rgba(0,0,0,.6)"></span></div><p>scrim</p><small>overlay de hojas</small></div>
+  </div>
+</section>
+
+<section aria-labelledby="t">
+  <h2 id="t">Tipografía · Archivo 400–800</h2>
+  <dl class="type">
+    <dt>Título de pantalla · 26 / 800 / -0.03em</dt><dd style="font-size:26px;font-weight:800;letter-spacing:-.03em">Mis torneos</dd>
+    <dt>Título vacío · 22 / 800 / -0.02em</dt><dd style="font-size:22px;font-weight:800;letter-spacing:-.02em">Todavía no estás en ningún torneo</dd>
+    <dt>Título de tarjeta · 18 / 800 / -0.02em</dt><dd style="font-size:18px;font-weight:800;letter-spacing:-.02em">Los Pibes del Martes</dd>
+    <dt>Botón · 15 / 800</dt><dd style="font-size:15px;font-weight:800">Crear torneo</dd>
+    <dt>Secundario · 13.5 / 550 / muted</dt><dd style="font-size:13.5px;font-weight:550;color:var(--muted)">Torneos y partidos casuales con cada uno.</dd>
+    <dt>Micro etiqueta · 12 / 800 / 0.13em</dt><dd class="micro">Próxima fecha</dd>
+  </dl>
+</section>
+
+<section aria-labelledby="s">
+  <h2 id="s">Espaciado y radios</h2>
+  <div class="row">
+    <div class="space">
+      <div><div style="width:9px;height:9px"></div><p>9</p></div>
+      <div><div style="width:12px;height:12px"></div><p>12</p></div>
+      <div><div style="width:16px;height:16px"></div><p>16</p></div>
+      <div><div style="width:20px;height:20px"></div><p>20</p></div>
+      <div><div style="width:24px;height:24px"></div><p>24</p></div>
+    </div>
+    <div class="row radius">
+      <div style="border-radius:12px">field · 12</div>
+      <div style="border-radius:14px">menú · 14</div>
+      <div style="border-radius:16px">card · 16</div>
+      <div style="border-radius:999px">pill</div>
+    </div>
+  </div>
+</section>
+
+<section aria-labelledby="k">
+  <h2 id="k">Componentes</h2>
+  <div class="row">
+    <div class="phone">
+      <a class="btn primary" href="#k">Crear torneo</a>
+      <a class="btn secondary" href="#k">Armar un torneo rápido<small>Una tarde, sin tabla ni fechas.</small></a>
+      <div class="card">
+        <div class="top"><p class="name">Los Pibes del Martes</p><span class="pill">En juego</span></div>
+        <div class="facts">
+          <div><p class="micro">Mi posición</p><p class="val">3°</p></div>
+          <span class="vline"></span>
+          <div><p class="micro">Próxima fecha</p><p class="val">Mar 18/11</p></div>
+        </div>
+      </div>
+    </div>
+    <div class="phone">
+      <p class="micro">Tus amigos</p>
+      <div class="list">
+        <a class="li" href="#k" style="color:inherit;text-decoration:none"><span class="av">NA</span><span><b>Nico Arias</b><span class="sub">Ver partidos y cargar uno</span></span><span class="chev" aria-hidden="true">›</span></a>
+        <a class="li" href="#k" style="color:inherit;text-decoration:none"><span class="av">FG</span><span><b>Facu Gómez</b><span class="sub">Ver partidos y cargar uno</span></span><span class="chev" aria-hidden="true">›</span></a>
+      </div>
+      <p style="font-size:13px;font-weight:550;color:var(--muted)">Estados: <span style="color:var(--up);font-weight:800">ganó</span> · <span style="color:var(--down);font-weight:800">perdió</span> · <span style="background:var(--live-bg);color:var(--live);font-weight:800;padding:3px 8px;border-radius:999px">En vivo</span></p>
+    </div>
+    <div>
+      <nav class="tabs" aria-label="Navegación del torneo">
+        <a class="on" href="#k"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>Tabla</a>
+        <a href="#k"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Fechas</a>
+        <a href="#k"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18M18 17V9M13 17V5M8 17v-3"/></svg>Stats</a>
+        <a href="#k"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>Reglas</a>
+      </nav>
+      <p style="font-size:12px;color:var(--muted);font-weight:600;margin-top:8px">Barra inferior: solo adentro de un torneo.</p>
+    </div>
+  </div>
+</section>
+</main>
+</body>
+</html>

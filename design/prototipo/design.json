@@ -1,0 +1,70 @@
+{
+  "title": "Prototipo que se toca",
+  "brief": "Ronda 5: un prototipo navegable en un solo archivo (index.html), para abrir en el celular y tocar. Pádel en azul cancha, FIFA en verde, amarillo pelota solo para lo tuyo, y Archivo con ancho variable: angosta y pesada para los números, normal para el texto. Cada artboard abre el prototipo en un estado.",
+  "feature": "odd/tasks/rediseno-app.md",
+  "artboards": [
+    {
+      "file": "01-inicio.html",
+      "title": "Inicio",
+      "tradeoff": "La próxima fecha es un bloque azul con el número grande y entra con tus torneos y el primer amigo sin scroll; Crear torneo y Torneo rápido quedan como botones de texto, sin caja.",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "file": "02-tabla.html",
+      "title": "Torneo: tabla",
+      "tradeoff": "Los 12 entran con tu fila en amarillo pelota y la línea del Masters; Fechas, Stats y Reglas están en la barra de abajo. A cambio, el encabezado azul ocupa un tercio de la pantalla.",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "file": "03-fecha.html",
+      "title": "La fecha 8",
+      "tradeoff": "Lo cargado se ve como marcador y lo que falta se ve como bloque celeste con Cargar; abajo, Faltan 4 partidos y Cerrar la fecha deshabilitado. La ronda 3 queda bajo el scroll.",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "file": "04-hoja.html",
+      "title": "Hoja de carga",
+      "tradeoff": "Dos toques, sin teclado: la pareja que ganó y los games del perdedor, y se guarda solo, con Deshacer. Se arrastra hacia abajo o se toca Cancelar para cerrar.",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "file": "05-amigo.html",
+      "title": "Amigo: Nico",
+      "tradeoff": "El 7 a 5 ocupa media pantalla como marcador, con los últimos 12 resultados en cuadraditos; el detalle de cada partido queda en una lista sobria abajo.",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "file": "06-inicio-oscuro.html",
+      "title": "Inicio, oscuro",
+      "tradeoff": "Fondo azul noche con superficies escalonadas; el bloque de la fecha sigue siendo azul cancha, un poco más profundo, y Cargar partido pasa a azul porque un botón casi blanco encandilaba. Es el mismo diseño, no otro.",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "file": "07-tabla-oscuro.html",
+      "title": "Tabla, oscuro",
+      "tradeoff": "Tu fila deja de ser una franja amarilla, que de noche gritaba, y pasa a fila elevada con borde y puesto en amarillo; se ve menos de lejos que en claro.",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "file": "08-hoja-oscuro.html",
+      "title": "Hoja de carga, oscuro",
+      "tradeoff": "Fondo al 72 % de oscuridad y hoja un escalón más clara, con borde superior; la pareja no elegida lleva un borde propio para no fundirse con la hoja.",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "file": "09-amigo-oscuro.html",
+      "title": "Amigo: Nico, oscuro",
+      "tradeoff": "El marcador azul con el 7 en amarillo queda igual que en claro; el resto pasa a texto claro sobre azul noche. Es la pantalla que menos cambia.",
+      "width": 390,
+      "height": 844
+    }
+  ]
+}

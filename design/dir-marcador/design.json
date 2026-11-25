@@ -1,0 +1,10 @@
+{
+  "title": "Dirección Marcador",
+  "brief": "Cada partido se lee como el marcador de una transmisión: dos franjas, códigos de tres letras y los games en celdas oscuras, sobre una app clara y callada.",
+  "feature": "odd/tasks/rediseno-app.md",
+  "artboards": [
+    { "file": "01-inicio.html", "title": "Inicio", "tradeoff": "Los resultados con amigos se leen de un vistazo como marcadores; los códigos de tres letras piden un segundo para asociarlos a la persona.", "width": 390, "height": 1153 },
+    { "file": "02-tabla.html", "title": "Tabla", "tradeoff": "Se lee como un gráfico de posiciones de TV y el Masters se ve dos veces, en las celdas llenas y en la línea de corte; con doce renglones, la tabla es larga.", "width": 390, "height": 907 },
+    { "file": "03-fecha.html", "title": "La fecha", "tradeoff": "La carga se hace con el pulgar en celdas grandes de marcador; los cuatro colores de pareja suman un código más para aprender.", "width": 390, "height": 1091 }
+  ]
+}

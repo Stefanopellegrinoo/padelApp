@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A · Mis torneos + Amigos abajo</title>
+<style>
+  :root {
+    --bg: #ffffff; --surface: #f4f6f3; --chip: #eaefea; --line: #e4e9e5;
+    --text: #10231a; --muted: #5f6e66; --accent: #0e5c3f; --accent-text: #ffffff;
+    --accent-link: #0e5c3f; --up: #27794e; --ok-bg: #e6f2ea; --down: #b24b31;
+    --r-field: 12px; --r-card: 16px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1512; --surface: #16201c; --chip: #1b2823; --line: #21302a;
+      --text: #eaf2ee; --muted: #8ea298; --accent: #0f6b48; --accent-text: #dbf5e8;
+      --accent-link: #34c08a; --up: #34c08a; --ok-bg: #12291f; --down: #ff9a6b;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: Archivo, ui-sans-serif, system-ui, sans-serif; width: 390px; }
+  a { color: inherit; text-decoration: none; }
+  a:focus-visible, button:focus-visible { outline: 3px solid var(--accent-link); outline-offset: 2px; border-radius: 6px; }
+  main { display: flex; flex-direction: column; gap: 12px; padding: 0 20px 28px; }
+  header { display: flex; align-items: center; justify-content: space-between; padding-top: 16px; }
+  h1 { font-size: 26px; font-weight: 800; letter-spacing: -.03em; }
+  .me { width: 40px; height: 40px; border-radius: 50%; background: var(--chip); color: var(--muted); display: grid; place-items: center; font-size: 12px; font-weight: 800; border: 0; font-family: inherit; }
+  .card { display: block; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); padding: 16px; }
+  .top { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
+  .name { font-size: 18px; font-weight: 800; letter-spacing: -.02em; }
+  .sport { font-size: 12.5px; font-weight: 650; color: var(--muted); margin-top: 2px; }
+  .pill { border-radius: 999px; background: var(--ok-bg); color: var(--up); padding: 6px 10px; font-size: 12px; font-weight: 800; white-space: nowrap; }
+  .facts { display: flex; gap: 16px; align-items: center; margin-top: 12px; }
+  .micro { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .13em; color: var(--muted); }
+  .val { font-size: 15px; font-weight: 800; }
+  .vline { width: 1px; height: 26px; background: var(--line); }
+  .btn { display: block; border-radius: var(--r-field); padding: 16px; text-align: center; font-size: 15px; font-weight: 800; }
+  .primary { background: var(--accent); color: var(--accent-text); }
+  .secondary { border: 1px solid var(--line); }
+  .secondary small { display: block; padding-top: 3px; font-size: 12px; font-weight: 600; color: var(--muted); }
+  h2 { margin-top: 14px; display: flex; justify-content: space-between; align-items: baseline; }
+  h2 a { font-size: 13px; font-weight: 800; letter-spacing: 0; text-transform: none; color: var(--accent-link); }
+  .list { border: 1px solid var(--line); border-radius: var(--r-card); background: var(--surface); }
+  .li { display: flex; gap: 12px; align-items: center; padding: 12px 14px; min-height: 64px; }
+  .li + .li { border-top: 1px solid var(--line); }
+  .av { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 800; background: var(--ok-bg); color: var(--up); flex-shrink: 0; }
+  .li b { display: block; font-size: 15px; font-weight: 700; }
+  .sub { display: block; font-size: 12.5px; font-weight: 600; color: var(--muted); }
+  .w { color: var(--up); font-weight: 800; }
+  .l { color: var(--down); font-weight: 800; }
+  .chev { margin-left: auto; color: var(--muted); font-size: 20px; font-weight: 700; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Mis torneos</h1>
+    <button class="me" aria-label="Tu cuenta">MP</button>
+  </header>
+
+  <a class="card" href="#">
+    <div class="top">
+      <div><p class="name">Los Pibes del Martes</p><p class="sport">Pádel · Fecha 7 de 12</p></div>
+      <span class="pill">En juego</span>
+    </div>
+    <div class="facts">
+      <div><p class="micro">Mi posición</p><p class="val">3° de 12</p></div>
+      <span class="vline"></span>
+      <div><p class="micro">Próxima fecha</p><p class="val">Mar 18/11</p></div>
+    </div>
+  </a>
+
+  <a class="card" href="#">
+    <div class="top">
+      <div><p class="name">FIFA de los Viernes</p><p class="sport">FIFA · Fecha 4 de 8</p></div>
+      <span class="pill">En juego</span>
+    </div>
+    <div class="facts">
+      <div><p class="micro">Mi posición</p><p class="val">1° de 6</p></div>
+      <span class="vline"></span>
+      <div><p class="micro">Próxima fecha</p><p class="val">Vie 21/11</p></div>
+    </div>
+  </a>
+
+  <a class="btn primary" href="#">Crear torneo</a>
+  <a class="btn secondary" href="#">Armar un torneo rápido<small>Una tarde, sin tabla ni fechas.</small></a>
+
+  <h2 class="micro">Amigos <a href="#">Ver todos</a></h2>
+  <div class="list">
+    <a class="li" href="#"><span class="av">NA</span><span><b>Nico Arias</b><span class="sub"><span class="w">Ganaste 6-4 6-3</span> · hace 2 días</span></span><span class="chev" aria-hidden="true">›</span></a>
+    <a class="li" href="#"><span class="av">FG</span><span><b>Facu Gómez</b><span class="sub"><span class="l">Perdiste 1-3</span> · el viernes</span></span><span class="chev" aria-hidden="true">›</span></a>
+    <a class="li" href="#"><span class="av">JL</span><span><b>Juampi Ledesma</b><span class="sub"><span class="w">Ganaste 6-2 7-5</span> · hace 1 semana</span></span><span class="chev" aria-hidden="true">›</span></a>
+  </div>
+</main>
+</body>
+</html>

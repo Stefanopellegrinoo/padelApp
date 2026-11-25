@@ -10,7 +10,6 @@ import {
   unitOf,
   type Award,
   type MatchResult,
-  type Side,
 } from '@/core'
 import {
   entriesOf,
@@ -22,6 +21,9 @@ import {
 } from '@/db/read'
 import { serverClient } from '@/db/server'
 import { matchdayDay } from '@/app/format'
+import { Hero } from '@/app/ui/hero'
+import { button } from '@/app/ui/button'
+import { volverDestination } from '@/app/torneo/[id]/tabla-state'
 import { sportsOf } from '@/app/torneo/[id]/nav-state'
 import { AbrirFecha } from './abrir'
 import { championRecord, sideNames } from './campeon-de-la-fecha'
@@ -38,17 +40,6 @@ interface PageProps {
 interface ChampionInfo {
   names: string
   record: string
-}
-
-/**
- * Clave estable de un lado, de uno o de dos: el orden de los miembros no
- * importa. N30: esta pantalla usaba
- * `members(side).join('-')` (sin ordenar, otro separador) mientras
- * `fechas/[n]/page.tsx` usaba la versión ordenada — la misma pregunta
- * contestada de dos formas a 200 líneas de distancia.
- */
-function sideKey(side: Side): string {
-  return [...members(side)].sort().join('~')
 }
 
 export default async function FechasPage({ params }: PageProps) {
@@ -156,163 +147,149 @@ export default async function FechasPage({ params }: PageProps) {
       ? sportsOf(header.disciplines).find((sport) => sport.slug === disciplina)?.label
       : undefined
 
+  // Lo cargado de la fecha en juego: el dato que importa desde la lista.
+  const openLoaded = openDetail === null ? null : openDetail.matches.filter((match) => match.sets.length > 0).length
+  const volver = volverDestination(seasonId, header.disciplines.length)
+  const firstUnplayed = Array.from({ length: discipline.config.regularMatchdays }, (_, index) => index + 1).find(
+    (number) => !regularMatchdays.some((candidate) => candidate.number === number),
+  )
+  const numero = 'font-cond w-[30px] shrink-0 text-[24px]'
+
   return (
-    <div className="flex flex-col gap-3 pt-3">
-      {header.isAdmin && !hasLiveMatchday && (
-        <AbrirFecha
-          seasonId={seasonId}
-          disciplineId={discipline.id}
-          number={nextNumber}
-          sportName={sportName}
-        />
-      )}
+    <div data-deporte={discipline.kind} className="flex flex-col">
+      <Hero
+        back={volver}
+        kicker={sportName === undefined ? header.name : `${header.name} · ${sportName}`}
+        title="Fechas"
+        subtitle={`${discipline.config.regularMatchdays} ${discipline.config.regularMatchdays === 1 ? 'fecha' : 'fechas'} · ${closedMatchdays.length} ${closedMatchdays.length === 1 ? 'jugada' : 'jugadas'}`}
+        sport={discipline.kind}
+      />
 
-      <header className="flex flex-col gap-[3px]">
-        <p className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">
-          {discipline.config.regularMatchdays} fechas · {closedMatchdays.length} jugadas
-        </p>
-        <h1 className="text-[26px] font-extrabold tracking-[-.03em]">Fechas</h1>
-      </header>
+      <div className="flex flex-col gap-6 px-4 pt-5 pb-8">
+        {header.isAdmin && !hasLiveMatchday && (
+          <AbrirFecha seasonId={seasonId} disciplineId={discipline.id} number={nextNumber} sportName={sportName} />
+        )}
 
-      <div className="flex flex-col gap-3">
         {/* Las fechas se crean de a una (docs/estado.md): no se insertan las
             `regularMatchdays` filas al crear la temporada. Esta lista dibuja
             las que faltan a partir de esa config — un número sin fila real en
-            `matchdays` sale como "Por jugarse", dimmed, sin link a una fecha
-            que todavía no existe. Se apaga con borde punteado y NO con `opacity`:
-            ésta daba 2.18:1 de contraste en claro y 3.14 en oscuro. */}
-        {Array.from({ length: discipline.config.regularMatchdays }, (_, index) => index + 1).map((number) => {
-          const matchday = regularMatchdays.find((candidate) => candidate.number === number) ?? null
+            `matchdays` sale apagado, sin link a una fecha que todavía no
+            existe. Se apaga con `text-muted` (AA) y NO con `opacity`, que daba
+            2.18:1 en claro y 3.14 en oscuro. */}
+        <ol className="flex flex-col">
+          {Array.from({ length: discipline.config.regularMatchdays }, (_, index) => index + 1).map((number) => {
+            const matchday = regularMatchdays.find((candidate) => candidate.number === number) ?? null
 
-          if (matchday === null) {
+            if (matchday === null) {
+              return (
+                <li key={number}>
+                  {number === firstUnplayed && (
+                    <h2 className="font-titulo px-1 pt-3.5 pb-1 text-[20px]">Por jugar</h2>
+                  )}
+                  <div className="flex min-h-[56px] items-center gap-3 border-t border-line px-1 text-muted">
+                    <span className={numero}>{number}</span>
+                    <span className="flex-1 font-semibold">{`Fecha ${number}`}</span>
+                  </div>
+                </li>
+              )
+            }
+
+            const played = matchday.status === 'CLOSED'
+            const champion = played ? championOf(matchday) : null
+            // "1 set a 6 games" cuando se juega distinto que el deporte (§7).
+            const effective = effectiveMatchFormat(tournamentFormat, matchday.matchFormat)
+            const notice = formatoNotice(matchday.number, effective, tournamentFormat, unitOf(sportKind, effective))
+            const day = matchday.playedOn === null ? `Fecha ${matchday.number}` : matchdayDay(matchday.playedOn)
+            const href = `/torneo/${seasonId}/${disciplina}/fechas/${matchday.number}`
+
+            // La fecha viva —armándose o en juego— es la única sobre la que hay
+            // algo que hacer: va en el bloque del deporte, como en el prototipo.
+            if (!played) {
+              const estado =
+                matchday.status === 'OPEN'
+                  ? openLoaded !== null && openDetail !== null && openDetail.matches.length > 0
+                    ? `En juego · ${openLoaded} de ${openDetail.matches.length} cargados`
+                    : 'En juego'
+                  : 'Armando'
+              return (
+                <li key={matchday.id} className="py-2">
+                  <Link
+                    href={href}
+                    className="press flex min-h-[72px] items-center gap-3 rounded-tile bg-block px-4 py-3 text-on-block [--color-focus:var(--color-on-block)]"
+                  >
+                    <span className={numero}>{matchday.number}</span>
+                    <span className="min-w-0 flex-1">
+                      <b className="block text-[17px] font-bold first-letter:uppercase">{day}</b>
+                      <span className="block text-[15px] text-on-block-soft">{estado}</span>
+                      {notice !== null && <span className="block text-[15px] text-on-block-soft">{notice}</span>}
+                    </span>
+                    <svg
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                      className="h-6 w-6 shrink-0 fill-none stroke-current stroke-2 [stroke-linecap:round] [stroke-linejoin:round]"
+                    >
+                      <path d="M9 5l7 7-7 7" />
+                    </svg>
+                  </Link>
+                </li>
+              )
+            }
+
             return (
-              <div
-                key={number}
-                className="block rounded-[14px] border border-dashed border-line bg-surface p-[14px]"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">
-                    Fecha {number}
-                  </p>
-                  <span className="shrink-0 rounded-full px-[10px] py-[6px] text-[12px] font-extrabold text-muted">
-                    Por jugarse
+              <li key={matchday.id} className="border-t border-line first:border-t-0">
+                <Link href={href} className="press-fila flex min-h-[56px] items-center gap-3 px-1 py-2.5">
+                  <span className={numero}>{matchday.number}</span>
+                  <span className="min-w-0 flex-1">
+                    <b className="block font-semibold first-letter:uppercase">{day}</b>
+                    {champion !== null && (
+                      <span className="block text-[15px] text-muted">
+                        <span className="font-semibold text-text">{champion.names}</span>
+                        {` · ${champion.record}`}
+                      </span>
+                    )}
+                    {notice !== null && <span className="block text-[15px] text-muted">{notice}</span>}
                   </span>
-                </div>
-              </div>
+                </Link>
+              </li>
             )
-          }
+          })}
+        </ol>
 
-          const played = matchday.status === 'CLOSED'
-          const inProgress = matchday.status === 'OPEN'
-          const champion = played ? championOf(matchday) : null
-
-          // La fecha viva —armándose o en juego— es la única sobre la que hay
-          // algo que hacer, así que va en `accent`, que es el fondo de bloque
-          // del handoff. Antes la de armado salía con `opacity: .62`: la que
-          // había que tocar era la más apagada de la lista, y después de abrir
-          // una fecha el CTA de arriba desaparece, así que no quedaba UN solo
-          // elemento en acento y no se sabía a dónde ir.
-          const live = !played
-          // `ok-bg`/`up` y no `live-bg`/`live`: en el handoff `live` es el color de
-          // error —borde de input inválido, bloques que impiden continuar, cerrar
-          // sesión— y una fecha jugándose no es un problema. El par afirmativo es el
-          // que usan todos los chips activos del diseño: "Repiten", "Viene",
-          // "Defensora", "Sos vos".
-          const tagClass = live
-            ? 'bg-accent-text text-accent'
-            : played
-              ? 'bg-chip text-muted'
-              : 'text-muted'
-          const tagLabel = played ? 'Jugada' : inProgress ? 'En juego' : 'Armando'
-          // "Fecha 3 · 1 set a 6 games" cuando se juega distinto que el deporte (§7).
-          const effective = effectiveMatchFormat(tournamentFormat, matchday.matchFormat)
-          const notice = formatoNotice(matchday.number, effective, tournamentFormat, unitOf(sportKind, effective))
-
-          return (
-            <Link
-              key={matchday.id}
-              href={`/torneo/${seasonId}/${disciplina}/fechas/${matchday.number}`}
-              className={`block rounded-[14px] p-[14px] ${
-                live ? 'bg-accent text-accent-text' : 'border border-line bg-surface'
-              }`}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <p
-                  className={`text-[12px] font-extrabold uppercase tracking-[.14em] ${
-                    live ? 'opacity-90' : 'text-muted'
-                  }`}
-                >
-                  {notice ?? `Fecha ${matchday.number}`}
-                  {matchday.playedOn !== null ? ` · ${matchdayDay(matchday.playedOn)}` : ''}
-                </p>
-                <span className={`shrink-0 rounded-full px-[10px] py-[6px] text-[12px] font-extrabold ${tagClass}`}>
-                  {tagLabel}
-                </span>
-              </div>
-
-              {champion !== null && (
-                <div className="mt-2 flex flex-col gap-1">
-                  <p className="text-[15px] font-extrabold">{champion.names}</p>
-                  <p className="text-[12px] font-bold text-muted">{champion.record}</p>
-                </div>
+        {/* El Masters es UNO POR DISCIPLINA y cada una juega el suyo (C36,
+            decisión #4035): la guarda es `hasMasters`, que también cierra W89
+            —una disciplina que declaró que NO juega Masters no promete nada ni
+            ofrece un CTA que rebota siempre. */}
+        {discipline.hasMasters && (
+          <section className="rounded-block bg-surface px-5 py-5">
+            <p className="text-[15px] font-semibold text-muted">Cierre del año</p>
+            <h2 className="font-titulo mt-1 text-[28px]">Masters</h2>
+            <p className="mt-2 text-[16px]">
+              {`Los ${MASTERS_SIZE} primeros de la tabla, al terminar las ${discipline.config.regularMatchdays} fechas.`}
+              {remainingForMasters > 0 && (
+                <b className="font-semibold">{` Faltan ${remainingForMasters}.`}</b>
               )}
+            </p>
 
-              {inProgress && openDetail !== null && (
-                <div className="mt-2 flex flex-col gap-1">
-                  {openDetail.sides.map((side) => (
-                    <p key={sideKey(side)} className="text-[13.5px] font-bold">
-                      {sideNames(side, nameById)}
-                    </p>
-                  ))}
-                </div>
-              )}
-            </Link>
-          )
-        })}
+            {/* Cuando ya no falta ninguna fecha regular y soy admin, el chip
+                "Bloqueado" deja lugar al CTA. Si el Masters ya existe, lo
+                enlaza como cualquier otra fecha. */}
+            {mastersMatchday !== null ? (
+              <Link
+                href={`/torneo/${seasonId}/${disciplina}/fechas/${mastersMatchday.number}`}
+                className={`${button('primary', { size: 'lg', full: true })} mt-4`}
+              >
+                {mastersMatchday.status === 'CLOSED' ? 'Jugado · Ver el Masters' : 'En juego · Ver el Masters'}
+              </Link>
+            ) : header.isAdmin && remainingForMasters === 0 && !hasLiveMatchday ? (
+              <ArmarMasters seasonId={seasonId} disciplineId={discipline.id} />
+            ) : (
+              <span className="mt-4 inline-block rounded-pill bg-chip px-3 py-1.5 text-[15px] font-semibold text-muted">
+                Bloqueado
+              </span>
+            )}
+          </section>
+        )}
       </div>
-
-      {/* El Masters es UNO POR DISCIPLINA y cada una juega el suyo (C36,
-          decisión #4035): `create_discipline_masters` (0064) recibe cuál lo
-          pidió, y `matchdays_one_masters` siempre fue unique sobre
-          `discipline_id`. La guarda era `discipline.id ===
-          primaryDiscipline(header).id`, y con eso la SEGUNDA disciplina no
-          tenía dónde armar el suyo: no llegaba a FINISHED y la temporada no
-          podía terminar nunca (medido en #4034 sobre el default del wizard).
-
-          Ahora la guarda es `hasMasters`, que es la pregunta correcta y de
-          paso cierra W89: una disciplina que declaró que NO juega Masters
-          —una de a uno, decisión #4029— igual dibujaba el bloque, prometía
-          "se juega con los 4 primeros" y ofrecía un CTA que rebotaba
-          SIEMPRE. El dato estaba a mano desde `973d9a2`
-          (`DisciplineHeader.hasMasters`) y esta pantalla no lo leía. */}
-      {discipline.hasMasters && (
-        <div className="rounded-[18px] border-[1.5px] border-dashed border-line bg-surface px-[18px] py-5">
-          <p className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">Cierre del año</p>
-          <h2 className="mt-1 text-[24px] font-extrabold">Masters</h2>
-          <p className="mt-2 text-[13.5px] font-medium leading-[1.5]">
-            Se juega con los {MASTERS_SIZE} primeros de la tabla al terminar las{' '}
-            {discipline.config.regularMatchdays} fechas. Faltan {remainingForMasters}.
-          </p>
-
-          {/* Lo único que cambia del bloque: cuando ya no falta ninguna fecha
-              regular y soy admin, el chip "Bloqueado" deja lugar al CTA. Si el
-              Masters ya existe, la fila lo enlaza como cualquier otra fecha. */}
-          {mastersMatchday !== null ? (
-            <Link
-              href={`/torneo/${seasonId}/${disciplina}/fechas/${mastersMatchday.number}`}
-              className="mt-3 inline-block rounded-full bg-ok-bg px-[10px] py-[6px] text-[12px] font-extrabold text-up"
-            >
-              {mastersMatchday.status === 'CLOSED' ? 'Jugado' : 'En juego'}
-            </Link>
-          ) : header.isAdmin && remainingForMasters === 0 && !hasLiveMatchday ? (
-            <ArmarMasters seasonId={seasonId} disciplineId={discipline.id} />
-          ) : (
-            <span className="mt-3 inline-block rounded-full bg-chip px-[10px] py-[6px] text-[12px] font-extrabold text-muted">
-              Bloqueado
-            </span>
-          )}
-        </div>
-      )}
     </div>
   )
 }

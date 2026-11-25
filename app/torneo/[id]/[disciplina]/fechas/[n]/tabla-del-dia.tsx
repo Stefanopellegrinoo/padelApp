@@ -29,6 +29,8 @@ export interface FilaDelDia {
   key: string
   nombre: string
   esInvitado: boolean
+  /** El lado de quien mira: su fila va en amarillo (en oscuro, elevada con borde amarillo). */
+  esVos?: boolean
   won: number
   drawn: number
   gamesDiff: number
@@ -39,11 +41,15 @@ export interface FilaDelDia {
 /**
  * Las dos grillas van ESCRITAS ENTERAS y no armadas por interpolación, que es
  * lo único que Tailwind sabe escanear: `grid-cols-[1fr_${n}]` no emite nada.
- * Misma trampa que S72 verificó para `focus-visible:ring-accent-link`.
  */
 const GRID_SIN_EMPATES = 'grid-cols-[1fr_34px_44px_44px]'
 const GRID_CON_EMPATES = 'grid-cols-[1fr_34px_34px_44px_44px]'
 
+/**
+ * La tabla del prototipo: encabezado gris chico, filas de 46 con el divisor
+ * arriba, números tabulares y los puntos en la cara condensada. Sin caja: la
+ * jerarquía la dan las filas, como en la Tabla del torneo.
+ */
 export function TablaDelDia({
   filas,
   tituloLado,
@@ -56,10 +62,8 @@ export function TablaDelDia({
 }) {
   const grid = muestraEmpates ? GRID_CON_EMPATES : GRID_SIN_EMPATES
   return (
-    <div className="overflow-hidden rounded-[14px] border border-line">
-      <div
-        className={`grid ${grid} gap-2 bg-chip px-3 py-2 text-[12px] font-extrabold uppercase tracking-[.13em] text-muted`}
-      >
+    <div className="-mx-4">
+      <div className={`grid ${grid} h-9 items-center gap-2 px-4 text-[13px] font-semibold text-muted`}>
         <span>{tituloLado}</span>
         <span className="text-right">PG</span>
         {muestraEmpates && <span className="text-right">PE</span>}
@@ -69,27 +73,28 @@ export function TablaDelDia({
       {filas.map((fila, index) => (
         <div
           key={fila.key}
-          className={`grid ${grid} items-center gap-2 px-3 py-2 text-[13.5px] ${
-            index > 0 ? 'border-t border-line' : ''
+          className={`grid ${grid} min-h-[46px] items-center gap-2 px-4 py-2 text-[16px] tabular-nums ${
+            fila.esVos
+              ? 'bg-vos-fila shadow-[inset_4px_0_0_var(--color-vos-borde)]'
+              : index > 0 && !filas[index - 1]?.esVos
+                ? 'border-t border-line'
+                : ''
           }`}
         >
-          <span className="flex items-center gap-1.5 font-bold">
+          <span className="flex min-w-0 items-center gap-1.5 font-semibold">
             {fila.nombre}
             {fila.esInvitado && (
-              <span className="shrink-0 rounded-full border border-line px-1.5 py-0.5 text-[12px] font-extrabold text-muted">
+              <span className="shrink-0 rounded-pill border border-line px-1.5 py-0.5 text-[13px] font-semibold text-muted">
                 Invitado
               </span>
             )}
           </span>
-          <span className="text-right font-bold text-muted">{fila.won}</span>
-          {muestraEmpates && (
-            <span className="text-right font-bold text-muted">{fila.drawn}</span>
-          )}
-          <span className="text-right font-bold text-muted">
-            {fila.gamesDiff >= 0 ? '+' : ''}
-            {fila.gamesDiff}
+          <span className={`text-right ${fila.esVos ? '' : 'text-muted'}`}>{fila.won}</span>
+          {muestraEmpates && <span className={`text-right ${fila.esVos ? '' : 'text-muted'}`}>{fila.drawn}</span>}
+          <span className={`text-right ${fila.esVos ? '' : 'text-muted'}`}>
+            {`${fila.gamesDiff >= 0 ? '+' : ''}${fila.gamesDiff}`}
           </span>
-          <span className="text-right text-[17px] font-extrabold">{fila.pts}</span>
+          <span className="font-cond text-right text-[26px]">{fila.pts}</span>
         </div>
       ))}
     </div>

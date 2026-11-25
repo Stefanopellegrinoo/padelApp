@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { button } from '@/app/ui/button'
 import { sumarInvitado } from './actions'
 import type { GuestPromoteVM } from './sumar-state'
 
@@ -62,13 +63,13 @@ export function SumarInvitado({
             )
           case 'PAREJA_INVITADA':
             return (
-              <p key={guest.entryId} className="text-[12px] font-[600] text-muted">
+              <p key={guest.entryId} className="text-[15px] text-muted">
                 {`${guest.name} jugó esta fecha en una pareja que no cobró puntos —lo habitual es que haya jugado con otro invitado—. Sumarlo desde acá le cambiaría los puntos a los demás, por eso no se puede: si va a jugar el torneo, agregalo al plantel desde Ajustes › Plantel.`}
               </p>
             )
           case 'SIN_PAREJA':
             return (
-              <p key={guest.entryId} className="text-[12px] font-[600] text-muted">
+              <p key={guest.entryId} className="text-[15px] text-muted">
                 {`${guest.name} no quedó en ninguna pareja de esta fecha, así que no hay ningún punto suyo que conservar. Si va a jugar el torneo, agregalo al plantel desde Ajustes › Plantel.`}
               </p>
             )
@@ -109,7 +110,7 @@ function PromoteGuestCard({
           setError(null)
           setAsking(true)
         }}
-        className="flex min-h-[44px] items-center justify-center rounded-field border-[1.5px] border-line p-3 text-center text-[13.5px] font-extrabold"
+        className={button('secondary', { full: true })}
       >
         ¿{guest.name} se suma al torneo?
       </button>
@@ -164,11 +165,11 @@ function PromoteGuestCard({
           setAsking(false)
         })
       }}
-      className="flex flex-col gap-2 rounded-card border border-line bg-surface p-4"
+      className="flex flex-col gap-3 rounded-tile bg-surface p-4"
     >
-      <p className="text-[12.5px] font-bold">{copy}</p>
+      <p className="text-[15px]">{copy}</p>
 
-      <label className="flex items-center gap-2 text-[12.5px] font-bold">
+      <label className="flex items-center gap-2 text-[15px] font-semibold">
         Posición
         {/* `min-h-[44px]` y `text-[16px]`: misma regla que el select de
             `plantel.tsx` — abajo de 16px iOS hace zoom solo al enfocar. */}
@@ -176,7 +177,7 @@ function PromoteGuestCard({
           value={before}
           disabled={pending}
           onChange={(event) => setBefore(event.target.value)}
-          className="min-h-[44px] flex-1 rounded-field border border-line bg-surface p-[10px] text-[16px] font-bold outline-none"
+          className="min-h-[44px] flex-1 rounded-btn border-[1.5px] border-line bg-surface-2 p-[10px] text-[16px] font-semibold"
         >
           <option value="">Al final</option>
           {seats.map((seat) => (
@@ -191,9 +192,7 @@ function PromoteGuestCard({
         <button
           type="submit"
           disabled={pending}
-          className={`flex min-h-[44px] flex-1 items-center justify-center rounded-field p-3 text-center text-[14px] font-extrabold ${
-            pending ? 'bg-chip text-muted' : 'bg-accent text-accent-text'
-          }`}
+          className={`${button('primary')} flex-1`}
         >
           Sumarlo al plantel
         </button>
@@ -204,14 +203,16 @@ function PromoteGuestCard({
             setError(null)
             setAsking(false)
           }}
-          className="flex min-h-[44px] flex-1 items-center justify-center rounded-field bg-chip p-3 text-center text-[14px] font-extrabold text-muted"
+          className={`${button('secondary')} flex-1`}
         >
           Cancelar
         </button>
       </div>
 
       {error !== null && (
-        <p className="rounded-field bg-live-bg px-3 py-2.5 text-[12.5px] font-bold text-live">{error}</p>
+        <p role="alert" className="rounded-btn bg-live-bg px-3 py-2.5 text-[15px] font-semibold text-live">
+          {error}
+        </p>
       )}
     </form>
   )

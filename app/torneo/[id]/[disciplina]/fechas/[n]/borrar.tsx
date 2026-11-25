@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { button } from '@/app/ui/button'
 import { cancelTheMatchday } from './actions'
 
 /**
@@ -48,7 +49,7 @@ export function BorrarFecha({
       <button
         type="button"
         onClick={() => setAsking(true)}
-        className="rounded-field border-[1.5px] border-line p-4 text-center text-[15px] font-extrabold text-live"
+        className={button('danger', { full: true })}
       >
         Borrar fecha
       </button>
@@ -68,8 +69,8 @@ export function BorrarFecha({
         : `los ${loadedResults} resultados ya cargados`
 
   return (
-    <div className="flex flex-col gap-2 rounded-card border border-line bg-surface p-4">
-      <p className="text-[12.5px] font-bold">
+    <div className="flex flex-col gap-3 rounded-tile bg-surface p-4">
+      <p className="text-[15px] font-semibold">
         Se borra la fecha entera: presentismo, invitados, parejas, partidos y {perdida}. No se puede
         deshacer.
       </p>
@@ -86,9 +87,8 @@ export function BorrarFecha({
               if (!result.ok) setError(result.error)
             })
           }}
-          className={`min-h-11 flex-1 rounded-field p-3 text-center text-[14px] font-extrabold ${
-            pending ? 'bg-chip text-muted' : 'bg-live text-bg'
-          }`}
+          // El rojo lleno, no el tinte: es el paso que no se deshace.
+          className="press flex min-h-[44px] flex-1 items-center justify-center rounded-btn bg-live px-4 text-[16px] font-bold text-bg"
         >
           Borrar
         </button>
@@ -99,13 +99,13 @@ export function BorrarFecha({
             setError(null)
             setAsking(false)
           }}
-          className="min-h-11 flex-1 rounded-field bg-chip p-3 text-center text-[14px] font-extrabold text-muted"
+          className={`${button('secondary')} flex-1`}
         >
           Cancelar
         </button>
       </div>
       {error !== null && (
-        <p role="alert" className="rounded-field bg-live-bg px-3 py-2.5 text-[12.5px] font-bold text-live">
+        <p role="alert" className="rounded-btn bg-live-bg px-3 py-2.5 text-[15px] font-semibold text-live">
           {error}
         </p>
       )}

@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest'
 import type { DisciplineId } from '@/core'
 import {
   defendersOf,
+  footnoteOf,
   mastersCutoffFor,
   pairRows,
   singleDisciplineRedirect,
+  subtitleOf,
   volverDestination,
   type ClosedMatchdayAwards,
 } from './tabla-state'
@@ -122,10 +124,11 @@ function row(
   return {
     entryId,
     displayName,
-    initials: displayName.slice(0, 1),
     position,
     points,
     movement: 0,
+    played: 3,
+    isMe: false,
     tiedWithEntryId: null,
     ...extra,
   }
@@ -194,6 +197,21 @@ describe('pairRows', () => {
     expect(mastersAfter).toBe(3)
   })
 
+  it('la pareja es tuya si estás en ella, aunque vayas segundo de los dos', () => {
+    const input = sixPlayers().map((r) => (r.entryId === 'e4' ? { ...r, isMe: true } : r))
+    const { rows } = pairRows(input, [
+      { a: 'e1', b: 'e4' },
+      { a: 'e2', b: 'e3' },
+    ])
+    expect(rows.map((r) => r.isMe)).toEqual([true, false, false, false])
+  })
+
+  it('las fechas jugadas de la pareja son las del mejor ubicado, como los puntos', () => {
+    const input = sixPlayers().map((r) => (r.entryId === 'e1' ? { ...r, played: 5 } : r))
+    const { rows } = pairRows(input, [{ a: 'e4', b: 'e1' }])
+    expect(rows[0]).toMatchObject({ displayName: 'Dani & Ana', played: 5 })
+  })
+
   it('sin equipos las filas quedan idénticas a las de entrada', () => {
     const input = sixPlayers()
     expect(pairRows(input, []).rows).toEqual(input)
@@ -252,5 +270,41 @@ describe('mastersCutoffFor con parejas fijas', () => {
     const { rows, mastersAfter } = pairRows(sixPlayers(), teams)
     // 4 filas de pareja: fuera de rango es 5, no 7 (jugadores) ni 2.
     expect(mastersCutoffFor(false, rows.length, mastersAfter)).toBe(5)
+  })
+})
+
+/** El pie de la Tabla: las reglas que explican la tabla, en una línea. */
+describe('footnoteOf', () => {
+  it('con Masters y fechas que se descartan, las dos cosas', () => {
+    expect(footnoteOf(true, { regularMatchdays: 12, countBestOf: 10 })).toBe(
+      'Los 4 primeros van al Masters. Cuentan las mejores 10 de 12 fechas.',
+    )
+  })
+
+  it('sin Masters, sólo el descarte', () => {
+    expect(footnoteOf(false, { regularMatchdays: 10, countBestOf: 8 })).toBe('Cuentan las mejores 8 de 10 fechas.')
+  })
+
+  it('sin descarte, sólo el Masters', () => {
+    expect(footnoteOf(true, { regularMatchdays: 10, countBestOf: 10 })).toBe('Los 4 primeros van al Masters.')
+  })
+
+  it('sin Masters ni descarte no hay nada que aclarar', () => {
+    expect(footnoteOf(false, { regularMatchdays: 6, countBestOf: 6 })).toBeNull()
+  })
+})
+
+/** Debajo del nombre del torneo: el deporte y por qué fecha va. */
+describe('subtitleOf', () => {
+  it('en curso: el deporte y la fecha de cuántas', () => {
+    expect(subtitleOf('Pádel', 'ACTIVE', 7, 12)).toBe('Pádel, fecha 7 de 12')
+  })
+
+  it('terminado lo dice', () => {
+    expect(subtitleOf('FIFA', 'FINISHED', 10, 10)).toBe('FIFA, terminado')
+  })
+
+  it('sin arrancar, sólo el deporte', () => {
+    expect(subtitleOf('Pádel', 'SETUP', 1, 10)).toBe('Pádel')
   })
 })

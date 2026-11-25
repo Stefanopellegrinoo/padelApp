@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation'
 import { resolveDisciplineBySlug } from '@/core'
 import { disciplineConfig } from '@/db/discipline'
 import { teamsOf } from '@/db/discipline-teams'
-import { entriesOf, seasonAwardsOf, seasonHeader, seasonMatchdaysOf } from '@/db/read'
+import { entriesOf, myEntryId, seasonAwardsOf, seasonHeader, seasonMatchdaysOf } from '@/db/read'
 import { serverClient } from '@/db/server'
 import { TablaView } from '../tabla-view'
 
@@ -30,11 +30,13 @@ export default async function DisciplinaTablaPage({ params }: PageProps) {
   const discipline = resolveDisciplineBySlug(header.disciplines, disciplina)
   if (discipline === undefined) notFound()
 
-  const [entries, awardsByDiscipline, { fixedTeams }] = await Promise.all([
+  const [entries, awardsByDiscipline, { fixedTeams }, mine] = await Promise.all([
     entriesOf(supabase, seasonId, discipline.id),
     seasonAwardsOf(supabase, seasonMatchdays),
     // `fixedTeams` no viaja en `DisciplineHeader`: se pide con `disciplineConfig`.
     disciplineConfig(supabase, discipline.id),
+    // Tu fila y tu puesto en amarillo.
+    myEntryId(supabase, seasonId),
   ])
   // Con parejas fijas la tabla va por pareja; `[]` deja la de siempre, por persona.
   const teams = fixedTeams
@@ -51,6 +53,7 @@ export default async function DisciplinaTablaPage({ params }: PageProps) {
       awardsByMatchday={awardsByDiscipline.get(discipline.id) ?? new Map()}
       teams={teams}
       fixedTeams={fixedTeams}
+      myEntryId={mine}
     />
   )
 }

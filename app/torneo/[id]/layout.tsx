@@ -4,7 +4,7 @@ import { EdgeError } from '@/db/errors'
 import { primaryDiscipline, seasonHeaderOrNull } from '@/db/read'
 import { serverClient } from '@/db/server'
 import { ChipsDeporte } from './chips-deporte'
-import { TorneoNav } from './nav'
+import { ContenedorTorneo, TorneoNav } from './nav'
 import { sportsOf } from './nav-state'
 
 interface TorneoLayoutProps {
@@ -15,15 +15,20 @@ interface TorneoLayoutProps {
 /**
  * El shell de todas las pantallas del torneo: guarda de acceso vía RLS
  * —`seasonHeader` tira `EdgeError` si la temporada no existe o el caller no
- * tiene lugar en ella—, contenedor con el padding común y la nav fija de 4. El
- * header de cada pantalla (kicker, título, botón) es contenido de cada
- * `page.tsx`, no de este layout.
+ * tiene lugar en ella—, el contenedor con el color del deporte de la URL
+ * (`ContenedorTorneo`, `data-deporte`) y la barra de pestañas fija de abajo.
+ *
+ * **Sin márgenes a los costados.** El encabezado de cada pantalla es el
+ * bloque de color del prototipo (`Hero`, `app/ui/hero.tsx`), que va de borde
+ * a borde; por eso el `<main>` no pone padding horizontal y cada pantalla se
+ * pone los suyos (`px-4`, 16 px, como `Section` y las filas de `app/ui/row`).
+ * Nada de `-mx-*` para escaparse de un padding que ya no está.
  *
  * Con 2+ deportes, arriba de todo va la fila de chips para cambiar de deporte
- * (`ChipsDeporte`): vive acá y no en cada pantalla para que siga montada al
- * cambiar de deporte, y va primero de todo —en Tabla, arriba del `Volver`— como
- * selector de la sección entera. `ChipsDeporte` decide solo en qué rutas se
- * dibuja.
+ * (`ChipsDeporte`), en el color del bloque, pegada al `Hero`: vive acá y no en
+ * cada pantalla para que siga montada al cambiar de deporte, y va primero de
+ * todo —en Tabla, arriba del `Volver`— como selector de la sección entera.
+ * `ChipsDeporte` decide solo en qué rutas se dibuja.
  *
  * **Sin sesión —o con sesión pero sin lugar en la temporada— no dibuja la nav.** Reglas es
  * pública y este layout la estaba frenando antes de que se montara. Las demás
@@ -55,7 +60,7 @@ export default async function TorneoLayout({ children, params }: TorneoLayoutPro
   if (header === null) {
     return (
       <div className="flex min-h-dvh flex-col bg-bg text-text">
-        <main className="flex-1 px-5 pb-6">{children}</main>
+        <main className="flex-1 pb-6">{children}</main>
       </div>
     )
   }
@@ -72,13 +77,14 @@ export default async function TorneoLayout({ children, params }: TorneoLayoutPro
   const defaultDisciplineSlug = disciplineSlugs(header.disciplines).get(primaryDiscipline(header).id)
   if (defaultDisciplineSlug === undefined) throw new EdgeError('La disciplina de la temporada no existe.')
 
+  const sports = sportsOf(header.disciplines)
   return (
-    <div className="flex min-h-dvh flex-col bg-bg text-text">
-      <main className="flex-1 px-5 pb-6">
-        <ChipsDeporte seasonId={id} sports={sportsOf(header.disciplines)} />
+    <ContenedorTorneo seasonId={id} sports={sports}>
+      <main className="flex-1 pb-6">
+        <ChipsDeporte seasonId={id} sports={sports} />
         {children}
       </main>
       <TorneoNav seasonId={id} defaultDisciplineSlug={defaultDisciplineSlug} />
-    </div>
+    </ContenedorTorneo>
   )
 }

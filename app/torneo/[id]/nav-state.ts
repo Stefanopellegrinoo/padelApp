@@ -159,13 +159,30 @@ export function sportChips(
 }
 
 /**
- * Slug y nombre de cada deporte de la temporada, en el orden que llega —el de
- * `position`—, para los chips y el botón de abrir fecha. Dos disciplinas del
+ * El `kind` del deporte que trae la URL, para pintar la pantalla con su color
+ * (`data-deporte`, ver `globals.css`). `null` donde no hay deporte —la tabla
+ * general, Reglas, Ajustes del torneo— o el slug no es de esta temporada:
+ * ahí queda el azul de siempre.
+ */
+export function sportKindAt(
+  seasonId: string,
+  sports: readonly { slug: string; kind: string }[],
+  pathname: string,
+): string | null {
+  const base = `/torneo/${seasonId}`
+  if (!pathname.startsWith(`${base}/`)) return null
+  const slug = currentDisciplineSlug(base, pathname)
+  return sports.find((sport) => sport.slug === slug)?.kind ?? null
+}
+
+/**
+ * Slug, nombre y `kind` de cada deporte de la temporada, en el orden que llega —el de
+ * `position`—, para los chips, el color y el botón de abrir fecha. Dos disciplinas del
  * mismo `kind` darían dos "Pádel" iguales: el nombre se numera con la misma
  * regla que el slug (`core/discipline-slug.ts`), la primera pelada y la
  * n-ésima con " n", para que lo que dice el chip sea lo que dice la URL.
  */
-export function sportsOf(disciplines: readonly SluggableDiscipline[]): { slug: string; label: string }[] {
+export function sportsOf(disciplines: readonly SluggableDiscipline[]): { slug: string; label: string; kind: string }[] {
   const slugOf = disciplineSlugs(disciplines)
   // Por `kind` y no por nombre: es lo que numera el slug.
   const seenByKind = new Map<string, number>()
@@ -175,6 +192,6 @@ export function sportsOf(disciplines: readonly SluggableDiscipline[]): { slug: s
     const slug = slugOf.get(discipline.id)
     if (slug === undefined) throw new EdgeError('La disciplina de la temporada no existe.')
     const label = sportLabel(discipline.kind)
-    return { slug, label: ordinal === 1 ? label : `${label} ${ordinal}` }
+    return { slug, label: ordinal === 1 ? label : `${label} ${ordinal}`, kind: discipline.kind }
   })
 }

@@ -13,11 +13,12 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(search),
 }))
 vi.mock('next/link', () => ({
-  default: ({ href, children }: { href: string; children: unknown }) => createElement('a', { href }, children as never),
+  default: ({ href, children, prefetch: _p, replace: _r, ...rest }: { href: string; children: unknown; prefetch?: boolean; replace?: boolean }) =>
+    createElement('a', { href, ...rest }, children as never),
   useLinkStatus: () => ({ pending: false }),
 }))
 
-const { TorneoNav } = await import('./nav')
+const { ContenedorTorneo, TorneoNav } = await import('./nav')
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -65,4 +66,26 @@ it('Stats recuerda "Mías": de Stats Mías a Fechas y de vuelta, sigue en Mías'
   expect(hrefDe('Stats')).toBe('/torneo/s/fifa/stats?tab=mias')
   ir('/torneo/s/fifa/stats')
   expect(hrefDe('Stats')).toBe('/torneo/s/fifa/stats')
+})
+
+it('la pestaña de la pantalla actual se anuncia como la página actual; las otras no', () => {
+  ir('/torneo/s/padel/fechas/3')
+  const actuales = [...host.querySelectorAll('a[aria-current="page"]')].map((a) => a.textContent)
+  expect(actuales).toEqual(['Fechas'])
+  expect(host.querySelector('nav')?.getAttribute('aria-label')).toBe('Torneo')
+})
+
+it('el contenedor toma el color del deporte de la URL; sin deporte, ninguno', () => {
+  const sports = [
+    { slug: 'padel', label: 'Pádel', kind: 'PADEL' },
+    { slug: 'fifa', label: 'FIFA', kind: 'FIFA' },
+  ]
+  const pintar = (a: string) => {
+    pathname = a
+    act(() => root.render(createElement(ContenedorTorneo, { seasonId: 's', sports, children: 'x' })))
+    return (host.firstElementChild as HTMLElement).getAttribute('data-deporte')
+  }
+  expect(pintar('/torneo/s/fifa/fechas')).toBe('FIFA')
+  expect(pintar('/torneo/s/padel')).toBe('PADEL')
+  expect(pintar('/torneo/s/reglas')).toBeNull()
 })

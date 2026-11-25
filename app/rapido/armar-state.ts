@@ -5,6 +5,7 @@
  * terminado; esto es la interacción de ir construyéndolo, así que vive
  * aparte y no lo toca.
  */
+import { MAX_PAIRING_POOL } from '@/core'
 
 /** Los nombres con contenido real, en el mismo orden — mismo criterio que usa `armar` puertas adentro. */
 export function nombresValidos(jugadores: readonly string[]): string[] {
@@ -85,4 +86,23 @@ export function agruparChips(nombres: readonly string[], pares: Array<[number, n
       .map((nombre, indice) => ({ indice, nombre }))
       .filter(({ indice }) => !emparejados.has(indice)),
   }
+}
+
+/**
+ * Enter en el nombre `indice` (S8e: cargar la lista sin soltar el teclado):
+ * pasa al siguiente casillero; en el último, si tiene nombre, agrega uno
+ * vacío y va ahí. En el último vacío —o con la lista en el techo— no hay
+ * adónde ir: `foco` es `null` y la pantalla cierra el teclado.
+ *
+ * Agregar un casillero vacío no tira abajo las parejas fijas
+ * (`seCaenLasParejas`), así que la lista nueva pasa por el mismo camino.
+ */
+export function enterEnJugador(
+  jugadores: readonly string[],
+  indice: number,
+): { jugadores: string[]; foco: number | null } {
+  if (indice < jugadores.length - 1) return { jugadores: [...jugadores], foco: indice + 1 }
+  const conNombre = (jugadores[indice] ?? '').trim().length > 0
+  if (!conNombre || jugadores.length >= MAX_PAIRING_POOL) return { jugadores: [...jugadores], foco: null }
+  return { jugadores: [...jugadores, ''], foco: indice + 1 }
 }

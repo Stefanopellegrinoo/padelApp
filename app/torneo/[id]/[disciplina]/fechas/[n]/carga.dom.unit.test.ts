@@ -1,15 +1,16 @@
 // @vitest-environment jsdom
 //
-// jsdom y no `renderToStaticMarkup`: lo que se fija acá pasa al TOCAR "Cargar resultado" —que el
-// botón diga que abrió (`aria-expanded`) y que el panel quede a la vista—, y el HTML estático
-// descarta los `onClick` y los efectos. Va aparte de `carga.unit.test.ts` porque aquel es una suite
-// de entorno node y no conviene cambiarle el entorno.
+// La carga de resultados de la fecha (S8e): tocar el partido abre la hoja, el último toque guarda,
+// un error no borra nada, corregir viene precargado y después de guardar el siguiente queda a un
+// toque. jsdom y no `renderToStaticMarkup`: todo esto pasa al TOCAR, y el HTML estático descarta los
+// `onClick` y los efectos. Va aparte de `carga.unit.test.ts` porque aquel es una suite de entorno
+// node y no conviene cambiarle el entorno.
 import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { MatchFormat } from '@/core'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { MatchFormat, SetScore } from '@/core'
 import type { WriteResult } from './actions'
-import { Carga, type CargaContext } from './carga'
+import { CargaDeLaFecha, TarjetaPartido, type CargaContext, type PartidoVM } from './carga'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -24,7 +25,20 @@ vi.mock('./actions', () => ({
 }))
 vi.mock('./borrar', () => ({ BorrarFecha: () => null }))
 
+// jsdom todavía no trae `showModal` ni `close` (lo mismo que `app/ui/sheet.dom.unit.test.ts`).
+beforeAll(() => {
+  HTMLDialogElement.prototype.showModal = function showModal(this: HTMLDialogElement) {
+    this.setAttribute('open', '')
+  }
+  HTMLDialogElement.prototype.close = function close(this: HTMLDialogElement) {
+    if (!this.hasAttribute('open')) return
+    this.removeAttribute('open')
+    this.dispatchEvent(new Event('close'))
+  }
+})
+
 const PADEL: MatchFormat = { setsToWin: 1, gamesPerSet: 4, tieBreak: true, openScore: false }
+const PING_PONG: MatchFormat = { setsToWin: 2, gamesPerSet: 11, tieBreak: false, openScore: false }
 const FIFA: MatchFormat = { ...PADEL, openScore: true }
 
 const contextOf = (format: MatchFormat): CargaContext => ({
@@ -33,57 +47,78 @@ const contextOf = (format: MatchFormat): CargaContext => ({
   disciplina: 'padel',
   matchdayNumber: 1,
   format,
-  unit: 'games',
+  unit: format.openScore ? 'goles' : format.gamesPerSet === 11 ? 'puntos' : 'games',
 })
 
-// jsdom no trae `scrollIntoView`: se instala un espía y se devuelve lo que había.
-const original = Element.prototype.scrollIntoView
-const scrollIntoView = vi.fn()
+function partido(matchId: string, a: string, b: string, sets: SetScore[] = []): PartidoVM {
+  const [scoreA, scoreB] = sets.length === 0 ? ['–', '–'] : [String(sets[0]!.gamesA), String(sets[0]!.gamesB)]
+  const winner = sets.length === 0 ? null : sets[0]!.gamesA > sets[0]!.gamesB ? 'A' : sets[0]!.gamesB > sets[0]!.gamesA ? 'B' : null
+  return {
+    key: matchId,
+    matchId,
+    seccion: 'Ronda 1',
+    pairAName: a,
+    pairBName: b,
+    pairA: [{ name: a, vos: false }],
+    pairB: [{ name: b, vos: false }],
+    scoreA,
+    scoreB,
+    winner,
+    sets,
+  }
+}
 
-let container: HTMLDivElement | null = null
-let root: Root | null = null
+const P1 = partido('p1', 'Ana & Beto', 'Caro & Dani')
+const P2 = partido('p2', 'Eli & Fede', 'Gabi & Hugo')
+
+let host: HTMLDivElement
+let root: Root
 
 beforeEach(() => {
-  scrollIntoView.mockClear()
-  saveMatchResult.mockClear()
+  saveMatchResult.mockReset()
   saveMatchResult.mockResolvedValue({ ok: true })
-  Element.prototype.scrollIntoView = scrollIntoView
+  host = document.createElement('div')
+  document.body.append(host)
+  root = createRoot(host)
 })
 
 afterEach(() => {
-  if (root !== null) act(() => root?.unmount())
-  container?.remove()
-  container = null
-  root = null
-  if (original === undefined) delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView
-  else Element.prototype.scrollIntoView = original
+  act(() => root.unmount())
+  host.remove()
 })
 
-const carga = (format: MatchFormat) =>
-  createElement(Carga, {
-    context: contextOf(format),
-    matchId: 'p1',
-    pairAName: 'Ana & Beto',
-    pairBName: 'Caro & Dani',
-  })
-
-async function montar(format: MatchFormat): Promise<HTMLDivElement> {
-  container = document.createElement('div')
-  document.body.appendChild(container)
-  root = createRoot(container)
+async function montar(format: MatchFormat | null, partidos: PartidoVM[] = [P1, P2]): Promise<void> {
   await act(async () => {
-    root?.render(carga(format))
+    root.render(
+      createElement(CargaDeLaFecha, {
+        context: format === null ? null : contextOf(format),
+        partidos,
+        children: partidos.map((p) => createElement(TarjetaPartido, { key: p.matchId, partido: p })),
+      }),
+    )
   })
-  return container
 }
 
-const botonDe = (dentro: ParentNode, texto: string): HTMLButtonElement => {
-  const boton = [...dentro.querySelectorAll('button')].find((candidato) => candidato.textContent?.trim() === texto)
+const dialogo = () => host.querySelector('dialog') as HTMLDialogElement
+const aviso = () => host.querySelector('[role="status"][aria-live]') as HTMLElement
+const botones = (dentro: ParentNode = host) => [...dentro.querySelectorAll('button')]
+const botonDe = (texto: string, dentro: ParentNode = host): HTMLButtonElement => {
+  const boton = botones(dentro).find((candidato) => candidato.textContent?.trim() === texto)
   if (boton === undefined) throw new Error(`No hay un botón "${texto}".`)
   return boton
 }
+const botonLlamado = (nombre: string): HTMLButtonElement => {
+  const boton = botones().find((candidato) => candidato.getAttribute('aria-label') === nombre)
+  if (boton === undefined) throw new Error(`No hay un botón llamado "${nombre}".`)
+  return boton
+}
+/** Las parejas de la hoja: botones con `aria-pressed`. */
+const pareja = (nombre: string) =>
+  botones(dialogo()).find((b) => b.hasAttribute('aria-pressed') && b.textContent?.includes(nombre)) as HTMLButtonElement
+/** Un botón de games del perdedor, por su número. */
+const games = (n: string) => botonDe(n, dialogo())
 
-async function tocar(boton: HTMLButtonElement): Promise<void> {
+async function tocar(boton: HTMLElement): Promise<void> {
   await act(async () => {
     boton.click()
   })
@@ -98,121 +133,233 @@ async function tipear(campo: HTMLInputElement, texto: string): Promise<void> {
   })
 }
 
-describe('Cargar resultado — al abrir, el panel queda a la vista', () => {
-  it('antes del toque el botón dice que está cerrado y no se scrollea', async () => {
-    const vista = await montar(PADEL)
+describe('tocar el partido abre la hoja (sin el toque extra de "Cargar resultado")', () => {
+  it('cada partido sin cargar es un botón que nombra a los dos lados, y abre la hoja directo', async () => {
+    await montar(PADEL)
+    expect(dialogo().open).toBe(false)
+    expect(host.textContent).not.toContain('Cargar resultado')
 
-    expect(botonDe(vista, 'Cargar resultado').getAttribute('aria-expanded')).toBe('false')
-    expect(scrollIntoView).not.toHaveBeenCalled()
+    await tocar(botonLlamado('Cargar Ana & Beto contra Caro & Dani'))
+
+    expect(dialogo().open).toBe(true)
+    const titulo = document.getElementById(dialogo().getAttribute('aria-labelledby') ?? '')
+    expect(titulo?.textContent).toBe('Ronda 1')
+    expect(pareja('Ana & Beto').getAttribute('aria-pressed')).toBe('false')
+    expect(pareja('Caro & Dani').getAttribute('aria-pressed')).toBe('false')
   })
 
-  it('al tocarlo el botón dice que abrió, aparece "¿Quién ganó?" y se scrollea una vez a lo más cercano', async () => {
-    const vista = await montar(PADEL)
+  it('sin permiso de carga los partidos se ven pero no son botones', async () => {
+    await montar(null, [P1, partido('p3', 'Ana & Beto', 'Eli & Fede', [{ gamesA: 4, gamesB: 1 }])])
+    expect(botones()).toHaveLength(0)
+    expect(host.textContent).toContain('Ana & Beto')
+    expect(host.textContent).toContain('Eli & Fede')
+  })
+})
 
-    await tocar(botonDe(vista, 'Cargar resultado'))
-
-    expect(botonDe(vista, 'Cargar resultado').getAttribute('aria-expanded')).toBe('true')
-    expect(vista.textContent).toContain('¿Quién ganó?')
-    expect(scrollIntoView).toHaveBeenCalledTimes(1)
-    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' })
+describe('pádel: el par ganador y los games del perdedor, y se guarda en el último toque', () => {
+  it('antes de elegir quién ganó, los games no se pueden tocar', async () => {
+    await montar(PADEL)
+    await tocar(botonLlamado('Cargar Ana & Beto contra Caro & Dani'))
+    expect(games('2').disabled).toBe(true)
+    expect(dialogo().textContent).toContain('Tocá primero quién ganó.')
   })
 
-  it('el scroll es del contenedor de la carga, no del botón suelto', async () => {
-    const vista = await montar(PADEL)
+  it('guarda, cierra la hoja, avisa "Guardado: …" y "Siguiente" abre el próximo sin cargar', async () => {
+    await montar(PADEL)
+    await tocar(botonLlamado('Cargar Ana & Beto contra Caro & Dani'))
 
-    await tocar(botonDe(vista, 'Cargar resultado'))
+    await tocar(pareja('Ana & Beto'))
+    expect(pareja('Ana & Beto').getAttribute('aria-pressed')).toBe('true')
+    expect(dialogo().textContent).toContain('Games de Caro & Dani')
+    expect(dialogo().textContent).toContain('Con este toque se guarda.')
+    expect(saveMatchResult).not.toHaveBeenCalled()
 
-    const contenedor = scrollIntoView.mock.contexts[0] as Element
-    expect(contenedor.contains(botonDe(vista, 'Cargar resultado'))).toBe(true)
-    expect(contenedor.textContent).toContain('¿Quién ganó?')
-    // Deja lugar abajo para la barra fija de pestañas: sin esto `nearest` lo pega al borde y la barra lo tapa.
-    expect(contenedor.className).toContain('scroll-mb-24')
+    await tocar(games('2'))
+
+    expect(saveMatchResult).toHaveBeenCalledTimes(1)
+    expect(saveMatchResult).toHaveBeenCalledWith('s1', 1, 'p1', [{ gamesA: 4, gamesB: 2 }])
+    expect(dialogo().open).toBe(false)
+    expect(aviso().textContent).toContain('Guardado: Ana & Beto 4-2')
+
+    await tocar(botonDe('Siguiente', aviso()))
+    expect(dialogo().open).toBe(true)
+    expect(pareja('Eli & Fede')).toBeDefined()
+    // La hoja vuelve a la tarjeta del siguiente al cerrarse: el foco no queda perdido.
+    expect(document.activeElement).not.toBe(document.body)
   })
 
-  it('pasar al paso del perdedor vuelve a mirar: ese paso es más alto y puede quedar tapado', async () => {
-    const vista = await montar(PADEL)
-    await tocar(botonDe(vista, 'Cargar resultado'))
-
-    await tocar(botonDe(vista, 'Ana & Beto'))
-
-    expect(vista.textContent).toContain('del perdedor')
-    expect(scrollIntoView).toHaveBeenCalledTimes(2)
-    expect(scrollIntoView).toHaveBeenLastCalledWith({ block: 'nearest' })
+  it('ganó B: los games van del lado de A', async () => {
+    await montar(PADEL)
+    await tocar(botonLlamado('Cargar Ana & Beto contra Caro & Dani'))
+    await tocar(pareja('Caro & Dani'))
+    expect(dialogo().textContent).toContain('Games de Ana & Beto')
+    await tocar(games('0'))
+    expect(saveMatchResult).toHaveBeenCalledWith('s1', 1, 'p1', [{ gamesA: 0, gamesB: 4 }])
   })
 
-  it('un re-render sin cambios no vuelve a scrollear', async () => {
-    const vista = await montar(PADEL)
-    await tocar(botonDe(vista, 'Cargar resultado'))
+  it('a dos sets (ping pong): la hoja pasa set por set y guarda recién cuando se define', async () => {
+    await montar(PING_PONG)
+    await tocar(botonLlamado('Cargar Ana & Beto contra Caro & Dani'))
 
+    await tocar(pareja('Ana & Beto'))
+    await tocar(games('7'))
+    expect(saveMatchResult).not.toHaveBeenCalled()
+    expect(dialogo().open).toBe(true)
+    expect(dialogo().textContent).toContain('Set 2')
+    expect(pareja('Ana & Beto').getAttribute('aria-pressed')).toBe('false')
+
+    await tocar(pareja('Ana & Beto'))
+    await tocar(botonLlamado('12 a 10'))
+
+    expect(saveMatchResult).toHaveBeenCalledWith('s1', 1, 'p1', [
+      { gamesA: 11, gamesB: 7 },
+      { gamesA: 12, gamesB: 10 },
+    ])
+    expect(dialogo().open).toBe(false)
+    expect(aviso().textContent).toContain('Guardado: Ana & Beto 11-7 12-10')
+  })
+
+  it('mientras guarda lo dice y no deja tocar otra cosa', async () => {
+    let terminar: (value: WriteResult) => void = () => {}
+    saveMatchResult.mockImplementationOnce(() => new Promise<WriteResult>((resolve) => (terminar = resolve)))
+    await montar(PADEL)
+    await tocar(botonLlamado('Cargar Ana & Beto contra Caro & Dani'))
+    await tocar(pareja('Ana & Beto'))
+    await tocar(games('1'))
+
+    expect(dialogo().open).toBe(true)
+    expect(dialogo().textContent).toContain('Guardando…')
+    expect(games('3').disabled).toBe(true)
+    expect(pareja('Caro & Dani').disabled).toBe(true)
+
+    await act(async () => terminar({ ok: true }))
+    expect(dialogo().open).toBe(false)
+  })
+
+  it('si el guardado rebota, la hoja queda abierta con lo elegido y el error; tocar de nuevo reintenta', async () => {
+    saveMatchResult.mockResolvedValueOnce({ ok: false, error: 'No se pudo guardar.' })
+    await montar(PADEL)
+    await tocar(botonLlamado('Cargar Ana & Beto contra Caro & Dani'))
+    await tocar(pareja('Ana & Beto'))
+    await tocar(games('2'))
+
+    expect(dialogo().open).toBe(true)
+    expect(dialogo().querySelector('[role="alert"]')?.textContent).toBe('No se pudo guardar.')
+    expect(pareja('Ana & Beto').getAttribute('aria-pressed')).toBe('true')
+    expect(games('2').getAttribute('aria-pressed')).toBe('true')
+    expect(aviso().textContent).toBe('')
+
+    await tocar(games('2'))
+    expect(saveMatchResult).toHaveBeenCalledTimes(2)
+    expect(saveMatchResult).toHaveBeenLastCalledWith('s1', 1, 'p1', [{ gamesA: 4, gamesB: 2 }])
+    expect(dialogo().open).toBe(false)
+  })
+
+  it('un partido cargado se corrige con la hoja precargada', async () => {
+    const cargado = partido('p1', 'Ana & Beto', 'Caro & Dani', [{ gamesA: 4, gamesB: 2 }])
+    await montar(PADEL, [cargado, P2])
+
+    await tocar(botonLlamado('Corregir Ana & Beto 4, Caro & Dani 2'))
+
+    expect(dialogo().open).toBe(true)
+    expect(pareja('Ana & Beto').getAttribute('aria-pressed')).toBe('true')
+    expect(games('2').getAttribute('aria-pressed')).toBe('true')
+
+    await tocar(pareja('Caro & Dani'))
+    await tocar(games('3'))
+    expect(saveMatchResult).toHaveBeenCalledWith('s1', 1, 'p1', [{ gamesA: 3, gamesB: 4 }])
+  })
+
+  it('cancelar la cierra sin guardar, y al volver a abrir arranca de cero', async () => {
+    await montar(PADEL)
+    await tocar(botonLlamado('Cargar Ana & Beto contra Caro & Dani'))
+    await tocar(pareja('Ana & Beto'))
+    await tocar(botonDe('Cancelar', dialogo()))
+    expect(dialogo().open).toBe(false)
+    expect(saveMatchResult).not.toHaveBeenCalled()
+
+    await tocar(botonLlamado('Cargar Ana & Beto contra Caro & Dani'))
+    expect(pareja('Ana & Beto').getAttribute('aria-pressed')).toBe('false')
+  })
+})
+
+describe('FIFA: dos campos, el primero enfocado, y el paso al segundo', () => {
+  const campos = () => [...dialogo().querySelectorAll('input')] as HTMLInputElement[]
+
+  it('el primer campo arranca enfocado, numérico y de texto (con su tope de 3 dígitos)', async () => {
+    await montar(FIFA)
+    await tocar(botonLlamado('Cargar Ana & Beto contra Caro & Dani'))
+
+    const [golesA, golesB] = campos()
+    expect(document.activeElement).toBe(golesA)
+    for (const campo of [golesA!, golesB!]) {
+      expect(campo.type).toBe('text')
+      expect(campo.inputMode).toBe('numeric')
+      expect(campo.maxLength).toBe(3)
+    }
+    expect(golesA!.getAttribute('aria-label')).toBe('Goles de Ana & Beto')
+    expect(golesB!.getAttribute('aria-label')).toBe('Goles de Caro & Dani')
+  })
+
+  it('Enter en el primero pasa al segundo; Enter en el segundo guarda', async () => {
+    await montar(FIFA)
+    await tocar(botonLlamado('Cargar Ana & Beto contra Caro & Dani'))
+    const [golesA, golesB] = campos()
+
+    await tipear(golesA!, '3')
+    expect(document.activeElement).toBe(golesA)
     await act(async () => {
-      root?.render(carga(PADEL))
+      golesA!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
     })
+    expect(document.activeElement).toBe(golesB)
 
-    expect(vista.textContent).toContain('¿Quién ganó?')
-    expect(scrollIntoView).toHaveBeenCalledTimes(1)
+    await tipear(golesB!, '1')
+    await act(async () => {
+      golesB!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+    })
+    expect(saveMatchResult).toHaveBeenCalledWith('s1', 1, 'p1', [{ gamesA: 3, gamesB: 1 }])
+    expect(dialogo().open).toBe(false)
+    expect(aviso().textContent).toContain('Guardado: Ana & Beto 3-1')
   })
 
-  it('volver a tocarlo cierra el panel, lo marca cerrado y tampoco scrollea', async () => {
-    const vista = await montar(PADEL)
-    await tocar(botonDe(vista, 'Cargar resultado'))
-
-    await tocar(botonDe(vista, 'Cargar resultado'))
-
-    expect(botonDe(vista, 'Cargar resultado').getAttribute('aria-expanded')).toBe('false')
-    expect(vista.textContent).not.toContain('¿Quién ganó?')
-    expect(scrollIntoView).toHaveBeenCalledTimes(1)
+  it('con dos dígitos en el primero pasa solo al segundo', async () => {
+    await montar(FIFA)
+    await tocar(botonLlamado('Cargar Ana & Beto contra Caro & Dani'))
+    const [golesA, golesB] = campos()
+    await tipear(golesA!, '1')
+    expect(document.activeElement).toBe(golesA)
+    await tipear(golesA!, '10')
+    expect(document.activeElement).toBe(golesB)
   })
 
-  it('cerrar y volver a abrir scrollea otra vez', async () => {
-    const vista = await montar(PADEL)
-    await tocar(botonDe(vista, 'Cargar resultado'))
-    await tocar(botonDe(vista, 'Cargar resultado'))
-
-    await tocar(botonDe(vista, 'Cargar resultado'))
-
-    expect(botonDe(vista, 'Cargar resultado').getAttribute('aria-expanded')).toBe('true')
-    expect(scrollIntoView).toHaveBeenCalledTimes(2)
+  it('"Guardar" se apaga mientras falte un número y guarda con los dos', async () => {
+    await montar(FIFA)
+    await tocar(botonLlamado('Cargar Ana & Beto contra Caro & Dani'))
+    const [golesA, golesB] = campos()
+    expect(botonDe('Guardar', dialogo()).disabled).toBe(true)
+    await tipear(golesA!, '0')
+    await tipear(golesB!, '2')
+    await tocar(botonDe('Guardar', dialogo()))
+    expect(saveMatchResult).toHaveBeenCalledWith('s1', 1, 'p1', [{ gamesA: 0, gamesB: 2 }])
   })
 
-  it('con marcador abierto (FIFA) también scrollea al abrir', async () => {
-    const vista = await montar(FIFA)
+  it('si el guardado rebota, la hoja queda abierta con lo tipeado y el error', async () => {
+    saveMatchResult.mockResolvedValueOnce({ ok: false, error: 'Esta disciplina no admite empates.' })
+    await montar(FIFA)
+    await tocar(botonLlamado('Cargar Ana & Beto contra Caro & Dani'))
+    const [golesA, golesB] = campos()
+    await tipear(golesA!, '0')
+    await tipear(golesB!, '0')
+    await tocar(botonDe('Guardar', dialogo()))
 
-    await tocar(botonDe(vista, 'Cargar resultado'))
-
-    expect(botonDe(vista, 'Cargar resultado').getAttribute('aria-expanded')).toBe('true')
-    expect(vista.textContent).toContain('Guardar resultado')
-    expect(scrollIntoView).toHaveBeenCalledTimes(1)
-    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' })
+    expect(dialogo().open).toBe(true)
+    expect(dialogo().querySelector('[role="alert"]')?.textContent).toBe('Esta disciplina no admite empates.')
+    expect(campos().map((campo) => campo.value)).toEqual(['0', '0'])
   })
 
-  it('FIFA: si el guardado rebota, el error se suma al panel y vuelve a mirar; tipear no scrollea', async () => {
-    saveMatchResult.mockResolvedValue({ ok: false, error: 'Esta disciplina no admite empates.' })
-    const vista = await montar(FIFA)
-    await tocar(botonDe(vista, 'Cargar resultado'))
-
-    const [golesA, golesB] = [...vista.querySelectorAll('input')]
-    await tipear(golesA as HTMLInputElement, '0')
-    await tipear(golesB as HTMLInputElement, '0')
-    // Los campos son lo que más se toca con el teclado del celular abierto: mover la pantalla ahí estorba.
-    expect(scrollIntoView).toHaveBeenCalledTimes(1)
-
-    await tocar(botonDe(vista, 'Guardar resultado'))
-
-    expect(vista.textContent).toContain('Esta disciplina no admite empates.')
-    expect(scrollIntoView).toHaveBeenCalledTimes(2)
-  })
-
-  it('pádel: si el guardado rebota el panel se cierra, el error queda junto al botón y no scrollea', async () => {
-    saveMatchResult.mockResolvedValue({ ok: false, error: 'No se pudo guardar.' })
-    const vista = await montar(PADEL)
-    await tocar(botonDe(vista, 'Cargar resultado'))
-    await tocar(botonDe(vista, 'Ana & Beto'))
-    expect(scrollIntoView).toHaveBeenCalledTimes(2)
-
-    await tocar(botonDe(vista, '0'))
-
-    expect(vista.textContent).toContain('No se pudo guardar.')
-    expect(botonDe(vista, 'Cargar resultado').getAttribute('aria-expanded')).toBe('false')
-    expect(scrollIntoView).toHaveBeenCalledTimes(2)
+  it('corregir un FIFA cargado trae los goles puestos', async () => {
+    await montar(FIFA, [partido('p1', 'Ana & Beto', 'Caro & Dani', [{ gamesA: 2, gamesB: 2 }])])
+    await tocar(botonLlamado('Corregir Ana & Beto 2, Caro & Dani 2'))
+    expect(campos().map((campo) => campo.value)).toEqual(['2', '2'])
   })
 })

@@ -2,11 +2,12 @@
 
 import { useState, useTransition } from 'react'
 import { MASTERS_SIZE, type DisciplineId } from '@/core'
-import { initials } from '@/app/format'
+import { Avatar } from '@/app/ui/avatar'
+import { button } from '@/app/ui/button'
 import { buildMasters, confirmMatchday, drawMastersPairs, type WriteResult } from './actions'
 import { BorrarFecha } from './borrar'
 
-const ERROR_NOTE = 'rounded-field bg-live-bg px-3 py-2.5 text-[12.5px] font-bold text-live'
+const ERROR_NOTE = 'rounded-btn bg-live-bg px-3 py-2.5 text-[15px] font-semibold text-live'
 
 /** Hoy en `YYYY-MM-DD`, con componentes locales: `toISOString()` es UTC y con huso negativo da ayer. */
 function today(): string {
@@ -37,13 +38,14 @@ export function ArmarMasters({
   const [pending, startTransition] = useTransition()
 
   return (
-    <div className="mt-3 flex flex-col gap-2">
+    <div className="mt-4 flex flex-col gap-2">
       <div className="flex items-center gap-2">
         <input
           type="date"
           value={playedOn}
+          aria-label="Día del Masters"
           onChange={(event) => setPlayedOn(event.target.value)}
-          className="rounded-field border border-line bg-surface p-[13px] text-[16px] font-bold outline-none"
+          className="min-h-[56px] rounded-btn border-[1.5px] border-line bg-surface-2 px-3 text-[16px] font-semibold text-text"
         />
         <button
           type="button"
@@ -55,14 +57,16 @@ export function ArmarMasters({
               if (!result.ok) setError(result.error)
             })
           }}
-          className={`flex-1 rounded-field p-4 text-[15px] font-extrabold ${
-            pending || playedOn === '' ? 'bg-chip text-muted' : 'bg-accent text-accent-text'
-          }`}
+          className={`${button('primary', { size: 'lg' })} flex-1`}
         >
           Armar el Masters
         </button>
       </div>
-      {error !== null && <p className={ERROR_NOTE}>{error}</p>}
+      {error !== null && (
+        <p role="alert" className={ERROR_NOTE}>
+          {error}
+        </p>
+      )}
     </div>
   )
 }
@@ -114,16 +118,14 @@ export function MastersDraft({
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      <h2 className="text-[15px] font-extrabold tracking-[-.02em]">
-        Los {MASTERS_SIZE} primeros del año
-      </h2>
+    <div className="flex flex-col gap-4">
+      <h2 className="font-titulo text-[24px]">{`Los ${MASTERS_SIZE} primeros del año`}</h2>
 
-      <div className="overflow-hidden rounded-[14px] border border-line bg-surface">
+      <ol className="-mx-4">
         {qualifiers.map((row, index) => (
-          <div
+          <li
             key={row.entryId}
-            className={`flex items-center gap-3 p-3 ${index > 0 ? 'border-t border-line' : ''}`}
+            className="flex min-h-[56px] items-center gap-3 border-t border-line px-4 py-2 first:border-t-0"
           >
             {/* S85 (verify-report-pr21-cierre #4016): mismo gemelo que
                 armado.tsx/desempate.tsx. Acá es sólo consistencia -- `index + 1`
@@ -131,17 +133,22 @@ export function MastersDraft({
                 span jamás corta un número de dos dígitos hoy -- pero es la
                 misma forma copiada tres veces y conviene que las tres digan
                 lo mismo. */}
-            <span className="w-5 shrink-0 text-[14px] font-extrabold text-muted">{index + 1}</span>
-            <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full bg-chip text-[12px] font-extrabold text-muted">
-              {initials(row.name)}
+            <span className="font-cond w-5 shrink-0 text-[24px]">{index + 1}</span>
+            <Avatar name={row.name} />
+            <span className="min-w-0 flex-1 text-[17px] font-semibold">{row.name}</span>
+            <span className="font-cond shrink-0 text-[26px]">
+              {row.points}
+              <small className="ml-1 font-sans text-[14px] font-semibold text-muted [font-stretch:100%]">pts</small>
             </span>
-            <span className="flex-1 text-[14.5px] font-bold">{row.name}</span>
-            <span className="shrink-0 text-[17px] font-extrabold">{row.points}</span>
-          </div>
+          </li>
         ))}
-      </div>
+      </ol>
 
-      {error !== null && <p className={ERROR_NOTE}>{error}</p>}
+      {error !== null && (
+        <p role="alert" className={ERROR_NOTE}>
+          {error}
+        </p>
+      )}
 
       {/* "Confirmar fecha" es el mismo copy y la misma acción que una fecha
           regular: `openMatchday` ya sabe que el Masters no tiene asistencias.
@@ -151,9 +158,7 @@ export function MastersDraft({
           type="button"
           disabled={pending}
           onClick={() => run(() => drawMastersPairs(seasonId, matchdayId, matchdayNumber))}
-          className={`rounded-field p-4 text-center text-[15px] font-extrabold ${
-            generated ? 'border-[1.5px] border-line' : 'flex-1 bg-accent text-accent-text'
-          } ${pending ? 'bg-chip text-muted' : ''}`}
+          className={generated ? button('secondary', { size: 'lg' }) : `${button('primary', { size: 'lg' })} flex-1`}
         >
           Generar los partidos
         </button>
@@ -163,9 +168,7 @@ export function MastersDraft({
             type="button"
             disabled={pending}
             onClick={() => run(() => confirmMatchday(seasonId, matchdayId, matchdayNumber))}
-            className={`flex-1 rounded-field p-4 text-center text-[15px] font-extrabold ${
-              pending ? 'bg-chip text-muted' : 'bg-accent text-accent-text'
-            }`}
+            className={`${button('primary', { size: 'lg' })} flex-1`}
           >
             Confirmar fecha
           </button>

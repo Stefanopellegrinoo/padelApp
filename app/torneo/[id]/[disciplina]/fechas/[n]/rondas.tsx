@@ -1,19 +1,8 @@
 'use client'
 
-import { useState } from 'react'
-import { Carga, type CargaContext } from './carga'
+import { CargaDeLaFecha, TarjetaPartido, type CargaContext, type PartidoVM } from './carga'
 
-export interface RoundMatchVM {
-  key: string
-  /** El id de la fila de `matches`, que es lo que `saveResult` necesita para cargarlo. */
-  matchId: string
-  pairAName: string
-  pairBName: string
-  scoreA: string
-  scoreB: string
-  /** `null` sin resultado todavía: ninguna de las dos filas se dibuja como ganadora. */
-  winner: 'A' | 'B' | null
-}
+export type RoundMatchVM = PartidoVM
 
 export interface RoundVM {
   number: number
@@ -25,107 +14,78 @@ export interface RoundVM {
   restingPairName: string | null
 }
 
-function MatchRow({ name, score, isWinner, isLoser }: { name: string; score: string; isWinner: boolean; isLoser: boolean }) {
-  return (
-    <div className="flex items-center justify-between gap-2 py-[3px]">
-      <span className={`text-[14.5px] ${isWinner ? 'font-extrabold' : 'font-[650]'} ${isLoser ? 'text-muted' : ''}`}>
-        {name}
-      </span>
-      <span className="min-w-[32px] shrink-0 rounded-[8px] bg-chip px-2 py-1 text-center text-[16px] font-extrabold">
-        {score}
-      </span>
-    </div>
-  )
-}
-
-function MatchCard({ match, carga }: { match: RoundMatchVM; carga: CargaContext | null }) {
-  return (
-    <div className="rounded-[14px] border border-line bg-surface p-[13px]">
-      <MatchRow name={match.pairAName} score={match.scoreA} isWinner={match.winner === 'A'} isLoser={match.winner === 'B'} />
-      <MatchRow name={match.pairBName} score={match.scoreB} isWinner={match.winner === 'B'} isLoser={match.winner === 'A'} />
-      {/* El botón queda también sobre los partidos ya cargados: `saveResult`
-          reemplaza, y un score tipeado mal de noche no tendría otro arreglo. */}
-      {carga !== null && (
-        <Carga
-          context={carga}
-          matchId={match.matchId}
-          pairAName={match.pairAName}
-          pairBName={match.pairBName}
-        />
-      )}
-    </div>
-  )
-}
+/**
+ * Con más partidos que esto, las rondas terminadas se pliegan: con 66
+ * partidos (12 de a uno) la que está en juego queda a varias pantallas.
+ */
+const PLIEGA_DESDE = 20
 
 /**
- * Acordeón de rondas — Task 8, la parte del punto de la tarea. Cada ronda es su
- * propia sección; las que ya cargaron todos los resultados arrancan colapsadas
- * a una fila resumen tocable, las demás arrancan abiertas.
+ * Las rondas de la fecha, todas a la vista: una ronda terminada no esconde
+ * los partidos que puede hacer falta corregir (S8e). Sólo una fecha larga
+ * pliega las terminadas, y lo dice ("Ver los 4 partidos").
  *
- * La Task 10 del Plan 4 le enchufó la carga encima sin rehacerlo: con `carga`
- * en `null` —cualquiera que no sea quien organiza, o la fecha ya cerrada— el
- * acordeón es exactamente el de sólo lectura que era.
+ * El estado de cada ronda es un dato y no una frase: "Terminada", "En juego"
+ * (la primera que falta, en el color del deporte) o "Pendiente". La carga
+ * —la hoja, el aviso, "Siguiente"— es de `CargaDeLaFecha`; con `carga` en
+ * `null` (quien no carga, o la fecha cerrada) las tarjetas son de lectura.
  */
 export function Rondas({
   rounds,
-  totalRounds,
   carga = null,
 }: {
   rounds: RoundVM[]
-  totalRounds: number
   carga?: CargaContext | null
 }) {
-  const [expanded, setExpanded] = useState<Set<number>>(
-    () => new Set(rounds.filter((round) => !round.complete).map((round) => round.number)),
-  )
+  const partidos = rounds.flatMap((round) => round.matches)
+  const enJuego = rounds.findIndex((round) => !round.complete)
+  const pliega = partidos.length > PLIEGA_DESDE
 
   return (
-    <div className="flex flex-col gap-4">
-      {rounds.map((round) => {
-        const isOpen = expanded.has(round.number)
-        return (
-          <div key={round.number} className="flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <p className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">
-                Ronda {round.number} de {totalRounds}
-              </p>
-              <p className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">
-                {round.loadedCount}/{round.totalCount} cargados
-              </p>
+    <CargaDeLaFecha context={carga} partidos={partidos}>
+      <div className="flex flex-col gap-5">
+        {rounds.map((round, index) => {
+          const estado = round.complete ? 'Terminada' : index === enJuego ? 'En juego' : 'Pendiente'
+          const encabezado = (
+            <div className="flex items-baseline justify-between gap-3">
+              <h2 className="font-titulo text-[24px]">{`Ronda ${round.number}`}</h2>
+              <span className={`text-[14px] font-[650] ${estado === 'En juego' ? 'text-sport' : 'text-muted'}`}>
+                {estado}
+              </span>
             </div>
+          )
+          const lista = (
+            <div className="flex flex-col gap-2.5">
+              {round.matches.map((match) => (
+                <TarjetaPartido key={match.key} partido={match} />
+              ))}
+              {round.restingPairName !== null && (
+                <p className="text-[15px] text-muted">{`Descansa: ${round.restingPairName}`}</p>
+              )}
+            </div>
+          )
 
-            {isOpen ? (
-              <div className="flex flex-col gap-2">
-                {round.matches.map((match) => (
-                  <MatchCard key={match.key} match={match} carga={carga} />
-                ))}
-                {round.restingPairName !== null && (
-                  <p className="rounded-field bg-chip px-3 py-2 text-[12px] font-bold text-muted">
-                    Descansa esta ronda: {round.restingPairName}
-                  </p>
-                )}
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setExpanded((prev) => new Set(prev).add(round.number))}
-                className="flex flex-col gap-1 rounded-[14px] border border-line bg-surface p-[13px] text-left"
-              >
-                {round.matches.map((match) => (
-                  <span key={match.key} className="text-[12px] font-[650] text-muted">
-                    {match.pairAName} {match.scoreA}–{match.scoreB} {match.pairBName}
+          if (pliega && round.complete) {
+            return (
+              <details key={round.number} className="group">
+                <summary className="flex min-h-[44px] cursor-pointer list-none flex-col justify-center gap-1 [&::-webkit-details-marker]:hidden">
+                  {encabezado}
+                  <span className="text-[15px] font-semibold text-accent-link group-open:hidden">
+                    {`Ver los ${round.totalCount} partidos`}
                   </span>
-                ))}
-                {round.restingPairName !== null && (
-                  <span className="text-[12px] font-[650] text-muted">
-                    Descansa esta ronda: {round.restingPairName}
-                  </span>
-                )}
-              </button>
-            )}
-          </div>
-        )
-      })}
-    </div>
+                </summary>
+                <div className="mt-2.5">{lista}</div>
+              </details>
+            )
+          }
+          return (
+            <section key={round.number} className="flex flex-col gap-2.5">
+              {encabezado}
+              {lista}
+            </section>
+          )
+        })}
+      </div>
+    </CargaDeLaFecha>
   )
 }

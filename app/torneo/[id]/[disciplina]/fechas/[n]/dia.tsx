@@ -48,9 +48,9 @@ export function DiaDeLaFecha({
   }
 
   return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-center gap-2">
-        <label htmlFor="dia" className="text-[12px] font-extrabold text-muted">
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center justify-between gap-3">
+        <label htmlFor="dia" className="text-[16px] font-semibold">
           Se juega el
         </label>
         <input
@@ -59,10 +59,14 @@ export function DiaDeLaFecha({
           value={value}
           disabled={pending}
           onChange={(event) => save(event.target.value)}
-          className="min-h-11 rounded-field border border-line bg-surface px-3 py-2 text-[16px] font-bold outline-none transition-opacity disabled:opacity-45"
+          className="min-h-11 rounded-btn border-[1.5px] border-line bg-surface-2 px-3 py-2 text-[16px] font-semibold text-text"
         />
       </div>
-      {error !== null && <p className="text-[12px] font-bold text-live">{error}</p>}
+      {error !== null && (
+        <p role="alert" className="text-[15px] font-semibold text-live">
+          {error}
+        </p>
+      )}
     </div>
   )
 }

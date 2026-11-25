@@ -2,59 +2,15 @@
 
 import { useState, useTransition } from 'react'
 import type { Phase } from '@/core'
+import { button } from '@/app/ui/button'
 import { closePhase } from './actions'
-import { Carga, type CargaContext } from './carga'
+import { CargaDeLaFecha, TarjetaPartido, type CargaContext, type PartidoVM } from './carga'
+import { FASE_LABEL, sectionTitle } from './secciones'
 
-export interface LlaveMatchVM {
-  key: string
-  /** El id de la fila de `matches`, que es lo que `saveResult` necesita para cargarlo. */
-  matchId: string
+export interface LlaveMatchVM extends PartidoVM {
   fase: Phase
   /** Sólo significa algo en `GRUPO` — `matches_group_only_in_groups` (0039) lo fija en 1 en cualquier otra fase. */
   grupo: number
-  sideAName: string
-  sideBName: string
-  scoreA: string
-  scoreB: string
-  winner: 'A' | 'B' | null
-}
-
-const FASE_LABEL: Record<Phase, string> = {
-  GRUPO: 'Fase de grupos',
-  OCTAVOS: 'Octavos de final',
-  CUARTOS: 'Cuartos de final',
-  SEMI: 'Semifinal',
-  TERCER_PUESTO: 'Tercer puesto',
-  FINAL: 'Final',
-}
-
-function sectionTitle(fase: Phase, grupo: number): string {
-  return fase === 'GRUPO' ? `Grupo ${grupo}` : FASE_LABEL[fase]
-}
-
-function MatchRow({ name, score, isWinner, isLoser }: { name: string; score: string; isWinner: boolean; isLoser: boolean }) {
-  return (
-    <div className="flex items-center justify-between gap-2 py-[3px]">
-      <span className={`text-[14.5px] ${isWinner ? 'font-extrabold' : 'font-[650]'} ${isLoser ? 'text-muted' : ''}`}>
-        {name}
-      </span>
-      <span className="min-w-[32px] shrink-0 rounded-[8px] bg-chip px-2 py-1 text-center text-[16px] font-extrabold">
-        {score}
-      </span>
-    </div>
-  )
-}
-
-function MatchCard({ match, carga }: { match: LlaveMatchVM; carga: CargaContext | null }) {
-  return (
-    <div className="rounded-[14px] border border-line bg-surface p-[13px]">
-      <MatchRow name={match.sideAName} score={match.scoreA} isWinner={match.winner === 'A'} isLoser={match.winner === 'B'} />
-      <MatchRow name={match.sideBName} score={match.scoreB} isWinner={match.winner === 'B'} isLoser={match.winner === 'A'} />
-      {carga !== null && (
-        <Carga context={carga} matchId={match.matchId} pairAName={match.sideAName} pairBName={match.sideBName} />
-      )}
-    </div>
-  )
 }
 
 /**
@@ -66,7 +22,8 @@ function MatchCard({ match, carga }: { match: LlaveMatchVM; carga: CargaContext 
  * ronda de cada grupo bajo el mismo título "Ronda 1".
  *
  * `matches` ya viene ordenado por `(fase, grupo, round)` desde `page.tsx`: acá
- * sólo se agrupa por sección, preservando ese orden.
+ * sólo se agrupa por sección, preservando ese orden. La carga es la misma
+ * hoja que en `Rondas` (`CargaDeLaFecha`).
  */
 export function Llave({
   seasonId,
@@ -111,37 +68,37 @@ export function Llave({
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      {phase !== null && (
-        <p className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">
-          Fase actual: {FASE_LABEL[phase]}
-        </p>
-      )}
+    <CargaDeLaFecha context={carga} partidos={matches}>
+      <div className="flex flex-col gap-5">
+        {phase !== null && (
+          <p className="text-[15px] font-semibold text-sport">{`Fase actual: ${FASE_LABEL[phase]}`}</p>
+        )}
 
-      {sections.map((section) => (
-        <div key={section.title} className="flex flex-col gap-2">
-          <p className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">{section.title}</p>
-          <div className="flex flex-col gap-2">
+        {sections.map((section) => (
+          <section key={section.title} className="flex flex-col gap-2.5">
+            <h2 className="font-titulo text-[24px]">{section.title}</h2>
             {section.matches.map((match) => (
-              <MatchCard key={match.key} match={match} carga={carga} />
+              <TarjetaPartido key={match.key} partido={match} />
             ))}
-          </div>
-        </div>
-      ))}
+          </section>
+        ))}
 
-      {canClosePhase && (
-        <button
-          type="button"
-          disabled={pending}
-          onClick={cerrarFase}
-          className="rounded-field bg-accent p-4 text-center text-[15px] font-extrabold text-accent-text transition-opacity disabled:opacity-45"
-        >
-          Cerrar fase
-        </button>
-      )}
-      {error !== null && (
-        <p className="rounded-field bg-live-bg px-3 py-2.5 text-[12.5px] font-bold text-live">{error}</p>
-      )}
-    </div>
+        {canClosePhase && (
+          <button
+            type="button"
+            disabled={pending}
+            onClick={cerrarFase}
+            className={button('primary', { size: 'lg', full: true })}
+          >
+            Cerrar fase
+          </button>
+        )}
+        {error !== null && (
+          <p role="alert" className="rounded-btn bg-live-bg px-3 py-2.5 text-[15px] font-semibold text-live">
+            {error}
+          </p>
+        )}
+      </div>
+    </CargaDeLaFecha>
   )
 }

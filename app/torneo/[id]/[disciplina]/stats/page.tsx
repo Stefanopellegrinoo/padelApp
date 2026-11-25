@@ -315,7 +315,7 @@ function Duplas({ best, rest, gente }: { best: PartnerRecord | null; rest: Partn
 }
 
 function metaDupla(record: PartnerRecord): string {
-  return `${record.won}-${record.lost} · ${record.together === 1 ? '1 fecha' : `${record.together} fechas`}`
+  return `${record.won}-${record.lost}, ${record.together === 1 ? '1 fecha' : `${record.together} fechas`}`
 }
 
 /**
@@ -424,7 +424,7 @@ export default async function StatsPage({ params, searchParams }: PageProps) {
     <Hero
       back={volverDestination(seasonId, header.disciplines.length)}
       kicker={header.name}
-      title={`Estadísticas${disciplineLabel !== null ? ` · ${disciplineLabel}` : ''}`}
+      title={`Estadísticas${disciplineLabel !== null ? ` de ${disciplineLabel}` : ''}`}
       subtitle={`${history.length} de ${config.regularMatchdays} fechas jugadas`}
       sport={discipline.kind}
       right={

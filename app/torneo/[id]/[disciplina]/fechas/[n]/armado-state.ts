@@ -25,6 +25,8 @@ export interface SeatVM {
   name: string
   /** Sin fila de asistencia es `true`: el default es venir, y `seedAttendances` hace que la base opine lo mismo. */
   playing: boolean
+  /** Es el asiento de quien mira: lleva la marca de "vos". */
+  vos?: boolean
 }
 
 /** Lo que un toque afirma: este asiento juega, o no. Nunca "dalo vuelta". */
@@ -191,10 +193,10 @@ export function matchFormatLabel(format: MatchFormat, unit: string): string {
   return formatsLabel([{ label: '', matchFormat: format, unit }])
 }
 
-/** "Fecha 3 · 1 set a 6 games", o null si la fecha se juega igual que el deporte hoy (§7). */
+/** "Fecha 3, 1 set a 6 games", o null si la fecha se juega igual que el deporte hoy (§7). */
 export function formatoNotice(number: number, effective: MatchFormat, discipline: MatchFormat, unit: string): string | null {
   const label = matchFormatLabel(effective, unit)
-  return label === matchFormatLabel(discipline, unit) ? null : `Fecha ${number} · ${label}`
+  return label === matchFormatLabel(discipline, unit) ? null : `Fecha ${number}, ${label}`
 }
 
 /** Lo que el sorteo tiene para repartir en esta fecha. */

@@ -29,7 +29,7 @@ export function Hero({
   titleVariant = 'title',
   sport,
 }: {
-  back?: { href: string; label?: string }
+  back?: { href: string; label?: string; desanda?: boolean }
   kicker?: ReactNode
   title: ReactNode
   subtitle?: ReactNode
@@ -47,7 +47,7 @@ export function Hero({
       data-deporte={sport}
       className="rounded-b-block bg-block px-4 pt-[calc(6px+env(safe-area-inset-top))] pb-5 text-on-block [--color-focus:var(--color-on-block)]"
     >
-      {back !== undefined && <Volver href={back.href} label={back.label} />}
+      {back !== undefined && <Volver href={back.href} label={back.label} desanda={back.desanda} />}
       {kicker !== undefined && (
         <div className="mt-2 flex items-center gap-2 text-[15px] font-semibold text-on-block-soft">{kicker}</div>
       )}

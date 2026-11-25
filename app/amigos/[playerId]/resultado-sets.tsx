@@ -5,7 +5,6 @@ import {
   chooseLoserGames,
   chooseWinner,
   isComplete,
-  startLoad,
   type LoadState,
 } from '@/app/torneo/[id]/[disciplina]/fechas/[n]/carga-state'
 import { BotonesDelPerdedor } from '@/app/torneo/[id]/[disciplina]/fechas/[n]/carga'
@@ -22,26 +21,37 @@ type FormatKey = 'setsToWin' | 'gamesPerSet'
  * (`carga-state.ts`, A = mi lado): quién ganó, y con cuántos se quedó el que
  * perdió. Sin estado propio: todo vive en `CasualForm`, que es quien guarda
  * en el toque que cierra el partido.
+ *
+ * `load` es lo que se va tocando y `final` lo que se guardaría (al corregir,
+ * lo tocado más lo guardado que falta): las pastillas y el campo oculto son
+ * de `final`. `elegido` es el número marcado del set en curso al corregir.
  */
 export function ResultadoSets({
   sport,
   format,
   load,
+  final = load,
+  elegido = null,
   mineName,
   otherName,
   pending,
   onFormat,
   onLoad,
+  onRestart,
 }: {
   sport: SetsSport
   format: MatchFormat
   load: LoadState
+  final?: LoadState
+  elegido?: { loser: number; deuce: boolean } | null
   /** Los dos lados como se leen en los botones: "Vos" y "Fede", o las parejas. */
   mineName: string
   otherName: string
   pending: boolean
   onFormat: (key: FormatKey, value: number) => void
   onLoad: (next: LoadState) => void
+  /** "Volver a cargar": de cero. */
+  onRestart: () => void
 }) {
   const cap = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
   const labels: Record<FormatKey, string> = {
@@ -53,7 +63,7 @@ export function ResultadoSets({
     <div className="flex flex-col">
       <input type="hidden" name="setsToWin" value={format.setsToWin} />
       <input type="hidden" name="gamesPerSet" value={format.gamesPerSet} />
-      <input type="hidden" name="sets" value={setsField(load)} />
+      <input type="hidden" name="sets" value={setsField(final)} />
       {steppers.length > 0 && (
         <div className="mt-2 flex flex-col divide-y divide-line">
           {steppers.map((key) => (
@@ -72,11 +82,14 @@ export function ResultadoSets({
       <SetsTaps
         unit={sport.unit}
         load={load}
+        pastillas={final.sets}
+        elegido={elegido}
         format={format}
         mineName={mineName}
         otherName={otherName}
         pending={pending}
         onChange={onLoad}
+        onRestart={onRestart}
       />
     </div>
   )
@@ -92,19 +105,25 @@ export function ResultadoSets({
 function SetsTaps({
   unit,
   load,
+  pastillas,
+  elegido,
   format,
   mineName,
   otherName,
   pending,
   onChange,
+  onRestart,
 }: {
   unit: string
   load: LoadState
+  pastillas: LoadState['sets']
+  elegido: { loser: number; deuce: boolean } | null
   format: MatchFormat
   mineName: string
   otherName: string
   pending: boolean
   onChange: (next: LoadState) => void
+  onRestart: () => void
 }) {
   const complete = isComplete(load, format)
   const ganador = load.pendingWinner
@@ -112,10 +131,10 @@ function SetsTaps({
   const multiSet = format.setsToWin > 1
   return (
     <div className="flex flex-col">
-      {(multiSet || load.sets.length > 0) && (
+      {(multiSet || pastillas.length > 0) && (
         <div className="mt-4 flex flex-wrap items-center gap-2" aria-live="polite">
           {!complete && <p className="font-titulo text-[20px]">Set {load.sets.length + 1}</p>}
-          {load.sets.map((set, index) => (
+          {pastillas.map((set, index) => (
             <span
               key={index}
               aria-label={`Set ${index + 1}: ${set.gamesA} a ${set.gamesB}`}
@@ -163,6 +182,7 @@ function SetsTaps({
             unit={unit}
             loserName={ganador === null ? null : nombreDe(ganador === 'A' ? 'B' : 'A')}
             pending={pending}
+            elegido={elegido}
             onLoser={(n) => onChange(chooseLoserGames(load, n, format))}
             onDeuce={(loser) => onChange(chooseDeuce(load, loser, format))}
           />
@@ -173,7 +193,7 @@ function SetsTaps({
           type="button"
           disabled={pending}
           className="mt-2 flex min-h-[44px] items-center self-start rounded-btn px-1 text-[16px] font-bold text-accent-link"
-          onClick={() => onChange(startLoad())}
+          onClick={onRestart}
         >
           Volver a cargar
         </button>

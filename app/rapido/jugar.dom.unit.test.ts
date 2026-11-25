@@ -113,6 +113,20 @@ it('dos toques: quién ganó y los games del que perdió; el segundo guarda y ci
   expect(aviso().textContent).toContain('Guardado: Beto 4-2')
 })
 
+it('el partido recién guardado destella 700 ms; los demás, no', async () => {
+  montar()
+  tocar(porEtiqueta('Cargar Ana contra Beto'))
+  tocar(enHoja('Ana'))
+  tocar(enHoja('1'))
+  expect(document.getElementById('partido-0')?.classList.contains('destello')).toBe(true)
+  expect(document.getElementById('partido-1')?.classList.contains('destello')).toBe(false)
+
+  await act(async () => {
+    await new Promise((listo) => setTimeout(listo, 750))
+  })
+  expect(document.getElementById('partido-0')?.classList.contains('destello')).toBe(false)
+})
+
 it('"Siguiente" del aviso abre el próximo sin cargar', () => {
   montar()
   tocar(porEtiqueta('Cargar Ana contra Beto'))
@@ -188,10 +202,11 @@ it('"Nuevo torneo" pregunta antes de borrar; Cancelar no borra nada', () => {
   expect(nuevo).toHaveBeenCalledTimes(1)
 })
 
-it('Volver va al inicio de la app', () => {
+it('Volver va al inicio de la app y lo nombra', () => {
   montar()
   const volver = host.querySelector('header a') as HTMLAnchorElement
   expect(volver.getAttribute('href')).toBe('/')
+  expect(volver.textContent).toBe('Inicio')
 })
 
 it('antes del primer resultado la tabla no inventa puestos', () => {

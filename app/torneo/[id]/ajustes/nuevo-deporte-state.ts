@@ -16,17 +16,18 @@ export interface NewSportInput {
  * Las opciones de "Primera fecha" al sumar un deporte (docs/torneos-deportes.md §5): "Por nivel" es el
  * orden que ya tiene el torneo, y "Igual que" copia el de cualquier disciplina que el torneo ya tiene
  * (no hay cadenas que evitar: su orden ya está guardado). Con dos del mismo deporte, el slug las distingue.
+ * Las mismas palabras que el asistente de crear (`opcionesPrimeraFecha`, `app/torneos/nuevo/crear-state.ts`).
  */
 export function opcionesDeAlta(
   disciplines: readonly { id: string; kind: string; slug: string }[],
 ): { value: PrimeraFecha; label: string; sub: string | null }[] {
   return [
-    { value: 'NIVEL', label: 'Por nivel', sub: 'el orden del torneo' },
-    { value: 'SORTEO', label: 'Al azar', sub: 'sorteo' },
+    { value: 'NIVEL', label: 'Por nivel', sub: 'vos los ordenás' },
+    { value: 'SORTEO', label: 'Al azar', sub: 'sortea la app' },
     ...disciplines.map((discipline) => {
       const repeated = disciplines.filter((other) => other.kind === discipline.kind).length > 1
       const name = repeated ? `${sportLabel(discipline.kind)} (${discipline.slug})` : sportLabel(discipline.kind)
-      return { value: { igualQue: discipline.id }, label: `Igual que ${name}`, sub: null }
+      return { value: { igualQue: discipline.id }, label: `Igual que ${name}`, sub: 'el mismo orden' }
     }),
   ]
 }

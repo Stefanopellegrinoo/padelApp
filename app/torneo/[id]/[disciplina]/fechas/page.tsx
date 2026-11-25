@@ -159,9 +159,9 @@ export default async function FechasPage({ params }: PageProps) {
     <div data-deporte={discipline.kind} className="flex flex-col">
       <Hero
         back={volver}
-        kicker={sportName === undefined ? header.name : `${header.name} · ${sportName}`}
+        kicker={sportName === undefined ? header.name : `${header.name}, ${sportName}`}
         title="Fechas"
-        subtitle={`${discipline.config.regularMatchdays} ${discipline.config.regularMatchdays === 1 ? 'fecha' : 'fechas'} · ${closedMatchdays.length} ${closedMatchdays.length === 1 ? 'jugada' : 'jugadas'}`}
+        subtitle={`${discipline.config.regularMatchdays} ${discipline.config.regularMatchdays === 1 ? 'fecha' : 'fechas'}, ${closedMatchdays.length} ${closedMatchdays.length === 1 ? 'jugada' : 'jugadas'}`}
         sport={discipline.kind}
       />
 
@@ -208,7 +208,7 @@ export default async function FechasPage({ params }: PageProps) {
               const estado =
                 matchday.status === 'OPEN'
                   ? openLoaded !== null && openDetail !== null && openDetail.matches.length > 0
-                    ? `En juego · ${openLoaded} de ${openDetail.matches.length} cargados`
+                    ? `En juego, ${openLoaded} de ${openDetail.matches.length} cargados`
                     : 'En juego'
                   : 'Armando'
               return (
@@ -243,8 +243,8 @@ export default async function FechasPage({ params }: PageProps) {
                     <b className="block font-semibold first-letter:uppercase">{day}</b>
                     {champion !== null && (
                       <span className="block text-[15px] text-muted">
-                        <span className="font-semibold text-text">{champion.names}</span>
-                        {` · ${champion.record}`}
+                        <span className="block font-semibold text-text">{champion.names}</span>
+                        <span className="block">{champion.record}</span>
                       </span>
                     )}
                     {notice !== null && <span className="block text-[15px] text-muted">{notice}</span>}
@@ -278,7 +278,7 @@ export default async function FechasPage({ params }: PageProps) {
                 href={`/torneo/${seasonId}/${disciplina}/fechas/${mastersMatchday.number}`}
                 className={`${button('primary', { size: 'lg', full: true })} mt-4`}
               >
-                {mastersMatchday.status === 'CLOSED' ? 'Jugado · Ver el Masters' : 'En juego · Ver el Masters'}
+                {mastersMatchday.status === 'CLOSED' ? 'Ver el Masters jugado' : 'Ver el Masters en juego'}
               </Link>
             ) : header.isAdmin && remainingForMasters === 0 && !hasLiveMatchday ? (
               <ArmarMasters seasonId={seasonId} disciplineId={discipline.id} />

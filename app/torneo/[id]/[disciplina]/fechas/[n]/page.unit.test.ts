@@ -1223,12 +1223,15 @@ describe('con parejas fijas no hay pareja "Defensora" (R17)', () => {
 
   it('control: con parejas que rotan, la fecha abierta marca a la campeona anterior como defensora', async () => {
     fecha2('OPEN', false)
-    expect(await render('2')).toContain('· Defensora')
+    const html = await render('2')
+    // "Defensora" es su propia marca al lado del nombre, sin "·" (el prototipo no lo usa).
+    expect(html).toMatch(/>Defensora<\/span>/)
+    expect(html).not.toContain('·')
   })
 
   it('parejas fijas: la fecha abierta tampoco marca a la campeona anterior como defensora', async () => {
     fecha2('OPEN', true)
-    expect(await render('2')).not.toContain('· Defensora')
+    expect(await render('2')).not.toContain('Defensora')
   })
 })
 

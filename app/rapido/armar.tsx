@@ -8,6 +8,7 @@ import {
   DEPORTE_LABEL,
   DEPORTE_OBJETIVO,
   DEPORTES,
+  VOLVER_INICIO,
   armadoWarning,
   type Armado,
   type Modalidad,
@@ -216,7 +217,7 @@ export function Armar({ onEmpezar, aviso }: { onEmpezar: (armado: Armado) => voi
   return (
     <div data-deporte={armado.deporte} className="flex flex-1 flex-col">
       <Hero
-        back={{ href: '/' }}
+        back={VOLVER_INICIO}
         title="Torneo rápido"
         subtitle="Sin cuenta. Queda guardado en este teléfono."
         sport={armado.deporte}

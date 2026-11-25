@@ -71,3 +71,17 @@ it('con label va siempre a href, aunque haya algo atrás', () => {
   expect(back).not.toHaveBeenCalled()
   expect(prevenido).toBe(false)
 })
+
+/**
+ * El Hero tiene que pasarle `desanda` a `Volver`: el torneo rápido nombra su destino ("Inicio")
+ * pero sigue volviendo a donde estabas si hay algo atrás (odd/tasks/rediseno-app.md, T16).
+ */
+it('Hero pasa desanda: con label y algo atrás, desanda', async () => {
+  const { Hero } = await import('@/app/ui/hero')
+  registrar('/torneos')
+  registrar('/rapido')
+  act(() => root.render(createElement(Hero, { title: 'T', back: { href: '/', label: 'Inicio', desanda: true } })))
+  expect(link().textContent).toBe('Inicio')
+  act(() => link().click())
+  expect(back).toHaveBeenCalledTimes(1)
+})

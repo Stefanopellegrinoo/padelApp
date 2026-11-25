@@ -188,6 +188,22 @@ describe('pádel: el par ganador y los games del perdedor, y se guarda en el úl
     expect(document.activeElement).not.toBe(document.body)
   })
 
+  it('el partido recién guardado destella 700 ms (el del prototipo); los demás, no', async () => {
+    await montar(PADEL)
+    await tocar(botonLlamado('Cargar Ana & Beto contra Caro & Dani'))
+    await tocar(pareja('Ana & Beto'))
+    await tocar(games('2'))
+
+    const guardada = document.getElementById('partido-p1')!
+    expect(guardada.classList.contains('destello')).toBe(true)
+    expect(document.getElementById('partido-p2')!.classList.contains('destello')).toBe(false)
+
+    await act(async () => {
+      await new Promise((listo) => setTimeout(listo, 750))
+    })
+    expect(document.getElementById('partido-p1')!.classList.contains('destello')).toBe(false)
+  })
+
   it('ganó B: los games van del lado de A', async () => {
     await montar(PADEL)
     await tocar(botonLlamado('Cargar Ana & Beto contra Caro & Dani'))

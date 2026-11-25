@@ -354,8 +354,8 @@ export default async function JugadorPage({ params, searchParams }: PageProps) {
     <div className="flex flex-col">
       <Hero
         back={volver}
-        kicker={header.name}
-        title={`${entry.displayName}${disciplineLabel !== null ? ` · ${disciplineLabel}` : ''}`}
+        kicker={disciplineLabel !== null ? `${header.name}, ${disciplineLabel}` : header.name}
+        title={entry.displayName}
         // Lo tuyo, en amarillo: el puesto de la derecha y esta marca.
         subtitle={isMe ? <span className="font-bold text-vos">vos</span> : undefined}
         sport={discipline.kind}
@@ -363,16 +363,15 @@ export default async function JugadorPage({ params, searchParams }: PageProps) {
           // Lo de `HeroTabla`: el puesto grande, en amarillo si es el tuyo.
           <p>
             <span className="sr-only">
-              {row.position}° de {squadEntries.length} · {row.points} puntos
+              {row.position}° de {squadEntries.length}, {row.points} puntos
             </span>
             <span aria-hidden="true">
               <span className={`font-cond block text-[64px] ${isMe ? 'text-vos' : ''}`}>
                 {row.position}
                 <span className="align-top text-[32px]">°</span>
               </span>
-              <span className="text-[14px] text-on-block-soft">
-                de {squadEntries.length} · {row.points} pts
-              </span>
+              <span className="block text-[14px] text-on-block-soft">de {squadEntries.length}</span>
+              <span className="block text-[14px] text-on-block-soft">{row.points} pts</span>
             </span>
           </p>
         }

@@ -161,11 +161,11 @@ export default async function FechaDetailPage({ params }: PageProps) {
     members(side).map((entryId) => ({ name: nameOf.get(entryId) ?? '?', vos: entryId === me }))
   const isMine = (side: Side) => me !== null && includes(side, me)
 
-  // El estado, y el día como dato al lado ("En juego · jueves 5 de marzo").
+  // El estado, y el día como dato al lado ("En juego, jueves 5 de marzo").
   const kicker = [
-    matchday.status === 'DRAFT' ? 'Armando · sólo vos la ves' : matchday.status === 'OPEN' ? 'En juego' : 'Cerrada',
+    matchday.status === 'DRAFT' ? 'Armando, sólo vos la ves' : matchday.status === 'OPEN' ? 'En juego' : 'Cerrada',
     ...(matchday.playedOn !== null && matchday.status !== 'DRAFT' ? [matchdayFull(matchday.playedOn)] : []),
-  ].join(' · ')
+  ].join(', ')
 
   // El vocabulario de la disciplina: un lado de uno no es "una pareja".
   const sideWord = sideWords(discipline.pairSize).many
@@ -281,6 +281,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
         entryId: entry.id,
         name: entry.displayName,
         playing: attendances.get(entry.id) !== 'ABSENT',
+        vos: entry.id === me,
       }))
 
     // `entriesOf` trae los invitados de TODAS las fechas de la temporada, por
@@ -747,7 +748,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
         <CompartirImagen
           archivo={`fecha-${matchday.number}-partidos`}
           titulo={isMasters ? 'Masters' : `Fecha ${matchday.number}`}
-          subtitulo={`${header.name}${matchday.playedOn !== null ? ` · ${matchdayFull(matchday.playedOn)}` : ''}`}
+          subtitulo={`${header.name}${matchday.playedOn !== null ? `, ${matchdayFull(matchday.playedOn)}` : ''}`}
           filas={rounds.flatMap((round) => [
             { nombre: `Ronda ${round.number}`, titulo: true },
             ...round.matches.map((match) => ({ nombre: `${match.pairAName}  vs  ${match.pairBName}` })),
@@ -933,7 +934,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
                   }`}
                 >
                   {sideName(side)}
-                  {defending ? ' · Defensora' : ''}
+                  {defending && <span className="ml-2 font-bold">Defensora</span>}
                 </li>
               )
             })}
@@ -977,7 +978,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
                 <CompartirImagen
                   archivo={`fecha-${matchday.number}`}
                   titulo={`Fecha ${matchday.number}`}
-                  subtitulo={`${header.name}${matchday.playedOn !== null ? ` · ${matchdayFull(matchday.playedOn)}` : ''}`}
+                  subtitulo={`${header.name}${matchday.playedOn !== null ? `, ${matchdayFull(matchday.playedOn)}` : ''}`}
                   filas={tableRows.map((row, index) => ({
                     nombre: `${index + 1}. ${sideName(row.side)}`,
                     puntos: ptsOf(row.side),
@@ -1073,14 +1074,13 @@ export default async function FechaDetailPage({ params }: PageProps) {
   }
 
   return (
-    <div data-deporte={discipline.kind} className="flex flex-col">
+    <div data-deporte={discipline.kind} className="relative flex flex-col">
       <Hero
         back={{ href: `/torneo/${seasonId}/${disciplina}/fechas`, label: 'Fechas' }}
         kicker={kicker}
         title={isMasters ? 'Masters' : `Fecha ${matchday.number}`}
         titleVariant="number"
         subtitle={notice ?? undefined}
-        right={compartir ?? undefined}
         sport={discipline.kind}
       >
         {progress !== null && progress.total > 0 && (
@@ -1101,6 +1101,14 @@ export default async function FechaDetailPage({ params }: PageProps) {
           </div>
         )}
       </Hero>
+      {/* Compartir, arriba a la derecha a la altura del `Volver`, como en la
+          Tabla (`HeroTabla`): el círculo es `chip` con tinta. Adentro del
+          bloque el ícono tomaba el blanco de alrededor y no se veía. */}
+      {compartir !== null && (
+        <div className="absolute top-[calc(2px+env(safe-area-inset-top))] right-4 flex gap-2 text-text [--color-focus:var(--color-on-block)]">
+          {compartir}
+        </div>
+      )}
 
       <div className="flex flex-col gap-6 px-4 pt-5 pb-8">
         {/* El día se elegía una sola vez, al abrir la fecha, y quedaba para

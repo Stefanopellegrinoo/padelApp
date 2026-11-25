@@ -20,16 +20,20 @@ import { hayAnterior, registrar } from './historial'
  * torneos), donde lo que haya atrás en el historial son pestañas hermanas y
  * desandarlas te pasearía por ellas. Ahí el destino es fijo y se nombra.
  *
+ * Con `label` y `desanda` nombra el destino y desanda igual (si hay algo
+ * atrás; si no, `href`): para cuando todo lo que puede haber atrás tiene el
+ * mismo nombre (el torneo rápido: se llega desde Inicio o desde la portada).
+ *
  * El `<Link>` es la caja de 44 aunque el texto mida menos: achicar el dibujo
  * no tiene por qué achicar el blanco al que hay que apuntar. El `-my-1.5` se
  * come el aire que sobra, y el `-ml-1` alinea la flecha con el margen.
  */
-export function Volver({ href, label }: { href: string; label?: string }) {
+export function Volver({ href, label, desanda = label === undefined }: { href: string; label?: string; desanda?: boolean }) {
   return (
     <Link
       href={href}
       onClick={(event) => {
-        if (label !== undefined || !hayAnterior()) return
+        if (!desanda || !hayAnterior()) return
         event.preventDefault()
         history.back()
       }}

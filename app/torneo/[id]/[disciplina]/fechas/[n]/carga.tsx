@@ -3,6 +3,7 @@
 import {
   createContext,
   useContext,
+  useEffect,
   useId,
   useRef,
   useState,
@@ -94,6 +95,8 @@ const cap = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
  * "Siguiente": el próximo partido sin cargar, a un toque. Es una acción del
  * aviso y no un salto solo: mover la pantalla o el foco sin que nadie lo pida
  * desorienta, y con lector de pantalla el aviso ya se anuncia por su región.
+ * La tarjeta recién guardada destella 700 ms (`destello`, `globals.css`):
+ * dice cuál cambió sin mover nada.
  */
 export function CargaDeLaFecha({
   context,
@@ -109,7 +112,15 @@ export function CargaDeLaFecha({
   // mismo partido. `matchId` se queda al cerrar para que baje con su contenido.
   const [hoja, setHoja] = useState<{ matchId: string; open: boolean; vez: number } | null>(null)
   const [aviso, setAviso] = useState<{ texto: string; guardado: string } | null>(null)
+  // La tarjeta que destella; `vez` hace un objeto nuevo en cada guardado, que reinicia el reloj.
+  const [destello, setDestello] = useState<{ matchId: string; vez: number } | null>(null)
   const primerCampo = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (destello === null) return
+    const timer = setTimeout(() => setDestello(null), 700)
+    return () => clearTimeout(timer)
+  }, [destello])
 
   const abrir = (matchId: string) => setHoja((prev) => ({ matchId, open: true, vez: (prev?.vez ?? 0) + 1 }))
   const cerrar = () => setHoja((prev) => (prev === null ? null : { ...prev, open: false }))
@@ -136,7 +147,7 @@ export function CargaDeLaFecha({
 
   return (
     <CargaCtx.Provider value={context === null ? null : abrir}>
-      {children}
+      <DestelloCtx.Provider value={destello?.matchId ?? null}>{children}</DestelloCtx.Provider>
       {context !== null && (
         <>
           <Sheet
@@ -154,6 +165,7 @@ export function CargaDeLaFecha({
                 onGuardado={(sets) => {
                   cerrar()
                   setAviso({ texto: `Guardado: ${resumenGuardado(partido.pairAName, partido.pairBName, sets)}`, guardado: partido.matchId })
+                  setDestello((prev) => ({ matchId: partido.matchId, vez: (prev?.vez ?? 0) + 1 }))
                 }}
               />
             )}
@@ -173,6 +185,9 @@ export function CargaDeLaFecha({
 
 /** Abrir la hoja de un partido, o `null` si en esta fecha no se carga. */
 const CargaCtx = createContext<((matchId: string) => void) | null>(null)
+
+/** El partido recién guardado, que destella; `null` si ninguno. */
+const DestelloCtx = createContext<string | null>(null)
 
 /** Un lado escrito, con tu nombre marcado si estás. Sin vos es texto plano. */
 function Lado({ partes }: { partes: ParteVM[] }) {
@@ -197,6 +212,7 @@ function Lado({ partes }: { partes: ParteVM[] }) {
  */
 export function TarjetaPartido({ partido }: { partido: PartidoVM }) {
   const abrir = useContext(CargaCtx)
+  const destella = useContext(DestelloCtx) === partido.matchId ? ' destello' : ''
   const cargado = partido.sets.length > 0
 
   const fila = (lado: 'A' | 'B') => {
@@ -230,7 +246,7 @@ export function TarjetaPartido({ partido }: { partido: PartidoVM }) {
         type="button"
         aria-label={`Corregir ${partido.pairAName} ${partido.scoreA}, ${partido.pairBName} ${partido.scoreB}`}
         onClick={() => abrir(partido.matchId)}
-        className={`${caja} press-fila min-h-[76px]`}
+        className={`${caja} press-fila min-h-[76px]${destella}`}
       >
         {fila('A')}
         {fila('B')}
@@ -244,7 +260,7 @@ export function TarjetaPartido({ partido }: { partido: PartidoVM }) {
       type="button"
       aria-label={`Cargar ${partido.pairAName} contra ${partido.pairBName}`}
       onClick={() => abrir(partido.matchId)}
-      className="flex min-h-[84px] w-full items-center gap-3 rounded-tile bg-sport-tint py-3 pr-3.5 pl-4 text-left active:bg-opcion"
+      className={`flex min-h-[84px] w-full items-center gap-3 rounded-tile bg-sport-tint py-3 pr-3.5 pl-4 text-left active:bg-opcion${destella}`}
     >
       <span className="flex min-w-0 flex-1 flex-col gap-1.5">
         <span className="text-[17px] font-semibold text-text">

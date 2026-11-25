@@ -346,6 +346,71 @@ describe('CasualForm', () => {
       expect(f.submit().textContent).toBe('Guardar cambios')
     })
 
+    // Como la hoja de la fecha (`DosToques`): cada set arranca con su toque marcado, así que
+    // confirmar lo mismo es un toque y corregir un set es uno o dos, sin "Volver a cargar".
+    it('al corregir, cada set arranca con su ganador y su número marcados; cambiar uno no obliga a recargar todos', async () => {
+      const action = vi.fn(fallaSiempre)
+      const f = await montar({
+        action,
+        initial: editando('PADEL', {
+          otherName: 'Fede',
+          sets: [
+            { mine: 6, theirs: 3 },
+            { mine: 4, theirs: 6 },
+            { mine: 6, theirs: 5 },
+          ],
+        }),
+      })
+      expect(f.boton('Vos').getAttribute('aria-pressed')).toBe('true')
+      expect(f.boton('3').getAttribute('aria-pressed')).toBe('true')
+
+      await tocar(f.boton('4')) // el primer set fue 6-4, no 6-3
+      expect(f.boton('Fede').getAttribute('aria-pressed')).toBe('true')
+      expect(f.boton('4').getAttribute('aria-pressed')).toBe('true')
+      await tocar(f.boton('4'))
+      expect(f.boton('Vos').getAttribute('aria-pressed')).toBe('true')
+      expect(f.boton('5').getAttribute('aria-pressed')).toBe('true')
+      expect(action).not.toHaveBeenCalled()
+      await tocar(f.boton('5'))
+
+      expect(action).toHaveBeenCalledTimes(1)
+      expect(JSON.parse(String(action.mock.calls[0]![1].get('sets')))).toEqual([
+        { mine: 6, theirs: 4 },
+        { mine: 4, theirs: 6 },
+        { mine: 6, theirs: 5 },
+      ])
+    })
+
+    it('al corregir un partido de un set, un toque guarda', async () => {
+      const action = vi.fn(fallaSiempre)
+      const f = await montar({ action, initial: editando('PADEL', { sets: [{ mine: 4, theirs: 2 }] }) })
+      await tocar(f.boton('3'))
+      expect(action).toHaveBeenCalledTimes(1)
+      expect(JSON.parse(String(action.mock.calls[0]![1].get('sets')))).toEqual([{ mine: 4, theirs: 3 }])
+    })
+
+    it('al corregir sólo la fecha, "Guardar cambios" manda los sets de antes', async () => {
+      const action = vi.fn(fallaSiempre)
+      const f = await montar({
+        action,
+        initial: editando('PADEL', {
+          sets: [
+            { mine: 6, theirs: 3 },
+            { mine: 6, theirs: 4 },
+          ],
+        }),
+      })
+      await act(async () => escribir(f.input('playedOn'), '2026-08-29'))
+      await f.enviar()
+      expect(action).toHaveBeenCalledTimes(1)
+      const data = action.mock.calls[0]![1]
+      expect(data.get('playedOn')).toBe('2026-08-29')
+      expect(JSON.parse(String(data.get('sets')))).toEqual([
+        { mine: 6, theirs: 3 },
+        { mine: 6, theirs: 4 },
+      ])
+    })
+
     it('equivocarse de ganador sin sets cargados tiene vuelta atrás', async () => {
       const f = await montar()
       expect(f.boton('Volver a cargar')).toBeUndefined()

@@ -277,6 +277,20 @@ dialog:focus-visible {
   }
 }
 
+/* El destello del partido recién guardado (el `.flash` del prototipo): el
+   fondo y el borde arrancan en `destello` y vuelven a los suyos en 700 ms.
+   Sin `to`: cada tarjeta vuelve a SU fondo (tinte, o ninguno). La clase la
+   pone la pantalla al guardar y la saca al terminar. */
+@keyframes destello {
+  from {
+    background-color: var(--color-destello);
+    border-color: var(--color-destello);
+  }
+}
+@utility destello {
+  animation: destello 700ms var(--ease-salida);
+}
+
 /* La cara condensada de Archivo (eje de ancho del `next/font` del layout).
    `font-cond`: números de marcador —puesto, puntos, games, "Fecha 8"—,
    tabulares para que las columnas no bailen. `font-titulo`: títulos. Para
@@ -383,6 +397,11 @@ dialog:focus-visible {
     animation-iteration-count: 1;
     transition-duration: 1ms;
     scroll-behavior: auto;
+  }
+  /* El destello no mueve nada, es un cambio de color: queda, más corto
+     (como en el prototipo), para que se vea qué se guardó. */
+  .destello {
+    animation-duration: 400ms;
   }
   .hoja,
   .hoja[open] {

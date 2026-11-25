@@ -175,7 +175,7 @@ describe('Jugador trae las estadísticas de la disciplina de la URL, no la [0] d
     expect(html).toContain('Padel Uno')
     expect(html).not.toContain('Fifa Uno')
     expect(html).toContain('100%')
-    expect(html).toContain('1° de 2 · 20 puntos')
+    expect(html).toContain('1° de 2, 20 puntos')
   })
 
   it('con el slug de FIFA, el MISMO entryId (e1) sale subcampeón: 2° con 5 puntos (countBestOf de FIFA, no el de pádel), 0% de efectividad', async () => {
@@ -185,15 +185,18 @@ describe('Jugador trae las estadísticas de la disciplina de la URL, no la [0] d
     expect(html).not.toContain('Padel Uno')
     expect(html).toContain('0%')
     expect(html).not.toContain('100%')
-    expect(html).toContain('2° de 2 · 5 puntos')
+    expect(html).toContain('2° de 2, 5 puntos')
   })
 
   it('con 2+ disciplinas, el nombre dice cuál está mostrando', async () => {
     const htmlFifa = await render('fifa')
     const htmlPadel = await render('padel')
 
-    expect(htmlFifa).toContain('Fifa Uno · FIFA')
-    expect(htmlPadel).toContain('Padel Uno · Pádel')
+    // El deporte va arriba, con el torneo; el título es el nombre solo. Sin "·" (el prototipo no lo usa).
+    expect(htmlFifa).toContain('Torneo de prueba, FIFA')
+    expect(htmlPadel).toContain('Torneo de prueba, Pádel')
+    expect(htmlPadel).toMatch(/<h1[^>]*>Padel Uno<\/h1>/)
+    expect(htmlPadel).not.toContain('·')
   })
 
   it('un socio del torneo que no juega ESTA disciplina dice cuál le falta, no un genérico "esta disciplina"', async () => {
@@ -288,7 +291,7 @@ describe('Jugador trae las estadísticas de la disciplina de la URL, no la [0] d
 
     const html = await render('fifa', 'e1')
 
-    expect(html).toContain('1° de 2 · 10 puntos')
+    expect(html).toContain('1° de 2, 10 puntos')
   })
 })
 

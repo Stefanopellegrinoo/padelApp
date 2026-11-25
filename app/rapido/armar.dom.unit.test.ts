@@ -55,6 +55,7 @@ function enter(input: HTMLInputElement) {
 it('el Hero dice dónde estás y Volver va al inicio de la app', () => {
   expect(host.querySelector('h1')?.textContent).toBe('Torneo rápido')
   expect(host.querySelector('header a')?.getAttribute('href')).toBe('/')
+  expect(host.querySelector('header a')?.textContent).toBe('Inicio')
 })
 
 it('los nombres son de 16 px (sin zoom de iOS) y Enter dice "siguiente"', () => {

@@ -8,17 +8,18 @@ const fifaRules = rulesFromSeed(fichaSeed('FIFA', entryIds.length, 'INDIVIDUAL')
 const padelRules = rulesFromSeed(fichaSeed('PADEL', 4, 'FIJAS'))
 
 describe('opcionesDeAlta', () => {
-  it('ofrece "Por nivel" (el orden del torneo), "Al azar" y un "Igual que" por cada deporte del torneo', () => {
+  // Las mismas palabras que el asistente de crear (`app/torneos/nuevo/crear-state.ts`): sin "orden del torneo" ni "sorteo".
+  it('ofrece "Por nivel" (vos los ordenás), "Al azar" (sortea la app) y un "Igual que" (el mismo orden) por cada deporte', () => {
     const options = opcionesDeAlta([
       { id: 'p1', kind: 'PADEL', slug: 'padel' },
       { id: 'f1', kind: 'FIFA', slug: 'fifa' },
     ])
 
     expect(options).toEqual([
-      { value: 'NIVEL', label: 'Por nivel', sub: 'el orden del torneo' },
-      { value: 'SORTEO', label: 'Al azar', sub: 'sorteo' },
-      { value: { igualQue: 'p1' }, label: 'Igual que Pádel', sub: null },
-      { value: { igualQue: 'f1' }, label: 'Igual que FIFA', sub: null },
+      { value: 'NIVEL', label: 'Por nivel', sub: 'vos los ordenás' },
+      { value: 'SORTEO', label: 'Al azar', sub: 'sortea la app' },
+      { value: { igualQue: 'p1' }, label: 'Igual que Pádel', sub: 'el mismo orden' },
+      { value: { igualQue: 'f1' }, label: 'Igual que FIFA', sub: 'el mismo orden' },
     ])
   })
 

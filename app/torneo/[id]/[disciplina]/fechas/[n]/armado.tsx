@@ -15,6 +15,7 @@ import {
 } from '@/core'
 import { matchdayFormatLabel } from '@/app/format'
 import { Avatar } from '@/app/ui/avatar'
+import { VOS_FILA } from '@/app/torneo/[id]/[disciplina]/jugador/piezas'
 import { button } from '@/app/ui/button'
 import { BloquePartido } from '@/app/deporte/personalizar-reglas'
 import { setsSportOf } from '@/app/deporte/personalizar-reglas-state'
@@ -386,7 +387,7 @@ export function Armado({
             // de a dos son 15. Ese número es el que hace pedir el formato de
             // grupos (REQ-D8-1, PR21), que es la salida a W32.
             <p className="mt-2 text-center text-[15px] text-muted">
-              La fecha es de {size} · {sides} {label.sides} · {matches} partidos
+              La fecha es de {size}, {sides} {label.sides}, {matches} partidos
             </p>
           ) : (
             <p className="mt-3 rounded-btn bg-warn-bg px-3 py-2.5 text-center text-[15px] font-semibold">
@@ -442,7 +443,7 @@ export function Armado({
           {groupPreview.map((group) => (
             <div key={group.number} className="flex flex-col gap-1.5">
               <p className="font-titulo text-[18px]">{`Grupo ${group.number}`}</p>
-              <p className="text-[16px] font-semibold">{group.names.join(' · ')}</p>
+              <p className="text-[16px] font-semibold">{group.names.join(', ')}</p>
             </div>
           ))}
         </section>
@@ -457,41 +458,7 @@ export function Armado({
         </div>
 
         {optimisticSeats.map((seat) => (
-          <button
-            key={seat.entryId}
-            type="button"
-            // Sin `disabled`, a propósito: `setAttendance` escribe un estado
-            // ABSOLUTO (no un toggle), así que un segundo toque mientras el
-            // primero sigue en vuelo es inofensivo — como mucho el usuario
-            // pidió lo mismo dos veces, o volvió al estado del que salió.
-            // Next además serializa las Server Actions en orden de toque, así
-            // que no hay escritura corriendo por delante de otra.
-            onClick={() => tickAttendance(seat)}
-            // Opacity is reserved for "the system is working" (the global
-            // `:disabled` rule). Resting states speak in color instead — the
-            // "No viene" chip and the "Avisó que no va" line already carry
-            // this state, so dimming the whole row here would also swallow
-            // the `disabled:opacity-45` feedback on tap.
-            className={`press-fila -mx-1 flex min-h-[64px] items-center gap-3 border-t border-line px-1 py-2 text-left ${
-              seat.playing ? '' : 'text-muted'
-            }`}
-          >
-            <Avatar name={seat.name} />
-            <span className="flex min-w-0 flex-1 flex-col">
-              <span className="text-[17px] font-semibold">{seat.name}</span>
-              {/* ponytail: `attendances` no guarda quién escribió la fila, así que
-                  "avisó" es todo ausente. Si algún día importa distinguir al que
-                  avisó del que sacó el admin, es una columna nueva. */}
-              {!seat.playing && <span className={NOTA}>Avisó que no va</span>}
-            </span>
-            <span
-              className={`shrink-0 rounded-pill px-3 py-1.5 text-[14px] font-semibold ${
-                seat.playing ? 'bg-sport-tint text-sport' : 'bg-chip text-muted'
-              }`}
-            >
-              {seat.playing ? 'Viene' : 'No viene'}
-            </span>
-          </button>
+          <Asiento key={seat.entryId} seat={seat} onTick={() => tickAttendance(seat)} />
         ))}
       </section>
 
@@ -813,6 +780,58 @@ const AUTOMATICO_LINEA = 'mt-0.5 block text-[14px] font-semibold'
  * sorteo; si se arman todas, la fecha queda entera a mano. Repetir una pareja
  * de las fechas anteriores se permite —el admin manda— pero se avisa.
  */
+/**
+ * Un asiento de "Quién viene": tocarlo dice si viene o no. El tuyo lleva la
+ * marca de "vos" (la fila amarilla en claro, el borde amarillo en oscuro, y
+ * "vos" al lado del nombre), como en el Plantel de Ajustes: el amarillo es
+ * sólo tuyo.
+ *
+ * Exportado para renderizarlo en la suite.
+ */
+export function Asiento({ seat, onTick }: { seat: SeatVM; onTick: () => void }) {
+  const vos = seat.vos === true
+  return (
+    <button
+      type="button"
+      // Sin `disabled`, a propósito: `setAttendance` escribe un estado
+      // ABSOLUTO (no un toggle), así que un segundo toque mientras el
+      // primero sigue en vuelo es inofensivo — como mucho el usuario
+      // pidió lo mismo dos veces, o volvió al estado del que salió.
+      // Next además serializa las Server Actions en orden de toque, así
+      // que no hay escritura corriendo por delante de otra.
+      onClick={onTick}
+      // Opacity is reserved for "the system is working" (the global
+      // `:disabled` rule). Resting states speak in color instead — the
+      // "No viene" chip and the "Avisó que no va" line already carry
+      // this state, so dimming the whole row here would also swallow
+      // the `disabled:opacity-45` feedback on tap.
+      // La tuya va a sangre, como tu fila en la tabla de la fecha: el amarillo no queda pegado al avatar.
+      className={`press-fila flex min-h-[64px] items-center gap-3 border-t border-line py-2 text-left ${
+        vos ? `-mx-4 px-4 ${VOS_FILA}` : `-mx-1 px-1 ${seat.playing ? '' : 'text-muted'}`
+      }`}
+    >
+      <Avatar name={seat.name} />
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="text-[17px] font-semibold">
+          {seat.name}
+          {vos && <span className="ml-1.5 text-[14px] font-semibold">vos</span>}
+        </span>
+        {/* ponytail: `attendances` no guarda quién escribió la fila, así que
+            "avisó" es todo ausente. Si algún día importa distinguir al que
+            avisó del que sacó el admin, es una columna nueva. */}
+        {!seat.playing && <span className={NOTA}>Avisó que no va</span>}
+      </span>
+      <span
+        className={`shrink-0 rounded-pill px-3 py-1.5 text-[14px] font-semibold ${
+          seat.playing ? 'bg-sport-tint text-sport' : 'bg-chip text-muted'
+        }`}
+      >
+        {seat.playing ? 'Viene' : 'No viene'}
+      </span>
+    </button>
+  )
+}
+
 export function ParejasAMano({
   handPairs,
   seats,

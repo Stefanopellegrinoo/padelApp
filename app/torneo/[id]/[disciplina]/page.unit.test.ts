@@ -215,7 +215,7 @@ describe('Tabla de un deporte de parejas fijas', () => {
   it('control: con parejas que rotan, la campeona de la fecha 1 sí defiende', async () => {
     vi.mocked(disciplineConfig).mockResolvedValueOnce({ fixedTeams: false } as Awaited<ReturnType<typeof disciplineConfig>>)
     const html = await render()
-    expect(html).toContain('Ganaron la fecha 1 · les queda 1 defensa')
+    expect(html).toContain('Ganaron la fecha 1, les queda 1 defensa')
   })
 
   it('en un deporte sin parejas fijas la tabla sigue por persona', async () => {

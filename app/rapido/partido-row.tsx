@@ -22,19 +22,22 @@ const cap = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
  * extra de abrir un panel, y lo cargado se corrige tocándolo.
  *
  * El `id` es para "Siguiente": el foco va a la tarjeta antes de abrir la
- * hoja, así al cerrarla vuelve ahí.
+ * hoja, así al cerrarla vuelve ahí. `destella`: es la recién guardada.
  */
 export function TarjetaPartido({
   indice,
   partido,
   jugadores,
+  destella = false,
   onAbrir,
 }: {
   indice: number
   partido: Partido
   jugadores: string[]
+  destella?: boolean
   onAbrir: () => void
 }) {
+  const destello = destella ? ' destello' : ''
   const nombreA = nombreLado(jugadores, partido.a)
   const nombreB = nombreLado(jugadores, partido.b)
   const marcador = partido.marcador
@@ -46,7 +49,7 @@ export function TarjetaPartido({
         type="button"
         aria-label={`Cargar ${nombreA} contra ${nombreB}`}
         onClick={onAbrir}
-        className="flex min-h-[84px] w-full items-center gap-3 rounded-tile bg-sport-tint py-3 pr-3.5 pl-4 text-left active:bg-opcion"
+        className={`flex min-h-[84px] w-full items-center gap-3 rounded-tile bg-sport-tint py-3 pr-3.5 pl-4 text-left active:bg-opcion${destello}`}
       >
         <span className="flex min-w-0 flex-1 flex-col gap-1.5">
           <span className="text-[17px] font-semibold text-text">{nombreA}</span>
@@ -80,7 +83,7 @@ export function TarjetaPartido({
       type="button"
       aria-label={`Corregir ${nombreA} ${marcador.a}, ${nombreB} ${marcador.b}`}
       onClick={onAbrir}
-      className="press-fila flex min-h-[76px] w-full flex-col gap-1.5 rounded-tile border-[1.5px] border-line px-4 py-3 text-left"
+      className={`press-fila flex min-h-[76px] w-full flex-col gap-1.5 rounded-tile border-[1.5px] border-line px-4 py-3 text-left${destello}`}
     >
       {fila('a')}
       {fila('b')}

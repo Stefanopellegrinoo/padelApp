@@ -506,7 +506,7 @@ describe('formatoNotice', () => {
   const aSeis: MatchFormat = { ...aCuatro, gamesPerSet: 6 }
 
   it('nombra la fecha y a cuánto se juega cuando no es lo del deporte', () => {
-    expect(formatoNotice(3, aSeis, aCuatro, 'games')).toBe('Fecha 3 · 1 set a 6 games')
+    expect(formatoNotice(3, aSeis, aCuatro, 'games')).toBe('Fecha 3, 1 set a 6 games')
   })
 
   it('calla cuando la fecha se juega igual que el deporte', () => {

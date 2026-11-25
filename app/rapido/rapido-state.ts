@@ -20,6 +20,14 @@ import { allMatchings, buildFixture, MAX_PAIRING_POOL, type Duo } from '@/core'
 export const DEPORTES = ['PADEL', 'PING_PONG'] as const
 export type Deporte = (typeof DEPORTES)[number]
 
+/**
+ * El `Volver` de las dos pantallas: a `/rapido` se llega desde Inicio o desde
+ * la portada, y las dos son "Inicio". Nombra el destino y aun así desanda el
+ * historial (`desanda`, `app/torneo/[id]/volver.tsx`); sin nada atrás —el
+ * atajo de la app instalada— va a la portada.
+ */
+export const VOLVER_INICIO = { href: '/', label: 'Inicio', desanda: true }
+
 export const DEPORTE_LABEL: Record<Deporte, string> = {
   PADEL: 'Pádel',
   PING_PONG: 'Ping pong',

@@ -1,9 +1,9 @@
 'use client'
 
 import { useActionState, useEffect, useId, useRef, useState, useTransition, type ReactNode, type RefObject } from 'react'
-import { SPORTS, SPORT_IDS, isSportId, sportLabel, sportOf, type MatchFormat, type SportId } from '@/core'
+import { SPORTS, SPORT_IDS, isSportId, sportLabel, sportOf, type MatchFormat, type SetScore, type SportId } from '@/core'
 import type { CasualMatch } from '@/db/friends'
-import { isComplete, startLoad, type LoadState } from '@/app/torneo/[id]/[disciplina]/fechas/[n]/carga-state'
+import { isComplete, startLoad, toqueDelSet, type LoadState } from '@/app/torneo/[id]/[disciplina]/fechas/[n]/carga-state'
 import { SubmitButton } from '@/app/submit-button'
 import { button } from '@/app/ui/button'
 import { Sheet } from '@/app/ui/sheet'
@@ -136,6 +136,12 @@ function recordar(recuerdo: Recuerdo): void {
  *
  * Cuando la action vuelve sin error, avisa con `onSaved` y el resumen de lo
  * que se guardó ("Ganaste 6-4 6-3"): la hoja se cierra y lo dice abajo.
+ *
+ * Al corregir un partido de sets, como en la hoja de la fecha: cada set
+ * arranca con su toque marcado (`toqueDelSet`), así que confirmar lo mismo es
+ * un toque y corregir un set, uno o dos. Lo que todavía no se volvió a tocar
+ * sigue siendo lo guardado: "Guardar cambios" sin tocar los sets (sólo la
+ * fecha) manda los de antes.
  */
 export function CasualForm({
   friendPlayerId,
@@ -193,9 +199,14 @@ export function CasualForm({
     if (info?.family !== 'sets' || sport === '') return SPORTS.PADEL.format
     return initial?.sets !== undefined ? formatForSport(info, initial.sets) : formatoInicial(info, sport, recuerdo)
   })
+  // Los sets guardados del partido que se corrige (A = mío); vacío en uno nuevo o después de "Volver a cargar".
+  const [previos, setPrevios] = useState<SetScore[]>(() =>
+    (initial?.sets ?? []).map((set) => ({ gamesA: set.mine, gamesB: set.theirs })),
+  )
+  // Lo que se va tocando. Al corregir arranca en el primer set, con su ganador elegido.
   const [load, setLoad] = useState<LoadState>(() => ({
-    sets: (initial?.sets ?? []).map((set) => ({ gamesA: set.mine, gamesB: set.theirs })),
-    pendingWinner: null,
+    sets: [],
+    pendingWinner: previos[0] === undefined ? null : (toqueDelSet(previos[0], format)?.winner ?? null),
   }))
   // Elegir un deporte de goles lleva el foco al primer número (S8e).
   const [enfocar, setEnfocar] = useState(0)
@@ -210,13 +221,30 @@ export function CasualForm({
     setSport(id)
     if (next.family === 'sets') setFormat(formatoInicial(next, id, recuerdo))
     else setEnfocar((n) => n + 1)
-    setLoad(startLoad())
+    volverACargar()
     setGoals(SIN_GOLES)
   }
   const setFormatKey = (key: 'setsToWin' | 'gamesPerSet', value: number) => {
     setFormat((current) => ({ ...current, [key]: value }))
+    volverACargar()
+  }
+  // De cero: sin sets tocados y sin los guardados (con otro formato ya no valen).
+  function volverACargar() {
+    setPrevios([])
     setLoad(startLoad())
   }
+
+  // Lo que se guardaría: lo tocado y, detrás, lo guardado que falta volver a tocar.
+  const final: LoadState =
+    previos.length === 0 || isComplete(load, format)
+      ? load
+      : { sets: [...load.sets, ...previos.slice(load.sets.length)], pendingWinner: null }
+  // El toque marcado del set en curso: el del set guardado, mientras su ganador siga elegido.
+  const toqueGuardado = isComplete(load, format) ? null : toqueDeIndice(previos, load.sets.length, format)
+  const elegido =
+    toqueGuardado !== null && load.pendingWinner === toqueGuardado.winner
+      ? { loser: toqueGuardado.loser, deuce: toqueGuardado.deuce }
+      : null
 
   const slotValues = {
     partner: slotOf(slots.partner),
@@ -251,7 +279,7 @@ export function CasualForm({
     // Sólo al editar un id que salió del registro: no hay chip elegido ni resultado que dibujar.
     (info === null ? 'Elegí el deporte para cargar el resultado.' : null) ??
     (playedOn === '' ? 'Falta la fecha.' : null)
-  const setsCompletos = info?.family === 'sets' && isComplete(load, format)
+  const setsCompletos = info?.family === 'sets' && isComplete(final, format)
   const problem =
     faltaAlgo ??
     (info?.family === 'sets' && !setsCompletos ? 'Cargá los sets hasta cerrar el partido.' : null) ??
@@ -269,7 +297,7 @@ export function CasualForm({
     if (state.error === null) avisar.current?.(resumen.current)
   }, [state])
 
-  const enviar = (carga: LoadState = load) => {
+  const enviar = (carga: LoadState = final) => {
     const form = formRef.current
     if (form === null || pending) return
     const data = new FormData(form)
@@ -294,7 +322,9 @@ export function CasualForm({
   }
 
   const onLoad = (next: LoadState) => {
-    setLoad(next)
+    // Cerró un set y sigue otro: si se está corrigiendo, el siguiente arranca con su ganador.
+    const cerroUnSet = next.sets.length > load.sets.length && !isComplete(next, format)
+    setLoad(cerroUnSet ? { ...next, pendingWinner: toqueDeIndice(previos, next.sets.length, format)?.winner ?? null } : next)
     if (faltaAlgo === null && !isComplete(load, format) && isComplete(next, format)) enviar(next)
   }
 
@@ -446,11 +476,14 @@ export function CasualForm({
           sport={info}
           format={format}
           load={load}
+          final={final}
+          elegido={elegido}
           mineName={mineName}
           otherName={otherName}
           pending={pending}
           onFormat={setFormatKey}
           onLoad={onLoad}
+          onRestart={volverACargar}
         />
       )}
       {info?.family === 'goals' && (
@@ -499,6 +532,12 @@ export function CasualForm({
 }
 
 const cap = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
+
+/** El toque que dio el set guardado número `index`, o `null` si no hay (o ningún botón lo da). */
+function toqueDeIndice(previos: readonly SetScore[], index: number, format: MatchFormat) {
+  const set = previos[index]
+  return set === undefined ? null : toqueDelSet(set, format)
+}
 
 /**
  * La línea de abajo, que dice qué falta o qué hace el próximo toque. Con sets

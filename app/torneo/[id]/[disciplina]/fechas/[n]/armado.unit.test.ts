@@ -3,7 +3,7 @@ import { defaultMaxMatches } from '@/core'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import type { MatchdayFormat, MatchdayFormatSetting, MatchFormat } from '@/core'
-import { EstaFechaSeJuegaA, ParejasAMano, SelectorDeFormato, type HandPairVM, type SeatVM } from './armado'
+import { Asiento, EstaFechaSeJuegaA, ParejasAMano, SelectorDeFormato, type HandPairVM, type SeatVM } from './armado'
 
 /**
  * El selector de formato de la fecha (REQ-D8-1), RENDERIZADO — no la lógica
@@ -313,5 +313,27 @@ describe('ParejasAMano', () => {
     const absent = seats.map((seat) => (seat.entryId === 'b' ? { ...seat, playing: false } : seat))
 
     expect(render([anaYBeto], [], absent)).toContain('Uno de los dos no viene')
+  })
+})
+
+describe('Asiento: tu fila de "Quién viene"', () => {
+  const asiento = (seat: SeatVM) =>
+    renderToStaticMarkup(createElement(Asiento, { seat, onTick: () => {} }))
+
+  it('tu asiento lleva la marca de "vos" (amarilla, como en el Plantel de Ajustes); el de otro, no', () => {
+    const tuyo = asiento({ entryId: 'e1', name: 'Ana', playing: true, vos: true })
+    const ajeno = asiento({ entryId: 'e2', name: 'Beto', playing: true })
+
+    expect(tuyo).toContain('bg-vos-fila')
+    expect(tuyo).toMatch(/>vos<\/span>/)
+    expect(ajeno).not.toContain('bg-vos-fila')
+    expect(ajeno).not.toMatch(/>vos<\/span>/)
+  })
+
+  it('sigue diciendo si viene o no, también en tu fila', () => {
+    expect(asiento({ entryId: 'e1', name: 'Ana', playing: true, vos: true })).toContain('Viene')
+    const noViene = asiento({ entryId: 'e1', name: 'Ana', playing: false, vos: true })
+    expect(noViene).toContain('No viene')
+    expect(noViene).toContain('Avisó que no va')
   })
 })

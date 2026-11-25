@@ -149,8 +149,10 @@ describe('Stats trae los datos de la disciplina de la URL, no la [0] de la tempo
     const htmlFifa = await render('fifa')
     const htmlPadel = await render('padel')
 
-    expect(htmlFifa).toContain('Estadísticas · FIFA')
-    expect(htmlPadel).toContain('Estadísticas · Pádel')
+    // "de", como la Tabla ("Tabla de Pádel"): el "·" para juntar datos no es del prototipo.
+    expect(htmlFifa).toContain('Estadísticas de FIFA')
+    expect(htmlPadel).toContain('Estadísticas de Pádel')
+    expect(htmlPadel).not.toContain('·')
   })
 
   it('un slug de disciplina desconocido da notFound(), no la [0] por defecto', async () => {
@@ -247,7 +249,7 @@ describe('Stats sin fechas suficientes', () => {
 
     const html = await render('padel')
 
-    expect(html).toContain('Estadísticas · Pádel')
+    expect(html).toContain('Estadísticas de Pádel')
     expect(html).toContain('Falta 1 fecha')
     expect(linkWith(html, 'Ir a las fechas')).toContain('href="/torneo/s1/padel/fechas"')
   })

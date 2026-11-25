@@ -1,11 +1,11 @@
 'use client'
 
-import { useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { button } from '@/app/ui/button'
 import { Hero } from '@/app/ui/hero'
 import { Sheet } from '@/app/ui/sheet'
 import { Toast } from '@/app/ui/toast'
-import { DEPORTE_LABEL, campeon, tabla, terminado, type Armado, type TorneoRapido } from './rapido-state'
+import { DEPORTE_LABEL, VOLVER_INICIO, campeon, tabla, terminado, type Armado, type TorneoRapido } from './rapido-state'
 import { agruparPorRonda, nombreLado, resumenGuardado, siguienteSinCargar } from './jugar-logic'
 import { HojaPartido, TarjetaPartido } from './partido-row'
 import { Tabla } from './tabla'
@@ -40,7 +40,8 @@ interface JugarProps {
  * Después de guardar, la hoja se cierra y el aviso dice qué se guardó y ofrece
  * "Siguiente", el próximo sin cargar, a un toque. Es una acción del aviso y no
  * un salto solo: mover la pantalla sin que nadie lo pida desorienta. Con el
- * último cargado, la acción es ver al campeón.
+ * último cargado, la acción es ver al campeón. La tarjeta recién guardada
+ * destella 700 ms (`destello`, `globals.css`), como en la fecha.
  *
  * "Nuevo torneo" se ve SIEMPRE, no sólo con el torneo terminado. Escondido
  * detrás de `acabo` un torneo a medio jugar era una ratonera: si te
@@ -55,7 +56,15 @@ export function Jugar({ torneo, onCargarMarcador, onNuevoTorneo, aviso }: JugarP
   const [hoja, setHoja] = useState<{ indice: number; open: boolean; vez: number } | null>(null)
   const [guardado, setGuardado] = useState<{ texto: string; indice: number } | null>(null)
   const [confirmando, setConfirmando] = useState(false)
+  // La tarjeta que destella; `vez` hace un objeto nuevo en cada guardado, que reinicia el reloj.
+  const [destello, setDestello] = useState<{ indice: number; vez: number } | null>(null)
   const campeonRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (destello === null) return
+    const timer = setTimeout(() => setDestello(null), 700)
+    return () => clearTimeout(timer)
+  }, [destello])
 
   const { armado, jugadores, partidos } = torneo
   const grupos = agruparPorRonda(partidos)
@@ -97,7 +106,7 @@ export function Jugar({ torneo, onCargarMarcador, onNuevoTorneo, aviso }: JugarP
   return (
     <div data-deporte={armado.deporte} className="flex flex-1 flex-col pb-[calc(24px+env(safe-area-inset-bottom))]">
       <Hero
-        back={{ href: '/' }}
+        back={VOLVER_INICIO}
         kicker={DEPORTE_LABEL[armado.deporte]}
         title={armado.nombre.trim() || 'Torneo rápido'}
         subtitle={formatoDe(armado)}
@@ -151,7 +160,14 @@ export function Jugar({ torneo, onCargarMarcador, onNuevoTorneo, aviso }: JugarP
             </div>
             <div className="flex flex-col gap-2.5">
               {grupo.items.map(({ indice, partido: p }) => (
-                <TarjetaPartido key={indice} indice={indice} partido={p} jugadores={jugadores} onAbrir={() => abrir(indice)} />
+                <TarjetaPartido
+                  key={indice}
+                  indice={indice}
+                  partido={p}
+                  jugadores={jugadores}
+                  destella={destello?.indice === indice}
+                  onAbrir={() => abrir(indice)}
+                />
               ))}
             </div>
           </section>
@@ -188,6 +204,7 @@ export function Jugar({ torneo, onCargarMarcador, onNuevoTorneo, aviso }: JugarP
               cerrar()
               const texto = resumenGuardado(nombreLado(jugadores, partido.a), nombreLado(jugadores, partido.b), { a, b })
               setGuardado({ texto: `Guardado: ${texto}`, indice: hoja.indice })
+              setDestello((prev) => ({ indice: hoja.indice, vez: (prev?.vez ?? 0) + 1 }))
             }}
           />
         )}

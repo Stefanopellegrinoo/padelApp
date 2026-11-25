@@ -139,7 +139,7 @@ export function TablaView({
         share={
           hasClosedMatchday
             ? {
-                subtitulo: `${manySports ? `Tabla de ${sportName}` : 'Tabla'} · ${closedRegular.length} de ${config.regularMatchdays} fechas jugadas`,
+                subtitulo: `${manySports ? `Tabla de ${sportName}` : 'Tabla'}, ${closedRegular.length} de ${config.regularMatchdays} fechas jugadas`,
                 filas: rows.map((row) => ({ nombre: `${row.position}. ${row.displayName}`, puntos: row.points })),
               }
             : null
@@ -168,7 +168,7 @@ export function TablaView({
         <div className="mx-4 mt-3 flex items-center justify-between gap-3 rounded-tile bg-surface px-4 py-3">
           <div className="min-w-0">
             <p className="text-[16px] font-bold">{defenders.names.join(' y ')}</p>
-            <p className="text-[14px] text-muted">Ganaron la fecha {defenders.matchdayNumber} · les queda 1 defensa</p>
+            <p className="text-[14px] text-muted">Ganaron la fecha {defenders.matchdayNumber}, les queda 1 defensa</p>
           </div>
           <span className="shrink-0 text-[14px] font-bold text-sport">Repiten</span>
         </div>

@@ -1,7 +1,17 @@
 import Link from 'next/link'
-import { computeGlobalRanking, computeRanking, type DisciplineRanking } from '@/core'
-import type { Client } from '@/db/client'
 import {
+  computeGlobalRanking,
+  computeRanking,
+  isUnplayedThirdPlace,
+  sportLabel,
+  type DisciplineRanking,
+} from '@/core'
+import type { Client } from '@/db/client'
+import { amigosDeInicio, type AmigoInicio } from '@/db/inicio'
+import {
+  attendancesOf,
+  entriesOf,
+  matchdayDetail,
   myEntryId,
   mySeasons,
   playerNames,
@@ -11,60 +21,66 @@ import {
   type SeasonHeader,
 } from '@/db/read'
 import { serverClient } from '@/db/server'
-import { matchdayDay } from '../format'
+import { Avatar } from '@/app/ui/avatar'
+import { button } from '@/app/ui/button'
+import { Hero } from '@/app/ui/hero'
+import { rowPress } from '@/app/ui/row'
+import { Section } from '@/app/ui/section'
 import { Cuenta } from './cuenta'
-
-/**
- * El chip de estado. El handoff (§5) dibuja el chip con su tipografía y su
- * color pero nunca le pone texto, y `ui-screens.md` §5 sólo nombra dos de los
- * tres casos ("en curso / terminado"). Los tres strings los decide el Plan 4.
- *
- * `SETUP` existe de verdad: una temporada recién creada no pasa a `ACTIVE`
- * hasta que se abre su primera fecha (0005_matchday_moves.sql).
- */
-const ESTADO: Record<string, string> = {
-  SETUP: 'Sin empezar',
-  ACTIVE: 'En curso',
-  FINISHED: 'Terminado',
-}
+import { CargarPartido } from './inicio/cargar-partido'
+import {
+  diaFecha,
+  faltanTexto,
+  fechasVivas,
+  hrefFecha,
+  ordenarPorCercania,
+  paraCargar,
+  progresoDe,
+  proximaFecha,
+  tituloFecha,
+  ultimoResultado,
+  type FechaViva,
+} from './inicio/estado'
+import { Icono, IconoDeporte } from './inicio/iconos'
+import { matchdayDay } from '../format'
 
 interface SeasonCard {
   id: string
   name: string
   status: string
-  estado: string
+  /** El `kind` de la disciplina principal: el color del bloque (`data-deporte`). */
+  sport: string
+  /** "Pádel", o "Pádel y FIFA" con más de un deporte. */
+  sports: string
+  /** "Fecha 8 de 12", "Sin empezar", "Terminado" (`progresoDe`). */
+  progreso: string
   /** `null` cuando la temporada todavía no repartió un punto: no hay posición que mostrar. */
   position: number | null
   squadSize: number
-  /** El día de la próxima fecha, o `null` si no hay ninguna sin cerrar. */
-  nextMatchday: string | null
+  /** Las fechas sin cerrar de todos sus deportes. */
+  fechas: FechaViva[]
 }
 
 /**
  * Se compone acá y no en `db/read.ts` a propósito (Plan 3: una función de
  * datos con forma de pantalla es la que después le falta algo).
  *
- * "Mi posición" es la de la TABLA GLOBAL (REQ-D9-1/2): suma, por persona, los
+ * "Tu posición" es la de la TABLA GLOBAL (REQ-D9-1/2): suma, por persona, los
  * puntos de cada disciplina × su `weight` — con una sola disciplina y
- * `weight=1` (el caso de hoy) da lo mismo que antes. Por eso lee
+ * `weight=1` da lo mismo que la tabla de esa disciplina. Por eso lee
  * `seasonSquadOf`/`seasonAwardsOf` (temporada entera) y no `entriesOf`/
- * `awardsOf` (una disciplina puntual): la global necesita el plantel y los
- * premios de CADA disciplina para sumarlos ponderados.
+ * `awardsOf` (una disciplina puntual).
  *
  * ponytail: sin criterio de desempate propio para el ORDEN de las filas —
  * `computeRanking` corre con snapshot vacío, y ese orden nunca se lee acá.
  * Lo que sí se lee es `position` de `computeGlobalRanking`
  * (docs/tipos-de-torneo.md §2.4): numeración de competencia, compartida
- * entre empatados. Alcanza mientras nadie necesite ver POR QUÉ empatan dos
- * personas en la global — sólo hace falta decir QUE empatan, y el número
- * compartido ya lo dice.
+ * entre empatados.
  *
- * Consultas por temporada, REMEDIDAS con `pg_stat_statements` (misma técnica
- * que S10) contra un escenario con una fecha cerrada
- * real: **10 antes** (S10 midió 9 sin ninguna CLOSED — `awardsOf` corta antes
- * de su 3ª consulta cuando no hay ninguna) → **5 después**. Sin fan-out por
- * disciplina: las dos lecturas de temporada entera traen TODAS en una sola
- * consulta cada una — mejora, y no crece con la cantidad de disciplinas.
+ * Cinco consultas por temporada (medidas con `pg_stat_statements`), sin
+ * fan-out por disciplina. Las fechas vivas salen de las mismas
+ * `seasonMatchdaysOf` que ya se traían: el bloque de arriba y "Cargar
+ * partido" no suman consultas por torneo.
  */
 async function cardFor(supabase: Client, header: SeasonHeader): Promise<SeasonCard> {
   const [squad, matchdays, viewerEntryId] = await Promise.all([
@@ -81,192 +97,412 @@ async function cardFor(supabase: Client, header: SeasonHeader): Promise<SeasonCa
   const ranking = computeGlobalRanking(perDiscipline)
 
   // Antes de que cierre la primera fecha de CUALQUIER disciplina, todos están
-  // en cero: mismo criterio que la Tabla de una disciplina — no mostrar un
-  // "1°" que no dice nada todavía.
-  const anyClosed = matchdays.some(
-    (matchday) => matchday.kind === 'REGULAR' && matchday.status === 'CLOSED',
-  )
+  // en cero: mismo criterio que la Tabla — no mostrar un "1°" que no dice
+  // nada todavía.
+  const anyClosed = matchdays.some((matchday) => matchday.kind === 'REGULAR' && matchday.status === 'CLOSED')
   const myRow = ranking.find((row) => row.entryId === viewerEntryId) ?? null
-
-  // "Próxima fecha" queda igual que antes (de la disciplina primaria): con
-  // más de una disciplina puede haber más de una fecha viva a la vez
-  //(REQ-D3-1) y elegir CUÁL mostrar acá es una decisión de UI que REQ-D9 no
-  // pide — fuera del corte de esta PR.
-  const primaryDisciplineId = header.disciplines[0]?.id
-  const live =
-    matchdays.find(
-      (matchday) => matchday.disciplineId === primaryDisciplineId && matchday.status !== 'CLOSED',
-    ) ?? null
 
   return {
     id: header.id,
     name: header.name,
     status: header.status,
-    estado: ESTADO[header.status] ?? '',
+    sport: header.disciplines[0]?.kind ?? '',
+    sports: [...new Set(header.disciplines.map((d) => sportLabel(d.kind)))].join(' y '),
+    progreso: progresoDe(header, matchdays),
     // `row.position` de `computeGlobalRanking`, no un índice de array: con
     // los mismos puntos hay empate y el puesto se comparte (1, 2, 2, 4) —
-    // docs/tipos-de-torneo.md §2.4. Antes de este cambio esto mostraba
-    // `index + 1`, que le daba a cada empatado un número DISTINTO (mentira:
-    // el orden interno de `computeGlobalRanking` no es un criterio de
-    // desempate, ver su docblock en `core/global-ranking.ts`).
+    // docs/tipos-de-torneo.md §2.4.
     position: !anyClosed || myRow === null ? null : myRow.position,
     squadSize: squad.length,
-    nextMatchday: live?.playedOn ?? null,
+    fechas: fechasVivas(header, matchdays),
   }
 }
 
 /**
- * Los dos caminos para arrancar algo, JUNTOS y en un solo componente.
- *
- * Antes esto era sólo "Crear torneo", y el torneo rápido vivía nada más que
- * en la home (`app/page.tsx`). Para un usuario con sesión eso es casi
- * invisible: `/torneos` ES la pantalla de entrada de la app —lo dice el
- * comentario de abajo— y la home queda de paso. Se probó y no se encontraba.
- *
- * Van en el mismo componente y no como dos elementos suelos en cada rama a
- * propósito: esta pantalla dibuja las acciones DOS veces (el estado vacío y
- * el que ya tiene torneos), y con dos elementos separados agregar algo a una
- * rama y olvidarlo en la otra es exactamente el error que trajo hasta acá.
- * Un componente, dos call sites, imposible que divergan.
+ * Cómo viene la fecha del bloque de arriba, sólo con lo que la base sabe. En
+ * juego: cuántos partidos faltan cargar, con la misma cuenta que el botón de
+ * cerrar de la fecha (un tercer puesto sin jugar no cuenta,
+ * `isUnplayedThirdPlace`). Armándose: cuántos del plantel están confirmados
+ * — sin fila de asistencia es "viene", como en el armado (`fechas/[n]/page.tsx`)
+ * — y que las parejas todavía no se sortearon, que es lo que dice `DRAFT`.
  */
-function Acciones({ className = '' }: { className?: string }) {
-  return (
-    <div className={`flex flex-col gap-[9px] ${className}`}>
-      <Link
-        href="/torneos/nuevo"
-        className="rounded-field bg-accent p-4 text-center text-[15px] font-extrabold text-accent-text"
-      >
-        Crear torneo
-      </Link>
-      <Link
-        href="/rapido"
-        className="rounded-field border border-line p-4 text-center text-[15px] font-extrabold text-text"
-      >
-        Armar un torneo rápido
-        <span className="block pt-[3px] text-[12px] font-semibold text-muted">
-          Una tarde, sin tabla ni fechas.
-        </span>
-      </Link>
-    </div>
-  )
+type EstadoFecha =
+  | { kind: 'OPEN'; faltan: number; cargados: number }
+  | { kind: 'DRAFT'; confirmados: number; plantel: number }
+
+async function estadoDe(supabase: Client, fecha: FechaViva): Promise<EstadoFecha> {
+  if (fecha.status === 'OPEN') {
+    const { matches } = await matchdayDetail(supabase, fecha.id)
+    const faltan = matches.filter((m) => m.sets.length === 0 && !isUnplayedThirdPlace(m)).length
+    return { kind: 'OPEN', faltan, cargados: matches.filter((m) => m.sets.length > 0).length }
+  }
+  const [entries, attendances] = await Promise.all([
+    entriesOf(supabase, fecha.seasonId, fecha.disciplineId),
+    attendancesOf(supabase, fecha.id),
+  ])
+  const plantel = entries.filter((entry) => entry.kind === 'SQUAD')
+  return {
+    kind: 'DRAFT',
+    confirmados: plantel.filter((entry) => attendances.get(entry.id) !== 'ABSENT').length,
+    plantel: plantel.length,
+  }
 }
 
+/** Hoy en `YYYY-MM-DD`, con la fecha local del servidor (la de `played_on` no tiene hora). */
+function hoyISO(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/** Hasta cuántos amigos van en Inicio: el resto está en "Ver todos". */
+const AMIGOS_EN_INICIO = 4
+
 /**
- * Mis torneos — §5 del handoff. Es la pantalla de entrada a la app, y va **sin
- * bottom nav**: está un nivel por encima del torneo.
+ * Inicio — la entrada de la app (estructura B, `design/inicio/02`, con el
+ * lenguaje del prototipo): arriba, en el bloque, la fecha más cercana de tus
+ * torneos; abajo, "Tus torneos" y "Amigos", las dos partes de la app a la
+ * vista desde que la abrís (S4). "Cargar partido", fijo abajo, junta los
+ * caminos más cortos para cargar un resultado.
+ *
+ * Sin barra de pestañas: está un nivel por encima del torneo. La cuenta
+ * (amigos, privacidad, cerrar sesión) es el círculo de arriba a la derecha.
  */
-export default async function MisTorneosPage() {
+export default async function InicioPage() {
   const supabase = await serverClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
 
   const headers = await mySeasons(supabase)
-  const [cards, myName] = await Promise.all([
+  const hoy = hoyISO()
+  const [cards, myName, amigos] = await Promise.all([
     Promise.all(headers.map((header) => cardFor(supabase, header))),
     (async () => {
       const { data: playerId } = await supabase.rpc('my_player_id')
       if (playerId === null) return ''
       return (await playerNames(supabase, [playerId])).get(playerId) ?? ''
     })(),
+    user === null ? Promise.resolve([]) : amigosDeInicio(supabase),
   ])
 
-  const live = cards.filter((card) => card.status !== 'FINISHED')
+  const live = ordenarPorCercania(
+    cards
+      .filter((card) => card.status !== 'FINISHED')
+      .map((card) => ({ ...card, proxima: proximaFecha(card.fechas, hoy) })),
+    hoy,
+  )
   const finished = cards.filter((card) => card.status === 'FINISHED')
+  const fechas = live.flatMap((card) => card.fechas)
+  const proxima = proximaFecha(fechas, hoy)
+  const estado = proxima === null ? null : await estadoDe(supabase, proxima)
+  const cargables = paraCargar(fechas, hoy).map((fecha) => ({
+    id: fecha.id,
+    href: hrefFecha(fecha),
+    titulo: tituloFecha(fecha),
+    torneo: fecha.seasonName,
+    dia: fecha.playedOn === null ? null : matchdayDay(fecha.playedOn),
+    sport: fecha.sport,
+  }))
 
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-lg flex-col gap-3 bg-bg px-5 pb-6 text-text">
-      {/* El nombre dejó de ser un kicker y pasó a estar adentro del círculo:
-          era texto que no hacía nada, y ahora es el único acceso a la cuenta. */}
-      <header className="flex items-center justify-between gap-3 pt-4">
-        <h1 className="text-[26px] font-extrabold tracking-[-.03em]">Mis torneos</h1>
-        <Cuenta name={myName} />
-      </header>
+    <main className="mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-bg pb-[calc(104px+env(safe-area-inset-bottom))] text-text">
+      <div className="relative">
+        {proxima !== null && estado !== null ? (
+          <HeroFecha fecha={proxima} estado={estado} />
+        ) : cards.length === 0 ? (
+          <HeroVacio entrar={user === null} />
+        ) : (
+          <Hero kicker={<span className="pr-14">Inicio</span>} title={<span className="block pr-12">Sin fechas en juego</span>} />
+        )}
+        <div className="absolute top-[calc(6px+env(safe-area-inset-top))] right-4 [--color-focus:var(--color-on-block)]">
+          <Cuenta name={myName} />
+        </div>
+      </div>
 
       {cards.length === 0 ? (
-        <div className="flex flex-1 flex-col justify-center gap-3">
-          <h2 className="text-pretty text-[22px] font-extrabold tracking-[-.02em]">
-            Todavía no estás en ningún torneo
-          </h2>
-          <p className="text-pretty text-[14px] font-[550] leading-[1.5] text-muted">
-            Creá el tuyo y compartí el link con el grupo. Si alguien ya te pasó un link de
-            invitación, abrilo y elegí tu nombre de la lista.
+        <Section title="Tus torneos">
+          <p className="rounded-tile border-[1.5px] border-dashed border-line px-4 py-3.5 text-[15px] text-muted">
+            ¿Te pasaron un link de invitación? Abrilo y elegí tu nombre.
           </p>
-          <Acciones className="mt-2" />
-          {user === null && (
-            <Link href="/login" className="text-center text-[12.5px] font-bold text-accent-link">
-              Entrar
+        </Section>
+      ) : (
+        <Section title="Tus torneos">
+          {live.length > 0 && <Tiles cards={live} />}
+          <div className="mt-1.5 grid grid-cols-2 gap-2">
+            <Link href="/torneos/nuevo" className="press flex min-h-[48px] items-center gap-1.5 rounded-btn px-1 text-[16px] font-bold text-accent-link active:bg-sport-tint">
+              <Icono name="plus" className="h-[18px] w-[18px]" />
+              Crear torneo
             </Link>
+            <Link href="/rapido" className="press flex min-h-[48px] items-center gap-1.5 rounded-btn px-1 text-[16px] font-bold text-accent-link active:bg-sport-tint">
+              <Icono name="bolt" className="h-[18px] w-[18px]" />
+              Torneo rápido
+            </Link>
+          </div>
+        </Section>
+      )}
+
+      <Section
+        title="Amigos"
+        action={
+          amigos.length > 0 ? (
+            <Link href="/amigos" className="press -my-2 flex min-h-[44px] items-center px-1 text-[16px] font-bold text-accent-link">
+              Ver todos
+            </Link>
+          ) : undefined
+        }
+      >
+        <ul className="-mx-4">
+          {amigos.length === 0 ? (
+            <li>
+              <Link href="/amigos" className={`${rowPress} min-h-[72px]`}>
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-sport-tint text-sport">
+                  <Icono name="plus" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[17px] font-bold">Sumá un amigo</span>
+                  <span className="block text-[14px] text-muted">El historial con cada uno</span>
+                </span>
+                <Icono name="chev" className="h-6 w-6 text-muted" />
+              </Link>
+            </li>
+          ) : (
+            amigos.slice(0, AMIGOS_EN_INICIO).map((amigo) => <FilaAmigo key={amigo.playerId} amigo={amigo} />)
+          )}
+        </ul>
+      </Section>
+
+      {finished.length > 0 && (
+        <Section title="Terminados" className="pt-7">
+          <ul className="-mx-4">
+            {finished.map((card) => (
+              <li key={card.id} data-deporte={card.sport}>
+                <Link href={`/torneo/${card.id}`} className={rowPress}>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[17px] font-bold">{card.name}</span>
+                    <span className="block text-[14px] text-muted">{card.sports}</span>
+                  </span>
+                  {card.position !== null && (
+                    <span className="shrink-0 text-right">
+                      <span className="sr-only">Terminaste </span>
+                      <span className="font-cond text-[30px] text-sport">
+                        {card.position}
+                        <span className="align-[.45em] text-[.5em]">°</span>
+                      </span>
+                    </span>
+                  )}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
+
+      {/* Sin fechas para cargar ni amigos no hay partido que cargar: el botón
+          competiría con "Crear torneo" sin llevar a ningún lado. */}
+      {user !== null && (cargables.length > 0 || amigos.length > 0) && <CargarPartido fechas={cargables} />}
+    </main>
+  )
+}
+
+/** El bloque de la fecha más cercana: el torneo, "Fecha 8", el día, cómo viene y el link. */
+function HeroFecha({ fecha, estado }: { fecha: FechaViva; estado: EstadoFecha }) {
+  const dia = diaFecha(fecha.playedOn)
+  const pips =
+    estado.kind === 'OPEN'
+      ? { llenos: estado.cargados, total: estado.cargados + estado.faltan }
+      : { llenos: estado.confirmados, total: estado.plantel }
+  return (
+    <Hero
+      sport={fecha.sport}
+      kicker={
+        <span className="flex min-w-0 items-center gap-2 pr-14">
+          <IconoDeporte kind={fecha.sport} className="h-[18px] w-[18px]" />
+          <span className="truncate">{fecha.seasonName}</span>
+        </span>
+      }
+      title={tituloFecha(fecha)}
+      titleVariant="number"
+    >
+      <p className="mt-2 text-[21px] font-bold font-stretch-[88%]">
+        {dia ?? (fecha.status === 'OPEN' ? 'En juego' : 'Armándose')}
+      </p>
+      {dia !== null && (
+        <p className="text-[16px] text-on-block-soft">{fecha.status === 'OPEN' ? 'En juego' : 'Armándose'}</p>
+      )}
+      <div className="mt-4 flex items-end justify-between gap-3">
+        <div className="min-w-0">
+          {pips.total > 0 && pips.total <= 16 && (
+            <span aria-hidden="true" className="mb-2 flex flex-wrap gap-1">
+              {Array.from({ length: pips.total }, (_, i) => (
+                <i
+                  key={i}
+                  className={`h-3 w-3 rounded-[3px] ${i < pips.llenos ? 'bg-on-block' : 'shadow-[inset_0_0_0_1.5px_var(--color-on-block-soft)]'}`}
+                />
+              ))}
+            </span>
+          )}
+          {estado.kind === 'OPEN' ? (
+            <p className="text-[15px] leading-snug">
+              <b className="font-bold">{faltanTexto(estado.faltan)}</b>
+              <span className="block text-on-block-soft">
+                {estado.cargados} de {estado.cargados + estado.faltan} cargados
+              </span>
+            </p>
+          ) : (
+            <p className="text-[15px] leading-snug">
+              <b className="font-bold">
+                {estado.confirmados} de {estado.plantel}
+              </b>{' '}
+              confirmados
+              <span className="block text-on-block-soft">Parejas sin sortear</span>
+            </p>
           )}
         </div>
-      ) : (
-        <>
-          <div className="flex flex-col gap-3">
-            {live.map((card) => (
-              <Link
-                key={card.id}
-                href={`/torneo/${card.id}`}
-                className="block rounded-card border border-line bg-surface p-4"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <p className="text-[18px] font-extrabold tracking-[-.02em]">{card.name}</p>
-                  <span className="shrink-0 rounded-full bg-ok-bg px-[10px] py-[6px] text-[12px] font-extrabold text-up">
-                    {card.estado}
-                  </span>
-                </div>
+        <Link href={hrefFecha(fecha)} className={`${button('onBlock')} min-h-[48px] shrink-0 pr-3 pl-[18px]`}>
+          Ver la fecha
+          <Icono name="chev" className="h-[18px] w-[18px]" />
+        </Link>
+      </div>
+    </Hero>
+  )
+}
 
-                <div className="mt-3 flex items-center gap-4">
-                  <div className="flex flex-col gap-[2px]">
-                    <p className="text-[12px] font-extrabold uppercase tracking-[.13em] text-muted">
-                      Mi posición
-                    </p>
-                    <p className="text-[15px] font-extrabold">
-                      {card.position === null ? '—' : `${card.position}°`}
-                    </p>
-                  </div>
-                  <span className="h-[26px] w-px shrink-0 bg-line" />
-                  <div className="flex flex-col gap-[2px]">
-                    <p className="text-[12px] font-extrabold uppercase tracking-[.13em] text-muted">
-                      Próxima fecha
-                    </p>
-                    <p className="text-[15px] font-extrabold">
-                      {card.nextMatchday === null ? '—' : matchdayDay(card.nextMatchday)}
-                    </p>
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
+/** Sin torneos: el bloque es la invitación a armar el primero. */
+function HeroVacio({ entrar }: { entrar: boolean }) {
+  return (
+    <Hero
+      kicker={<span className="pr-14">Inicio</span>}
+      title={<span className="block pr-12">Armá el torneo del grupo</span>}
+      subtitle="La tabla, las fechas y el historial con tus amigos."
+    >
+      <div className="mt-5 flex flex-col gap-2">
+        <Link href="/torneos/nuevo" className={button('onBlock', { size: 'lg', full: true })}>
+          <Icono name="plus" />
+          Crear torneo
+        </Link>
+        <Link
+          href="/rapido"
+          className="press flex min-h-[48px] items-center justify-center gap-2 rounded-btn text-[16px] font-bold text-on-block active:bg-white/15"
+        >
+          <Icono name="bolt" className="h-[18px] w-[18px]" />
+          Torneo rápido
+        </Link>
+        {entrar && (
+          <Link href="/login" className="flex min-h-[44px] items-center justify-center text-[16px] font-bold text-on-block underline">
+            Entrar
+          </Link>
+        )}
+      </div>
+    </Hero>
+  )
+}
 
-          <Acciones className="mt-1" />
+/**
+ * Tus torneos en bloques del color de su deporte: el deporte, el nombre
+ * (reserva dos líneas para que el puesto quede a la misma altura), tu puesto
+ * en la cara condensada y por qué fecha va. Con más de dos, la fila se
+ * desliza de costado y el tercero asoma: así "Amigos" sigue entrando en la
+ * pantalla (S4) y ningún torneo queda escondido detrás de un "ver más".
+ */
+function Tiles({ cards }: { cards: readonly SeasonCard[] }) {
+  const desliza = cards.length > 2
+  return (
+    <ul
+      className={
+        desliza
+          ? '-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-2.5 overflow-x-auto px-4 pb-1 [scrollbar-width:none]'
+          : 'grid grid-cols-2 gap-2.5'
+      }
+    >
+      {cards.map((card) => {
+        const label = [
+          card.name,
+          card.sports,
+          ...(card.position === null ? [] : [`vas ${card.position}° de ${card.squadSize}`]),
+          card.progreso,
+        ].join(', ')
+        return (
+          <li key={card.id} data-deporte={card.sport} className={desliza ? 'w-[calc(50%-24px)] shrink-0 snap-start' : ''}>
+            <Link
+              href={`/torneo/${card.id}`}
+              aria-label={label}
+              className="press flex h-full flex-col rounded-tile bg-sport-tint px-3.5 pt-3.5 pb-4 text-sport"
+            >
+              <span className="flex items-center justify-between gap-2">
+                <span className="truncate text-[14px] font-bold">{card.sports}</span>
+                <IconoDeporte kind={card.sport} />
+              </span>
+              <span className="mt-2.5 line-clamp-2 min-h-[2.4em] text-[16px] leading-[1.2] font-bold text-text">
+                {card.name}
+              </span>
+              <span className="mt-2.5 flex items-end gap-1">
+                {card.position === null ? (
+                  <span className="font-cond text-[52px] leading-[.78] text-muted">–</span>
+                ) : (
+                  <>
+                    <span className="font-cond text-[52px] leading-[.78]">
+                      {card.position}
+                      <span className="align-[.62em] text-[.5em]">°</span>
+                    </span>
+                    <span className="text-[16px] leading-none font-bold">de {card.squadSize}</span>
+                  </>
+                )}
+              </span>
+              <span className="mt-1.5 text-[14px] text-muted">{card.progreso}</span>
+            </Link>
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
 
-          {finished.length > 0 && (
-            <>
-              <div className="mt-3 flex items-center gap-3">
-                <p className="text-[12px] font-extrabold uppercase tracking-[.13em] text-muted">
-                  Terminados
-                </p>
-                <span className="h-px flex-1 bg-line" />
-              </div>
-              {finished.map((card) => (
-                <Link
-                  key={card.id}
-                  href={`/torneo/${card.id}`}
-                  className="flex items-center justify-between gap-3 py-2 opacity-60"
-                >
-                  <div>
-                    <p className="text-[15px] font-[750]">{card.name}</p>
-                    <p className="text-[12px] font-semibold text-muted">{card.estado}</p>
-                  </div>
-                  <p className="shrink-0 text-[15px] font-extrabold">
-                    {card.position === null ? '—' : `${card.position}°`}
-                  </p>
-                </Link>
-              ))}
-            </>
-          )}
-        </>
-      )}
-    </main>
+/**
+ * Un amigo: su último resultado (verbo, marcador y día) y el cara a cara. El
+ * número es el de enfrentados, lo tuyo contra él; si sólo jugaron de
+ * compañeros, el de la pareja, con "juntos" al lado para que no se confunda.
+ */
+function FilaAmigo({ amigo }: { amigo: AmigoInicio }) {
+  const ultimo = amigo.ultimo === null ? null : ultimoResultado(amigo.ultimo)
+  const enContra = amigo.contra.won + amigo.contra.lost + amigo.contra.drew > 0
+  const deJuntos = amigo.juntos.won + amigo.juntos.lost + amigo.juntos.drew > 0
+  const registro = enContra ? amigo.contra : deJuntos ? amigo.juntos : null
+  const empates = registro !== null && registro.drew > 0 ? `, ${enContra ? 'empataste' : 'empataron'} ${registro.drew}` : ''
+  const aria =
+    registro === null
+      ? undefined
+      : enContra
+        ? `Historial: ganaste ${registro.won}, perdiste ${registro.lost}${empates}`
+        : `Juntos: ganaron ${registro.won}, perdieron ${registro.lost}${empates}`
+  return (
+    <li data-deporte={amigo.ultimo?.sport}>
+      <Link href={`/amigos/${amigo.playerId}`} className={`${rowPress} min-h-[72px]`}>
+        <Avatar name={amigo.displayName} />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[17px] font-bold">{amigo.displayName}</span>
+          <span className="block truncate text-[14px] text-muted">
+            {ultimo === null ? (
+              'Sin partidos todavía'
+            ) : (
+              <>
+                <span className={ultimo.gano ? 'font-semibold text-up' : 'font-semibold text-text'}>
+                  {ultimo.verbo}
+                  {ultimo.marcador !== null && ` ${ultimo.marcador}`}
+                </span>
+                {ultimo.dia !== null && `, ${ultimo.dia}`}
+              </>
+            )}
+          </span>
+        </span>
+        {registro !== null && (
+          <span role="img" aria-label={aria} className="flex shrink-0 items-baseline gap-[5px]">
+            <span className="font-cond text-[34px]">{registro.won}</span>
+            <small className="text-[15px] font-semibold text-muted">a</small>
+            <span className="font-cond text-[34px]">{registro.lost}</span>
+            {!enContra && <small className="ml-1 text-[13px] font-semibold text-muted">juntos</small>}
+          </span>
+        )}
+      </Link>
+    </li>
   )
 }

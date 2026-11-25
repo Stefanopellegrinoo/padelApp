@@ -1,15 +1,20 @@
 import Link from 'next/link'
 import { signOut } from '@/app/auth/actions'
 import { SubmitButton } from '@/app/submit-button'
+import { button } from '@/app/ui/button'
 import { serverClient } from '@/db/server'
 
-const BULLETS = [
-  'Las parejas se arman solas cruzando la tabla, sin discusiones.',
-  'Cargás el resultado en dos toques, sin teclado.',
-  'Cada uno ve su posición, su racha y con quién le va mejor.',
+/** Lo que hace la app, en tres datos: el título dice qué, la línea gris dice cómo. */
+const PUNTOS = [
+  { titulo: 'Parejas solas', detalle: 'Se arman cruzando la tabla, sin discusiones.' },
+  { titulo: 'Resultado en dos toques', detalle: 'Quién ganó y los games del otro. Sin teclado.' },
+  { titulo: 'Tu tabla y tu historial', detalle: 'Tu puesto, tu racha y con quién te va mejor.' },
 ]
 
 /**
+ * La puerta de la app para quien no entró: el bloque azul con lo que es, tres
+ * datos de lo que hace y los caminos para empezar.
+ *
  * Quien cae acá logueado ya tiene a dónde ir —Mis torneos—, así que el CTA
  * principal deja de ser "Crear mi torneo" y pasa a llevarlo ahí: crear uno es
  * un botón de esa pantalla. Lo único que se vuelve falso es "Ya tengo cuenta":
@@ -23,52 +28,38 @@ export default async function HomePage() {
   } = await supabase.auth.getUser()
 
   return (
-    <main className="flex min-h-dvh flex-col bg-bg px-6 pb-[26px] text-text">
-      <div className="flex items-center gap-[9px] pt-4">
-        <span className="h-[26px] w-[26px] rounded-[7px] bg-accent" />
-        <span className="text-[14.5px] font-extrabold tracking-[-.01em]">Padel Liga</span>
-      </div>
-
-      <div className="flex flex-1 flex-col justify-center gap-4">
-        <h1 className="text-pretty text-[40px] leading-[1.02] font-extrabold tracking-[-.035em]">
-          El campeonato del grupo, sin planillas.
-        </h1>
-        <p className="text-pretty text-[15.5px] leading-[1.5] font-medium text-muted">
-          Parejas nuevas cada fecha y una tabla que se actualiza sola. Vos cargás quién ganó, la app
-          hace el resto.
+    <main className="mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-bg pb-[calc(24px+env(safe-area-inset-bottom))] text-text">
+      <header className="rounded-b-block bg-block px-4 pt-[calc(16px+env(safe-area-inset-top))] pb-7 text-on-block [--color-focus:var(--color-on-block)]">
+        <p className="flex items-center gap-2 text-[16px] font-bold">
+          <span aria-hidden="true" className="h-6 w-6 rounded-[7px] bg-on-block" />
+          Padel Liga
         </p>
+        <h1 className="mt-10 font-titulo text-[46px] text-balance">El campeonato del grupo, sin planillas.</h1>
+        <p className="mt-3 text-[17px] text-pretty text-on-block-soft">
+          Parejas nuevas cada fecha y una tabla que se actualiza sola.
+        </p>
+      </header>
 
-        <div className="flex flex-col gap-[9px] pt-[10px]">
-          {BULLETS.map((bullet) => (
-            <div key={bullet} className="flex items-start gap-[11px]">
-              <span className="mt-[1px] flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full bg-ok-bg text-[12px] font-extrabold text-up">
-                ✓
-              </span>
-              <span className="text-pretty text-[14px] leading-[1.45] font-semibold">{bullet}</span>
-            </div>
-          ))}
-        </div>
-      </div>
+      <ul className="flex flex-col gap-4 px-4 pt-6">
+        {PUNTOS.map((punto) => (
+          <li key={punto.titulo} className="border-l-4 border-sport py-0.5 pl-3.5">
+            <b className="block text-[18px] leading-snug font-bold">{punto.titulo}</b>
+            <span className="text-[15px] text-muted">{punto.detalle}</span>
+          </li>
+        ))}
+      </ul>
 
-      <div className="flex flex-col gap-[10px]">
-        <Link
-          href={user === null ? '/registro' : '/torneos'}
-          className="rounded-field bg-accent p-4 text-center font-extrabold text-accent-text"
-        >
+      <div className="mt-auto flex flex-col gap-2.5 px-4 pt-8">
+        <Link href={user === null ? '/registro' : '/torneos'} className={button('primary', { size: 'lg', full: true })}>
           {user === null ? 'Crear mi torneo' : 'Mis torneos'}
         </Link>
         {user === null ? (
-          <Link
-            href="/login"
-            className="rounded-field border border-line p-4 text-center font-extrabold text-text"
-          >
+          <Link href="/login" className={button('secondary', { size: 'lg', full: true })}>
             Ya tengo cuenta
           </Link>
         ) : (
           <form action={signOut}>
-            <SubmitButton className="w-full rounded-field border border-line p-4 text-center font-extrabold text-text">
-              Cerrar sesión
-            </SubmitButton>
+            <SubmitButton className={button('secondary', { size: 'lg', full: true })}>Cerrar sesión</SubmitButton>
           </form>
         )}
         {/*
@@ -80,19 +71,17 @@ export default async function HomePage() {
           piden: es el único que alguien puede recorrer entero sin registrarse,
           así que es el que más barato sale mostrar.
 
-          Queda tercero y con borde, no lleno: sigue siendo secundario contra
-          "Crear mi torneo". Lo que cambió es que ahora se toca, no que grite.
+          Queda tercero y sin caja: sigue siendo secundario contra "Crear mi
+          torneo". Lo que cambió es que ahora se toca, no que grite.
         */}
         <Link
           href="/rapido"
-          className="rounded-field border border-line p-4 text-center font-extrabold text-text"
+          className="press flex min-h-[56px] flex-col items-center justify-center rounded-btn text-center active:bg-sport-tint"
         >
-          Armar un torneo rápido
-          <span className="block pt-[3px] text-[12px] font-semibold text-muted">
-            Una tarde, sin cuenta.
-          </span>
+          <span className="text-[17px] font-bold text-accent-link">Armar un torneo rápido</span>
+          <span className="text-[14px] text-muted">Una tarde, sin cuenta.</span>
         </Link>
-        <p className="text-pretty pt-[2px] text-center text-[12.5px] font-medium text-muted">
+        <p className="pt-1 text-center text-[14px] text-pretty text-muted">
           ¿Te pasaron un link de invitación? Abrilo y elegí tu nombre.
         </p>
       </div>

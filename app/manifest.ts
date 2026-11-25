@@ -40,10 +40,10 @@ export default function manifest(): MetadataRoute.Manifest {
     scope: '/',
     display: 'standalone',
     orientation: 'portrait',
-    // El fondo oscuro de la app. Es el color de la pantalla de arranque, así
-    // que un blanco acá sería un flash blanco cada vez que se abre.
-    background_color: '#0d1512',
-    theme_color: '#0d1512',
+    // El fondo oscuro de la app (azul noche). Es el color de la pantalla de
+    // arranque, así que un blanco acá sería un flash blanco cada vez que se abre.
+    background_color: '#0E1630',
+    theme_color: '#0E1630',
     icons: [
       { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
       { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },

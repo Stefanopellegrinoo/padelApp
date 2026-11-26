@@ -64,5 +64,6 @@ export function initials(name: string): string {
  */
 export function matchdayFormatLabel(formato: MatchdayFormatSetting): string {
   if (formato.kind === 'AUTO') return 'Automático'
+  if (formato.kind === 'RANKING') return 'Ranking por pinos'
   return formato.kind === 'ROUND_ROBIN' ? 'Todos contra todos' : `${formato.groups} grupos + llave`
 }

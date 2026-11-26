@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import {
   computeRanking,
   partnerRecords,
+  rankingTallies,
   rivalRecords,
   rankingWithMovement,
   resolveDisciplineBySlug,
@@ -13,9 +14,18 @@ import {
   unitOf,
   type Award,
   type EntryId,
+  type RivalRecord,
   type SeasonConfig,
 } from '@/core'
-import { awardsOf, closedHistoryAll, entriesOf, myEntryId, seasonHeader, seasonSquadMembersOf } from '@/db/read'
+import {
+  awardsOf,
+  closedHistoryAll,
+  closedScoresOf,
+  entriesOf,
+  myEntryId,
+  seasonHeader,
+  seasonSquadMembersOf,
+} from '@/db/read'
 import { serverClient } from '@/db/server'
 import { Avatar } from '@/app/ui/avatar'
 import { button } from '@/app/ui/button'
@@ -158,13 +168,15 @@ function formatSigned(value: number): string {
 /**
  * Una fila de compañero o de rival: avatar, nombre (el link al perfil, que
  * cubre la fila entera), una línea gris y el resultado en números grandes.
- * La del que mira lleva la marca de "vos".
+ * La del que mira lleva la marca de "vos". Con `drawn` (ajedrez) el resultado
+ * es ganadas-tablas-perdidas.
  */
 function FilaPersona({
   name,
   href,
   meta,
   won,
+  drawn,
   lost,
   tone,
   isMe,
@@ -173,6 +185,7 @@ function FilaPersona({
   href: string
   meta: string
   won: number
+  drawn?: number
   lost: number
   tone: 'up' | 'down' | 'muted'
   isMe: boolean
@@ -192,11 +205,9 @@ function FilaPersona({
       <span
         className={`font-cond shrink-0 text-[30px] ${tone === 'up' ? 'text-up' : tone === 'down' ? 'text-down' : 'text-muted'}`}
       >
-        <span aria-hidden="true">
-          {won}-{lost}
-        </span>
+        <span aria-hidden="true">{drawn === undefined ? `${won}-${lost}` : `${won}-${drawn}-${lost}`}</span>
         <span className="sr-only">
-          {won} ganados, {lost} perdidos
+          {drawn === undefined ? `${won} ganados, ${lost} perdidos` : `${won} ganadas, ${drawn} tablas, ${lost} perdidas`}
         </span>
       </span>
     </li>
@@ -244,12 +255,15 @@ export default async function JugadorPage({ params, searchParams }: PageProps) {
   const base = `/torneo/${seasonId}/${disciplina}`
   const volver = volverDelJugador(base, desde)
 
-  const [squad, entries, history, awardsByMatchday, viewerEntryId] = await Promise.all([
+  // Bowling (S4): sin partidos. El perfil cuenta pinos en vez de partidos y games.
+  const byPins = discipline.formatoDefault.kind === 'RANKING'
+  const [squad, entries, history, awardsByMatchday, viewerEntryId, scoresByMatchday] = await Promise.all([
     seasonSquadMembersOf(supabase, seasonId),
     entriesOf(supabase, seasonId, discipline.id),
     closedHistoryAll(supabase, seasonId, discipline.id),
     awardsOf(supabase, seasonId, discipline.id),
     myEntryId(supabase, seasonId),
+    byPins ? closedScoresOf(supabase, discipline.id) : Promise.resolve(new Map<number, Map<EntryId, number>>()),
   ])
 
   // La identidad se resuelve con el plantel de LA TEMPORADA (C11, verify
@@ -345,12 +359,15 @@ export default async function JugadorPage({ params, searchParams }: PageProps) {
     .filter((record) => record.entryId === entryId)
     .sort((a, b) => b.won - b.lost - (a.won - a.lost) || b.together - a.together)
   // Los que más veces tuvo enfrente primero: el cara a cara que más se repite es el que se discute.
-  const rivals = rivalRecords(history, entryId).sort(
-    (a, b) => b.won + b.lost - (a.won + a.lost) || b.won - b.lost - (a.won - a.lost),
-  )
+  // En ajedrez las tablas cuentan (S3); en los demás, como siempre, sólo ganados y perdidos.
+  const jugadosContra = (record: RivalRecord) => record.won + record.lost + (partidas ? record.drawn : 0)
+  const rivals = rivalRecords(history, entryId)
+    .filter((record) => jugadosContra(record) > 0)
+    .sort((a, b) => jugadosContra(b) - jugadosContra(a) || b.won - b.lost - (a.won - a.lost))
 
   const isMe = entryId === viewerEntryId
-  const fechasJugadas = tally.matchdaysPlayed
+  const pins = rankingTallies(scoresByMatchday, [entryId])[0]
+  const fechasJugadas = byPins ? (pins?.played ?? 0) : tally.matchdaysPlayed
 
   return (
     <div className="flex flex-col">
@@ -380,16 +397,24 @@ export default async function JugadorPage({ params, searchParams }: PageProps) {
       />
 
       <div className="grid grid-cols-3 gap-2.5 px-4 pt-5">
-        {partidas ? (
-          <Dato label="Partidas" value={`${tally.matchesWon}-${matchesLost - tally.matchesDrawn}`} />
+        {byPins ? (
+          <>
+            <Dato label="Promedio" value={pins?.average ?? 0} />
+            <Dato label="Mejor total" value={pins?.best ?? 0} />
+            <Dato label={`${unit.charAt(0).toUpperCase()}${unit.slice(1)} totales`} value={pins?.total ?? 0} />
+          </>
+        ) : partidas ? (
+          <>
+            <Dato label="Partidas" value={`${tally.matchesWon}-${matchesLost - tally.matchesDrawn}`} />
+            <Dato label="Efectividad" value={`${efectividad}%`} />
+            <Dato label="Tablas" value={tally.matchesDrawn} />
+          </>
         ) : (
-          <Dato label="Partidos" value={`${tally.matchesWon}-${matchesLost}`} />
-        )}
-        <Dato label="Efectividad" value={`${efectividad}%`} />
-        {partidas ? (
-          <Dato label="Tablas" value={tally.matchesDrawn} />
-        ) : (
-          <Dato label={`Dif. ${unit}`} value={formatSigned(difGames)} />
+          <>
+            <Dato label="Partidos" value={`${tally.matchesWon}-${matchesLost}`} />
+            <Dato label="Efectividad" value={`${efectividad}%`} />
+            <Dato label={`Dif. ${unit}`} value={formatSigned(difGames)} />
+          </>
         )}
         <Dato label="Fechas ganadas" value={fechasGanadas} />
         <Dato label="Racha de títulos" value={longestStreak} />
@@ -427,14 +452,16 @@ export default async function JugadorPage({ params, searchParams }: PageProps) {
           <ul>
             {rivals.map((record) => {
               const balance = record.won - record.lost
-              const played = record.won + record.lost
+              const played = jugadosContra(record)
+              const palabra = partidas ? 'partida' : 'partido'
               return (
                 <FilaPersona
                   key={record.rival}
                   name={nameById.get(record.rival) ?? ''}
                   href={perfilHref(base, record.rival, desde)}
-                  meta={played === 1 ? '1 partido' : `${played} partidos`}
+                  meta={played === 1 ? `1 ${palabra}` : `${played} ${palabra}s`}
                   won={record.won}
+                  drawn={partidas ? record.drawn : undefined}
                   lost={record.lost}
                   tone={balance > 0 ? 'up' : balance < 0 ? 'down' : 'muted'}
                   isMe={record.rival === viewerEntryId}

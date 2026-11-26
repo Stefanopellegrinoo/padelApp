@@ -39,11 +39,8 @@ export function Icono({ name, className = 'h-6 w-6' }: { name: keyof typeof TRAZ
   )
 }
 
-/** Ajedrez y bowling tienen ícono antes de tener entrada en el registro (llegan con su familia). */
-const ICONO_SIN_REGISTRO: Record<string, SportIcono> = { AJEDREZ: 'peon', BOWLING: 'bolo' }
-
 /** El ícono del deporte, el de su entrada del registro (`icono`). Un id que no se conoce, la paleta. */
 export function IconoDeporte({ kind, className }: { kind: string; className?: string }) {
-  const name = isSportId(kind) ? SPORTS[kind].icono : (ICONO_SIN_REGISTRO[kind] ?? 'padel')
+  const name = isSportId(kind) ? SPORTS[kind].icono : 'padel'
   return <Icono name={name} className={className} />
 }

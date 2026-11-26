@@ -129,6 +129,6 @@ describe('el reglamento y el detalle del ajedrez', () => {
     )
     expect(fecha).not.toContain('set')
     const desempate = sections.find((section) => section.title === 'Los desempates')?.body ?? ''
-    expect(desempate).toContain('si dos jugadores suman los mismos puntos, corta la diferencia de partidas')
+    expect(desempate).toContain('si dos jugadores suman los mismos puntos, corta la diferencia entre ganadas y perdidas')
   })
 })

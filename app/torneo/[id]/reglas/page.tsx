@@ -34,6 +34,7 @@ function blocksOf(formats: PublicFormat[]): RulesBlock[] {
       shape,
       unit: unitOf(format.kind, format.config.matchFormat),
       text: format.rulesText,
+      ranking: format.formatoDefault.kind === 'RANKING',
     }
   })
 }

@@ -1,5 +1,5 @@
 import { defaultConfig } from '../../core/config'
-import type { DisciplineId, SeasonConfig, SideSize } from '../../core/types'
+import type { DisciplineId, MatchdayFormatSetting, SeasonConfig, SideSize } from '../../core/types'
 import { adminClient } from './admin'
 import type { Json } from '../database.types'
 import type { TestUser } from './users'
@@ -23,6 +23,8 @@ export interface DisciplineSpec {
    * decisión es que esa fila no puede existir, ni para un test.
    */
   hasMasters?: boolean
+  /** `disciplines.formato_default`. Sin especificar, default de columna. Bowling (S4) lo necesita en `RANKING`. */
+  formatoDefault?: MatchdayFormatSetting
 }
 
 interface CreateSeasonOptions {
@@ -69,6 +71,24 @@ export async function createSeason({
     throw new Error(`No se pudo crear la temporada de test: ${seasonError?.message}`)
   }
 
+  // Sin transacción (son inserts sueltos por PostgREST): si algo de acá abajo
+  // rebota, la temporada recién creada se borra antes de relanzar el error.
+  // Si no, una corrida en rojo deja temporadas sin disciplina y rompe el
+  // tripwire global de REQ-NR-4 (`db/discipline.db.test.ts`) para todos.
+  try {
+    return await fillSeason(db, season.id, { config, squad, disciplines })
+  } catch (error) {
+    await db.from('seasons').delete().eq('id', season.id)
+    throw error
+  }
+}
+
+async function fillSeason(
+  db: ReturnType<typeof adminClient>,
+  seasonId: string,
+  { config, squad, disciplines }: { config: SeasonConfig; squad: string[]; disciplines: DisciplineSpec[] },
+): Promise<CreatedSeason> {
+  const season = { id: seasonId }
   const disciplineIds: DisciplineId[] = []
   for (const [index, spec] of disciplines.entries()) {
     const { data: discipline, error: disciplineError } = await db
@@ -86,6 +106,7 @@ export async function createSeason({
         // `pairSize: 1` viola `disciplines_has_masters_needs_pair` (0053),
         // porque el default de columna (0015) sigue en `true`.
         has_masters: spec.hasMasters ?? spec.pairSize !== 1,
+        ...(spec.formatoDefault === undefined ? {} : { formato_default: spec.formatoDefault as unknown as Json }),
       })
       .select('id')
       .single()

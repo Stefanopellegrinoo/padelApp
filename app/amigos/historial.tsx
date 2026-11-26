@@ -1,5 +1,6 @@
 import type { CasualMatch, SharedMatch, TournamentMatch } from '@/db/friends'
 import { matchdayDay } from '@/app/format'
+import { PARTIDA_ANOTADA } from '@/app/torneos/inicio/estado'
 import { sportFamily, sportLabel } from '@/core'
 import { CasualMatchRow } from './[playerId]/cargar'
 
@@ -168,9 +169,6 @@ function porMes(partidos: readonly SharedMatch[]): { mes: string; partidos: Shar
   }, [])
 }
 
-
-const PARTIDA: Record<Resultado, string> = { won: '1-0', lost: '0-1', drew: '½-½' }
-
 /** El color del resultado, como en el prototipo: ganar en azul, perder en tinta. */
 const TONO: Record<Resultado, string> = { won: 'text-up', lost: 'text-text', drew: 'text-text' }
 const META = 'col-start-1 text-[14px] text-muted'
@@ -179,7 +177,7 @@ const META = 'col-start-1 text-[14px] text-muted'
 export function marcadorDe(partido: SharedMatch): string | null {
   // Una partida de ajedrez se anota 1-0, 0-1 o ½-½: sale del resultado, no de un marcador (con
   // amigos no hay; en un torneo es el set 1-0 con que se guarda).
-  if (sportFamily(partido.sport) === 'result' && partido.outcome !== null) return PARTIDA[partido.outcome]
+  if (sportFamily(partido.sport) === 'result' && partido.outcome !== null) return PARTIDA_ANOTADA[partido.outcome]
   const sets = partido.kind === 'casual' ? partido.sets : null
   if (sets !== null && sets.length > 0) return sets.map((set) => `${set.mine}-${set.theirs}`).join(' ')
   return partido.score === null ? null : `${partido.score.mine}-${partido.score.theirs}`

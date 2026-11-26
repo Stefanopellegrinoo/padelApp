@@ -158,6 +158,13 @@ export type Phase = (typeof PHASE_ORDER)[number]
 export type MatchdayFormat =
   | { readonly kind: 'ROUND_ROBIN' }
   | { readonly kind: 'GROUPS_KNOCKOUT'; readonly groups: number; readonly qualifiersPerGroup: number }
+  /**
+   * Sin partidos (bowling, S4): cada presente carga su total y la tabla sale
+   * de ordenarlos, con puestos compartidos (`core/ranking-fecha.ts`). No es un
+   * formato que se elija en el armado: lo trae la disciplina desde su ficha
+   * (`formato_default`) y la fecha lo hereda.
+   */
+  | { readonly kind: 'RANKING' }
 
 /** Lo que guarda `disciplines.formato_default` y, mientras la fecha está en DRAFT, `matchdays.formato`. */
 export type MatchdayFormatSetting = MatchdayFormat | { readonly kind: 'AUTO' }

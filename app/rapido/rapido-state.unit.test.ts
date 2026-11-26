@@ -44,15 +44,19 @@ function claveDeLado(lado: readonly number[]): string {
 }
 
 describe('constantes del deporte', () => {
-  it('lista los deportes de sets con su etiqueta y objetivo de puntos (S1, S2)', () => {
-    expect(DEPORTES).toEqual(['PADEL', 'PING_PONG', 'TENIS', 'FUTBOL_TENIS', 'POOL', 'BEER_PONG', 'AJEDREZ'])
+  it('lista los deportes de sets, el ajedrez y el bowling con su etiqueta y objetivo de puntos (S1, S2)', () => {
+    expect(DEPORTES).toEqual(['PADEL', 'PING_PONG', 'TENIS', 'FUTBOL_TENIS', 'POOL', 'BEER_PONG', 'AJEDREZ', 'BOWLING'])
     expect(DEPORTE_LABEL.PADEL).toBe('Pádel')
     expect(DEPORTE_LABEL.PING_PONG).toBe('Ping pong')
     expect(DEPORTE_LABEL.FUTBOL_TENIS).toBe('Fútbol tenis')
     expect(DEPORTE_LABEL.BEER_PONG).toBe('Beer pong')
     expect(DEPORTE_LABEL.AJEDREZ).toBe('Ajedrez')
-    // El ajedrez es una partida: un set de 1 que gana uno (1-0) o queda en tablas (0-0).
-    expect(DEPORTE_OBJETIVO).toEqual({ PADEL: 4, PING_PONG: 11, TENIS: 6, FUTBOL_TENIS: 15, POOL: 3, BEER_PONG: 10, AJEDREZ: 1 })
+    expect(DEPORTE_LABEL.BOWLING).toBe('Bowling')
+    // El ajedrez es una partida: un set de 1 que gana uno (1-0) o queda en tablas (0-0). El bowling,
+    // una línea perfecta, sólo de referencia.
+    expect(DEPORTE_OBJETIVO).toEqual({
+      PADEL: 4, PING_PONG: 11, TENIS: 6, FUTBOL_TENIS: 15, POOL: 3, BEER_PONG: 10, AJEDREZ: 1, BOWLING: 300,
+    })
   })
 })
 

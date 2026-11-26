@@ -18,7 +18,7 @@ import type { DisciplineShape, MatchFormat, MatchResult, SeasonConfig, SideSize 
  * `setsToWin` − 1 los que se juegan como máximo.
  */
 export function formatLabel(format: MatchFormat, unit: string): string {
-  if (format.openScore) return 'Marcador de goles'
+  if (format.openScore) return `Marcador de ${unit}`
   if (format.resultado === true) return 'Gana, pierde o tablas'
   const setWord = format.setsToWin === 1 ? '1 set' : `mejor de ${2 * format.setsToWin - 1} sets`
   return `${setWord} a ${format.gamesPerSet} ${unit}`
@@ -205,13 +205,16 @@ export function narrateRules(config: SeasonConfig, shape: DisciplineShape, unit:
  * en fútbol, *"diferencia de games"* en pádel, *"diferencia de puntos"* en ping
  * pong.
  *
- * `unit` lo pone quien llama (`unitOf(kind, format)`). "goles" es el único que
- * no se copia tal cual: es "diferencia de **gol**", singular, y no "diferencia
- * de goles". Una sola función con la excepción adentro: las pantallas no
- * repiten el ternario.
+ * `unit` lo pone quien llama (`unitOf(kind, format)`). "goles" no se copia tal
+ * cual: es "diferencia de **gol**", singular, y no "diferencia de goles". Y
+ * "partidas" (ajedrez) tampoco: cada partida se guarda 1-0 o 0-0, así que lo
+ * que corta es ganadas menos perdidas. Una sola función con las excepciones
+ * adentro: las pantallas no repiten el ternario.
  */
 export function scoreDiffLabel(unit: string): string {
-  return unit === 'goles' ? 'diferencia de gol' : `diferencia de ${unit}`
+  if (unit === 'goles') return 'diferencia de gol'
+  if (unit === 'partidas') return 'diferencia entre ganadas y perdidas'
+  return `diferencia de ${unit}`
 }
 
 /**

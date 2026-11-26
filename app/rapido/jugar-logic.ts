@@ -4,7 +4,7 @@
  * Nada de esto toca React ni el DOM — por eso vive acá y no en jugar.tsx,
  * donde ningún test lo alcanzaría.
  */
-import { SPORTS, type MatchFormat } from '@/core'
+import { SPORTS, type MatchFormat, type Sport } from '@/core'
 import { loserGamesOptions } from '@/app/torneo/[id]/[disciplina]/fechas/[n]/carga-state'
 import { deuceOptions, deuceWinnerGames } from '@/app/amigos/[playerId]/cargar-state'
 import type { Deporte, Partido } from './rapido-state'
@@ -37,10 +37,13 @@ export type Lado = 'a' | 'b'
  * Un partido rápido es UN set del deporte, con la regla con la que nace un
  * torneo nuevo (`fichaSeed`): pádel y tenis juegan el set real (5-3, 7-5,
  * 7-6, S6) y ping pong y fútbol tenis se ganan por 2 (12-10, 16-14).
+ * Bowling no tiene partidos (cada uno carga su total, `tablaPinos`): si
+ * alguien pidiera su formato, es un marcador abierto a una línea perfecta.
  */
 export function formatoRapido(deporte: Deporte): MatchFormat {
-  const sport = SPORTS[deporte]
+  const sport: Sport = SPORTS[deporte]
   if (sport.family === 'result') return { ...sport.format }
+  if (sport.family === 'goals') return { setsToWin: 1, gamesPerSet: 300, tieBreak: false, openScore: true }
   return { ...sport.format, setsToWin: 1, ...(sport.setReal ? { ventaja: true } : {}) }
 }
 
@@ -49,9 +52,13 @@ export function esPartida(deporte: Deporte): boolean {
   return SPORTS[deporte].family === 'result'
 }
 
-/** Lo que dice el botón del deporte al armar: "A 4 games", o "Gana o tablas" (entra en un renglón). */
+/**
+ * Lo que dice el botón del deporte al armar: "A 4 games", "Gana o tablas" (entra en un renglón), o
+ * "Cada uno su total": bowling no se juega "a" nada (S4).
+ */
 export function subDeporte(deporte: Deporte): string {
-  return esPartida(deporte) ? 'Gana o tablas' : `A ${SPORTS[deporte].format.gamesPerSet} ${unidadDe(deporte)}`
+  if (deporte === 'BOWLING') return 'Cada uno su total'
+  return esPartida(deporte) ? 'Gana o tablas' : `A ${formatoRapido(deporte).gamesPerSet} ${unidadDe(deporte)}`
 }
 
 /** El toque de una partida: ganó un lado, o tablas. */
@@ -97,7 +104,7 @@ export function marcadorDeDosToques(
   puntosPerdedor: number,
   deporte: Deporte,
 ): { a: number; b: number } {
-  const objetivo = SPORTS[deporte].format.gamesPerSet
+  const objetivo = formatoRapido(deporte).gamesPerSet
   return ganador === 'a'
     ? { a: objetivo, b: puntosPerdedor }
     : { a: puntosPerdedor, b: objetivo }

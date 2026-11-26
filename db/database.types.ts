@@ -632,6 +632,45 @@ export type Database = {
           },
         ]
       }
+      matchday_scores: {
+        Row: {
+          entry_id: string
+          matchday_id: string
+          score: number
+          season_id: string
+          updated_at: string
+        }
+        Insert: {
+          entry_id: string
+          matchday_id: string
+          score: number
+          season_id: string
+          updated_at?: string
+        }
+        Update: {
+          entry_id?: string
+          matchday_id?: string
+          score?: number
+          season_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "matchday_scores_entry_id_season_id_fkey"
+            columns: ["entry_id", "season_id"]
+            isOneToOne: false
+            referencedRelation: "entries"
+            referencedColumns: ["id", "season_id"]
+          },
+          {
+            foreignKeyName: "matchday_scores_matchday_id_season_id_fkey"
+            columns: ["matchday_id", "season_id"]
+            isOneToOne: false
+            referencedRelation: "matchdays"
+            referencedColumns: ["id", "season_id"]
+          },
+        ]
+      }
       matchdays: {
         Row: {
           allows_draw: boolean
@@ -1036,6 +1075,10 @@ export type Database = {
       match_season: { Args: { p_match: string }; Returns: string }
       matchday_discipline: { Args: { p_matchday: string }; Returns: string }
       matchday_phase: { Args: { p_matchday: string }; Returns: string }
+      matchday_score_is_open: {
+        Args: { p_entry: string; p_matchday: string }
+        Returns: boolean
+      }
       matchday_season: { Args: { p_matchday: string }; Returns: string }
       my_player_id: { Args: never; Returns: string }
       open_matchday: { Args: { p_matchday: string }; Returns: undefined }

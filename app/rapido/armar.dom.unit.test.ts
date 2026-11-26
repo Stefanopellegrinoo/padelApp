@@ -97,7 +97,7 @@ it('el deporte es un grupo con título y dice cuál está elegido', () => {
   expect(document.getElementById(grupo.getAttribute('aria-labelledby') ?? '')?.textContent).toBe('Deporte')
 })
 
-it('los siete deportes entran en una grilla de tres, cada uno con su número y su unidad', () => {
+it('los ocho deportes entran en una grilla de tres, cada uno con su número y su unidad (bowling, su total)', () => {
   const grupo = [...host.querySelectorAll('[role="group"]')].find((g) => g.textContent?.includes('Pádel'))!
   expect(grupo.className.split(' ')).toEqual(expect.arrayContaining(['grid', 'grid-cols-3']))
   const textos = [...grupo.querySelectorAll('button')].map((b) => b.textContent)
@@ -109,6 +109,7 @@ it('los siete deportes entran en una grilla de tres, cada uno con su número y s
     'PoolA 3 bolas',
     'Beer pongA 10 vasos',
     'AjedrezGana o tablas',
+    'BowlingCada uno su total',
   ])
   act(() => [...grupo.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Pool'))!.click())
   expect(host.querySelector('[data-deporte]')?.getAttribute('data-deporte')).toBe('POOL')

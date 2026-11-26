@@ -38,6 +38,7 @@ import {
   disciplineOf,
   entriesOf,
   matchdayDetail,
+  matchdayScoresOf,
   myEntryId,
   pairLocksOf,
   seasonHeader,
@@ -65,6 +66,8 @@ import {
 } from './armado'
 import { CierreFecha, Rayitas, type ParteVM } from './carga'
 import { marcadorDeTarjeta } from './carga-state'
+import { ArmadoPinos, CargaDePinos, TablaDePinos } from './pinos'
+import { tablaDePinos, type JugadorPinosVM } from './pinos-state'
 import { DiaDeLaFecha } from './dia'
 import { Llave, type LlaveMatchVM } from './llave'
 import { sectionTitle } from './secciones'
@@ -164,6 +167,8 @@ export default async function FechaDetailPage({ params }: PageProps) {
   let notice: string | null = null
   // Lo cargado de la fecha en juego, para el encabezado. Lo calcula la rama no-DRAFT.
   let progress: { total: number; remaining: number } | null = null
+  // Qué cuentan las rayitas del encabezado: partidos, o jugadores con pinos en una fecha por ranking.
+  let progressLabel = 'partidos cargados'
   // "Compartir" para el grupo: los partidos de la fecha en juego, o el campeón con la
   // tabla del año en el Masters cerrado. Lo arma la rama no-DRAFT.
   let compartir: ReactNode = null
@@ -179,6 +184,143 @@ export default async function FechaDetailPage({ params }: PageProps) {
   // el título, el armado (4 clasificados en vez de asistencias), y la tabla de
   // la fecha cerrada, que deja lugar al campeón del año.
   const isMasters = matchday.kind === 'MASTERS'
+  // Bowling (S4): una fecha sin partidos. Su armado, su carga y su tabla son otros, y viven en `pinos.tsx`.
+  const isRanking = matchday.formato.kind === 'RANKING'
+
+  // "Reabrir fecha" aparece sólo donde `reopen_matchday` va a decir que sí, y
+  // eso son DOS de sus guardas, no una:
+  //   · no hay una fecha CLOSED posterior (0005_matchday_moves.sql:180-185)
+  //   · no hay otra fecha EN JUEGO (0005:174-179) — una fecha OPEN nunca se
+  //     borra sola, así que ahí el botón falla siempre, y "cerré la 2, abrí
+  //     la 3, vuelvo a mirar la 2" es el camino normal, no un borde.
+  // La tercera guarda —la fecha siguiente en DRAFT— se deja pasar a propósito:
+  // si está vacía, `reopen_matchday` la borra y sigue, que es exactamente el
+  // caso para el que se escribió; si tiene datos, su mensaje es el correcto.
+  //`matchdays` es de TODA la temporada
+  // (`seasonMatchdaysOf`), pero `reopen_matchday` (0018) filtra sus dos
+  // guardas por `discipline_id` — una fecha OPEN o CLOSED de OTRA
+  // disciplina no debe apagar el botón acá.
+  const ownMatchdays = matchdays.filter((candidate) => candidate.disciplineId === matchday.disciplineId)
+  const isLastClosed =
+    !ownMatchdays.some(
+      (candidate) => candidate.status === 'CLOSED' && candidate.number > matchday.number,
+    ) && !ownMatchdays.some((candidate) => candidate.status === 'OPEN' && candidate.id !== matchday.id)
+
+  // Los asientos de "Quién viene", para los dos armados. Sin fila de
+  // asistencia es "viene" (el porqué, en el armado de partidos, abajo).
+  const squadSeats = (attendances: Map<string, 'PLAYING' | 'ABSENT'>): SeatVM[] =>
+    entries
+      .filter((entry) => entry.kind === 'SQUAD')
+      .sort((a, b) => a.seedPosition - b.seedPosition)
+      .map((entry) => ({
+        entryId: entry.id,
+        name: entry.displayName,
+        playing: attendances.get(entry.id) !== 'ABSENT',
+        vos: entry.id === me,
+      }))
+
+  if (isRanking && matchday.status === 'DRAFT' && header.isAdmin) {
+    const [attendances, scores] = await Promise.all([
+      attendancesOf(supabase, matchday.id),
+      matchdayScoresOf(supabase, matchday.id),
+    ])
+    body = (
+      <ArmadoPinos
+        seasonId={seasonId}
+        matchdayId={matchday.id}
+        disciplina={disciplina}
+        matchdayNumber={matchday.number}
+        seats={squadSeats(attendances)}
+        loadedScores={scores.size}
+      />
+    )
+  }
+
+  if (isRanking && matchday.status !== 'DRAFT') {
+    const status = matchday.status
+    const [attendances, scores, frozen] = await Promise.all([
+      attendancesOf(supabase, matchday.id),
+      matchdayScoresOf(supabase, matchday.id),
+      // Los puntos CONGELADOS, igual que la tabla de una fecha de partidos: lo que la fecha repartió.
+      status === 'CLOSED' ? frozenPointsOf(supabase, matchday.id) : Promise.resolve(new Map<string, FrozenAward>()),
+    ])
+    // Juega quien está PLAYING (`openMatchday` sembró una fila por asiento antes de abrir). Los
+    // pinos de alguien que después se bajó quedan guardados pero no se muestran ni cuentan.
+    const jugadores: JugadorPinosVM[] = entries
+      .filter((entry) => entry.kind === 'SQUAD' && attendances.get(entry.id) === 'PLAYING')
+      .sort((a, b) => a.seedPosition - b.seedPosition)
+      .map((entry) => ({ entryId: entry.id, name: entry.displayName, vos: entry.id === me, score: scores.get(entry.id) ?? null }))
+    const remaining = jugadores.filter((jugador) => jugador.score === null).length
+    const loaded = jugadores.length - remaining
+    if (status === 'OPEN') {
+      progress = { total: jugadores.length, remaining }
+      progressLabel = 'jugadores con pinos'
+    }
+    const filas = tablaDePinos(jugadores).map((fila) => ({
+      ...fila,
+      pts: status === 'OPEN' ? '—' : String(frozen.get(fila.key)?.points ?? 0),
+    }))
+    if (status === 'CLOSED') {
+      compartir = (
+        <CompartirImagen
+          archivo={`fecha-${matchday.number}`}
+          titulo={`Fecha ${matchday.number}`}
+          subtitulo={`${header.name}${matchday.playedOn !== null ? `, ${matchdayFull(matchday.playedOn)}` : ''}`}
+          filas={filas.map((fila) => ({ nombre: `${fila.puesto}. ${fila.nombre}`, puntos: fila.pts }))}
+        />
+      )
+    }
+    // Cargar: quien organiza, o el plantel con "los jugadores cargan" prendido (0109, `matchday_scores_write`).
+    const canLoad = (header.isAdmin || header.playersCanScore) && status === 'OPEN'
+    const base = disciplineOf(header, matchday.disciplineId).config
+    const unit = unitOf(discipline.kind, base.matchFormat)
+
+    body = (
+      <div className="flex flex-col gap-7">
+        {canLoad && (
+          <section className="flex flex-col gap-2.5">
+            <h2 className="font-titulo text-[20px]">Pinos</h2>
+            <p className="text-[15px] text-muted">Tocá una fila y escribí el total. Enter guarda y pasa al siguiente.</p>
+            <CargaDePinos
+              context={{ seasonId, matchdayId: matchday.id, matchdayNumber: matchday.number }}
+              jugadores={jugadores}
+            />
+          </section>
+        )}
+
+        <section className="flex flex-col gap-3">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="font-titulo text-[24px]">Tabla de la fecha</h2>
+          </div>
+          <TablaDePinos filas={filas} />
+          <p className="text-[15px] text-muted">
+            {status === 'OPEN'
+              ? 'Los puntos se reparten al cerrar la fecha. Los empatados comparten el puesto y los puntos.'
+              : 'Los empatados comparten el puesto y los puntos.'}
+          </p>
+        </section>
+
+        {header.isAdmin && (
+          <CierreFecha
+            context={{
+              seasonId,
+              matchdayId: matchday.id,
+              disciplina,
+              matchdayNumber: matchday.number,
+              format: base.matchFormat,
+              unit,
+            }}
+            status={status}
+            remaining={remaining}
+            total={jugadores.length}
+            canReopen={isLastClosed}
+            loadedResults={loaded}
+            pinos
+          />
+        )}
+      </div>
+    )
+  }
 
   if (isMasters && matchday.status === 'DRAFT' && header.isAdmin) {
     const seedOrder = entries
@@ -218,7 +360,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
   // El armado es del admin y de nadie más: el kicker dice "sólo vos la ves" y
   // `attendances_write` no deja tildar a nadie que no sea admin. Un jugador que
   // llegue a esta URL ve la tarjeta de arriba, que es la verdad para él.
-  if (!isMasters && matchday.status === 'DRAFT' && header.isAdmin) {
+  if (!isMasters && !isRanking && matchday.status === 'DRAFT' && header.isAdmin) {
     const [attendances, detail, locks, lastHistory, beforeLastHistory, { fixedTeams }] = await Promise.all([
       attendancesOf(supabase, matchday.id),
       matchdayDetail(supabase, matchday.id),
@@ -263,15 +405,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
     // Sin fila de asistencia es "viene": el admin arma la fecha con todos y
     // descuenta a los que avisaron. `seedAttendances` —que corre en cada action,
     // nunca al dibujar— hace que la base opine lo mismo.
-    const seats: SeatVM[] = entries
-      .filter((entry) => entry.kind === 'SQUAD')
-      .sort((a, b) => a.seedPosition - b.seedPosition)
-      .map((entry) => ({
-        entryId: entry.id,
-        name: entry.displayName,
-        playing: attendances.get(entry.id) !== 'ABSENT',
-        vos: entry.id === me,
-      }))
+    const seats: SeatVM[] = squadSeats(attendances)
 
     // `entriesOf` trae los invitados de TODAS las fechas de la temporada, por
     // eso el filtro por `matchdayId`.
@@ -422,7 +556,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
     )
   }
 
-  if (matchday.status !== 'DRAFT') {
+  if (!isRanking && matchday.status !== 'DRAFT') {
     const status = matchday.status
     // Mismo cierre que arriba (Masters): la config es de la disciplina de
     // ESTA fecha, no la [0] de la temporada. Y a cuánto se juega ESTA fecha
@@ -789,24 +923,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
     // `remaining > 0` Y resultados a la vez, así que hace falta contar
     // directamente los partidos que ya tienen sets.
     const loadedResults = detail.matches.filter((match) => match.sets.length > 0).length
-    // "Reabrir fecha" aparece sólo donde `reopen_matchday` va a decir que sí, y
-    // eso son DOS de sus guardas, no una:
-    //   · no hay una fecha CLOSED posterior (0005_matchday_moves.sql:180-185)
-    //   · no hay otra fecha EN JUEGO (0005:174-179) — una fecha OPEN nunca se
-    //     borra sola, así que ahí el botón falla siempre, y "cerré la 2, abrí
-    //     la 3, vuelvo a mirar la 2" es el camino normal, no un borde.
-    // La tercera guarda —la fecha siguiente en DRAFT— se deja pasar a propósito:
-    // si está vacía, `reopen_matchday` la borra y sigue, que es exactamente el
-    // caso para el que se escribió; si tiene datos, su mensaje es el correcto.
-    //`matchdays` es de TODA la temporada
-    // (`seasonMatchdaysOf`), pero `reopen_matchday` (0018) filtra sus dos
-    // guardas por `discipline_id` — una fecha OPEN o CLOSED de OTRA
-    // disciplina no debe apagar el botón acá.
-    const ownMatchdays = matchdays.filter((candidate) => candidate.disciplineId === matchday.disciplineId)
-    const isLastClosed =
-      !ownMatchdays.some(
-        (candidate) => candidate.status === 'CLOSED' && candidate.number > matchday.number,
-      ) && !ownMatchdays.some((candidate) => candidate.status === 'OPEN' && candidate.id !== matchday.id)
+    // `isLastClosed` (cuándo se ofrece "Reabrir fecha") se calcula arriba, compartido con la fecha por ranking.
 
     const hasGuest = (side: Side) => members(side).some((entryId) => detail.guestIds.includes(entryId))
     const anyGuestInTable = status === 'CLOSED' && standings.some((row) => hasGuest(row.side))
@@ -1091,7 +1208,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
             </div>
             <p className="text-[15px]">
               <b className="font-bold">{`${progress.total - progress.remaining} de ${progress.total}`}</b>
-              <span className="text-on-block-soft"> partidos cargados</span>
+              <span className="text-on-block-soft">{` ${progressLabel}`}</span>
             </p>
           </div>
         )}

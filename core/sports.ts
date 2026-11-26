@@ -32,8 +32,7 @@ export interface TournamentFicha {
 /**
  * La paleta del deporte (S5 de mas-deportes): `app/globals.css` define
  * `--color-<tono>`, `-tint`, `on-<tono>`, `-block` y `-block-soft` en claro y
- * en oscuro, y un bloque `[data-deporte='<ID>']` por id que las usa. Bowling
- * ya tiene la suya: su entrada del registro llega con su familia.
+ * en oscuro, y un bloque `[data-deporte='<ID>']` por id que las usa.
  */
 export const SPORT_TONOS = [
   'padel', 'pingpong', 'fifa', 'futbol', 'basquet', 'tenis', 'futboltenis', 'pool', 'beerpong', 'ajedrez', 'bowling',
@@ -203,6 +202,20 @@ export const SPORTS = {
       season: SEASON_DE_HOY, masters: false, fechaFormat: AUTO_FECHA, firstFecha: FIRST_FECHA_DE_HOY,
     },
   },
+  // ── Bowling (S4) ──────────────────────────────────────────────────────────
+  // Familia `goals` y no una nueva: entre amigos es un mano a mano por pinos
+  // (gana el que más hizo, sin empates) y eso ya es el marcador abierto. Lo que
+  // lo hace distinto en un torneo no es cómo se anota un partido sino que la
+  // fecha NO tiene partidos: `fechaFormat` `RANKING` hace que cada uno cargue
+  // su total y la tabla salga de ordenarlos (`core/ranking-fecha.ts`). Sólo
+  // individual: en una fecha de pinos no hay parejas.
+  BOWLING: {
+    label: 'Bowling', unit: 'pinos', family: 'goals', allowsDraw: false, teams: false, tournaments: true, tono: 'bowling', icono: 'bolo',
+    ficha: {
+      modalities: [{ id: 'INDIVIDUAL', label: 'Individual' }],
+      season: SEASON_DE_HOY, masters: false, fechaFormat: { kind: 'RANKING' }, firstFecha: FIRST_FECHA_DE_HOY,
+    },
+  },
   FUTBOL:  { label: 'Fútbol',  unit: 'goles',  family: 'goals', allowsDraw: true,  teams: false, tournaments: false, ficha: null, tono: 'futbol', icono: 'futbol' },
   BASQUET: { label: 'Básquet', unit: 'puntos', family: 'goals', allowsDraw: false, teams: false, tournaments: false, ficha: null, tono: 'basquet', icono: 'basquet' },
 } satisfies Record<string, Sport>
@@ -263,12 +276,17 @@ export function unitOf(kind: string, format: MatchFormat): string {
 
 /** Tupla literal a propósito (`TournamentSport` necesita las claves exactas); el orden del registro es el de los chips. */
 export const TOURNAMENT_SPORTS = [
-  'PADEL', 'PING_PONG', 'FIFA', 'TENIS', 'FUTBOL_TENIS', 'POOL', 'BEER_PONG', 'AJEDREZ',
+  'PADEL', 'PING_PONG', 'FIFA', 'TENIS', 'FUTBOL_TENIS', 'POOL', 'BEER_PONG', 'AJEDREZ', 'BOWLING',
 ] as const satisfies readonly SportId[]
 export type TournamentSport = (typeof TOURNAMENT_SPORTS)[number]
 
 export function isTournamentSport(raw: string): raw is TournamentSport {
   return isSportId(raw) && (TOURNAMENT_SPORTS as readonly string[]).includes(raw)
+}
+
+/** Sus fechas son un ranking por puntaje (bowling): sin partidos, cada uno carga su total. Fuera del registro, `false`. */
+export function isRankingSport(kind: string): boolean {
+  return isSportId(kind) && SPORTS[kind].ficha?.fechaFormat.kind === 'RANKING'
 }
 
 /**

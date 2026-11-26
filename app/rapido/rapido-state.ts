@@ -14,17 +14,30 @@
  * acá lo pone `armadoWarning`, y `armarRotativas` repite la guarda por si
  * algún día se arma un torneo sin pasar por el aviso.
  */
-import { allMatchings, buildFixture, dayScoring, MAX_PAIRING_POOL, SPORTS, type DayScoring, type Duo, type SportId } from '@/core'
+import {
+  allMatchings,
+  buildFixture,
+  dayScoring,
+  MAX_PAIRING_POOL,
+  rankingScoreError,
+  rankScores,
+  SPORTS,
+  type DayScoring,
+  type Duo,
+  type Sport,
+  type SportId,
+} from '@/core'
 
 // ── El deporte ────────────────────────────────────────────────────────────
 /**
  * Los deportes de sets del registro (`core/sports.ts`): un partido rápido es un
- * set a su número, con la misma regla que una fecha (`jugar-logic.ts`). Y el
- * ajedrez, que es una partida: 1-0, 0-1 o tablas (0-0). El orden es el de los
+ * set a su número, con la misma regla que una fecha (`jugar-logic.ts`). El
+ * ajedrez, que es una partida: 1-0, 0-1 o tablas (0-0). Y el bowling, que no
+ * tiene partidos: cada uno carga sus pinos (`esBowling`). El orden es el de los
  * botones.
  */
 export const DEPORTES = [
-  'PADEL', 'PING_PONG', 'TENIS', 'FUTBOL_TENIS', 'POOL', 'BEER_PONG', 'AJEDREZ',
+  'PADEL', 'PING_PONG', 'TENIS', 'FUTBOL_TENIS', 'POOL', 'BEER_PONG', 'AJEDREZ', 'BOWLING',
 ] as const satisfies readonly SportId[]
 export type Deporte = (typeof DEPORTES)[number]
 
@@ -38,10 +51,21 @@ export const VOLVER_INICIO = { href: '/', label: 'Inicio', desanda: true }
 
 export const DEPORTE_LABEL = Object.fromEntries(DEPORTES.map((id) => [id, SPORTS[id].label])) as Record<Deporte, string>
 
-/** A cuánto se juega: el número del set del deporte en el registro. */
+/**
+ * A cuánto se juega: el número del set del deporte en el registro. Bowling no
+ * tiene partidos ni objetivo: una línea perfecta, sólo de referencia.
+ */
 export const DEPORTE_OBJETIVO = Object.fromEntries(
-  DEPORTES.map((id) => [id, SPORTS[id].format.gamesPerSet]),
+  DEPORTES.map((id) => {
+    const sport: Sport = SPORTS[id]
+    return [id, sport.family === 'goals' ? 300 : sport.format.gamesPerSet]
+  }),
 ) as Record<Deporte, number>
+
+/** Bowling (S4): sin partidos, cada uno carga su total y el ranking es el resultado. */
+export function esBowling(armado: Pick<Armado, 'deporte'>): boolean {
+  return armado.deporte === 'BOWLING'
+}
 
 // ── El armado ────────────────────────────────────────────────────────────
 export type Modalidad = 'INDIVIDUAL' | 'PAREJAS'
@@ -75,6 +99,12 @@ export interface TorneoRapido {
   /** Los nombres ya filtrados y recortados. Los índices de los partidos apuntan ACÁ. */
   jugadores: string[]
   partidos: Partido[]
+  /**
+   * Sólo bowling: el total de cada jugador, por índice de `jugadores`; `null`
+   * mientras no lo cargó. Opcional, y ésa es la compatibilidad: un torneo
+   * guardado antes de bowling no lo trae y se sigue leyendo igual.
+   */
+  pinos?: Array<number | null>
 }
 
 export interface FilaTabla {
@@ -162,6 +192,14 @@ function esPuntajeValido(value: unknown): value is number {
  */
 export function armadoWarning(armado: Armado): string | null {
   const cantidad = nombresFiltrados(armado.jugadores).length
+
+  // Bowling no arma lados: alcanza con dos para que haya un ranking, y la
+  // modalidad no se mira (`armar` lo juega individual siempre).
+  if (esBowling(armado)) {
+    if (cantidad < 2) return 'Faltan jugadores: bowling arranca en 2.'
+    if (cantidad > MAX_PAIRING_POOL) return `Como mucho ${MAX_PAIRING_POOL} jugadores.`
+    return null
+  }
 
   if (armado.modalidad === 'INDIVIDUAL' && cantidad < 3) {
     return 'Faltan jugadores: individual arranca en 3.'
@@ -318,6 +356,10 @@ function armarRotativas(armado: Armado, jugadores: string[], random: () => numbe
  */
 export function armar(armado: Armado, random: () => number): TorneoRapido {
   const jugadores = nombresFiltrados(armado.jugadores)
+
+  if (esBowling(armado)) {
+    return { armado: { ...armado, modalidad: 'INDIVIDUAL' }, jugadores, partidos: [], pinos: jugadores.map(() => null) }
+  }
 
   if (armado.modalidad === 'INDIVIDUAL') {
     const lados = jugadores.map((_, indice) => [indice])
@@ -486,6 +528,8 @@ export function tabla(torneo: TorneoRapido): FilaTabla[] {
 }
 
 export function terminado(torneo: TorneoRapido): boolean {
+  // Bowling no tiene partidos: sin esto, `every` sobre una lista vacía lo daría por terminado al empezar.
+  if (torneo.pinos !== undefined) return torneo.pinos.length > 0 && torneo.pinos.every((pinos) => pinos !== null)
   return torneo.partidos.every((partido) => partido.marcador !== null)
 }
 
@@ -493,6 +537,63 @@ export function campeon(torneo: TorneoRapido): FilaTabla | null {
   if (!terminado(torneo)) return null
   const filas = tabla(torneo)
   return filas.find((fila) => fila.posicion === 1) ?? null
+}
+
+// ── Bowling: los pinos ──────────────────────────────────────────────────
+
+/** Carga (o borra, con `null`) el total de un jugador. Inmutable, como `cargarMarcador`. */
+export function cargarPinos(torneo: TorneoRapido, indice: number, pinos: number | null): TorneoRapido {
+  const actuales = torneo.pinos
+  if (actuales === undefined || indice < 0 || indice >= actuales.length || !Number.isInteger(indice)) {
+    throw new Error(`No hay ningún jugador en la posición ${indice}.`)
+  }
+  if (pinos !== null) {
+    const problema = rankingScoreError(pinos)
+    if (problema !== null) throw new Error(problema)
+  }
+  return { ...torneo, pinos: actuales.map((actual, i) => (i === indice ? pinos : actual)) }
+}
+
+export interface FilaPinos {
+  /** El índice del jugador, como string: la identidad de la fila. */
+  clave: string
+  nombre: string
+  pinos: number | null
+  /** El puesto compartido; `null` mientras no cargó. */
+  posicion: number | null
+}
+
+/**
+ * El ranking: los que cargaron, ordenados con `rankScores` (core) —la misma
+ * regla que la fecha de un torneo: los empatados comparten el puesto y el
+ * siguiente salta (S4)—, y abajo los que faltan, sin puesto.
+ */
+export function tablaPinos(torneo: TorneoRapido): FilaPinos[] {
+  const pinos = torneo.pinos ?? []
+  const nombreDe = (indice: number) => torneo.jugadores[indice] ?? `#${indice}`
+  const cargados = rankScores(
+    pinos.flatMap((total, indice) => (total === null ? [] : [{ entryId: String(indice), score: total }])),
+  )
+  return [
+    ...cargados.map((row) => ({
+      clave: row.side.a,
+      nombre: nombreDe(Number(row.side.a)),
+      pinos: row.dayPoints,
+      posicion: row.position,
+    })),
+    ...pinos.flatMap((total, indice) =>
+      total === null ? [{ clave: String(indice), nombre: nombreDe(indice), pinos: null, posicion: null }] : [],
+    ),
+  ]
+}
+
+/** Los campeones de un bowling terminado: todos los que comparten el 1°, con sus pinos. */
+export function campeonesPinos(torneo: TorneoRapido): { nombres: string[]; pinos: number } | null {
+  if (torneo.pinos === undefined || !terminado(torneo)) return null
+  const primeros = tablaPinos(torneo).filter((fila) => fila.posicion === 1)
+  const pinos = primeros[0]?.pinos
+  if (pinos === undefined || pinos === null) return null
+  return { nombres: primeros.map((fila) => fila.nombre), pinos }
 }
 
 export const STORAGE_KEY = 'padel:torneo-rapido'
@@ -604,6 +705,17 @@ function leerPartido(value: unknown, cantidadJugadores: number): Partido | null 
   return { ronda: candidato.ronda, a: candidato.a, b: candidato.b, marcador }
 }
 
+function leerPinos(value: unknown, cantidadJugadores: number): Array<number | null> | null {
+  if (!Array.isArray(value) || value.length !== cantidadJugadores) return null
+  const pinos: Array<number | null> = []
+  for (const total of value) {
+    if (total === null) pinos.push(null)
+    else if (typeof total === 'number' && rankingScoreError(total) === null) pinos.push(total)
+    else return null
+  }
+  return pinos
+}
+
 function validarTorneo(data: unknown): TorneoRapido | null {
   if (typeof data !== 'object' || data === null) return null
   const candidato = data as Record<string, unknown>
@@ -620,6 +732,14 @@ function validarTorneo(data: unknown): TorneoRapido | null {
     const partido = leerPartido(item, jugadores.length)
     if (partido === null) return null
     partidos.push(partido)
+  }
+
+  // Bowling: un total (o `null`) por jugador y ningún partido. Cualquier otro
+  // deporte no tiene pinos: si vinieran colados en el storage, se ignoran.
+  if (esBowling(armado)) {
+    const pinos = leerPinos(candidato.pinos, jugadores.length)
+    if (pinos === null || partidos.length > 0) return null
+    return { armado, jugadores, partidos, pinos }
   }
 
   return { armado, jugadores, partidos }

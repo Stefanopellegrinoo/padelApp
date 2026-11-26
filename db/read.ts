@@ -645,6 +645,61 @@ export async function attendancesOf(
 }
 
 /**
+ * Los totales de una fecha por ranking (bowling, S4), por asiento. Vacío para
+ * una fecha de partidos, o para quien no ve la temporada (RLS). Trae también
+ * los de alguien que estaba presente y después se bajó: la pantalla dibuja
+ * sólo a los presentes, y el cierre sólo los cuenta a ellos.
+ */
+export async function matchdayScoresOf(supabase: Client, matchdayId: string): Promise<Map<EntryId, number>> {
+  const { data, error } = await supabase
+    .from('matchday_scores')
+    .select('entry_id, score')
+    .eq('matchday_id', matchdayId)
+  if (error) throw new EdgeError(`No se pudieron leer los pinos: ${error.message}`)
+  return new Map((data ?? []).map((row) => [row.entry_id, row.score]))
+}
+
+/**
+ * Los totales que CONTARON en las fechas cerradas de una disciplina por
+ * ranking (bowling, S4), por número de fecha: los de quien estaba presente al
+ * cerrar. Los de alguien que cargó y después se bajó quedan afuera, igual que
+ * en el cierre. Vacío para una disciplina de partidos.
+ */
+export async function closedScoresOf(
+  supabase: Client,
+  disciplineId: DisciplineId,
+): Promise<Map<number, Map<EntryId, number>>> {
+  const { data: closed, error: closedError } = await supabase
+    .from('matchdays')
+    .select('id, number')
+    .eq('discipline_id', disciplineId)
+    .eq('status', 'CLOSED')
+    .eq('kind', 'REGULAR')
+  if (closedError) throw new EdgeError(`No se pudieron leer las fechas cerradas: ${closedError.message}`)
+  const numberOf = new Map((closed ?? []).map((row) => [row.id, row.number]))
+  const result = new Map<number, Map<EntryId, number>>()
+  if (numberOf.size === 0) return result
+
+  const ids = [...numberOf.keys()]
+  const [scoresResult, playingResult] = await Promise.all([
+    supabase.from('matchday_scores').select('matchday_id, entry_id, score').in('matchday_id', ids),
+    supabase.from('attendances').select('matchday_id, entry_id').in('matchday_id', ids).eq('status', 'PLAYING'),
+  ])
+  if (scoresResult.error) throw new EdgeError(`No se pudieron leer los pinos: ${scoresResult.error.message}`)
+  if (playingResult.error) throw new EdgeError(`No se pudo leer el presentismo: ${playingResult.error.message}`)
+  const playing = new Set((playingResult.data ?? []).map((row) => `${row.matchday_id}~${row.entry_id}`))
+
+  for (const row of scoresResult.data ?? []) {
+    const number = numberOf.get(row.matchday_id)
+    if (number === undefined || !playing.has(`${row.matchday_id}~${row.entry_id}`)) continue
+    const bucket = result.get(number)
+    if (bucket === undefined) result.set(number, new Map([[row.entry_id, row.score]]))
+    else bucket.set(row.entry_id, row.score)
+  }
+  return result
+}
+
+/**
  * The pairs the admin settled by hand on one matchday, WITH their row id.
  *
  * `locksOf` in `db/matchday.ts` answers the same question for the draw and

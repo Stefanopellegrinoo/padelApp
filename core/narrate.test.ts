@@ -444,6 +444,12 @@ describe('scoreDiffLabel', () => {
     expect(scoreDiffLabel('puntos')).toBe('diferencia de puntos')
     expect(scoreDiffLabel('games')).toBe('diferencia de games')
   })
+
+  // Ajedrez (S3 de mas-deportes): cada partida se guarda 1-0 o 0-0, así que la diferencia que ordena
+  // es ganadas menos perdidas; "diferencia de partidas" no dice eso.
+  it('con "partidas" (ajedrez) dice lo que cuenta: ganadas menos perdidas', () => {
+    expect(scoreDiffLabel('partidas')).toBe('diferencia entre ganadas y perdidas')
+  })
 })
 
 // Antes de PR20 rebanada D2 todas las
@@ -543,6 +549,21 @@ describe('bracketOrderNote', () => {
   it('ping pong: cuenta la diferencia de puntos', () => {
     expect(bracketOrderNote('puntos')).toContain('diferencia de puntos')
   })
+
+  it('ajedrez: la diferencia entre ganadas y perdidas, nunca "diferencia de partidas"', () => {
+    expect(bracketOrderNote('partidas')).toContain('la misma diferencia entre ganadas y perdidas')
+    expect(bracketOrderNote('partidas')).not.toContain('diferencia de partidas')
+  })
+})
+
+describe('narrateRules — el desempate del ajedrez (S3 de mas-deportes)', () => {
+  it('ordena por puntos y corta la diferencia entre ganadas y perdidas', () => {
+    const shape: DisciplineShape = { hasMasters: false, pairSize: 1, fixedTeams: false, allowsDraw: true }
+    const config: SeasonConfig = { ...defaultConfig(8, 1), matchFormat: SPORTS.AJEDREZ.format }
+    const texto = narrateRules(config, shape, 'partidas').map((section) => section.body).join(' ')
+    expect(texto).toContain('si dos jugadores suman los mismos puntos, corta la diferencia entre ganadas y perdidas.')
+    expect(texto).not.toContain('diferencia de partidas')
+  })
 })
 
 describe('narrateRules — el set real (S6 de mas-deportes)', () => {
@@ -556,5 +577,13 @@ describe('narrateRules — el set real (S6 de mas-deportes)', () => {
 
   it('un formato guardado sin la clave se narra como siempre', () => {
     expect(fecha(defaultConfig(8, 1))).toContain('Cada partido se define a un set de 4 games con tie-break.')
+  })
+})
+
+describe('formatLabel con un marcador que no es de goles (bowling, S4)', () => {
+  it('nombra su unidad; FIFA sigue diciendo goles', () => {
+    const open = { setsToWin: 1, gamesPerSet: 4, tieBreak: true, openScore: true }
+    expect(formatLabel(open, 'pinos')).toBe('Marcador de pinos')
+    expect(formatLabel(open, 'goles')).toBe('Marcador de goles')
   })
 })

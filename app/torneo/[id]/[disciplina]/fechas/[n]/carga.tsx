@@ -44,6 +44,7 @@ import {
 } from './actions'
 import { BotonesDelPerdedor } from './botones-del-perdedor'
 import { BorrarFecha } from './borrar'
+import { faltanPinos } from './pinos-state'
 import { mensajeDeFalla } from './sin-conexion'
 
 // Vive en su módulo para que el torneo rápido lo use sin traer las acciones de la fecha.
@@ -795,6 +796,7 @@ export function CierreFecha({
   total,
   canReopen,
   loadedResults,
+  pinos = false,
 }: {
   context: CargaContext
   status: 'OPEN' | 'CLOSED'
@@ -810,6 +812,12 @@ export function CierreFecha({
    * se pierden.
    */
   loadedResults: number
+  /**
+   * Una fecha por ranking (bowling, S4): lo que falta son jugadores sin pinos,
+   * no partidos (`remaining`/`total` cuentan presentes), y volver al armado
+   * no borra lo cargado.
+   */
+  pinos?: boolean
 }) {
   const [error, setError] = useState<string | null>(null)
   const [asking, setAsking] = useState(false)
@@ -838,7 +846,7 @@ export function CierreFecha({
         <div className="flex flex-col gap-2.5">
           <div className="flex items-center justify-between gap-3">
             <b id={faltanId} className="shrink-0 text-[17px] font-[750]">
-              {faltanPartidos(remaining)}
+              {pinos ? faltanPinos(remaining) : faltanPartidos(remaining)}
             </b>
             <Rayitas total={total} remaining={remaining} />
           </div>
@@ -874,11 +882,16 @@ export function CierreFecha({
               dijera sería una promesa falsa: se caen igual en cuanto se toca
               un tilde de presente (`toggleAttendance` → `syncGuestSeat` →
               `clearPairs`), que es justo lo que se viene a hacer acá. */}
-          {loadedResults > 0 && (
-            <p className="text-[15px] font-semibold">
-              Ya hay resultados cargados: si cambiás quién juega o volvés a sortear, se borran.
-            </p>
-          )}
+          {loadedResults > 0 &&
+            (pinos ? (
+              <p className="text-[15px] font-semibold">
+                Los pinos cargados se guardan. Si alguien deja de venir, sus pinos no cuentan al cerrar.
+              </p>
+            ) : (
+              <p className="text-[15px] font-semibold">
+                Ya hay resultados cargados: si cambiás quién juega o volvés a sortear, se borran.
+              </p>
+            ))}
           <div className="flex items-center gap-2">
             <button
               type="button"

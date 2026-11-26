@@ -370,4 +370,27 @@ describe('Jugador del ajedrez: ganadas, perdidas y tablas', () => {
     expect(html).toMatch(/>2-0<\/span><span[^>]*>Partidos</)
     expect(html).toContain('Dif. games')
   })
+
+  it('el cara a cara cuenta las tablas: ganadas-tablas-perdidas y las partidas jugadas', async () => {
+    const { closedHistoryAll } = await import('@/db/read')
+    const fecha = (number: number, gamesA: number, gamesB: number): PlayedMatchday => ({
+      number,
+      sides: [side('e1'), side('e2')],
+      matches: [{ round: 1, fase: 'GRUPO', grupo: 1, sideA: side('e1'), sideB: side('e2'), sets: [{ gamesA, gamesB }] }],
+    })
+    vi.mocked(closedHistoryAll).mockResolvedValueOnce([fecha(1, 0, 0), fecha(2, 1, 0)])
+    const html = await render('ajedrez')
+    const rival = html.match(/<li[^>]*>(?:(?!<\/li>).)*Padel Dos(?:(?!<\/li>).)*<\/li>/)?.[0]
+
+    expect(rival).toContain('2 partidas')
+    expect(rival).toMatch(/>1-1-0</)
+    expect(rival).toContain('1 ganadas, 1 tablas, 0 perdidas')
+  })
+
+  it('en pádel el cara a cara sigue siendo ganados-perdidos', async () => {
+    const rival = (await render('padel')).match(/<li[^>]*>(?:(?!<\/li>).)*Padel Dos(?:(?!<\/li>).)*<\/li>/)?.[0]
+    expect(rival).toContain('2 partidos')
+    expect(rival).toMatch(/>2-0</)
+    expect(rival).toContain('2 ganados, 0 perdidos')
+  })
 })

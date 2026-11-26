@@ -12,6 +12,7 @@ import {
   type MatchResult,
 } from '@/core'
 import {
+  closedScoresOf,
   entriesOf,
   matchdayDetail,
   seasonAwardsOf,
@@ -26,7 +27,7 @@ import { button } from '@/app/ui/button'
 import { volverDestination } from '@/app/torneo/[id]/tabla-state'
 import { sportsOf } from '@/app/torneo/[id]/nav-state'
 import { AbrirFecha } from './abrir'
-import { championRecord, sideNames } from './campeon-de-la-fecha'
+import { championRecord, rankingChampion, sideNames } from './campeon-de-la-fecha'
 // Import absoluto, no relativo: `./[n]/masters` sería válido pero ilegible
 // cruzando un segmento dinámico (mismo criterio que ya documentaba esta
 // pantalla en PR 10, cuando vivía un nivel más arriba).
@@ -80,15 +81,26 @@ export default async function FechasPage({ params }: PageProps) {
   const openMatchday = regularMatchdays.find((matchday) => matchday.status === 'OPEN') ?? null
   const mastersMatchday = disciplineMatchdays.find((matchday) => matchday.kind === 'MASTERS') ?? null
 
-  const [closedDetails, openDetail] = await Promise.all([
+  // Bowling (S4): sus fechas no tienen partidos; el ganador sale de los awards y su marca de los pinos.
+  const byPins = discipline.formatoDefault.kind === 'RANKING'
+  const [closedDetails, openDetail, scoresByNumber] = await Promise.all([
     Promise.all(closedMatchdays.map((matchday) => matchdayDetail(supabase, matchday.id))),
     openMatchday !== null ? matchdayDetail(supabase, openMatchday.id) : Promise.resolve(null),
+    byPins ? closedScoresOf(supabase, discipline.id) : Promise.resolve(new Map<number, Map<string, number>>()),
   ])
   const detailByMatchdayId = new Map(
     closedMatchdays.map((matchday, index) => [matchday.id, closedDetails[index]]),
   )
 
   function championOf(matchday: MatchdaySummary): ChampionInfo | null {
+    if (byPins) {
+      return rankingChampion(
+        awardsByNumber.get(matchday.number) ?? [],
+        scoresByNumber.get(matchday.number) ?? new Map(),
+        nameById,
+        unitOf(sportKind, tournamentFormat),
+      )
+    }
     const detail = detailByMatchdayId.get(matchday.id)
     if (detail === undefined) return null
 

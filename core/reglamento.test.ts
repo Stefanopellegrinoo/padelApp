@@ -148,3 +148,20 @@ describe('fichaLine', () => {
     expect(withSeason(1, 1)).toBe('1 set a 4 games · 1 fecha · Masters al final')
   })
 })
+
+describe('reglamento de bowling (S4)', () => {
+  it('cada uno carga su total, gana el que más hizo y los empatados comparten', () => {
+    expect(reglamento(seeded('BOWLING', 6, 'INDIVIDUAL'))).toEqual([
+      { key: 'modalidad', text: 'Individual.' },
+      { key: 'partido', text: 'Cada uno carga su total de pinos.' },
+      { key: 'fecha', text: 'Cada fecha gana el que más hizo; los empatados comparten el puesto y los puntos.' },
+      { key: 'puntos', text: 'Gana 10, segundo 7, tercero 5, cuarto 3, quinto 2, sexto 1.' },
+      { key: 'temporada', text: '10 fechas, cuentan las 8 mejores.' },
+      { key: 'desempate', text: 'Si empatan en puntos, gana el que iba mejor hace 3 fechas.' },
+    ])
+  })
+
+  it('la ficha en una línea dice por pinos, no a goles', () => {
+    expect(fichaLine(seeded('BOWLING', 6, 'INDIVIDUAL'))).toBe('Por pinos · 10 fechas · cuentan las 8 mejores')
+  })
+})

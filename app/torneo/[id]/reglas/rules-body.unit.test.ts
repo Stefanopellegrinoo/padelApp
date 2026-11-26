@@ -203,6 +203,19 @@ describe('Reglas — "Más detalle", cerrado, con el acordeón de siempre', () =
     expect(fifa).not.toContain('>Masters<')
   })
 
+  it('bowling (S4): sin "Formato de partido" ni el desempate de la tabla de partidos; el resto sigue', () => {
+    const config: SeasonConfig = { ...FIFA_CONFIG }
+    const shape: DisciplineShape = { ...FIFA_SHAPE, allowsDraw: false }
+    const bowling: RulesBlock = { ...bloque('BOWLING', 'Bowling', config, shape, '', { kind: 'RANKING' }), ranking: true }
+    const out = bloqueDe(html([bowling]), 'Bowling')
+    expect(out).toContain('Cada uno carga su total de pinos.')
+    expect(out).not.toContain('>Formato de partido<')
+    expect(out).not.toContain('>Orden de desempate<')
+    expect(out).not.toContain('ganan la misma cantidad de partidos')
+    expect(out).toContain('>Puntos por posición<')
+    expect(out).toContain('>Fechas que cuentan<')
+  })
+
   it('en parejas fijas la fila "Cómo se arman las parejas" tampoco aparece', () => {
     const fijas = bloque('PADEL', 'Pádel', PADEL_CONFIG, FIJAS_SHAPE)
     const out = html([fijas])

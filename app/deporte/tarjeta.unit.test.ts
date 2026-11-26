@@ -212,3 +212,17 @@ describe('TarjetaDeporte', () => {
     expect(html).toMatch(/<li[^>]*>10 fechas<\/li>/)
   })
 })
+
+describe('bowling (S4)', () => {
+  it('no pregunta cómo se arma la primera fecha: no hay nada que armar', () => {
+    const html = card('BOWLING', 4, 'INDIVIDUAL')
+    expect(html).toContain('Bowling')
+    expect(html).not.toContain('¿Cómo se arma la primera fecha?')
+    expect(html).not.toContain('Por nivel')
+    expect(html).toContain('Por pinos')
+  })
+
+  it('los demás deportes la siguen preguntando', () => {
+    expect(card('FIFA', 4, 'INDIVIDUAL')).toContain('¿Cómo se arma la primera fecha?')
+  })
+})

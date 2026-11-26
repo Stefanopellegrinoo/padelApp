@@ -580,6 +580,23 @@ describe('CasualForm', () => {
       expect(f.el.querySelector('input[name="teamMine"]')).toBeNull()
     })
 
+    it('bowling es un mano a mano por pinos: sin empate, sin equipos, y gana el que más hizo', async () => {
+      const f = await montar({ initial: editando('BOWLING', { scoreMine: '180', scoreTheirs: '150' }) })
+      expect(f.el.querySelector('input[name="outcome"][value="drew"]')).toBeNull()
+      expect(f.el.querySelector('input[name="outcome"][value="won"]')).not.toBeNull()
+      expect(f.el.textContent).toContain('Tus pinos')
+      expect(f.el.querySelector('input[name="teamMine"]')).toBeNull()
+    })
+
+    it('bowling con amigos es 1 vs 1: no ofrece 2 vs 2 ni lo arrastra de lo recordado', async () => {
+      localStorage.setItem('padel:partido-con-amigo', JSON.stringify({ sport: 'BOWLING', mode: '2v2', formats: {} }))
+      const f = await montar()
+      expect(f.el.querySelector('input[name="mode"]')).toBeNull()
+      expect(f.el.textContent).toContain('1 vs 1')
+      expect(f.el.textContent).toContain('Tus pinos')
+      expect(JSON.parse(f.hidden('players')!)).toEqual([{ side: 'theirs', playerId: 'amigo-1', guestName: null }])
+    })
+
     it('FIFA tiene empate, cuenta goles y pide equipos', async () => {
       const f = await montar({ initial: editando('FIFA', { scoreMine: '2', scoreTheirs: '1' }) })
       expect(f.el.querySelector('input[name="outcome"][value="drew"]')).not.toBeNull()
@@ -599,7 +616,7 @@ describe('CasualForm', () => {
       const f = await montar()
       const radios = Array.from(f.el.querySelectorAll('input[name="sport"]')) as HTMLInputElement[]
       expect(radios.map((r) => r.value)).toEqual([
-        'PADEL', 'PING_PONG', 'FIFA', 'TENIS', 'FUTBOL_TENIS', 'POOL', 'BEER_PONG', 'AJEDREZ', 'FUTBOL', 'BASQUET',
+        'PADEL', 'PING_PONG', 'FIFA', 'TENIS', 'FUTBOL_TENIS', 'POOL', 'BEER_PONG', 'AJEDREZ', 'BOWLING', 'FUTBOL', 'BASQUET',
       ])
       expect(radios.map((r) => r.closest('label')?.textContent)).toEqual([
         'Pádel',
@@ -610,10 +627,11 @@ describe('CasualForm', () => {
         'Pool',
         'Beer pong',
         'Ajedrez',
+        'Bowling',
         'Fútbol',
         'Básquet',
       ])
-      // Diez no entran en 390: la fila se desliza de costado, no se rompe en renglones.
+      // Once no entran en 390: la fila se desliza de costado, no se rompe en renglones.
       expect(radios[0]?.closest('div')?.className).toContain('overflow-x-auto')
     })
 

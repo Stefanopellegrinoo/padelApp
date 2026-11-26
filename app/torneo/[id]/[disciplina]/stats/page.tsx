@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation'
 import {
   bestPair,
   partnerRecords,
+  rankingTallies,
   rankingWithMovement,
   resolveDisciplineBySlug,
   snapshotForMatchday,
@@ -18,7 +19,7 @@ import {
   type PlayedMatchday,
 } from '@/core'
 import { disciplineConfig } from '@/db/discipline'
-import { awardsOf, closedHistoryAll, entriesOf, myEntryId, seasonHeader } from '@/db/read'
+import { awardsOf, closedHistoryAll, closedScoresOf, entriesOf, myEntryId, seasonHeader } from '@/db/read'
 import { serverClient } from '@/db/server'
 import { Avatar } from '@/app/ui/avatar'
 import { button } from '@/app/ui/button'
@@ -404,12 +405,15 @@ export default async function StatsPage({ params, searchParams }: PageProps) {
   // > 1 ? ... : null`): con una sola, decirlo es ruido que nadie pidió.
   const disciplineLabel = header.disciplines.length > 1 ? sportLabel(discipline.kind) : null
 
-  const [entries, history, awardsByMatchday, viewerEntryId, { fixedTeams }] = await Promise.all([
+  // Bowling (S4): sus fechas no tienen partidos. Lo que se cuenta son los pinos.
+  const ranking = discipline.formatoDefault.kind === 'RANKING'
+  const [entries, history, awardsByMatchday, viewerEntryId, { fixedTeams }, scoresByMatchday] = await Promise.all([
     entriesOf(supabase, seasonId, discipline.id),
     closedHistoryAll(supabase, seasonId, discipline.id),
     awardsOf(supabase, seasonId, discipline.id),
     myEntryId(supabase, seasonId),
     disciplineConfig(supabase, discipline.id),
+    ranking ? closedScoresOf(supabase, discipline.id) : Promise.resolve(new Map<number, Map<EntryId, number>>()),
   ])
   const { config } = discipline
   // Lo que se cuenta en un partido es del deporte (§8): games, goles, puntos.
@@ -495,8 +499,17 @@ export default async function StatsPage({ params, searchParams }: PageProps) {
     .map((tally) => ({ entryId: tally.entryId, pct: pct(tally.matchesWon, tally.matchesPlayed) }))
     .sort((a, b) => b.pct - a.pct)
 
+  // Por pinos, en vez de partidos: cuántas fechas jugó cada uno y qué hizo.
+  const pinTallies = rankingTallies(scoresByMatchday, squad)
+  const pinTally = new Map(pinTallies.map((tally) => [tally.entryId, tally]))
+  const totalPins = pinTallies.reduce((sum, tally) => sum + tally.total, 0)
+  const bestPins = pinTallies.reduce((best, tally) => Math.max(best, tally.best), 0)
+
   const presentismoRows: BarRow[] = squadTallies
-    .map((tally) => ({ entryId: tally.entryId, pct: pct(tally.matchdaysPlayed, history.length) }))
+    .map((tally) => ({
+      entryId: tally.entryId,
+      pct: pct(ranking ? (pinTally.get(tally.entryId)?.played ?? 0) : tally.matchdaysPlayed, history.length),
+    }))
     .sort((a, b) => b.pct - a.pct)
 
   const streaks = titleStreaks(awardsByMatchday, squad)
@@ -529,7 +542,9 @@ export default async function StatsPage({ params, searchParams }: PageProps) {
 
   // ── Mías ────────────────────────────────────────────────────────────────
   const myTally = viewerEntryId === null ? undefined : talliesByEntry.get(viewerEntryId)
-  const myMatchesPlayed = myTally?.matchesPlayed ?? 0
+  const myPins = viewerEntryId === null ? undefined : pinTally.get(viewerEntryId)
+  // "Jugó" es haber jugado un partido, o en bowling haber cargado sus pinos en una fecha cerrada.
+  const myMatchesPlayed = ranking ? (myPins?.played ?? 0) : (myTally?.matchesPlayed ?? 0)
   const myEffectiveness = myTally === undefined ? 0 : pct(myTally.matchesWon, myTally.matchesPlayed)
   const myNetGames = myTally === undefined ? 0 : myTally.gamesFor - myTally.gamesAgainst
   const myBestMatchday = viewerEntryId === null ? null : bestMatchdayFor(awardsByMatchday, viewerEntryId)
@@ -564,19 +579,27 @@ export default async function StatsPage({ params, searchParams }: PageProps) {
 
       {activeTab === 'torneo' ? (
         <>
-          <div className="grid grid-cols-3 gap-2.5 px-4 pt-4">
-            <Dato label={partidas ? 'Partidas jugadas' : 'Partidos jugados'} value={totalMatches} />
-            {partidas ? (
-              <Dato label="Tablas" value={totalDraws} />
-            ) : (
-              <Dato label={`${cap(unit)} totales`} value={totalGames} />
-            )}
-            <Dato
-              label="Fecha más pareja"
-              value={evenestMatchdayNumber ?? '—'}
-              href={evenestMatchdayNumber === null ? undefined : `${base}/fechas/${evenestMatchdayNumber}`}
-            />
-          </div>
+          {ranking ? (
+            <div className="grid grid-cols-3 gap-2.5 px-4 pt-4">
+              <Dato label="Fechas jugadas" value={history.length} />
+              <Dato label={`${cap(unit)} totales`} value={totalPins} />
+              <Dato label="Mejor total" value={bestPins} />
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 gap-2.5 px-4 pt-4">
+              <Dato label={partidas ? 'Partidas jugadas' : 'Partidos jugados'} value={totalMatches} />
+              {partidas ? (
+                <Dato label="Tablas" value={totalDraws} />
+              ) : (
+                <Dato label={`${cap(unit)} totales`} value={totalGames} />
+              )}
+              <Dato
+                label="Fecha más pareja"
+                value={evenestMatchdayNumber ?? '—'}
+                href={evenestMatchdayNumber === null ? undefined : `${base}/fechas/${evenestMatchdayNumber}`}
+              />
+            </div>
+          )}
 
           {/* Racha, en alza y en baja: quién, y el número. En alza y en baja
               son quién más se movió al cerrar la última fecha; si no se movió
@@ -614,7 +637,7 @@ export default async function StatsPage({ params, searchParams }: PageProps) {
             </ul>
           </Seccion>
 
-          <Barras title="% de partidos ganados" rows={winPctRows} gente={gente} />
+          {!ranking && <Barras title="% de partidos ganados" rows={winPctRows} gente={gente} />}
           <Barras title="Presentismo" rows={presentismoRows} gente={gente} />
           {showPairs && <Duplas best={best} rest={restPairs} gente={gente} />}
         </>
@@ -624,7 +647,11 @@ export default async function StatsPage({ params, searchParams }: PageProps) {
         <div className="px-4 pt-5">
           <div className="rounded-tile bg-sport-tint p-4">
             <h2 className="font-titulo text-[28px]">Todavía no jugaste</h2>
-            <p className="mt-1 text-[15px] text-muted">Tus partidos, tu efectividad y tus puntos por fecha van acá.</p>
+            <p className="mt-1 text-[15px] text-muted">
+              {ranking
+                ? 'Tus pinos y tus puntos por fecha van acá.'
+                : 'Tus partidos, tu efectividad y tus puntos por fecha van acá.'}
+            </p>
           </div>
           <Link href={`${base}/fechas`} className={`${button('primary', { size: 'lg', full: true })} mt-4`}>
             Ir a las fechas
@@ -633,12 +660,22 @@ export default async function StatsPage({ params, searchParams }: PageProps) {
       ) : (
         <>
           <div className="grid grid-cols-2 gap-2.5 px-4 pt-4">
-            <Dato label="Partidos" value={myMatchesPlayed} />
-            <Dato label="Efectividad" value={`${myEffectiveness}%`} />
-            {partidas ? (
-              <Dato label="Tablas" value={myTally?.matchesDrawn ?? 0} />
+            {ranking ? (
+              <>
+                <Dato label="Fechas jugadas" value={myMatchesPlayed} />
+                <Dato label="Promedio" value={myPins?.average ?? 0} />
+                <Dato label="Mejor total" value={myPins?.best ?? 0} />
+              </>
             ) : (
-              <Dato label={`Dif. ${unit}`} value={formatSigned(myNetGames)} />
+              <>
+                <Dato label="Partidos" value={myMatchesPlayed} />
+                <Dato label="Efectividad" value={`${myEffectiveness}%`} />
+                {partidas ? (
+                  <Dato label="Tablas" value={myTally?.matchesDrawn ?? 0} />
+                ) : (
+                  <Dato label={`Dif. ${unit}`} value={formatSigned(myNetGames)} />
+                )}
+              </>
             )}
             <Dato
               label="Mejor fecha"

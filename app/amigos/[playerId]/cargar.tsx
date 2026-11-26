@@ -1,7 +1,7 @@
 'use client'
 
 import { useActionState, useEffect, useId, useRef, useState, useTransition, type ReactNode, type RefObject } from 'react'
-import { SPORTS, SPORT_IDS, isSportId, sportLabel, sportOf, type MatchFormat, type ScoringFamily, type SetScore, type SportId } from '@/core'
+import { SPORTS, SPORT_IDS, isRankingSport, isSportId, sportLabel, sportOf, type MatchFormat, type ScoringFamily, type SetScore, type SportId } from '@/core'
 import type { CasualMatch } from '@/db/friends'
 import { isComplete, startLoad, toqueDelSet, type LoadState } from '@/app/torneo/[id]/[disciplina]/fechas/[n]/carga-state'
 import { mensajeDeFalla } from '@/app/torneo/[id]/[disciplina]/fechas/[n]/sin-conexion'
@@ -189,9 +189,10 @@ export function CasualForm({
   )
   const info = sport === '' ? null : sportOf(sport)
   const [modoElegido, setMode] = useState<Mode>(initial?.mode ?? recuerdo?.mode ?? '1v1')
-  // Una partida de ajedrez es uno contra uno: un partido nuevo no ofrece 2 vs 2 (ni lo arrastra de
-  // lo recordado). Al corregir, el plantel es el que se guardó.
-  const soloUnoContraUno = initial === undefined && info?.family === 'result'
+  // Una partida de ajedrez es uno contra uno, y el bowling con amigos un mano a mano por pinos: un
+  // partido nuevo no ofrece 2 vs 2 (ni lo arrastra de lo recordado). Al corregir, el plantel es el
+  // que se guardó.
+  const soloUnoContraUno = initial === undefined && (info?.family === 'result' || (sport !== '' && isRankingSport(sport)))
   const mode: Mode = soloUnoContraUno ? '1v1' : modoElegido
   const [slots, setSlots] = useState<Record<SlotKey, SlotChoice>>({
     partner: { choice: '', name: '' },

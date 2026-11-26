@@ -1,4 +1,4 @@
-import { disciplineSlugs, type DisciplineId } from '@/core'
+import { disciplineSlugs, sportFamily, type DisciplineId } from '@/core'
 import type { SharedMatch } from '@/db/friends'
 import type { MatchdaySummary, SeasonHeader } from '@/db/read'
 import { matchdayDay, matchdayFull } from '@/app/format'
@@ -137,11 +137,15 @@ export function progresoDe(header: SeasonHeader, matchdays: readonly MatchdaySum
 const VERBOS_JUNTOS = { won: 'Ganaron', lost: 'Perdieron', drew: 'Empataron' } as const
 const VERBOS_CONTRA = { won: 'Ganaste', lost: 'Perdiste', drew: 'Empataste' } as const
 
+/** Una partida de ajedrez se anota 1-0, 0-1 o ½-½ (S3): sale del resultado, no de un marcador. */
+export const PARTIDA_ANOTADA = { won: '1-0', lost: '0-1', drew: '½-½' } as const
+
 /**
  * El último partido con un amigo, en pedazos para la fila: el verbo (de
  * compañeros es de la pareja, enfrentados es tuyo, como `leyendaDe` en
  * `app/amigos/historial.tsx`), el marcador y el día. Sólo para partidos con
- * resultado: es lo que `resumenAmigo` (`db/inicio.ts`) elige como último.
+ * resultado: es lo que `resumenAmigo` (`db/inicio.ts`) elige como último. En
+ * ajedrez, como en el historial, el empate son tablas.
  */
 export function ultimoResultado(partido: SharedMatch): {
   verbo: string
@@ -150,10 +154,12 @@ export function ultimoResultado(partido: SharedMatch): {
   gano: boolean
 } {
   const outcome = partido.outcome ?? 'drew'
-  const verbo = (partido.together ? VERBOS_JUNTOS : VERBOS_CONTRA)[outcome]
+  const esPartida = sportFamily(partido.sport) === 'result'
+  const verbo = esPartida && outcome === 'drew' ? 'Tablas' : (partido.together ? VERBOS_JUNTOS : VERBOS_CONTRA)[outcome]
   const sets = partido.kind === 'casual' ? partido.sets : null
-  const marcador =
-    sets !== null && sets.length > 0
+  const marcador = esPartida
+    ? PARTIDA_ANOTADA[outcome]
+    : sets !== null && sets.length > 0
       ? sets.map((set) => `${set.mine}-${set.theirs}`).join(' ')
       : partido.score !== null
         ? `${partido.score.mine}-${partido.score.theirs}`

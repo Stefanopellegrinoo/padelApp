@@ -463,7 +463,8 @@ describe('fichaSeed', () => {
           expect(seed.pairSize).toBe(pairSize)
           expect(seed.fixedTeams).toBe(shapes[modality].fixedTeams)
           if (modality === 'INDIVIDUAL') expect(seed.hasMasters).toBe(false)
-          expect(seed.formatoDefault).toEqual({ kind: 'AUTO' })
+          // Bowling (S4) nace por ranking: sus fechas no tienen partidos que armar.
+          expect(seed.formatoDefault).toEqual(kind === 'BOWLING' ? { kind: 'RANKING' } : { kind: 'AUTO' })
           expect(seed.allowsDraw).toBe(SPORTS[kind].allowsDraw)
         }
       }

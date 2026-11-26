@@ -6,6 +6,7 @@ import {
   SPORT_TONOS,
   SPORT_IDS,
   TOURNAMENT_SPORTS,
+  isRankingSport,
   isSportId,
   isTournamentSport,
   modalityLabel,
@@ -53,10 +54,10 @@ describe('registro de deportes', () => {
 
   it('la lista de deportes y la de torneos, en el orden de los chips', () => {
     expect(SPORT_IDS).toEqual([
-      'PADEL', 'PING_PONG', 'FIFA', 'TENIS', 'FUTBOL_TENIS', 'POOL', 'BEER_PONG', 'AJEDREZ', 'FUTBOL', 'BASQUET',
+      'PADEL', 'PING_PONG', 'FIFA', 'TENIS', 'FUTBOL_TENIS', 'POOL', 'BEER_PONG', 'AJEDREZ', 'BOWLING', 'FUTBOL', 'BASQUET',
     ])
     expect([...TOURNAMENT_SPORTS]).toEqual([
-      'PADEL', 'PING_PONG', 'FIFA', 'TENIS', 'FUTBOL_TENIS', 'POOL', 'BEER_PONG', 'AJEDREZ',
+      'PADEL', 'PING_PONG', 'FIFA', 'TENIS', 'FUTBOL_TENIS', 'POOL', 'BEER_PONG', 'AJEDREZ', 'BOWLING',
     ])
   })
 
@@ -83,9 +84,9 @@ describe('registro de deportes', () => {
     expect(SPORTS.FIFA.tono).toBe('fifa')
     const iconos = SPORT_IDS.map((id) => SPORTS[id].icono)
     expect(new Set(iconos).size).toBe(iconos.length)
-    // Bowling (T3) ya tiene paleta: su entrada del registro llega con él.
     expect(SPORTS.AJEDREZ.tono).toBe('ajedrez')
-    expect(SPORT_TONOS).toEqual(expect.arrayContaining(['bowling']))
+    expect(SPORTS.BOWLING.tono).toBe('bowling')
+    expect(SPORTS.BOWLING.icono).toBe('bolo')
   })
 
   it('los torneos nuevos de pádel y tenis nacen con el set real; los demás con su regla', () => {
@@ -263,5 +264,34 @@ describe('sportFormatError', () => {
     expect(sportFormatError('TEJO', { setsToWin: 1, gamesPerSet: 4, openScore: false })).toBe(
       'Elegí un deporte de la lista.',
     )
+  })
+})
+
+describe('bowling (S4)', () => {
+  it('se juega en torneos, de a uno, por pinos, sin empates ni equipos', () => {
+    const bowling = SPORTS.BOWLING
+    expect(bowling.label).toBe('Bowling')
+    expect(bowling.unit).toBe('pinos')
+    expect(bowling.family).toBe('goals')
+    expect(bowling.allowsDraw).toBe(false)
+    expect(bowling.teams).toBe(false)
+    expect(bowling.tournaments).toBe(true)
+    expect(isTournamentSport('BOWLING')).toBe(true)
+    expect(bowling.ficha.modalities.map((option) => option.id)).toEqual(['INDIVIDUAL'])
+    expect(bowling.ficha.masters).toBe(false)
+  })
+
+  it('cada fecha es un ranking por pinos, no partidos', () => {
+    expect(SPORTS.BOWLING.ficha.fechaFormat).toEqual({ kind: 'RANKING' })
+    expect(isRankingSport('BOWLING')).toBe(true)
+  })
+
+  it('ningún otro deporte, ni un id fuera del registro, juega fechas por ranking', () => {
+    expect(SPORT_IDS.filter((id) => isRankingSport(id))).toEqual(['BOWLING'])
+    expect(isRankingSport('TEJO')).toBe(false)
+  })
+
+  it('unitOf dice pinos', () => {
+    expect(unitOf('BOWLING', { setsToWin: 1, gamesPerSet: 4, tieBreak: true, openScore: true })).toBe('pinos')
   })
 })

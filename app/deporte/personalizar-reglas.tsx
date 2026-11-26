@@ -23,8 +23,10 @@ import {
   rulesErrors,
   rulesHints,
   setsSportOf,
+  ventajaHint,
   withFormatoChoice,
   withGroups,
+  withVentaja,
   type DisciplineRules,
   type FormatoChoice,
 } from './personalizar-reglas-state'
@@ -108,11 +110,17 @@ export function BloquePartido({
   kind,
   format,
   disabled,
+  conVentaja = false,
   onChange,
 }: {
   kind: string
   format: MatchFormat
   disabled: boolean
+  /**
+   * El switch del set real (S6), sólo en los deportes que lo juegan (`setReal`). Lo pone
+   * "Personalizar reglas"; el armado de una fecha no, porque la fecha sólo cambia sets y games.
+   */
+  conVentaja?: boolean
   onChange: (next: MatchFormat) => void
 }) {
   const sport = setsSportOf(kind)
@@ -145,6 +153,14 @@ export function BloquePartido({
           </Fila>
         )
       })}
+      {conVentaja && sport.setReal && (
+        <FilaSwitch
+          titulo="Ventaja de 2 y tie-break"
+          checked={format.ventaja === true}
+          hint={ventajaHint(format)}
+          onChange={(ventaja) => onChange(withVentaja(format, ventaja))}
+        />
+      )}
     </Bloque>
   )
 }
@@ -285,13 +301,23 @@ function PuntosPorPosicion({
   )
 }
 
-function FilaMasters({ checked, hint, onChange }: { checked: boolean; hint: string; onChange: (next: boolean) => void }) {
+function FilaSwitch({
+  titulo,
+  checked,
+  hint,
+  onChange,
+}: {
+  titulo: string
+  checked: boolean
+  hint: string
+  onChange: (next: boolean) => void
+}) {
   const id = useId()
   return (
     <div className={FILA}>
       <div className="min-w-0">
         <p id={id} className={TITULO_FILA}>
-          Masters al final
+          {titulo}
         </p>
         <p className={AYUDA}>{hint}</p>
       </div>
@@ -418,6 +444,7 @@ export function PersonalizarReglas({
           kind={kind}
           format={config.matchFormat}
           disabled={pending}
+          conVentaja
           onChange={(matchFormat) => setConfig({ matchFormat })}
         />
 
@@ -455,7 +482,8 @@ export function PersonalizarReglas({
             onChange={(countBestOf) => setConfig({ countBestOf })}
           />
           {pairSize === 2 && (
-            <FilaMasters
+            <FilaSwitch
+              titulo="Masters al final"
               checked={rules.hasMasters}
               hint={hints.masters}
               onChange={(hasMasters) => onChange({ ...rules, hasMasters })}

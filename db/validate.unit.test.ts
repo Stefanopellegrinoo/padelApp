@@ -104,6 +104,52 @@ describe('setError — no tie-break, must win by two', () => {
   })
 })
 
+describe('setError — el set real: ventaja de 2 y tie-break en N-N (S6)', () => {
+  const aSeis: MatchFormat = { setsToWin: 1, gamesPerSet: 6, tieBreak: true, openScore: false, ventaja: true }
+
+  it.each([[6, 0], [6, 4], [7, 5], [7, 6], [0, 6], [4, 6], [5, 7], [6, 7]])('acepta %i-%i', (gamesA, gamesB) => {
+    expect(setError({ gamesA, gamesB }, aSeis, false)).toBeNull()
+  })
+
+  it('rechaza 6-5: a 6 con ventaja hay que ganar por 2', () => {
+    expect(setError({ gamesA: 6, gamesB: 5 }, aSeis, false)).toBe(
+      'En un set a 6 games con ventaja de 2 y tie-break, 6-5 no es un resultado posible.',
+    )
+  })
+
+  it.each([[7, 4], [8, 6], [8, 7], [5, 3], [7, 7]])('rechaza %i-%i', (gamesA, gamesB) => {
+    expect(setError({ gamesA, gamesB }, aSeis, false)).not.toBeNull()
+  })
+
+  it('con otro número de games la regla es la misma: a 4, 4-2, 5-3 y 5-4 sí; 4-3 no', () => {
+    const aCuatro: MatchFormat = { ...aSeis, gamesPerSet: 4 }
+    expect(setError({ gamesA: 4, gamesB: 2 }, aCuatro, false)).toBeNull()
+    expect(setError({ gamesA: 5, gamesB: 3 }, aCuatro, false)).toBeNull()
+    expect(setError({ gamesA: 5, gamesB: 4 }, aCuatro, false)).toBeNull()
+    expect(setError({ gamesA: 4, gamesB: 3 }, aCuatro, false)).not.toBeNull()
+  })
+
+  it('matchError cierra un partido a 2 sets con 7-5 7-6', () => {
+    const dosSets = { ...aSeis, setsToWin: 2 }
+    expect(matchError([{ gamesA: 7, gamesB: 5 }, { gamesA: 7, gamesB: 6 }], dosSets, false)).toBeNull()
+  })
+
+  it('un formato guardado SIN la clave sigue siendo el de antes: 4-3 vale y 5-3 no', () => {
+    const guardado = JSON.parse('{"setsToWin":1,"gamesPerSet":4,"tieBreak":true,"openScore":false}') as MatchFormat
+    expect(setError({ gamesA: 4, gamesB: 3 }, guardado, false)).toBeNull()
+    expect(setError({ gamesA: 5, gamesB: 3 }, guardado, false)).not.toBeNull()
+    expect(setError({ gamesA: 4, gamesB: 3 }, { ...guardado, ventaja: false }, false)).toBeNull()
+  })
+
+  it('ni con empates permitidos un 7-7 cierra un set a 6', () => {
+    expect(setError({ gamesA: 7, gamesB: 7 }, aSeis, true)).not.toBeNull()
+  })
+
+  it('con marcador abierto la ventaja no se lee', () => {
+    expect(setError({ gamesA: 3, gamesB: 1 }, { ...aSeis, openScore: true }, false)).toBeNull()
+  })
+})
+
 describe('matchError', () => {
   const format: MatchFormat = { setsToWin: 2, gamesPerSet: 4, tieBreak: true, openScore: false }
 

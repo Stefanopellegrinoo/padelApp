@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { defaultConfig, disciplineProfile } from './config'
+import { defaultConfig, disciplineProfile, fichaSeed } from './config'
 import {
   MODALITY_ORDER,
   SPORTS,
+  SPORT_TONOS,
   SPORT_IDS,
   TOURNAMENT_SPORTS,
   isSportId,
@@ -16,12 +17,74 @@ import {
   sportLabel,
   unitOf,
   type Modality,
+  type Sport,
 } from './sports'
 import type { MatchFormat, SideSize } from './types'
 
 describe('registro de deportes', () => {
   it('el formato por defecto de pádel no se mueve', () => {
     expect(SPORTS.PADEL.format).toEqual(disciplineProfile('PADEL', defaultConfig(4)).config.matchFormat)
+    expect(defaultConfig(4).matchFormat.ventaja).toBeUndefined()
+  })
+
+  it('los deportes nuevos, con los valores aprobados (S1, S2)', () => {
+    expect(SPORTS.TENIS).toMatchObject({
+      label: 'Tenis', unit: 'games', family: 'sets', tournaments: true,
+      format: { setsToWin: 1, gamesPerSet: 6, tieBreak: true, openScore: false, ventaja: true },
+    })
+    expect(SPORTS.FUTBOL_TENIS).toMatchObject({
+      label: 'Fútbol tenis', unit: 'puntos', family: 'sets', tournaments: true,
+      format: { setsToWin: 1, gamesPerSet: 15, tieBreak: false, openScore: false },
+    })
+    expect(SPORTS.POOL).toMatchObject({
+      label: 'Pool', unit: 'bolas', family: 'sets', tournaments: true,
+      format: { setsToWin: 1, gamesPerSet: 3, tieBreak: true, openScore: false },
+    })
+    expect(SPORTS.BEER_PONG).toMatchObject({
+      label: 'Beer pong', unit: 'vasos', family: 'sets', tournaments: true,
+      format: { setsToWin: 1, gamesPerSet: 10, tieBreak: true, openScore: false },
+    })
+  })
+
+  it('la lista de deportes y la de torneos, en el orden de los chips', () => {
+    expect(SPORT_IDS).toEqual([
+      'PADEL', 'PING_PONG', 'FIFA', 'TENIS', 'FUTBOL_TENIS', 'POOL', 'BEER_PONG', 'FUTBOL', 'BASQUET',
+    ])
+    expect([...TOURNAMENT_SPORTS]).toEqual(['PADEL', 'PING_PONG', 'FIFA', 'TENIS', 'FUTBOL_TENIS', 'POOL', 'BEER_PONG'])
+  })
+
+  it('el set real se ofrece sólo donde se juega a games con tie-break: pádel y tenis', () => {
+    const conSetReal = SPORT_IDS.filter((id) => {
+      const sport = SPORTS[id]
+      return sport.family === 'sets' && sport.setReal
+    })
+    expect(conSetReal).toEqual(['PADEL', 'TENIS'])
+    for (const id of SPORT_IDS) {
+      const sport: Sport = SPORTS[id]
+      if (sport.family === 'sets' && !sport.setReal) expect(sport.format.ventaja).toBeUndefined()
+    }
+    // Pádel con amigos y en el torneo rápido sigue con la regla de antes; tenis, deporte nuevo, ya juega el real.
+    expect((SPORTS.PADEL.format as MatchFormat).ventaja).toBeUndefined()
+    expect(SPORTS.TENIS.format.ventaja).toBe(true)
+  })
+
+  it('cada deporte tiene su color y su ícono, y no hay dos con el mismo color (S5)', () => {
+    const tonos = SPORT_IDS.map((id) => SPORTS[id].tono)
+    expect(new Set(tonos).size).toBe(tonos.length)
+    for (const tono of tonos) expect(SPORT_TONOS).toContain(tono)
+    expect(SPORTS.PADEL.tono).toBe('padel')
+    expect(SPORTS.FIFA.tono).toBe('fifa')
+    const iconos = SPORT_IDS.map((id) => SPORTS[id].icono)
+    expect(new Set(iconos).size).toBe(iconos.length)
+    // Los de T2 y T3 ya tienen paleta: sus entradas del registro llegan con ellos.
+    expect(SPORT_TONOS).toEqual(expect.arrayContaining(['ajedrez', 'bowling']))
+  })
+
+  it('los torneos nuevos de pádel y tenis nacen con el set real; los demás con su regla', () => {
+    expect(fichaSeed('PADEL', 8, 'ROTAN').config.matchFormat).toEqual({ ...SPORTS.PADEL.format, ventaja: true })
+    expect(fichaSeed('PADEL', 8, 'FIJAS').config.matchFormat.ventaja).toBe(true)
+    expect(fichaSeed('TENIS', 8, 'INDIVIDUAL').config.matchFormat).toEqual(SPORTS.TENIS.format)
+    expect(fichaSeed('PING_PONG', 8, 'INDIVIDUAL').config.matchFormat.ventaja).toBeUndefined()
   })
 
   it('los rangos de pádel son los de STEPPERS de hoy', () => {
@@ -92,6 +155,20 @@ describe('la ficha', () => {
     expect(SPORTS.PADEL.ficha?.modalities[0]?.id).toBe('ROTAN')
     expect(SPORTS.PING_PONG.ficha?.modalities[0]?.id).toBe('INDIVIDUAL')
     expect(SPORTS.FIFA.ficha?.modalities[0]?.id).toBe('INDIVIDUAL')
+    expect(SPORTS.TENIS.ficha?.modalities.map((o) => o.label)).toEqual(['Individual', 'Dobles fijos', 'Dobles que rotan'])
+    expect(SPORTS.FUTBOL_TENIS.ficha?.modalities[0]?.id).toBe('INDIVIDUAL')
+    expect(SPORTS.POOL.ficha?.modalities[0]?.id).toBe('INDIVIDUAL')
+    expect(SPORTS.BEER_PONG.ficha?.modalities.map((o) => o.id)).toEqual(['FIJAS', 'ROTAN', 'INDIVIDUAL'])
+  })
+
+  it('cada deporte nuevo siembra un torneo con cada modalidad de su ficha', () => {
+    for (const id of ['TENIS', 'FUTBOL_TENIS', 'POOL', 'BEER_PONG'] as const) {
+      for (const { id: modality } of SPORTS[id].ficha.modalities) {
+        const seed = fichaSeed(id, 8, modality)
+        expect(seed.config.matchFormat).toEqual(SPORTS[id].format)
+        expect(seed.hasMasters).toBe(false)
+      }
+    }
   })
 
   it('MODALITY_ORDER dibuja individual, fijas, rotan', () => {

@@ -44,12 +44,13 @@ function claveDeLado(lado: readonly number[]): string {
 }
 
 describe('constantes del deporte', () => {
-  it('lista pádel y ping pong con su etiqueta y objetivo de puntos', () => {
-    expect(DEPORTES).toEqual(['PADEL', 'PING_PONG'])
+  it('lista los deportes de sets con su etiqueta y objetivo de puntos (S1, S2)', () => {
+    expect(DEPORTES).toEqual(['PADEL', 'PING_PONG', 'TENIS', 'FUTBOL_TENIS', 'POOL', 'BEER_PONG'])
     expect(DEPORTE_LABEL.PADEL).toBe('Pádel')
     expect(DEPORTE_LABEL.PING_PONG).toBe('Ping pong')
-    expect(DEPORTE_OBJETIVO.PADEL).toBe(4)
-    expect(DEPORTE_OBJETIVO.PING_PONG).toBe(11)
+    expect(DEPORTE_LABEL.FUTBOL_TENIS).toBe('Fútbol tenis')
+    expect(DEPORTE_LABEL.BEER_PONG).toBe('Beer pong')
+    expect(DEPORTE_OBJETIVO).toEqual({ PADEL: 4, PING_PONG: 11, TENIS: 6, FUTBOL_TENIS: 15, POOL: 3, BEER_PONG: 10 })
   })
 })
 
@@ -593,8 +594,30 @@ describe('leerTorneo / escribirTorneo', () => {
   })
 
   it('devuelve null si deporte/modalidad/modoParejas están fuera de sus uniones', () => {
-    const roto = { ...torneo, armado: { ...armado, deporte: 'TENIS' } }
+    const roto = { ...torneo, armado: { ...armado, deporte: 'CRICKET' } }
     expect(leerTorneo(JSON.stringify(roto))).toBeNull()
+  })
+
+  it('un deporte que esta versión no conoce (uno futuro) no tira: no hay torneo que mostrar', () => {
+    const futuro = { ...torneo, armado: { ...armado, deporte: 'AJEDREZ' } }
+    expect(() => leerTorneo(JSON.stringify(futuro))).not.toThrow()
+    expect(leerTorneo(JSON.stringify(futuro))).toBeNull()
+  })
+
+  it('los deportes nuevos se guardan y se leen, con un marcador de ventaja', () => {
+    for (const deporte of ['TENIS', 'FUTBOL_TENIS', 'POOL', 'BEER_PONG'] as const) {
+      const nuevo = { ...torneo, armado: { ...armado, deporte } }
+      expect(leerTorneo(escribirTorneo(nuevo))?.armado.deporte).toBe(deporte)
+    }
+    const conVentaja = cargarMarcador({ ...torneo, armado: { ...armado, deporte: 'FUTBOL_TENIS' } }, 0, 16, 14)
+    expect(leerTorneo(escribirTorneo(conVentaja))?.partidos[0]?.marcador).toEqual({ a: 16, b: 14 })
+  })
+
+  it('un torneo guardado por la versión de antes (pádel 4-3, o un 6-5 a mano) se sigue leyendo igual', () => {
+    for (const [a, b] of [[4, 3], [6, 5]] as const) {
+      const viejo = cargarMarcador(torneo, 0, a, b)
+      expect(leerTorneo(escribirTorneo(viejo))).toEqual(viejo)
+    }
   })
 
   it('devuelve null si un partido referencia un índice fuera de rango', () => {

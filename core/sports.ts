@@ -29,8 +29,25 @@ export interface TournamentFicha {
   firstFecha: Record<Modality, FirstFecha>
 }
 
+/**
+ * La paleta del deporte (S5 de mas-deportes): `app/globals.css` define
+ * `--color-<tono>`, `-tint`, `on-<tono>`, `-block` y `-block-soft` en claro y
+ * en oscuro, y un bloque `[data-deporte='<ID>']` por id que las usa. Ajedrez y
+ * bowling ya tienen la suya: sus entradas del registro llegan con su familia.
+ */
+export const SPORT_TONOS = [
+  'padel', 'pingpong', 'fifa', 'futbol', 'basquet', 'tenis', 'futboltenis', 'pool', 'beerpong', 'ajedrez', 'bowling',
+] as const
+export type SportTono = (typeof SPORT_TONOS)[number]
+
+/** El ícono del deporte: un trazo de `app/torneos/inicio/iconos.tsx`. */
+export type SportIcono =
+  | 'padel' | 'pingpong' | 'pad' | 'futbol' | 'basquet' | 'tenis' | 'futbolTenis' | 'pool' | 'vaso' | 'peon' | 'bolo'
+
 interface SportBase {
   label: string
+  tono: SportTono
+  icono: SportIcono
   /** Plural, minúscula: 'games' | 'puntos' | 'goles'. El copy lo arma la pantalla. */
   unit: string
   /** Se puede elegir al crear un torneo: exige `ficha`. */
@@ -44,6 +61,13 @@ export interface SetsSport extends SportBase {
   allowsDraw: false
   /** Defaults, `openScore: false`. */
   format: MatchFormat
+  /**
+   * Se juega a games con tie-break, así que un torneo nuevo nace con el set
+   * real (`MatchFormat.ventaja`, `fichaSeed`) y "Personalizar reglas" ofrece
+   * apagarlo: pádel y tenis. Los de puntos que se ganan por 2 (ping pong,
+   * fútbol tenis) y los de llegar justo (pool, beer pong) no.
+   */
+  setReal: boolean
   setsToWin: Range
   /** min === max → fijo, sin stepper. */
   gamesPerSet: Range
@@ -62,8 +86,10 @@ const FIRST_FECHA_DE_HOY: Record<Modality, FirstFecha> = { INDIVIDUAL: 'SORTEO',
 
 export const SPORTS = {
   PADEL: {
-    label: 'Pádel', unit: 'games', family: 'sets', allowsDraw: false, tournaments: true,
-    format: { setsToWin: 1, gamesPerSet: 4, tieBreak: true, openScore: false },
+    label: 'Pádel', unit: 'games', family: 'sets', allowsDraw: false, tournaments: true, tono: 'padel', icono: 'padel',
+    // Sin `ventaja`: es el formato de los partidos con amigos y del torneo rápido, que siguen con la
+    // regla de antes. Un torneo nuevo nace con el set real por `setReal` (`fichaSeed`).
+    format: { setsToWin: 1, gamesPerSet: 4, tieBreak: true, openScore: false }, setReal: true,
     setsToWin: { min: 1, max: 3 }, gamesPerSet: { min: 3, max: 9 },
     ficha: {
       modalities: [{ id: 'ROTAN', label: 'Parejas que rotan' }, { id: 'FIJAS', label: 'Parejas fijas' }],
@@ -71,8 +97,8 @@ export const SPORTS = {
     },
   },
   PING_PONG: {
-    label: 'Ping pong', unit: 'puntos', family: 'sets', allowsDraw: false, tournaments: true,
-    format: { setsToWin: 2, gamesPerSet: 11, tieBreak: false, openScore: false },
+    label: 'Ping pong', unit: 'puntos', family: 'sets', allowsDraw: false, tournaments: true, tono: 'pingpong', icono: 'pingpong',
+    format: { setsToWin: 2, gamesPerSet: 11, tieBreak: false, openScore: false }, setReal: false,
     setsToWin: { min: 1, max: 4 }, gamesPerSet: { min: 11, max: 11 },
     ficha: {
       modalities: [
@@ -84,7 +110,7 @@ export const SPORTS = {
     },
   },
   FIFA: {
-    label: 'FIFA', unit: 'goles', family: 'goals', allowsDraw: true, teams: true, tournaments: true,
+    label: 'FIFA', unit: 'goles', family: 'goals', allowsDraw: true, teams: true, tournaments: true, tono: 'fifa', icono: 'pad',
     ficha: {
       modalities: [
         { id: 'INDIVIDUAL', label: 'Individual' },
@@ -94,8 +120,61 @@ export const SPORTS = {
       season: SEASON_DE_HOY, masters: false, fechaFormat: AUTO_FECHA, firstFecha: FIRST_FECHA_DE_HOY,
     },
   },
-  FUTBOL:  { label: 'Fútbol',  unit: 'goles',  family: 'goals', allowsDraw: true,  teams: false, tournaments: false, ficha: null },
-  BASQUET: { label: 'Básquet', unit: 'puntos', family: 'goals', allowsDraw: false, teams: false, tournaments: false, ficha: null },
+  TENIS: {
+    label: 'Tenis', unit: 'games', family: 'sets', allowsDraw: false, tournaments: true, tono: 'tenis', icono: 'tenis',
+    format: { setsToWin: 1, gamesPerSet: 6, tieBreak: true, openScore: false, ventaja: true }, setReal: true,
+    setsToWin: { min: 1, max: 3 }, gamesPerSet: { min: 4, max: 8 },
+    ficha: {
+      modalities: [
+        { id: 'INDIVIDUAL', label: 'Individual' },
+        { id: 'FIJAS', label: 'Dobles fijos' },
+        { id: 'ROTAN', label: 'Dobles que rotan' },
+      ],
+      season: SEASON_DE_HOY, masters: false, fechaFormat: AUTO_FECHA, firstFecha: FIRST_FECHA_DE_HOY,
+    },
+  },
+  FUTBOL_TENIS: {
+    label: 'Fútbol tenis', unit: 'puntos', family: 'sets', allowsDraw: false, tournaments: true, tono: 'futboltenis', icono: 'futbolTenis',
+    // Sin tie-break: se gana por 2 (16-14), como el ping pong.
+    format: { setsToWin: 1, gamesPerSet: 15, tieBreak: false, openScore: false }, setReal: false,
+    setsToWin: { min: 1, max: 3 }, gamesPerSet: { min: 11, max: 21 },
+    ficha: {
+      modalities: [
+        { id: 'INDIVIDUAL', label: 'Individual' },
+        { id: 'FIJAS', label: 'Parejas fijas' },
+        { id: 'ROTAN', label: 'Parejas que rotan' },
+      ],
+      season: SEASON_DE_HOY, masters: false, fechaFormat: AUTO_FECHA, firstFecha: FIRST_FECHA_DE_HOY,
+    },
+  },
+  POOL: {
+    label: 'Pool', unit: 'bolas', family: 'sets', allowsDraw: false, tournaments: true, tono: 'pool', icono: 'pool',
+    format: { setsToWin: 1, gamesPerSet: 3, tieBreak: true, openScore: false }, setReal: false,
+    setsToWin: { min: 1, max: 3 }, gamesPerSet: { min: 1, max: 9 },
+    ficha: {
+      modalities: [
+        { id: 'INDIVIDUAL', label: 'Individual' },
+        { id: 'FIJAS', label: 'Parejas fijas' },
+        { id: 'ROTAN', label: 'Parejas que rotan' },
+      ],
+      season: SEASON_DE_HOY, masters: false, fechaFormat: AUTO_FECHA, firstFecha: FIRST_FECHA_DE_HOY,
+    },
+  },
+  BEER_PONG: {
+    label: 'Beer pong', unit: 'vasos', family: 'sets', allowsDraw: false, tournaments: true, tono: 'beerpong', icono: 'vaso',
+    format: { setsToWin: 1, gamesPerSet: 10, tieBreak: true, openScore: false }, setReal: false,
+    setsToWin: { min: 1, max: 3 }, gamesPerSet: { min: 6, max: 10 },
+    ficha: {
+      modalities: [
+        { id: 'FIJAS', label: 'Parejas fijas' },
+        { id: 'ROTAN', label: 'Parejas que rotan' },
+        { id: 'INDIVIDUAL', label: 'Individual' },
+      ],
+      season: SEASON_DE_HOY, masters: false, fechaFormat: AUTO_FECHA, firstFecha: FIRST_FECHA_DE_HOY,
+    },
+  },
+  FUTBOL:  { label: 'Fútbol',  unit: 'goles',  family: 'goals', allowsDraw: true,  teams: false, tournaments: false, ficha: null, tono: 'futbol', icono: 'futbol' },
+  BASQUET: { label: 'Básquet', unit: 'puntos', family: 'goals', allowsDraw: false, teams: false, tournaments: false, ficha: null, tono: 'basquet', icono: 'basquet' },
 } satisfies Record<string, Sport>
 
 export type SportId = keyof typeof SPORTS
@@ -153,7 +232,7 @@ export function unitOf(kind: string, format: MatchFormat): string {
 }
 
 /** Tupla literal a propósito (`TournamentSport` necesita las claves exactas); el orden del registro es el de los chips. */
-export const TOURNAMENT_SPORTS = ['PADEL', 'PING_PONG', 'FIFA'] as const satisfies readonly SportId[]
+export const TOURNAMENT_SPORTS = ['PADEL', 'PING_PONG', 'FIFA', 'TENIS', 'FUTBOL_TENIS', 'POOL', 'BEER_PONG'] as const satisfies readonly SportId[]
 export type TournamentSport = (typeof TOURNAMENT_SPORTS)[number]
 
 export function isTournamentSport(raw: string): raw is TournamentSport {

@@ -15,6 +15,7 @@ import {
   startLoad,
   toqueDelSet,
 } from './carga-state'
+import { chooseDeuce, deuceOptions, deuceWinnerGames } from '@/app/amigos/[playerId]/cargar-state'
 
 const ONE_SET_TO_4: MatchFormat = { setsToWin: 1, gamesPerSet: 4, tieBreak: true, openScore: false }
 const TWO_SETS_TO_6: MatchFormat = { setsToWin: 2, gamesPerSet: 6, tieBreak: true, openScore: false }
@@ -284,5 +285,58 @@ describe('resumenGuardado: el texto del aviso', () => {
 
   it('un empate nombra a los dos', () => {
     expect(resumenGuardado('Ana', 'Beto', [{ gamesA: 1, gamesB: 1 }])).toBe('Ana 1-1 Beto')
+  })
+})
+
+describe('el set real en dos toques (S6 de mas-deportes)', () => {
+  const TENIS: MatchFormat = { setsToWin: 1, gamesPerSet: 6, tieBreak: true, openScore: false, ventaja: true }
+  const PADEL_REAL: MatchFormat = { ...TENIS, gamesPerSet: 4 }
+  const FUTBOL_TENIS: MatchFormat = { setsToWin: 1, gamesPerSet: 15, tieBreak: false, openScore: false }
+
+  it('el perdedor puede tener de 0 a N-2, y aparte van los de ventaja: 7-5 y 7-6', () => {
+    expect(loserGamesOptions(TENIS)).toEqual([0, 1, 2, 3, 4])
+    expect(deuceOptions(TENIS)).toEqual([5, 6])
+    expect(deuceOptions(TENIS).map((loser) => `${deuceWinnerGames(TENIS, loser)}-${loser}`)).toEqual(['7-5', '7-6'])
+  })
+
+  it('a 4 la regla es la misma: 4-0 a 4-2, 5-3 y 5-4', () => {
+    expect(loserGamesOptions(PADEL_REAL)).toEqual([0, 1, 2])
+    expect(deuceOptions(PADEL_REAL).map((loser) => `${deuceWinnerGames(PADEL_REAL, loser)}-${loser}`)).toEqual(['5-3', '5-4'])
+  })
+
+  it('chooseDeuce arma el 7-5 y el 7-6 de los dos lados', () => {
+    const conGanador = (winner: 'A' | 'B') => chooseWinner(startLoad(), winner)
+    expect(chooseDeuce(conGanador('A'), 5, TENIS).sets).toEqual([{ gamesA: 7, gamesB: 5 }])
+    expect(chooseDeuce(conGanador('A'), 6, TENIS).sets).toEqual([{ gamesA: 7, gamesB: 6 }])
+    expect(chooseDeuce(conGanador('B'), 6, TENIS).sets).toEqual([{ gamesA: 6, gamesB: 7 }])
+  })
+
+  it('todo botón da un set que setError acepta, y ninguno más', () => {
+    for (const format of [TENIS, PADEL_REAL, FUTBOL_TENIS]) {
+      for (const loser of loserGamesOptions(format)) {
+        expect(setError({ gamesA: format.gamesPerSet, gamesB: loser }, format, false)).toBeNull()
+      }
+      for (const loser of deuceOptions(format)) {
+        expect(setError({ gamesA: deuceWinnerGames(format, loser), gamesB: loser }, format, false)).toBeNull()
+      }
+    }
+  })
+
+  it('fútbol tenis se gana por 2: 15-13 es un número y 16-14 un botón de ventaja', () => {
+    expect(loserGamesOptions(FUTBOL_TENIS).at(-1)).toBe(13)
+    expect(deuceOptions(FUTBOL_TENIS)).toContain(14)
+    expect(deuceWinnerGames(FUTBOL_TENIS, 14)).toBe(16)
+  })
+
+  it('toqueDelSet prende el botón de ventaja de un 7-5 y de un 7-6, y el número de un 6-4', () => {
+    expect(toqueDelSet({ gamesA: 7, gamesB: 5 }, TENIS)).toEqual({ winner: 'A', loser: 5, deuce: true })
+    expect(toqueDelSet({ gamesA: 6, gamesB: 7 }, TENIS)).toEqual({ winner: 'B', loser: 6, deuce: true })
+    expect(toqueDelSet({ gamesA: 6, gamesB: 4 }, TENIS)).toEqual({ winner: 'A', loser: 4, deuce: false })
+    expect(toqueDelSet({ gamesA: 6, gamesB: 5 }, TENIS)).toBeNull()
+  })
+
+  it('un formato sin la clave sigue con los botones de antes', () => {
+    expect(loserGamesOptions(ONE_SET_TO_4)).toEqual([0, 1, 2, 3])
+    expect(deuceOptions(ONE_SET_TO_4)).toEqual([])
   })
 })

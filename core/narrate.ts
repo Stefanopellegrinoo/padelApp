@@ -272,7 +272,9 @@ function describeFormat(format: MatchFormat, allowsDraw: boolean, unit: string):
     )
   }
   const setWord = format.setsToWin === 1 ? 'un set' : `${format.setsToWin} sets ganados`
-  const tie = format.tieBreak ? ' con tie-break' : ''
+  const n = format.gamesPerSet
+  const tie =
+    format.ventaja === true ? `, con ventaja de 2 y tie-break en ${n}-${n}` : format.tieBreak ? ' con tie-break' : ''
   // ponytail: esta rama no nombra `allowsDraw` — con sets, el empate lo saca
   // el propio formato (alguien llega antes a `setsToWin`), así que la frase
   // no necesita decir nada sobre empates HOY. El techo: `!openScore &&

@@ -422,9 +422,10 @@ describe('maxMatches — el techo de partidos de la disciplina', () => {
 })
 
 describe('fichaSeed', () => {
-  it('Pádel rotan es la config de hoy más la primera fecha por nivel', () => {
+  it('Pádel rotan es la config de hoy con el set real (S6), más la primera fecha por nivel', () => {
     const { firstFecha, ...rest } = fichaSeed('PADEL', 8, 'ROTAN').config
-    expect(rest).toEqual(disciplineProfile('PADEL', defaultConfig(8, 2)).config)
+    const hoy = disciplineProfile('PADEL', defaultConfig(8, 2)).config
+    expect(rest).toEqual({ ...hoy, matchFormat: { ...hoy.matchFormat, ventaja: true } })
     expect(firstFecha).toBe('NIVEL')
   })
 
@@ -509,7 +510,7 @@ describe('effectiveMatchFormat', () => {
     expect(effectiveMatchFormat(PADEL, null)).toBe(PADEL)
   })
 
-  it('con formato propio, pisa sets y games y deja el resto del torneo', () => {
+  it('con formato propio, pisa sets y games y deja el resto del torneo (la ventaja incluida)', () => {
     expect(effectiveMatchFormat(PADEL, { setsToWin: 2, gamesPerSet: 6 })).toEqual({
       setsToWin: 2,
       gamesPerSet: 6,

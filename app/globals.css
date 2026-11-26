@@ -7,8 +7,8 @@
 
    - `block`/`on-block`/`on-block-soft`: el bloque de color del encabezado.
    - `sport`/`sport-tint`/`on-sport`: el color del deporte, que cambia con
-     `data-deporte` (abajo). Pádel, ping pong y básquet en azul; FIFA y fútbol
-     en verde. `text-sport` sirve sobre fondo y sobre `sport-tint`;
+     `data-deporte` (abajo): un color por deporte, pádel azul y FIFA verde.
+     `text-sport` sirve sobre fondo y sobre `sport-tint`;
      `bg-sport` va con `text-on-sport`. En los dos temas.
    - `cta`/`on-cta`: el botón principal (tinta en claro, azul en oscuro).
    - `vos`/`on-vos`: el amarillo pelota. SOLO marca lo del usuario (su fila, su
@@ -48,14 +48,67 @@
   --color-scrim: rgba(14, 26, 74, 0.5);
   --color-focus: #0e1a4a;
 
+  /* Una paleta por deporte (S5 de mas-deportes), con el nombre del `tono` del
+     registro (`core/sports.ts`): el color (texto sobre fondo y sobre su
+     tinte), el tinte, lo que va sobre el color lleno, el bloque del
+     encabezado y el texto suave sobre el bloque. Pádel y FIFA son los del
+     prototipo; el resto se midió con la misma vara, y la mide
+     `app/globals-css.unit.test.ts`. */
   --color-padel: #1f45e0;
   --color-padel-tint: #e8edff;
   --color-on-padel: #ffffff;
+  --color-padel-block: #1f45e0;
+  --color-padel-block-soft: #c9d3ff;
+  --color-pingpong: #b526a9;
+  --color-pingpong-tint: #fae6f8;
+  --color-on-pingpong: #ffffff;
+  --color-pingpong-block: #b526a9;
+  --color-pingpong-block-soft: #fae6f8;
   --color-fifa: #0b7a3b;
   --color-fifa-tint: #e3f5ea;
   --color-on-fifa: #ffffff;
   --color-fifa-block: #0b7a3b;
   --color-fifa-block-soft: #e3f5ea;
+  --color-futbol: #0d7762;
+  --color-futbol-tint: #e5faf6;
+  --color-on-futbol: #ffffff;
+  --color-futbol-block: #0d7762;
+  --color-futbol-block-soft: #d1faf2;
+  --color-basquet: #ba420f;
+  --color-basquet-tint: #faebe5;
+  --color-on-basquet: #ffffff;
+  --color-basquet-block: #ba420f;
+  --color-basquet-block-soft: #fce9e1;
+  --color-tenis: #49760a;
+  --color-tenis-tint: #f1fae5;
+  --color-on-tenis: #ffffff;
+  --color-tenis-block: #49760a;
+  --color-tenis-block-soft: #e9fad1;
+  --color-futboltenis: #cb1d51;
+  --color-futboltenis-tint: #fae5eb;
+  --color-on-futboltenis: #ffffff;
+  --color-futboltenis-block: #cb1d51;
+  --color-futboltenis-block-soft: #fbe6ed;
+  --color-pool: #0b728b;
+  --color-pool-tint: #e5f6fa;
+  --color-on-pool: #ffffff;
+  --color-pool-block: #0b728b;
+  --color-pool-block-soft: #d1f2fa;
+  --color-beerpong: #8d6007;
+  --color-beerpong-tint: #faf3e5;
+  --color-on-beerpong: #ffffff;
+  --color-beerpong-block: #8d6007;
+  --color-beerpong-block-soft: #faecd1;
+  --color-ajedrez: #5c6984;
+  --color-ajedrez-tint: #edeff2;
+  --color-on-ajedrez: #ffffff;
+  --color-ajedrez-block: #5c6984;
+  --color-ajedrez-block-soft: #e8ebef;
+  --color-bowling: #8449d2;
+  --color-bowling-tint: #eee7f9;
+  --color-on-bowling: #ffffff;
+  --color-bowling-block: #8449d2;
+  --color-bowling-block-soft: #f1ebfa;
   --color-sport: var(--color-padel);
   --color-sport-tint: var(--color-padel-tint);
   --color-on-sport: var(--color-on-padel);
@@ -114,8 +167,8 @@
 
    El oscuro del prototipo es diseñado, no invertido: azul noche (no negro),
    el azul y el verde de texto suben de tono y el bloque baja un poco para no
-   encandilar. `sport` y compañía no se repiten acá: son `var()` a `padel` y
-   `fifa`, que sí cambian. */
+   encandilar. `sport` y compañía no se repiten acá: son `var()` a la paleta
+   de cada deporte, que sí cambia. */
 @media (prefers-color-scheme: dark) {
   :root {
     --color-bg: #0e1630;
@@ -141,11 +194,58 @@
     --color-padel: #8da4ff;
     --color-padel-tint: #1b2a60;
     --color-on-padel: #0e1630;
+    --color-padel-block: #2643bc;
+    --color-padel-block-soft: #c9d3ff;
+    --color-pingpong: #dc74d4;
+    --color-pingpong-tint: #391336;
+    --color-on-pingpong: #0e1630;
+    --color-pingpong-block: #af25a3;
+    --color-pingpong-block-soft: #f8ddf6;
     --color-fifa: #6cd49a;
     --color-fifa-tint: #133a2a;
     --color-on-fifa: #0e1630;
     --color-fifa-block: #17683c;
     --color-fifa-block-soft: #cdefda;
+    --color-futbol: #74dcc8;
+    --color-futbol-tint: #133932;
+    --color-on-futbol: #0e1630;
+    --color-futbol-block: #187260;
+    --color-futbol-block-soft: #baf7eb;
+    --color-basquet: #dc9374;
+    --color-basquet-tint: #391f13;
+    --color-on-basquet: #0e1630;
+    --color-basquet-block: #a64b23;
+    --color-basquet-block-soft: #fae1d6;
+    --color-tenis: #b1dc74;
+    --color-tenis-tint: #293913;
+    --color-on-tenis: #0e1630;
+    --color-tenis-block: #4c7218;
+    --color-tenis-block-soft: #def7ba;
+    --color-futboltenis: #de7a98;
+    --color-futboltenis-tint: #39131f;
+    --color-on-futboltenis: #0e1630;
+    --color-futboltenis-block: #bd2855;
+    --color-futboltenis-block-soft: #fadee6;
+    --color-pool: #74c8dc;
+    --color-pool-tint: #133239;
+    --color-on-pool: #0e1630;
+    --color-pool-block: #1c6e82;
+    --color-pool-block-soft: #c1edf8;
+    --color-beerpong: #dcba74;
+    --color-beerpong-tint: #392d13;
+    --color-on-beerpong: #0e1630;
+    --color-beerpong-block: #82601c;
+    --color-beerpong-block-soft: #f8e4bc;
+    --color-ajedrez: #99a3b8;
+    --color-ajedrez-tint: #1f242d;
+    --color-on-ajedrez: #0e1630;
+    --color-ajedrez-block: #596680;
+    --color-ajedrez-block-soft: #e4e7ec;
+    --color-bowling: #ae87e1;
+    --color-bowling-tint: #241339;
+    --color-on-bowling: #0e1630;
+    --color-bowling-block: #8043d0;
+    --color-bowling-block-soft: #ece2f8;
 
     --color-block: #2643bc;
     --color-on-block: #ffffff;
@@ -166,24 +266,86 @@
 
 /* El deporte de lo que se está mirando: `data-deporte={kind}` en el contenedor
    (el `kind` de `core/sports.ts`) y adentro `bg-sport`, `text-sport`,
-   `bg-sport-tint` y `bg-block` toman su color. Sin atributo, pádel. Los dos
-   grupos se nombran enteros para que un pádel adentro de un FIFA vuelva a
-   azul. Ping pong y básquet comparten el azul: el prototipo tiene dos colores
-   de deporte y un tercero sería inventar. */
-[data-deporte='PADEL'],
-[data-deporte='PING_PONG'],
-[data-deporte='BASQUET'] {
+   `bg-sport-tint` y `bg-block` toman su color. Sin atributo, pádel. Cada
+   deporte nombra su paleta entera para que un pádel adentro de un FIFA vuelva
+   a azul. Ajedrez y bowling ya tienen la suya: llegan al registro con su
+   familia de marcador. */
+[data-deporte='PADEL'] {
   --color-sport: var(--color-padel);
   --color-sport-tint: var(--color-padel-tint);
   --color-on-sport: var(--color-on-padel);
+  --color-block: var(--color-padel-block);
+  --color-on-block-soft: var(--color-padel-block-soft);
 }
-[data-deporte='FIFA'],
-[data-deporte='FUTBOL'] {
+[data-deporte='PING_PONG'] {
+  --color-sport: var(--color-pingpong);
+  --color-sport-tint: var(--color-pingpong-tint);
+  --color-on-sport: var(--color-on-pingpong);
+  --color-block: var(--color-pingpong-block);
+  --color-on-block-soft: var(--color-pingpong-block-soft);
+}
+[data-deporte='FIFA'] {
   --color-sport: var(--color-fifa);
   --color-sport-tint: var(--color-fifa-tint);
   --color-on-sport: var(--color-on-fifa);
   --color-block: var(--color-fifa-block);
   --color-on-block-soft: var(--color-fifa-block-soft);
+}
+[data-deporte='TENIS'] {
+  --color-sport: var(--color-tenis);
+  --color-sport-tint: var(--color-tenis-tint);
+  --color-on-sport: var(--color-on-tenis);
+  --color-block: var(--color-tenis-block);
+  --color-on-block-soft: var(--color-tenis-block-soft);
+}
+[data-deporte='FUTBOL_TENIS'] {
+  --color-sport: var(--color-futboltenis);
+  --color-sport-tint: var(--color-futboltenis-tint);
+  --color-on-sport: var(--color-on-futboltenis);
+  --color-block: var(--color-futboltenis-block);
+  --color-on-block-soft: var(--color-futboltenis-block-soft);
+}
+[data-deporte='POOL'] {
+  --color-sport: var(--color-pool);
+  --color-sport-tint: var(--color-pool-tint);
+  --color-on-sport: var(--color-on-pool);
+  --color-block: var(--color-pool-block);
+  --color-on-block-soft: var(--color-pool-block-soft);
+}
+[data-deporte='BEER_PONG'] {
+  --color-sport: var(--color-beerpong);
+  --color-sport-tint: var(--color-beerpong-tint);
+  --color-on-sport: var(--color-on-beerpong);
+  --color-block: var(--color-beerpong-block);
+  --color-on-block-soft: var(--color-beerpong-block-soft);
+}
+[data-deporte='FUTBOL'] {
+  --color-sport: var(--color-futbol);
+  --color-sport-tint: var(--color-futbol-tint);
+  --color-on-sport: var(--color-on-futbol);
+  --color-block: var(--color-futbol-block);
+  --color-on-block-soft: var(--color-futbol-block-soft);
+}
+[data-deporte='BASQUET'] {
+  --color-sport: var(--color-basquet);
+  --color-sport-tint: var(--color-basquet-tint);
+  --color-on-sport: var(--color-on-basquet);
+  --color-block: var(--color-basquet-block);
+  --color-on-block-soft: var(--color-basquet-block-soft);
+}
+[data-deporte='AJEDREZ'] {
+  --color-sport: var(--color-ajedrez);
+  --color-sport-tint: var(--color-ajedrez-tint);
+  --color-on-sport: var(--color-on-ajedrez);
+  --color-block: var(--color-ajedrez-block);
+  --color-on-block-soft: var(--color-ajedrez-block-soft);
+}
+[data-deporte='BOWLING'] {
+  --color-sport: var(--color-bowling);
+  --color-sport-tint: var(--color-bowling-tint);
+  --color-on-sport: var(--color-on-bowling);
+  --color-block: var(--color-bowling-block);
+  --color-on-block-soft: var(--color-bowling-block-soft);
 }
 
 html {

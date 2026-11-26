@@ -2,17 +2,18 @@
 
 import { useState } from 'react'
 import type { Deporte, Partido } from './rapido-state'
+import { BotonesDelPerdedor } from '@/app/torneo/[id]/[disciplina]/fechas/[n]/botones-del-perdedor'
 import {
+  formatoRapido,
   marcadorDeDosToques,
+  marcadorDeVentaja,
   nombreLado,
-  puntosDelPerdedor,
   toqueDelMarcador,
   unidadDe,
   type Lado,
 } from './jugar-logic'
 
 const PREGUNTA = 'mt-3.5 mb-2.5 text-[17px] font-bold'
-const cap = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
 
 /**
  * Un partido de la lista, con la cara de la carga de una fecha
@@ -92,15 +93,16 @@ export function TarjetaPartido({
 }
 
 /**
- * El contenido de la hoja de un partido: la carga en dos toques, el mismo
- * patrón que la carga de una fecha. Quién ganó, y con cuántos se quedó el que
- * perdió, de una lista acotada de botones; el segundo toque guarda. El
- * ganador siempre se lleva el objetivo entero (`marcadorDeDosToques`), así que
- * nada de lo que sale de acá lo puede rechazar `cargarMarcador`, y en la
- * pantalla no existe el empate: ni el pádel ni el ping pong empatan.
+ * El contenido de la hoja de un partido: la carga en dos toques, con los
+ * mismos botones que la carga de una fecha (`BotonesDelPerdedor`). Quién ganó,
+ * y con cuántos se quedó el que perdió; el segundo toque guarda. El ganador
+ * se lleva el objetivo entero, o lo de un botón de ventaja (7-5, 7-6, 12-10,
+ * 16-14) donde el deporte lo deja (`formatoRapido`), así que nada de lo que
+ * sale de acá lo puede rechazar `cargarMarcador`, y en la pantalla no existe
+ * el empate: ninguno de estos deportes empata.
  *
  * Un partido cargado abre con lo que tiene (`toqueDelMarcador`): el ganador
- * elegido y su número marcado, así corregir es un toque. Cambiar de ganador
+ * elegido y su botón marcado, así corregir es un toque. Cambiar de ganador
  * suelta el número. Va montada con `key` por apertura: cada vez arranca de lo
  * que dice el partido, no de un intento anterior.
  */
@@ -117,17 +119,17 @@ export function HojaPartido({
 }) {
   const previo = toqueDelMarcador(partido.marcador, deporte)
   const [ganador, setGanador] = useState<Lado | null>(previo.ganador)
-  const [elegido, setElegido] = useState<number | null>(previo.perdedor)
+  const [elegido, setElegido] = useState<{ loser: number; deuce: boolean } | null>(
+    previo.perdedor === null ? null : { loser: previo.perdedor, deuce: previo.ventaja },
+  )
 
   const nombreDe = (lado: Lado) => nombreLado(jugadores, lado === 'a' ? partido.a : partido.b)
   const perdedor = ganador === null ? null : nombreDe(ganador === 'a' ? 'b' : 'a')
-  const opciones = puntosDelPerdedor(deporte)
-  const unidad = unidadDe(deporte)
 
-  const elegirPuntos = (puntos: number) => {
+  const guardar = (puntos: number, deuce: boolean) => {
     if (ganador === null) return
-    setElegido(puntos)
-    const marcador = marcadorDeDosToques(ganador, puntos, deporte)
+    setElegido({ loser: puntos, deuce })
+    const marcador = deuce ? marcadorDeVentaja(ganador, puntos, deporte) : marcadorDeDosToques(ganador, puntos, deporte)
     onGuardar(marcador.a, marcador.b)
   }
 
@@ -166,26 +168,15 @@ export function HojaPartido({
       {/* Nombra al que perdió, no "el perdedor": es lo que confirma qué se
           tocó recién. Sin ganador los números se ven pero no se tocan: la
           hoja no salta de alto entre un toque y otro. */}
-      <p className={PREGUNTA}>{perdedor === null ? `${cap(unidad)} del que perdió` : `${cap(unidad)} de ${perdedor}`}</p>
-      <div className={`grid gap-2 ${opciones.length <= 4 ? 'grid-cols-4' : 'grid-cols-6'}`}>
-        {opciones.map((puntos) => {
-          const activo = elegido === puntos
-          return (
-            <button
-              key={puntos}
-              type="button"
-              disabled={ganador === null}
-              aria-pressed={activo}
-              onClick={() => elegirPuntos(puntos)}
-              className={`font-cond flex min-h-[60px] items-center justify-center rounded-btn border-[1.5px] text-[30px] ${
-                activo ? 'border-block bg-block text-on-block' : 'border-line text-text active:bg-sport-tint'
-              }`}
-            >
-              {puntos}
-            </button>
-          )
-        })}
-      </div>
+      <BotonesDelPerdedor
+        format={formatoRapido(deporte)}
+        unit={unidadDe(deporte)}
+        loserName={perdedor}
+        pending={false}
+        elegido={elegido}
+        onLoser={(puntos) => guardar(puntos, false)}
+        onDeuce={(puntos) => guardar(puntos, true)}
+      />
       <p aria-live="polite" className="mt-2.5 min-h-5 text-[15px] text-muted">
         {ganador === null ? 'Tocá primero quién ganó.' : 'Con este toque se guarda.'}
       </p>

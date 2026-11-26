@@ -37,6 +37,18 @@ export interface MatchFormat {
    * un marcador abierto SIN empates rechaza un `0-0` igual.
    */
   openScore: boolean
+  /**
+   * El set real (S6 de mas-deportes): a `gamesPerSet` con ventaja de 2, y en
+   * N-N tie-break que queda N+1 a N. A 6: 6-0 a 6-4, 7-5 o 7-6. Con esto
+   * prendido `tieBreak` no se lee: el tie-break ya está en la regla.
+   *
+   * OPCIONAL a propósito, al revés que `openScore`: los formatos guardados
+   * antes de esta clave no la tienen, y ausente (o `false`) tiene que seguir
+   * siendo la regla con la que se armó el torneo. Un 4-3 ya cargado no puede
+   * volverse inválido. Los torneos nuevos de pádel y tenis nacen con `true`
+   * desde su ficha (`core/sports.ts`).
+   */
+  ventaja?: boolean
 }
 
 /** `matchdays.match_format`: a cuánto se juega UNA fecha, si no es al del deporte en el torneo. */

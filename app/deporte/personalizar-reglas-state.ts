@@ -76,10 +76,26 @@ export function partidoHints(kind: string, format: MatchFormat): Pick<RulesHints
   const next = setsToWin + 1 <= max ? ` ${setsToWin + 1} = ${frase(setsToWin + 1)}.` : ''
   return {
     setsToWin: `${setsToWin} = ${frase(setsToWin)}.${next}`,
-    gamesPerSet: format.tieBreak
-      ? `Con tie-break: el set termina en ${gamesPerSet} justo.`
-      : `Se gana por 2: ${gamesPerSet}-${gamesPerSet - 2}, ${gamesPerSet + 1}-${gamesPerSet - 1}…`,
+    gamesPerSet:
+      format.ventaja === true
+        ? `A ${gamesPerSet} con ventaja de 2: ${gamesPerSet}-${gamesPerSet - 2}, ${gamesPerSet + 1}-${gamesPerSet - 1}, o ${gamesPerSet + 1}-${gamesPerSet} con tie-break.`
+        : format.tieBreak
+          ? `Con tie-break: el set termina en ${gamesPerSet} justo.`
+          : `Se gana por 2: ${gamesPerSet}-${gamesPerSet - 2}, ${gamesPerSet + 1}-${gamesPerSet - 1}…`,
   }
+}
+
+/** El switch "Ventaja de 2 y tie-break" (S6): apagado es la regla de antes, el set corta en N justo. */
+export function withVentaja(format: MatchFormat, ventaja: boolean): MatchFormat {
+  return { ...format, ventaja }
+}
+
+/** La ayuda del switch, con el número del set. */
+export function ventajaHint(format: MatchFormat): string {
+  const n = format.gamesPerSet
+  return format.ventaja === true
+    ? `Se gana ${n}-${n - 2} o ${n + 1}-${n - 1}; en ${n}-${n}, tie-break y ${n + 1}-${n}.`
+    : `Apagado, el set corta en ${n} justo: el ${n}-${n - 1} sale del tie-break.`
 }
 
 /** La consecuencia de cada número, escrita al lado de su stepper. */

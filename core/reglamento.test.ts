@@ -13,7 +13,7 @@ describe('reglamento', () => {
   it('Pádel de hoy: el párrafo de §6 de la spec, en presente, línea por línea', () => {
     expect(reglamento(seeded('PADEL', 8, 'ROTAN'))).toEqual([
       { key: 'modalidad', text: 'Parejas que rotan. La primera fecha se arma por nivel; después, por la tabla.' },
-      { key: 'partido', text: 'Partidos a 1 set de 4 games.' },
+      { key: 'partido', text: 'Partidos a 1 set de 4 games, con ventaja de 2 y tie-break en 4-4.' },
       { key: 'fecha', text: 'Cada fecha se arma sola, según cuántos vengan.' },
       { key: 'puntos', text: 'Gana 10, segundo 6, tercero 3, cuarto 1.' },
       { key: 'temporada', text: '10 fechas, cuentan las 8 mejores.' },
@@ -31,6 +31,18 @@ describe('reglamento', () => {
       { key: 'temporada', text: '10 fechas, cuentan las 8 mejores.' },
       { key: 'desempate', text: 'Si empatan en puntos, gana el que iba mejor hace 3 fechas.' },
     ])
+  })
+
+  it('el set real se dice con su número (S6): tenis a 6', () => {
+    expect(byKey(seeded('TENIS', 8, 'INDIVIDUAL')).partido).toBe(
+      'Partidos a 1 set de 6 games, con ventaja de 2 y tie-break en 6-6.',
+    )
+  })
+
+  it('los deportes nuevos dicen su unidad y su regla', () => {
+    expect(byKey(seeded('FUTBOL_TENIS', 8, 'INDIVIDUAL')).partido).toBe('Partidos a 1 set de 15 puntos, se gana por 2.')
+    expect(byKey(seeded('POOL', 8, 'INDIVIDUAL')).partido).toBe('Partidos a 1 set de 3 bolas.')
+    expect(byKey(seeded('BEER_PONG', 8, 'FIJAS')).partido).toBe('Partidos a 1 set de 10 vasos.')
   })
 
   it('FIFA individual de 8: goles con empate y la cola de ceros que no suma', () => {
@@ -57,6 +69,8 @@ describe('reglamento', () => {
     })
     expect(lines.modalidad).toBe('Parejas que rotan.')
     expect(lines.fecha).toBe('Cada fecha, todos contra todos.')
+    // Su formato no tiene `ventaja`: sigue siendo la regla con la que se armó.
+    expect(lines.partido).toBe('Partidos a 1 set de 4 games.')
   })
 
   it('un deporte fuera del registro nunca tira: etiqueta genérica y games', () => {

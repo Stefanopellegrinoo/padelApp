@@ -1,5 +1,6 @@
 import { isSportId, sportOf, type MatchFormat, type SetsSport, type SportId } from '@/core'
 import { EdgeError } from '@/db/errors'
+import { matchError } from '@/db/validate'
 import type { CasualPlayerInput } from '@/db/friends'
 import { isComplete, type LoadState } from '@/app/torneo/[id]/[disciplina]/fechas/[n]/carga-state'
 
@@ -109,7 +110,20 @@ export function formatForSport(sport: SetsSport, sets: readonly PadelSet[]): Mat
   if (sets.length === 0) return sport.format
   const format = { ...sport.format, ...formatFromSets(sets) }
   const { min, max } = sport.gamesPerSet
-  return min === max ? { ...format, gamesPerSet: min } : format
+  if (min === max) return { ...format, gamesPerSet: min }
+  if (format.ventaja !== true) return format
+  // Con el set real el ganador puede tener N+1 (7-5, 7-6): el número es el del
+  // deporte si los sets entran, si no el más alto o uno menos (un 4-3 viejo es
+  // un set a 3 con tie-break en 3-3). Lo que ningún set real explica —un 6-5
+  // de antes— se edita con la regla de antes, que lo sigue cerrando.
+  const games = sets.map((set) => ({ gamesA: set.mine, gamesB: set.theirs }))
+  const cierra = (candidate: MatchFormat) => matchError(games, candidate, false) === null
+  const n = [sport.format.gamesPerSet, format.gamesPerSet, format.gamesPerSet - 1].find(
+    (candidate) => candidate >= min && candidate <= max && cierra({ ...format, gamesPerSet: candidate }),
+  )
+  if (n !== undefined) return { ...format, gamesPerSet: n }
+  const deAntes = { ...format, ventaja: false }
+  return cierra(deAntes) ? deAntes : format
 }
 
 /** Los sets cargados como los lee `parseCasualResult`: JSON en mi orientación (A = mío). */
@@ -118,22 +132,36 @@ export function setsField(state: LoadState): string {
 }
 
 /**
- * Botones extra del segundo toque cuando se gana por dos: el perdedor llegó a
- * `gamesPerSet - 1` o más (ping pong: 10..14 → 12-10 … 16-14). Con tie-break el
- * set corta en `gamesPerSet` exacto y con marcador abierto no hay sets: nada.
- * Acá y no en `carga-state.ts`: en el torneo `tieBreak` es siempre `true`.
+ * Botones extra del segundo toque, los de ventaja: los resultados donde el
+ * ganador pasa de `gamesPerSet`.
+ *
+ * - Se gana por dos (sin tie-break): el perdedor llegó a `gamesPerSet - 1` o
+ *   más (ping pong: 10..14 → 12-10 … 16-14; fútbol tenis: 16-14 … 20-18).
+ * - El set real (`ventaja`): N-1 y N, que el ganador cierra en N+1 (a 6: 7-5,
+ *   y 7-6 con tie-break).
+ * - Con tie-break el set corta en `gamesPerSet` exacto y con marcador abierto
+ *   no hay sets: nada.
+ *
+ * Los games del ganador de cada botón los da `deuceWinnerGames`.
  */
 export function deuceOptions(format: MatchFormat): number[] {
-  if (format.tieBreak || format.openScore) return []
+  if (format.openScore) return []
+  if (format.ventaja === true) return [format.gamesPerSet - 1, format.gamesPerSet]
+  if (format.tieBreak) return []
   // ponytail: techo en 16-14; un 18-16 no se carga. Si aparece: un input numérico en vez de botones.
   return Array.from({ length: 5 }, (_, index) => format.gamesPerSet - 1 + index)
 }
 
-/** Cierra el set en curso con el ganador en perdedor+2. Mismas guardas que `chooseLoserGames`. */
+/** Con cuánto cierra el ganador un botón de ventaja: N+1 en el set real, perdedor+2 si se gana por dos. */
+export function deuceWinnerGames(format: MatchFormat, loser: number): number {
+  return format.ventaja === true ? format.gamesPerSet + 1 : loser + 2
+}
+
+/** Cierra el set en curso con un botón de ventaja. Mismas guardas que `chooseLoserGames`. */
 export function chooseDeuce(state: LoadState, loser: number, format: MatchFormat): LoadState {
   if (state.pendingWinner === null || isComplete(state, format)) return state
-  const set =
-    state.pendingWinner === 'A' ? { gamesA: loser + 2, gamesB: loser } : { gamesA: loser, gamesB: loser + 2 }
+  const won = deuceWinnerGames(format, loser)
+  const set = state.pendingWinner === 'A' ? { gamesA: won, gamesB: loser } : { gamesA: loser, gamesB: won }
   return { sets: [...state.sets, set], pendingWinner: null }
 }
 

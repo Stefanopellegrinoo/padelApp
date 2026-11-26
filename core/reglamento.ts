@@ -77,7 +77,10 @@ function partidoText({ kind, allowsDraw, config }: ReglamentoInput): string {
     return allowsDraw ? 'Partidos a goles; se puede empatar.' : 'Partidos a goles, siempre con un ganador.'
   }
   const sets = format.setsToWin === 1 ? 'a 1 set' : `al mejor de ${2 * format.setsToWin - 1} sets`
-  const byTwo = format.tieBreak ? '' : ', se gana por 2'
+  const n = format.gamesPerSet
+  const byTwo = format.ventaja === true
+    ? `, con ventaja de 2 y tie-break en ${n}-${n}`
+    : format.tieBreak ? '' : ', se gana por 2'
   return `Partidos ${sets} de ${format.gamesPerSet} ${unitOf(kind, format)}${byTwo}.`
 }
 

@@ -11,8 +11,10 @@ import {
   rulesHints,
   withFormatoChoice,
   withGroups,
+  withVentaja,
   type DisciplineRules,
 } from './personalizar-reglas-state'
+import { setError } from '@/db/validate'
 
 const rulesOf = (kind: SportId, squad: number, modality: Modality) => rulesFromSeed(fichaSeed(kind, squad, modality))
 const withConfig = (rules: DisciplineRules, patch: Partial<SeasonConfig>): DisciplineRules => ({
@@ -27,7 +29,7 @@ describe('rulesHints', () => {
   it('Pádel 8 que rotan: cada ayuda dice la consecuencia del número', () => {
     expect(rulesHints('PADEL', PADEL, 2)).toEqual({
       setsToWin: '1 = un solo set. 2 = al mejor de 3.',
-      gamesPerSet: 'Con tie-break: el set termina en 4 justo.',
+      gamesPerSet: 'A 4 con ventaja de 2: 4-2, 5-3, o 5-4 con tie-break.',
       formato: 'Con 8 jugadores: todos contra todos (6 partidos). Se puede cambiar al armar cada fecha.',
       points: 'Cuántos suma cada puesto de la fecha. Hay un puesto por pareja.',
       maxMatches: 'El máximo que entra en una tarde. Con 12 jugadores, todos contra todos son 15.',
@@ -74,7 +76,8 @@ describe('rulesHints', () => {
   })
 
   it('games por set: sin tie-break se gana por 2 desde el número elegido', () => {
-    const format = { ...PADEL.config.matchFormat, tieBreak: false, gamesPerSet: 6 }
+    // Sin la ventaja de la ficha de hoy: es la regla "se gana por 2" a secas.
+    const format = { ...PADEL.config.matchFormat, tieBreak: false, gamesPerSet: 6, ventaja: false }
     expect(rulesHints('PADEL', withConfig(PADEL, { matchFormat: format }), 2).gamesPerSet).toBe(
       'Se gana por 2: 6-4, 7-5…',
     )
@@ -213,7 +216,7 @@ describe('PersonalizarReglas', () => {
     expect(html).toContain('Masters al final')
     expect(html).toMatch(/role="switch"[^>]*aria-checked="true"|aria-checked="true"[^>]*role="switch"/)
     expect(html).toContain('Así queda')
-    expect(html).toContain('Partidos a 1 set de 4 games.')
+    expect(html).toContain('Partidos a 1 set de 4 games, con ventaja de 2 y tie-break en 4-4.')
     expect(html).toContain('Volver a las reglas de Pádel')
   })
 
@@ -329,6 +332,47 @@ describe('PersonalizarReglas', () => {
     const html = sheet('PADEL', 8, 'ROTAN', { note: 'Los cambios valen desde la próxima fecha.', error: 'No se pudo guardar.' })
     expect(html).toContain('Los cambios valen desde la próxima fecha.')
     expect(html).toContain('No se pudo guardar.')
+  })
+})
+
+describe('el set real en Personalizar reglas (S6)', () => {
+  const switchVentaja = (html: string) =>
+    /<button[^>]*role="switch"[^>]*aria-checked="(true|false)"[^>]*aria-labelledby="([^"]+)"[^>]*>/g
+
+  it('pádel y tenis tienen el switch "Ventaja de 2 y tie-break", prendido al nacer', () => {
+    for (const [kind, modality] of [['PADEL', 'ROTAN'], ['TENIS', 'INDIVIDUAL']] as const) {
+      const html = sheet(kind, 8, modality)
+      expect(html).toContain('Ventaja de 2 y tie-break')
+      const id = /<p id="([^"]+)"[^>]*>Ventaja de 2 y tie-break<\/p>/.exec(html)?.[1]
+      expect(id).toBeDefined()
+      const sw = [...html.matchAll(switchVentaja(html))].find((m) => m[2] === id)
+      expect(sw?.[1]).toBe('true')
+    }
+    expect(sheet('TENIS', 8, 'INDIVIDUAL')).toContain('7-5; en 6-6, tie-break y 7-6.')
+  })
+
+  it('los demás deportes de sets no lo tienen: ping pong, fútbol tenis, pool, beer pong', () => {
+    for (const [kind, modality] of [['PING_PONG', 'INDIVIDUAL'], ['FUTBOL_TENIS', 'INDIVIDUAL'], ['POOL', 'INDIVIDUAL'], ['BEER_PONG', 'FIJAS']] as const) {
+      expect(sheet(kind, 8, modality)).not.toContain('Ventaja de 2 y tie-break')
+    }
+  })
+
+  it('el armado de una fecha (BloquePartido sin el switch) no lo ofrece: la fecha sólo cambia sets y games', () => {
+    const html = renderToStaticMarkup(
+      createElement(BloquePartido, { kind: 'PADEL', format: PADEL.config.matchFormat, disabled: false, onChange: () => {} }),
+    )
+    expect(html).not.toContain('Ventaja de 2 y tie-break')
+  })
+
+  it('apagarlo vuelve a la regla de antes, y prenderlo a la real', () => {
+    const apagado = withVentaja(PADEL.config.matchFormat, false)
+    expect(apagado).toEqual({ ...PADEL.config.matchFormat, ventaja: false })
+    expect(setError({ gamesA: 4, gamesB: 3 }, apagado, false)).toBeNull()
+    const prendido = withVentaja(apagado, true)
+    expect(setError({ gamesA: 5, gamesB: 4 }, prendido, false)).toBeNull()
+    expect(rulesHints('PADEL', { ...PADEL, config: { ...PADEL.config, matchFormat: apagado } }, 2).gamesPerSet).toBe(
+      'Con tie-break: el set termina en 4 justo.',
+    )
   })
 })
 

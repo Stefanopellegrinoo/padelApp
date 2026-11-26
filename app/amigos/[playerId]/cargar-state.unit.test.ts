@@ -1,3 +1,4 @@
+import { matchError } from '@/db/validate'
 import { describe, expect, it } from 'vitest'
 import { EdgeError } from '@/db/errors'
 import { SPORTS } from '@/core'
@@ -125,6 +126,34 @@ describe('formatForSport', () => {
       gamesPerSet: 4,
     })
   })
+  it('tenis 7-5 y 7-6 son sets a 6 con ventaja, no a 7', () => {
+    expect(formatForSport(SPORTS.TENIS, [{ mine: 7, theirs: 5 }]).gamesPerSet).toBe(6)
+    expect(formatForSport(SPORTS.TENIS, [{ mine: 6, theirs: 7 }, { mine: 6, theirs: 2 }, { mine: 7, theirs: 6 }])).toEqual({
+      ...SPORTS.TENIS.format,
+      setsToWin: 2,
+      gamesPerSet: 6,
+    })
+  })
+  it('pádel de hoy (sin ventaja en el registro) sigue igual: 4-3 es a 4', () => {
+    expect(formatForSport(SPORTS.PADEL, [{ mine: 4, theirs: 3 }])).toEqual({ ...SPORTS.PADEL.format, setsToWin: 1, gamesPerSet: 4 })
+  })
+  describe('el día que pádel con amigos juegue el set real (ventaja en su formato)', () => {
+    const PADEL_REAL = { ...SPORTS.PADEL, format: { ...SPORTS.PADEL.format, ventaja: true } }
+    it('5-4 es a 4 con ventaja', () => {
+      expect(formatForSport(PADEL_REAL, [{ mine: 5, theirs: 4 }])).toMatchObject({ gamesPerSet: 4, ventaja: true })
+    })
+    it('un 4-3 viejo se edita con un formato que lo acepta (a 3, tie-break en 3-3)', () => {
+      const format = formatForSport(PADEL_REAL, [{ mine: 4, theirs: 3 }])
+      expect(format.gamesPerSet).toBe(3)
+      expect(matchError([{ gamesA: 4, gamesB: 3 }], format, false)).toBeNull()
+    })
+    it('un 6-3 4-6 6-5 viejo, que ningún set real explica, vuelve a la regla de antes y sigue cerrando', () => {
+      const sets = [{ mine: 6, theirs: 3 }, { mine: 4, theirs: 6 }, { mine: 6, theirs: 5 }]
+      const format = formatForSport(PADEL_REAL, sets)
+      expect(format).toMatchObject({ setsToWin: 2, gamesPerSet: 6, ventaja: false })
+      expect(matchError(sets.map((s) => ({ gamesA: s.mine, gamesB: s.theirs })), format, false)).toBeNull()
+    })
+  })
   it('lo fijo del deporte manda: un deuce 12-10 en ping pong sigue siendo a 11', () => {
     const format = formatForSport(SPORTS.PING_PONG, [
       { mine: 12, theirs: 10 },
@@ -160,8 +189,11 @@ describe('setsField', () => {
 describe('deuceOptions / chooseDeuce', () => {
   const PING = SPORTS.PING_PONG.format
 
-  it('pádel (con tie-break) no tiene deuce', () => {
-    expect(deuceOptions(SPORTS.PADEL.format)).toEqual([])
+  it('pádel con la regla de antes (tie-break, sin ventaja) no tiene deuce', () => {
+    expect(deuceOptions({ ...SPORTS.PADEL.format, ventaja: false })).toEqual([])
+  })
+  it('pádel con el set real ofrece 5-3 y 5-4: lo lee del formato, no del deporte', () => {
+    expect(deuceOptions({ ...SPORTS.PADEL.format, ventaja: true })).toEqual([3, 4])
   })
   it('marcador abierto no tiene deuce', () => {
     expect(deuceOptions({ ...PING, openScore: true })).toEqual([])

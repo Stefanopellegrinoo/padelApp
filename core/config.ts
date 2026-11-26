@@ -186,8 +186,12 @@ export function fichaSeed(kind: SportId, squadSize: number, modality: Modality):
   }
   const { pairSize, fixedTeams } = modalityShape(modality)
   const base = defaultConfig(squadSize, pairSize)
-  // Copia: la config sembrada no puede compartir el objeto del registro.
-  const matchFormat = sport.family === 'sets' ? { ...sport.format } : { ...base.matchFormat, openScore: true }
+  // Copia: la config sembrada no puede compartir el objeto del registro. Con `setReal` el torneo
+  // nace con el set real (S6); los ya creados conservan la regla con la que se armaron.
+  const matchFormat =
+    sport.family === 'sets'
+      ? { ...sport.format, ...(sport.setReal ? { ventaja: true } : {}) }
+      : { ...base.matchFormat, openScore: true }
   return {
     config: { ...base, ...ficha.season, matchFormat, firstFecha: ficha.firstFecha[modality] },
     pairSize,

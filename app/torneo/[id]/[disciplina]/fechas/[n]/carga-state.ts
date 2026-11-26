@@ -2,7 +2,7 @@ import type { MatchFormat, SetScore } from '@/core'
 import { matchError } from '@/db/validate'
 // Ciclo con `cargar-state` (que importa `isComplete` de acá): sólo se usa al
 // llamar, nunca al cargar el módulo, así que el orden de evaluación no importa.
-import { deuceOptions } from '@/app/amigos/[playerId]/cargar-state'
+import { deuceOptions, deuceWinnerGames } from '@/app/amigos/[playerId]/cargar-state'
 
 /**
  * Cuántos dígitos entran en un lado del marcador abierto.
@@ -145,10 +145,12 @@ export function chooseLoserGames(
  *
  * Con tie-break el set corta en `gamesPerSet` exacto, así que el perdedor puede
  * tener de 0 a `gamesPerSet - 1`. Sin tie-break hay que ganar por dos, y ese
- * último valor —el 4-3 de un set a 4— no cierra nada.
+ * último valor —el 4-3 de un set a 4— no cierra nada. Con el set real
+ * (`ventaja`) tampoco: el 6-5 sigue, y el 7-5 y el 7-6 son botones de ventaja
+ * (`deuceOptions`).
  */
 export function loserGamesOptions(format: MatchFormat): number[] {
-  const top = format.tieBreak ? format.gamesPerSet - 1 : format.gamesPerSet - 2
+  const top = format.tieBreak && format.ventaja !== true ? format.gamesPerSet - 1 : format.gamesPerSet - 2
   return Array.from({ length: Math.max(0, top + 1) }, (_, index) => index)
 }
 
@@ -204,7 +206,7 @@ export function toqueDelSet(
   const won = Math.max(set.gamesA, set.gamesB)
   const loser = Math.min(set.gamesA, set.gamesB)
   if (won === format.gamesPerSet && loserGamesOptions(format).includes(loser)) return { winner, loser, deuce: false }
-  if (won === loser + 2 && deuceOptions(format).includes(loser)) return { winner, loser, deuce: true }
+  if (won === deuceWinnerGames(format, loser) && deuceOptions(format).includes(loser)) return { winner, loser, deuce: true }
   return null
 }
 

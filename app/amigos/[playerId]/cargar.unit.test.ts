@@ -504,7 +504,7 @@ describe('CasualForm', () => {
     })
   })
 
-  describe('los cinco deportes del registro', () => {
+  describe('los deportes del registro', () => {
     let enviado: FormData | null = null
     async function guardar(_state: CasualFormState, formData: FormData): Promise<CasualFormState> {
       enviado = formData
@@ -514,14 +514,51 @@ describe('CasualForm', () => {
     it('hay un chip por deporte, en el orden del registro', async () => {
       const f = await montar()
       const radios = Array.from(f.el.querySelectorAll('input[name="sport"]')) as HTMLInputElement[]
-      expect(radios.map((r) => r.value)).toEqual(['PADEL', 'PING_PONG', 'FIFA', 'FUTBOL', 'BASQUET'])
+      expect(radios.map((r) => r.value)).toEqual([
+        'PADEL', 'PING_PONG', 'FIFA', 'TENIS', 'FUTBOL_TENIS', 'POOL', 'BEER_PONG', 'FUTBOL', 'BASQUET',
+      ])
       expect(radios.map((r) => r.closest('label')?.textContent)).toEqual([
         'Pádel',
         'Ping pong',
         'FIFA',
+        'Tenis',
+        'Fútbol tenis',
+        'Pool',
+        'Beer pong',
         'Fútbol',
         'Básquet',
       ])
+      // Nueve no entran en 390: la fila se desliza de costado, no se rompe en renglones.
+      expect(radios[0]?.closest('div')?.className).toContain('overflow-x-auto')
+    })
+
+    it('tenis juega el set real: 7-5 y 7-6 en dos toques, a 6', async () => {
+      const f = await montar()
+      await tocar(f.radio('sport', 'TENIS'))
+      expect(f.hidden('gamesPerSet')).toBe('6')
+      await tocar(f.boton('Vos'))
+      expect(f.boton('5')).toBeUndefined()
+      expect(f.boton('7-5').getAttribute('aria-label')).toBe('7 a 5')
+      expect(f.boton('7-6').getAttribute('aria-label')).toBe('7 a 6, con tie-break')
+      await tocar(f.boton('7-6'))
+      expect(f.pastillas()).toEqual(['7-6'])
+      expect(JSON.parse(f.hidden('sets')!)).toEqual([{ mine: 7, theirs: 6 }])
+    })
+
+    it('editar un tenis 7-5 6-7 7-6 lo prellena a 2 sets de 6, no de 7', async () => {
+      const f = await montar({
+        initial: editando('TENIS', {
+          sets: [
+            { mine: 7, theirs: 5 },
+            { mine: 6, theirs: 7 },
+            { mine: 7, theirs: 6 },
+          ],
+        }),
+      })
+      expect(f.hidden('setsToWin')).toBe('2')
+      expect(f.hidden('gamesPerSet')).toBe('6')
+      expect(f.pastillas()).toEqual(['7-5', '6-7', '7-6'])
+      expect(f.submit().disabled).toBe(false)
     })
 
     it('pasar de pádel a ping pong vacía los sets y toma el formato del ping pong', async () => {

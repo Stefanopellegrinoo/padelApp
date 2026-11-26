@@ -250,9 +250,10 @@ export { tallyPlayers, partnerRecords, bestPair, rivalRecords } from './playerst
 export { allMatchings } from './matchings'
 
 //── El registro de deportes: un deporte es dato, la familia de marcador es la estrategia ──
-export type { ScoringFamily, Range, SetsSport, GoalsSport, Sport, SportId, TournamentSport, Modality, TournamentFicha } from './sports'
+export type { ScoringFamily, Range, SetsSport, GoalsSport, Sport, SportId, SportIcono, SportTono, TournamentSport, Modality, TournamentFicha } from './sports'
 export {
   SPORTS,
+  SPORT_TONOS,
   SPORT_IDS,
   TOURNAMENT_SPORTS,
   MODALITY_ORDER,

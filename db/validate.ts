@@ -72,6 +72,17 @@ export function setError(set: SetScore, format: MatchFormat, allowsDraw: boolean
   const winner = Math.max(gamesA, gamesB)
   const loser = Math.min(gamesA, gamesB)
 
+  // El set real: a N con ventaja de 2 (N-0 a N-(N-2), o N+1 a N-1) y en N-N
+  // tie-break, que queda N+1 a N. Sin la clave, la regla de antes.
+  if (format.ventaja === true) {
+    const closed =
+      (winner === gamesPerSet && loser <= gamesPerSet - 2) ||
+      (winner === gamesPerSet + 1 && loser >= gamesPerSet - 1 && loser <= gamesPerSet)
+    return closed
+      ? null
+      : `En un set a ${gamesPerSet} games con ventaja de 2 y tie-break, ${gamesA}-${gamesB} no es un resultado posible.`
+  }
+
   if (tieBreak) {
     // El tie-break corta en gamesPerSet exacto: no existe el 5-3.
     if (winner !== gamesPerSet) {

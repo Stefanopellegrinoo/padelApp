@@ -14,7 +14,7 @@ import {
   type SetStateAction,
 } from 'react'
 import type { MatchFormat, SetScore } from '@/core'
-import { chooseDeuce, deuceOptions } from '@/app/amigos/[playerId]/cargar-state'
+import { chooseDeuce } from '@/app/amigos/[playerId]/cargar-state'
 import { button } from '@/app/ui/button'
 import { Sheet } from '@/app/ui/sheet'
 import { Toast } from '@/app/ui/toast'
@@ -25,7 +25,6 @@ import {
   goalsError,
   goalsRejected,
   isComplete,
-  loserGamesOptions,
   openScoreSet,
   resumenGuardado,
   retomarUltimoSet,
@@ -40,8 +39,12 @@ import {
   saveMatchResult,
   type WriteResult,
 } from './actions'
+import { BotonesDelPerdedor } from './botones-del-perdedor'
 import { BorrarFecha } from './borrar'
 import { mensajeDeFalla } from './sin-conexion'
+
+// Vive en su módulo para que el torneo rápido lo use sin traer las acciones de la fecha.
+export { BotonesDelPerdedor }
 
 /** Lo que la carga necesita saber de la fecha, igual para todos sus partidos. */
 export interface CargaContext {
@@ -82,7 +85,6 @@ export interface PartidoVM {
 
 const ERROR_NOTE = 'rounded-btn bg-live-bg px-3 py-2.5 text-[15px] font-semibold text-live'
 const PREGUNTA = 'mt-3.5 mb-2.5 text-[17px] font-bold'
-const cap = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
 
 /**
  * La carga de la fecha (S8e): tocar el partido abre la hoja, y nada más.
@@ -453,85 +455,6 @@ function DosToques({
       </p>
       {alerta}
     </div>
-  )
-}
-
-/**
- * El segundo toque: con cuántos se quedó el que perdió. Si el set se gana por
- * dos (ping pong, sin tie-break) siguen los de ventaja, "12-10" … "16-14"
- * (`deuceOptions`, los mismos de amigos); con tie-break `deuceOptions` da `[]`
- * y pádel queda como siempre. Sin ganador elegido se ven pero no se tocan: la
- * hoja no salta de alto entre un toque y otro.
- *
- * Exportado para renderizarlo en la suite.
- */
-export function BotonesDelPerdedor({
-  format,
-  unit,
-  loserName,
-  pending,
-  elegido = null,
-  onLoser,
-  onDeuce,
-}: {
-  format: MatchFormat
-  unit: string
-  /** El que perdió, o `null` mientras no se eligió quién ganó. */
-  loserName: string | null
-  pending: boolean
-  /** El botón marcado: el precargado al corregir, o el que se intentó guardar. */
-  elegido?: { loser: number; deuce: boolean } | null
-  onLoser: (n: number) => void
-  onDeuce: (loser: number) => void
-}) {
-  const apagado = pending || loserName === null
-  const numero = (activo: boolean) =>
-    `flex min-h-[60px] items-center justify-center rounded-btn border-[1.5px] font-cond ${
-      activo ? 'border-block bg-block text-on-block' : 'border-line text-text active:bg-sport-tint'
-    }`
-  return (
-    <>
-      <p className={PREGUNTA}>
-        {loserName === null ? `${cap(unit)} del que perdió` : `${cap(unit)} de ${loserName}`}
-      </p>
-      <div className="grid grid-cols-6 gap-2">
-        {loserGamesOptions(format).map((games) => {
-          const activo = elegido !== null && !elegido.deuce && elegido.loser === games
-          return (
-            <button
-              key={games}
-              type="button"
-              disabled={apagado}
-              aria-pressed={activo}
-              className={`${numero(activo)} text-[30px]`}
-              onClick={() => onLoser(games)}
-            >
-              {games}
-            </button>
-          )
-        })}
-      </div>
-      {deuceOptions(format).length > 0 && (
-        <div className="mt-2 grid grid-cols-3 gap-2">
-          {deuceOptions(format).map((loser) => {
-            const activo = elegido !== null && elegido.deuce && elegido.loser === loser
-            return (
-              <button
-                key={`deuce-${loser}`}
-                type="button"
-                disabled={apagado}
-                aria-pressed={activo}
-                aria-label={`${loser + 2} a ${loser}`}
-                className={`${numero(activo)} text-[26px]`}
-                onClick={() => onDeuce(loser)}
-              >
-                {`${loser + 2}-${loser}`}
-              </button>
-            )
-          })}
-        </div>
-      )}
-    </>
   )
 }
 

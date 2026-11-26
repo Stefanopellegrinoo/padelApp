@@ -4,7 +4,10 @@
  * Nada de esto toca React ni el DOM — por eso vive acá y no en jugar.tsx,
  * donde ningún test lo alcanzaría.
  */
-import { DEPORTE_OBJETIVO, type Deporte, type Partido } from './rapido-state'
+import { SPORTS, type MatchFormat } from '@/core'
+import { loserGamesOptions } from '@/app/torneo/[id]/[disciplina]/fechas/[n]/carga-state'
+import { deuceOptions, deuceWinnerGames } from '@/app/amigos/[playerId]/cargar-state'
+import type { Deporte, Partido } from './rapido-state'
 
 export interface GrupoRonda {
   ronda: number
@@ -31,17 +34,31 @@ export function nombreLado(jugadores: readonly string[], indices: readonly numbe
 export type Lado = 'a' | 'b'
 
 /**
- * Los botones del segundo toque, y son todos los marcadores posibles: el que
- * gana se lleva el objetivo entero del deporte, así que al perdedor sólo le
- * puede quedar de 0 a objetivo − 1. Nada de lo que salga de acá lo puede
- * rechazar `cargarMarcador`, igual que en la carga de una fecha.
+ * Un partido rápido es UN set del deporte, con la regla con la que nace un
+ * torneo nuevo (`fichaSeed`): pádel y tenis juegan el set real (5-3, 7-5,
+ * 7-6, S6) y ping pong y fútbol tenis se ganan por 2 (12-10, 16-14).
+ */
+export function formatoRapido(deporte: Deporte): MatchFormat {
+  const sport = SPORTS[deporte]
+  return { ...sport.format, setsToWin: 1, ...(sport.setReal ? { ventaja: true } : {}) }
+}
+
+/**
+ * Los botones del segundo toque: el que gana se lleva el objetivo entero y al
+ * perdedor le queda lo que la regla deja (`loserGamesOptions`, los de una
+ * fecha). Nada de lo que salga de acá lo puede rechazar `cargarMarcador`.
  *
  * El objetivo NO está en la lista, y es la decisión que hace que la pantalla
- * no ofrezca el empate: ni el pádel ni el ping pong empatan. El motor lo
- * acepta por generalidad; acá no hay dos toques que lo produzcan.
+ * no ofrezca el empate: ninguno de estos deportes empata. El motor lo acepta
+ * por generalidad; acá no hay dos toques que lo produzcan.
  */
 export function puntosDelPerdedor(deporte: Deporte): number[] {
-  return Array.from({ length: DEPORTE_OBJETIVO[deporte] }, (_, puntos) => puntos)
+  return loserGamesOptions(formatoRapido(deporte))
+}
+
+/** Los botones de ventaja (`deuceOptions`, los de una fecha): los puntos del que perdió. */
+export function ventajasDelPerdedor(deporte: Deporte): number[] {
+  return deuceOptions(formatoRapido(deporte))
 }
 
 /** El marcador que sale de los dos toques: el que ganó se lleva el objetivo entero. */
@@ -50,10 +67,16 @@ export function marcadorDeDosToques(
   puntosPerdedor: number,
   deporte: Deporte,
 ): { a: number; b: number } {
-  const objetivo = DEPORTE_OBJETIVO[deporte]
+  const objetivo = SPORTS[deporte].format.gamesPerSet
   return ganador === 'a'
     ? { a: objetivo, b: puntosPerdedor }
     : { a: puntosPerdedor, b: objetivo }
+}
+
+/** El marcador de un botón de ventaja: 7-5, 7-6, 12-10, 16-14. */
+export function marcadorDeVentaja(ganador: Lado, puntosPerdedor: number, deporte: Deporte): { a: number; b: number } {
+  const delGanador = deuceWinnerGames(formatoRapido(deporte), puntosPerdedor)
+  return ganador === 'a' ? { a: delGanador, b: puntosPerdedor } : { a: puntosPerdedor, b: delGanador }
 }
 
 /**
@@ -72,26 +95,32 @@ export function siguienteSinCargar(partidos: readonly Partido[], desde: number):
 
 /**
  * Lo que la hoja muestra elegido al abrir un partido ya cargado: el ganador y
- * los puntos del que perdió, así corregir es un toque. Un marcador que no
- * salió de los dos toques —los torneos de la versión con dos campos libres
- * siguen en algún teléfono— marca el ganador y ningún número: ofrecer uno que
- * no es el cargado sería mentir sobre lo que hay.
+ * el botón del que perdió (un número, o uno de ventaja), así corregir es un
+ * toque. Un marcador que no salió de los dos toques —los torneos de la versión
+ * con dos campos libres, o un 4-3 de pádel de antes del set real— marca el
+ * ganador y ningún número: ofrecer uno que no es el cargado sería mentir sobre
+ * lo que hay.
  */
 export function toqueDelMarcador(
   marcador: Partido['marcador'],
   deporte: Deporte,
-): { ganador: Lado | null; perdedor: number | null } {
-  if (marcador === null || marcador.a === marcador.b) return { ganador: null, perdedor: null }
+): { ganador: Lado | null; perdedor: number | null; ventaja: boolean } {
+  if (marcador === null || marcador.a === marcador.b) return { ganador: null, perdedor: null, ventaja: false }
   const ganador: Lado = marcador.a > marcador.b ? 'a' : 'b'
-  const delGanador = ganador === 'a' ? marcador.a : marcador.b
   const delPerdedor = ganador === 'a' ? marcador.b : marcador.a
-  const deDosToques = delGanador === DEPORTE_OBJETIVO[deporte] && puntosDelPerdedor(deporte).includes(delPerdedor)
-  return { ganador, perdedor: deDosToques ? delPerdedor : null }
+  const igual = (otro: { a: number; b: number }) => otro.a === marcador.a && otro.b === marcador.b
+  if (puntosDelPerdedor(deporte).includes(delPerdedor) && igual(marcadorDeDosToques(ganador, delPerdedor, deporte))) {
+    return { ganador, perdedor: delPerdedor, ventaja: false }
+  }
+  if (ventajasDelPerdedor(deporte).includes(delPerdedor) && igual(marcadorDeVentaja(ganador, delPerdedor, deporte))) {
+    return { ganador, perdedor: delPerdedor, ventaja: true }
+  }
+  return { ganador, perdedor: null, ventaja: false }
 }
 
 /** Cómo se cuentan los puntos del deporte, para la pregunta del segundo toque. */
-export function unidadDe(deporte: Deporte): 'games' | 'puntos' {
-  return deporte === 'PADEL' ? 'games' : 'puntos'
+export function unidadDe(deporte: Deporte): string {
+  return SPORTS[deporte].unit
 }
 
 /**

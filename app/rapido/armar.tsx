@@ -72,7 +72,8 @@ function Opciones<T extends string>({
       <h2 id={idTitulo} className={PREGUNTA}>
         {titulo}
       </h2>
-      <div role="group" aria-labelledby={idTitulo} className="mt-3 flex gap-2">
+      {/* Más de tres no entran en una fila de 390 (los deportes): van de a tres por renglón. */}
+      <div role="group" aria-labelledby={idTitulo} className={`mt-3 gap-2 ${opciones.length > 3 ? 'grid grid-cols-3' : 'flex'}`}>
         {opciones.map((opcion) => {
           const elegida = opcion === valor
           return (

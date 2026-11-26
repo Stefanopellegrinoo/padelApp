@@ -14,10 +14,15 @@
  * acá lo pone `armadoWarning`, y `armarRotativas` repite la guarda por si
  * algún día se arma un torneo sin pasar por el aviso.
  */
-import { allMatchings, buildFixture, MAX_PAIRING_POOL, type Duo } from '@/core'
+import { allMatchings, buildFixture, MAX_PAIRING_POOL, SPORTS, type Duo, type SportId } from '@/core'
 
 // ── El deporte ────────────────────────────────────────────────────────────
-export const DEPORTES = ['PADEL', 'PING_PONG'] as const
+/**
+ * Los deportes de sets del registro (`core/sports.ts`): un partido rápido es un
+ * set a su número, con la misma regla que una fecha (`jugar-logic.ts`). El
+ * orden es el de los botones.
+ */
+export const DEPORTES = ['PADEL', 'PING_PONG', 'TENIS', 'FUTBOL_TENIS', 'POOL', 'BEER_PONG'] as const satisfies readonly SportId[]
 export type Deporte = (typeof DEPORTES)[number]
 
 /**
@@ -28,16 +33,12 @@ export type Deporte = (typeof DEPORTES)[number]
  */
 export const VOLVER_INICIO = { href: '/', label: 'Inicio', desanda: true }
 
-export const DEPORTE_LABEL: Record<Deporte, string> = {
-  PADEL: 'Pádel',
-  PING_PONG: 'Ping pong',
-}
+export const DEPORTE_LABEL = Object.fromEntries(DEPORTES.map((id) => [id, SPORTS[id].label])) as Record<Deporte, string>
 
-/** Sólo el hint del input de puntaje objetivo; no valida nada. */
-export const DEPORTE_OBJETIVO: Record<Deporte, number> = {
-  PADEL: 4,
-  PING_PONG: 11,
-}
+/** A cuánto se juega: el número del set del deporte en el registro. */
+export const DEPORTE_OBJETIVO = Object.fromEntries(
+  DEPORTES.map((id) => [id, SPORTS[id].format.gamesPerSet]),
+) as Record<Deporte, number>
 
 // ── El armado ────────────────────────────────────────────────────────────
 export type Modalidad = 'INDIVIDUAL' | 'PAREJAS'

@@ -544,3 +544,17 @@ describe('bracketOrderNote', () => {
     expect(bracketOrderNote('puntos')).toContain('diferencia de puntos')
   })
 })
+
+describe('narrateRules — el set real (S6 de mas-deportes)', () => {
+  const shape: DisciplineShape = { hasMasters: false, pairSize: 1, fixedTeams: false, allowsDraw: false }
+  const fecha = (config: SeasonConfig) => narrateRules(config, shape, 'games').find((s) => s.title === 'La fecha')?.body
+
+  it('dice la ventaja y el tie-break con su número', () => {
+    const config: SeasonConfig = { ...defaultConfig(8, 1), matchFormat: SPORTS.TENIS.format }
+    expect(fecha(config)).toContain('Cada partido se define a un set de 6 games, con ventaja de 2 y tie-break en 6-6.')
+  })
+
+  it('un formato guardado sin la clave se narra como siempre', () => {
+    expect(fecha(defaultConfig(8, 1))).toContain('Cada partido se define a un set de 4 games con tie-break.')
+  })
+})

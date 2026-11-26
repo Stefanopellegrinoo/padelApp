@@ -2,17 +2,22 @@
 
 import { useState } from 'react'
 import type { Deporte, Partido } from './rapido-state'
+import { BotonesDelPerdedor } from '@/app/torneo/[id]/[disciplina]/fechas/[n]/botones-del-perdedor'
 import {
+  esPartida,
+  formatoRapido,
   marcadorDeDosToques,
+  marcadorDePartida,
+  marcadorDeVentaja,
   nombreLado,
-  puntosDelPerdedor,
+  partidaDelMarcador,
   toqueDelMarcador,
   unidadDe,
   type Lado,
+  type ToquePartida,
 } from './jugar-logic'
 
 const PREGUNTA = 'mt-3.5 mb-2.5 text-[17px] font-bold'
-const cap = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
 
 /**
  * Un partido de la lista, con la cara de la carga de una fecha
@@ -28,12 +33,15 @@ export function TarjetaPartido({
   indice,
   partido,
   jugadores,
+  deporte,
   destella = false,
   onAbrir,
 }: {
   indice: number
   partido: Partido
   jugadores: string[]
+  /** El ajedrez anota las tablas como ½ y ½. */
+  deporte: Deporte
   destella?: boolean
   onAbrir: () => void
 }) {
@@ -63,6 +71,9 @@ export function TarjetaPartido({
     )
   }
 
+  // Una partida en tablas se anota ½ y ½, como en ajedrez; el resto, el número.
+  const tablas = esPartida(deporte) && partidaDelMarcador(marcador) === 'tablas'
+  const texto = (n: number) => (tablas ? '½' : String(n))
   const fila = (lado: Lado) => {
     const propio = lado === 'a' ? marcador.a : marcador.b
     const ajeno = lado === 'a' ? marcador.b : marcador.a
@@ -72,7 +83,7 @@ export function TarjetaPartido({
         <span className={`min-w-0 text-[17px] ${perdio ? 'font-medium text-muted' : 'font-bold text-text'}`}>
           {lado === 'a' ? nombreA : nombreB}
         </span>
-        <span className={`font-cond shrink-0 text-[32px] ${perdio ? 'text-muted' : 'text-text'}`}>{propio}</span>
+        <span className={`font-cond shrink-0 text-[32px] ${perdio ? 'text-muted' : 'text-text'}`}>{texto(propio)}</span>
       </span>
     )
   }
@@ -81,7 +92,7 @@ export function TarjetaPartido({
     <button
       id={`partido-${indice}`}
       type="button"
-      aria-label={`Corregir ${nombreA} ${marcador.a}, ${nombreB} ${marcador.b}`}
+      aria-label={`Corregir ${nombreA} ${texto(marcador.a)}, ${nombreB} ${texto(marcador.b)}`}
       onClick={onAbrir}
       className={`press-fila flex min-h-[76px] w-full flex-col gap-1.5 rounded-tile border-[1.5px] border-line px-4 py-3 text-left${destello}`}
     >
@@ -92,15 +103,16 @@ export function TarjetaPartido({
 }
 
 /**
- * El contenido de la hoja de un partido: la carga en dos toques, el mismo
- * patrón que la carga de una fecha. Quién ganó, y con cuántos se quedó el que
- * perdió, de una lista acotada de botones; el segundo toque guarda. El
- * ganador siempre se lleva el objetivo entero (`marcadorDeDosToques`), así que
- * nada de lo que sale de acá lo puede rechazar `cargarMarcador`, y en la
- * pantalla no existe el empate: ni el pádel ni el ping pong empatan.
+ * El contenido de la hoja de un partido: la carga en dos toques, con los
+ * mismos botones que la carga de una fecha (`BotonesDelPerdedor`). Quién ganó,
+ * y con cuántos se quedó el que perdió; el segundo toque guarda. El ganador
+ * se lleva el objetivo entero, o lo de un botón de ventaja (7-5, 7-6, 12-10,
+ * 16-14) donde el deporte lo deja (`formatoRapido`), así que nada de lo que
+ * sale de acá lo puede rechazar `cargarMarcador`, y en la pantalla no existe
+ * el empate: ninguno de estos deportes empata.
  *
  * Un partido cargado abre con lo que tiene (`toqueDelMarcador`): el ganador
- * elegido y su número marcado, así corregir es un toque. Cambiar de ganador
+ * elegido y su botón marcado, así corregir es un toque. Cambiar de ganador
  * suelta el número. Va montada con `key` por apertura: cada vez arranca de lo
  * que dice el partido, no de un intento anterior.
  */
@@ -115,19 +127,94 @@ export function HojaPartido({
   deporte: Deporte
   onGuardar: (a: number, b: number) => void
 }) {
+  if (esPartida(deporte)) return <HojaPartida partido={partido} jugadores={jugadores} onGuardar={onGuardar} />
+  return <HojaDosToques partido={partido} jugadores={jugadores} deporte={deporte} onGuardar={onGuardar} />
+}
+
+/**
+ * La partida de ajedrez (odd/tasks/mas-deportes.md S3): "Ganó Ana", "Tablas",
+ * "Ganó Beto", como la hoja de una fecha, y el toque guarda (1-0, 0-1 o 0-0).
+ * Una partida cargada abre con su toque marcado.
+ */
+function HojaPartida({
+  partido,
+  jugadores,
+  onGuardar,
+}: {
+  partido: Partido
+  jugadores: string[]
+  onGuardar: (a: number, b: number) => void
+}) {
+  const [elegido, setElegido] = useState<ToquePartida | null>(() => partidaDelMarcador(partido.marcador))
+  const opciones: { toque: ToquePartida; texto: string }[] = [
+    { toque: 'a', texto: `Ganó ${nombreLado(jugadores, partido.a)}` },
+    { toque: 'tablas', texto: 'Tablas' },
+    { toque: 'b', texto: `Ganó ${nombreLado(jugadores, partido.b)}` },
+  ]
+  return (
+    <div>
+      <p className={PREGUNTA}>¿Cómo terminó?</p>
+      <div className="flex flex-col gap-2.5">
+        {opciones.map(({ toque, texto }) => (
+          <button
+            key={toque}
+            type="button"
+            aria-pressed={elegido === toque}
+            onClick={() => {
+              setElegido(toque)
+              const { a, b } = marcadorDePartida(toque)
+              onGuardar(a, b)
+            }}
+            className={`flex min-h-[64px] items-center justify-between gap-3 rounded-btn px-[18px] text-left text-[19px] font-bold ${
+              elegido === toque
+                ? 'bg-block text-on-block'
+                : 'bg-opcion text-text shadow-[inset_0_0_0_1.5px_var(--color-opcion-borde)]'
+            }`}
+          >
+            <span className="min-w-0">{texto}</span>
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              className={`h-6 w-6 shrink-0 fill-none stroke-current stroke-2 [stroke-linecap:round] [stroke-linejoin:round] ${
+                elegido === toque ? '' : 'invisible'
+              }`}
+            >
+              <path d="M5 12.5l4.5 4.5L19 7.5" />
+            </svg>
+          </button>
+        ))}
+      </div>
+      <p aria-live="polite" className="mt-2.5 min-h-5 text-[15px] text-muted">
+        Con un toque se guarda.
+      </p>
+    </div>
+  )
+}
+
+function HojaDosToques({
+  partido,
+  jugadores,
+  deporte,
+  onGuardar,
+}: {
+  partido: Partido
+  jugadores: string[]
+  deporte: Deporte
+  onGuardar: (a: number, b: number) => void
+}) {
   const previo = toqueDelMarcador(partido.marcador, deporte)
   const [ganador, setGanador] = useState<Lado | null>(previo.ganador)
-  const [elegido, setElegido] = useState<number | null>(previo.perdedor)
+  const [elegido, setElegido] = useState<{ loser: number; deuce: boolean } | null>(
+    previo.perdedor === null ? null : { loser: previo.perdedor, deuce: previo.ventaja },
+  )
 
   const nombreDe = (lado: Lado) => nombreLado(jugadores, lado === 'a' ? partido.a : partido.b)
   const perdedor = ganador === null ? null : nombreDe(ganador === 'a' ? 'b' : 'a')
-  const opciones = puntosDelPerdedor(deporte)
-  const unidad = unidadDe(deporte)
 
-  const elegirPuntos = (puntos: number) => {
+  const guardar = (puntos: number, deuce: boolean) => {
     if (ganador === null) return
-    setElegido(puntos)
-    const marcador = marcadorDeDosToques(ganador, puntos, deporte)
+    setElegido({ loser: puntos, deuce })
+    const marcador = deuce ? marcadorDeVentaja(ganador, puntos, deporte) : marcadorDeDosToques(ganador, puntos, deporte)
     onGuardar(marcador.a, marcador.b)
   }
 
@@ -166,26 +253,15 @@ export function HojaPartido({
       {/* Nombra al que perdió, no "el perdedor": es lo que confirma qué se
           tocó recién. Sin ganador los números se ven pero no se tocan: la
           hoja no salta de alto entre un toque y otro. */}
-      <p className={PREGUNTA}>{perdedor === null ? `${cap(unidad)} del que perdió` : `${cap(unidad)} de ${perdedor}`}</p>
-      <div className={`grid gap-2 ${opciones.length <= 4 ? 'grid-cols-4' : 'grid-cols-6'}`}>
-        {opciones.map((puntos) => {
-          const activo = elegido === puntos
-          return (
-            <button
-              key={puntos}
-              type="button"
-              disabled={ganador === null}
-              aria-pressed={activo}
-              onClick={() => elegirPuntos(puntos)}
-              className={`font-cond flex min-h-[60px] items-center justify-center rounded-btn border-[1.5px] text-[30px] ${
-                activo ? 'border-block bg-block text-on-block' : 'border-line text-text active:bg-sport-tint'
-              }`}
-            >
-              {puntos}
-            </button>
-          )
-        })}
-      </div>
+      <BotonesDelPerdedor
+        format={formatoRapido(deporte)}
+        unit={unidadDe(deporte)}
+        loserName={perdedor}
+        pending={false}
+        elegido={elegido}
+        onLoser={(puntos) => guardar(puntos, false)}
+        onDeuce={(puntos) => guardar(puntos, true)}
+      />
       <p aria-live="polite" className="mt-2.5 min-h-5 text-[15px] text-muted">
         {ganador === null ? 'Tocá primero quién ganó.' : 'Con este toque se guarda.'}
       </p>

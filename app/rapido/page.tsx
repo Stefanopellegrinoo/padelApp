@@ -5,6 +5,7 @@ import {
   STORAGE_KEY,
   armar,
   cargarMarcador,
+  cargarPinos,
   escribirTorneo,
   leerTorneo,
   type Armado,
@@ -63,6 +64,11 @@ export default function RapidoPage() {
     guardar(cargarMarcador(torneo, indice, a, b))
   }
 
+  const cargarUnosPinos = (indice: number, pinos: number | null) => {
+    if (torneo === null) return
+    guardar(cargarPinos(torneo, indice, pinos))
+  }
+
   // Mientras no se leyó el storage: el lugar del encabezado, así el bloque
   // de color no aparece de golpe sobre una pantalla blanca.
   if (!cargado) {
@@ -87,6 +93,7 @@ export default function RapidoPage() {
         <Jugar
           torneo={torneo}
           onCargarMarcador={cargarUnMarcador}
+          onCargarPinos={cargarUnosPinos}
           onNuevoTorneo={() => guardar(null)}
           aviso={aviso}
         />

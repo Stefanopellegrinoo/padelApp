@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import { defaultConfig, type Award, type DisciplineId, type PlayedMatchday, type Side } from '@/core'
+import { defaultConfig, RESULT_FORMAT, type Award, type DisciplineId, type PlayedMatchday, type Side } from '@/core'
 import type { DisciplineHeader, EntryRow, SquadMember } from '@/db/read'
 import { vi } from 'vitest'
 
@@ -53,6 +53,7 @@ import { vi } from 'vitest'
 
 const D_PADEL = 'd-padel' as DisciplineId
 const D_FIFA = 'd-fifa' as DisciplineId
+const D_AJEDREZ = 'd-ajedrez' as DisciplineId
 
 function side(entryId: string): Side {
   return { size: 1, a: entryId }
@@ -66,6 +67,8 @@ function header(): DisciplineHeader[] {
     // sólo si la pantalla usa ESTE `config`, no el de pádel: con dos fechas
     // de 5 y 5 puntos, contar sólo la mejor 1 da 5, contar las dos da 10.
     { id: D_FIFA, kind: 'FIFA', config: { ...defaultConfig(2, 1), countBestOf: 1 }, ...shape },
+    // Ajedrez: sus lecturas caen en las de pádel; el caso de ajedrez pisa la historia.
+    { id: D_AJEDREZ, kind: 'AJEDREZ', config: { ...defaultConfig(2, 1), matchFormat: RESULT_FORMAT }, ...shape, allowsDraw: true },
   ]
 }
 
@@ -341,5 +344,53 @@ describe('Jugador: tu perfil', () => {
     const html = await render('padel', 'e3')
 
     expect(linkWith(html, 'Ver las fechas')).toContain('href="/torneo/s1/padel/fechas"')
+  })
+})
+
+// Ajedrez (odd/tasks/mas-deportes.md, S3): ganadas y perdidas sin contar las tablas como derrotas,
+// y las tablas donde iba la diferencia (que sería un 1-0 contado como games).
+describe('Jugador del ajedrez: ganadas, perdidas y tablas', () => {
+  it('una tabla y una ganada: Partidas 1-0, Tablas 1, sin diferencia', async () => {
+    const { closedHistoryAll } = await import('@/db/read')
+    const fecha = (number: number, gamesA: number, gamesB: number): PlayedMatchday => ({
+      number,
+      sides: [side('e1'), side('e2')],
+      matches: [{ round: 1, fase: 'GRUPO', grupo: 1, sideA: side('e1'), sideB: side('e2'), sets: [{ gamesA, gamesB }] }],
+    })
+    vi.mocked(closedHistoryAll).mockResolvedValueOnce([fecha(1, 0, 0), fecha(2, 1, 0)])
+    const html = await render('ajedrez')
+
+    expect(html).toMatch(/>1-0<\/span><span[^>]*>Partidas</)
+    expect(html).toMatch(/>1<\/span><span[^>]*>Tablas</)
+    expect(html).not.toContain('Dif.')
+  })
+
+  it('pádel sigue con Partidos y su diferencia', async () => {
+    const html = await render('padel')
+    expect(html).toMatch(/>2-0<\/span><span[^>]*>Partidos</)
+    expect(html).toContain('Dif. games')
+  })
+
+  it('el cara a cara cuenta las tablas: ganadas-tablas-perdidas y las partidas jugadas', async () => {
+    const { closedHistoryAll } = await import('@/db/read')
+    const fecha = (number: number, gamesA: number, gamesB: number): PlayedMatchday => ({
+      number,
+      sides: [side('e1'), side('e2')],
+      matches: [{ round: 1, fase: 'GRUPO', grupo: 1, sideA: side('e1'), sideB: side('e2'), sets: [{ gamesA, gamesB }] }],
+    })
+    vi.mocked(closedHistoryAll).mockResolvedValueOnce([fecha(1, 0, 0), fecha(2, 1, 0)])
+    const html = await render('ajedrez')
+    const rival = html.match(/<li[^>]*>(?:(?!<\/li>).)*Padel Dos(?:(?!<\/li>).)*<\/li>/)?.[0]
+
+    expect(rival).toContain('2 partidas')
+    expect(rival).toMatch(/>1-1-0</)
+    expect(rival).toContain('1 ganadas, 1 tablas, 0 perdidas')
+  })
+
+  it('en pádel el cara a cara sigue siendo ganados-perdidos', async () => {
+    const rival = (await render('padel')).match(/<li[^>]*>(?:(?!<\/li>).)*Padel Dos(?:(?!<\/li>).)*<\/li>/)?.[0]
+    expect(rival).toContain('2 partidos')
+    expect(rival).toMatch(/>2-0</)
+    expect(rival).toContain('2 ganados, 0 perdidos')
   })
 })

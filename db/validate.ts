@@ -55,6 +55,14 @@ export function setError(set: SetScore, format: MatchFormat, allowsDraw: boolean
   // la base con `check (allows_draw or games_a <> games_b)`. Si `openScore`
   // aflojara el empate por su cuenta, la app aceptaría un `0-0` que la base
   // rechaza y el mensaje legible se cambiaría por una violación de constraint.
+  // Una partida (familia resultado, ajedrez): 1-0, 0-1 o tablas, y las tablas
+  // sólo donde vale un empate (`drawIsLegal`: nunca en la llave).
+  if (format.resultado === true) {
+    if (gamesA === 0 && gamesB === 0) {
+      return allowsDraw ? null : 'Esta partida no puede quedar en tablas: tiene que haber un ganador.'
+    }
+    return gamesA + gamesB === 1 ? null : `Una partida se carga como 1-0, 0-1 o tablas: ${gamesA}-${gamesB} no es un resultado.`
+  }
   if (gamesA === gamesB && !allowsDraw) {
     return format.openScore
       ? `Un partido no puede terminar ${gamesA} a ${gamesB}: esta disciplina no admite empates.`
@@ -71,6 +79,17 @@ export function setError(set: SetScore, format: MatchFormat, allowsDraw: boolean
   const { gamesPerSet, tieBreak } = format
   const winner = Math.max(gamesA, gamesB)
   const loser = Math.min(gamesA, gamesB)
+
+  // El set real: a N con ventaja de 2 (N-0 a N-(N-2), o N+1 a N-1) y en N-N
+  // tie-break, que queda N+1 a N. Sin la clave, la regla de antes.
+  if (format.ventaja === true) {
+    const closed =
+      (winner === gamesPerSet && loser <= gamesPerSet - 2) ||
+      (winner === gamesPerSet + 1 && loser >= gamesPerSet - 1 && loser <= gamesPerSet)
+    return closed
+      ? null
+      : `En un set a ${gamesPerSet} games con ventaja de 2 y tie-break, ${gamesA}-${gamesB} no es un resultado posible.`
+  }
 
   if (tieBreak) {
     // El tie-break corta en gamesPerSet exacto: no existe el 5-3.
@@ -108,6 +127,9 @@ export function matchError(
   // par de números y ahí termina. No hay `setsToWin` que exigir ni ganador que
   // declarar — un `0-0` está tan terminado como un `3-1`, y quién ganó lo
   // deduce quien tabula, no quien valida.
+  if (format.resultado === true) {
+    return sets.length === 1 ? null : `Una partida se carga con un solo resultado, no ${sets.length}.`
+  }
   if (format.openScore) {
     return sets.length === 1
       ? null

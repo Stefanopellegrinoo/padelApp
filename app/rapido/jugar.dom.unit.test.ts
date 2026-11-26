@@ -152,7 +152,7 @@ it('con el último partido guardado no hay "Siguiente" y aparece el campeón', (
   expect(host.textContent).not.toContain('Campeón')
   tocar(porEtiqueta('Cargar Beto contra Cami'))
   tocar(enHoja('Beto'))
-  tocar(enHoja('3'))
+  tocar(enHoja('2'))
 
   expect([...aviso().querySelectorAll('button')].map((b) => b.textContent)).not.toContain('Siguiente')
   expect(host.querySelector('header')?.textContent).toContain('Campeón')
@@ -173,7 +173,7 @@ it('"Ver campeón" lleva el foco al campeón y cierra el aviso', () => {
   })
   tocar(porEtiqueta('Cargar Beto contra Cami'))
   tocar(enHoja('Beto'))
-  tocar(enHoja('3'))
+  tocar(enHoja('2'))
   expect(aviso().dataset.visible).toBe('true')
 
   tocar([...aviso().querySelectorAll('button')].find((b) => b.textContent === 'Ver campeón'))
@@ -185,11 +185,12 @@ it('"Ver campeón" lleva el foco al campeón y cierra el aviso', () => {
   scroll.mockRestore()
 })
 
+// Pádel nace con el set real (S6): el 4-3 ya no es un toque, así que el precargado usa un 4-2.
 it('un partido cargado abre precargado: el ganador elegido y su número marcado; un toque corrige', () => {
-  montar({ ...TORNEO, partidos: [{ ...TORNEO.partidos[0]!, marcador: { a: 4, b: 3 } }, ...TORNEO.partidos.slice(1)] })
-  tocar(porEtiqueta('Corregir Ana 4, Beto 3'))
+  montar({ ...TORNEO, partidos: [{ ...TORNEO.partidos[0]!, marcador: { a: 4, b: 2 } }, ...TORNEO.partidos.slice(1)] })
+  tocar(porEtiqueta('Corregir Ana 4, Beto 2'))
   expect(enHoja('Ana')?.getAttribute('aria-pressed')).toBe('true')
-  expect(enHoja('3')?.getAttribute('aria-pressed')).toBe('true')
+  expect(enHoja('2')?.getAttribute('aria-pressed')).toBe('true')
 
   tocar(enHoja('1'))
   expect(cargas).toEqual([[0, 4, 1]])
@@ -197,10 +198,10 @@ it('un partido cargado abre precargado: el ganador elegido y su número marcado;
 })
 
 it('cambiar de ganador al corregir suelta el número marcado', () => {
-  montar({ ...TORNEO, partidos: [{ ...TORNEO.partidos[0]!, marcador: { a: 4, b: 3 } }, ...TORNEO.partidos.slice(1)] })
-  tocar(porEtiqueta('Corregir Ana 4, Beto 3'))
+  montar({ ...TORNEO, partidos: [{ ...TORNEO.partidos[0]!, marcador: { a: 4, b: 2 } }, ...TORNEO.partidos.slice(1)] })
+  tocar(porEtiqueta('Corregir Ana 4, Beto 2'))
   tocar(enHoja('Beto'))
-  expect(enHoja('3')?.getAttribute('aria-pressed')).toBe('false')
+  expect(enHoja('2')?.getAttribute('aria-pressed')).toBe('false')
   expect(cargas).toEqual([])
 })
 
@@ -247,4 +248,90 @@ it('antes del primer resultado la tabla no inventa puestos', () => {
     '2°',
     '3°',
   ])
+})
+
+// S6 y la carga con ventaja: los mismos botones que una fecha.
+const conDeporte = (deporte: TorneoRapido['armado']['deporte']): TorneoRapido => ({
+  ...TORNEO,
+  armado: { ...TORNEO.armado, deporte },
+})
+
+it('tenis: 7-5 y 7-6 son botones aparte, el del tie-break dicho en claro, y guardan con un toque', () => {
+  montar(conDeporte('TENIS'))
+  tocar(porEtiqueta('Cargar Ana contra Beto'))
+  tocar(enHoja('Ana'))
+  expect(hojaAbierta()?.textContent).toContain('El 7-6 es con tie-break.')
+  expect(enHoja('5')).toBeUndefined()
+  tocar(enHoja('7-6'))
+  expect(cargas).toEqual([[0, 7, 6]])
+  expect(aviso().textContent).toContain('Guardado: Ana 7-6')
+})
+
+it('fútbol tenis: un 16-14 se carga con su botón y al corregir vuelve marcado', () => {
+  montar(conDeporte('FUTBOL_TENIS'))
+  tocar(porEtiqueta('Cargar Ana contra Beto'))
+  tocar(enHoja('Beto'))
+  expect(hojaAbierta()?.textContent).toContain('Puntos de Ana')
+  tocar(enHoja('16-14'))
+  expect(cargas).toEqual([[0, 14, 16]])
+  tocar(porEtiqueta('Corregir Ana 14, Beto 16'))
+  expect(enHoja('16-14')?.getAttribute('aria-pressed')).toBe('true')
+})
+
+it('pool: a 3 bolas, sin botones de ventaja', () => {
+  montar(conDeporte('POOL'))
+  tocar(porEtiqueta('Cargar Ana contra Beto'))
+  tocar(enHoja('Ana'))
+  expect(hojaAbierta()?.textContent).toContain('Bolas de Beto')
+  expect(enHoja('3')).toBeUndefined()
+  tocar(enHoja('2'))
+  expect(cargas).toEqual([[0, 3, 2]])
+})
+
+it('un pádel guardado antes del set real (4-3) se ve como se cargó y se corrige con un toque', () => {
+  montar({ ...TORNEO, partidos: [{ ...TORNEO.partidos[0]!, marcador: { a: 4, b: 3 } }, ...TORNEO.partidos.slice(1)] })
+  tocar(porEtiqueta('Corregir Ana 4, Beto 3'))
+  expect(enHoja('Ana')?.getAttribute('aria-pressed')).toBe('true')
+  // Ningún botón dice 4-3: no se marca ninguno, pero se ven los del set real.
+  expect(hojaAbierta()?.querySelectorAll('button[aria-pressed="true"]')).toHaveLength(1)
+  tocar(enHoja('5-4'))
+  expect(cargas).toEqual([[0, 5, 4]])
+})
+
+// Ajedrez (odd/tasks/mas-deportes.md, S3): un toque guarda; la tarjeta dice 1-0 o ½-½; la tabla
+// cuenta victorias y tablas.
+const AJEDREZ: TorneoRapido = { ...TORNEO, armado: { ...TORNEO.armado, deporte: 'AJEDREZ' } }
+
+it('ajedrez: "Tablas" guarda 0-0 con un toque, la tarjeta dice ½ y ½ y al corregir viene marcado', () => {
+  montar(AJEDREZ)
+  tocar(porEtiqueta('Cargar Ana contra Beto'))
+  const opciones = [...hojaAbierta()!.querySelectorAll('button[aria-pressed]')].map((b) => b.textContent?.trim())
+  expect(opciones).toEqual(['Ganó Ana', 'Tablas', 'Ganó Beto'])
+  expect(hojaAbierta()?.textContent).toContain('Con un toque se guarda.')
+
+  tocar(enHoja('Tablas'))
+  expect(cargas).toEqual([[0, 0, 0]])
+  expect(hojaAbierta()).toBeUndefined()
+  expect(aviso().textContent).toContain('Guardado: Ana y Beto, tablas')
+
+  tocar(porEtiqueta('Corregir Ana ½, Beto ½'))
+  expect(enHoja('Tablas')?.getAttribute('aria-pressed')).toBe('true')
+  tocar(enHoja('Ganó Beto'))
+  expect(cargas.at(-1)).toEqual([0, 0, 1])
+  expect(porEtiqueta('Corregir Ana 0, Beto 1')).toBeDefined()
+})
+
+it('ajedrez: la tabla dice ganadas, tablas y puntos, sin diferencia', () => {
+  montar(AJEDREZ)
+  tocar(porEtiqueta('Cargar Ana contra Beto'))
+  tocar(enHoja('Ganó Ana'))
+  tocar(porEtiqueta('Cargar Ana contra Cami'))
+  tocar(enHoja('Tablas'))
+  const tabla = host.querySelector('ol')!.parentElement!
+  expect(tabla.textContent).toContain('PE')
+  expect(tabla.textContent).toContain('Pts')
+  expect(tabla.textContent).not.toContain('Dif')
+  const ana = [...tabla.querySelectorAll('li')].find((li) => li.textContent?.includes('Ana'))!
+  expect(ana.textContent).toContain('4 puntos')
+  expect(ana.textContent).toContain('1 tablas')
 })

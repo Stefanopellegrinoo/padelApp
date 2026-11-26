@@ -14,7 +14,7 @@ import {
   type SetStateAction,
 } from 'react'
 import type { MatchFormat, SetScore } from '@/core'
-import { chooseDeuce, deuceOptions } from '@/app/amigos/[playerId]/cargar-state'
+import { chooseDeuce } from '@/app/amigos/[playerId]/cargar-state'
 import { button } from '@/app/ui/button'
 import { Sheet } from '@/app/ui/sheet'
 import { Toast } from '@/app/ui/toast'
@@ -25,13 +25,15 @@ import {
   goalsError,
   goalsRejected,
   isComplete,
-  loserGamesOptions,
   openScoreSet,
+  resultadoDeLaPartida,
   resumenGuardado,
   retomarUltimoSet,
+  setDeResultado,
   siguienteSinCargar,
   toqueDelSet,
   type LoadState,
+  type ResultadoPartida,
 } from './carga-state'
 import {
   closeTheMatchday,
@@ -40,8 +42,13 @@ import {
   saveMatchResult,
   type WriteResult,
 } from './actions'
+import { BotonesDelPerdedor } from './botones-del-perdedor'
 import { BorrarFecha } from './borrar'
+import { faltanPinos } from './pinos-state'
 import { mensajeDeFalla } from './sin-conexion'
+
+// Vive en su módulo para que el torneo rápido lo use sin traer las acciones de la fecha.
+export { BotonesDelPerdedor }
 
 /** Lo que la carga necesita saber de la fecha, igual para todos sus partidos. */
 export interface CargaContext {
@@ -78,11 +85,16 @@ export interface PartidoVM {
   winner: 'A' | 'B' | null
   /** Los sets cargados, para abrir la hoja precargada al corregir. Vacío sin resultado. */
   sets: SetScore[]
+  /**
+   * Si este partido puede quedar empatado (`drawIsLegal`: la disciplina admite
+   * empates y no es de la llave). Sólo lo lee la partida de ajedrez, que sin
+   * esto no ofrece "Tablas".
+   */
+  tablas: boolean
 }
 
 const ERROR_NOTE = 'rounded-btn bg-live-bg px-3 py-2.5 text-[15px] font-semibold text-live'
 const PREGUNTA = 'mt-3.5 mb-2.5 text-[17px] font-bold'
-const cap = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
 
 /**
  * La carga de la fecha (S8e): tocar el partido abre la hoja, y nada más.
@@ -165,7 +177,10 @@ export function CargaDeLaFecha({
                 primerCampo={primerCampo}
                 onGuardado={(sets) => {
                   cerrar()
-                  setAviso({ texto: `Guardado: ${resumenGuardado(partido.pairAName, partido.pairBName, sets)}`, guardado: partido.matchId })
+                  setAviso({
+                    texto: `Guardado: ${resumenGuardado(partido.pairAName, partido.pairBName, sets, context.format)}`,
+                    guardado: partido.matchId,
+                  })
                   setDestello((prev) => ({ matchId: partido.matchId, vez: (prev?.vez ?? 0) + 1 }))
                 }}
               />
@@ -335,7 +350,76 @@ function HojaDeCarga({
       />
     )
   }
+  if (format.resultado === true) {
+    return <UnToque partido={partido} pending={pending} alerta={alerta} guardar={guardar} />
+  }
   return <DosToques context={context} partido={partido} pending={pending} alerta={alerta} guardar={guardar} />
+}
+
+/**
+ * La partida (ajedrez, odd/tasks/mas-deportes.md S3): "Ganó Ana", "Tablas",
+ * "Ganó Caro", y el toque guarda. Con la misma cara que los "Ganó" de los dos
+ * toques. En la llave no hay tablas (`drawIsLegal`), así que no se ofrecen.
+ *
+ * Al corregir, lo cargado viene marcado (`resultadoDeLaPartida`); mientras
+ * guarda y si rebota, queda marcado lo que se tocó, y tocarlo de nuevo reintenta.
+ */
+function UnToque({
+  partido,
+  pending,
+  alerta,
+  guardar,
+}: {
+  partido: PartidoVM
+  pending: boolean
+  alerta: ReactNode
+  guardar: (sets: SetScore[], siFalla: () => void) => void
+}) {
+  const [elegido, setElegido] = useState<ResultadoPartida | null>(() => resultadoDeLaPartida(partido.sets))
+  const opciones: { resultado: ResultadoPartida; texto: string }[] = [
+    { resultado: 'A', texto: `Ganó ${partido.pairAName}` },
+    ...(partido.tablas ? [{ resultado: 'TABLAS' as const, texto: 'Tablas' }] : []),
+    { resultado: 'B', texto: `Ganó ${partido.pairBName}` },
+  ]
+  return (
+    <div>
+      <p className={PREGUNTA}>¿Cómo terminó?</p>
+      <div className="flex flex-col gap-2.5">
+        {opciones.map(({ resultado, texto }) => (
+          <button
+            key={resultado}
+            type="button"
+            aria-pressed={elegido === resultado}
+            disabled={pending}
+            onClick={() => {
+              setElegido(resultado)
+              guardar([setDeResultado(resultado)], () => {})
+            }}
+            className={`flex min-h-[64px] items-center justify-between gap-3 rounded-btn px-[18px] text-left text-[19px] font-bold ${
+              elegido === resultado
+                ? 'bg-block text-on-block'
+                : 'bg-opcion text-text shadow-[inset_0_0_0_1.5px_var(--color-opcion-borde)]'
+            }`}
+          >
+            <span className="min-w-0">{texto}</span>
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              className={`h-6 w-6 shrink-0 fill-none stroke-current stroke-2 [stroke-linecap:round] [stroke-linejoin:round] ${
+                elegido === resultado ? '' : 'invisible'
+              }`}
+            >
+              <path d="M5 12.5l4.5 4.5L19 7.5" />
+            </svg>
+          </button>
+        ))}
+      </div>
+      <p aria-live="polite" className="mt-2.5 min-h-5 text-[15px] text-muted">
+        {pending ? 'Guardando…' : partido.tablas ? 'Con un toque se guarda.' : 'Con un toque se guarda. En la llave no hay tablas.'}
+      </p>
+      {alerta}
+    </div>
+  )
 }
 
 /**
@@ -453,85 +537,6 @@ function DosToques({
       </p>
       {alerta}
     </div>
-  )
-}
-
-/**
- * El segundo toque: con cuántos se quedó el que perdió. Si el set se gana por
- * dos (ping pong, sin tie-break) siguen los de ventaja, "12-10" … "16-14"
- * (`deuceOptions`, los mismos de amigos); con tie-break `deuceOptions` da `[]`
- * y pádel queda como siempre. Sin ganador elegido se ven pero no se tocan: la
- * hoja no salta de alto entre un toque y otro.
- *
- * Exportado para renderizarlo en la suite.
- */
-export function BotonesDelPerdedor({
-  format,
-  unit,
-  loserName,
-  pending,
-  elegido = null,
-  onLoser,
-  onDeuce,
-}: {
-  format: MatchFormat
-  unit: string
-  /** El que perdió, o `null` mientras no se eligió quién ganó. */
-  loserName: string | null
-  pending: boolean
-  /** El botón marcado: el precargado al corregir, o el que se intentó guardar. */
-  elegido?: { loser: number; deuce: boolean } | null
-  onLoser: (n: number) => void
-  onDeuce: (loser: number) => void
-}) {
-  const apagado = pending || loserName === null
-  const numero = (activo: boolean) =>
-    `flex min-h-[60px] items-center justify-center rounded-btn border-[1.5px] font-cond ${
-      activo ? 'border-block bg-block text-on-block' : 'border-line text-text active:bg-sport-tint'
-    }`
-  return (
-    <>
-      <p className={PREGUNTA}>
-        {loserName === null ? `${cap(unit)} del que perdió` : `${cap(unit)} de ${loserName}`}
-      </p>
-      <div className="grid grid-cols-6 gap-2">
-        {loserGamesOptions(format).map((games) => {
-          const activo = elegido !== null && !elegido.deuce && elegido.loser === games
-          return (
-            <button
-              key={games}
-              type="button"
-              disabled={apagado}
-              aria-pressed={activo}
-              className={`${numero(activo)} text-[30px]`}
-              onClick={() => onLoser(games)}
-            >
-              {games}
-            </button>
-          )
-        })}
-      </div>
-      {deuceOptions(format).length > 0 && (
-        <div className="mt-2 grid grid-cols-3 gap-2">
-          {deuceOptions(format).map((loser) => {
-            const activo = elegido !== null && elegido.deuce && elegido.loser === loser
-            return (
-              <button
-                key={`deuce-${loser}`}
-                type="button"
-                disabled={apagado}
-                aria-pressed={activo}
-                aria-label={`${loser + 2} a ${loser}`}
-                className={`${numero(activo)} text-[26px]`}
-                onClick={() => onDeuce(loser)}
-              >
-                {`${loser + 2}-${loser}`}
-              </button>
-            )
-          })}
-        </div>
-      )}
-    </>
   )
 }
 
@@ -791,6 +796,7 @@ export function CierreFecha({
   total,
   canReopen,
   loadedResults,
+  pinos = false,
 }: {
   context: CargaContext
   status: 'OPEN' | 'CLOSED'
@@ -806,6 +812,12 @@ export function CierreFecha({
    * se pierden.
    */
   loadedResults: number
+  /**
+   * Una fecha por ranking (bowling, S4): lo que falta son jugadores sin pinos,
+   * no partidos (`remaining`/`total` cuentan presentes), y volver al armado
+   * no borra lo cargado.
+   */
+  pinos?: boolean
 }) {
   const [error, setError] = useState<string | null>(null)
   const [asking, setAsking] = useState(false)
@@ -834,7 +846,7 @@ export function CierreFecha({
         <div className="flex flex-col gap-2.5">
           <div className="flex items-center justify-between gap-3">
             <b id={faltanId} className="shrink-0 text-[17px] font-[750]">
-              {faltanPartidos(remaining)}
+              {pinos ? faltanPinos(remaining) : faltanPartidos(remaining)}
             </b>
             <Rayitas total={total} remaining={remaining} />
           </div>
@@ -870,11 +882,16 @@ export function CierreFecha({
               dijera sería una promesa falsa: se caen igual en cuanto se toca
               un tilde de presente (`toggleAttendance` → `syncGuestSeat` →
               `clearPairs`), que es justo lo que se viene a hacer acá. */}
-          {loadedResults > 0 && (
-            <p className="text-[15px] font-semibold">
-              Ya hay resultados cargados: si cambiás quién juega o volvés a sortear, se borran.
-            </p>
-          )}
+          {loadedResults > 0 &&
+            (pinos ? (
+              <p className="text-[15px] font-semibold">
+                Los pinos cargados se guardan. Si alguien deja de venir, sus pinos no cuentan al cerrar.
+              </p>
+            ) : (
+              <p className="text-[15px] font-semibold">
+                Ya hay resultados cargados: si cambiás quién juega o volvés a sortear, se borran.
+              </p>
+            ))}
           <div className="flex items-center gap-2">
             <button
               type="button"

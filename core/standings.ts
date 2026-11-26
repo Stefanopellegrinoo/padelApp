@@ -60,6 +60,15 @@ const PADEL_DAY_SCORING: DayScoring = { win: 1, draw: 0 }
 const DRAW_DAY_SCORING: DayScoring = { win: 3, draw: 1 }
 
 /**
+ * Lo que paga cada resultado en la tabla del día, según haya empates. Exportada
+ * para que el reglamento del ajedrez diga los MISMOS números que ordenan la
+ * tabla ("victoria 3 puntos y tablas 1") en vez de una copia que pueda driftear.
+ */
+export function dayScoring(allowsDraw: boolean): DayScoring {
+  return allowsDraw ? DRAW_DAY_SCORING : PADEL_DAY_SCORING
+}
+
+/**
  * Ephemeral tally for a single matchday's computation — never persisted,
  * never carried across matchdays. `side` replaces `pair` as the identity
  * (design #3801, decision #6): a side is a shape for a matchday's play, not
@@ -187,7 +196,7 @@ export function computeStandings(
     Math.min(...members(side).map((entryId) => snapshotRank.get(entryId) ?? OUTSIDE))
 
   const bySetsDiff = usesSetsDiff(config.matchFormat)
-  const scoring = allowsDraw ? DRAW_DAY_SCORING : PADEL_DAY_SCORING
+  const scoring = dayScoring(allowsDraw)
 
   // Step one: the objective criteria, which are transitive and safe to sort with.
   const byObjective = [...tallies].sort((left, right) =>

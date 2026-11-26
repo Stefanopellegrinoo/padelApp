@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { defaultConfig, groupPhaseMatches, pair, SPORTS, type MatchFormat, type MatchResult, type Side } from '@/core'
-import { championRecord } from './campeon-de-la-fecha'
+import { championRecord, rankingChampion } from './campeon-de-la-fecha'
 
 /**
  * La marca del campeón en la lista de fechas.
@@ -132,5 +132,40 @@ describe('el cableado de la marca del campeón', () => {
     const misWire = 'championRecord(detail.matches, championSide, matchFormat, matchday.allowsDraw)'
     expect(misWire).toMatch(/championRecord\(/)
     expect(misWire).not.toMatch(/championRecord\(\s*groupPhaseMatches\(detail\.matches\)/)
+  })
+})
+
+// Ajedrez (odd/tasks/mas-deportes.md, S3): ganadas–tablas–perdidas y nada más; la diferencia sería
+// contar las partidas otra vez ("+2 partidas").
+describe('championRecord en ajedrez', () => {
+  it('dice ganadas–tablas–perdidas, sin la diferencia', () => {
+    const matches = [partido(A, B, 1, 0), partido(A, C, 0, 0), partido(C, A, 0, 1)]
+    expect(championRecord(matches, A, SPORTS.AJEDREZ.format, true, 'partidas')).toBe('2–1–0')
+  })
+})
+
+describe('rankingChampion: el ganador de una fecha por pinos (bowling, S4)', () => {
+  const names = new Map([
+    ['a', 'Ana'],
+    ['b', 'Beto'],
+    ['c', 'Caro'],
+  ])
+  const award = (entryId: string, position: number) => ({ entryId, position, points: 0, lines: [] })
+
+  it('nombra al 1° con sus pinos', () => {
+    expect(rankingChampion([award('a', 1), award('b', 2)], new Map([['a', 201], ['b', 150]]), names, 'pinos')).toEqual({
+      names: 'Ana',
+      record: '201 pinos',
+    })
+  })
+
+  it('con el 1° compartido nombra a todos, y los pinos son los mismos', () => {
+    expect(
+      rankingChampion([award('a', 1), award('c', 1), award('b', 3)], new Map([['a', 180], ['c', 180], ['b', 99]]), names, 'pinos'),
+    ).toEqual({ names: 'Ana y Caro', record: '180 pinos' })
+  })
+
+  it('sin awards no hay ganador', () => {
+    expect(rankingChampion([], new Map(), names, 'pinos')).toBeNull()
   })
 })

@@ -74,9 +74,23 @@ function sectionApplies(section: string, shape: DisciplineShape): boolean {
   return true
 }
 
-function rulesRowsOf(config: SeasonConfig, shape: DisciplineShape, label: string, unit: string): RuleRow[] {
+/**
+ * Una fecha por ranking (bowling, S4) no tiene partidos: el formato del partido
+ * y el desempate de la tabla de partidos no le dicen nada, y el reglamento de
+ * arriba ya cuenta cómo gana y cómo se comparte el puesto.
+ */
+const NO_RANKING = new Set(['Formato de partido', 'Orden de desempate'])
+
+function rulesRowsOf(
+  config: SeasonConfig,
+  shape: DisciplineShape,
+  label: string,
+  unit: string,
+  ranking: boolean,
+): RuleRow[] {
   const sections = narrateRules(config, shape, unit)
-  return ROWS.filter((row) => sectionApplies(row.section, shape)).map((row) => {
+  const rows = ROWS.filter((row) => sectionApplies(row.section, shape) && !(ranking && NO_RANKING.has(row.title)))
+  return rows.map((row) => {
     const section = sections.find((candidate) => candidate.title === row.section)
     if (section === undefined) {
       throw new Error(`narrateRules no tiene la sección "${row.section}". Esto es un bug.`)
@@ -107,6 +121,8 @@ export interface RulesBlock {
   text: string
   /** Slug de URL del deporte, para su "Editar reglas". Sólo la rama con sesión lo sabe. */
   slug?: string
+  /** Sus fechas son un ranking por pinos (bowling, S4): sin filas de partidos en "Más detalle". */
+  ranking?: boolean
 }
 
 export interface RulesBodyProps {
@@ -183,7 +199,13 @@ export function RulesBody({ seasonId, seasonName, back, disciplines, adminName, 
                 </span>
               </summary>
               <RulesAccordion
-                rows={rulesRowsOf(discipline.config, discipline.shape, discipline.label, discipline.unit)}
+                rows={rulesRowsOf(
+                  discipline.config,
+                  discipline.shape,
+                  discipline.label,
+                  discipline.unit,
+                  discipline.ranking === true,
+                )}
               />
             </details>
 

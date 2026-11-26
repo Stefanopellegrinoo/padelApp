@@ -45,6 +45,17 @@ describe('tallyPlayers', () => {
     expect(x1?.gamesAgainst).toBe(5) // 2 (as pairA) + 3 (as pairB)
   })
 
+  it('cuenta las tablas aparte: ni ganadas ni perdidas (ajedrez, y cualquier empate)', () => {
+    const a = single('a')
+    const b = single('b')
+    const history: PlayedMatchday[] = [
+      { number: 1, sides: [a, b], matches: [match(a, b, 0, 0), match(a, b, 1, 0, 2), match(b, a, 1, 0, 3)] },
+    ]
+    const tallies = tallyPlayers(history, ['a', 'b'])
+    expect(tallies.find((t) => t.entryId === 'a')).toMatchObject({ matchesPlayed: 3, matchesWon: 1, matchesDrawn: 1 })
+    expect(tallies.find((t) => t.entryId === 'b')).toMatchObject({ matchesPlayed: 3, matchesWon: 1, matchesDrawn: 1 })
+  })
+
   it('includes a guest who played even though they are not in the squad', () => {
     const pairA = pair('a1', 'a2')
     const pairGuest = pair('guest', 'b2')
@@ -203,10 +214,10 @@ describe('rivalRecords', () => {
       { number: 2, sides: [a, b], matches: [match(b, a, 0, 2)] },
     ]
     expect(rivalRecords(history, 'a')).toEqual([
-      { rival: 'b', won: 2, lost: 1 },
-      { rival: 'c', won: 1, lost: 0 },
+      { rival: 'b', won: 2, drawn: 0, lost: 1 },
+      { rival: 'c', won: 1, drawn: 0, lost: 0 },
     ])
-    expect(rivalRecords(history, 'b')).toEqual([{ rival: 'a', won: 1, lost: 2 }])
+    expect(rivalRecords(history, 'b')).toEqual([{ rival: 'a', won: 1, drawn: 0, lost: 2 }])
   })
 
   it('in pairs, both players across the net are rivals and the partner is not', () => {
@@ -214,17 +225,18 @@ describe('rivalRecords', () => {
     const pairB = pair('b1', 'b2')
     const history: PlayedMatchday[] = [{ number: 1, sides: [pairA, pairB], matches: [match(pairA, pairB, 4, 2)] }]
     expect(rivalRecords(history, 'a1')).toEqual([
-      { rival: 'b1', won: 1, lost: 0 },
-      { rival: 'b2', won: 1, lost: 0 },
+      { rival: 'b1', won: 1, drawn: 0, lost: 0 },
+      { rival: 'b2', won: 1, drawn: 0, lost: 0 },
     ])
   })
 
-  it('skips draws and matches not played yet', () => {
+  it('counts draws apart (chess tablas, S3 de mas-deportes) and skips matches not played yet', () => {
     const a = single('a')
     const b = single('b')
     const history: PlayedMatchday[] = [
-      { number: 1, sides: [a, b], matches: [match(a, b, 1, 1), { ...match(a, b, 0, 0), sets: [] }] },
+      { number: 1, sides: [a, b], matches: [match(a, b, 0, 0), match(b, a, 0, 1), { ...match(a, b, 0, 0), sets: [] }] },
     ]
-    expect(rivalRecords(history, 'a')).toEqual([])
+    expect(rivalRecords(history, 'a')).toEqual([{ rival: 'b', won: 1, drawn: 1, lost: 0 }])
+    expect(rivalRecords(history, 'b')).toEqual([{ rival: 'a', won: 0, drawn: 1, lost: 1 }])
   })
 })

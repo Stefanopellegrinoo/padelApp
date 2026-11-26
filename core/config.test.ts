@@ -422,9 +422,10 @@ describe('maxMatches — el techo de partidos de la disciplina', () => {
 })
 
 describe('fichaSeed', () => {
-  it('Pádel rotan es la config de hoy más la primera fecha por nivel', () => {
+  it('Pádel rotan es la config de hoy con el set real (S6), más la primera fecha por nivel', () => {
     const { firstFecha, ...rest } = fichaSeed('PADEL', 8, 'ROTAN').config
-    expect(rest).toEqual(disciplineProfile('PADEL', defaultConfig(8, 2)).config)
+    const hoy = disciplineProfile('PADEL', defaultConfig(8, 2)).config
+    expect(rest).toEqual({ ...hoy, matchFormat: { ...hoy.matchFormat, ventaja: true } })
     expect(firstFecha).toBe('NIVEL')
   })
 
@@ -462,7 +463,8 @@ describe('fichaSeed', () => {
           expect(seed.pairSize).toBe(pairSize)
           expect(seed.fixedTeams).toBe(shapes[modality].fixedTeams)
           if (modality === 'INDIVIDUAL') expect(seed.hasMasters).toBe(false)
-          expect(seed.formatoDefault).toEqual({ kind: 'AUTO' })
+          // Bowling (S4) nace por ranking: sus fechas no tienen partidos que armar.
+          expect(seed.formatoDefault).toEqual(kind === 'BOWLING' ? { kind: 'RANKING' } : { kind: 'AUTO' })
           expect(seed.allowsDraw).toBe(SPORTS[kind].allowsDraw)
         }
       }
@@ -509,12 +511,22 @@ describe('effectiveMatchFormat', () => {
     expect(effectiveMatchFormat(PADEL, null)).toBe(PADEL)
   })
 
-  it('con formato propio, pisa sets y games y deja el resto del torneo', () => {
-    expect(effectiveMatchFormat(PADEL, { setsToWin: 2, gamesPerSet: 6 })).toEqual({
+  // La base es el formato GUARDADO del torneo, no el del registro: un torneo armado con la regla de
+  // antes la conserva aunque pádel ya juegue el set real (odd/tasks/mas-deportes.md, S6).
+  it('con formato propio, pisa sets y games y deja el resto del torneo (la ventaja incluida)', () => {
+    const deAntes = { setsToWin: 1, gamesPerSet: 4, tieBreak: true, openScore: false }
+    expect(effectiveMatchFormat(deAntes, { setsToWin: 2, gamesPerSet: 6 })).toEqual({
       setsToWin: 2,
       gamesPerSet: 6,
       tieBreak: true,
       openScore: false,
+    })
+    expect(effectiveMatchFormat({ ...deAntes, ventaja: true }, { setsToWin: 2, gamesPerSet: 6 })).toEqual({
+      setsToWin: 2,
+      gamesPerSet: 6,
+      tieBreak: true,
+      openScore: false,
+      ventaja: true,
     })
   })
 })

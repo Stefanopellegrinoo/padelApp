@@ -37,6 +37,28 @@ export interface MatchFormat {
    * un marcador abierto SIN empates rechaza un `0-0` igual.
    */
   openScore: boolean
+  /**
+   * El set real (S6 de mas-deportes): a `gamesPerSet` con ventaja de 2, y en
+   * N-N tie-break que queda N+1 a N. A 6: 6-0 a 6-4, 7-5 o 7-6. Con esto
+   * prendido `tieBreak` no se lee: el tie-break ya está en la regla.
+   *
+   * OPCIONAL a propósito, al revés que `openScore`: los formatos guardados
+   * antes de esta clave no la tienen, y ausente (o `false`) tiene que seguir
+   * siendo la regla con la que se armó el torneo. Un 4-3 ya cargado no puede
+   * volverse inválido. Los torneos nuevos de pádel y tenis nacen con `true`
+   * desde su ficha (`core/sports.ts`).
+   */
+  ventaja?: boolean
+  /**
+   * La familia "resultado" (ajedrez, S3 de mas-deportes): el partido es UNA
+   * partida que se gana, se pierde o termina en tablas, guardada como un set
+   * 1-0, 0-1 o 0-0 (`RESULT_FORMAT`, `core/sports.ts`). Con esto prendido
+   * `setsToWin`, `gamesPerSet` y `tieBreak` no se leen.
+   *
+   * OPCIONAL por lo mismo que `ventaja`: ningún formato guardado antes la tiene,
+   * y ausente es la regla de sets de siempre.
+   */
+  resultado?: boolean
 }
 
 /** `matchdays.match_format`: a cuánto se juega UNA fecha, si no es al del deporte en el torneo. */
@@ -136,6 +158,13 @@ export type Phase = (typeof PHASE_ORDER)[number]
 export type MatchdayFormat =
   | { readonly kind: 'ROUND_ROBIN' }
   | { readonly kind: 'GROUPS_KNOCKOUT'; readonly groups: number; readonly qualifiersPerGroup: number }
+  /**
+   * Sin partidos (bowling, S4): cada presente carga su total y la tabla sale
+   * de ordenarlos, con puestos compartidos (`core/ranking-fecha.ts`). No es un
+   * formato que se elija en el armado: lo trae la disciplina desde su ficha
+   * (`formato_default`) y la fecha lo hereda.
+   */
+  | { readonly kind: 'RANKING' }
 
 /** Lo que guarda `disciplines.formato_default` y, mientras la fecha está en DRAFT, `matchdays.formato`. */
 export type MatchdayFormatSetting = MatchdayFormat | { readonly kind: 'AUTO' }

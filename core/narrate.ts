@@ -1,6 +1,6 @@
 import { MASTERS_MATCHES, MASTERS_SIZE, MAX_PAIRING_POOL, maxMatchesOf, minSquadFor } from './constants'
 import { thirdPlaceByGroupTable } from './knockout'
-import { usesSetsDiff } from './standings'
+import { dayScoring, usesSetsDiff } from './standings'
 import type { DisciplineShape, MatchFormat, MatchResult, SeasonConfig, SideSize } from './types'
 
 /**
@@ -18,7 +18,8 @@ import type { DisciplineShape, MatchFormat, MatchResult, SeasonConfig, SideSize 
  * `setsToWin` − 1 los que se juegan como máximo.
  */
 export function formatLabel(format: MatchFormat, unit: string): string {
-  if (format.openScore) return 'Marcador de goles'
+  if (format.openScore) return `Marcador de ${unit}`
+  if (format.resultado === true) return 'Gana, pierde o tablas'
   const setWord = format.setsToWin === 1 ? '1 set' : `mejor de ${2 * format.setsToWin - 1} sets`
   return `${setWord} a ${format.gamesPerSet} ${unit}`
 }
@@ -182,7 +183,7 @@ export function narrateRules(config: SeasonConfig, shape: DisciplineShape, unit:
 
   sections.push({
     title: 'Los desempates',
-    body: describeTiebreak(matchFormat, tiebreakSnapshotEvery, pairSize, unit),
+    body: describeTiebreak(matchFormat, tiebreakSnapshotEvery, pairSize, unit, allowsDraw),
   })
 
   if (hasMasters) {
@@ -204,13 +205,16 @@ export function narrateRules(config: SeasonConfig, shape: DisciplineShape, unit:
  * en fútbol, *"diferencia de games"* en pádel, *"diferencia de puntos"* en ping
  * pong.
  *
- * `unit` lo pone quien llama (`unitOf(kind, format)`). "goles" es el único que
- * no se copia tal cual: es "diferencia de **gol**", singular, y no "diferencia
- * de goles". Una sola función con la excepción adentro: las pantallas no
- * repiten el ternario.
+ * `unit` lo pone quien llama (`unitOf(kind, format)`). "goles" no se copia tal
+ * cual: es "diferencia de **gol**", singular, y no "diferencia de goles". Y
+ * "partidas" (ajedrez) tampoco: cada partida se guarda 1-0 o 0-0, así que lo
+ * que corta es ganadas menos perdidas. Una sola función con las excepciones
+ * adentro: las pantallas no repiten el ternario.
  */
 export function scoreDiffLabel(unit: string): string {
-  return unit === 'goles' ? 'diferencia de gol' : `diferencia de ${unit}`
+  if (unit === 'goles') return 'diferencia de gol'
+  if (unit === 'partidas') return 'diferencia entre ganadas y perdidas'
+  return `diferencia de ${unit}`
 }
 
 /**
@@ -229,7 +233,13 @@ export function scoreDiffLabel(unit: string): string {
  * `subject` porque "ellas" concuerda en género con "parejas": con
  * `pairSize=1` el sujeto pasa a "jugadores" y el pronombre a "ellos".
  */
-function describeTiebreak(format: MatchFormat, snapshotEvery: number, pairSize: SideSize, unit: string): string {
+function describeTiebreak(
+  format: MatchFormat,
+  snapshotEvery: number,
+  pairSize: SideSize,
+  unit: string,
+  allowsDraw: boolean,
+): string {
   const setStep = usesSetsDiff(format) ? `corta la diferencia de sets, después ` : ''
   // Con marcador abierto no hay escalón de sets que narrar: es el MISMO
   // criterio que corre `computeStandings`, contado. Lo que se cuenta (goles,
@@ -237,8 +247,12 @@ function describeTiebreak(format: MatchFormat, snapshotEvery: number, pairSize: 
   const scoreDiff = scoreDiffLabel(unit)
   const subject = pairSize === 1 ? 'dos jugadores' : 'dos parejas'
   const pronoun = pairSize === 1 ? 'ellos' : 'ellas'
+  // Con tablas lo que ordena son los puntos de la fecha, no los ganados: se dice así sólo en la
+  // familia resultado, para que el texto de los demás no cambie una letra.
+  const level =
+    format.resultado === true && allowsDraw ? 'suman los mismos puntos' : 'ganan la misma cantidad de partidos'
   return (
-    `En la tabla de la fecha, si ${subject} ganan la misma cantidad de partidos, ${setStep}` +
+    `En la tabla de la fecha, si ${subject} ${level}, ${setStep}` +
     `corta la ${scoreDiff}. Si empatan dos, el partido entre ${pronoun} lo decide; si empatan ` +
     `tres o más, el partido entre ${pronoun} no alcanza porque se ganan en círculo, y corta el orden de ` +
     `desempate. En la tabla del campeonato, si dos jugadores tienen los mismos puntos corta el orden ` +
@@ -271,8 +285,19 @@ function describeFormat(format: MatchFormat, allowsDraw: boolean, unit: string):
       `un número al que haya que llegar. ${drawClause}`
     )
   }
+  // Una partida: ni sets ni números. Lo que paga la tabla de la fecha sale del motor (`dayScoring`).
+  if (format.resultado === true) {
+    if (!allowsDraw) return 'Cada partida tiene que salir con un ganador: no hay tablas.'
+    const { win, draw } = dayScoring(true)
+    return (
+      `Cada partida se gana, se pierde o termina en tablas. En la tabla de la fecha la victoria vale ` +
+      `${win} y las tablas ${draw}. En la llave no hay tablas: tiene que haber un ganador.`
+    )
+  }
   const setWord = format.setsToWin === 1 ? 'un set' : `${format.setsToWin} sets ganados`
-  const tie = format.tieBreak ? ' con tie-break' : ''
+  const n = format.gamesPerSet
+  const tie =
+    format.ventaja === true ? `, con ventaja de 2 y tie-break en ${n}-${n}` : format.tieBreak ? ' con tie-break' : ''
   // ponytail: esta rama no nombra `allowsDraw` — con sets, el empate lo saca
   // el propio formato (alguien llega antes a `setsToWin`), así que la frase
   // no necesita decir nada sobre empates HOY. El techo: `!openScore &&

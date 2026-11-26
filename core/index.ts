@@ -49,6 +49,7 @@ export type {
   FirstFecha,
   MatchResult,
   SideStanding,
+  DayScoring,
   Award,
   AwardLine,
   RankingRow,
@@ -102,13 +103,26 @@ export { previousContext } from './history'
 // `usesSetsDiff` sale a la superficie porque el criterio lo comparten tres
 // lugares —la tabla, la frase del desempate de la fecha y la página de Reglas—
 // y eran tres copias de `setsToWin > 1`. Arreglar una sola las hacía discrepar.
-export { computeStandings, usesSetsDiff } from './standings'
+export { computeStandings, dayScoring, usesSetsDiff } from './standings'
 // `tallySets` sale ahora (plan-historial-entre-amigos-2a, tarea 1):
 // `db/friends.ts` necesita saber quién ganó un partido desde afuera de
 // `core/`, y esa regla ya vivía inline en `computeStandings` — mismo criterio
 // que `usesSetsDiff` arriba, se extrae en vez de copiarse.
 export { tallySets } from './standings'
 export { computeAwards } from './awards'
+
+//── Una fecha por ranking (bowling, S4): sin partidos, puestos compartidos ──
+// `db/matchday.ts` (cerrar) y la pantalla de la fecha (la tabla en vivo)
+// arman la misma tabla con `rankScores`; el torneo rápido también.
+export type { EntryScore, RankingTally } from './ranking-fecha'
+export {
+  rankScores,
+  computeRankingAwards,
+  rankingScoreError,
+  parseRankingScore,
+  rankingTallies,
+  MAX_RANKING_SCORE,
+} from './ranking-fecha'
 
 //── Formato sugerido y grupos de una fecha (REQ-D8-1, PR21) ─────────────────
 // `suggestFormat` es la salida real de W32 (decisión #3863): grupos + llave
@@ -250,9 +264,11 @@ export { tallyPlayers, partnerRecords, bestPair, rivalRecords } from './playerst
 export { allMatchings } from './matchings'
 
 //── El registro de deportes: un deporte es dato, la familia de marcador es la estrategia ──
-export type { ScoringFamily, Range, SetsSport, GoalsSport, Sport, SportId, TournamentSport, Modality, TournamentFicha } from './sports'
+export type { ScoringFamily, Range, SetsSport, GoalsSport, ResultSport, Sport, SportId, SportIcono, SportTono, TournamentSport, Modality, TournamentFicha } from './sports'
 export {
   SPORTS,
+  RESULT_FORMAT,
+  SPORT_TONOS,
   SPORT_IDS,
   TOURNAMENT_SPORTS,
   MODALITY_ORDER,
@@ -268,6 +284,8 @@ export {
   sideWords,
   unitOf,
 } from './sports'
+// Aparte del bloque de arriba: lo trajo bowling (S4), sin tocar la lista del registro.
+export { isRankingSport } from './sports'
 
 // ── Un sorteo reproducible ───────────────────────────────────────────────────
 // Fisher-Yates con el `random` inyectado: `core/` no tiene `Math.random`.

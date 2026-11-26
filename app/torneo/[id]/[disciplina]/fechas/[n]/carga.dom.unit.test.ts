@@ -40,6 +40,7 @@ beforeAll(() => {
 const PADEL: MatchFormat = { setsToWin: 1, gamesPerSet: 4, tieBreak: true, openScore: false }
 const PING_PONG: MatchFormat = { setsToWin: 2, gamesPerSet: 11, tieBreak: false, openScore: false }
 const FIFA: MatchFormat = { ...PADEL, openScore: true }
+const AJEDREZ: MatchFormat = { setsToWin: 1, gamesPerSet: 1, tieBreak: false, openScore: false, resultado: true }
 
 const contextOf = (format: MatchFormat): CargaContext => ({
   seasonId: 's1',
@@ -47,10 +48,10 @@ const contextOf = (format: MatchFormat): CargaContext => ({
   disciplina: 'padel',
   matchdayNumber: 1,
   format,
-  unit: format.openScore ? 'goles' : format.gamesPerSet === 11 ? 'puntos' : 'games',
+  unit: format.resultado === true ? 'partidas' : format.openScore ? 'goles' : format.gamesPerSet === 11 ? 'puntos' : 'games',
 })
 
-function partido(matchId: string, a: string, b: string, sets: SetScore[] = []): PartidoVM {
+function partido(matchId: string, a: string, b: string, sets: SetScore[] = [], tablas = true): PartidoVM {
   const [scoreA, scoreB] = sets.length === 0 ? ['–', '–'] : [String(sets[0]!.gamesA), String(sets[0]!.gamesB)]
   const winner = sets.length === 0 ? null : sets[0]!.gamesA > sets[0]!.gamesB ? 'A' : sets[0]!.gamesB > sets[0]!.gamesA ? 'B' : null
   return {
@@ -65,6 +66,7 @@ function partido(matchId: string, a: string, b: string, sets: SetScore[] = []): 
     scoreB,
     winner,
     sets,
+    tablas,
   }
 }
 
@@ -414,5 +416,99 @@ describe('FIFA: dos campos, el primero enfocado, y el paso al segundo', () => {
     await montar(FIFA, [partido('p1', 'Ana & Beto', 'Caro & Dani', [{ gamesA: 2, gamesB: 2 }])])
     await tocar(botonLlamado('Corregir Ana & Beto 2, Caro & Dani 2'))
     expect(campos().map((campo) => campo.value)).toEqual(['2', '2'])
+  })
+})
+
+// Ajedrez (odd/tasks/mas-deportes.md, S3): un toque —ganó uno, tablas, ganó el otro— y se guarda.
+describe('ajedrez: gana, pierde o tablas, en un toque', () => {
+  const PARTIDA = partido('p1', 'Ana', 'Caro')
+  const OTRA = partido('p2', 'Eli', 'Gabi')
+  const opcion = (texto: string) => botonDe(texto, dialogo())
+  const opciones = () => botones(dialogo()).filter((b) => b.hasAttribute('aria-pressed')).map((b) => b.textContent?.trim())
+
+  it('la hoja ofrece las tres opciones grandes y ningún número', async () => {
+    await montar(AJEDREZ, [PARTIDA, OTRA])
+    await tocar(botonLlamado('Cargar Ana contra Caro'))
+    expect(opciones()).toEqual(['Ganó Ana', 'Tablas', 'Ganó Caro'])
+    expect(dialogo().textContent).not.toContain('Partidas de')
+    expect(dialogo().textContent).toContain('Con un toque se guarda.')
+    for (const b of botones(dialogo()).filter((b) => b.hasAttribute('aria-pressed'))) {
+      expect(b.className).toContain('min-h-[64px]')
+    }
+  })
+
+  it('"Tablas" guarda 0-0 con un toque, cierra la hoja y "Siguiente" abre la otra', async () => {
+    await montar(AJEDREZ, [PARTIDA, OTRA])
+    await tocar(botonLlamado('Cargar Ana contra Caro'))
+    await tocar(opcion('Tablas'))
+
+    expect(saveMatchResult).toHaveBeenCalledTimes(1)
+    expect(saveMatchResult).toHaveBeenCalledWith('s1', 1, 'p1', [{ gamesA: 0, gamesB: 0 }])
+    expect(dialogo().open).toBe(false)
+    expect(aviso().textContent).toContain('Guardado: Ana y Caro, tablas')
+
+    await tocar(botonDe('Siguiente', aviso()))
+    expect(dialogo().open).toBe(true)
+    expect(opciones()).toEqual(['Ganó Eli', 'Tablas', 'Ganó Gabi'])
+  })
+
+  it('ganó cada uno: 1-0 y 0-1', async () => {
+    await montar(AJEDREZ, [PARTIDA, OTRA])
+    await tocar(botonLlamado('Cargar Ana contra Caro'))
+    await tocar(opcion('Ganó Ana'))
+    expect(saveMatchResult).toHaveBeenLastCalledWith('s1', 1, 'p1', [{ gamesA: 1, gamesB: 0 }])
+    expect(aviso().textContent).toContain('Guardado: ganó Ana')
+
+    await tocar(botonLlamado('Cargar Eli contra Gabi'))
+    await tocar(opcion('Ganó Gabi'))
+    expect(saveMatchResult).toHaveBeenLastCalledWith('s1', 1, 'p2', [{ gamesA: 0, gamesB: 1 }])
+  })
+
+  it('en la llave no se ofrece "Tablas"', async () => {
+    await montar(AJEDREZ, [partido('p1', 'Ana', 'Caro', [], false)])
+    await tocar(botonLlamado('Cargar Ana contra Caro'))
+    expect(opciones()).toEqual(['Ganó Ana', 'Ganó Caro'])
+    expect(dialogo().textContent).toContain('En la llave no hay tablas.')
+  })
+
+  it('mientras guarda lo dice y no deja tocar otra opción', async () => {
+    let terminar: (value: WriteResult) => void = () => {}
+    saveMatchResult.mockImplementationOnce(() => new Promise<WriteResult>((resolve) => (terminar = resolve)))
+    await montar(AJEDREZ, [PARTIDA])
+    await tocar(botonLlamado('Cargar Ana contra Caro'))
+    await tocar(opcion('Ganó Caro'))
+
+    expect(dialogo().textContent).toContain('Guardando…')
+    expect(opcion('Ganó Caro').getAttribute('aria-pressed')).toBe('true')
+    expect(opcion('Tablas').disabled).toBe(true)
+    await act(async () => terminar({ ok: true }))
+    expect(dialogo().open).toBe(false)
+  })
+
+  it('si rebota (o no hay conexión), la hoja queda abierta con lo tocado y el error; tocar de nuevo reintenta', async () => {
+    saveMatchResult.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    await montar(AJEDREZ, [PARTIDA])
+    await tocar(botonLlamado('Cargar Ana contra Caro'))
+    await tocar(opcion('Tablas'))
+
+    expect(dialogo().open).toBe(true)
+    expect(dialogo().querySelector('[role="alert"]')?.textContent).toBe('Sin conexión. Probá de nuevo.')
+    expect(opcion('Tablas').getAttribute('aria-pressed')).toBe('true')
+    expect(opcion('Tablas').disabled).toBe(false)
+
+    await tocar(opcion('Tablas'))
+    expect(saveMatchResult).toHaveBeenCalledTimes(2)
+    expect(dialogo().open).toBe(false)
+  })
+
+  it('corregir trae marcado lo cargado', async () => {
+    const cargada = { ...partido('p1', 'Ana', 'Caro', [{ gamesA: 0, gamesB: 0 }]), scoreA: '½', scoreB: '½' }
+    await montar(AJEDREZ, [cargada])
+    await tocar(botonLlamado('Corregir Ana ½, Caro ½'))
+    expect(opcion('Tablas').getAttribute('aria-pressed')).toBe('true')
+    expect(opcion('Ganó Ana').getAttribute('aria-pressed')).toBe('false')
+
+    await tocar(opcion('Ganó Ana'))
+    expect(saveMatchResult).toHaveBeenCalledWith('s1', 1, 'p1', [{ gamesA: 1, gamesB: 0 }])
   })
 })

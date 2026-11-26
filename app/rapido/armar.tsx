@@ -6,16 +6,16 @@ import { Hero } from '@/app/ui/hero'
 import {
   ARMADO_INICIAL,
   DEPORTE_LABEL,
-  DEPORTE_OBJETIVO,
   DEPORTES,
   VOLVER_INICIO,
   armadoWarning,
+  esBowling,
   type Armado,
   type Modalidad,
   type ModoParejas,
 } from './rapido-state'
 import { agruparChips, enterEnJugador, nombresValidos, seCaenLasParejas, tocarJugador } from './armar-state'
-import { unidadDe } from './jugar-logic'
+import { esPartida, subDeporte } from './jugar-logic'
 
 const MODALIDADES: Modalidad[] = ['INDIVIDUAL', 'PAREJAS']
 const MODALIDAD_LABEL: Record<Modalidad, string> = { INDIVIDUAL: 'Individual', PAREJAS: 'Parejas' }
@@ -72,7 +72,8 @@ function Opciones<T extends string>({
       <h2 id={idTitulo} className={PREGUNTA}>
         {titulo}
       </h2>
-      <div role="group" aria-labelledby={idTitulo} className="mt-3 flex gap-2">
+      {/* Más de tres no entran en una fila de 390 (los deportes): van de a tres por renglón. */}
+      <div role="group" aria-labelledby={idTitulo} className={`mt-3 gap-2 ${opciones.length > 3 ? 'grid grid-cols-3' : 'flex'}`}>
         {opciones.map((opcion) => {
           const elegida = opcion === valor
           return (
@@ -212,6 +213,7 @@ export function Armar({ onEmpezar, aviso }: { onEmpezar: (armado: Armado) => voi
   const jugadoresFiltrados = nombresValidos(armado.jugadores)
   const chips = agruparChips(jugadoresFiltrados, armado.parejasManuales)
   const warning = armadoWarning(armado)
+  const bowling = esBowling(armado)
   const listo = warning === null
 
   return (
@@ -228,20 +230,25 @@ export function Armar({ onEmpezar, aviso }: { onEmpezar: (armado: Armado) => voi
         titulo="Deporte"
         opciones={DEPORTES}
         etiqueta={(deporte) => DEPORTE_LABEL[deporte]}
-        sub={(deporte) => `A ${DEPORTE_OBJETIVO[deporte]} ${unidadDe(deporte)}`}
+        sub={subDeporte}
         valor={armado.deporte}
-        onChange={(deporte) => setArmado({ ...armado, deporte })}
+        // El ajedrez es uno contra uno: elegirlo pasa a individual (y no pregunta cómo se juega). Bowling
+        // tampoco pregunta: `armar` lo juega individual siempre.
+        onChange={(deporte) => setArmado({ ...armado, deporte, ...(esPartida(deporte) ? { modalidad: 'INDIVIDUAL' } : {}) })}
       />
 
-      <Opciones
-        titulo="Cómo se juega"
-        opciones={MODALIDADES}
-        etiqueta={(modalidad) => MODALIDAD_LABEL[modalidad]}
-        valor={armado.modalidad}
-        onChange={(modalidad) => setArmado({ ...armado, modalidad })}
-      />
+      {/* El ajedrez y el bowling se juegan de a uno: no hay modalidad ni parejas que elegir. */}
+      {!esPartida(armado.deporte) && !bowling && (
+        <Opciones
+          titulo="Cómo se juega"
+          opciones={MODALIDADES}
+          etiqueta={(modalidad) => MODALIDAD_LABEL[modalidad]}
+          valor={armado.modalidad}
+          onChange={(modalidad) => setArmado({ ...armado, modalidad })}
+        />
+      )}
 
-      {armado.modalidad === 'PAREJAS' && (
+      {!bowling && armado.modalidad === 'PAREJAS' && (
         <Opciones
           titulo="Parejas"
           opciones={MODOS_PAREJAS}
@@ -252,7 +259,7 @@ export function Armar({ onEmpezar, aviso }: { onEmpezar: (armado: Armado) => voi
         />
       )}
 
-      {armado.modalidad === 'PAREJAS' && armado.modoParejas === 'ROTATIVAS' && (
+      {!bowling && armado.modalidad === 'PAREJAS' && armado.modoParejas === 'ROTATIVAS' && (
         <div className="mx-4 mt-3 flex min-h-[64px] items-center justify-between gap-3 rounded-tile bg-surface py-2 pr-2 pl-4">
           <span className="text-[17px] font-bold">Rondas</span>
           <StepperRondas value={armado.rondas} onChange={(rondas) => setArmado({ ...armado, rondas })} />
@@ -322,7 +329,7 @@ export function Armar({ onEmpezar, aviso }: { onEmpezar: (armado: Armado) => voi
         </button>
       </section>
 
-      {armado.modalidad === 'PAREJAS' && armado.modoParejas === 'FIJAS' && (
+      {!bowling && armado.modalidad === 'PAREJAS' && armado.modoParejas === 'FIJAS' && (
         <section className="px-4 pt-6">
           <h2 className={PREGUNTA}>Armá las parejas</h2>
           <p className="mt-1 text-[15px] text-muted">Tocá dos nombres para juntarlos. Otro toque los separa.</p>

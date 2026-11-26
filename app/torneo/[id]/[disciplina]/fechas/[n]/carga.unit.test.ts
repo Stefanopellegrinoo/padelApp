@@ -1,6 +1,7 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
+import type { MatchFormat } from '@/core'
 import { BotonesDelPerdedor, PanelGoles } from './carga'
 
 /**
@@ -79,7 +80,7 @@ describe('botones del perdedor — la unidad del deporte y los de ventaja', () =
   const PING_PONG = { setsToWin: 2, gamesPerSet: 11, tieBreak: false, openScore: false }
   const PADEL = { setsToWin: 1, gamesPerSet: 4, tieBreak: true, openScore: false }
 
-  function botones(format: typeof PADEL, unit: string) {
+  function botones(format: MatchFormat, unit: string) {
     const html = renderToStaticMarkup(
       createElement(BotonesDelPerdedor, { format, unit, loserName: 'Caro & Dani', pending: false, onLoser: () => {}, onDeuce: () => {} }),
     )
@@ -110,6 +111,14 @@ describe('botones del perdedor — la unidad del deporte y los de ventaja', () =
     const { html, labels } = botones(PADEL, 'games')
     expect(html).toContain('Games de Caro &amp; Dani')
     expect(labels.map((b) => b.text)).toEqual(['0', '1', '2', '3'])
+  })
+
+  it('tenis con el set real: 0 a 4, y aparte 7-5 y 7-6, el del tie-break dicho en claro (S6)', () => {
+    const TENIS: MatchFormat = { setsToWin: 1, gamesPerSet: 6, tieBreak: true, openScore: false, ventaja: true }
+    const { html, labels } = botones(TENIS, 'games')
+    expect(labels.map((b) => b.text)).toEqual(['0', '1', '2', '3', '4', '7-5', '7-6'])
+    expect(labels.filter((b) => b.text.includes('-')).map((b) => b.aria)).toEqual(['7 a 5', '7 a 6, con tie-break'])
+    expect(html).toContain('El 7-6 es con tie-break.')
   })
 
   // 44 es el piso; la hoja los hace de 60, como el prototipo (`.gpick`), porque se tocan parado en el club.

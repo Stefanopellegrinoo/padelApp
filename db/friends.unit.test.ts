@@ -726,6 +726,26 @@ describe('parseCasualResult', () => {
     expect(parseCasualResult(padel({ setsToWin: '2', gamesPerSet: '6', sets })).outcome).toBe('won')
   })
 
+  /**
+   * Pádel se carga con el set real (odd/tasks/mas-deportes.md, S6): 7-5 y 7-6
+   * valen; un 8-6 no. Un partido viejo con un 6-5 de la regla de antes se puede
+   * volver a guardar (el test de arriba).
+   */
+  it('padel con el set real: 7-5 y 7-6 valen, 8-6 no', () => {
+    const ok = '[{"mine":7,"theirs":5},{"mine":6,"theirs":7},{"mine":7,"theirs":6}]'
+    expect(parseCasualResult(padel({ setsToWin: '2', gamesPerSet: '6', sets: ok })).outcome).toBe('won')
+    expect(() =>
+      parseCasualResult(padel({ setsToWin: '2', gamesPerSet: '6', sets: '[{"mine":8,"theirs":6},{"mine":6,"theirs":2}]' })),
+    ).toThrow(EdgeError)
+  })
+
+  // Lo que manda el formulario al volver a guardar un 4-3 viejo (`formatForSport`: a 3 games) y lo
+  // que mandaba antes (a 4 games, regla de antes): las dos cosas valen.
+  it('padel: un 4-3 viejo se vuelve a guardar, a 3 o a 4 games', () => {
+    expect(parseCasualResult(padel({ gamesPerSet: '3', sets: '[{"mine":4,"theirs":3}]' })).outcome).toBe('won')
+    expect(parseCasualResult(padel({ gamesPerSet: '4', sets: '[{"mine":4,"theirs":3}]' })).outcome).toBe('won')
+  })
+
   it('padel: deriva lost cuando el rival gana el set', () => {
     expect(parseCasualResult(padel({ sets: '[{"mine":1,"theirs":4}]' })).outcome).toBe('lost')
   })
@@ -840,5 +860,30 @@ describe('parseCasualResult', () => {
 
   it('fecha inexistente', () => {
     expect(() => parseCasualResult(fifa({ playedOn: '2026-02-31', outcome: 'won' }))).toThrow(EdgeError)
+  })
+
+  // Ajedrez (odd/tasks/mas-deportes.md, S3): gana, pierde o tablas, y nada más. Las tablas se
+  // guardan como cualquier empate casual: `winner_side` null (`saveArgs`).
+  describe('ajedrez', () => {
+    const ajedrez = (over: Partial<CasualResultInput>) => ({ ...base, sport: 'AJEDREZ', ...over })
+    const sinNumeros = { scoreMine: null, scoreTheirs: null, teamMine: null, teamTheirs: null, format: null, sets: null }
+
+    it('ganaste, perdiste o tablas, sin marcador ni sets', () => {
+      expect(parseCasualResult(ajedrez({ outcome: 'won' }))).toEqual({ sport: 'AJEDREZ', playedOn: '2026-05-01', outcome: 'won', ...sinNumeros })
+      expect(parseCasualResult(ajedrez({ outcome: 'lost' }))).toMatchObject({ outcome: 'lost', ...sinNumeros })
+      expect(parseCasualResult(ajedrez({ outcome: 'drew' }))).toMatchObject({ outcome: 'drew', ...sinNumeros })
+    })
+
+    it('sin resultado pide quién ganó o si fueron tablas', () => {
+      expect(() => parseCasualResult(ajedrez({}))).toThrow('Decinos quién ganó, o si fueron tablas.')
+      expect(() => parseCasualResult(ajedrez({ outcome: 'empate' }))).toThrow('Decinos quién ganó, o si fueron tablas.')
+    })
+
+    it('no lleva marcador, sets ni equipos', () => {
+      const error = 'El ajedrez se carga con gana, pierde o tablas: sin marcador.'
+      expect(() => parseCasualResult(ajedrez({ outcome: 'won', scoreMine: '1', scoreTheirs: '0' }))).toThrow(error)
+      expect(() => parseCasualResult(ajedrez({ outcome: 'won', sets: '[{"mine":1,"theirs":0}]' }))).toThrow(error)
+      expect(() => parseCasualResult(ajedrez({ outcome: 'won', teamMine: 'Blancas' }))).toThrow('Los equipos son sólo para FIFA.')
+    })
   })
 })

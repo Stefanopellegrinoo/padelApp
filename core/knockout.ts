@@ -451,6 +451,8 @@ export function resolveFormato(
  * disciplina de a uno con 12 presentes armaba 66 partidos.
  */
 export function formatoOfrecible(formato: MatchdayFormat, sides: number, maxMatches: number): boolean {
+  // Una fecha por ranking no arma partidos: no está en el menú del armado.
+  if (formato.kind === 'RANKING') return false
   return offerableFormats(sides, maxMatches).some((candidato) =>
     formato.kind === 'GROUPS_KNOCKOUT'
       ? candidato.kind === 'GROUPS_KNOCKOUT' && candidato.groups === formato.groups
@@ -500,6 +502,7 @@ function knockoutMatchCount(groups: number, qualifiersPerGroup: number): number 
  */
 export function matchCountForFormat(format: MatchdayFormat, sides: number): number {
   if (format.kind === 'ROUND_ROBIN') return combinations(sides)
+  if (format.kind === 'RANKING') return 0
   return groupStageMatchCount(sides, format.groups) + knockoutMatchCount(format.groups, format.qualifiersPerGroup)
 }
 

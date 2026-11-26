@@ -240,6 +240,24 @@ describe('ultimoResultado', () => {
     expect(ultimoResultado(casual({ sets: null, score: null })).marcador).toBeNull()
   })
 
+  // Ajedrez (odd/tasks/mas-deportes.md, S3): como en el historial, el empate son tablas y la partida
+  // se anota 1-0, 0-1 o ½-½.
+  it('una partida de ajedrez se lee como en el historial: Tablas ½-½, Ganaste 1-0', () => {
+    expect(ultimoResultado(torneo({ sport: 'AJEDREZ', outcome: 'drew', score: { mine: 0, theirs: 0 } }))).toMatchObject({
+      verbo: 'Tablas',
+      marcador: '½-½',
+      gano: false,
+    })
+    expect(ultimoResultado(casual({ sport: 'AJEDREZ', outcome: 'drew', sets: null, together: true })).verbo).toBe('Tablas')
+    expect(ultimoResultado(casual({ sport: 'AJEDREZ', outcome: 'won', sets: null }))).toMatchObject({ verbo: 'Ganaste', marcador: '1-0' })
+    expect(ultimoResultado(torneo({ sport: 'AJEDREZ', outcome: 'lost', score: { mine: 0, theirs: 1 } })).marcador).toBe('0-1')
+    // Un empate de FIFA sigue siendo "Empataste".
+    expect(ultimoResultado(torneo({ sport: 'FIFA', outcome: 'drew', score: { mine: 2, theirs: 2 } }))).toMatchObject({
+      verbo: 'Empataste',
+      marcador: '2-2',
+    })
+  })
+
   it('el día, y si ganó tu lado', () => {
     const r = ultimoResultado(torneo())
     expect(r.dia).toBe('mié 18 nov')

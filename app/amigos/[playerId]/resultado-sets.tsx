@@ -7,7 +7,7 @@ import {
   isComplete,
   type LoadState,
 } from '@/app/torneo/[id]/[disciplina]/fechas/[n]/carga-state'
-import { BotonesDelPerdedor } from '@/app/torneo/[id]/[disciplina]/fechas/[n]/carga'
+import { BotonesDelPerdedor } from '@/app/torneo/[id]/[disciplina]/fechas/[n]/botones-del-perdedor'
 import { Stepper } from '@/app/stepper'
 import { chooseDeuce, setsField } from './cargar-state'
 import { LABEL, PREGUNTA } from './estilos'

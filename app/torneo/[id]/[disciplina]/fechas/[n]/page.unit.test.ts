@@ -75,6 +75,10 @@ const escena = vi.hoisted(() => ({
   // Historia cerrada por número de fecha (`closedHistory`): vacía salvo en los tests de defensores.
   histories: {} as Record<number, unknown>,
   number: 1,
+  // Bowling (S4): quién vino y los pinos cargados de una fecha por ranking.
+  attendances: new Map<string, 'PLAYING' | 'ABSENT'>(),
+  scores: new Map<string, number>(),
+  playersCanScore: false,
 }))
 
 vi.mock('@/db/discipline', async (importOriginal) => {
@@ -188,12 +192,14 @@ vi.mock('@/db/read', async (importOriginal) => {
       status: 'ACTIVE',
       regularMatchdays: 10,
       isAdmin: escena.isAdmin,
+      playersCanScore: escena.playersCanScore,
       inviteToken: 'token',
       disciplines: [discipline()],
     }),
     seasonMatchdaysOf: async () => [matchdaySummary()],
     entriesOf: async () => entries(),
-    attendancesOf: async () => new Map(),
+    attendancesOf: async () => escena.attendances,
+    matchdayScoresOf: async () => escena.scores,
     // Quién mira: nadie del plantel, así ninguna fila sale marcada como "vos".
     myEntryId: async () => null,
     pairLocksOf: async () => [],
@@ -1317,5 +1323,117 @@ describe('S8e — quién toca un partido y qué abre', () => {
     expect(html).toMatch(/<a[^>]*href="\/torneo\/s1\/fifa\/fechas"[^>]*>.*Fechas<\/a>/)
     expect(html).toContain('1 de 2')
     expect(html).toContain('Falta 1 partido')
+  })
+})
+
+describe('una fecha por ranking (bowling, S4)', () => {
+  // Vinieron los tres primeros; del 4 al 8 avisaron que no.
+  const tresPresentes = () =>
+    new Map<string, 'PLAYING' | 'ABSENT'>([
+      ['e1', 'PLAYING'],
+      ['e2', 'PLAYING'],
+      ['e3', 'PLAYING'],
+      ...[4, 5, 6, 7, 8].map((n) => [`e${n}`, 'ABSENT'] as [string, 'ABSENT']),
+    ])
+
+  afterEach(() => {
+    escena.formato = { kind: 'ROUND_ROBIN' }
+    escena.status = 'OPEN'
+    escena.isAdmin = true
+    escena.playersCanScore = false
+    escena.attendances = new Map()
+    escena.scores = new Map()
+    escena.frozenPoints = new Map()
+    escena.sides = []
+    escena.matches = []
+  })
+
+  it('en armado: quién viene y "Abrir la fecha", sin sorteo ni formato', async () => {
+    escena.formato = { kind: 'RANKING' }
+    escena.status = 'DRAFT'
+    escena.attendances = tresPresentes()
+    const html = await render()
+    expect(html).toContain('Quién viene')
+    expect(html).toMatch(/<button[^>]*>Abrir la fecha<\/button>/)
+    expect(html).not.toContain('Formato de la fecha')
+    expect(html).not.toContain('Generar')
+    expect(html).not.toContain('Confirmar fecha')
+    expect(html).toContain('>3<')
+  })
+
+  it('en juego: una fila de pinos por presente, el ranking con el puesto compartido y "Falta 1 jugador"', async () => {
+    escena.formato = { kind: 'RANKING' }
+    escena.attendances = tresPresentes()
+    escena.scores = new Map([
+      ['e1', 180],
+      ['e2', 180],
+    ])
+    const html = await render()
+    for (const n of [1, 2, 3]) expect(html).toContain(`aria-label="Pinos de Jugador ${n}"`)
+    expect(html).not.toContain('aria-label="Pinos de Jugador 4"')
+    expect(html).toMatch(/value="180"/)
+    // Los dos de 180 son 1°, y el que no cargó no tiene puesto.
+    expect(html.match(/font-cond text-\[24px\]">1</g)).toHaveLength(2)
+    expect(html).toContain('Falta 1 jugador')
+    const cerrar = /<button[^>]*>Cerrar la fecha<\/button>/.exec(html)?.[0] ?? ''
+    expect(cerrar).toContain('disabled')
+    expect(html).toContain('jugadores con pinos')
+    expect(html).not.toContain('partidos cargados')
+    expect(html).not.toContain('Ronda 1')
+  })
+
+  it('con todos cargados se puede cerrar', async () => {
+    escena.formato = { kind: 'RANKING' }
+    escena.attendances = tresPresentes()
+    escena.scores = new Map([
+      ['e1', 180],
+      ['e2', 150],
+      ['e3', 99],
+    ])
+    const html = await render()
+    expect(html).toContain('Todos cargaron sus pinos')
+    const cerrar = /<button[^>]*>Cerrar la fecha<\/button>/.exec(html)?.[0] ?? ''
+    expect(cerrar).not.toContain('disabled')
+  })
+
+  it('quien no organiza ni puede cargar ve el ranking, sin campos', async () => {
+    escena.formato = { kind: 'RANKING' }
+    escena.isAdmin = false
+    escena.attendances = tresPresentes()
+    escena.scores = new Map([['e1', 120]])
+    const html = await render()
+    expect(html).not.toContain('Pinos de Jugador')
+    expect(html).toContain('Tabla de la fecha')
+    expect(html).not.toContain('Cerrar la fecha')
+  })
+
+  it('con "los jugadores cargan" prendido, un jugador ve los campos', async () => {
+    escena.formato = { kind: 'RANKING' }
+    escena.isAdmin = false
+    escena.playersCanScore = true
+    escena.attendances = tresPresentes()
+    const html = await render()
+    expect(html).toContain('aria-label="Pinos de Jugador 1"')
+  })
+
+  it('cerrada: los puntos congelados en la tabla, y sin campos', async () => {
+    escena.formato = { kind: 'RANKING' }
+    escena.status = 'CLOSED'
+    escena.attendances = tresPresentes()
+    escena.scores = new Map([
+      ['e1', 180],
+      ['e2', 180],
+      ['e3', 99],
+    ])
+    escena.frozenPoints = new Map([
+      ['e1', { position: 1, points: 10 }],
+      ['e2', { position: 1, points: 10 }],
+      ['e3', { position: 3, points: 5 }],
+    ])
+    const html = await render()
+    expect(html).not.toContain('Pinos de Jugador')
+    expect(html.match(/font-cond text-right text-\[26px\]">10</g)).toHaveLength(2)
+    expect(html).toContain('font-cond text-right text-[26px]">5<')
+    expect(html).toContain('Reabrir fecha')
   })
 })

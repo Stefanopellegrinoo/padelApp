@@ -1,7 +1,7 @@
 'use client'
 
 import { useId, type ReactNode } from 'react'
-import { fichaLine, isSportId, modalityLabel, sportLabel, sportOf, type Modality, type SideSize } from '@/core'
+import { fichaLine, isRankingSport, isSportId, modalityLabel, sportLabel, sportOf, type Modality, type SideSize } from '@/core'
 import type { DisciplineRules } from './personalizar-reglas-state'
 import { modalityHint, offeredModalities, primeraFechaKey, type PrimeraFecha } from './tarjeta-state'
 
@@ -130,29 +130,32 @@ export function TarjetaDeporte({
           <p className="rounded-btn bg-live-bg px-3.5 py-3 text-[15px] font-semibold text-live">{warning}</p>
         )}
 
-        <div>
-          <p id={fechaId} className={`${PREGUNTA} mb-2`}>
-            ¿Cómo se arma la primera fecha?
-          </p>
-          {/* Con tres deportes son cuatro opciones, y a 390px no entran en una fila: dos columnas. */}
-          <div
-            role="group"
-            aria-labelledby={fechaId}
-            className={primeraFechaOptions.length > 3 ? 'grid grid-cols-2 gap-2' : 'flex gap-2'}
-          >
-            {primeraFechaOptions.map(({ value, label, sub }) => (
-              <Opcion
-                key={primeraFechaKey(value)}
-                elegido={primeraFechaKey(value) === primeraFechaKey(primeraFecha)}
-                sub={sub}
-                onClick={() => onPrimeraFecha(value)}
-              >
-                {label}
-              </Opcion>
-            ))}
+        {/* Bowling (S4): cada fecha es un ranking por pinos, no hay parejas ni cruces que armar. */}
+        {!isRankingSport(kind) && (
+          <div>
+            <p id={fechaId} className={`${PREGUNTA} mb-2`}>
+              ¿Cómo se arma la primera fecha?
+            </p>
+            {/* Con tres deportes son cuatro opciones, y a 390px no entran en una fila: dos columnas. */}
+            <div
+              role="group"
+              aria-labelledby={fechaId}
+              className={primeraFechaOptions.length > 3 ? 'grid grid-cols-2 gap-2' : 'flex gap-2'}
+            >
+              {primeraFechaOptions.map(({ value, label, sub }) => (
+                <Opcion
+                  key={primeraFechaKey(value)}
+                  elegido={primeraFechaKey(value) === primeraFechaKey(primeraFecha)}
+                  sub={sub}
+                  onClick={() => onPrimeraFecha(value)}
+                >
+                  {label}
+                </Opcion>
+              ))}
+            </div>
+            <p className={AYUDA}>Después, manda la tabla.</p>
           </div>
-          <p className={AYUDA}>Después, manda la tabla.</p>
-        </div>
+        )}
 
         <div>
           <p className={`${PREGUNTA} mb-2`}>Reglas</p>

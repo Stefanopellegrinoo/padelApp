@@ -406,6 +406,21 @@ describe('Historial', () => {
     expect(tejo.join('|')).toContain('3-1')
   })
 
+  // Ajedrez (odd/tasks/mas-deportes.md, S3): se anota 1-0, 0-1 o ½-½, y el empate son tablas.
+  it('una partida de ajedrez se lee como se anota: tablas ½-½, ganada 1-0, perdida 0-1', () => {
+    const base = { sport: 'AJEDREZ', score: null, teams: { mine: null, theirs: null }, rivals: ['Juan'] }
+    expect(lineas(partidoCasual({ ...base, outcome: 'drew' }))).toEqual([
+      'Tablas', '½-½', `Ajedrez, ${matchdayDay('2026-08-23')}`, 'Cargó Fede',
+    ])
+    expect(lineas(partidoCasual({ ...base, outcome: 'lost' })).slice(0, 2)).toEqual(['Perdiste', '0-1'])
+    expect(lineas(partido({ sport: 'AJEDREZ', outcome: 'won', score: { mine: 1, theirs: 0 } }))).toEqual([
+      'Ganaste', '1-0', `Ajedrez, ${matchdayDay('2026-08-14')}, Los Jueves`,
+    ])
+    expect(lineas(partido({ sport: 'AJEDREZ', outcome: 'drew', score: { mine: 0, theirs: 0 }, together: true })).slice(0, 2)).toEqual([
+      'Tablas', '½-½',
+    ])
+  })
+
   it('la fila de torneo tiene la misma forma, sin nombres ni autoría', () => {
     expect(lineas(partido())).toEqual(['Ganaste', '6-3', `Pádel, ${matchdayDay('2026-08-14')}, Los Jueves`])
   })

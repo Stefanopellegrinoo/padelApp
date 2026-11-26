@@ -2,6 +2,7 @@ import {
   buildFixture,
   buildSides,
   computeAwards,
+  computeRankingAwards,
   computeRanking,
   computeStandings,
   currentPhase,
@@ -23,6 +24,8 @@ import {
   phaseIsComplete,
   previousContext,
   pair,
+  rankingScoreError,
+  rankScores,
   resolveFormato,
   sameSide,
   sideOfRow,
@@ -318,6 +321,14 @@ export async function setMatchdayFormat(
   const matchday = await requireMatchday(supabase, matchdayId)
   if (matchday.status !== 'DRAFT') {
     throw new EdgeError('El formato sólo se cambia con la fecha en armado.')
+  }
+  // Por ranking (bowling) es lo que la fecha ES, no algo que se elige: lo
+  // hereda de la disciplina. Ni una fecha de pinos pasa a partidos ni al revés.
+  if (isRankingFecha(matchday)) {
+    throw new EdgeError('Una fecha de pinos no cambia de formato.')
+  }
+  if (formato.kind === 'RANKING') {
+    throw new EdgeError('El ranking por pinos no se elige en el armado: es el formato de bowling.')
   }
 
   // W78 (verify-report-pr21-cierre, #4016): `matchdays_formato_kind` (0040)
@@ -829,6 +840,9 @@ export async function generatePairs(supabase: Client, matchdayId: string): Promi
   if (matchday.status !== 'DRAFT') {
     throw new EdgeError('Las parejas sólo se arman con la fecha en armado.')
   }
+  if (isRankingFecha(matchday)) {
+    throw new EdgeError('Esta fecha no arma parejas: cada uno carga sus pinos.')
+  }
 
   // `buildSides` (PR16, wired here — PR18a): con `sideSize=2` es `buildPairs`
   // sin cambios (desde PR19 ya devuelve `Side[]` solo); con `sideSize=1` cada
@@ -1296,6 +1310,11 @@ export async function openMatchday(supabase: Client, matchdayId: string): Promis
     return
   }
 
+  if (isRankingFecha(masters)) {
+    await openRankingMatchday(supabase, masters)
+    return
+  }
+
   const { input, guests, matchday } = await pairingContextFor(supabase, matchdayId)
   assertGuestsNamed(guests)
 
@@ -1315,6 +1334,34 @@ export async function openMatchday(supabase: Client, matchdayId: string): Promis
   await freezeMatchdayFormat(supabase, matchday, present.size)
   const { error } = await supabase.rpc('open_matchday', { p_matchday: matchdayId })
   if (error !== null) throw new EdgeError(error.message)
+}
+
+/**
+ * Abre una fecha por ranking (bowling, S4): no hay parejas que comparar con
+ * los presentes, porque no hay parejas. Lo que se exige es que haya con quién
+ * competir —dos o más presentes, lo mismo que `open_matchday` (0110) vuelve a
+ * verificar— y que la lista de puntos alcance para pagar a todos, la misma
+ * pregunta que `assertPointsCoverMatchday` le hace al sorteo.
+ */
+async function openRankingMatchday(supabase: Client, matchday: MatchdayRow): Promise<void> {
+  const present = await playingEntryIds(supabase, matchday.id, matchday.discipline_id)
+  if (present.length < 2) {
+    throw new EdgeError('Hacen falta al menos dos presentes para abrir la fecha.')
+  }
+  const { config } = await disciplineConfig(supabase, matchday.discipline_id)
+  if (present.length > config.points.length) {
+    throw new EdgeError(
+      `Vienen ${present.length} y la lista de puntos sólo paga ${config.points.length} puestos. Sumá puestos en las reglas.`,
+    )
+  }
+  await freezeMatchdayFormat(supabase, matchday, present.length)
+  const { error } = await supabase.rpc('open_matchday', { p_matchday: matchday.id })
+  if (error !== null) throw new EdgeError(error.message)
+}
+
+/** `matchdays.formato` dice `RANKING`: la fecha no tiene partidos (bowling, S4). */
+function isRankingFecha(matchday: MatchdayRow): boolean {
+  return (matchday.formato as unknown as MatchdayFormatSetting).kind === 'RANKING'
 }
 
 /**
@@ -1360,6 +1407,10 @@ export async function closeMatchday(supabase: Client, matchdayId: string): Promi
   // sobre quién viene HOY en vez de sobre quiénes jugaron, y previousContext
   // podría tirar por un problema de la fecha anterior mientras cerrás ésta.
   const { matchday, config, guests, snapshot } = await matchdayContextFor(supabase, matchdayId)
+  if (isRankingFecha(matchday)) {
+    await closeRankingMatchday(supabase, matchday, config)
+    return
+  }
   const { sides, matches } = await resultsOf(supabase, matchdayId)
 
   for (const match of matches) {
@@ -1430,6 +1481,80 @@ export async function closeMatchday(supabase: Client, matchdayId: string): Promi
     p_awards: awards as unknown as Json,
   })
   if (error !== null) throw new EdgeError(error.message)
+}
+
+/**
+ * Cierra una fecha por ranking (bowling, S4): la tabla sale de los pinos de
+ * los presentes (`rankScores`) y los puntos de los puestos compartidos
+ * (`computeRankingAwards`). `close_matchday` (0111) vuelve a verificar las dos
+ * cosas del lado de la base: que nadie quede sin total y que cada puesto y
+ * cada punto salgan de esos totales.
+ *
+ * Los pinos de alguien que estaba presente y después se bajó (una vuelta al
+ * armado) quedan guardados pero no cuentan: juega quien está PLAYING hoy.
+ */
+async function closeRankingMatchday(supabase: Client, matchday: MatchdayRow, config: SeasonConfig): Promise<void> {
+  const present = await playingEntryIds(supabase, matchday.id, matchday.discipline_id)
+  const scores = await scoresOf(supabase, matchday.id)
+  const missing = present.filter((entryId) => !scores.has(entryId)).length
+  if (missing > 0) {
+    throw new EdgeError(
+      missing === 1 ? 'Faltan los pinos de 1 jugador.' : `Faltan los pinos de ${missing} jugadores.`,
+    )
+  }
+  const standings = rankScores(present.map((entryId) => ({ entryId, score: scores.get(entryId) ?? 0 })))
+  const awards = computeRankingAwards(standings, config)
+  const { error } = await supabase.rpc('close_matchday', {
+    p_matchday: matchday.id,
+    p_awards: awards as unknown as Json,
+  })
+  if (error !== null) throw new EdgeError(error.message)
+}
+
+/**
+ * Guarda el total de un presente en una fecha por ranking (bowling, S4).
+ * Reemplaza el que tuviera: corregir es volver a cargar.
+ *
+ * Los chequeos de acá son para el mensaje; la guarda de verdad es
+ * `matchday_scores_write` (0109): fecha por ranking EN JUEGO, asiento
+ * presente, y quien organiza o el plantel con "los jugadores cargan"
+ * prendido — el mismo permiso que `match_sets_write`.
+ */
+export async function saveScore(supabase: Client, matchdayId: string, entryId: string, score: number): Promise<void> {
+  const problem = rankingScoreError(score)
+  if (problem !== null) throw new EdgeError(problem)
+  const matchday = await requireMatchday(supabase, matchdayId)
+  if (!isRankingFecha(matchday)) throw new EdgeError('Esta fecha no es de pinos.')
+  if (matchday.status !== 'OPEN') throw new EdgeError('Los pinos se cargan con la fecha en juego.')
+
+  const { error } = await supabase.from('matchday_scores').upsert(
+    {
+      matchday_id: matchdayId,
+      entry_id: entryId,
+      season_id: matchday.season_id,
+      score,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'matchday_id,entry_id' },
+  )
+  if (error !== null) {
+    // 42501: RLS. O no tenés permiso de cargar, o ese asiento no vino a esta fecha.
+    throw new EdgeError(
+      error.code === '42501'
+        ? 'No se pudieron guardar los pinos: no podés cargar en esta fecha, o ese jugador no vino.'
+        : `No se pudieron guardar los pinos: ${error.message}`,
+    )
+  }
+}
+
+/** Los totales cargados de una fecha por ranking, por asiento. Incluye los de quien después se bajó. */
+async function scoresOf(supabase: Client, matchdayId: string): Promise<Map<EntryId, number>> {
+  const { data, error } = await supabase
+    .from('matchday_scores')
+    .select('entry_id, score')
+    .eq('matchday_id', matchdayId)
+  if (error) throw new EdgeError(`No se pudieron leer los pinos: ${error.message}`)
+  return new Map((data ?? []).map((row) => [row.entry_id, row.score]))
 }
 
 /**

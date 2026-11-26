@@ -993,10 +993,11 @@ export function SelectorDeFormato({
     formato.kind === 'GROUPS_KNOCKOUT' && !ofertados.some((candidato) => candidato.groups === formato.groups)
       ? [...ofertados, formato]
       : ofertados
+  // `RANKING` no llega acá (la fecha por pinos no usa este armado); sólo cierra la unión.
   const resolvedIsShown =
     resolved.kind === 'ROUND_ROBIN'
       ? ofreceRoundRobin
-      : grupos.some((candidato) => candidato.groups === resolved.groups)
+      : resolved.kind === 'GROUPS_KNOCKOUT' && grupos.some((candidato) => candidato.groups === resolved.groups)
   const automatico = formato.kind === 'AUTO'
   return (
     <section className="flex flex-col gap-2">

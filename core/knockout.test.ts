@@ -714,3 +714,15 @@ describe('resolveFormato', () => {
     expect(formatoOfrecible(resolveFormato(AUTO, headcount, sideSize, techo), sides, techo)).toBe(true)
   })
 })
+
+describe('una fecha por ranking (bowling, S4) no arma partidos', () => {
+  it('no promete partidos y no está en el menú del armado', () => {
+    expect(matchCountForFormat({ kind: 'RANKING' }, 8)).toBe(0)
+    expect(formatoOfrecible({ kind: 'RANKING' }, 8, 66)).toBe(false)
+    expect(offerableFormats(8, 66).some((format) => format.kind === 'RANKING')).toBe(false)
+  })
+
+  it('resolveFormato la deja tal cual: no es AUTO', () => {
+    expect(resolveFormato({ kind: 'RANKING' }, 8, 1, 66)).toEqual({ kind: 'RANKING' })
+  })
+})

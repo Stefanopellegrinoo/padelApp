@@ -53,9 +53,11 @@ describe('registro de deportes', () => {
 
   it('la lista de deportes y la de torneos, en el orden de los chips', () => {
     expect(SPORT_IDS).toEqual([
-      'PADEL', 'PING_PONG', 'FIFA', 'TENIS', 'FUTBOL_TENIS', 'POOL', 'BEER_PONG', 'FUTBOL', 'BASQUET',
+      'PADEL', 'PING_PONG', 'FIFA', 'TENIS', 'FUTBOL_TENIS', 'POOL', 'BEER_PONG', 'AJEDREZ', 'FUTBOL', 'BASQUET',
     ])
-    expect([...TOURNAMENT_SPORTS]).toEqual(['PADEL', 'PING_PONG', 'FIFA', 'TENIS', 'FUTBOL_TENIS', 'POOL', 'BEER_PONG'])
+    expect([...TOURNAMENT_SPORTS]).toEqual([
+      'PADEL', 'PING_PONG', 'FIFA', 'TENIS', 'FUTBOL_TENIS', 'POOL', 'BEER_PONG', 'AJEDREZ',
+    ])
   })
 
   it('el set real se ofrece sólo donde se juega a games con tie-break: pádel y tenis', () => {
@@ -81,8 +83,9 @@ describe('registro de deportes', () => {
     expect(SPORTS.FIFA.tono).toBe('fifa')
     const iconos = SPORT_IDS.map((id) => SPORTS[id].icono)
     expect(new Set(iconos).size).toBe(iconos.length)
-    // Los de T2 y T3 ya tienen paleta: sus entradas del registro llegan con ellos.
-    expect(SPORT_TONOS).toEqual(expect.arrayContaining(['ajedrez', 'bowling']))
+    // Bowling (T3) ya tiene paleta: su entrada del registro llega con él.
+    expect(SPORTS.AJEDREZ.tono).toBe('ajedrez')
+    expect(SPORT_TONOS).toEqual(expect.arrayContaining(['bowling']))
   })
 
   it('los torneos nuevos de pádel y tenis nacen con el set real; los demás con su regla', () => {

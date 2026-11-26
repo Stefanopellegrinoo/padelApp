@@ -4,10 +4,13 @@ import {
   formatoRapido,
   marcadorDeDosToques,
   marcadorDeVentaja,
+  marcadorDePartida,
   nombreLado,
+  partidaDelMarcador,
   puntosDelPerdedor,
   resumenGuardado,
   siguienteSinCargar,
+  subDeporte,
   toqueDelMarcador,
   unidadDe,
   ventajasDelPerdedor,
@@ -181,5 +184,44 @@ describe('unidadDe y resumenGuardado', () => {
     expect(resumenGuardado('Ana y Beto', 'Cami y Dani', { a: 4, b: 2 })).toBe('Ana y Beto 4-2')
     expect(resumenGuardado('Ana', 'Beto', { a: 7, b: 11 })).toBe('Beto 11-7')
     expect(resumenGuardado('Ana', 'Beto', { a: 3, b: 3 })).toBe('Ana 3-3 Beto')
+  })
+})
+
+// Ajedrez (odd/tasks/mas-deportes.md, S3): un toque, guardado como 1-0, 0-1 o 0-0.
+describe('la partida de ajedrez', () => {
+  it('cada toque es un marcador que la regla de una fecha acepta, tablas incluidas', () => {
+    expect(marcadorDePartida('a')).toEqual({ a: 1, b: 0 })
+    expect(marcadorDePartida('b')).toEqual({ a: 0, b: 1 })
+    expect(marcadorDePartida('tablas')).toEqual({ a: 0, b: 0 })
+    for (const toque of ['a', 'b', 'tablas'] as const) {
+      const { a, b } = marcadorDePartida(toque)
+      expect(setError({ gamesA: a, gamesB: b }, formatoRapido('AJEDREZ'), true)).toBeNull()
+    }
+  })
+
+  it('lo cargado vuelve a su toque', () => {
+    expect(partidaDelMarcador({ a: 1, b: 0 })).toBe('a')
+    expect(partidaDelMarcador({ a: 0, b: 1 })).toBe('b')
+    expect(partidaDelMarcador({ a: 0, b: 0 })).toBe('tablas')
+    expect(partidaDelMarcador(null)).toBeNull()
+    expect(partidaDelMarcador({ a: 4, b: 2 })).toBeNull()
+  })
+
+  it('no tiene números del perdedor ni de ventaja', () => {
+    expect(puntosDelPerdedor('AJEDREZ')).toEqual([])
+    expect(ventajasDelPerdedor('AJEDREZ')).toEqual([])
+  })
+
+  it('el botón del deporte dice cómo se juega', () => {
+    expect(subDeporte('AJEDREZ')).toBe('Gana o tablas')
+    expect(subDeporte('PADEL')).toBe('A 4 games')
+    expect(subDeporte('BEER_PONG')).toBe('A 10 vasos')
+  })
+
+  it('el aviso dice quién ganó, o tablas', () => {
+    expect(resumenGuardado('Ana', 'Beto', { a: 1, b: 0 }, 'AJEDREZ')).toBe('ganó Ana')
+    expect(resumenGuardado('Ana', 'Beto', { a: 0, b: 1 }, 'AJEDREZ')).toBe('ganó Beto')
+    expect(resumenGuardado('Ana', 'Beto', { a: 0, b: 0 }, 'AJEDREZ')).toBe('Ana y Beto, tablas')
+    expect(resumenGuardado('Ana', 'Beto', { a: 4, b: 2 }, 'PADEL')).toBe('Ana 4-2')
   })
 })

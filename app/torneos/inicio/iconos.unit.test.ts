@@ -20,8 +20,9 @@ describe('IconoDeporte: un ícono por deporte (S5)', () => {
     expect(trazo('FIFA')).toMatch(/^M7 8h10/)
   })
 
-  it('ajedrez y bowling ya tienen el suyo; un id que no se conoce cae en la paleta, sin tirar', () => {
-    const conocidos = new Set(SPORT_IDS.map(trazo))
+  it('ajedrez dibuja su peón desde el registro; bowling ya tiene el suyo; un id que no se conoce cae en la paleta', () => {
+    const conocidos = new Set(SPORT_IDS.filter((id) => id !== 'AJEDREZ').map(trazo))
+    expect(SPORTS.AJEDREZ.icono).toBe('peon')
     expect(conocidos.has(trazo('AJEDREZ'))).toBe(false)
     expect(conocidos.has(trazo('BOWLING'))).toBe(false)
     expect(trazo('AJEDREZ')).not.toBe(trazo('BOWLING'))

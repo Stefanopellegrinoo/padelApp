@@ -26,11 +26,14 @@ import {
   goalsRejected,
   isComplete,
   openScoreSet,
+  resultadoDeLaPartida,
   resumenGuardado,
   retomarUltimoSet,
+  setDeResultado,
   siguienteSinCargar,
   toqueDelSet,
   type LoadState,
+  type ResultadoPartida,
 } from './carga-state'
 import {
   closeTheMatchday,
@@ -81,6 +84,12 @@ export interface PartidoVM {
   winner: 'A' | 'B' | null
   /** Los sets cargados, para abrir la hoja precargada al corregir. Vacío sin resultado. */
   sets: SetScore[]
+  /**
+   * Si este partido puede quedar empatado (`drawIsLegal`: la disciplina admite
+   * empates y no es de la llave). Sólo lo lee la partida de ajedrez, que sin
+   * esto no ofrece "Tablas".
+   */
+  tablas: boolean
 }
 
 const ERROR_NOTE = 'rounded-btn bg-live-bg px-3 py-2.5 text-[15px] font-semibold text-live'
@@ -167,7 +176,10 @@ export function CargaDeLaFecha({
                 primerCampo={primerCampo}
                 onGuardado={(sets) => {
                   cerrar()
-                  setAviso({ texto: `Guardado: ${resumenGuardado(partido.pairAName, partido.pairBName, sets)}`, guardado: partido.matchId })
+                  setAviso({
+                    texto: `Guardado: ${resumenGuardado(partido.pairAName, partido.pairBName, sets, context.format)}`,
+                    guardado: partido.matchId,
+                  })
                   setDestello((prev) => ({ matchId: partido.matchId, vez: (prev?.vez ?? 0) + 1 }))
                 }}
               />
@@ -337,7 +349,76 @@ function HojaDeCarga({
       />
     )
   }
+  if (format.resultado === true) {
+    return <UnToque partido={partido} pending={pending} alerta={alerta} guardar={guardar} />
+  }
   return <DosToques context={context} partido={partido} pending={pending} alerta={alerta} guardar={guardar} />
+}
+
+/**
+ * La partida (ajedrez, odd/tasks/mas-deportes.md S3): "Ganó Ana", "Tablas",
+ * "Ganó Caro", y el toque guarda. Con la misma cara que los "Ganó" de los dos
+ * toques. En la llave no hay tablas (`drawIsLegal`), así que no se ofrecen.
+ *
+ * Al corregir, lo cargado viene marcado (`resultadoDeLaPartida`); mientras
+ * guarda y si rebota, queda marcado lo que se tocó, y tocarlo de nuevo reintenta.
+ */
+function UnToque({
+  partido,
+  pending,
+  alerta,
+  guardar,
+}: {
+  partido: PartidoVM
+  pending: boolean
+  alerta: ReactNode
+  guardar: (sets: SetScore[], siFalla: () => void) => void
+}) {
+  const [elegido, setElegido] = useState<ResultadoPartida | null>(() => resultadoDeLaPartida(partido.sets))
+  const opciones: { resultado: ResultadoPartida; texto: string }[] = [
+    { resultado: 'A', texto: `Ganó ${partido.pairAName}` },
+    ...(partido.tablas ? [{ resultado: 'TABLAS' as const, texto: 'Tablas' }] : []),
+    { resultado: 'B', texto: `Ganó ${partido.pairBName}` },
+  ]
+  return (
+    <div>
+      <p className={PREGUNTA}>¿Cómo terminó?</p>
+      <div className="flex flex-col gap-2.5">
+        {opciones.map(({ resultado, texto }) => (
+          <button
+            key={resultado}
+            type="button"
+            aria-pressed={elegido === resultado}
+            disabled={pending}
+            onClick={() => {
+              setElegido(resultado)
+              guardar([setDeResultado(resultado)], () => {})
+            }}
+            className={`flex min-h-[64px] items-center justify-between gap-3 rounded-btn px-[18px] text-left text-[19px] font-bold ${
+              elegido === resultado
+                ? 'bg-block text-on-block'
+                : 'bg-opcion text-text shadow-[inset_0_0_0_1.5px_var(--color-opcion-borde)]'
+            }`}
+          >
+            <span className="min-w-0">{texto}</span>
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              className={`h-6 w-6 shrink-0 fill-none stroke-current stroke-2 [stroke-linecap:round] [stroke-linejoin:round] ${
+                elegido === resultado ? '' : 'invisible'
+              }`}
+            >
+              <path d="M5 12.5l4.5 4.5L19 7.5" />
+            </svg>
+          </button>
+        ))}
+      </div>
+      <p aria-live="polite" className="mt-2.5 min-h-5 text-[15px] text-muted">
+        {pending ? 'Guardando…' : partido.tablas ? 'Con un toque se guarda.' : 'Con un toque se guarda. En la llave no hay tablas.'}
+      </p>
+      {alerta}
+    </div>
+  )
 }
 
 /**

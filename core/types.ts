@@ -49,6 +49,16 @@ export interface MatchFormat {
    * desde su ficha (`core/sports.ts`).
    */
   ventaja?: boolean
+  /**
+   * La familia "resultado" (ajedrez, S3 de mas-deportes): el partido es UNA
+   * partida que se gana, se pierde o termina en tablas, guardada como un set
+   * 1-0, 0-1 o 0-0 (`RESULT_FORMAT`, `core/sports.ts`). Con esto prendido
+   * `setsToWin`, `gamesPerSet` y `tieBreak` no se leen.
+   *
+   * OPCIONAL por lo mismo que `ventaja`: ningún formato guardado antes la tiene,
+   * y ausente es la regla de sets de siempre.
+   */
+  resultado?: boolean
 }
 
 /** `matchdays.match_format`: a cuánto se juega UNA fecha, si no es al del deporte en el torneo. */

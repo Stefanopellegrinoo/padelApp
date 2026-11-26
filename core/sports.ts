@@ -8,7 +8,7 @@
  */
 import type { FirstFecha, MatchFormat, MatchdayFormatSetting, SideSize } from './types'
 
-export type ScoringFamily = 'sets' | 'goals'
+export type ScoringFamily = 'sets' | 'goals' | 'result'
 export interface Range {
   min: number
   max: number
@@ -32,8 +32,8 @@ export interface TournamentFicha {
 /**
  * La paleta del deporte (S5 de mas-deportes): `app/globals.css` define
  * `--color-<tono>`, `-tint`, `on-<tono>`, `-block` y `-block-soft` en claro y
- * en oscuro, y un bloque `[data-deporte='<ID>']` por id que las usa. Ajedrez y
- * bowling ya tienen la suya: sus entradas del registro llegan con su familia.
+ * en oscuro, y un bloque `[data-deporte='<ID>']` por id que las usa. Bowling
+ * ya tiene la suya: su entrada del registro llega con su familia.
  */
 export const SPORT_TONOS = [
   'padel', 'pingpong', 'fifa', 'futbol', 'basquet', 'tenis', 'futboltenis', 'pool', 'beerpong', 'ajedrez', 'bowling',
@@ -77,7 +77,25 @@ export interface GoalsSport extends SportBase {
   allowsDraw: boolean
   teams: boolean
 }
-export type Sport = SetsSport | GoalsSport
+/**
+ * Gana, pierde o tablas (ajedrez, S3 de mas-deportes): un toque y ningún
+ * número. Se guarda como UN set 1-0, 0-1 o 0-0 (`RESULT_FORMAT`), así la base,
+ * la validación y la tabla de la fecha son las de siempre: las tablas son un
+ * empate y pagan lo que paga un empate (`dayScoring`, core/standings.ts).
+ */
+export interface ResultSport extends SportBase {
+  family: 'result'
+  /** Las tablas: legales donde lo es un empate (`drawIsLegal`), nunca en la llave. */
+  allowsDraw: true
+  /** Siempre `RESULT_FORMAT`: no hay perillas. */
+  format: MatchFormat
+}
+export type Sport = SetsSport | GoalsSport | ResultSport
+
+/** Una partida: un set de 1, que gana uno (1-0, 0-1) o queda en tablas (0-0). */
+export const RESULT_FORMAT: MatchFormat = {
+  setsToWin: 1, gamesPerSet: 1, tieBreak: false, openScore: false, resultado: true,
+}
 
 // Lo que comparten las tres fichas de hoy: los valores que la app ya usaba.
 const SEASON_DE_HOY = { regularMatchdays: 10, countBestOf: 8, tiebreakSnapshotEvery: 3 }
@@ -175,6 +193,16 @@ export const SPORTS = {
       season: SEASON_DE_HOY, masters: false, fechaFormat: AUTO_FECHA, firstFecha: FIRST_FECHA_DE_HOY,
     },
   },
+  AJEDREZ: {
+    label: 'Ajedrez', unit: 'partidas', family: 'result', allowsDraw: true, tournaments: true, tono: 'ajedrez', icono: 'peon',
+    format: RESULT_FORMAT,
+    // Sólo de a uno: una partida es uno contra uno. El ajedrez por equipos son varios tableros
+    // a la vez, que es otra cosa que una pareja; y sin parejas no hay Masters (0053).
+    ficha: {
+      modalities: [{ id: 'INDIVIDUAL', label: 'Individual' }],
+      season: SEASON_DE_HOY, masters: false, fechaFormat: AUTO_FECHA, firstFecha: FIRST_FECHA_DE_HOY,
+    },
+  },
   FUTBOL:  { label: 'Fútbol',  unit: 'goles',  family: 'goals', allowsDraw: true,  teams: false, tournaments: false, ficha: null, tono: 'futbol', icono: 'futbol' },
   BASQUET: { label: 'Básquet', unit: 'puntos', family: 'goals', allowsDraw: false, teams: false, tournaments: false, ficha: null, tono: 'basquet', icono: 'basquet' },
 } satisfies Record<string, Sport>
@@ -234,7 +262,9 @@ export function unitOf(kind: string, format: MatchFormat): string {
 }
 
 /** Tupla literal a propósito (`TournamentSport` necesita las claves exactas); el orden del registro es el de los chips. */
-export const TOURNAMENT_SPORTS = ['PADEL', 'PING_PONG', 'FIFA', 'TENIS', 'FUTBOL_TENIS', 'POOL', 'BEER_PONG'] as const satisfies readonly SportId[]
+export const TOURNAMENT_SPORTS = [
+  'PADEL', 'PING_PONG', 'FIFA', 'TENIS', 'FUTBOL_TENIS', 'POOL', 'BEER_PONG', 'AJEDREZ',
+] as const satisfies readonly SportId[]
 export type TournamentSport = (typeof TOURNAMENT_SPORTS)[number]
 
 export function isTournamentSport(raw: string): raw is TournamentSport {
@@ -242,15 +272,22 @@ export function isTournamentSport(raw: string): raw is TournamentSport {
 }
 
 /**
- * `null` si el formato de partido entra en la ficha. Sólo mira los deportes de sets con `openScore: false`:
- * los de goles y los marcadores abiertos no tienen perillas (y hay tests que crean FIFA con la config de pádel).
+ * `null` si el formato de partido entra en la ficha. Los de goles y los marcadores abiertos no tienen
+ * perillas (y hay tests que crean FIFA con la config de pádel). Los de resultado tienen UN formato,
+ * `RESULT_FORMAT`, y la marca `resultado` sólo vale ahí.
  */
 export function sportFormatError(
   kind: string,
-  format: Pick<MatchFormat, 'setsToWin' | 'gamesPerSet' | 'openScore'>,
+  format: Pick<MatchFormat, 'setsToWin' | 'gamesPerSet' | 'openScore' | 'resultado'>,
 ): string | null {
   if (!isSportId(kind)) return 'Elegí un deporte de la lista.'
-  const sport = SPORTS[kind]
+  const sport: Sport = SPORTS[kind]
+  if (sport.family === 'result') {
+    const esPartida =
+      format.resultado === true && !format.openScore && format.setsToWin === 1 && format.gamesPerSet === 1
+    return esPartida ? null : `El ${sport.label.toLowerCase()} se carga con gana, pierde o tablas: no tiene sets que cambiar.`
+  }
+  if (format.resultado === true) return 'Este deporte no se carga con gana, pierde o tablas.'
   if (sport.family !== 'sets' || format.openScore) return null
   const { setsToWin, gamesPerSet } = sport
   if (format.setsToWin < setsToWin.min || format.setsToWin > setsToWin.max) {

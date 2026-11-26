@@ -414,6 +414,9 @@ export default async function StatsPage({ params, searchParams }: PageProps) {
   const { config } = discipline
   // Lo que se cuenta en un partido es del deporte (§8): games, goles, puntos.
   const unit = unitOf(discipline.kind, config.matchFormat)
+  // Una partida de ajedrez se guarda 1-0 o 0-0: sumar sus "games" es contar las partidas otra vez.
+  // Ahí lo que dice algo son las tablas.
+  const partidas = config.matchFormat.resultado === true
   // "Dupla" sólo tiene sentido con parejas que ROTAN: de a uno no hay con quién
   // jugar, y con parejas fijas la dupla es siempre la misma.
   const showPairs = discipline.pairSize === 2 && !fixedTeams
@@ -475,6 +478,11 @@ export default async function StatsPage({ params, searchParams }: PageProps) {
         (matchSum, match) => matchSum + match.sets.reduce((setSum, set) => setSum + set.gamesA + set.gamesB, 0),
         0,
       ),
+    0,
+  )
+  const totalDraws = history.reduce(
+    (sum, matchday) =>
+      sum + matchday.matches.filter((match) => match.sets.length > 0 && matchMargin(match) === 0).length,
     0,
   )
   const evenestMatchdayNumber = evenestMatchday(history)
@@ -557,8 +565,12 @@ export default async function StatsPage({ params, searchParams }: PageProps) {
       {activeTab === 'torneo' ? (
         <>
           <div className="grid grid-cols-3 gap-2.5 px-4 pt-4">
-            <Dato label="Partidos jugados" value={totalMatches} />
-            <Dato label={`${cap(unit)} totales`} value={totalGames} />
+            <Dato label={partidas ? 'Partidas jugadas' : 'Partidos jugados'} value={totalMatches} />
+            {partidas ? (
+              <Dato label="Tablas" value={totalDraws} />
+            ) : (
+              <Dato label={`${cap(unit)} totales`} value={totalGames} />
+            )}
             <Dato
               label="Fecha más pareja"
               value={evenestMatchdayNumber ?? '—'}
@@ -623,7 +635,11 @@ export default async function StatsPage({ params, searchParams }: PageProps) {
           <div className="grid grid-cols-2 gap-2.5 px-4 pt-4">
             <Dato label="Partidos" value={myMatchesPlayed} />
             <Dato label="Efectividad" value={`${myEffectiveness}%`} />
-            <Dato label={`Dif. ${unit}`} value={formatSigned(myNetGames)} />
+            {partidas ? (
+              <Dato label="Tablas" value={myTally?.matchesDrawn ?? 0} />
+            ) : (
+              <Dato label={`Dif. ${unit}`} value={formatSigned(myNetGames)} />
+            )}
             <Dato
               label="Mejor fecha"
               value={myBestMatchday ?? '—'}

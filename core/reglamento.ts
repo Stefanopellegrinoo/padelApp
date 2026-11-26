@@ -11,6 +11,7 @@
  */
 import { MASTERS_SIZE } from './constants'
 import { modalityLabel, modalityOf, unitOf } from './sports'
+import { dayScoring } from './standings'
 import type { MatchdayFormatSetting, SeasonConfig, SideSize } from './types'
 
 export interface ReglamentoInput {
@@ -55,7 +56,11 @@ export function fichaLine(input: ReglamentoInput): string {
   const format = config.matchFormat
   const sets = format.setsToWin === 1 ? '1 set' : `Mejor de ${2 * format.setsToWin - 1} sets`
   const parts = [
-    format.openScore ? 'A goles' : `${sets} a ${format.gamesPerSet} ${unitOf(kind, format)}`,
+    format.openScore
+      ? 'A goles'
+      : format.resultado === true
+        ? 'Gana, pierde o tablas'
+        : `${sets} a ${format.gamesPerSet} ${unitOf(kind, format)}`,
     fechasText(config.regularMatchdays),
     config.regularMatchdays === 1 ? null : cuentanText(config),
     input.hasMasters ? 'Masters al final' : null,
@@ -75,6 +80,11 @@ function partidoText({ kind, allowsDraw, config }: ReglamentoInput): string {
   const format = config.matchFormat
   if (format.openScore) {
     return allowsDraw ? 'Partidos a goles; se puede empatar.' : 'Partidos a goles, siempre con un ganador.'
+  }
+  if (format.resultado === true) {
+    if (!allowsDraw) return 'Cada partida, siempre con un ganador.'
+    const { win, draw } = dayScoring(true)
+    return `Cada partida: gana, pierde o tablas. En la tabla de la fecha, victoria ${win} puntos y tablas ${draw}.`
   }
   const sets = format.setsToWin === 1 ? 'a 1 set' : `al mejor de ${2 * format.setsToWin - 1} sets`
   const n = format.gamesPerSet

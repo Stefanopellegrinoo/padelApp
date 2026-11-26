@@ -145,7 +145,7 @@ export function setsField(state: LoadState): string {
  * Los games del ganador de cada botón los da `deuceWinnerGames`.
  */
 export function deuceOptions(format: MatchFormat): number[] {
-  if (format.openScore) return []
+  if (format.openScore || format.resultado === true) return []
   if (format.ventaja === true) return [format.gamesPerSet - 1, format.gamesPerSet]
   if (format.tieBreak) return []
   // ponytail: techo en 16-14; un 18-16 no se carga. Si aparece: un input numérico en vez de botones.
@@ -246,8 +246,11 @@ export function resumenPartido(
   mode: Mode,
   resultado:
     | { family: 'sets'; sets: readonly PadelSet[] }
-    | { family: 'goals'; outcome: 'won' | 'lost' | 'drew'; scoreMine: string; scoreTheirs: string },
+    | { family: 'goals'; outcome: 'won' | 'lost' | 'drew'; scoreMine: string; scoreTheirs: string }
+    | { family: 'result'; outcome: 'won' | 'lost' | 'drew' },
 ): string {
+  // La partida de ajedrez: sin números, y el empate son tablas.
+  if (resultado.family === 'result') return resultado.outcome === 'drew' ? 'Tablas' : VERBO[mode][resultado.outcome]
   if (resultado.family === 'sets') {
     const mine = resultado.sets.filter((set) => set.mine > set.theirs).length
     const theirs = resultado.sets.filter((set) => set.theirs > set.mine).length

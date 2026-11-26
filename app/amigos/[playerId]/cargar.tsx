@@ -1,7 +1,7 @@
 'use client'
 
 import { useActionState, useEffect, useId, useRef, useState, useTransition, type ReactNode, type RefObject } from 'react'
-import { SPORTS, SPORT_IDS, isSportId, sportLabel, sportOf, type MatchFormat, type SetScore, type SportId } from '@/core'
+import { SPORTS, SPORT_IDS, isSportId, sportLabel, sportOf, type MatchFormat, type ScoringFamily, type SetScore, type SportId } from '@/core'
 import type { CasualMatch } from '@/db/friends'
 import { isComplete, startLoad, toqueDelSet, type LoadState } from '@/app/torneo/[id]/[disciplina]/fechas/[n]/carga-state'
 import { mensajeDeFalla } from '@/app/torneo/[id]/[disciplina]/fechas/[n]/sin-conexion'
@@ -28,6 +28,7 @@ import {
 } from './cargar-state'
 import { INPUT, LABEL, OPTION } from './estilos'
 import { ResultadoGoles, type GoalsFields } from './resultado-goles'
+import { ResultadoPartida, type OutcomePartida } from './resultado-partida'
 import { ResultadoSets } from './resultado-sets'
 
 const INITIAL_STATE: CasualFormState = { error: null }
@@ -187,7 +188,11 @@ export function CasualForm({
     initial === undefined ? (recuerdo?.sport ?? 'PADEL') : isSportId(initialSport) ? initialSport : '',
   )
   const info = sport === '' ? null : sportOf(sport)
-  const [mode, setMode] = useState<Mode>(initial?.mode ?? recuerdo?.mode ?? '1v1')
+  const [modoElegido, setMode] = useState<Mode>(initial?.mode ?? recuerdo?.mode ?? '1v1')
+  // Una partida de ajedrez es uno contra uno: un partido nuevo no ofrece 2 vs 2 (ni lo arrastra de
+  // lo recordado). Al corregir, el plantel es el que se guardó.
+  const soloUnoContraUno = initial === undefined && info?.family === 'result'
+  const mode: Mode = soloUnoContraUno ? '1v1' : modoElegido
   const [slots, setSlots] = useState<Record<SlotKey, SlotChoice>>({
     partner: { choice: '', name: '' },
     rival1: {
@@ -230,7 +235,7 @@ export function CasualForm({
     const next = sportOf(id)
     setSport(id)
     if (next.family === 'sets') setFormat(formatoInicial(next, id, recuerdo))
-    else setEnfocar((n) => n + 1)
+    else if (next.family === 'goals') setEnfocar((n) => n + 1)
     volverACargar()
     setGoals(SIN_GOLES)
   }
@@ -293,7 +298,7 @@ export function CasualForm({
   const problem =
     faltaAlgo ??
     (info?.family === 'sets' && !setsCompletos ? 'Cargá los sets hasta cerrar el partido.' : null) ??
-    (info?.family === 'goals' && goals.outcome === '' ? 'Falta quién ganó.' : null)
+    (info?.family !== 'sets' && goals.outcome === '' ? 'Falta quién ganó.' : null)
 
   // El resumen se arma al enviar: cuando vuelve la action, el formulario ya
   // pudo cambiar (y el aviso tiene que decir lo que se guardó).
@@ -307,20 +312,25 @@ export function CasualForm({
     if (state.error === null) avisar.current?.(resumen.current)
   }, [state])
 
-  const enviar = (carga: LoadState = final) => {
+  // `outcome` aparte: el toque de la partida guarda en el mismo evento en que elige, antes de que
+  // `goals` se actualice.
+  const enviar = (carga: LoadState = final, outcome: GoalsFields['outcome'] = goals.outcome) => {
     const form = formRef.current
     if (form === null || pending) return
     const data = new FormData(form)
     if (info?.family === 'sets') data.set('sets', setsField(carga))
+    if (info?.family === 'result') data.set('outcome', outcome)
     resumen.current =
       info?.family === 'sets'
         ? resumenPartido(mode, {
             family: 'sets',
             sets: carga.sets.map((set) => ({ mine: set.gamesA, theirs: set.gamesB })),
           })
-        : goals.outcome === ''
+        : outcome === ''
           ? ''
-          : resumenPartido(mode, { family: 'goals', ...goals, outcome: goals.outcome })
+          : info?.family === 'result'
+            ? resumenPartido(mode, { family: 'result', outcome })
+            : resumenPartido(mode, { family: 'goals', ...goals, outcome })
     if (initial === undefined && sport !== '') {
       recordar({
         sport,
@@ -336,6 +346,12 @@ export function CasualForm({
     const cerroUnSet = next.sets.length > load.sets.length && !isComplete(next, format)
     setLoad(cerroUnSet ? { ...next, pendingWinner: toqueDeIndice(previos, next.sets.length, format)?.winner ?? null } : next)
     if (faltaAlgo === null && !isComplete(load, format) && isComplete(next, format)) enviar(next)
+  }
+
+  // La partida: el toque elige y, si no falta nada más, guarda.
+  const onPartida = (outcome: OutcomePartida) => {
+    setGoals((current) => ({ ...current, outcome }))
+    if (faltaAlgo === null) enviar(final, outcome)
   }
 
   const onScore = (side: 'scoreMine' | 'scoreTheirs', value: string) => {
@@ -433,7 +449,12 @@ export function CasualForm({
       </fieldset>
 
       <div className="mt-3 grid grid-cols-2 gap-3">
-        {initial === undefined ? (
+        {soloUnoContraUno ? (
+          <div className="flex min-w-0 flex-col gap-1.5">
+            <span className={LABEL}>Juegan</span>
+            <p className="flex min-h-[48px] items-center text-[16px] font-bold">1 vs 1</p>
+          </div>
+        ) : initial === undefined ? (
           <fieldset className="flex min-w-0 flex-col gap-1.5">
             <legend className={`${LABEL} mb-1.5`}>Juegan</legend>
             <div className="flex gap-1.5">
@@ -496,6 +517,18 @@ export function CasualForm({
           onRestart={volverACargar}
         />
       )}
+      {info?.family === 'result' && (
+        <ResultadoPartida
+          outcome={goals.outcome}
+          textos={
+            mode === '1v1'
+              ? { won: 'Ganaste', drew: 'Tablas', lost: `Ganó ${otherName}` }
+              : { won: 'Ganaron ustedes', drew: 'Tablas', lost: 'Ganaron ellos' }
+          }
+          pending={pending}
+          onElegir={onPartida}
+        />
+      )}
       {info?.family === 'goals' && (
         <ResultadoGoles
           sport={info}
@@ -556,11 +589,13 @@ function toqueDeIndice(previos: readonly SetScore[], index: number, format: Matc
 function hintDe(
   problem: string | null,
   faltaAlgo: string | null,
-  family: 'sets' | 'goals' | undefined,
+  family: ScoringFamily | undefined,
   load: LoadState,
   format: MatchFormat,
 ): string {
   if (faltaAlgo !== null) return faltaAlgo
+  // La partida guarda en el toque: lo único que puede faltar es tocarlo.
+  if (family === 'result') return 'Con un toque se guarda.'
   if (family === 'sets' && !isComplete(load, format)) {
     if (load.pendingWinner === null) return 'Tocá primero quién ganó.'
     return format.setsToWin > 1 ? 'Se guarda cuando se define el partido.' : 'Con este toque se guarda.'

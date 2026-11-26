@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildPairs, defaultConfig, pair, validateConfig, type MatchFormat } from '@/core'
+import { buildPairs, defaultConfig, drawIsLegal, pair, validateConfig, type MatchFormat } from '@/core'
 import { EdgeError } from './errors'
 import {
   assertValidConfig,
@@ -666,5 +666,53 @@ describe('W62 — un empate a mitad de camino no cierra el partido', () => {
   it('pero un set empatado en un formato a UN set sí cierra (REQ-D6-1)', () => {
     const oneSet: MatchFormat = { setsToWin: 1, gamesPerSet: 2, tieBreak: true, openScore: false }
     expect(matchError([{ gamesA: 2, gamesB: 2 }], oneSet, true)).toBeNull()
+  })
+})
+
+// La familia "resultado" (ajedrez, odd/tasks/mas-deportes.md S3): una partida es UN set 1-0, 0-1
+// o 0-0. Las tablas valen donde valen los empates: `drawIsLegal`, o sea en una fecha de todos
+// contra todos (fase GRUPO) y nunca en la llave.
+describe('setError / matchError con la familia resultado (ajedrez)', () => {
+  const PARTIDA: MatchFormat = { setsToWin: 1, gamesPerSet: 1, tieBreak: false, openScore: false, resultado: true }
+
+  it('acepta ganó uno y ganó el otro', () => {
+    expect(matchError([{ gamesA: 1, gamesB: 0 }], PARTIDA, true)).toBeNull()
+    expect(matchError([{ gamesA: 0, gamesB: 1 }], PARTIDA, true)).toBeNull()
+    expect(matchError([{ gamesA: 1, gamesB: 0 }], PARTIDA, false)).toBeNull()
+  })
+
+  it('las tablas se guardan en una fecha de todos contra todos, como un empate de FIFA', () => {
+    expect(matchError([{ gamesA: 0, gamesB: 0 }], PARTIDA, drawIsLegal('GRUPO', true))).toBeNull()
+  })
+
+  it('en la llave no hay tablas', () => {
+    expect(matchError([{ gamesA: 0, gamesB: 0 }], PARTIDA, drawIsLegal('SEMI', true))).toBe(
+      'Esta partida no puede quedar en tablas: tiene que haber un ganador.',
+    )
+  })
+
+  it('nada que no sea 1-0, 0-1 o tablas', () => {
+    for (const [gamesA, gamesB] of [[2, 0], [1, 1], [0, 2], [3, 1]] as const) {
+      expect(setError({ gamesA, gamesB }, PARTIDA, true)).toBe(
+        `Una partida se carga como 1-0, 0-1 o tablas: ${gamesA}-${gamesB} no es un resultado.`,
+      )
+    }
+    expect(setError({ gamesA: -1, gamesB: 0 }, PARTIDA, true)).toBe('Los games tienen que ser números enteros y no negativos.')
+  })
+
+  it('una partida es un solo resultado', () => {
+    expect(matchError([], PARTIDA, true)).toBe('Falta cargar el resultado de este partido.')
+    expect(matchError([{ gamesA: 1, gamesB: 0 }, { gamesA: 1, gamesB: 0 }], PARTIDA, true)).toBe(
+      'Una partida se carga con un solo resultado, no 2.',
+    )
+  })
+
+  it('sin la marca, el mismo set a 1 sigue con la regla de sets (los demás no se mueven)', () => {
+    const SET_A_UNO: MatchFormat = { setsToWin: 1, gamesPerSet: 1, tieBreak: true, openScore: false }
+    expect(matchError([{ gamesA: 1, gamesB: 0 }], SET_A_UNO, false)).toBeNull()
+    expect(setError({ gamesA: 0, gamesB: 0 }, SET_A_UNO, false)).toBe('Un set no puede terminar 0 a 0: en padel no hay empates.')
+    expect(setError({ gamesA: 2, gamesB: 0 }, SET_A_UNO, true)).toBe(
+      'En un set a 1 games con tie-break, 2-0 no es un resultado posible.',
+    )
   })
 })

@@ -4,13 +4,17 @@ import { useState } from 'react'
 import type { Deporte, Partido } from './rapido-state'
 import { BotonesDelPerdedor } from '@/app/torneo/[id]/[disciplina]/fechas/[n]/botones-del-perdedor'
 import {
+  esPartida,
   formatoRapido,
   marcadorDeDosToques,
+  marcadorDePartida,
   marcadorDeVentaja,
   nombreLado,
+  partidaDelMarcador,
   toqueDelMarcador,
   unidadDe,
   type Lado,
+  type ToquePartida,
 } from './jugar-logic'
 
 const PREGUNTA = 'mt-3.5 mb-2.5 text-[17px] font-bold'
@@ -29,12 +33,15 @@ export function TarjetaPartido({
   indice,
   partido,
   jugadores,
+  deporte,
   destella = false,
   onAbrir,
 }: {
   indice: number
   partido: Partido
   jugadores: string[]
+  /** El ajedrez anota las tablas como ½ y ½. */
+  deporte: Deporte
   destella?: boolean
   onAbrir: () => void
 }) {
@@ -64,6 +71,9 @@ export function TarjetaPartido({
     )
   }
 
+  // Una partida en tablas se anota ½ y ½, como en ajedrez; el resto, el número.
+  const tablas = esPartida(deporte) && partidaDelMarcador(marcador) === 'tablas'
+  const texto = (n: number) => (tablas ? '½' : String(n))
   const fila = (lado: Lado) => {
     const propio = lado === 'a' ? marcador.a : marcador.b
     const ajeno = lado === 'a' ? marcador.b : marcador.a
@@ -73,7 +83,7 @@ export function TarjetaPartido({
         <span className={`min-w-0 text-[17px] ${perdio ? 'font-medium text-muted' : 'font-bold text-text'}`}>
           {lado === 'a' ? nombreA : nombreB}
         </span>
-        <span className={`font-cond shrink-0 text-[32px] ${perdio ? 'text-muted' : 'text-text'}`}>{propio}</span>
+        <span className={`font-cond shrink-0 text-[32px] ${perdio ? 'text-muted' : 'text-text'}`}>{texto(propio)}</span>
       </span>
     )
   }
@@ -82,7 +92,7 @@ export function TarjetaPartido({
     <button
       id={`partido-${indice}`}
       type="button"
-      aria-label={`Corregir ${nombreA} ${marcador.a}, ${nombreB} ${marcador.b}`}
+      aria-label={`Corregir ${nombreA} ${texto(marcador.a)}, ${nombreB} ${texto(marcador.b)}`}
       onClick={onAbrir}
       className={`press-fila flex min-h-[76px] w-full flex-col gap-1.5 rounded-tile border-[1.5px] border-line px-4 py-3 text-left${destello}`}
     >
@@ -107,6 +117,81 @@ export function TarjetaPartido({
  * que dice el partido, no de un intento anterior.
  */
 export function HojaPartido({
+  partido,
+  jugadores,
+  deporte,
+  onGuardar,
+}: {
+  partido: Partido
+  jugadores: string[]
+  deporte: Deporte
+  onGuardar: (a: number, b: number) => void
+}) {
+  if (esPartida(deporte)) return <HojaPartida partido={partido} jugadores={jugadores} onGuardar={onGuardar} />
+  return <HojaDosToques partido={partido} jugadores={jugadores} deporte={deporte} onGuardar={onGuardar} />
+}
+
+/**
+ * La partida de ajedrez (odd/tasks/mas-deportes.md S3): "Ganó Ana", "Tablas",
+ * "Ganó Beto", como la hoja de una fecha, y el toque guarda (1-0, 0-1 o 0-0).
+ * Una partida cargada abre con su toque marcado.
+ */
+function HojaPartida({
+  partido,
+  jugadores,
+  onGuardar,
+}: {
+  partido: Partido
+  jugadores: string[]
+  onGuardar: (a: number, b: number) => void
+}) {
+  const [elegido, setElegido] = useState<ToquePartida | null>(() => partidaDelMarcador(partido.marcador))
+  const opciones: { toque: ToquePartida; texto: string }[] = [
+    { toque: 'a', texto: `Ganó ${nombreLado(jugadores, partido.a)}` },
+    { toque: 'tablas', texto: 'Tablas' },
+    { toque: 'b', texto: `Ganó ${nombreLado(jugadores, partido.b)}` },
+  ]
+  return (
+    <div>
+      <p className={PREGUNTA}>¿Cómo terminó?</p>
+      <div className="flex flex-col gap-2.5">
+        {opciones.map(({ toque, texto }) => (
+          <button
+            key={toque}
+            type="button"
+            aria-pressed={elegido === toque}
+            onClick={() => {
+              setElegido(toque)
+              const { a, b } = marcadorDePartida(toque)
+              onGuardar(a, b)
+            }}
+            className={`flex min-h-[64px] items-center justify-between gap-3 rounded-btn px-[18px] text-left text-[19px] font-bold ${
+              elegido === toque
+                ? 'bg-block text-on-block'
+                : 'bg-opcion text-text shadow-[inset_0_0_0_1.5px_var(--color-opcion-borde)]'
+            }`}
+          >
+            <span className="min-w-0">{texto}</span>
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              className={`h-6 w-6 shrink-0 fill-none stroke-current stroke-2 [stroke-linecap:round] [stroke-linejoin:round] ${
+                elegido === toque ? '' : 'invisible'
+              }`}
+            >
+              <path d="M5 12.5l4.5 4.5L19 7.5" />
+            </svg>
+          </button>
+        ))}
+      </div>
+      <p aria-live="polite" className="mt-2.5 min-h-5 text-[15px] text-muted">
+        Con un toque se guarda.
+      </p>
+    </div>
+  )
+}
+
+function HojaDosToques({
   partido,
   jugadores,
   deporte,

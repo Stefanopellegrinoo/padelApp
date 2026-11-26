@@ -45,12 +45,14 @@ function claveDeLado(lado: readonly number[]): string {
 
 describe('constantes del deporte', () => {
   it('lista los deportes de sets con su etiqueta y objetivo de puntos (S1, S2)', () => {
-    expect(DEPORTES).toEqual(['PADEL', 'PING_PONG', 'TENIS', 'FUTBOL_TENIS', 'POOL', 'BEER_PONG'])
+    expect(DEPORTES).toEqual(['PADEL', 'PING_PONG', 'TENIS', 'FUTBOL_TENIS', 'POOL', 'BEER_PONG', 'AJEDREZ'])
     expect(DEPORTE_LABEL.PADEL).toBe('Pádel')
     expect(DEPORTE_LABEL.PING_PONG).toBe('Ping pong')
     expect(DEPORTE_LABEL.FUTBOL_TENIS).toBe('Fútbol tenis')
     expect(DEPORTE_LABEL.BEER_PONG).toBe('Beer pong')
-    expect(DEPORTE_OBJETIVO).toEqual({ PADEL: 4, PING_PONG: 11, TENIS: 6, FUTBOL_TENIS: 15, POOL: 3, BEER_PONG: 10 })
+    expect(DEPORTE_LABEL.AJEDREZ).toBe('Ajedrez')
+    // El ajedrez es una partida: un set de 1 que gana uno (1-0) o queda en tablas (0-0).
+    expect(DEPORTE_OBJETIVO).toEqual({ PADEL: 4, PING_PONG: 11, TENIS: 6, FUTBOL_TENIS: 15, POOL: 3, BEER_PONG: 10, AJEDREZ: 1 })
   })
 })
 
@@ -417,9 +419,11 @@ describe('tabla — por lado (todo modo salvo PAREJAS + ROTATIVAS)', () => {
 
   it('cuenta ganados/jugados/diferencia y ordena por ganados, luego diferencia, luego nombre', () => {
     expect(tabla(base)).toEqual([
-      { clave: '0', jugadores: ['Ana'], jugados: 2, ganados: 1, diferencia: 2, posicion: 1 },
-      { clave: '2', jugadores: ['Cin'], jugados: 1, ganados: 0, diferencia: 0, posicion: 2 },
-      { clave: '1', jugadores: ['Bea'], jugados: 1, ganados: 0, diferencia: -2, posicion: 3 },
+      // El 4-4 (de una versión vieja) cuenta como empatado y no paga: fuera del ajedrez el orden
+      // sigue siendo por ganados (`puntos` es `ganados`).
+      { clave: '0', jugadores: ['Ana'], jugados: 2, ganados: 1, empatados: 1, puntos: 1, diferencia: 2, posicion: 1 },
+      { clave: '2', jugadores: ['Cin'], jugados: 1, ganados: 0, empatados: 1, puntos: 0, diferencia: 0, posicion: 2 },
+      { clave: '1', jugadores: ['Bea'], jugados: 1, ganados: 0, empatados: 0, puntos: 0, diferencia: -2, posicion: 3 },
     ])
   })
 
@@ -515,10 +519,10 @@ describe('tabla — por jugador (PAREJAS + ROTATIVAS)', () => {
       partidos: [{ ronda: 1, a: [0, 1], b: [2, 3], marcador: { a: 6, b: 3 } }],
     }
     expect(tabla(torneo)).toEqual([
-      { clave: '0', jugadores: ['Ana'], jugados: 1, ganados: 1, diferencia: 3, posicion: 1 },
-      { clave: '1', jugadores: ['Bea'], jugados: 1, ganados: 1, diferencia: 3, posicion: 2 },
-      { clave: '2', jugadores: ['Cin'], jugados: 1, ganados: 0, diferencia: -3, posicion: 3 },
-      { clave: '3', jugadores: ['Dan'], jugados: 1, ganados: 0, diferencia: -3, posicion: 4 },
+      { clave: '0', jugadores: ['Ana'], jugados: 1, ganados: 1, empatados: 0, puntos: 1, diferencia: 3, posicion: 1 },
+      { clave: '1', jugadores: ['Bea'], jugados: 1, ganados: 1, empatados: 0, puntos: 1, diferencia: 3, posicion: 2 },
+      { clave: '2', jugadores: ['Cin'], jugados: 1, ganados: 0, empatados: 0, puntos: 0, diferencia: -3, posicion: 3 },
+      { clave: '3', jugadores: ['Dan'], jugados: 1, ganados: 0, empatados: 0, puntos: 0, diferencia: -3, posicion: 4 },
     ])
   })
 })
@@ -599,7 +603,7 @@ describe('leerTorneo / escribirTorneo', () => {
   })
 
   it('un deporte que esta versión no conoce (uno futuro) no tira: no hay torneo que mostrar', () => {
-    const futuro = { ...torneo, armado: { ...armado, deporte: 'AJEDREZ' } }
+    const futuro = { ...torneo, armado: { ...armado, deporte: 'TEJO' } }
     expect(() => leerTorneo(JSON.stringify(futuro))).not.toThrow()
     expect(leerTorneo(JSON.stringify(futuro))).toBeNull()
   })
@@ -736,5 +740,43 @@ describe('leerTorneo / escribirTorneo', () => {
 
   it('el STORAGE_KEY es el acordado', () => {
     expect(STORAGE_KEY).toBe('padel:torneo-rapido')
+  })
+})
+
+// Ajedrez (odd/tasks/mas-deportes.md, S3): de a uno, y la tabla cuenta victorias y tablas con la
+// misma regla que la tabla de una fecha (victoria 3, tablas 1, `dayScoring`).
+describe('ajedrez en el torneo rápido', () => {
+  const armado = armadoBase({ deporte: 'AJEDREZ', modalidad: 'INDIVIDUAL', jugadores: ['Ana', 'Bea', 'Cin'] })
+
+  it('se juega de a uno', () => {
+    expect(armadoWarning({ ...armado, modalidad: 'PAREJAS', modoParejas: 'SORTEADAS', jugadores: ['A', 'B', 'C', 'D'] })).toBe(
+      'El ajedrez se juega de a uno.',
+    )
+    expect(armadoWarning(armado)).toBeNull()
+  })
+
+  it('la tabla paga 3 la victoria y 1 las tablas, y no ordena por ganados', () => {
+    const torneo: TorneoRapido = {
+      armado,
+      jugadores: ['Ana', 'Bea', 'Cin'],
+      partidos: [
+        { ronda: 1, a: [0], b: [1], marcador: { a: 0, b: 0 } },
+        { ronda: 2, a: [0], b: [2], marcador: { a: 0, b: 0 } },
+        { ronda: 3, a: [1], b: [2], marcador: { a: 0, b: 1 } },
+      ],
+    }
+    expect(tabla(torneo)).toEqual([
+      { clave: '2', jugadores: ['Cin'], jugados: 2, ganados: 1, empatados: 1, puntos: 4, diferencia: 1, posicion: 1 },
+      { clave: '0', jugadores: ['Ana'], jugados: 2, ganados: 0, empatados: 2, puntos: 2, diferencia: 0, posicion: 2 },
+      { clave: '1', jugadores: ['Bea'], jugados: 2, ganados: 0, empatados: 1, puntos: 1, diferencia: -1, posicion: 3 },
+    ])
+    expect(campeon(torneo)?.jugadores).toEqual(['Cin'])
+  })
+
+  it('las tablas quedan guardadas y se vuelven a leer', () => {
+    const torneo = cargarMarcador(armar(armado, () => 0.5), 0, 0, 0)
+    const leido = leerTorneo(escribirTorneo(torneo))
+    expect(leido?.armado.deporte).toBe('AJEDREZ')
+    expect(leido?.partidos[0]?.marcador).toEqual({ a: 0, b: 0 })
   })
 })

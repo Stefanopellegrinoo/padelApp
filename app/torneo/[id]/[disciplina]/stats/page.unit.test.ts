@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import { defaultConfig, type Award, type DisciplineId, type PlayedMatchday, type Side } from '@/core'
+import { defaultConfig, RESULT_FORMAT, type Award, type DisciplineId, type PlayedMatchday, type Side } from '@/core'
 import type { DisciplineHeader, EntryRow } from '@/db/read'
 import { vi } from 'vitest'
 
@@ -20,6 +20,7 @@ import { vi } from 'vitest'
 
 const D_PADEL = 'd-padel' as DisciplineId
 const D_FIFA = 'd-fifa' as DisciplineId
+const D_AJEDREZ = 'd-ajedrez' as DisciplineId
 
 function side(entryId: string): Side {
   return { size: 1, a: entryId }
@@ -33,6 +34,8 @@ function header(): DisciplineHeader[] {
   return [
     { id: D_PADEL, kind: 'PADEL', config: defaultConfig(2, 1), ...shape, pairSize: padelPairSize },
     { id: D_FIFA, kind: 'FIFA', config: defaultConfig(2, 1), ...shape },
+    // Ajedrez: sus lecturas caen en las de pádel (p1, p2); los casos de ajedrez pisan la historia.
+    { id: D_AJEDREZ, kind: 'AJEDREZ', config: { ...defaultConfig(2, 1), matchFormat: RESULT_FORMAT }, ...shape, allowsDraw: true },
   ]
 }
 
@@ -284,5 +287,44 @@ describe('Stats sin fechas suficientes', () => {
     expect(html).toContain('Estadísticas de Pádel')
     expect(html).toContain('Falta 1 fecha')
     expect(linkWith(html, 'Ir a las fechas')).toContain('href="/torneo/s1/padel/fechas"')
+  })
+})
+
+// Ajedrez (odd/tasks/mas-deportes.md, S3): una partida se guarda 1-0 o 0-0, así que "partidas
+// totales" o la diferencia serían contar las partidas otra vez. Van las tablas.
+describe('Stats del ajedrez: tablas, no games', () => {
+  const partidas = (): PlayedMatchday[] => {
+    const fecha = (number: number, gamesA: number, gamesB: number): PlayedMatchday => ({
+      number,
+      sides: [side('p1'), side('p2')],
+      matches: [{ round: 1, fase: 'GRUPO', grupo: 1, sideA: side('p1'), sideB: side('p2'), sets: [{ gamesA, gamesB }] }],
+    })
+    return [fecha(1, 0, 0), fecha(2, 1, 0)]
+  }
+
+  it('General: cuántas partidas terminaron en tablas, sin "Partidas totales"', async () => {
+    const { closedHistoryAll } = await import('@/db/read')
+    vi.mocked(closedHistoryAll).mockResolvedValueOnce(partidas())
+    const html = await render('ajedrez')
+
+    expect(html).toContain('Partidas jugadas')
+    expect(html).toMatch(/>1<\/span><span[^>]*>Tablas</)
+    expect(html).not.toContain('Partidas totales')
+  })
+
+  it('Mías: tus tablas en lugar de la diferencia', async () => {
+    const { closedHistoryAll, myEntryId } = await import('@/db/read')
+    vi.mocked(closedHistoryAll).mockResolvedValueOnce(partidas())
+    vi.mocked(myEntryId).mockResolvedValueOnce('p1')
+    const html = await render('ajedrez', 'mias')
+
+    expect(html).toMatch(/>1<\/span><span[^>]*>Tablas</)
+    expect(html).not.toContain('Dif.')
+  })
+
+  it('pádel sigue con su diferencia en Mías', async () => {
+    const { myEntryId } = await import('@/db/read')
+    vi.mocked(myEntryId).mockResolvedValueOnce('p1')
+    expect(await render('padel', 'mias')).toContain('Dif. games')
   })
 })

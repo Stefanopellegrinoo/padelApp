@@ -35,6 +35,8 @@ export interface PlayerTally {
   entryId: EntryId
   matchesPlayed: number
   matchesWon: number
+  /** Iguales: ni ganados ni perdidos (las tablas del ajedrez, un empate de FIFA). */
+  matchesDrawn: number
   gamesFor: number
   gamesAgainst: number
   /** Matchdays where the player appears in some pair — the source of attendance. */
@@ -78,7 +80,7 @@ export function tallyPlayers(
   const tallyOf = (entryId: EntryId): PlayerTally => {
     let tally = tallies.get(entryId)
     if (tally === undefined) {
-      tally = { entryId, matchesPlayed: 0, matchesWon: 0, gamesFor: 0, gamesAgainst: 0, matchdaysPlayed: 0 }
+      tally = { entryId, matchesPlayed: 0, matchesWon: 0, matchesDrawn: 0, gamesFor: 0, gamesAgainst: 0, matchdaysPlayed: 0 }
       tallies.set(entryId, tally)
     }
     return tally
@@ -105,6 +107,7 @@ export function tallyPlayers(
         tally.gamesFor += gamesA
         tally.gamesAgainst += gamesB
         if (winner === 'A') tally.matchesWon++
+        if (winner === 'tie') tally.matchesDrawn++
       }
       for (const entryId of members(match.sideB)) {
         const tally = tallyOf(entryId)
@@ -112,6 +115,7 @@ export function tallyPlayers(
         tally.gamesFor += gamesB
         tally.gamesAgainst += gamesA
         if (winner === 'B') tally.matchesWon++
+        if (winner === 'tie') tally.matchesDrawn++
       }
     }
   }

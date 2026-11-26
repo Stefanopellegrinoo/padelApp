@@ -1,5 +1,5 @@
 import { minSquadFor } from './constants'
-import { SPORTS, modalityShape, sportOf, type Modality, type SportId, type TournamentSport } from './sports'
+import { RESULT_FORMAT, SPORTS, modalityShape, sportOf, type Modality, type Sport, type SportId, type TournamentSport } from './sports'
 import type { MatchFormat, MatchFormatOwn, MatchdayFormatSetting, SeasonConfig, SideSize } from './types'
 
 /**
@@ -134,13 +134,28 @@ export function disciplineProfile(
   kind: TournamentSport,
   config: SeasonConfig,
 ): { config: SeasonConfig; allowsDraw: boolean } {
-  const sport = SPORTS[kind]
-  const goals = sport.family === 'goals'
+  const sport: Sport = SPORTS[kind]
   return {
+    config: { ...config, matchFormat: profileFormat(sport, config.matchFormat) },
+    allowsDraw: sport.allowsDraw,
+  }
+}
+
+/** La forma de marcador de la familia sobre el formato que entró. */
+function profileFormat(sport: Sport, format: MatchFormat): MatchFormat {
+  switch (sport.family) {
     // Los dos sentidos, no sólo el de encender: así el resultado depende del
     // `kind` y no de lo que traía la config que entró.
-    config: { ...config, matchFormat: { ...config.matchFormat, openScore: goals } },
-    allowsDraw: sport.allowsDraw,
+    case 'sets':
+    case 'goals':
+      return { ...format, openScore: sport.family === 'goals' }
+    // La partida no tiene perillas: es siempre la misma.
+    case 'result':
+      return { ...RESULT_FORMAT }
+    default: {
+      const never: never = sport
+      throw new Error(`familia desconocida: ${String(never)}`)
+    }
   }
 }
 
@@ -188,10 +203,7 @@ export function fichaSeed(kind: SportId, squadSize: number, modality: Modality):
   const base = defaultConfig(squadSize, pairSize)
   // Copia: la config sembrada no puede compartir el objeto del registro. Con `setReal` el torneo
   // nace con el set real (S6); los ya creados conservan la regla con la que se armaron.
-  const matchFormat =
-    sport.family === 'sets'
-      ? { ...sport.format, ...(sport.setReal ? { ventaja: true } : {}) }
-      : { ...base.matchFormat, openScore: true }
+  const matchFormat = seedFormat(sport, base.matchFormat)
   return {
     config: { ...base, ...ficha.season, matchFormat, firstFecha: ficha.firstFecha[modality] },
     pairSize,
@@ -199,6 +211,21 @@ export function fichaSeed(kind: SportId, squadSize: number, modality: Modality):
     allowsDraw: sport.allowsDraw,
     hasMasters: ficha.masters && pairSize === 2,
     formatoDefault: ficha.fechaFormat,
+  }
+}
+
+function seedFormat(sport: Sport, base: MatchFormat): MatchFormat {
+  switch (sport.family) {
+    case 'sets':
+      return { ...sport.format, ...(sport.setReal ? { ventaja: true } : {}) }
+    case 'goals':
+      return { ...base, openScore: true }
+    case 'result':
+      return { ...sport.format }
+    default: {
+      const never: never = sport
+      throw new Error(`familia desconocida: ${String(never)}`)
+    }
   }
 }
 

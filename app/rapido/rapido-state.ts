@@ -14,15 +14,18 @@
  * acá lo pone `armadoWarning`, y `armarRotativas` repite la guarda por si
  * algún día se arma un torneo sin pasar por el aviso.
  */
-import { allMatchings, buildFixture, MAX_PAIRING_POOL, SPORTS, type Duo, type SportId } from '@/core'
+import { allMatchings, buildFixture, dayScoring, MAX_PAIRING_POOL, SPORTS, type DayScoring, type Duo, type SportId } from '@/core'
 
 // ── El deporte ────────────────────────────────────────────────────────────
 /**
  * Los deportes de sets del registro (`core/sports.ts`): un partido rápido es un
- * set a su número, con la misma regla que una fecha (`jugar-logic.ts`). El
- * orden es el de los botones.
+ * set a su número, con la misma regla que una fecha (`jugar-logic.ts`). Y el
+ * ajedrez, que es una partida: 1-0, 0-1 o tablas (0-0). El orden es el de los
+ * botones.
  */
-export const DEPORTES = ['PADEL', 'PING_PONG', 'TENIS', 'FUTBOL_TENIS', 'POOL', 'BEER_PONG'] as const satisfies readonly SportId[]
+export const DEPORTES = [
+  'PADEL', 'PING_PONG', 'TENIS', 'FUTBOL_TENIS', 'POOL', 'BEER_PONG', 'AJEDREZ',
+] as const satisfies readonly SportId[]
 export type Deporte = (typeof DEPORTES)[number]
 
 /**
@@ -80,6 +83,13 @@ export interface FilaTabla {
   jugadores: string[]
   jugados: number
   ganados: number
+  /** Iguales: las tablas del ajedrez (o un empate guardado por una versión vieja). */
+  empatados: number
+  /**
+   * Lo que ordena: la misma regla que la tabla de una fecha (`dayScoring`). Sin
+   * empates en el deporte son los ganados; en ajedrez, 3 la victoria y 1 las tablas.
+   */
+  puntos: number
   diferencia: number
   /** 1-based. */
   posicion: number
@@ -155,6 +165,10 @@ export function armadoWarning(armado: Armado): string | null {
 
   if (armado.modalidad === 'INDIVIDUAL' && cantidad < 3) {
     return 'Faltan jugadores: individual arranca en 3.'
+  }
+  // Una partida de ajedrez es uno contra uno.
+  if (armado.modalidad === 'PAREJAS' && SPORTS[armado.deporte].family === 'result') {
+    return `El ${SPORTS[armado.deporte].label.toLowerCase()} se juega de a uno.`
   }
   if (armado.modalidad === 'PAREJAS' && cantidad < 4) {
     return 'Faltan jugadores: parejas arranca en 4.'
@@ -360,19 +374,33 @@ export function cargarMarcador(
   }
 }
 
+type Acumulado = Omit<FilaTabla, 'posicion' | 'puntos'>
+
 function acumularResultado(
-  fila: { jugados: number; ganados: number; diferencia: number },
+  fila: { jugados: number; ganados: number; empatados: number; diferencia: number },
   propios: number,
   rivales: number,
 ): void {
   fila.jugados += 1
   fila.diferencia += propios - rivales
   if (propios > rivales) fila.ganados += 1
+  else if (propios === rivales) fila.empatados += 1
 }
 
-function ordenarFilas(filas: Array<Omit<FilaTabla, 'posicion'>>): FilaTabla[] {
+/** Lo que paga cada resultado en la tabla: la regla de una fecha del mismo deporte. */
+function puntuacionDe(torneo: TorneoRapido): DayScoring {
+  return dayScoring(SPORTS[torneo.armado.deporte].allowsDraw)
+}
+
+function ordenarFilas(acumuladas: Acumulado[], puntuacion: DayScoring): FilaTabla[] {
+  const filas = acumuladas.map(({ diferencia, ...fila }) => ({
+    ...fila,
+    puntos: fila.ganados * puntuacion.win + fila.empatados * puntuacion.draw,
+    diferencia,
+  }))
+  // Sin empates en el deporte `puntos` es `ganados`: el orden de siempre.
   const ordenadas = [...filas].sort((x, y) => {
-    if (y.ganados !== x.ganados) return y.ganados - x.ganados
+    if (y.puntos !== x.puntos) return y.puntos - x.puntos
     if (y.diferencia !== x.diferencia) return y.diferencia - x.diferencia
     // El nombre del lado, para que el orden sea determinístico también en
     // el empate total. Para un lado de dos, el "nombre" es el join de los dos.
@@ -394,15 +422,12 @@ function tablaPorLado(torneo: TorneoRapido): FilaTabla[] {
     // que los índices de un partido caen dentro de `jugadores`.
     torneo.jugadores[indice] ?? `#${indice}`
 
-  const filas = new Map<
-    string,
-    { jugadores: string[]; jugados: number; ganados: number; diferencia: number }
-  >()
+  const filas = new Map<string, Omit<Acumulado, 'clave'>>()
 
   const asegurarLado = (indices: number[]): void => {
     const clave = claveLado(indices)
     if (!filas.has(clave)) {
-      filas.set(clave, { jugadores: indices.map(nombreDe), jugados: 0, ganados: 0, diferencia: 0 })
+      filas.set(clave, { jugadores: indices.map(nombreDe), jugados: 0, ganados: 0, empatados: 0, diferencia: 0 })
     }
   }
   for (const partido of torneo.partidos) {
@@ -420,7 +445,7 @@ function tablaPorLado(torneo: TorneoRapido): FilaTabla[] {
     acumularResultado(filaB, partido.marcador.b, partido.marcador.a)
   }
 
-  return ordenarFilas([...filas.entries()].map(([clave, fila]) => ({ clave, ...fila })))
+  return ordenarFilas([...filas.entries()].map(([clave, fila]) => ({ clave, ...fila })), puntuacionDe(torneo))
 }
 
 /**
@@ -429,11 +454,12 @@ function tablaPorLado(torneo: TorneoRapido): FilaTabla[] {
  * turno.
  */
 function tablaPorJugador(torneo: TorneoRapido): FilaTabla[] {
-  const filas = torneo.jugadores.map((nombre, indice) => ({
+  const filas: Acumulado[] = torneo.jugadores.map((nombre, indice) => ({
     clave: claveLado([indice]),
     jugadores: [nombre],
     jugados: 0,
     ganados: 0,
+    empatados: 0,
     diferencia: 0,
   }))
 
@@ -449,7 +475,7 @@ function tablaPorJugador(torneo: TorneoRapido): FilaTabla[] {
     }
   }
 
-  return ordenarFilas(filas)
+  return ordenarFilas(filas, puntuacionDe(torneo))
 }
 
 export function tabla(torneo: TorneoRapido): FilaTabla[] {

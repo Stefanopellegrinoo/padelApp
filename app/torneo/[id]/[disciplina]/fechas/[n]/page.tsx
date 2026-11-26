@@ -7,6 +7,7 @@ import {
   computeRanking,
   computeStandings,
   currentPhase,
+  drawIsLegal,
   effectiveMatchFormat,
   groupPhaseMatches,
   groupSides,
@@ -63,6 +64,7 @@ import {
   type SeatVM,
 } from './armado'
 import { CierreFecha, Rayitas, type ParteVM } from './carga'
+import { marcadorDeTarjeta } from './carga-state'
 import { DiaDeLaFecha } from './dia'
 import { Llave, type LlaveMatchVM } from './llave'
 import { sectionTitle } from './secciones'
@@ -79,19 +81,6 @@ interface PageProps {
 /** Clave estable de un lado, de uno o de dos: el orden de los miembros no importa. */
 function sideKey(side: Side): string {
   return [...members(side)].sort().join('~')
-}
-
-/**
- * Lo que la tarjeta del partido dice de cada lado (R15): con un solo set, sus games/goles/puntos;
- * con más de uno, los SETS ganados — sumar 11-0, 9-11, 9-11 da 29 a 22 y señala al que perdió.
- * `['–', '–']` sin resultado.
- */
-function cardScore(match: MatchResult): [string, string] {
-  if (match.sets.length === 0) return ['–', '–']
-  if (match.sets.length === 1) return [String(match.sets[0]!.gamesA), String(match.sets[0]!.gamesB)]
-  const won = (mine: 'gamesA' | 'gamesB', theirs: 'gamesA' | 'gamesB') =>
-    String(match.sets.filter((set) => set[mine] > set[theirs]).length)
-  return [won('gamesA', 'gamesB'), won('gamesB', 'gamesA')]
 }
 
 /** Ganador del partido por sets, la misma cuenta que usa `computeStandings`. `null` sin resultado. */
@@ -592,7 +581,8 @@ export default async function FechaDetailPage({ params }: PageProps) {
         return a.round - b.round
       })
       .map((match) => {
-        const [scoreA, scoreB] = cardScore(match)
+        // Lo que dice la tarjeta (R15), con la partida de ajedrez en 1-0 o ½-½ (`marcadorDeTarjeta`).
+        const [scoreA, scoreB] = marcadorDeTarjeta(match.sets, config.matchFormat)
         return {
           key: match.id,
           matchId: match.id,
@@ -607,6 +597,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
           scoreB,
           winner: matchWinner(match),
           sets: match.sets,
+          tablas: drawIsLegal(match.fase, matchday.allowsDraw),
         }
       })
 
@@ -717,7 +708,8 @@ export default async function FechaDetailPage({ params }: PageProps) {
       const loadedCount = roundMatches.filter((match) => match.sets.length > 0).length
 
       const matches: RoundMatchVM[] = roundMatches.map((match, index) => {
-        const [scoreA, scoreB] = cardScore(match)
+        // Lo que dice la tarjeta (R15), con la partida de ajedrez en 1-0 o ½-½ (`marcadorDeTarjeta`).
+        const [scoreA, scoreB] = marcadorDeTarjeta(match.sets, config.matchFormat)
         return {
           key: `${roundNumber}-${index}`,
           matchId: match.id,
@@ -730,6 +722,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
           scoreB,
           winner: matchWinner(match),
           sets: match.sets,
+          tablas: drawIsLegal(match.fase, matchday.allowsDraw),
         }
       })
 
@@ -996,6 +989,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
                     <TablaDelDia
                       tituloLado={discipline.pairSize === 1 ? 'Jugador' : 'Pareja'}
                       muestraEmpates={matchday.allowsDraw}
+                      partidas={config.matchFormat.resultado === true}
                       filas={rows.map((row) => ({
                         key: sideKey(row.side),
                         nombre: sideName(row.side),
@@ -1005,6 +999,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
                         esVos: isMine(row.side),
                         won: row.won,
                         drawn: row.drawn,
+                        lost: row.played - row.won - row.drawn,
                         gamesDiff: row.gamesDiff,
                         pts: '—',
                       }))}
@@ -1016,6 +1011,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
               <TablaDelDia
                 tituloLado={discipline.pairSize === 1 ? 'Jugador' : 'Pareja'}
                 muestraEmpates={matchday.allowsDraw}
+                partidas={config.matchFormat.resultado === true}
                 filas={tableRows.map((row) => ({
                   key: sideKey(row.side),
                   nombre: sideName(row.side),
@@ -1023,6 +1019,7 @@ export default async function FechaDetailPage({ params }: PageProps) {
                   esVos: isMine(row.side),
                   won: row.won,
                   drawn: row.drawn,
+                  lost: row.played - row.won - row.drawn,
                   gamesDiff: row.gamesDiff,
                   // Los puntos que se llevó cada jugador (`ui-screens.md` §9):
                   // en la pareja del invitado el primer miembro con award

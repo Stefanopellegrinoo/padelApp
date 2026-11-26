@@ -45,6 +45,17 @@ describe('tallyPlayers', () => {
     expect(x1?.gamesAgainst).toBe(5) // 2 (as pairA) + 3 (as pairB)
   })
 
+  it('cuenta las tablas aparte: ni ganadas ni perdidas (ajedrez, y cualquier empate)', () => {
+    const a = single('a')
+    const b = single('b')
+    const history: PlayedMatchday[] = [
+      { number: 1, sides: [a, b], matches: [match(a, b, 0, 0), match(a, b, 1, 0, 2), match(b, a, 1, 0, 3)] },
+    ]
+    const tallies = tallyPlayers(history, ['a', 'b'])
+    expect(tallies.find((t) => t.entryId === 'a')).toMatchObject({ matchesPlayed: 3, matchesWon: 1, matchesDrawn: 1 })
+    expect(tallies.find((t) => t.entryId === 'b')).toMatchObject({ matchesPlayed: 3, matchesWon: 1, matchesDrawn: 1 })
+  })
+
   it('includes a guest who played even though they are not in the squad', () => {
     const pairA = pair('a1', 'a2')
     const pairGuest = pair('guest', 'b2')

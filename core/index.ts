@@ -49,6 +49,7 @@ export type {
   FirstFecha,
   MatchResult,
   SideStanding,
+  DayScoring,
   Award,
   AwardLine,
   RankingRow,
@@ -102,7 +103,7 @@ export { previousContext } from './history'
 // `usesSetsDiff` sale a la superficie porque el criterio lo comparten tres
 // lugares —la tabla, la frase del desempate de la fecha y la página de Reglas—
 // y eran tres copias de `setsToWin > 1`. Arreglar una sola las hacía discrepar.
-export { computeStandings, usesSetsDiff } from './standings'
+export { computeStandings, dayScoring, usesSetsDiff } from './standings'
 // `tallySets` sale ahora (plan-historial-entre-amigos-2a, tarea 1):
 // `db/friends.ts` necesita saber quién ganó un partido desde afuera de
 // `core/`, y esa regla ya vivía inline en `computeStandings` — mismo criterio
@@ -250,9 +251,10 @@ export { tallyPlayers, partnerRecords, bestPair, rivalRecords } from './playerst
 export { allMatchings } from './matchings'
 
 //── El registro de deportes: un deporte es dato, la familia de marcador es la estrategia ──
-export type { ScoringFamily, Range, SetsSport, GoalsSport, Sport, SportId, SportIcono, SportTono, TournamentSport, Modality, TournamentFicha } from './sports'
+export type { ScoringFamily, Range, SetsSport, GoalsSport, ResultSport, Sport, SportId, SportIcono, SportTono, TournamentSport, Modality, TournamentFicha } from './sports'
 export {
   SPORTS,
+  RESULT_FORMAT,
   SPORT_TONOS,
   SPORT_IDS,
   TOURNAMENT_SPORTS,

@@ -6,7 +6,6 @@ import { Hero } from '@/app/ui/hero'
 import {
   ARMADO_INICIAL,
   DEPORTE_LABEL,
-  DEPORTE_OBJETIVO,
   DEPORTES,
   VOLVER_INICIO,
   armadoWarning,
@@ -15,7 +14,7 @@ import {
   type ModoParejas,
 } from './rapido-state'
 import { agruparChips, enterEnJugador, nombresValidos, seCaenLasParejas, tocarJugador } from './armar-state'
-import { unidadDe } from './jugar-logic'
+import { esPartida, subDeporte } from './jugar-logic'
 
 const MODALIDADES: Modalidad[] = ['INDIVIDUAL', 'PAREJAS']
 const MODALIDAD_LABEL: Record<Modalidad, string> = { INDIVIDUAL: 'Individual', PAREJAS: 'Parejas' }
@@ -229,18 +228,21 @@ export function Armar({ onEmpezar, aviso }: { onEmpezar: (armado: Armado) => voi
         titulo="Deporte"
         opciones={DEPORTES}
         etiqueta={(deporte) => DEPORTE_LABEL[deporte]}
-        sub={(deporte) => `A ${DEPORTE_OBJETIVO[deporte]} ${unidadDe(deporte)}`}
+        sub={subDeporte}
         valor={armado.deporte}
-        onChange={(deporte) => setArmado({ ...armado, deporte })}
+        // El ajedrez es uno contra uno: elegirlo pasa a individual (y no pregunta cómo se juega).
+        onChange={(deporte) => setArmado({ ...armado, deporte, ...(esPartida(deporte) ? { modalidad: 'INDIVIDUAL' } : {}) })}
       />
 
-      <Opciones
-        titulo="Cómo se juega"
-        opciones={MODALIDADES}
-        etiqueta={(modalidad) => MODALIDAD_LABEL[modalidad]}
-        valor={armado.modalidad}
-        onChange={(modalidad) => setArmado({ ...armado, modalidad })}
-      />
+      {!esPartida(armado.deporte) && (
+        <Opciones
+          titulo="Cómo se juega"
+          opciones={MODALIDADES}
+          etiqueta={(modalidad) => MODALIDAD_LABEL[modalidad]}
+          valor={armado.modalidad}
+          onChange={(modalidad) => setArmado({ ...armado, modalidad })}
+        />
+      )}
 
       {armado.modalidad === 'PAREJAS' && (
         <Opciones

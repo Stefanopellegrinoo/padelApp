@@ -134,3 +134,12 @@ describe('el cableado de la marca del campeón', () => {
     expect(misWire).not.toMatch(/championRecord\(\s*groupPhaseMatches\(detail\.matches\)/)
   })
 })
+
+// Ajedrez (odd/tasks/mas-deportes.md, S3): ganadas–tablas–perdidas y nada más; la diferencia sería
+// contar las partidas otra vez ("+2 partidas").
+describe('championRecord en ajedrez', () => {
+  it('dice ganadas–tablas–perdidas, sin la diferencia', () => {
+    const matches = [partido(A, B, 1, 0), partido(A, C, 0, 0), partido(C, A, 0, 1)]
+    expect(championRecord(matches, A, SPORTS.AJEDREZ.format, true, 'partidas')).toBe('2–1–0')
+  })
+})

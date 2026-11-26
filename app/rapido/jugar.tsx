@@ -6,7 +6,7 @@ import { Hero } from '@/app/ui/hero'
 import { Sheet } from '@/app/ui/sheet'
 import { Toast } from '@/app/ui/toast'
 import { DEPORTE_LABEL, VOLVER_INICIO, campeon, tabla, terminado, type Armado, type TorneoRapido } from './rapido-state'
-import { agruparPorRonda, nombreLado, resumenGuardado, siguienteSinCargar } from './jugar-logic'
+import { agruparPorRonda, esPartida, nombreLado, resumenGuardado, siguienteSinCargar } from './jugar-logic'
 import { HojaPartido, TarjetaPartido } from './partido-row'
 import { Tabla } from './tabla'
 
@@ -142,8 +142,8 @@ export function Jugar({ torneo, onCargarMarcador, onNuevoTorneo, aviso }: JugarP
               <p className="font-titulo text-[28px] [overflow-wrap:anywhere]">{ganador.jugadores.join(' y ')}</p>
             </div>
             <p className="shrink-0 text-right">
-              <span className="font-cond block text-[40px]">{ganador.ganados}</span>
-              <span className="text-[14px] font-semibold">ganados</span>
+              <span className="font-cond block text-[40px]">{esPartida(armado.deporte) ? ganador.puntos : ganador.ganados}</span>
+              <span className="text-[14px] font-semibold">{esPartida(armado.deporte) ? 'puntos' : 'ganados'}</span>
             </p>
           </div>
         )}
@@ -165,6 +165,7 @@ export function Jugar({ torneo, onCargarMarcador, onNuevoTorneo, aviso }: JugarP
                   indice={indice}
                   partido={p}
                   jugadores={jugadores}
+                  deporte={armado.deporte}
                   destella={destello?.indice === indice}
                   onAbrir={() => abrir(indice)}
                 />
@@ -176,7 +177,7 @@ export function Jugar({ torneo, onCargarMarcador, onNuevoTorneo, aviso }: JugarP
 
       <section className="pt-6">
         <h2 className="px-4 font-titulo text-[24px]">Tabla</h2>
-        <Tabla filas={filas} />
+        <Tabla filas={filas} partidas={esPartida(armado.deporte)} />
       </section>
 
       <div className="px-4 pt-6">
@@ -202,7 +203,12 @@ export function Jugar({ torneo, onCargarMarcador, onNuevoTorneo, aviso }: JugarP
             onGuardar={(a, b) => {
               onCargarMarcador(hoja.indice, a, b)
               cerrar()
-              const texto = resumenGuardado(nombreLado(jugadores, partido.a), nombreLado(jugadores, partido.b), { a, b })
+              const texto = resumenGuardado(
+                nombreLado(jugadores, partido.a),
+                nombreLado(jugadores, partido.b),
+                { a, b },
+                armado.deporte,
+              )
               setGuardado({ texto: `Guardado: ${texto}`, indice: hoja.indice })
               setDestello((prev) => ({ indice: hoja.indice, vez: (prev?.vez ?? 0) + 1 }))
             }}

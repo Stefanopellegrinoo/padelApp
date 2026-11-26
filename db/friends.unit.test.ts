@@ -861,4 +861,29 @@ describe('parseCasualResult', () => {
   it('fecha inexistente', () => {
     expect(() => parseCasualResult(fifa({ playedOn: '2026-02-31', outcome: 'won' }))).toThrow(EdgeError)
   })
+
+  // Ajedrez (odd/tasks/mas-deportes.md, S3): gana, pierde o tablas, y nada más. Las tablas se
+  // guardan como cualquier empate casual: `winner_side` null (`saveArgs`).
+  describe('ajedrez', () => {
+    const ajedrez = (over: Partial<CasualResultInput>) => ({ ...base, sport: 'AJEDREZ', ...over })
+    const sinNumeros = { scoreMine: null, scoreTheirs: null, teamMine: null, teamTheirs: null, format: null, sets: null }
+
+    it('ganaste, perdiste o tablas, sin marcador ni sets', () => {
+      expect(parseCasualResult(ajedrez({ outcome: 'won' }))).toEqual({ sport: 'AJEDREZ', playedOn: '2026-05-01', outcome: 'won', ...sinNumeros })
+      expect(parseCasualResult(ajedrez({ outcome: 'lost' }))).toMatchObject({ outcome: 'lost', ...sinNumeros })
+      expect(parseCasualResult(ajedrez({ outcome: 'drew' }))).toMatchObject({ outcome: 'drew', ...sinNumeros })
+    })
+
+    it('sin resultado pide quién ganó o si fueron tablas', () => {
+      expect(() => parseCasualResult(ajedrez({}))).toThrow('Decinos quién ganó, o si fueron tablas.')
+      expect(() => parseCasualResult(ajedrez({ outcome: 'empate' }))).toThrow('Decinos quién ganó, o si fueron tablas.')
+    })
+
+    it('no lleva marcador, sets ni equipos', () => {
+      const error = 'El ajedrez se carga con gana, pierde o tablas: sin marcador.'
+      expect(() => parseCasualResult(ajedrez({ outcome: 'won', scoreMine: '1', scoreTheirs: '0' }))).toThrow(error)
+      expect(() => parseCasualResult(ajedrez({ outcome: 'won', sets: '[{"mine":1,"theirs":0}]' }))).toThrow(error)
+      expect(() => parseCasualResult(ajedrez({ outcome: 'won', teamMine: 'Blancas' }))).toThrow('Los equipos son sólo para FIFA.')
+    })
+  })
 })

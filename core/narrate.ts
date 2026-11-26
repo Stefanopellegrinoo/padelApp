@@ -1,6 +1,6 @@
 import { MASTERS_MATCHES, MASTERS_SIZE, MAX_PAIRING_POOL, maxMatchesOf, minSquadFor } from './constants'
 import { thirdPlaceByGroupTable } from './knockout'
-import { usesSetsDiff } from './standings'
+import { dayScoring, usesSetsDiff } from './standings'
 import type { DisciplineShape, MatchFormat, MatchResult, SeasonConfig, SideSize } from './types'
 
 /**
@@ -19,6 +19,7 @@ import type { DisciplineShape, MatchFormat, MatchResult, SeasonConfig, SideSize 
  */
 export function formatLabel(format: MatchFormat, unit: string): string {
   if (format.openScore) return 'Marcador de goles'
+  if (format.resultado === true) return 'Gana, pierde o tablas'
   const setWord = format.setsToWin === 1 ? '1 set' : `mejor de ${2 * format.setsToWin - 1} sets`
   return `${setWord} a ${format.gamesPerSet} ${unit}`
 }
@@ -182,7 +183,7 @@ export function narrateRules(config: SeasonConfig, shape: DisciplineShape, unit:
 
   sections.push({
     title: 'Los desempates',
-    body: describeTiebreak(matchFormat, tiebreakSnapshotEvery, pairSize, unit),
+    body: describeTiebreak(matchFormat, tiebreakSnapshotEvery, pairSize, unit, allowsDraw),
   })
 
   if (hasMasters) {
@@ -229,7 +230,13 @@ export function scoreDiffLabel(unit: string): string {
  * `subject` porque "ellas" concuerda en género con "parejas": con
  * `pairSize=1` el sujeto pasa a "jugadores" y el pronombre a "ellos".
  */
-function describeTiebreak(format: MatchFormat, snapshotEvery: number, pairSize: SideSize, unit: string): string {
+function describeTiebreak(
+  format: MatchFormat,
+  snapshotEvery: number,
+  pairSize: SideSize,
+  unit: string,
+  allowsDraw: boolean,
+): string {
   const setStep = usesSetsDiff(format) ? `corta la diferencia de sets, después ` : ''
   // Con marcador abierto no hay escalón de sets que narrar: es el MISMO
   // criterio que corre `computeStandings`, contado. Lo que se cuenta (goles,
@@ -237,8 +244,12 @@ function describeTiebreak(format: MatchFormat, snapshotEvery: number, pairSize: 
   const scoreDiff = scoreDiffLabel(unit)
   const subject = pairSize === 1 ? 'dos jugadores' : 'dos parejas'
   const pronoun = pairSize === 1 ? 'ellos' : 'ellas'
+  // Con tablas lo que ordena son los puntos de la fecha, no los ganados: se dice así sólo en la
+  // familia resultado, para que el texto de los demás no cambie una letra.
+  const level =
+    format.resultado === true && allowsDraw ? 'suman los mismos puntos' : 'ganan la misma cantidad de partidos'
   return (
-    `En la tabla de la fecha, si ${subject} ganan la misma cantidad de partidos, ${setStep}` +
+    `En la tabla de la fecha, si ${subject} ${level}, ${setStep}` +
     `corta la ${scoreDiff}. Si empatan dos, el partido entre ${pronoun} lo decide; si empatan ` +
     `tres o más, el partido entre ${pronoun} no alcanza porque se ganan en círculo, y corta el orden de ` +
     `desempate. En la tabla del campeonato, si dos jugadores tienen los mismos puntos corta el orden ` +
@@ -269,6 +280,15 @@ function describeFormat(format: MatchFormat, allowsDraw: boolean, unit: string):
     return (
       `Cada partido se carga con el marcador de goles: los dos números como quedaron, sin ` +
       `un número al que haya que llegar. ${drawClause}`
+    )
+  }
+  // Una partida: ni sets ni números. Lo que paga la tabla de la fecha sale del motor (`dayScoring`).
+  if (format.resultado === true) {
+    if (!allowsDraw) return 'Cada partida tiene que salir con un ganador: no hay tablas.'
+    const { win, draw } = dayScoring(true)
+    return (
+      `Cada partida se gana, se pierde o termina en tablas. En la tabla de la fecha la victoria vale ` +
+      `${win} y las tablas ${draw}. En la llave no hay tablas: tiene que haber un ganador.`
     )
   }
   const setWord = format.setsToWin === 1 ? 'un set' : `${format.setsToWin} sets ganados`

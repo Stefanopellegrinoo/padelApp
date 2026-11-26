@@ -1,6 +1,6 @@
 import {
   defaultConfig, disciplineProfile, isSportId, SPORT_IDS, sportFamily, sportLabel, sportOf, tallySets,
-  type GoalsSport, type MatchFormat, type SetScore, type SetsSport, type SportId, type TournamentSport,
+  type GoalsSport, type MatchFormat, type ResultSport, type SetScore, type SetsSport, type SportId, type TournamentSport,
 } from '@/core'
 import { EdgeError } from './errors'
 import { matchError } from './validate'
@@ -873,6 +873,25 @@ function parseGoalsResult(sport: GoalsSport, input: CasualResultInput) {
   return { outcome, scoreMine, scoreTheirs, ...teams }
 }
 
+/**
+ * Gana, pierde o tablas (ajedrez, odd/tasks/mas-deportes.md S3): sólo el
+ * `outcome`. Las tablas se guardan como cualquier empate casual, con
+ * `winner_side` null (`saveArgs`); sin marcador ni sets que guardar.
+ */
+function parseResultResult(sport: ResultSport, input: CasualResultInput) {
+  const raw = input.outcome
+  if (raw !== 'won' && raw !== 'lost' && raw !== 'drew') {
+    throw new EdgeError('Decinos quién ganó, o si fueron tablas.')
+  }
+  if (normalizeTeam(input.teamMine) !== null || normalizeTeam(input.teamTheirs) !== null) throw new EdgeError(TEAMS_ONLY)
+  const sets = input.sets.trim()
+  if (input.scoreMine.trim() !== '' || input.scoreTheirs.trim() !== '' || (sets !== '' && sets !== '[]')) {
+    throw new EdgeError(`El ${sport.label.toLowerCase()} se carga con gana, pierde o tablas: sin marcador.`)
+  }
+  const outcome: CasualOutcome = raw
+  return { outcome }
+}
+
 /** Valida el resultado de un partido casual según la familia de marcador de su deporte. */
 export function parseCasualResult(input: CasualResultInput): CasualResult {
   if (!isSportId(input.sport)) throw new EdgeError('Elegí un deporte de la lista.')
@@ -888,6 +907,11 @@ export function parseCasualResult(input: CasualResultInput): CasualResult {
     }
     case 'goals':
       return { sport: input.sport, playedOn: input.playedOn, format: null, sets: null, ...parseGoalsResult(sport, input) }
+    case 'result':
+      return {
+        sport: input.sport, playedOn: input.playedOn, ...parseResultResult(sport, input),
+        scoreMine: null, scoreTheirs: null, teamMine: null, teamTheirs: null, format: null, sets: null,
+      }
     default: {
       const never: never = sport
       throw new Error(`familia desconocida: ${String(never)}`)

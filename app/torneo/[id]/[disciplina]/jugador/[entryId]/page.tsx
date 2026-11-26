@@ -322,6 +322,8 @@ export default async function JugadorPage({ params, searchParams }: PageProps) {
   // El sufijo es del deporte (§8): goles en FIFA, games en pádel, puntos en ping pong.
   const unit = unitOf(discipline.kind, config.matchFormat)
   const matchesLost = tally.matchesPlayed - tally.matchesWon
+  // Ajedrez: las tablas no son derrotas, y la diferencia sería un 1-0 contado como games.
+  const partidas = config.matchFormat.resultado === true
 
   const marks = markMatchdays(
     history.map((matchday) => matchday.number),
@@ -378,9 +380,17 @@ export default async function JugadorPage({ params, searchParams }: PageProps) {
       />
 
       <div className="grid grid-cols-3 gap-2.5 px-4 pt-5">
-        <Dato label="Partidos" value={`${tally.matchesWon}-${matchesLost}`} />
+        {partidas ? (
+          <Dato label="Partidas" value={`${tally.matchesWon}-${matchesLost - tally.matchesDrawn}`} />
+        ) : (
+          <Dato label="Partidos" value={`${tally.matchesWon}-${matchesLost}`} />
+        )}
         <Dato label="Efectividad" value={`${efectividad}%`} />
-        <Dato label={`Dif. ${unit}`} value={formatSigned(difGames)} />
+        {partidas ? (
+          <Dato label="Tablas" value={tally.matchesDrawn} />
+        ) : (
+          <Dato label={`Dif. ${unit}`} value={formatSigned(difGames)} />
+        )}
         <Dato label="Fechas ganadas" value={fechasGanadas} />
         <Dato label="Racha de títulos" value={longestStreak} />
         <Dato label="Fechas jugadas" value={fechasJugadas} />

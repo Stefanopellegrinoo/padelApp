@@ -20,9 +20,9 @@ import { TablaDelDia, type FilaDelDia } from './tabla-del-dia'
  */
 
 const FILAS: FilaDelDia[] = [
-  { key: 'a', nombre: 'Jugador 2 & Jugador 7', esInvitado: false, won: 2, drawn: 0, gamesDiff: 5, pts: '—' },
-  { key: 'b', nombre: 'Jugador 1 & Jugador 8', esInvitado: false, won: 1, drawn: 1, gamesDiff: -3, pts: '—' },
-  { key: 'c', nombre: 'Jugador 3 & Jugador 6', esInvitado: false, won: 1, drawn: 0, gamesDiff: -2, pts: '—' },
+  { key: 'a', nombre: 'Jugador 2 & Jugador 7', esInvitado: false, won: 2, drawn: 0, lost: 0, gamesDiff: 5, pts: '—' },
+  { key: 'b', nombre: 'Jugador 1 & Jugador 8', esInvitado: false, won: 1, drawn: 1, lost: 1, gamesDiff: -3, pts: '—' },
+  { key: 'c', nombre: 'Jugador 3 & Jugador 6', esInvitado: false, won: 1, drawn: 0, lost: 2, gamesDiff: -2, pts: '—' },
 ]
 
 function html(muestraEmpates: boolean, filas: FilaDelDia[] = FILAS): string {
@@ -114,5 +114,29 @@ describe('tu fila', () => {
     expect(filas).toHaveLength(3)
     expect(filas.filter((fila) => fila.includes('bg-vos-fila'))).toHaveLength(1)
     expect(filas[1]).toContain('bg-vos-fila')
+  })
+})
+
+// Ajedrez (odd/tasks/mas-deportes.md, S3): la diferencia serían partidas ganadas menos perdidas, un
+// 1-0 contado como "games". En su lugar van las perdidas: ganadas, tablas y perdidas, como se cuenta.
+describe('la tabla del día del ajedrez', () => {
+  const partidas = (filas: FilaDelDia[] = FILAS) =>
+    renderToStaticMarkup(createElement(TablaDelDia, { filas, tituloLado: 'Jugador', muestraEmpates: true, partidas: true }))
+
+  it('cambia Dif por PP, con la misma grilla', () => {
+    expect(partidas()).toContain('>PP<')
+    expect(partidas()).not.toContain('>Dif<')
+    expect(partidas()).toContain('grid-cols-[1fr_34px_34px_44px_44px]')
+  })
+
+  it('cada fila dice ganadas, tablas y perdidas, sin la diferencia', () => {
+    expect(celdas(partidas())).toContain('|Jugador 1 & Jugador 8|1|1|1|—|')
+    expect(celdas(partidas())).toContain('|Jugador 3 & Jugador 6|1|0|2|—|')
+    expect(partidas()).not.toContain('-3')
+  })
+
+  it('los demás deportes siguen con Dif', () => {
+    expect(html(true)).toContain('>Dif<')
+    expect(html(true)).not.toContain('>PP<')
   })
 })

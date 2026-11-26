@@ -33,9 +33,9 @@ import { members, sameSide, type MatchFormat, type MatchResult, type Side } from
 export function championRecord(
   matches: readonly MatchResult[],
   champion: Side,
-  // ponytail: ya no se lee —la unidad viene aparte—; sigue en la firma porque la
-  // pantalla y su test de cableado la nombran. Sacarla con ellos si molesta.
-  _format: MatchFormat,
+  // Sólo para la partida de ajedrez (`resultado`): ahí la diferencia sería
+  // contar las partidas otra vez y no se dice. La unidad viene aparte.
+  format: MatchFormat,
   allowsDraw: boolean,
   unit: string,
 ): string {
@@ -75,6 +75,7 @@ export function championRecord(
   const diff = scoreFor - scoreAgainst
   const sign = diff >= 0 ? '+' : ''
   const partidos = allowsDraw ? `${won}–${drawn}–${lost}` : `${won}–${lost}`
+  if (format.resultado === true) return partidos
   return `${partidos}, ${sign}${diff} ${unit}`
 }
 

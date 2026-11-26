@@ -461,6 +461,72 @@ describe('CasualForm', () => {
     })
   })
 
+  // Ajedrez (odd/tasks/mas-deportes.md, S3): un toque —ganaste, tablas o ganó él— y se guarda.
+  describe('ajedrez: gana, pierde o tablas en un toque', () => {
+    const opciones = (el: HTMLElement) =>
+      Array.from(el.querySelectorAll('button[aria-pressed]')).map((b) => b.textContent?.trim())
+
+    it('ofrece las tres opciones, siempre 1 vs 1, sin marcador ni sets', async () => {
+      const f = await montar()
+      await tocar(f.radio('sport', 'AJEDREZ'))
+      expect(opciones(f.el)).toEqual(['Ganaste', 'Tablas', 'Ganó Fede'])
+      expect(f.el.querySelector('input[name="mode"]')).toBeNull()
+      expect(f.el.textContent).toContain('1 vs 1')
+      expect(f.el.querySelector('input[name="scoreMine"]')).toBeNull()
+      expect(f.hidden('setsToWin')).toBeUndefined()
+      expect(f.boton('Tablas').className).toContain('min-h-[64px]')
+      expect(f.el.textContent).toContain('Con un toque se guarda.')
+    })
+
+    it('"Tablas" guarda un empate con un toque, y avisa', async () => {
+      const onSaved = vi.fn()
+      const action = vi.fn(async (state: CasualFormState, _data: FormData) => ({ error: null, saved: (state.saved ?? 0) + 1 }))
+      const f = await montar({ action, onSaved })
+      await tocar(f.radio('sport', 'AJEDREZ'))
+      await tocar(f.boton('Tablas'))
+
+      expect(action).toHaveBeenCalledTimes(1)
+      const data = action.mock.calls[0]![1]
+      expect(data.get('sport')).toBe('AJEDREZ')
+      expect(data.get('outcome')).toBe('drew')
+      expect(data.get('sets')).toBeNull()
+      expect(data.get('scoreMine')).toBeNull()
+      expect(JSON.parse(String(data.get('players')))).toEqual([{ side: 'theirs', playerId: 'amigo-1', guestName: null }])
+      expect(onSaved).toHaveBeenCalledWith('Tablas')
+    })
+
+    it('ganó él: perdiste; un error deja lo tocado y reintentar es un toque', async () => {
+      const action = vi.fn(fallaSiempre)
+      const f = await montar({ action })
+      await tocar(f.radio('sport', 'AJEDREZ'))
+      await tocar(f.boton('Ganó Fede'))
+
+      expect(action.mock.calls[0]![1].get('outcome')).toBe('lost')
+      expect(f.el.textContent).toContain('Elegí una fecha real.')
+      expect(f.boton('Ganó Fede').getAttribute('aria-pressed')).toBe('true')
+      expect(f.submit().disabled).toBe(false)
+      await tocar(f.boton('Ganó Fede'))
+      expect(action).toHaveBeenCalledTimes(2)
+    })
+
+    it('lo recordado en 2 vs 2 no se arrastra: el ajedrez es 1 vs 1', async () => {
+      localStorage.setItem('padel:partido-con-amigo', JSON.stringify({ sport: 'AJEDREZ', mode: '2v2', formats: {} }))
+      const f = await montar()
+      expect(opciones(f.el)).toEqual(['Ganaste', 'Tablas', 'Ganó Fede'])
+    })
+
+    it('al corregir viene marcado lo cargado, y otro toque lo cambia', async () => {
+      const action = vi.fn(fallaSiempre)
+      const f = await montar({ action, initial: editando('AJEDREZ', { outcome: 'drew' }) })
+      expect(f.boton('Tablas').getAttribute('aria-pressed')).toBe('true')
+      expect(f.boton('Ganaste').getAttribute('aria-pressed')).toBe('false')
+      await tocar(f.boton('Ganaste'))
+      expect(action).toHaveBeenCalledTimes(1)
+      expect(action.mock.calls[0]![1].get('outcome')).toBe('won')
+      expect(action.mock.calls[0]![1].get('matchId')).toBe('m1')
+    })
+  })
+
   describe('goles: el marcador primero', () => {
     it('elegir FIFA lleva el foco al primer campo; Enter pasa al segundo', async () => {
       const f = await montar()
@@ -533,7 +599,7 @@ describe('CasualForm', () => {
       const f = await montar()
       const radios = Array.from(f.el.querySelectorAll('input[name="sport"]')) as HTMLInputElement[]
       expect(radios.map((r) => r.value)).toEqual([
-        'PADEL', 'PING_PONG', 'FIFA', 'TENIS', 'FUTBOL_TENIS', 'POOL', 'BEER_PONG', 'FUTBOL', 'BASQUET',
+        'PADEL', 'PING_PONG', 'FIFA', 'TENIS', 'FUTBOL_TENIS', 'POOL', 'BEER_PONG', 'AJEDREZ', 'FUTBOL', 'BASQUET',
       ])
       expect(radios.map((r) => r.closest('label')?.textContent)).toEqual([
         'Pádel',
@@ -543,10 +609,11 @@ describe('CasualForm', () => {
         'Fútbol tenis',
         'Pool',
         'Beer pong',
+        'Ajedrez',
         'Fútbol',
         'Básquet',
       ])
-      // Nueve no entran en 390: la fila se desliza de costado, no se rompe en renglones.
+      // Diez no entran en 390: la fila se desliza de costado, no se rompe en renglones.
       expect(radios[0]?.closest('div')?.className).toContain('overflow-x-auto')
     })
 

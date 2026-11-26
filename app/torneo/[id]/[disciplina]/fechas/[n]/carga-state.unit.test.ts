@@ -8,9 +8,12 @@ import {
   goalsRejected,
   isComplete,
   loserGamesOptions,
+  marcadorDeTarjeta,
   openScoreSet,
+  resultadoDeLaPartida,
   resumenGuardado,
   retomarUltimoSet,
+  setDeResultado,
   siguienteSinCargar,
   startLoad,
   toqueDelSet,
@@ -338,5 +341,48 @@ describe('el set real en dos toques (S6 de mas-deportes)', () => {
   it('un formato sin la clave sigue con los botones de antes', () => {
     expect(loserGamesOptions(ONE_SET_TO_4)).toEqual([0, 1, 2, 3])
     expect(deuceOptions(ONE_SET_TO_4)).toEqual([])
+  })
+})
+
+describe('ajedrez: la partida como un set (odd/tasks/mas-deportes.md, S3)', () => {
+  const AJEDREZ: MatchFormat = { setsToWin: 1, gamesPerSet: 1, tieBreak: false, openScore: false, resultado: true }
+
+  it('cada toque es un set que la validación acepta', () => {
+    expect(setDeResultado('A')).toEqual({ gamesA: 1, gamesB: 0 })
+    expect(setDeResultado('B')).toEqual({ gamesA: 0, gamesB: 1 })
+    expect(setDeResultado('TABLAS')).toEqual({ gamesA: 0, gamesB: 0 })
+    for (const toque of ['A', 'B', 'TABLAS'] as const) {
+      expect(matchError([setDeResultado(toque)], AJEDREZ, true)).toBeNull()
+    }
+  })
+
+  it('lo cargado vuelve a su toque, y lo que no es una partida no marca nada', () => {
+    expect(resultadoDeLaPartida([{ gamesA: 1, gamesB: 0 }])).toBe('A')
+    expect(resultadoDeLaPartida([{ gamesA: 0, gamesB: 1 }])).toBe('B')
+    expect(resultadoDeLaPartida([{ gamesA: 0, gamesB: 0 }])).toBe('TABLAS')
+    expect(resultadoDeLaPartida([])).toBeNull()
+    expect(resultadoDeLaPartida([{ gamesA: 4, gamesB: 2 }])).toBeNull()
+  })
+
+  it('la tarjeta dice 1 y 0, o ½ y ½ en tablas', () => {
+    expect(marcadorDeTarjeta([{ gamesA: 1, gamesB: 0 }], AJEDREZ)).toEqual(['1', '0'])
+    expect(marcadorDeTarjeta([{ gamesA: 0, gamesB: 1 }], AJEDREZ)).toEqual(['0', '1'])
+    expect(marcadorDeTarjeta([{ gamesA: 0, gamesB: 0 }], AJEDREZ)).toEqual(['½', '½'])
+    expect(marcadorDeTarjeta([], AJEDREZ)).toEqual(['–', '–'])
+  })
+
+  it('los demás deportes se ven como siempre: un set, sus games; varios, los sets ganados', () => {
+    expect(marcadorDeTarjeta([{ gamesA: 4, gamesB: 2 }], ONE_SET_TO_4)).toEqual(['4', '2'])
+    expect(marcadorDeTarjeta([{ gamesA: 0, gamesB: 0 }], FIFA_OPEN)).toEqual(['0', '0'])
+    expect(
+      marcadorDeTarjeta([{ gamesA: 11, gamesB: 0 }, { gamesA: 9, gamesB: 11 }, { gamesA: 9, gamesB: 11 }], TWO_SETS_TO_6),
+    ).toEqual(['1', '2'])
+  })
+
+  it('el aviso dice quién ganó, o tablas', () => {
+    expect(resumenGuardado('Ana', 'Caro', [{ gamesA: 1, gamesB: 0 }], AJEDREZ)).toBe('ganó Ana')
+    expect(resumenGuardado('Ana', 'Caro', [{ gamesA: 0, gamesB: 1 }], AJEDREZ)).toBe('ganó Caro')
+    expect(resumenGuardado('Ana', 'Caro', [{ gamesA: 0, gamesB: 0 }], AJEDREZ)).toBe('Ana y Caro, tablas')
+    expect(resumenGuardado('Ana', 'Caro', [{ gamesA: 4, gamesB: 2 }], ONE_SET_TO_4)).toBe('Ana 4-2')
   })
 })

@@ -33,6 +33,8 @@ export interface FilaDelDia {
   esVos?: boolean
   won: number
   drawn: number
+  /** Las perdidas: sólo se dibujan en lugar de `Dif` en una tabla de partidas (`partidas`). */
+  lost: number
   gamesDiff: number
   /** Ya formateados: un guión mientras la fecha está abierta. */
   pts: string
@@ -54,11 +56,18 @@ export function TablaDelDia({
   filas,
   tituloLado,
   muestraEmpates,
+  partidas = false,
 }: {
   filas: readonly FilaDelDia[]
   /** "Pareja" o "Jugador", según la disciplina se juegue de a dos o de a uno. */
   tituloLado: string
   muestraEmpates: boolean
+  /**
+   * Ajedrez (familia resultado): la diferencia serían ganadas menos perdidas,
+   * un 1-0 contado como games. En su lugar va `PP`, las perdidas, en la misma
+   * columna. Apagado, la tabla es la de siempre.
+   */
+  partidas?: boolean
 }) {
   const grid = muestraEmpates ? GRID_CON_EMPATES : GRID_SIN_EMPATES
   return (
@@ -67,7 +76,7 @@ export function TablaDelDia({
         <span>{tituloLado}</span>
         <span className="text-right">PG</span>
         {muestraEmpates && <span className="text-right">PE</span>}
-        <span className="text-right">Dif</span>
+        <span className="text-right">{partidas ? 'PP' : 'Dif'}</span>
         <span className="text-right">Pts</span>
       </div>
       {filas.map((fila, index) => (
@@ -92,7 +101,7 @@ export function TablaDelDia({
           <span className={`text-right ${fila.esVos ? '' : 'text-muted'}`}>{fila.won}</span>
           {muestraEmpates && <span className={`text-right ${fila.esVos ? '' : 'text-muted'}`}>{fila.drawn}</span>}
           <span className={`text-right ${fila.esVos ? '' : 'text-muted'}`}>
-            {`${fila.gamesDiff >= 0 ? '+' : ''}${fila.gamesDiff}`}
+            {partidas ? fila.lost : `${fila.gamesDiff >= 0 ? '+' : ''}${fila.gamesDiff}`}
           </span>
           <span className="font-cond text-right text-[26px]">{fila.pts}</span>
         </div>

@@ -228,8 +228,21 @@ export function siguienteSinCargar(
 /**
  * "Martín & Tomi 6-3": el ganador y sus games primero, set por set, como se
  * canta un resultado. Un empate (FIFA) no tiene ganador y nombra a los dos.
+ * Una partida (`format.resultado`) no tiene números que cantar: "ganó Ana", o
+ * "Ana y Caro, tablas".
  */
-export function resumenGuardado(pairAName: string, pairBName: string, sets: readonly SetScore[]): string {
+export function resumenGuardado(
+  pairAName: string,
+  pairBName: string,
+  sets: readonly SetScore[],
+  format?: MatchFormat,
+): string {
+  if (format?.resultado === true) {
+    const resultado = resultadoDeLaPartida(sets)
+    if (resultado === 'A') return `ganó ${pairAName}`
+    if (resultado === 'B') return `ganó ${pairBName}`
+    if (resultado === 'TABLAS') return `${pairAName} y ${pairBName}, tablas`
+  }
   let setsA = 0
   let setsB = 0
   for (const set of sets) {
@@ -240,4 +253,43 @@ export function resumenGuardado(pairAName: string, pairBName: string, sets: read
   const ganoA = setsA > setsB
   const marcador = sets.map((set) => (ganoA ? `${set.gamesA}-${set.gamesB}` : `${set.gamesB}-${set.gamesA}`))
   return `${ganoA ? pairAName : pairBName} ${marcador.join(' ')}`
+}
+
+/**
+ * La familia resultado (ajedrez, odd/tasks/mas-deportes.md S3): un toque y
+ * ningún número. Cada toque es UN set que `matchError` acepta con el formato
+ * `resultado`: ganó A 1-0, ganó B 0-1, tablas 0-0.
+ */
+export type ResultadoPartida = 'A' | 'B' | 'TABLAS'
+
+export function setDeResultado(resultado: ResultadoPartida): SetScore {
+  if (resultado === 'A') return { gamesA: 1, gamesB: 0 }
+  if (resultado === 'B') return { gamesA: 0, gamesB: 1 }
+  return { gamesA: 0, gamesB: 0 }
+}
+
+/** El toque que dio una partida ya cargada, para marcarlo al corregir; `null` si no es una partida. */
+export function resultadoDeLaPartida(sets: readonly SetScore[]): ResultadoPartida | null {
+  const set = sets.length === 1 ? sets[0] : undefined
+  if (set === undefined) return null
+  if (set.gamesA === 1 && set.gamesB === 0) return 'A'
+  if (set.gamesA === 0 && set.gamesB === 1) return 'B'
+  if (set.gamesA === 0 && set.gamesB === 0) return 'TABLAS'
+  return null
+}
+
+/**
+ * Lo que la tarjeta del partido dice de cada lado: con un solo set, sus
+ * games/goles/puntos; con más de uno, los SETS ganados (sumar 11-0, 9-11, 9-11
+ * da 29 a 22 y señala al que perdió). Una partida dice 1 y 0, o ½ y ½ en
+ * tablas, como se anota en ajedrez. `['–', '–']` sin resultado.
+ */
+export function marcadorDeTarjeta(sets: readonly SetScore[], format: MatchFormat): [string, string] {
+  if (sets.length === 0) return ['–', '–']
+  if (format.resultado === true && resultadoDeLaPartida(sets) === 'TABLAS') return ['½', '½']
+  const [solo] = sets
+  if (sets.length === 1 && solo !== undefined) return [String(solo.gamesA), String(solo.gamesB)]
+  const won = (mine: 'gamesA' | 'gamesB', theirs: 'gamesA' | 'gamesB') =>
+    String(sets.filter((set) => set[mine] > set[theirs]).length)
+  return [won('gamesA', 'gamesB'), won('gamesB', 'gamesA')]
 }

@@ -40,7 +40,37 @@ export type Lado = 'a' | 'b'
  */
 export function formatoRapido(deporte: Deporte): MatchFormat {
   const sport = SPORTS[deporte]
+  if (sport.family === 'result') return { ...sport.format }
   return { ...sport.format, setsToWin: 1, ...(sport.setReal ? { ventaja: true } : {}) }
+}
+
+/** Si el deporte se carga con un toque: gana, pierde o tablas (ajedrez). */
+export function esPartida(deporte: Deporte): boolean {
+  return SPORTS[deporte].family === 'result'
+}
+
+/** Lo que dice el botón del deporte al armar: "A 4 games", o "Gana o tablas" (entra en un renglón). */
+export function subDeporte(deporte: Deporte): string {
+  return esPartida(deporte) ? 'Gana o tablas' : `A ${SPORTS[deporte].format.gamesPerSet} ${unidadDe(deporte)}`
+}
+
+/** El toque de una partida: ganó un lado, o tablas. */
+export type ToquePartida = Lado | 'tablas'
+
+/** El marcador de una partida, como lo guarda una fecha: 1-0, 0-1 o 0-0. */
+export function marcadorDePartida(toque: ToquePartida): { a: number; b: number } {
+  if (toque === 'a') return { a: 1, b: 0 }
+  if (toque === 'b') return { a: 0, b: 1 }
+  return { a: 0, b: 0 }
+}
+
+/** El toque que dio una partida cargada, para marcarlo al corregir; `null` si no es una partida. */
+export function partidaDelMarcador(marcador: Partido['marcador']): ToquePartida | null {
+  if (marcador === null) return null
+  if (marcador.a === 1 && marcador.b === 0) return 'a'
+  if (marcador.a === 0 && marcador.b === 1) return 'b'
+  if (marcador.a === 0 && marcador.b === 0) return 'tablas'
+  return null
 }
 
 /**
@@ -128,7 +158,19 @@ export function unidadDe(deporte: Deporte): string {
  * resultado (el mismo criterio que la carga de una fecha). Un empate —sólo
  * puede venir de una versión vieja— nombra a los dos.
  */
-export function resumenGuardado(nombreA: string, nombreB: string, marcador: { a: number; b: number }): string {
+export function resumenGuardado(
+  nombreA: string,
+  nombreB: string,
+  marcador: { a: number; b: number },
+  deporte?: Deporte,
+): string {
+  // La partida: sin números que cantar.
+  if (deporte !== undefined && esPartida(deporte)) {
+    const toque = partidaDelMarcador(marcador)
+    if (toque === 'a') return `ganó ${nombreA}`
+    if (toque === 'b') return `ganó ${nombreB}`
+    if (toque === 'tablas') return `${nombreA} y ${nombreB}, tablas`
+  }
   if (marcador.a === marcador.b) return `${nombreA} ${marcador.a}-${marcador.b} ${nombreB}`
   return marcador.a > marcador.b
     ? `${nombreA} ${marcador.a}-${marcador.b}`

@@ -10,6 +10,7 @@ import {
   DEPORTES,
   VOLVER_INICIO,
   armadoWarning,
+  esBowling,
   type Armado,
   type Modalidad,
   type ModoParejas,
@@ -212,6 +213,7 @@ export function Armar({ onEmpezar, aviso }: { onEmpezar: (armado: Armado) => voi
   const jugadoresFiltrados = nombresValidos(armado.jugadores)
   const chips = agruparChips(jugadoresFiltrados, armado.parejasManuales)
   const warning = armadoWarning(armado)
+  const bowling = esBowling(armado)
   const listo = warning === null
 
   return (
@@ -228,20 +230,24 @@ export function Armar({ onEmpezar, aviso }: { onEmpezar: (armado: Armado) => voi
         titulo="Deporte"
         opciones={DEPORTES}
         etiqueta={(deporte) => DEPORTE_LABEL[deporte]}
-        sub={(deporte) => `A ${DEPORTE_OBJETIVO[deporte]} ${unidadDe(deporte)}`}
+        // Bowling no se juega "a" nada: cada uno carga su total (S4).
+        sub={(deporte) => (deporte === 'BOWLING' ? 'Cada uno su total' : `A ${DEPORTE_OBJETIVO[deporte]} ${unidadDe(deporte)}`)}
         valor={armado.deporte}
         onChange={(deporte) => setArmado({ ...armado, deporte })}
       />
 
-      <Opciones
-        titulo="Cómo se juega"
-        opciones={MODALIDADES}
-        etiqueta={(modalidad) => MODALIDAD_LABEL[modalidad]}
-        valor={armado.modalidad}
-        onChange={(modalidad) => setArmado({ ...armado, modalidad })}
-      />
+      {/* Bowling se juega de a uno: no hay modalidad ni parejas que elegir. */}
+      {!bowling && (
+        <Opciones
+          titulo="Cómo se juega"
+          opciones={MODALIDADES}
+          etiqueta={(modalidad) => MODALIDAD_LABEL[modalidad]}
+          valor={armado.modalidad}
+          onChange={(modalidad) => setArmado({ ...armado, modalidad })}
+        />
+      )}
 
-      {armado.modalidad === 'PAREJAS' && (
+      {!bowling && armado.modalidad === 'PAREJAS' && (
         <Opciones
           titulo="Parejas"
           opciones={MODOS_PAREJAS}
@@ -252,7 +258,7 @@ export function Armar({ onEmpezar, aviso }: { onEmpezar: (armado: Armado) => voi
         />
       )}
 
-      {armado.modalidad === 'PAREJAS' && armado.modoParejas === 'ROTATIVAS' && (
+      {!bowling && armado.modalidad === 'PAREJAS' && armado.modoParejas === 'ROTATIVAS' && (
         <div className="mx-4 mt-3 flex min-h-[64px] items-center justify-between gap-3 rounded-tile bg-surface py-2 pr-2 pl-4">
           <span className="text-[17px] font-bold">Rondas</span>
           <StepperRondas value={armado.rondas} onChange={(rondas) => setArmado({ ...armado, rondas })} />
@@ -322,7 +328,7 @@ export function Armar({ onEmpezar, aviso }: { onEmpezar: (armado: Armado) => voi
         </button>
       </section>
 
-      {armado.modalidad === 'PAREJAS' && armado.modoParejas === 'FIJAS' && (
+      {!bowling && armado.modalidad === 'PAREJAS' && armado.modoParejas === 'FIJAS' && (
         <section className="px-4 pt-6">
           <h2 className={PREGUNTA}>Armá las parejas</h2>
           <p className="mt-1 text-[15px] text-muted">Tocá dos nombres para juntarlos. Otro toque los separa.</p>

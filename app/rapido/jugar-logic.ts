@@ -90,7 +90,8 @@ export function toqueDelMarcador(
 }
 
 /** Cómo se cuentan los puntos del deporte, para la pregunta del segundo toque. */
-export function unidadDe(deporte: Deporte): 'games' | 'puntos' {
+export function unidadDe(deporte: Deporte): 'games' | 'puntos' | 'pinos' {
+  if (deporte === 'BOWLING') return 'pinos'
   return deporte === 'PADEL' ? 'games' : 'puntos'
 }
 

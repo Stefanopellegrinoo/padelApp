@@ -44,8 +44,8 @@ function claveDeLado(lado: readonly number[]): string {
 }
 
 describe('constantes del deporte', () => {
-  it('lista pádel y ping pong con su etiqueta y objetivo de puntos', () => {
-    expect(DEPORTES).toEqual(['PADEL', 'PING_PONG'])
+  it('lista pádel, ping pong y bowling con su etiqueta y objetivo de puntos', () => {
+    expect(DEPORTES).toEqual(['PADEL', 'PING_PONG', 'BOWLING'])
     expect(DEPORTE_LABEL.PADEL).toBe('Pádel')
     expect(DEPORTE_LABEL.PING_PONG).toBe('Ping pong')
     expect(DEPORTE_OBJETIVO.PADEL).toBe(4)

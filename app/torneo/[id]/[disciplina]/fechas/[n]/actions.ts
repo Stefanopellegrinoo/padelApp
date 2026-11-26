@@ -23,6 +23,7 @@ import {
   removeLooseGuestSeat,
   reopenMatchday,
   saveResult,
+  saveScore,
   seedAttendances,
   setAttendance,
   setMatchdayDate,
@@ -212,6 +213,19 @@ export async function saveMatchResult(
 ): Promise<WriteResult> {
   return onMatchday(seasonId, matchdayNumber, async (supabase) => {
     await saveResult(supabase, matchId, sets)
+  })
+}
+
+/** Los pinos de un presente en una fecha por ranking (bowling, S4). `saveScore` reemplaza el total anterior. */
+export async function saveMatchdayScore(
+  seasonId: string,
+  matchdayNumber: number,
+  matchdayId: string,
+  entryId: string,
+  score: number,
+): Promise<WriteResult> {
+  return onMatchday(seasonId, matchdayNumber, async (supabase) => {
+    await saveScore(supabase, matchdayId, entryId, score)
   })
 }
 

@@ -18,7 +18,7 @@ import type { DisciplineShape, MatchFormat, MatchResult, SeasonConfig, SideSize 
  * `setsToWin` − 1 los que se juegan como máximo.
  */
 export function formatLabel(format: MatchFormat, unit: string): string {
-  if (format.openScore) return 'Marcador de goles'
+  if (format.openScore) return `Marcador de ${unit}`
   const setWord = format.setsToWin === 1 ? '1 set' : `mejor de ${2 * format.setsToWin - 1} sets`
   return `${setWord} a ${format.gamesPerSet} ${unit}`
 }

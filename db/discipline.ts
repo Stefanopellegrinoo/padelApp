@@ -237,6 +237,13 @@ export async function updateDisciplineFormatoDefault(
   disciplineId: DisciplineId,
   formato: MatchdayFormatSetting,
 ): Promise<void> {
+  // Por ranking (bowling, S4) es lo que la disciplina ES, no una preferencia de
+  // armado: ni bowling pasa a partidos ni un deporte de partidos a pinos. La
+  // base sólo exige que el ranking sea de a uno (`disciplines_ranking_individual`, 0109).
+  const { formatoDefault: current } = await disciplineConfig(supabase, disciplineId)
+  if ((current.kind === 'RANKING') !== (formato.kind === 'RANKING')) {
+    throw new EdgeError('El ranking por pinos es el formato de bowling: no se cambia.')
+  }
   const { error, count } = await supabase
     .from('disciplines')
     .update({ formato_default: formato as unknown as Json }, { count: 'exact' })

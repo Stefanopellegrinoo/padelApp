@@ -382,6 +382,8 @@ export function PersonalizarReglas({
     config,
   }).filter((line) => line.key !== 'modalidad')
 
+  const ranking = rules.formatoDefault.kind === 'RANKING'
+
   return (
     <dialog
       ref={dialogo}
@@ -422,17 +424,21 @@ export function PersonalizarReglas({
         />
 
         <Bloque titulo="La fecha" disabled={pending}>
-          <ComoSeArma rules={rules} hint={hints.formato} onChange={onChange} />
+          {/* Una fecha por ranking (bowling) no tiene partidos: ni formato que
+              elegir ni techo de partidos. Lo que queda son los puntos por puesto. */}
+          {!ranking && <ComoSeArma rules={rules} hint={hints.formato} onChange={onChange} />}
           <PuntosPorPosicion points={config.points} hint={hints.points} onChange={(points) => setConfig({ points })} />
-          <FilaStepper
-            stepper="maxMatches"
-            titulo="Partidos por fecha"
-            hint={hints.maxMatches}
-            value={maxMatchesOf(config, pairSize)}
-            min={1}
-            max={66}
-            onChange={(maxMatches) => setConfig({ maxMatches })}
-          />
+          {!ranking && (
+            <FilaStepper
+              stepper="maxMatches"
+              titulo="Partidos por fecha"
+              hint={hints.maxMatches}
+              value={maxMatchesOf(config, pairSize)}
+              min={1}
+              max={66}
+              onChange={(maxMatches) => setConfig({ maxMatches })}
+            />
+          )}
         </Bloque>
 
         <Bloque titulo="La temporada" disabled={pending}>

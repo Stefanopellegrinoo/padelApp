@@ -11,7 +11,7 @@
  * tres; y llamaba `games` a lo que en FIFA son goles.
  */
 
-import { members, sameSide, type MatchFormat, type MatchResult, type Side } from '@/core'
+import { members, sameSide, type Award, type MatchFormat, type MatchResult, type Side } from '@/core'
 
 /**
  * Partidos ganados–(empatados)–perdidos y diferencia de la unidad que
@@ -83,4 +83,24 @@ export function sideNames(side: Side, nameById: ReadonlyMap<string, string>): st
   return members(side)
     .map((entryId) => nameById.get(entryId) ?? '?')
     .join(' & ')
+}
+
+/**
+ * El ganador de una fecha por pinos (bowling, S4): quien cobró el 1° —todos,
+ * si lo compartieron— y su total. No hay partidos que contar, así que la
+ * marca son los pinos. `null` sin awards (una fecha vieja sin cerrar bien).
+ */
+export function rankingChampion(
+  awards: readonly Award[],
+  scores: ReadonlyMap<string, number>,
+  nameById: ReadonlyMap<string, string>,
+  unit: string,
+): { names: string; record: string } | null {
+  const first = awards.filter((award) => award.position === 1).map((award) => award.entryId)
+  if (first.length === 0) return null
+  const score = scores.get(first[0] ?? '')
+  return {
+    names: first.map((entryId) => nameById.get(entryId) ?? '?').join(' y '),
+    record: score === undefined ? '' : `${score} ${unit}`,
+  }
 }

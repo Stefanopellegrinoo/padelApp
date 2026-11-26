@@ -544,3 +544,11 @@ describe('bracketOrderNote', () => {
     expect(bracketOrderNote('puntos')).toContain('diferencia de puntos')
   })
 })
+
+describe('formatLabel con un marcador que no es de goles (bowling, S4)', () => {
+  it('nombra su unidad; FIFA sigue diciendo goles', () => {
+    const open = { setsToWin: 1, gamesPerSet: 4, tieBreak: true, openScore: true }
+    expect(formatLabel(open, 'pinos')).toBe('Marcador de pinos')
+    expect(formatLabel(open, 'goles')).toBe('Marcador de goles')
+  })
+})

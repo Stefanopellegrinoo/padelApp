@@ -55,7 +55,11 @@ export function fichaLine(input: ReglamentoInput): string {
   const format = config.matchFormat
   const sets = format.setsToWin === 1 ? '1 set' : `Mejor de ${2 * format.setsToWin - 1} sets`
   const parts = [
-    format.openScore ? 'A goles' : `${sets} a ${format.gamesPerSet} ${unitOf(kind, format)}`,
+    input.formatoDefault.kind === 'RANKING'
+      ? `Por ${unitOf(kind, format)}`
+      : format.openScore
+        ? 'A goles'
+        : `${sets} a ${format.gamesPerSet} ${unitOf(kind, format)}`,
     fechasText(config.regularMatchdays),
     config.regularMatchdays === 1 ? null : cuentanText(config),
     input.hasMasters ? 'Masters al final' : null,
@@ -63,16 +67,18 @@ export function fichaLine(input: ReglamentoInput): string {
   return parts.filter((part) => part !== null).join(' · ')
 }
 
-function modalidadText({ kind, pairSize, fixedTeams, config }: ReglamentoInput): string {
+function modalidadText({ kind, pairSize, fixedTeams, config, formatoDefault }: ReglamentoInput): string {
   const label = `${modalityLabel(kind, modalityOf(pairSize, fixedTeams))}.`
   // Sin `firstFecha` (torneo anterior a la ficha) no se inventa cómo se armó la primera fecha.
-  if (config.firstFecha === undefined) return label
+  // Por ranking (bowling) no hay nada que armar: cada uno juega su línea.
+  if (config.firstFecha === undefined || formatoDefault.kind === 'RANKING') return label
   const how = config.firstFecha === 'NIVEL' ? 'por nivel' : 'al azar'
   return `${label} La primera fecha se arma ${how}; después, por la tabla.`
 }
 
-function partidoText({ kind, allowsDraw, config }: ReglamentoInput): string {
+function partidoText({ kind, allowsDraw, config, formatoDefault }: ReglamentoInput): string {
   const format = config.matchFormat
+  if (formatoDefault.kind === 'RANKING') return `Cada uno carga su total de ${unitOf(kind, format)}.`
   if (format.openScore) {
     return allowsDraw ? 'Partidos a goles; se puede empatar.' : 'Partidos a goles, siempre con un ganador.'
   }
@@ -84,6 +90,7 @@ function partidoText({ kind, allowsDraw, config }: ReglamentoInput): string {
 function fechaText(formato: MatchdayFormatSetting): string {
   if (formato.kind === 'AUTO') return 'Cada fecha se arma sola, según cuántos vengan.'
   if (formato.kind === 'ROUND_ROBIN') return 'Cada fecha, todos contra todos.'
+  if (formato.kind === 'RANKING') return 'Cada fecha gana el que más hizo; los empatados comparten el puesto y los puntos.'
   return `Cada fecha, ${formato.groups} grupos + llave.`
 }
 

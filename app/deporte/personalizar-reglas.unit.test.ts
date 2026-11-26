@@ -239,6 +239,16 @@ describe('PersonalizarReglas', () => {
     expect(html).toContain('La temporada')
   })
 
+  it('Bowling: sin partidos, así que no hay "El partido", "Cómo se arma" ni "Partidos por fecha"', () => {
+    const html = sheet('BOWLING', 6, 'INDIVIDUAL')
+    expect(html).toContain('Reglas de Bowling')
+    expect(html).not.toContain('El partido')
+    expect(html).not.toContain('Cómo se arma')
+    expect(html).not.toContain('data-stepper="maxMatches"')
+    expect(html).toContain('Puntos por puesto')
+    expect(html).toContain('Cada uno carga su total de pinos.')
+  })
+
   it('Cómo se arma: tres botones /rapido en un grupo con título; Automático viene elegido', () => {
     const html = sheet('PADEL', 8, 'ROTAN')
     expect(html).toMatch(/role="group"[^>]*aria-labelledby="[^"]+"/)

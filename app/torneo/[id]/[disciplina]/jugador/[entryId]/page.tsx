@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import {
   computeRanking,
   partnerRecords,
+  rankingTallies,
   rivalRecords,
   rankingWithMovement,
   resolveDisciplineBySlug,
@@ -15,7 +16,15 @@ import {
   type EntryId,
   type SeasonConfig,
 } from '@/core'
-import { awardsOf, closedHistoryAll, entriesOf, myEntryId, seasonHeader, seasonSquadMembersOf } from '@/db/read'
+import {
+  awardsOf,
+  closedHistoryAll,
+  closedScoresOf,
+  entriesOf,
+  myEntryId,
+  seasonHeader,
+  seasonSquadMembersOf,
+} from '@/db/read'
 import { serverClient } from '@/db/server'
 import { Avatar } from '@/app/ui/avatar'
 import { button } from '@/app/ui/button'
@@ -244,12 +253,15 @@ export default async function JugadorPage({ params, searchParams }: PageProps) {
   const base = `/torneo/${seasonId}/${disciplina}`
   const volver = volverDelJugador(base, desde)
 
-  const [squad, entries, history, awardsByMatchday, viewerEntryId] = await Promise.all([
+  // Bowling (S4): sin partidos. El perfil cuenta pinos en vez de partidos y games.
+  const byPins = discipline.formatoDefault.kind === 'RANKING'
+  const [squad, entries, history, awardsByMatchday, viewerEntryId, scoresByMatchday] = await Promise.all([
     seasonSquadMembersOf(supabase, seasonId),
     entriesOf(supabase, seasonId, discipline.id),
     closedHistoryAll(supabase, seasonId, discipline.id),
     awardsOf(supabase, seasonId, discipline.id),
     myEntryId(supabase, seasonId),
+    byPins ? closedScoresOf(supabase, discipline.id) : Promise.resolve(new Map<number, Map<EntryId, number>>()),
   ])
 
   // La identidad se resuelve con el plantel de LA TEMPORADA (C11, verify
@@ -348,7 +360,8 @@ export default async function JugadorPage({ params, searchParams }: PageProps) {
   )
 
   const isMe = entryId === viewerEntryId
-  const fechasJugadas = tally.matchdaysPlayed
+  const pins = rankingTallies(scoresByMatchday, [entryId])[0]
+  const fechasJugadas = byPins ? (pins?.played ?? 0) : tally.matchdaysPlayed
 
   return (
     <div className="flex flex-col">
@@ -378,9 +391,19 @@ export default async function JugadorPage({ params, searchParams }: PageProps) {
       />
 
       <div className="grid grid-cols-3 gap-2.5 px-4 pt-5">
-        <Dato label="Partidos" value={`${tally.matchesWon}-${matchesLost}`} />
-        <Dato label="Efectividad" value={`${efectividad}%`} />
-        <Dato label={`Dif. ${unit}`} value={formatSigned(difGames)} />
+        {byPins ? (
+          <>
+            <Dato label="Promedio" value={pins?.average ?? 0} />
+            <Dato label="Mejor total" value={pins?.best ?? 0} />
+            <Dato label={`${unit.charAt(0).toUpperCase()}${unit.slice(1)} totales`} value={pins?.total ?? 0} />
+          </>
+        ) : (
+          <>
+            <Dato label="Partidos" value={`${tally.matchesWon}-${matchesLost}`} />
+            <Dato label="Efectividad" value={`${efectividad}%`} />
+            <Dato label={`Dif. ${unit}`} value={formatSigned(difGames)} />
+          </>
+        )}
         <Dato label="Fechas ganadas" value={fechasGanadas} />
         <Dato label="Racha de títulos" value={longestStreak} />
         <Dato label="Fechas jugadas" value={fechasJugadas} />

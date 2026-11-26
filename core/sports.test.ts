@@ -5,6 +5,7 @@ import {
   SPORTS,
   SPORT_IDS,
   TOURNAMENT_SPORTS,
+  isRankingSport,
   isSportId,
   isTournamentSport,
   modalityLabel,
@@ -178,5 +179,34 @@ describe('sportFormatError', () => {
     expect(sportFormatError('TEJO', { setsToWin: 1, gamesPerSet: 4, openScore: false })).toBe(
       'Elegí un deporte de la lista.',
     )
+  })
+})
+
+describe('bowling (S4)', () => {
+  it('se juega en torneos, de a uno, por pinos, sin empates ni equipos', () => {
+    const bowling = SPORTS.BOWLING
+    expect(bowling.label).toBe('Bowling')
+    expect(bowling.unit).toBe('pinos')
+    expect(bowling.family).toBe('goals')
+    expect(bowling.allowsDraw).toBe(false)
+    expect(bowling.teams).toBe(false)
+    expect(bowling.tournaments).toBe(true)
+    expect(isTournamentSport('BOWLING')).toBe(true)
+    expect(bowling.ficha.modalities.map((option) => option.id)).toEqual(['INDIVIDUAL'])
+    expect(bowling.ficha.masters).toBe(false)
+  })
+
+  it('cada fecha es un ranking por pinos, no partidos', () => {
+    expect(SPORTS.BOWLING.ficha.fechaFormat).toEqual({ kind: 'RANKING' })
+    expect(isRankingSport('BOWLING')).toBe(true)
+  })
+
+  it('ningún otro deporte, ni un id fuera del registro, juega fechas por ranking', () => {
+    expect(SPORT_IDS.filter((id) => isRankingSport(id))).toEqual(['BOWLING'])
+    expect(isRankingSport('TEJO')).toBe(false)
+  })
+
+  it('unitOf dice pinos', () => {
+    expect(unitOf('BOWLING', { setsToWin: 1, gamesPerSet: 4, tieBreak: true, openScore: true })).toBe('pinos')
   })
 })

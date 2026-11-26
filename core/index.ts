@@ -110,6 +110,19 @@ export { computeStandings, usesSetsDiff } from './standings'
 export { tallySets } from './standings'
 export { computeAwards } from './awards'
 
+//── Una fecha por ranking (bowling, S4): sin partidos, puestos compartidos ──
+// `db/matchday.ts` (cerrar) y la pantalla de la fecha (la tabla en vivo)
+// arman la misma tabla con `rankScores`; el torneo rápido también.
+export type { EntryScore, RankingTally } from './ranking-fecha'
+export {
+  rankScores,
+  computeRankingAwards,
+  rankingScoreError,
+  parseRankingScore,
+  rankingTallies,
+  MAX_RANKING_SCORE,
+} from './ranking-fecha'
+
 //── Formato sugerido y grupos de una fecha (REQ-D8-1, PR21) ─────────────────
 // `suggestFormat` es la salida real de W32 (decisión #3863): grupos + llave
 // en vez de un techo de jugadores nuevo. `MatchdayFormat` (su tipo de
@@ -268,6 +281,8 @@ export {
   sideWords,
   unitOf,
 } from './sports'
+// Aparte del bloque de arriba: lo trajo bowling (S4), sin tocar la lista del registro.
+export { isRankingSport } from './sports'
 
 // ── Un sorteo reproducible ───────────────────────────────────────────────────
 // Fisher-Yates con el `random` inyectado: `core/` no tiene `Math.random`.

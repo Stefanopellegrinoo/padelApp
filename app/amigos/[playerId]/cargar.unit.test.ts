@@ -496,6 +496,14 @@ describe('CasualForm', () => {
       expect(f.el.querySelector('input[name="teamMine"]')).toBeNull()
     })
 
+    it('bowling es un mano a mano por pinos: sin empate, sin equipos, y gana el que más hizo', async () => {
+      const f = await montar({ initial: editando('BOWLING', { scoreMine: '180', scoreTheirs: '150' }) })
+      expect(f.el.querySelector('input[name="outcome"][value="drew"]')).toBeNull()
+      expect(f.el.querySelector('input[name="outcome"][value="won"]')).not.toBeNull()
+      expect(f.el.textContent).toContain('Tus pinos')
+      expect(f.el.querySelector('input[name="teamMine"]')).toBeNull()
+    })
+
     it('FIFA tiene empate, cuenta goles y pide equipos', async () => {
       const f = await montar({ initial: editando('FIFA', { scoreMine: '2', scoreTheirs: '1' }) })
       expect(f.el.querySelector('input[name="outcome"][value="drew"]')).not.toBeNull()
@@ -514,13 +522,14 @@ describe('CasualForm', () => {
     it('hay un chip por deporte, en el orden del registro', async () => {
       const f = await montar()
       const radios = Array.from(f.el.querySelectorAll('input[name="sport"]')) as HTMLInputElement[]
-      expect(radios.map((r) => r.value)).toEqual(['PADEL', 'PING_PONG', 'FIFA', 'FUTBOL', 'BASQUET'])
+      expect(radios.map((r) => r.value)).toEqual(['PADEL', 'PING_PONG', 'FIFA', 'FUTBOL', 'BASQUET', 'BOWLING'])
       expect(radios.map((r) => r.closest('label')?.textContent)).toEqual([
         'Pádel',
         'Ping pong',
         'FIFA',
         'Fútbol',
         'Básquet',
+        'Bowling',
       ])
     })
 

@@ -5,13 +5,25 @@ import { button } from '@/app/ui/button'
 import { Hero } from '@/app/ui/hero'
 import { Sheet } from '@/app/ui/sheet'
 import { Toast } from '@/app/ui/toast'
-import { DEPORTE_LABEL, VOLVER_INICIO, campeon, tabla, terminado, type Armado, type TorneoRapido } from './rapido-state'
+import {
+  DEPORTE_LABEL,
+  VOLVER_INICIO,
+  campeon,
+  campeonesPinos,
+  tabla,
+  tablaPinos,
+  terminado,
+  type Armado,
+  type TorneoRapido,
+} from './rapido-state'
 import { agruparPorRonda, nombreLado, resumenGuardado, siguienteSinCargar } from './jugar-logic'
 import { HojaPartido, TarjetaPartido } from './partido-row'
 import { Tabla } from './tabla'
+import { CargaPinos, TablaPinos } from './pinos'
 
 /** Cómo se juega, en dos palabras: va de subtítulo del encabezado. */
 function formatoDe(armado: Armado): string {
+  if (armado.deporte === 'BOWLING') return 'Cada uno su total'
   if (armado.modalidad === 'INDIVIDUAL') return 'Individual'
   if (armado.modoParejas === 'FIJAS') return 'Parejas fijas'
   if (armado.modoParejas === 'SORTEADAS') return 'Parejas sorteadas'
@@ -26,6 +38,8 @@ function faltan(cuantos: number): string {
 interface JugarProps {
   torneo: TorneoRapido
   onCargarMarcador: (indice: number, a: number, b: number) => void
+  /** Bowling (S4): el total de un jugador, o `null` para borrarlo. */
+  onCargarPinos?: (indice: number, pinos: number | null) => void
   onNuevoTorneo: () => void
   /** El aviso de `page.tsx` cuando el navegador no deja guardar: va debajo del encabezado. */
   aviso?: ReactNode
@@ -50,7 +64,7 @@ interface JugarProps {
  * partidos para que el botón apareciera. Pisar el torneo sigue preguntando,
  * en una hoja: es lo único de la ruta que no se deshace.
  */
-export function Jugar({ torneo, onCargarMarcador, onNuevoTorneo, aviso }: JugarProps) {
+export function Jugar({ torneo, onCargarMarcador, onCargarPinos, onNuevoTorneo, aviso }: JugarProps) {
   // `vez` cambia en cada apertura: la hoja arranca de cero aunque se reabra el
   // mismo partido. `indice` se queda al cerrar para que baje con su contenido.
   const [hoja, setHoja] = useState<{ indice: number; open: boolean; vez: number } | null>(null)
@@ -103,6 +117,12 @@ export function Jugar({ torneo, onCargarMarcador, onNuevoTorneo, aviso }: JugarP
 
   const esPareja = (ganador?.jugadores.length ?? 0) > 1
 
+  // Bowling (S4): sin partidos. La planilla de pinos y el ranking reemplazan a las rondas y la tabla.
+  const pinos = torneo.pinos
+  const filasPinos = pinos === undefined ? [] : tablaPinos(torneo)
+  const campeonPinos = campeonesPinos(torneo)
+  const cargados = pinos === undefined ? 0 : pinos.filter((total) => total !== null).length
+
   return (
     <div data-deporte={armado.deporte} className="flex flex-1 flex-col pb-[calc(24px+env(safe-area-inset-bottom))]">
       <Hero
@@ -112,7 +132,12 @@ export function Jugar({ torneo, onCargarMarcador, onNuevoTorneo, aviso }: JugarP
         subtitle={formatoDe(armado)}
         sport={armado.deporte}
         right={
-          acabo ? undefined : (
+          acabo ? undefined : pinos !== undefined ? (
+            <p>
+              <span className="font-cond block text-[56px]">{cargados}</span>
+              <span className="text-[14px] text-on-block-soft">{` de ${pinos.length} cargados`}</span>
+            </p>
+          ) : (
             <p>
               <span className="font-cond block text-[56px]">{jugados}</span>
               <span className="text-[14px] text-on-block-soft">
@@ -122,6 +147,22 @@ export function Jugar({ torneo, onCargarMarcador, onNuevoTorneo, aviso }: JugarP
           )
         }
       >
+        {acabo && campeonPinos !== null && (
+          <div
+            ref={campeonRef}
+            tabIndex={-1}
+            className="mt-4 flex items-center gap-3 rounded-tile bg-on-block px-4 py-3 text-block"
+          >
+            <div className="min-w-0 flex-1">
+              <p className="text-[14px] font-bold">{campeonPinos.nombres.length > 1 ? 'Campeones' : 'Campeón'}</p>
+              <p className="font-titulo text-[28px] [overflow-wrap:anywhere]">{campeonPinos.nombres.join(' y ')}</p>
+            </div>
+            <p className="shrink-0 text-right">
+              <span className="font-cond block text-[40px]">{campeonPinos.pinos}</span>
+              <span className="text-[14px] font-semibold">pinos</span>
+            </p>
+          </div>
+        )}
         {acabo && ganador !== null && (
           <div
             ref={campeonRef}
@@ -174,9 +215,23 @@ export function Jugar({ torneo, onCargarMarcador, onNuevoTorneo, aviso }: JugarP
         )
       })}
 
+      {pinos !== undefined && onCargarPinos !== undefined && (
+        <section className="pt-5">
+          <h2 className="px-4 font-titulo text-[24px]">Pinos</h2>
+          <p className="px-4 pt-1 text-[15px] text-muted">Escribí el total de cada uno. Enter pasa al siguiente.</p>
+          <CargaPinos
+            filas={pinos.map((total, indice) => ({ indice, nombre: jugadores[indice] ?? '', pinos: total }))}
+            onCargar={onCargarPinos}
+          />
+        </section>
+      )}
+
       <section className="pt-6">
         <h2 className="px-4 font-titulo text-[24px]">Tabla</h2>
-        <Tabla filas={filas} />
+        {pinos === undefined ? <Tabla filas={filas} /> : <TablaPinos filas={filasPinos} />}
+        {pinos !== undefined && (
+          <p className="px-4 pt-2 text-[15px] text-muted">Gana el que más hizo. Los empatados comparten el puesto.</p>
+        )}
       </section>
 
       <div className="px-4 pt-6">

@@ -29,8 +29,8 @@ export function rulesFromSeed(seed: DisciplineSeed): DisciplineRules {
   return { config: seed.config, hasMasters: seed.hasMasters, formatoDefault: seed.formatoDefault }
 }
 
-/** Los tres botones de "Cómo se arma". Los grupos (2 o 4) se eligen en un segundo renglón. */
-export type FormatoChoice = 'AUTO' | 'ROUND_ROBIN' | 'GROUPS_KNOCKOUT'
+/** Los tres botones de "Cómo se arma". Los grupos (2 o 4) se eligen en un segundo renglón. `RANKING` no es un botón: lo trae la ficha de bowling y la hoja no ofrece cambiarlo. */
+export type FormatoChoice = 'AUTO' | 'ROUND_ROBIN' | 'GROUPS_KNOCKOUT' | 'RANKING'
 
 export function formatoChoice(setting: MatchdayFormatSetting): FormatoChoice {
   return setting.kind

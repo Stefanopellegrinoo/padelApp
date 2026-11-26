@@ -108,3 +108,13 @@ it('Cancelar la cierra', () => {
   act(() => cancelar.click())
   expect(dialogo().open).toBe(false)
 })
+
+// En pantalla ancha el contenido de Inicio va centrado en `max-w-lg`: la barra de abajo, también (no
+// pegada a la izquierda), y sigue pagando el área segura de abajo.
+it('la barra de abajo va centrada con el contenido', () => {
+  act(() => root.render(createElement(CargarPartido, { fechas: FECHAS, amigos: AMIGOS })))
+  const cta = [...host.querySelectorAll('button')].find((b) => b.textContent === 'Cargar partido')!
+  const barra = cta.parentElement!.className.split(' ')
+  expect(barra).toEqual(expect.arrayContaining(['fixed', 'inset-x-0', 'bottom-0', 'mx-auto', 'max-w-lg']))
+  expect(barra.some((c) => c.includes('safe-area-inset-bottom'))).toBe(true)
+})

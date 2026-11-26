@@ -216,6 +216,8 @@ describe('la partida de ajedrez', () => {
     expect(subDeporte('AJEDREZ')).toBe('Gana o tablas')
     expect(subDeporte('PADEL')).toBe('A 4 games')
     expect(subDeporte('BEER_PONG')).toBe('A 10 vasos')
+    // Un renglón en el bloque más angosto (360 px, de a tres): bowling no se juega "a" nada, se suman pinos.
+    expect(subDeporte('BOWLING')).toBe('Por pinos')
   })
 
   it('el aviso dice quién ganó, o tablas', () => {

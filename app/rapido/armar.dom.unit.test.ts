@@ -97,7 +97,7 @@ it('el deporte es un grupo con título y dice cuál está elegido', () => {
   expect(document.getElementById(grupo.getAttribute('aria-labelledby') ?? '')?.textContent).toBe('Deporte')
 })
 
-it('los ocho deportes entran en una grilla de tres, cada uno con su número y su unidad (bowling, su total)', () => {
+it('los ocho deportes entran en una grilla de tres, cada uno con su número y su unidad (bowling, sus pinos)', () => {
   const grupo = [...host.querySelectorAll('[role="group"]')].find((g) => g.textContent?.includes('Pádel'))!
   expect(grupo.className.split(' ')).toEqual(expect.arrayContaining(['grid', 'grid-cols-3']))
   const textos = [...grupo.querySelectorAll('button')].map((b) => b.textContent)
@@ -109,10 +109,29 @@ it('los ocho deportes entran en una grilla de tres, cada uno con su número y su
     'PoolA 3 bolas',
     'Beer pongA 10 vasos',
     'AjedrezGana o tablas',
-    'BowlingCada uno su total',
+    'BowlingPor pinos',
   ])
   act(() => [...grupo.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Pool'))!.click())
   expect(host.querySelector('[data-deporte]')?.getAttribute('data-deporte')).toBe('POOL')
+})
+
+// Como en la hoja con un amigo y en el asistente: cada deporte en su color y con su ícono. En 360
+// el nombre baja a dos renglones como mucho y lo de abajo entra en uno: todos los bloques parejos.
+it('cada deporte es un bloque en su color, con su ícono, el nombre en dos renglones como mucho y un renglón abajo', () => {
+  const grupo = [...host.querySelectorAll('[role="group"]')].find((g) => g.textContent?.includes('Pádel'))!
+  const bloques = [...grupo.querySelectorAll('button')]
+  expect(bloques.map((b) => b.getAttribute('data-deporte'))).toEqual([
+    'PADEL', 'PING_PONG', 'TENIS', 'FUTBOL_TENIS', 'POOL', 'BEER_PONG', 'AJEDREZ', 'BOWLING',
+  ])
+  for (const bloque of bloques) {
+    expect(bloque.querySelector('svg[aria-hidden="true"]')).not.toBeNull()
+    expect(bloque.querySelector('[data-nombre]')?.className.split(' ')).toContain('line-clamp-2')
+    expect(bloque.querySelector('[data-sub]')?.className.split(' ')).toContain('whitespace-nowrap')
+    expect(bloque.className.split(' ')).toContain('min-h-[96px]')
+  }
+  // Elegido, lleno de su color; los otros, en su tinte.
+  expect(bloques[0]!.className.split(' ')).toContain('bg-sport')
+  expect(bloques[1]!.className.split(' ')).toContain('bg-sport-tint')
 })
 
 // Ajedrez (odd/tasks/mas-deportes.md, S3): una partida es uno contra uno.

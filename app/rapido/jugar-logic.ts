@@ -53,11 +53,11 @@ export function esPartida(deporte: Deporte): boolean {
 }
 
 /**
- * Lo que dice el botón del deporte al armar: "A 4 games", "Gana o tablas" (entra en un renglón), o
- * "Cada uno su total": bowling no se juega "a" nada (S4).
+ * Lo que dice el botón del deporte al armar, en un renglón aun en 360 de a tres: "A 4 games",
+ * "Gana o tablas", o "Por pinos": bowling no se juega "a" nada, cada uno suma sus pinos (S4).
  */
 export function subDeporte(deporte: Deporte): string {
-  if (deporte === 'BOWLING') return 'Cada uno su total'
+  if (deporte === 'BOWLING') return 'Por pinos'
   return esPartida(deporte) ? 'Gana o tablas' : `A ${formatoRapido(deporte).gamesPerSet} ${unidadDe(deporte)}`
 }
 

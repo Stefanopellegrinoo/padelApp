@@ -17,6 +17,10 @@ interface TorneoNavProps {
  * chips y todo lo que use `sport`/`block` adentro lo toman de acá. El layout
  * es de servidor y no sabe la URL; esto sí. Sin deporte en la URL (la tabla
  * general, Reglas, Ajustes) queda el azul de siempre.
+ *
+ * Es también la columna del torneo: en pantalla ancha va centrada en
+ * `max-w-lg`, como Inicio y Amigos, con la barra de abajo adentro. En el
+ * teléfono la columna es la pantalla y la barra llega a los dos bordes.
  */
 export function ContenedorTorneo({
   seasonId,
@@ -29,7 +33,7 @@ export function ContenedorTorneo({
 }) {
   const kind = sportKindAt(seasonId, sports, usePathname())
   return (
-    <div data-deporte={kind ?? undefined} className="flex min-h-dvh flex-col bg-bg text-text">
+    <div data-deporte={kind ?? undefined} className="mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-bg text-text">
       {children}
     </div>
   )
@@ -53,7 +57,8 @@ export function TorneoNav({ seasonId, defaultDisciplineSlug }: TorneoNavProps) {
   return (
     // La barra de pestañas del prototipo: cuatro columnas iguales, ícono y
     // nombre, la activa en el color del deporte con la rayita arriba. El
-    // fondo llega al borde y paga el área segura de abajo.
+    // fondo llega al borde de la columna (`ContenedorTorneo`) y paga el área
+    // segura de abajo.
     <nav
       aria-label="Torneo"
       className="sticky bottom-0 z-40 grid grid-cols-4 border-t border-line bg-bg pb-[env(safe-area-inset-bottom)] dark:bg-surface"

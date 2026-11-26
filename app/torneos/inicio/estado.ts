@@ -98,6 +98,33 @@ export function ordenarPorCercania<T extends { proxima: FechaViva | null }>(card
   })
 }
 
+/**
+ * Cuántos torneos muestra "Tus torneos" sin abrir la grilla: dos filas, de dos
+ * en el teléfono y de tres en pantalla ancha. Así "Amigos" sigue entrando en
+ * la pantalla (S4) y el botón dice cuántos hay detrás.
+ */
+export const TORNEOS_A_LA_VISTA = { telefono: 4, ancho: 6 } as const
+
+/** Cuándo se ve un bloque con la grilla plegada: siempre, sólo en pantalla ancha, o sólo abierta. */
+export type VistaTorneo = 'siempre' | 'ancho' | 'abierta'
+
+/**
+ * Qué bloques se ven con la grilla plegada, en el orden en que llegan (el más
+ * cercano a jugarse primero, `ordenarPorCercania`), y en qué anchos hace
+ * falta el botón para ver el resto: con cinco o seis, sólo en el teléfono.
+ */
+export function torneosALaVista(total: number): { vistas: VistaTorneo[]; boton: 'nunca' | 'telefono' | 'siempre' } {
+  const { telefono, ancho } = TORNEOS_A_LA_VISTA
+  return {
+    vistas: Array.from({ length: total }, (_, i) => (i < telefono ? 'siempre' : i < ancho ? 'ancho' : 'abierta')),
+    boton: total <= telefono ? 'nunca' : total <= ancho ? 'telefono' : 'siempre',
+  }
+}
+
+export function verTorneosTexto(total: number, abierta: boolean): string {
+  return abierta ? 'Ver menos' : `Ver los ${total} torneos`
+}
+
 export function hrefFecha(fecha: Pick<FechaViva, 'seasonId' | 'slug' | 'number'>): string {
   return `/torneo/${fecha.seasonId}/${fecha.slug}/fechas/${fecha.number}`
 }

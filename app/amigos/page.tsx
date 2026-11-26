@@ -150,7 +150,7 @@ export default async function AmigosPage({ searchParams }: PageProps) {
  * Un amigo, como la fila de Inicio (`FilaAmigo`, `app/torneos/page.tsx`): su
  * último resultado (verbo, marcador y día) y el cara a cara. El número es el
  * de enfrentados, lo tuyo contra él; si sólo jugaron de compañeros, el de la
- * pareja, con "juntos" al lado para que no se confunda. Lleva al perfil con
+ * pareja, con "juntos" abajo para que no se confunda. Lleva al perfil con
  * `?desde=amigos`, así Volver vuelve acá.
  */
 function FilaAmigo({ amigo }: { amigo: AmigoInicio }) {
@@ -170,8 +170,9 @@ function FilaAmigo({ amigo }: { amigo: AmigoInicio }) {
       <Link href={`/amigos/${amigo.playerId}?desde=amigos`} className={`${rowPress} min-h-[72px]`}>
         <Avatar name={amigo.displayName} />
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[17px] font-bold">{amigo.displayName}</span>
-          <span className="block truncate text-[14px] text-muted">
+          {/* En 360, con el cara a cara al lado, baja a un segundo renglón antes que cortarse. */}
+          <span className="line-clamp-2 block text-[17px] leading-tight font-bold break-words">{amigo.displayName}</span>
+          <span className="mt-0.5 line-clamp-2 block text-[14px] leading-snug text-muted">
             {ultimo === null ? (
               'Sin partidos todavía'
             ) : (
@@ -186,11 +187,14 @@ function FilaAmigo({ amigo }: { amigo: AmigoInicio }) {
           </span>
         </span>
         {registro !== null && (
-          <span role="img" aria-label={aria} className="flex shrink-0 items-baseline gap-[5px]">
-            <span className="font-cond text-[34px]">{registro.won}</span>
-            <small className="text-[15px] font-semibold text-muted">a</small>
-            <span className="font-cond text-[34px]">{registro.lost}</span>
-            {!enContra && <small className="ml-1 text-[13px] font-semibold text-muted">juntos</small>}
+          // "juntos" va abajo del número y no al lado: así no le saca ancho al nombre.
+          <span role="img" aria-label={aria} className="flex shrink-0 flex-col items-end">
+            <span className="flex items-baseline gap-[5px]">
+              <span className="font-cond text-[34px]">{registro.won}</span>
+              <small className="text-[15px] font-semibold text-muted">a</small>
+              <span className="font-cond text-[34px]">{registro.lost}</span>
+            </span>
+            {!enContra && <small className="-mt-1 text-[13px] leading-none font-semibold text-muted">juntos</small>}
           </span>
         )}
         <Icono name="chev" className="h-5 w-5 text-muted" />

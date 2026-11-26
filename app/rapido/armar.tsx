@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { button } from '@/app/ui/button'
+import { IconoDeporte } from '@/app/torneos/inicio/iconos'
 import { Hero } from '@/app/ui/hero'
 import {
   ARMADO_INICIAL,
@@ -50,6 +51,11 @@ const ARMADO_SEED: Armado = { ...ARMADO_INICIAL, jugadores: ['', '', '', ''] }
  * el lector de pantalla anuncia "Pádel, button. Ping pong, button." y no hay
  * forma de saber de qué es la pregunta. Y `aria-pressed` es lo que dice cuál
  * está elegida — el color solo no alcanza.
+ *
+ * Con `deportes`, cada opción es un deporte y se dibuja como en la hoja con un
+ * amigo y en el asistente: su ícono, su tinte (`data-deporte`) y, elegida,
+ * llena de su color. El nombre baja a dos renglones como mucho y lo de abajo
+ * entra en uno, con el mismo alto para todos: en 360 la grilla queda pareja.
  */
 function Opciones<T extends string>({
   titulo,
@@ -58,6 +64,7 @@ function Opciones<T extends string>({
   sub,
   valor,
   onChange,
+  deportes = false,
 }: {
   titulo: string
   opciones: readonly T[]
@@ -65,6 +72,7 @@ function Opciones<T extends string>({
   sub?: (opcion: T) => string
   valor: T
   onChange: (opcion: T) => void
+  deportes?: boolean
 }) {
   const idTitulo = useId()
   return (
@@ -76,7 +84,30 @@ function Opciones<T extends string>({
       <div role="group" aria-labelledby={idTitulo} className={`mt-3 gap-2 ${opciones.length > 3 ? 'grid grid-cols-3' : 'flex'}`}>
         {opciones.map((opcion) => {
           const elegida = opcion === valor
-          return (
+          return deportes ? (
+            <button
+              key={opcion}
+              type="button"
+              data-deporte={opcion}
+              aria-pressed={elegida}
+              onClick={() => onChange(opcion)}
+              className={`flex min-h-[96px] min-w-0 flex-col items-center justify-center gap-1 rounded-tile px-1.5 py-2.5 text-center ${
+                elegida
+                  ? 'bg-sport text-on-sport'
+                  : 'bg-sport-tint text-sport dark:shadow-[inset_0_0_0_1.5px_color-mix(in_srgb,var(--color-sport)_40%,transparent)]'
+              }`}
+            >
+              <IconoDeporte kind={opcion} className="h-6 w-6" />
+              <span data-nombre className="line-clamp-2 text-[16px] leading-[1.15] font-bold break-words">
+                {etiqueta(opcion)}
+              </span>
+              {sub !== undefined && (
+                <span data-sub className={`text-[13px] leading-tight whitespace-nowrap ${elegida ? 'text-on-sport' : 'text-muted'}`}>
+                  {sub(opcion)}
+                </span>
+              )}
+            </button>
+          ) : (
             <button
               key={opcion}
               type="button"
@@ -231,6 +262,7 @@ export function Armar({ onEmpezar, aviso }: { onEmpezar: (armado: Armado) => voi
         opciones={DEPORTES}
         etiqueta={(deporte) => DEPORTE_LABEL[deporte]}
         sub={subDeporte}
+        deportes
         valor={armado.deporte}
         // El ajedrez es uno contra uno: elegirlo pasa a individual (y no pregunta cómo se juega). Bowling
         // tampoco pregunta: `armar` lo juega individual siempre.

@@ -89,3 +89,13 @@ it('el contenedor toma el color del deporte de la URL; sin deporte, ninguno', ()
   expect(pintar('/torneo/s/padel')).toBe('PADEL')
   expect(pintar('/torneo/s/reglas')).toBeNull()
 })
+
+// En pantalla ancha el torneo va centrado en la columna de la app (`max-w-lg`), como Inicio y Amigos:
+// la tabla no se estira a 1280 y las cuatro pestañas no quedan a 320 px una de otra. En el teléfono
+// la columna es la pantalla: la barra sigue llegando a los dos bordes.
+it('el contenedor centra el torneo en la columna de la app', () => {
+  pathname = '/torneo/s/padel'
+  act(() => root.render(createElement(ContenedorTorneo, { seasonId: 's', sports: [], children: 'x' })))
+  const clases = (host.firstElementChild as HTMLElement).className.split(' ')
+  expect(clases).toEqual(expect.arrayContaining(['mx-auto', 'w-full', 'max-w-lg', 'min-h-dvh']))
+})

@@ -631,8 +631,30 @@ describe('CasualForm', () => {
         'Fútbol',
         'Básquet',
       ])
-      // Once no entran en 390: la fila se desliza de costado, no se rompe en renglones.
-      expect(radios[0]?.closest('div')?.className).toContain('overflow-x-auto')
+      // Once en una grilla, todos a la vista sin deslizar de costado: de a tres en el teléfono, de a
+      // cuatro desde 640. Cada uno es un bloque de 44 o más, en su color y con su ícono.
+      const grilla = radios[0]!.closest('div')!.className.split(' ')
+      expect(grilla).toEqual(expect.arrayContaining(['grid', 'grid-cols-3', 'sm:grid-cols-4']))
+      expect(grilla).not.toContain('overflow-x-auto')
+      for (const radio of radios) {
+        const bloque = radio.closest('label')!
+        expect(bloque.getAttribute('data-deporte')).toBe(radio.value)
+        expect(bloque.className.split(' ')).toContain('min-h-[52px]')
+        expect(bloque.querySelector('svg[aria-hidden="true"]')).not.toBeNull()
+        // El nombre baja a un segundo renglón antes que cortarse.
+        expect(bloque.querySelector('[data-nombre]')?.className.split(' ')).toContain('line-clamp-2')
+      }
+    })
+
+    it('el deporte elegido se llena de su color y lleva la tilde; los otros, no', async () => {
+      const f = await montar()
+      const tilde = (id: string) => f.radio('sport', id).closest('label')!.querySelector('[data-tilde]')
+      expect(tilde('PADEL')).not.toBeNull()
+      expect(tilde('TENIS')).toBeNull()
+      await tocar(f.radio('sport', 'TENIS'))
+      expect(tilde('TENIS')).not.toBeNull()
+      expect(tilde('PADEL')).toBeNull()
+      expect(f.radio('sport', 'TENIS').closest('label')!.className).toContain('has-[:checked]:bg-sport')
     })
 
     it('tenis juega el set real: 7-5 y 7-6 en dos toques, a 6', async () => {
@@ -787,6 +809,13 @@ describe('CargarConAmigo: el botón de abajo y la hoja', () => {
     // Volver atrás o recargar no la reabre.
     expect(location.pathname + location.search).toBe('/amigos/amigo-1?desde=amigos')
     history.replaceState(null, '', '/')
+  })
+
+  it('la barra de abajo va centrada con el contenido en pantalla ancha, con el área segura', async () => {
+    const f = await montarPantalla()
+    const barra = f.boton('Cargar partido con Fede').parentElement!.className.split(' ')
+    expect(barra).toEqual(expect.arrayContaining(['fixed', 'inset-x-0', 'bottom-0', 'mx-auto', 'max-w-lg']))
+    expect(barra.some((c) => c.includes('safe-area-inset-bottom'))).toBe(true)
   })
 
   it('sin el atajo llega con la hoja cerrada', async () => {

@@ -130,7 +130,8 @@ describe('armar un bowling', () => {
     const empezar = vi.fn<(armado: Armado) => void>()
     act(() => root.render(createElement(Armar, { onEmpezar: empezar })))
     const bowling = [...host.querySelectorAll('button')].find((b) => b.textContent?.startsWith('Bowling'))!
-    expect(bowling.textContent).toContain('Cada uno su total')
+    // El bloque del deporte dice que no se juega "a" nada: cada uno suma sus pinos (`subDeporte`).
+    expect(bowling.textContent).toContain('Por pinos')
     act(() => bowling.click())
     expect(host.textContent).not.toContain('Cómo se juega')
     const nombre = (n: number) => host.querySelector(`input[aria-label="Jugador ${n}"]`) as HTMLInputElement

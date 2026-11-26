@@ -53,14 +53,15 @@ export function CargarConAmigo({
 
   return (
     <>
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface px-4 pt-3 pb-[calc(12px+env(safe-area-inset-bottom))]">
+      {/* Centrada con el contenido (`max-w-lg`), como la barra del asistente: en pantalla ancha no queda pegada a la izquierda. */}
+      <div className="fixed inset-x-0 bottom-0 z-40 mx-auto max-w-lg border-t border-line bg-surface px-4 pt-3 pb-[calc(12px+env(safe-area-inset-bottom))]">
         <button
           type="button"
           onClick={() => {
             setAviso(null)
             setHoja((prev) => ({ open: true, vez: prev.vez + 1 }))
           }}
-          className={`${button('primary', { size: 'lg', full: true })} mx-auto max-w-lg`}
+          className={button('primary', { size: 'lg', full: true })}
         >
           <Icono name="plus" />
           Cargar partido con {corto}

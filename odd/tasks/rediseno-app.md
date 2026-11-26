@@ -90,3 +90,11 @@ Cada decisión se maqueta en `design/<slug>/`, el usuario elige y queda anotada 
 - L41 Entrega: el usuario eligió "Push y PR, el merge lo hago yo". Un solo push de `feat/rediseno-app` (c43bbd7) y PR #51 https://github.com/Stefanopellegrinoo/padelApp/pull/51 (base `main`, etiqueta `enhancement`). El merge (que publica en producción) queda en manos del usuario.
 - L42 CI del PR #51 en verde: "typecheck · unit · build" (1m18s), "test:db (Postgres real)" (6m23s), Vercel preview desplegado en https://padel-app-git-feat-rediseno-app-stefano-s-projects-3a853fce.vercel.app. Limpieza: worktrees t8/t11/t12/t14 y sus ramas borrados (ya integrados), servidor :3100 parado. Sigue activa la galería de maquetas (`padel-design-gallery`, :8091). Queda: el usuario prueba el preview y mergea cuando quiera (publica en producción). Este registro (L41-L42) queda como commit local, sin push, para no gastar otra corrida de CI.
 - L43 Pedido: "mergea todo pero no pushee a prod". Merge local de `feat/rediseno-app` (incluido el commit de docs 0a35baa) en `main` como 3408e03, sin push: `main` local queda 32 commits adelante de `origin/main` y producción no cambia. El PR #51 sigue abierto en GitHub (mergearlo ahí, o pushear `main`, publica en Vercel).
+- L44 (2026-11-26) Pedido textual: "La página en sí está bastante bien lo único que hay que mejorar es el responsive cuando salran los torneos los torneos, los torneos rápidos y con secar a la historial entre amigos con el tema del deporte. Hay que mejorar más que nada esa página, pero pues el resto está muy bien."
+  - Reproducido a 360, 390, 768 y 1280 px.
+  - Hallazgos:
+    - (1) El carrusel "Tus torneos" de Inicio corta la tercera tarjeta a mitad de palabra y esconde cuántos torneos hay.
+    - (2) Las barras fijas de abajo ("Cargar partido", "Cargar partido con…") quedan corridas a la izquierda en pantallas anchas.
+    - (3) Los 11 deportes de la hoja de partido con un amigo van en una fila deslizable que corta los nombres.
+    - (4) En el selector de deporte del torneo rápido, a 360 px "Fútbol tenis" ocupa 3 renglones y las tarjetas quedan de alturas distintas.
+  - Encargado a un worker sobre `main` local, sin push.

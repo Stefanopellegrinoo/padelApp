@@ -12,7 +12,9 @@ import {
   progresoDe,
   proximaFecha,
   tituloFecha,
+  torneosALaVista,
   ultimoResultado,
+  verTorneosTexto,
   type FechaViva,
 } from './estado'
 
@@ -264,5 +266,39 @@ describe('ultimoResultado', () => {
     expect(r.gano).toBe(true)
     expect(ultimoResultado(torneo({ playedOn: null })).dia).toBeNull()
     expect(ultimoResultado(torneo({ outcome: 'lost' })).gano).toBe(false)
+  })
+})
+
+// La grilla de "Tus torneos" (S4): dos filas a la vista —de dos en el teléfono, de tres en pantalla
+// ancha— y el resto detrás de "Ver los N torneos", sin esconder cuántos son.
+describe('torneosALaVista', () => {
+  it('hasta cuatro, todos a la vista y sin botón', () => {
+    expect(torneosALaVista(0)).toEqual({ vistas: [], boton: 'nunca' })
+    expect(torneosALaVista(4)).toEqual({ vistas: ['siempre', 'siempre', 'siempre', 'siempre'], boton: 'nunca' })
+  })
+
+  it('el quinto y el sexto se ven de entrada sólo en pantalla ancha: el botón, sólo en el teléfono', () => {
+    expect(torneosALaVista(6)).toEqual({
+      vistas: ['siempre', 'siempre', 'siempre', 'siempre', 'ancho', 'ancho'],
+      boton: 'telefono',
+    })
+    expect(torneosALaVista(5).boton).toBe('telefono')
+  })
+
+  it('del séptimo en adelante, sólo con la grilla abierta, y el botón en todos los anchos', () => {
+    const { vistas, boton } = torneosALaVista(20)
+    expect(vistas).toHaveLength(20)
+    expect(vistas.slice(0, 4)).toEqual(['siempre', 'siempre', 'siempre', 'siempre'])
+    expect(vistas.slice(4, 6)).toEqual(['ancho', 'ancho'])
+    expect(vistas.slice(6).every((vista) => vista === 'abierta')).toBe(true)
+    expect(boton).toBe('siempre')
+  })
+})
+
+describe('verTorneosTexto', () => {
+  it('cerrada dice cuántos son; abierta, cómo volver', () => {
+    expect(verTorneosTexto(20, false)).toBe('Ver los 20 torneos')
+    expect(verTorneosTexto(5, false)).toBe('Ver los 5 torneos')
+    expect(verTorneosTexto(20, true)).toBe('Ver menos')
   })
 })

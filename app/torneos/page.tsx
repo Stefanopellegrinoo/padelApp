@@ -42,6 +42,7 @@ import {
   type FechaViva,
 } from './inicio/estado'
 import { Icono, IconoDeporte } from './inicio/iconos'
+import { TusTorneos } from './inicio/torneos'
 import { matchdayDay } from '../format'
 
 interface SeasonCard {
@@ -163,8 +164,8 @@ const AMIGOS_EN_LA_HOJA = 6
 /**
  * Inicio — la entrada de la app (estructura B, `design/inicio/02`, con el
  * lenguaje del prototipo): arriba, en el bloque, la fecha más cercana de tus
- * torneos; abajo, "Tus torneos" y "Amigos", las dos partes de la app a la
- * vista desde que la abrís (S4). "Cargar partido", fijo abajo, junta los
+ * torneos; abajo, "Tus torneos" (una grilla de dos filas, `TusTorneos`) y
+ * "Amigos", las dos partes de la app a la vista desde que la abrís (S4). "Cargar partido", fijo abajo, junta los
  * caminos más cortos para cargar un resultado.
  *
  * Sin barra de pestañas: está un nivel por encima del torneo. La cuenta
@@ -229,8 +230,17 @@ export default async function InicioPage() {
           </p>
         </Section>
       ) : (
-        <Section title="Tus torneos">
-          {live.length > 0 && <Tiles cards={live} />}
+        <TusTorneos
+          torneos={live.map(({ id, name, sport, sports, progreso, position, squadSize }) => ({
+            id,
+            name,
+            sport,
+            sports,
+            progreso,
+            position,
+            squadSize,
+          }))}
+        >
           <div className="mt-1.5 grid grid-cols-2 gap-2">
             <Link href="/torneos/nuevo" className="press flex min-h-[48px] items-center gap-1.5 rounded-btn px-1 text-[16px] font-bold text-accent-link active:bg-sport-tint">
               <Icono name="plus" className="h-[18px] w-[18px]" />
@@ -241,7 +251,7 @@ export default async function InicioPage() {
               Torneo rápido
             </Link>
           </div>
-        </Section>
+        </TusTorneos>
       )}
 
       <Section
@@ -408,69 +418,9 @@ function HeroVacio({ entrar }: { entrar: boolean }) {
 }
 
 /**
- * Tus torneos en bloques del color de su deporte: el deporte, el nombre
- * (reserva dos líneas para que el puesto quede a la misma altura), tu puesto
- * en la cara condensada y por qué fecha va. Con más de dos, la fila se
- * desliza de costado y el tercero asoma: así "Amigos" sigue entrando en la
- * pantalla (S4) y ningún torneo queda escondido detrás de un "ver más".
- */
-function Tiles({ cards }: { cards: readonly SeasonCard[] }) {
-  const desliza = cards.length > 2
-  return (
-    <ul
-      className={
-        desliza
-          ? '-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-2.5 overflow-x-auto px-4 pb-1 [scrollbar-width:none]'
-          : 'grid grid-cols-2 gap-2.5'
-      }
-    >
-      {cards.map((card) => {
-        const label = [
-          card.name,
-          card.sports,
-          ...(card.position === null ? [] : [`vas ${card.position}° de ${card.squadSize}`]),
-          card.progreso,
-        ].join(', ')
-        return (
-          <li key={card.id} data-deporte={card.sport} className={desliza ? 'w-[calc(50%-24px)] shrink-0 snap-start' : ''}>
-            <Link
-              href={`/torneo/${card.id}`}
-              aria-label={label}
-              className="press flex h-full flex-col rounded-tile bg-sport-tint px-3.5 pt-3.5 pb-4 text-sport"
-            >
-              <span className="flex items-center justify-between gap-2">
-                <span className="truncate text-[14px] font-bold">{card.sports}</span>
-                <IconoDeporte kind={card.sport} />
-              </span>
-              <span className="mt-2.5 line-clamp-2 min-h-[2.4em] text-[16px] leading-[1.2] font-bold text-text">
-                {card.name}
-              </span>
-              <span className="mt-2.5 flex items-end gap-1">
-                {card.position === null ? (
-                  <span className="font-cond text-[52px] leading-[.78] text-muted">–</span>
-                ) : (
-                  <>
-                    <span className="font-cond text-[52px] leading-[.78]">
-                      {card.position}
-                      <span className="align-[.62em] text-[.5em]">°</span>
-                    </span>
-                    <span className="text-[16px] leading-none font-bold">de {card.squadSize}</span>
-                  </>
-                )}
-              </span>
-              <span className="mt-1.5 text-[14px] text-muted">{card.progreso}</span>
-            </Link>
-          </li>
-        )
-      })}
-    </ul>
-  )
-}
-
-/**
  * Un amigo: su último resultado (verbo, marcador y día) y el cara a cara. El
  * número es el de enfrentados, lo tuyo contra él; si sólo jugaron de
- * compañeros, el de la pareja, con "juntos" al lado para que no se confunda.
+ * compañeros, el de la pareja, con "juntos" abajo para que no se confunda.
  */
 function FilaAmigo({ amigo }: { amigo: AmigoInicio }) {
   const ultimo = amigo.ultimo === null ? null : ultimoResultado(amigo.ultimo)
@@ -489,8 +439,9 @@ function FilaAmigo({ amigo }: { amigo: AmigoInicio }) {
       <Link href={`/amigos/${amigo.playerId}`} className={`${rowPress} min-h-[72px]`}>
         <Avatar name={amigo.displayName} />
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[17px] font-bold">{amigo.displayName}</span>
-          <span className="block truncate text-[14px] text-muted">
+          {/* En 360, con el cara a cara al lado, baja a un segundo renglón antes que cortarse. */}
+          <span className="line-clamp-2 block text-[17px] leading-tight font-bold break-words">{amigo.displayName}</span>
+          <span className="mt-0.5 line-clamp-2 block text-[14px] leading-snug text-muted">
             {ultimo === null ? (
               'Sin partidos todavía'
             ) : (
@@ -505,11 +456,14 @@ function FilaAmigo({ amigo }: { amigo: AmigoInicio }) {
           </span>
         </span>
         {registro !== null && (
-          <span role="img" aria-label={aria} className="flex shrink-0 items-baseline gap-[5px]">
-            <span className="font-cond text-[34px]">{registro.won}</span>
-            <small className="text-[15px] font-semibold text-muted">a</small>
-            <span className="font-cond text-[34px]">{registro.lost}</span>
-            {!enContra && <small className="ml-1 text-[13px] font-semibold text-muted">juntos</small>}
+          // "juntos" va abajo del número y no al lado: así no le saca ancho al nombre.
+          <span role="img" aria-label={aria} className="flex shrink-0 flex-col items-end">
+            <span className="flex items-baseline gap-[5px]">
+              <span className="font-cond text-[34px]">{registro.won}</span>
+              <small className="text-[15px] font-semibold text-muted">a</small>
+              <span className="font-cond text-[34px]">{registro.lost}</span>
+            </span>
+            {!enContra && <small className="-mt-1 text-[13px] leading-none font-semibold text-muted">juntos</small>}
           </span>
         )}
       </Link>

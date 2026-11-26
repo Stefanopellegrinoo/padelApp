@@ -6,6 +6,7 @@ import type { CasualMatch } from '@/db/friends'
 import { isComplete, startLoad, toqueDelSet, type LoadState } from '@/app/torneo/[id]/[disciplina]/fechas/[n]/carga-state'
 import { mensajeDeFalla } from '@/app/torneo/[id]/[disciplina]/fechas/[n]/sin-conexion'
 import { SubmitButton } from '@/app/submit-button'
+import { IconoDeporte } from '@/app/torneos/inicio/iconos'
 import { button } from '@/app/ui/button'
 import { Sheet } from '@/app/ui/sheet'
 import { editCasualMatch, removeCasualMatch, type CasualFormState } from '../actions'
@@ -32,6 +33,29 @@ import { ResultadoPartida, type OutcomePartida } from './resultado-partida'
 import { ResultadoSets } from './resultado-sets'
 
 const INITIAL_STATE: CasualFormState = { error: null }
+
+/**
+ * Un deporte de la hoja, como los del asistente (`PasoNuevo`): en su tinte sin elegir y lleno de su
+ * color al elegirlo, con el ícono al lado del nombre para que once entren en cuatro filas cortas.
+ * En oscuro el tinte casi no se separa de la hoja: el borde de su color lo recorta.
+ */
+const DEPORTE_BLOQUE =
+  'relative flex min-h-[52px] min-w-0 cursor-pointer items-center gap-1.5 rounded-tile bg-sport-tint py-2 pr-1.5 pl-2 text-left text-sport dark:shadow-[inset_0_0_0_1.5px_color-mix(in_srgb,var(--color-sport)_40%,transparent)] has-[:checked]:bg-sport has-[:checked]:text-on-sport has-[:checked]:shadow-none has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-focus'
+
+/** La tilde del deporte elegido: una pastilla en la esquina, para no robarle ancho al nombre. */
+function Tilde() {
+  return (
+    <span
+      data-tilde
+      aria-hidden="true"
+      className="absolute -top-1.5 -right-1.5 grid h-5 w-5 place-items-center rounded-full bg-on-sport text-sport shadow-[0_0_0_2px_var(--color-sport)]"
+    >
+      <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 fill-none stroke-current stroke-[3.5] [stroke-linecap:round] [stroke-linejoin:round]">
+        <path d="M5 12.5l4.5 4.5L19 7.5" />
+      </svg>
+    </span>
+  )
+}
 
 const ERROR_NOTE = 'rounded-btn bg-live-bg px-3 py-2.5 text-[15px] font-semibold text-live'
 const GUEST = '__guest__'
@@ -429,11 +453,11 @@ export function CasualForm({
 
       <fieldset>
         <legend className="sr-only">Deporte</legend>
-        {/* Cinco deportes no entran en 390: la fila se desliza de costado y
-            el último asoma. Casi siempre ya está el que usaste. */}
-        <div className="-mx-4 flex snap-x scroll-px-4 gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
+        {/* Once deportes, todos a la vista: de a tres en el teléfono, de a cuatro desde 640. Cada uno
+            en su color; el elegido, lleno y con la tilde. */}
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
           {SPORT_IDS.map((id) => (
-            <label key={id} className={`${OPTION} flex-none snap-start px-4`}>
+            <label key={id} data-deporte={id} className={DEPORTE_BLOQUE}>
               <input
                 type="radio"
                 name="sport"
@@ -443,7 +467,11 @@ export function CasualForm({
                 onChange={() => chooseSport(id)}
                 className="sr-only"
               />
-              {sportLabel(id)}
+              <IconoDeporte kind={id} className="h-[18px] w-[18px]" />
+              <span data-nombre className="line-clamp-2 min-w-0 text-[15px] leading-[1.15] font-bold break-words">
+                {sportLabel(id)}
+              </span>
+              {sport === id && <Tilde />}
             </label>
           ))}
         </div>

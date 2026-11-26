@@ -304,7 +304,7 @@ describe('CasualForm', () => {
       const f = await montar({ action })
       await tocar(f.radio('mode', '2v2'))
       await tocar(f.boton('Vos y tu pareja'))
-      await tocar(f.boton('3'))
+      await tocar(f.boton('2'))
       expect(action).not.toHaveBeenCalled()
       expect(f.el.textContent).toContain('Elegí a todos los jugadores.')
       expect(f.submit().disabled).toBe(true)
@@ -381,12 +381,30 @@ describe('CasualForm', () => {
       ])
     })
 
+    // Con el set real (S6) a 4 games no hay 4-3: lo que sigue al 4-2 es el 5-3.
     it('al corregir un partido de un set, un toque guarda', async () => {
       const action = vi.fn(fallaSiempre)
       const f = await montar({ action, initial: editando('PADEL', { sets: [{ mine: 4, theirs: 2 }] }) })
-      await tocar(f.boton('3'))
+      expect(f.boton('3')).toBeUndefined()
+      await tocar(f.boton('5-3'))
       expect(action).toHaveBeenCalledTimes(1)
-      expect(JSON.parse(String(action.mock.calls[0]![1].get('sets')))).toEqual([{ mine: 4, theirs: 3 }])
+      expect(JSON.parse(String(action.mock.calls[0]![1].get('sets')))).toEqual([{ mine: 5, theirs: 3 }])
+    })
+
+    // Un partido con amigos cargado con la regla de antes (un 4-3 a 4 games) se abre y se vuelve a
+    // guardar: se lee como un set a 3 con tie-break en 3-3 (`formatForSport`).
+    it('un 4-3 viejo se abre para corregir y se vuelve a guardar igual', async () => {
+      const action = vi.fn(fallaSiempre)
+      const f = await montar({ action, initial: editando('PADEL', { sets: [{ mine: 4, theirs: 3 }] }) })
+      expect(f.hidden('setsToWin')).toBe('1')
+      expect(f.hidden('gamesPerSet')).toBe('3')
+      expect(f.pastillas()).toEqual(['4-3'])
+      expect(f.submit().disabled).toBe(false)
+      await f.enviar()
+      expect(action).toHaveBeenCalledTimes(1)
+      const data = action.mock.calls[0]![1]
+      expect(data.get('gamesPerSet')).toBe('3')
+      expect(JSON.parse(String(data.get('sets')))).toEqual([{ mine: 4, theirs: 3 }])
     })
 
     it('al corregir sólo la fecha, "Guardar cambios" manda los sets de antes', async () => {
@@ -437,9 +455,9 @@ describe('CasualForm', () => {
         onSaved,
       })
       await tocar(f.boton('Fede'))
-      await tocar(f.boton('3'))
+      await tocar(f.boton('5-3'))
       expect(onSaved).toHaveBeenCalledTimes(1)
-      expect(onSaved).toHaveBeenCalledWith('Perdiste 3-4')
+      expect(onSaved).toHaveBeenCalledWith('Perdiste 3-5')
     })
   })
 

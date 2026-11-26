@@ -834,8 +834,12 @@ function parseSetsResult(sport: SetsSport, input: CasualResultInput) {
     gamesPerSet: intInRange(input.gamesPerSet, sport.gamesPerSet, `Los ${sport.unit} por set`),
   }
   const sets = parseSets(input.sets)
-  const problem = matchError(sets.map((s) => ({ gamesA: s.mine, gamesB: s.theirs })), format, false)
-  if (problem !== null) throw new EdgeError(problem)
+  const games = sets.map((s) => ({ gamesA: s.mine, gamesB: s.theirs }))
+  const problem = matchError(games, format, false)
+  // Con el set real (odd/tasks/mas-deportes.md, S6), un partido cargado con la
+  // regla de antes (un 6-5) se tiene que poder volver a guardar.
+  const deAntes = format.ventaja === true ? matchError(games, { ...format, ventaja: false }, false) : problem
+  if (problem !== null && deAntes !== null) throw new EdgeError(problem)
   const mine = sets.filter((s) => s.mine > s.theirs).length
   const theirs = sets.filter((s) => s.theirs > s.mine).length
   return { outcome: mine > theirs ? ('won' as const) : ('lost' as const), format, sets }

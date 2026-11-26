@@ -726,6 +726,26 @@ describe('parseCasualResult', () => {
     expect(parseCasualResult(padel({ setsToWin: '2', gamesPerSet: '6', sets })).outcome).toBe('won')
   })
 
+  /**
+   * Pádel se carga con el set real (odd/tasks/mas-deportes.md, S6): 7-5 y 7-6
+   * valen; un 8-6 no. Un partido viejo con un 6-5 de la regla de antes se puede
+   * volver a guardar (el test de arriba).
+   */
+  it('padel con el set real: 7-5 y 7-6 valen, 8-6 no', () => {
+    const ok = '[{"mine":7,"theirs":5},{"mine":6,"theirs":7},{"mine":7,"theirs":6}]'
+    expect(parseCasualResult(padel({ setsToWin: '2', gamesPerSet: '6', sets: ok })).outcome).toBe('won')
+    expect(() =>
+      parseCasualResult(padel({ setsToWin: '2', gamesPerSet: '6', sets: '[{"mine":8,"theirs":6},{"mine":6,"theirs":2}]' })),
+    ).toThrow(EdgeError)
+  })
+
+  // Lo que manda el formulario al volver a guardar un 4-3 viejo (`formatForSport`: a 3 games) y lo
+  // que mandaba antes (a 4 games, regla de antes): las dos cosas valen.
+  it('padel: un 4-3 viejo se vuelve a guardar, a 3 o a 4 games', () => {
+    expect(parseCasualResult(padel({ gamesPerSet: '3', sets: '[{"mine":4,"theirs":3}]' })).outcome).toBe('won')
+    expect(parseCasualResult(padel({ gamesPerSet: '4', sets: '[{"mine":4,"theirs":3}]' })).outcome).toBe('won')
+  })
+
   it('padel: deriva lost cuando el rival gana el set', () => {
     expect(parseCasualResult(padel({ sets: '[{"mine":1,"theirs":4}]' })).outcome).toBe('lost')
   })

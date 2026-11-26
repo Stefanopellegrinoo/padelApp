@@ -22,8 +22,13 @@ import {
 import type { MatchFormat, SideSize } from './types'
 
 describe('registro de deportes', () => {
-  it('el formato por defecto de pádel no se mueve', () => {
-    expect(SPORTS.PADEL.format).toEqual(disciplineProfile('PADEL', defaultConfig(4)).config.matchFormat)
+  // Pádel juega el set real (S6) y fuera de eso no se mueve; `defaultConfig`, la de los torneos de
+  // antes, sigue sin la regla.
+  it('el formato por defecto de pádel no se mueve, salvo el set real', () => {
+    expect(SPORTS.PADEL.format).toEqual({
+      ...disciplineProfile('PADEL', defaultConfig(4)).config.matchFormat,
+      ventaja: true,
+    })
     expect(defaultConfig(4).matchFormat.ventaja).toBeUndefined()
   })
 
@@ -63,8 +68,8 @@ describe('registro de deportes', () => {
       const sport: Sport = SPORTS[id]
       if (sport.family === 'sets' && !sport.setReal) expect(sport.format.ventaja).toBeUndefined()
     }
-    // Pádel con amigos y en el torneo rápido sigue con la regla de antes; tenis, deporte nuevo, ya juega el real.
-    expect((SPORTS.PADEL.format as MatchFormat).ventaja).toBeUndefined()
+    // Pádel con amigos y en el torneo rápido también juega el real, como tenis (S6).
+    expect((SPORTS.PADEL.format as MatchFormat).ventaja).toBe(true)
     expect(SPORTS.TENIS.format.ventaja).toBe(true)
   })
 

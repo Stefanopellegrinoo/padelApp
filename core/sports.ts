@@ -87,9 +87,11 @@ const FIRST_FECHA_DE_HOY: Record<Modality, FirstFecha> = { INDIVIDUAL: 'SORTEO',
 export const SPORTS = {
   PADEL: {
     label: 'Pádel', unit: 'games', family: 'sets', allowsDraw: false, tournaments: true, tono: 'padel', icono: 'padel',
-    // Sin `ventaja`: es el formato de los partidos con amigos y del torneo rápido, que siguen con la
-    // regla de antes. Un torneo nuevo nace con el set real por `setReal` (`fichaSeed`).
-    format: { setsToWin: 1, gamesPerSet: 4, tieBreak: true, openScore: false }, setReal: true,
+    // Con `ventaja`: el set real (odd/tasks/mas-deportes.md, S6) para los partidos con amigos y el
+    // torneo rápido; un torneo nuevo nace igual por `setReal` (`fichaSeed`). Los torneos ya creados
+    // guardan su formato y no cambian, y un partido con amigos viejo (un 6-5) se sigue pudiendo
+    // volver a guardar (`parseSetsResult`, db/friends.ts).
+    format: { setsToWin: 1, gamesPerSet: 4, tieBreak: true, openScore: false, ventaja: true }, setReal: true,
     setsToWin: { min: 1, max: 3 }, gamesPerSet: { min: 3, max: 9 },
     ficha: {
       modalities: [{ id: 'ROTAN', label: 'Parejas que rotan' }, { id: 'FIJAS', label: 'Parejas fijas' }],

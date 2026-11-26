@@ -134,22 +134,19 @@ describe('formatForSport', () => {
       gamesPerSet: 6,
     })
   })
-  it('pádel de hoy (sin ventaja en el registro) sigue igual: 4-3 es a 4', () => {
-    expect(formatForSport(SPORTS.PADEL, [{ mine: 4, theirs: 3 }])).toEqual({ ...SPORTS.PADEL.format, setsToWin: 1, gamesPerSet: 4 })
-  })
-  describe('el día que pádel con amigos juegue el set real (ventaja en su formato)', () => {
-    const PADEL_REAL = { ...SPORTS.PADEL, format: { ...SPORTS.PADEL.format, ventaja: true } }
-    it('5-4 es a 4 con ventaja', () => {
-      expect(formatForSport(PADEL_REAL, [{ mine: 5, theirs: 4 }])).toMatchObject({ gamesPerSet: 4, ventaja: true })
+  describe('pádel con amigos juega el set real (S6)', () => {
+    it('5-4 y 5-3 son a 4 con ventaja', () => {
+      expect(formatForSport(SPORTS.PADEL, [{ mine: 5, theirs: 4 }])).toEqual({ ...SPORTS.PADEL.format, setsToWin: 1, gamesPerSet: 4 })
+      expect(formatForSport(SPORTS.PADEL, [{ mine: 3, theirs: 5 }])).toMatchObject({ gamesPerSet: 4, ventaja: true })
     })
     it('un 4-3 viejo se edita con un formato que lo acepta (a 3, tie-break en 3-3)', () => {
-      const format = formatForSport(PADEL_REAL, [{ mine: 4, theirs: 3 }])
+      const format = formatForSport(SPORTS.PADEL, [{ mine: 4, theirs: 3 }])
       expect(format.gamesPerSet).toBe(3)
       expect(matchError([{ gamesA: 4, gamesB: 3 }], format, false)).toBeNull()
     })
     it('un 6-3 4-6 6-5 viejo, que ningún set real explica, vuelve a la regla de antes y sigue cerrando', () => {
       const sets = [{ mine: 6, theirs: 3 }, { mine: 4, theirs: 6 }, { mine: 6, theirs: 5 }]
-      const format = formatForSport(PADEL_REAL, sets)
+      const format = formatForSport(SPORTS.PADEL, sets)
       expect(format).toMatchObject({ setsToWin: 2, gamesPerSet: 6, ventaja: false })
       expect(matchError(sets.map((s) => ({ gamesA: s.mine, gamesB: s.theirs })), format, false)).toBeNull()
     })

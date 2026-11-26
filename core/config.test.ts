@@ -510,12 +510,22 @@ describe('effectiveMatchFormat', () => {
     expect(effectiveMatchFormat(PADEL, null)).toBe(PADEL)
   })
 
+  // La base es el formato GUARDADO del torneo, no el del registro: un torneo armado con la regla de
+  // antes la conserva aunque pádel ya juegue el set real (odd/tasks/mas-deportes.md, S6).
   it('con formato propio, pisa sets y games y deja el resto del torneo (la ventaja incluida)', () => {
-    expect(effectiveMatchFormat(PADEL, { setsToWin: 2, gamesPerSet: 6 })).toEqual({
+    const deAntes = { setsToWin: 1, gamesPerSet: 4, tieBreak: true, openScore: false }
+    expect(effectiveMatchFormat(deAntes, { setsToWin: 2, gamesPerSet: 6 })).toEqual({
       setsToWin: 2,
       gamesPerSet: 6,
       tieBreak: true,
       openScore: false,
+    })
+    expect(effectiveMatchFormat({ ...deAntes, ventaja: true }, { setsToWin: 2, gamesPerSet: 6 })).toEqual({
+      setsToWin: 2,
+      gamesPerSet: 6,
+      tieBreak: true,
+      openScore: false,
+      ventaja: true,
     })
   })
 })

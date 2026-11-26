@@ -98,3 +98,4 @@ Cada decisión se maqueta en `design/<slug>/`, el usuario elige y queda anotada 
     - (3) Los 11 deportes de la hoja de partido con un amigo van en una fila deslizable que corta los nombres.
     - (4) En el selector de deporte del torneo rápido, a 360 px "Fútbol tenis" ocupa 3 renglones y las tarjetas quedan de alturas distintas.
   - Encargado a un worker sobre `main` local, sin push.
+  - Hecho (28be940): grilla de torneos con 'Ver los N torneos', grilla de deportes en la hoja del amigo y en el torneo rápido, barras de abajo y páginas del torneo centradas en pantallas anchas, filas de amigos sin cortes a 360 px. Unit 2190 verde, typecheck limpio; 72 combinaciones de página, ancho y tema sin desborde horizontal; contraste mínimo 4,51 en claro y 5,63 en oscuro.

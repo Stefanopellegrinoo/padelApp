@@ -36,4 +36,14 @@ describe('renderAdminMarkdown', () => {
     expect(html).toContain('<strong>negrita</strong>')
     expect(html).not.toContain('<b>x</b>')
   })
+
+  it('a list right under a line, without a blank line between, is still a list', () => {
+    const html = renderAdminMarkdown('Lo que hay que saber:\n- Traer pelota\n- Avisar antes')
+    expect(html).toBe('<p>Lo que hay que saber:</p><ul><li>Traer pelota</li><li>Avisar antes</li></ul>')
+  })
+
+  it('a block of only list lines and a block of only text lines render as before', () => {
+    expect(renderAdminMarkdown('- a\n- b')).toBe('<ul><li>a</li><li>b</li></ul>')
+    expect(renderAdminMarkdown('uno\ndos')).toBe('<p>uno<br>dos</p>')
+  })
 })

@@ -2,6 +2,8 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { myEntryId } from '@/db/read'
 import { serverClient } from '@/db/server'
+import { button } from '@/app/ui/button'
+import { Hero } from '@/app/ui/hero'
 import { Picker } from './picker'
 
 interface PageProps {
@@ -24,14 +26,14 @@ export default async function UnirsePage({ params, searchParams }: PageProps) {
   const { data: seats, error } = await supabase.rpc('season_invite', { p_token: token })
   if (error !== null || seats === null || seats.length === 0) {
     return (
-      <main className="flex min-h-dvh flex-col items-center justify-center gap-3 bg-bg px-6 text-center text-text">
-        <h1 className="text-[26px] font-extrabold tracking-[-.03em]">Este link no es válido</h1>
-        <p className="text-[14px] font-[550] text-muted">
-          Pedile al organizador que te pase el link de nuevo.
-        </p>
-        <Link href="/" className="mt-4 inline-flex min-h-11 items-center text-[12.5px] font-[750] text-accent-link">
-          Volver al inicio
-        </Link>
+      <main className="mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-bg pb-8 text-text">
+        <Hero back={{ href: '/', label: 'Inicio' }} title="Este link no es válido" />
+        <div className="flex flex-col gap-5 px-4 pt-6">
+          <p className="text-[17px]">Pedile al organizador que te pase el link de nuevo.</p>
+          <Link href="/" className={button('secondary', { size: 'lg', full: true })}>
+            Volver al inicio
+          </Link>
+        </div>
       </main>
     )
   }
@@ -58,14 +60,19 @@ export default async function UnirsePage({ params, searchParams }: PageProps) {
   const selectedSeat = seats.find((seat) => seat.entry_id === selected && !seat.claimed) ?? null
 
   return (
-    <main className="flex min-h-dvh flex-col gap-5 bg-bg px-6 pt-4 pb-[26px] text-text">
-      <div className="flex flex-col gap-1">
-        <p className="text-[12px] font-extrabold text-muted">Te invitaron a</p>
-        <h1 className="text-[32px] font-extrabold tracking-[-.03em]">{first.season_name}</h1>
-        <p className="text-[14px] font-[550] text-muted">
-          {seats.length} jugadores · organiza {first.admin_name}
-        </p>
-      </div>
+    <main className="mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-bg text-text">
+      <Hero
+        back={{ href: '/', label: 'Inicio' }}
+        kicker="Te invitaron a"
+        title={first.season_name}
+        subtitle={`Organiza ${first.admin_name}`}
+        right={
+          <p className="pb-0.5">
+            <span className="font-cond block text-[52px]">{seats.length}</span>
+            <span className="text-[14px] text-on-block-soft">jugadores</span>
+          </p>
+        }
+      />
 
       <Picker
         token={token}

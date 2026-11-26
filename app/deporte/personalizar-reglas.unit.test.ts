@@ -183,14 +183,25 @@ const pressed = (html: string) =>
   [...html.matchAll(/<button[^>]*aria-pressed="true"[^>]*>(.*?)<\/button>/g)].map((m) => (m[1] ?? '').replace(/<[^>]+>/g, ''))
 
 describe('PersonalizarReglas', () => {
-  it('es un diálogo modal con título, subtítulo y una cruz de 44px', () => {
+  it('es una hoja de abajo (la `.hoja` de app/ui), modal, con título, los datos del plantel y "Cerrar" de 44px', () => {
     const html = sheet('PADEL', 8, 'ROTAN')
+    expect(html).toMatch(/^<dialog[^>]*class="hoja"/)
     expect(html).toContain('role="dialog"')
     expect(html).toContain('aria-modal="true"')
     expect(html).toMatch(/aria-labelledby="[^"]+"/)
+    expect(html).toContain('data-deporte="PADEL"')
     expect(html).toContain('Reglas de Pádel')
-    expect(html).toContain('Parejas que rotan · 8 jugadores')
-    expect(html).toMatch(/<button[^>]*aria-label="Cerrar"/)
+    expect(html).toContain('>Parejas que rotan<')
+    expect(html).toContain('>8 jugadores<')
+    expect(html).not.toContain(' · ')
+    const cerrar = /<button[^>]*aria-label="Cerrar"[^>]*>/.exec(html)?.[0] ?? ''
+    expect(cerrar).toContain('min-h-[44px]')
+  })
+
+  it('"Listo" queda abajo de todo, fijo, al alcance del pulgar', () => {
+    const html = sheet('PADEL', 8, 'ROTAN')
+    const barra = /<div[^>]*class="([^"]*)"[^>]*>(?:(?!<div).)*<button[^>]*>Listo<\/button>/.exec(html)?.[1] ?? ''
+    expect(barra.split(' ')).toEqual(expect.arrayContaining(['sticky', 'bottom-0']))
   })
 
   it('Pádel que rotan: los dos steppers del partido, Masters y el reglamento vivo', () => {
@@ -201,7 +212,7 @@ describe('PersonalizarReglas', () => {
     expect(html.match(/data-stepper="(setsToWin|gamesPerSet)"/g)).toHaveLength(2)
     expect(html).toContain('Masters al final')
     expect(html).toMatch(/role="switch"[^>]*aria-checked="true"|aria-checked="true"[^>]*role="switch"/)
-    expect(html).toContain('Así queda:')
+    expect(html).toContain('Así queda')
     expect(html).toContain('Partidos a 1 set de 4 games.')
     expect(html).toContain('Volver a las reglas de Pádel')
   })
@@ -247,11 +258,13 @@ describe('PersonalizarReglas', () => {
     expect(pressed(html)).toContain('Grupos + llave')
   })
 
-  it('Puntos por posición: un mosaico por puesto y el primero elegido', () => {
+  it('Puntos por puesto: un mosaico por puesto y el primero elegido', () => {
     const html = sheet('PADEL', 8, 'ROTAN')
+    expect(html).toContain('Puntos por puesto')
     expect(html.match(/data-tile="\d+"/g)).toHaveLength(4)
     expect(html).toContain('grid grid-cols-4 gap-2')
-    expect(pressed(html).some((text) => text.startsWith('10') && text.endsWith('1°'))).toBe(true)
+    // El puesto arriba y los puntos abajo, como los casilleros de Reglas.
+    expect(pressed(html)).toContain('1°10')
   })
 
   it('cada mosaico se anuncia con su puesto y su valor, "1 punto" en singular', () => {

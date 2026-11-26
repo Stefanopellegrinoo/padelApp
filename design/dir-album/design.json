@@ -1,0 +1,28 @@
+{
+  "title": "Dirección Álbum",
+  "brief": "Los amigos son la colección: cada jugador es una figurita del álbum del Mundial, con marco celeste (dorado solo el primero), y todo lo demás es papel blanco y tinta.",
+  "feature": "odd/tasks/rediseno-app.md",
+  "artboards": [
+    {
+      "file": "01-inicio.html",
+      "title": "Inicio",
+      "tradeoff": "Los amigos se reconocen al toque por su figurita, pero la lámina de confirmados no dice quiénes faltan.",
+      "width": 390,
+      "height": 1284
+    },
+    {
+      "file": "02-tabla.html",
+      "title": "Tabla",
+      "tradeoff": "La página del Masters se ve como una lámina del álbum y el resto se lee rápido como lista, aunque del 5° para abajo nadie tiene figurita.",
+      "width": 390,
+      "height": 1039
+    },
+    {
+      "file": "03-fecha.html",
+      "title": "La fecha",
+      "tradeoff": "Las parejas de figuritas se reconocen al toque y la carga es de dos toques, pero las figuritas grandes empujan los botones de games más abajo del primer pliegue.",
+      "width": 390,
+      "height": 1382
+    }
+  ]
+}

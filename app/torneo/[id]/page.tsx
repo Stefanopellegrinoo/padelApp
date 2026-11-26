@@ -1,14 +1,11 @@
-import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { computeGlobalRanking, computeRanking, type DisciplineRanking } from '@/core'
-import { seasonAwardsOf, seasonHeader, seasonMatchdaysOf, seasonSquadMembersOf } from '@/db/read'
+import { myEntryId, seasonAwardsOf, seasonHeader, seasonMatchdaysOf, seasonSquadMembersOf } from '@/db/read'
 import { serverClient } from '@/db/server'
-import { CompartirImagen } from '@/app/compartir-imagen'
-import { initials } from '@/app/format'
 import { Desempate, type StandingsRow } from './desempate'
 import { sportsOf } from './nav-state'
 import { singleDisciplineRedirect } from './tabla-state'
-import { Volver } from './volver'
+import { HeroTabla } from './tabla-view'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -48,14 +45,11 @@ interface PageProps {
  * cada disciplina. Tampoco hay corte de Masters (`has_masters` también es
  * por-disciplina): `mastersCutoff` se pasa fuera de rango a propósito.
  *
- * DEUDA ACEPTADA (presupuesto de línea): `Desempate` siempre dibuja el botón
- * "Orden de desempate ⇅" — acá no hay snapshot ni cadencia de refresco que
- * explicar (mismo motivo que arriba), así que se le pasa `tiebreakOrder`
- * vacío. Tocarlo (un prop opcional `showTiebreak` para ocultar el botón
- * cuando no aplica) es ~15L en `desempate.tsx`, evaluado y afuera de esta
- * PR por presupuesto. Ningún jugador puntual queda mal representado — no
- * hay `tiedWithEntryId` acá, así que ninguna fila abre el sheet; sólo el
- * botón superior, y quien lo toque ve una lista vacía en vez de nada.
+ * Sin desempate propio, tampoco hay botón "Orden de desempate": `Desempate`
+ * lo dibuja sólo si recibe un orden, y acá se le pasa vacío. (Antes lo
+ * dibujaba igual y abría una lista vacía.) Tampoco hay columnas de cambio y
+ * fechas jugadas (`showMatchdayColumns`): sin una cadencia común entre
+ * deportes no hay "fecha anterior" ni una cuenta de fechas que sumar.
  *
  * `tiedWithEntryId` sigue en `null` acá aun después de que `position`
  * (`computeGlobalRanking`) empezó a compartirse entre empatados (§2.4,
@@ -104,9 +98,10 @@ export default async function TablaGlobalPage({ params }: PageProps) {
   const redirectTarget = singleDisciplineRedirect(seasonId, header.disciplines)
   if (redirectTarget !== null) redirect(redirectTarget)
 
-  const [matchdays, squad] = await Promise.all([
+  const [matchdays, squad, mine] = await Promise.all([
     seasonMatchdaysOf(supabase, seasonId),
     seasonSquadMembersOf(supabase, seasonId),
+    myEntryId(supabase, seasonId),
   ])
   const seasonAwards = await seasonAwardsOf(supabase, matchdays)
 
@@ -116,9 +111,8 @@ export default async function TablaGlobalPage({ params }: PageProps) {
   // Mismo criterio que "mi posición" en `app/torneos/page.tsx` (`anyClosed`,
   // mismo predicado): antes de que cierre la primera fecha de CUALQUIER
   // disciplina, todo el plantel está en 0 puntos — y con `position`
-  // compartido (§2.4) eso los empata a TODOS en el puesto 1. Se lo pasa a
-  // `Desempate` como `highlightLeader` para que no resalte a nadie como
-  // líder cuando nadie jugó todavía.
+  // compartido (§2.4) eso los empata a TODOS en el puesto 1. Ahí no hay
+  // puesto tuyo que mostrar arriba ni imagen que compartir.
   const anyClosed = matchdays.some((matchday) => matchday.kind === 'REGULAR' && matchday.status === 'CLOSED')
 
   const perDiscipline: DisciplineRanking[] = header.disciplines.map((discipline) => ({
@@ -128,11 +122,9 @@ export default async function TablaGlobalPage({ params }: PageProps) {
   const ranking = computeGlobalRanking(perDiscipline)
 
   const rows: StandingsRow[] = ranking.map((row) => {
-    const displayName = nameOf.get(row.entryId) ?? ''
     return {
       entryId: row.entryId,
-      displayName,
-      initials: initials(displayName),
+      displayName: nameOf.get(row.entryId) ?? '',
       // De `computeGlobalRanking`, no `index + 1`: con los mismos puntos hay
       // empate y el puesto se comparte (1, 2, 2, 4) — ver el docblock de
       // `computeGlobalRanking` (`core/global-ranking.ts`).
@@ -141,35 +133,30 @@ export default async function TablaGlobalPage({ params }: PageProps) {
       // Sin "fecha anterior" que comparar en un ranking multi-disciplina sin
       // cadencia común, y sin desempate propio (ver doc de `Desempate` arriba).
       movement: null,
+      played: null,
+      isMe: row.entryId === mine,
       tiedWithEntryId: null,
     }
   })
+  const myRow = anyClosed ? (rows.find((row) => row.isMe) ?? null) : null
 
   return (
-    <div className="flex flex-col gap-3 pt-4">
-      <Volver href="/torneos" label="Mis torneos" />
-      <header className="flex items-start justify-between">
-        <h1 className="text-[26px] font-extrabold tracking-[-.03em]">{header.name}</h1>
-        <div className="flex shrink-0 gap-2">
-          {anyClosed && (
-            <CompartirImagen
-              archivo="tabla"
-              titulo={header.name}
-              subtitulo="Tabla general"
-              filas={rows.map((row) => ({ nombre: `${row.position}. ${row.displayName}`, puntos: row.points }))}
-            />
-          )}
-          {header.isAdmin && (
-            <Link
-              href={`/torneo/${seasonId}/ajustes`}
-              aria-label="Ajustes"
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-chip text-[18px]"
-            >
-              ⚙
-            </Link>
-          )}
-        </div>
-      </header>
+    <div className="flex flex-col">
+      <HeroTabla
+        back={{ href: '/torneos', label: 'Mis torneos' }}
+        title={header.name}
+        subtitle="Tabla general"
+        mine={myRow}
+        settingsHref={header.isAdmin ? `/torneo/${seasonId}/ajustes` : null}
+        share={
+          anyClosed
+            ? {
+                subtitulo: 'Tabla general',
+                filas: rows.map((row) => ({ nombre: `${row.position}. ${row.displayName}`, puntos: row.points })),
+              }
+            : null
+        }
+      />
 
       <Desempate
         // `rows` suma TODAS las disciplinas; la fila abre el perfil en la
@@ -178,17 +165,13 @@ export default async function TablaGlobalPage({ params }: PageProps) {
         rows={rows}
         // Fuera de rango a propósito: el corte de Masters es por-disciplina.
         mastersCutoff={rows.length + 1}
-        // Sin snapshot ni desempate propio acá (ver doc de arriba) — el botón
-        // "Orden de desempate" de `Desempate` queda inerte, no falso: ninguna
-        // fila tiene `tiedWithEntryId`, así que nunca abre con datos de nadie.
+        // Sin snapshot ni desempate propio acá (ver doc de arriba): sin orden
+        // no hay botón, y ninguna fila tiene `tiedWithEntryId`.
         tiebreakOrder={[]}
         tiebreakSnapshotEvery={0}
         asOfMatchday={null}
         nextRefreshMatchday={0}
-        // Sin ninguna fecha cerrada, todo el plantel comparte el puesto 1
-        // (0 a 0) — ver el comentario de `anyClosed` arriba. No hay líder
-        // que resaltar todavía.
-        highlightLeader={anyClosed}
+        showMatchdayColumns={false}
       />
     </div>
   )

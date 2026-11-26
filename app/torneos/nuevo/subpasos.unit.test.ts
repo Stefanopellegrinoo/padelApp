@@ -39,16 +39,20 @@ describe('ArmarParejas', () => {
     expect(text).toContain('Faltan emparejar 2.')
   })
 
-  it('dice de qué deporte son y qué cambia, y ofrece sortearlas', () => {
+  it('dice de qué deporte son (título en su color) y qué cambia, y ofrece sortearlas', () => {
     const html = parejas(unaArmada)
-    expect(textOf(html)).toContain('Pádel · Juegan juntas todo el torneo. La tabla de Pádel va a ser por pareja.')
+    expect(html).toMatch(/<section[^>]*data-deporte="PADEL"/)
+    expect(html).toMatch(/<h2[^>]*>Pádel<\/h2>/)
+    expect(textOf(html)).toContain('Juegan juntas todo el torneo. La tabla de Pádel va por pareja.')
+    expect(html).not.toContain(' · ')
     expect(buttons(html).map((b) => b.text)).toContain('Sortear parejas')
   })
 
   it('la que espera pareja se marca', () => {
     const lucas = buttons(parejas(unaArmada, { pendiente: 2 })).find((b) => b.text.startsWith('Lucas'))
-    expect(lucas?.text).toBe('Lucas · esperando')
+    expect(lucas?.text).toBe('Lucasesperando')
     expect(lucas?.attrs).toContain('aria-pressed="true"')
+    expect(lucas?.attrs).toContain('aria-label="Lucas, esperando pareja"')
   })
 
   it('con todas armadas no falta nada y no quedan chips sueltos', () => {
@@ -95,12 +99,13 @@ describe('OrdenarPorNivel', () => {
 
   it('individual: sólo arma la primera fecha; con parejas que rotan, las parejas de la primera fecha', () => {
     const fifa = tarjeta('FIFA', 'INDIVIDUAL', { primeraFecha: 'NIVEL' })
-    expect(textOf(porNivel(fifa))).toContain(
-      'FIFA · Arriba el que mejor juega. Sólo arma la primera fecha: después manda la tabla.',
-    )
+    const html = porNivel(fifa)
+    expect(html).toMatch(/<h2[^>]*>FIFA<\/h2>/)
+    expect(textOf(html)).toContain('Arriba el que mejor juega. Sólo arma la primera fecha: después manda la tabla.')
+    expect(html).not.toContain(' · ')
     const [padel] = cambiarPrimeraFecha([tarjeta('PADEL', 'ROTAN')], 'PADEL', 'NIVEL')
     expect(textOf(porNivel(padel!))).toContain(
-      'Pádel · Arriba el que mejor juega. Sólo arma las parejas de la primera fecha: después manda la tabla.',
+      'Arriba el que mejor juega. Sólo arma las parejas de la primera fecha: después manda la tabla.',
     )
   })
 })

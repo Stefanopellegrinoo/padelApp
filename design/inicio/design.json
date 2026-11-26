@@ -1,0 +1,10 @@
+{
+  "title": "Decisión 1 · Pantalla de entrada",
+  "brief": "Qué ves al abrir la app. Tiene que mostrar las dos partes del objetivo: armar torneos fácilmente y el historial con tus amigos. Las tres usan el estilo actual para comparar solo la estructura.",
+  "feature": "odd/tasks/rediseno-app.md",
+  "artboards": [
+    { "file": "01-mis-torneos-mas-amigos.html", "title": "A · Mis torneos + Amigos abajo", "tradeoff": "Cambio mínimo y conocido; el historial queda debajo de todo y sigue siendo secundario", "width": 390, "height": 900 },
+    { "file": "02-inicio-dos-partes.html", "title": "B · Inicio con las dos partes", "tradeoff": "Muestra el objetivo completo y lo próximo arriba; hay que cuidar que no se llene de cosas", "width": 390, "height": 1060 },
+    { "file": "03-pestanas-torneos-amigos.html", "title": "C · Pestañas Torneos y Amigos", "tradeoff": "Las dos partes al mismo nivel; suma una segunda barra que cambia al entrar a un torneo", "width": 1290, "height": 900 }
+  ]
+}

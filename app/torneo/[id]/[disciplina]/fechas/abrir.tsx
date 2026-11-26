@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from 'react'
 import type { DisciplineId } from '@/core'
+import { button } from '@/app/ui/button'
 import { openNextMatchday } from '../../actions'
 
 /**
@@ -66,29 +67,31 @@ export function AbrirFecha({ seasonId, disciplineId, number, sportName }: AbrirF
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-2">
-        {/* Sin label: el control nativo ya se explica (decisión registrada 7). */}
+        {/* Sin label visible: el control nativo ya se explica (decisión
+            registrada 7). Para el lector de pantalla sí lo nombra. */}
         <input
           type="date"
           value={playedOn}
+          aria-label="Día de la fecha"
           onChange={(event) => setPlayedOn(event.target.value)}
-          className="rounded-field border border-line bg-surface p-[13px] text-[16px] font-bold outline-none"
+          className="min-h-[56px] rounded-btn border-[1.5px] border-line bg-surface-2 px-3 text-[16px] font-semibold text-text"
         />
         <button
           type="button"
           onClick={open}
           disabled={blocked}
-          className={`flex-1 rounded-field p-4 text-[15px] font-extrabold ${
-            blocked ? 'bg-chip text-muted' : 'bg-accent text-accent-text'
-          }`}
+          className={`${button('primary', { size: 'lg' })} flex-1 flex-col gap-0 leading-tight`}
         >
           Abrir fecha {number}
           {/* Renglón propio y más chico: al lado del selector de fecha no entra en uno. */}
-          {sportName !== undefined && <span className="block text-[12px] font-bold"> de {sportName}</span>}
+          {sportName !== undefined && <span className="block text-[14px] font-semibold"> de {sportName}</span>}
         </button>
       </div>
 
       {error !== null && (
-        <p className="rounded-field bg-live-bg px-3 py-2.5 text-[12.5px] font-bold text-live">{error}</p>
+        <p role="alert" className="rounded-btn bg-live-bg px-3 py-2.5 text-[15px] font-semibold text-live">
+          {error}
+        </p>
       )}
     </div>
   )

@@ -1,4 +1,6 @@
 import Link from 'next/link'
+import { button } from '@/app/ui/button'
+import { Hero } from '@/app/ui/hero'
 
 /**
  * El 404 de la app, hermano de `error.tsx`: mismo molde, en castellano, en vez
@@ -6,25 +8,28 @@ import Link from 'next/link'
  *
  * Cae acá cualquier ruta que no existe y cualquier `notFound()` que tire una
  * página. Para los 500 está `error.tsx`.
+ *
+ * El "404" va de kicker, no de título: el número no le dice nada a nadie del
+ * grupo, el título sí. La salida es una sola, Inicio; Mis torneos queda como
+ * atajo para quien ya tiene cuenta.
  */
 export default function NotFound() {
   return (
-    <main className="mx-auto flex min-h-dvh w-full max-w-lg flex-col justify-center gap-3 bg-bg px-6 text-text">
-      <p className="text-[48px] font-extrabold leading-none tracking-[-.04em] text-muted tabular-nums">404</p>
-      <h1 className="text-pretty text-[22px] font-extrabold tracking-[-.02em]">Esta página no existe</h1>
-      <p className="text-pretty text-[14px] font-[550] leading-[1.5] text-muted">
-        Puede que el link esté mal escrito o que lo que buscabas ya no esté.
-      </p>
+    <main className="mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-bg pb-[calc(32px+env(safe-area-inset-bottom))] text-text">
+      <Hero
+        kicker={<span className="font-cond text-[20px] text-on-block-soft">404</span>}
+        title="Esta página no existe"
+        subtitle="El link está mal escrito o lo que buscabas ya no está."
+      />
 
-      <Link
-        href="/"
-        className="mt-2 rounded-field bg-accent p-4 text-center text-[15px] font-extrabold text-accent-text"
-      >
-        Ir al inicio
-      </Link>
-      <Link href="/torneos" className="text-center text-[12.5px] font-bold text-accent-link">
-        Ver mis torneos
-      </Link>
+      <div className="flex flex-col gap-3 px-4 pt-6">
+        <Link href="/" className={button('primary', { size: 'lg', full: true })}>
+          Ir al inicio
+        </Link>
+        <Link href="/torneos" className={button('ghost', { full: true })}>
+          Ver mis torneos
+        </Link>
+      </div>
     </main>
   )
 }

@@ -25,10 +25,13 @@ function side(entryId: string): Side {
   return { size: 1, a: entryId }
 }
 
+/** De a cuántos se juega el pádel del fixture: 2 sólo en el caso de las duplas. */
+let padelPairSize: 1 | 2 = 1
+
 function header(): DisciplineHeader[] {
   const shape = { weight: 1, pairSize: 1 as const, hasMasters: false, allowsDraw: false, formatoDefault: { kind: 'ROUND_ROBIN' as const } }
   return [
-    { id: D_PADEL, kind: 'PADEL', config: defaultConfig(2, 1), ...shape },
+    { id: D_PADEL, kind: 'PADEL', config: defaultConfig(2, 1), ...shape, pairSize: padelPairSize },
     { id: D_FIFA, kind: 'FIFA', config: defaultConfig(2, 1), ...shape },
   ]
 }
@@ -94,28 +97,36 @@ vi.mock('@/db/read', async (importOriginal) => {
       inviteToken: 'token',
       disciplines: header(),
     }),
-    myEntryId: async () => null,
+    // `vi.fn` para que un caso pueda pisar UNA lectura con
+    // `mockResolvedValueOnce` (quién mira, cuántas fechas cerraron) sin tocar
+    // el fixture del resto de la suite.
+    myEntryId: vi.fn(async () => null),
     // Las tres lecturas devuelven algo DISTINTO según qué `disciplineId`
     // reciban -- si la pantalla dejara de pasarlo (o volviera a
     // `defaultDisciplineId`), las tres caerían al `else` de Pádel sin
     // importar el slug de la URL, y las aserciones de más abajo se rompen.
     entriesOf: async (_supabase: unknown, _seasonId: string, disciplineId?: DisciplineId) =>
       disciplineId === D_FIFA ? squadOf('f') : squadOf('p'),
-    closedHistoryAll: async (_supabase: unknown, _seasonId: string, disciplineId?: DisciplineId) =>
-      disciplineId === D_FIFA ? historyOf('f') : historyOf('p'),
+    closedHistoryAll: vi.fn(async (_supabase: unknown, _seasonId: string, disciplineId?: DisciplineId) =>
+      disciplineId === D_FIFA ? historyOf('f') : historyOf('p')),
     awardsOf: async (_supabase: unknown, _seasonId: string, disciplineId?: DisciplineId) =>
       disciplineId === D_FIFA ? awardsOf('f') : awardsOf('p'),
   }
 })
 
-async function render(disciplina: string): Promise<string> {
+async function render(disciplina: string, tab?: string): Promise<string> {
   const { default: StatsPage } = await import('./page')
   return renderToStaticMarkup(
     await StatsPage({
       params: Promise.resolve({ id: 's1', disciplina }),
-      searchParams: Promise.resolve({}),
+      searchParams: Promise.resolve(tab === undefined ? {} : { tab }),
     }),
   )
+}
+
+/** El `<a>` entero (apertura, contenido, cierre) cuyo texto visible es `text`. */
+function linkWith(html: string, text: string): string | undefined {
+  return html.match(new RegExp(`<a [^>]*>(?:(?!</a>).)*?${text}(?:(?!</a>).)*?</a>`))?.[0]
 }
 
 describe('Stats trae los datos de la disciplina de la URL, no la [0] de la temporada', () => {
@@ -141,8 +152,10 @@ describe('Stats trae los datos de la disciplina de la URL, no la [0] de la tempo
     const htmlFifa = await render('fifa')
     const htmlPadel = await render('padel')
 
-    expect(htmlFifa).toContain('Estadísticas · FIFA')
-    expect(htmlPadel).toContain('Estadísticas · Pádel')
+    // "de", como la Tabla ("Tabla de Pádel"): el "·" para juntar datos no es del prototipo.
+    expect(htmlFifa).toContain('Estadísticas de FIFA')
+    expect(htmlPadel).toContain('Estadísticas de Pádel')
+    expect(htmlPadel).not.toContain('·')
   })
 
   it('un slug de disciplina desconocido da notFound(), no la [0] por defecto', async () => {
@@ -167,5 +180,109 @@ describe('Stats habla con la unidad y las palabras del deporte', () => {
 
     expect(html).toContain('Games totales')
     expect(html).not.toContain('Goles totales')
+  })
+})
+
+describe('Stats: el encabezado y el control General/Mías', () => {
+  it('Volver nombra su destino: con 2+ deportes, la Tabla general', async () => {
+    const html = await render('padel')
+
+    const volver = linkWith(html, 'Tabla general')
+    expect(volver).toContain('href="/torneo/s1"')
+  })
+
+  it('General y Mías son links a la misma pantalla; el encendido lleva aria-current="page"', async () => {
+    const general = await render('padel')
+    expect(linkWith(general, 'General')).toContain('href="/torneo/s1/padel/stats"')
+    expect(linkWith(general, 'General')).toContain('aria-current="page"')
+    expect(linkWith(general, 'Mías')).toContain('href="/torneo/s1/padel/stats?tab=mias"')
+    expect(linkWith(general, 'Mías')).not.toContain('aria-current')
+
+    const mias = await render('padel', 'mias')
+    expect(linkWith(mias, 'Mías')).toContain('aria-current="page"')
+    expect(linkWith(mias, 'General')).not.toContain('aria-current')
+  })
+})
+
+describe('Stats: lo tuyo y los links al perfil', () => {
+  it('tu fila en los rankings dice "vos"; la de otro, no', async () => {
+    const { myEntryId } = await import('@/db/read')
+    vi.mocked(myEntryId).mockResolvedValueOnce('p1')
+
+    const html = await render('padel')
+
+    const rows = html.match(/<li[^>]*>(?:(?!<\/li>).)*<\/li>/g) ?? []
+    const mine = rows.filter((row) => row.includes('Padel Uno'))
+    const theirs = rows.filter((row) => row.includes('Padel Dos'))
+    expect(mine.length).toBeGreaterThan(0)
+    expect(mine.every((row) => />vos</.test(row))).toBe(true)
+    expect(theirs.some((row) => />vos</.test(row))).toBe(false)
+  })
+
+  /**
+   * Los nombres de una dupla son links en texto corrido: el blanco de 44 lo da el relleno vertical
+   * (medido en el navegador, T17: con `py-3` medían 41-43 px; con 14 px de cada lado, 45 o más).
+   */
+  it('cada nombre de una dupla es un link a su perfil con relleno para medir 44 o más', async () => {
+    const { closedHistoryAll } = await import('@/db/read')
+    const pareja = (a: string, b: string): Side => ({ size: 2, a, b })
+    const fecha = (number: number): PlayedMatchday => ({
+      number,
+      sides: [pareja('p1', 'p2'), pareja('p3', 'p4')],
+      matches: [
+        { round: 1, fase: 'GRUPO', grupo: 1, sideA: pareja('p1', 'p2'), sideB: pareja('p3', 'p4'), sets: [{ gamesA: 4, gamesB: 1 }] },
+      ],
+    })
+    vi.mocked(closedHistoryAll).mockResolvedValueOnce([fecha(1), fecha(2)])
+    padelPairSize = 2
+    const html = await render('padel').finally(() => {
+      padelPairSize = 1
+    })
+    expect(html).toContain('Mejor dupla del torneo')
+    expect(html).toContain('Las demás duplas')
+    const duplas = html.slice(html.indexOf('Mejor dupla del torneo'))
+    const nombres = duplas.match(/<a [^>]*><span[^>]*>[^<]*<\/span><\/a>/g) ?? []
+    expect(nombres.length).toBeGreaterThan(0)
+    for (const link of nombres) {
+      expect(link).toMatch(/class="[^"]*\bpy-3\.5\b/)
+    }
+  })
+
+  it('los perfiles se abren sabiendo de dónde vinieron (?desde=stats), para que su Volver diga Estadísticas', async () => {
+    const html = await render('padel')
+
+    expect(html).toContain('href="/torneo/s1/padel/jugador/p1?desde=stats"')
+    expect(html).toContain('href="/torneo/s1/padel/jugador/p2?desde=stats"')
+    expect(html).not.toMatch(/jugador\/p[12]"/)
+  })
+
+  it('Mías muestra tus puntos por fecha', async () => {
+    const { myEntryId } = await import('@/db/read')
+    vi.mocked(myEntryId).mockResolvedValueOnce('p1')
+
+    const html = await render('padel', 'mias')
+
+    expect(html).toContain('Tus puntos por fecha')
+    expect(html).toContain('Puntos por fecha: fecha 1, 10; fecha 2, 10')
+  })
+
+  it('Mías sin partidos jugados invita a ir a las fechas', async () => {
+    const html = await render('padel', 'mias')
+
+    expect(html).toContain('Todavía no jugaste')
+    expect(linkWith(html, 'Ir a las fechas')).toContain('href="/torneo/s1/padel/fechas"')
+  })
+})
+
+describe('Stats sin fechas suficientes', () => {
+  it('con 1 fecha cerrada dice cuánto falta y lleva a las fechas', async () => {
+    const { closedHistoryAll } = await import('@/db/read')
+    vi.mocked(closedHistoryAll).mockResolvedValueOnce(historyOf('p').slice(0, 1))
+
+    const html = await render('padel')
+
+    expect(html).toContain('Estadísticas de Pádel')
+    expect(html).toContain('Falta 1 fecha')
+    expect(linkWith(html, 'Ir a las fechas')).toContain('href="/torneo/s1/padel/fechas"')
   })
 })

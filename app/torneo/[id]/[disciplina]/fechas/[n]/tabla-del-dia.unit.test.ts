@@ -106,3 +106,13 @@ describe('lo que la tabla dibuja igual en las dos', () => {
     expect(solo).toContain('>Jugador<')
   })
 })
+
+describe('tu fila', () => {
+  it('va marcada como tuya (amarillo en claro, borde amarillo en oscuro) y sólo la tuya', () => {
+    const conVos = [FILAS[0]!, { ...FILAS[1]!, esVos: true }, FILAS[2]!]
+    const filas = html(false, conVos).match(/<div class="grid [^"]*min-h-\[46px\][^"]*"/g) ?? []
+    expect(filas).toHaveLength(3)
+    expect(filas.filter((fila) => fila.includes('bg-vos-fila'))).toHaveLength(1)
+    expect(filas[1]).toContain('bg-vos-fila')
+  })
+})

@@ -9,7 +9,11 @@ import {
   isComplete,
   loserGamesOptions,
   openScoreSet,
+  resumenGuardado,
+  retomarUltimoSet,
+  siguienteSinCargar,
   startLoad,
+  toqueDelSet,
 } from './carga-state'
 
 const ONE_SET_TO_4: MatchFormat = { setsToWin: 1, gamesPerSet: 4, tieBreak: true, openScore: false }
@@ -190,13 +194,95 @@ describe('goalsError', () => {
     expect(goalsError('3', '1')).toBeNull()
   })
 
-  it('explica el rechazo, y nombra el caso del 3-1 en un solo campo', () => {
-    const message = goalsError('3-1', '')
-    expect(message).toContain('un número entero por lado')
-    expect(message).toContain('3-1')
+  it('explica el rechazo en una oración, y nombra el caso del 3-1 en un solo campo', () => {
+    expect(goalsError('3-1', '')).toBe('Un número por lado: un 3-1 se carga 3 y 1.')
   })
 
   it('da igual de qué lado esté el error', () => {
     expect(goalsError('', 'abc')).toBe(goalsError('abc', ''))
+  })
+})
+
+// ── S8e — la hoja de carga: reintentar, corregir, seguir ─────────────────────
+
+describe('retomarUltimoSet: un guardado que rebota no borra lo cargado', () => {
+  const PING_PONG: MatchFormat = { setsToWin: 2, gamesPerSet: 11, tieBreak: false, openScore: false }
+
+  it('saca el último set y deja elegido a su ganador, listo para volver a tocar el número', () => {
+    const completo = play('A', 2, ONE_SET_TO_4)
+    expect(retomarUltimoSet(completo)).toEqual({ sets: [], pendingWinner: 'A' })
+  })
+
+  it('en un partido a dos sets conserva el primero', () => {
+    const primero = play('B', 7, PING_PONG)
+    const completo = chooseLoserGames(chooseWinner(primero, 'B'), 3, PING_PONG)
+    expect(retomarUltimoSet(completo)).toEqual({ sets: [{ gamesA: 7, gamesB: 11 }], pendingWinner: 'B' })
+  })
+
+  it('sin sets no hay nada que retomar', () => {
+    expect(retomarUltimoSet(startLoad())).toEqual(startLoad())
+  })
+})
+
+describe('toqueDelSet: qué botones prende un set ya cargado (corregir precargado)', () => {
+  const PING_PONG: MatchFormat = { setsToWin: 2, gamesPerSet: 11, tieBreak: false, openScore: false }
+
+  it('pádel 4-2: ganó A, el perdedor hizo 2', () => {
+    expect(toqueDelSet({ gamesA: 4, gamesB: 2 }, ONE_SET_TO_4)).toEqual({ winner: 'A', loser: 2, deuce: false })
+  })
+
+  it('del otro lado: ganó B', () => {
+    expect(toqueDelSet({ gamesA: 0, gamesB: 4 }, ONE_SET_TO_4)).toEqual({ winner: 'B', loser: 0, deuce: false })
+  })
+
+  it('ping pong 12-10 es el botón de ventaja, no un número', () => {
+    expect(toqueDelSet({ gamesA: 10, gamesB: 12 }, PING_PONG)).toEqual({ winner: 'B', loser: 10, deuce: true })
+  })
+
+  it('un set que ningún botón produce (otro formato, empate) no prende nada', () => {
+    expect(toqueDelSet({ gamesA: 6, gamesB: 2 }, ONE_SET_TO_4)).toBeNull()
+    expect(toqueDelSet({ gamesA: 2, gamesB: 2 }, ONE_SET_TO_4)).toBeNull()
+  })
+})
+
+describe('siguienteSinCargar: el próximo partido queda a un toque', () => {
+  const orden = [
+    { matchId: 'a', loaded: true },
+    { matchId: 'b', loaded: false },
+    { matchId: 'c', loaded: true },
+    { matchId: 'd', loaded: false },
+  ]
+
+  it('es el próximo sin cargar DESPUÉS del que se guardó', () => {
+    expect(siguienteSinCargar(orden, 'b')).toBe('d')
+  })
+
+  it('si no queda ninguno después, vuelve a empezar desde arriba', () => {
+    expect(siguienteSinCargar(orden, 'd')).toBe('b')
+  })
+
+  it('nunca el mismo que se acaba de guardar, aunque la lista todavía no se haya enterado', () => {
+    expect(siguienteSinCargar([{ matchId: 'b', loaded: false }], 'b')).toBeNull()
+  })
+
+  it('con todo cargado no hay siguiente', () => {
+    expect(siguienteSinCargar([{ matchId: 'a', loaded: true }], 'a')).toBeNull()
+  })
+})
+
+describe('resumenGuardado: el texto del aviso', () => {
+  it('el ganador y sus games primero, set por set', () => {
+    expect(resumenGuardado('Martín & Tomi', 'Nico & Lucas', [{ gamesA: 6, gamesB: 3 }])).toBe('Martín & Tomi 6-3')
+    expect(
+      resumenGuardado('Ana', 'Beto', [
+        { gamesA: 9, gamesB: 11 },
+        { gamesA: 11, gamesB: 5 },
+        { gamesA: 7, gamesB: 11 },
+      ]),
+    ).toBe('Beto 11-9 5-11 11-7')
+  })
+
+  it('un empate nombra a los dos', () => {
+    expect(resumenGuardado('Ana', 'Beto', [{ gamesA: 1, gamesB: 1 }])).toBe('Ana 1-1 Beto')
   })
 })

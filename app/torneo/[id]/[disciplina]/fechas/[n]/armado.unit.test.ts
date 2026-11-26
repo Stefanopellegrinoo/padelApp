@@ -3,7 +3,7 @@ import { defaultMaxMatches } from '@/core'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import type { MatchdayFormat, MatchdayFormatSetting, MatchFormat } from '@/core'
-import { EstaFechaSeJuegaA, ParejasAMano, SelectorDeFormato, type HandPairVM, type SeatVM } from './armado'
+import { Asiento, EstaFechaSeJuegaA, ParejasAMano, SelectorDeFormato, type HandPairVM, type SeatVM } from './armado'
 
 /**
  * El selector de formato de la fecha (REQ-D8-1), RENDERIZADO — no la lógica
@@ -169,12 +169,14 @@ describe('SelectorDeFormato', () => {
   describe('lo que elegiría "Automático" (W77, decisión #4022, §7)', () => {
     it('nombra el formato que elegiría en la línea de Automático, separada de los botones', () => {
       const markup = html(ROUND_ROBIN, 6, GROUPS_2)
-      expect(markup).toContain('→ 2 grupos + llave')
+      // Texto llano, sin flecha (S8d, T17).
+      expect(markup).toContain('2 grupos + llave (vienen')
+      expect(markup).not.toContain('→')
     })
 
     it('también nombra "todos contra todos" cuando es lo que elegiría', () => {
       const markup = html(GROUPS_2, 4, ROUND_ROBIN)
-      expect(markup).toContain('→ Todos contra todos')
+      expect(markup).toContain('Todos contra todos (vienen')
     })
 
     /**
@@ -190,7 +192,7 @@ describe('SelectorDeFormato', () => {
       const markup = html(ROUND_ROBIN, 6, GROUPS_2)
       const btnGrupos2 = /<button[^>]*>2 grupos \+ llave<\/button>/.exec(markup)?.[0] ?? ''
       expect(btnGrupos2).toContain('aria-checked="false"') // lo automático, no lo elegido
-      expect(markup).toContain('→ 2 grupos + llave')
+      expect(markup).toContain('2 grupos + llave (vienen')
     })
 
     /**
@@ -217,7 +219,7 @@ describe('SelectorDeFormato — Automático (§7)', () => {
     const markup = html(AUTO, 8, GROUPS_2, TECHO_DE_A_UNO, 8)
 
     expect(markup).toContain('Automático')
-    expect(markup).toContain('→ 2 grupos + llave (vienen 8)')
+    expect(markup).toContain('2 grupos + llave (vienen 8)')
     expect(botonAutomatico(markup)).toContain('aria-checked="true"')
     // La fila de hoy sigue, sin marcar: Automático no es ninguno de los dos.
     const btnGrupos2 = /<button[^>]*>2 grupos \+ llave<\/button>/.exec(markup)?.[0] ?? ''
@@ -292,6 +294,10 @@ describe('ParejasAMano', () => {
   it('muestra la pareja armada y ofrece armar otra con los que quedan', () => {
     const markup = render([anaYBeto], seats.slice(2))
 
+    // Una línea que dice lo que importa, sin narrar (S8d, T17).
+    expect(markup).toContain('Las que no armes salen del sorteo.')
+    expect(markup).not.toContain('Armá las parejas que quieras')
+
     expect(markup).toContain('Ana y Beto')
     expect(markup).toContain('Deshacer')
     expect(markup).toContain('Armar pareja')
@@ -313,5 +319,27 @@ describe('ParejasAMano', () => {
     const absent = seats.map((seat) => (seat.entryId === 'b' ? { ...seat, playing: false } : seat))
 
     expect(render([anaYBeto], [], absent)).toContain('Uno de los dos no viene')
+  })
+})
+
+describe('Asiento: tu fila de "Quién viene"', () => {
+  const asiento = (seat: SeatVM) =>
+    renderToStaticMarkup(createElement(Asiento, { seat, onTick: () => {} }))
+
+  it('tu asiento lleva la marca de "vos" (amarilla, como en el Plantel de Ajustes); el de otro, no', () => {
+    const tuyo = asiento({ entryId: 'e1', name: 'Ana', playing: true, vos: true })
+    const ajeno = asiento({ entryId: 'e2', name: 'Beto', playing: true })
+
+    expect(tuyo).toContain('bg-vos-fila')
+    expect(tuyo).toMatch(/>vos<\/span>/)
+    expect(ajeno).not.toContain('bg-vos-fila')
+    expect(ajeno).not.toMatch(/>vos<\/span>/)
+  })
+
+  it('sigue diciendo si viene o no, también en tu fila', () => {
+    expect(asiento({ entryId: 'e1', name: 'Ana', playing: true, vos: true })).toContain('Viene')
+    const noViene = asiento({ entryId: 'e1', name: 'Ana', playing: false, vos: true })
+    expect(noViene).toContain('No viene')
+    expect(noViene).toContain('Avisó que no va')
   })
 })

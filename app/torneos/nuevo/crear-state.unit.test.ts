@@ -131,8 +131,9 @@ describe('cambiarModalidad', () => {
 })
 
 describe('opcionesPrimeraFecha', () => {
-  const POR_NIVEL = { value: 'NIVEL', label: 'Por nivel', sub: 'las ordenás vos' }
-  const AL_AZAR = { value: 'SORTEO', label: 'Al azar', sub: 'sorteo' }
+  // En palabras de todos los días: quién decide el orden (S4, sin jerga).
+  const POR_NIVEL = { value: 'NIVEL', label: 'Por nivel', sub: 'vos los ordenás' }
+  const AL_AZAR = { value: 'SORTEO', label: 'Al azar', sub: 'sortea la app' }
 
   it('con una sola tarjeta no hay "igual que"', () => {
     expect(opcionesPrimeraFecha([card('PADEL', 'ROTAN')], 'PADEL')).toEqual([POR_NIVEL, AL_AZAR])
@@ -143,7 +144,7 @@ describe('opcionesPrimeraFecha', () => {
     expect(opcionesPrimeraFecha(cards, 'FIFA')).toEqual([
       POR_NIVEL,
       AL_AZAR,
-      { value: { igualQue: 'PADEL' }, label: 'Igual que Pádel', sub: null },
+      { value: { igualQue: 'PADEL' }, label: 'Igual que Pádel', sub: 'el mismo orden' },
     ])
     expect(opcionesPrimeraFecha(cards, 'PADEL').map((o) => o.label)).toEqual(['Por nivel', 'Al azar', 'Igual que FIFA'])
   })

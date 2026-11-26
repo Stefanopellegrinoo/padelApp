@@ -20,6 +20,13 @@ import {
 import { disciplineConfig } from '@/db/discipline'
 import { awardsOf, closedHistoryAll, entriesOf, myEntryId, seasonHeader } from '@/db/read'
 import { serverClient } from '@/db/server'
+import { Avatar } from '@/app/ui/avatar'
+import { button } from '@/app/ui/button'
+import { Hero } from '@/app/ui/hero'
+import { row as rowClass, rowMeta, rowTitle } from '@/app/ui/row'
+import { volverDestination } from '@/app/torneo/[id]/tabla-state'
+import { perfilHref, type Desde } from '../jugador/origen'
+import { Dato, markMatchdays, PuntosPorFecha, Seccion, Vos, VOS_FILA } from '../jugador/piezas'
 
 interface PageProps {
   params: Promise<{ id: string; disciplina: string }>
@@ -103,109 +110,253 @@ function bestMatchdayFor(awardsByMatchday: Map<number, Award[]>, entryId: EntryI
 
 // ── piezas visuales ──────────────────────────────────────────────────────────
 
-function StatCard({ label, value }: { label: string; value: ReactNode }) {
+/** Lo que cada pieza necesita para nombrar a alguien y llevar a su perfil. */
+interface Gente {
+  base: string
+  nameOf: NameOf
+  /** El asiento del que mira: su fila va marcada. */
+  viewer: EntryId | null
+  /** De qué pestaña sale el link, para el `Volver` del perfil. */
+  desde: Desde
+}
+
+/**
+ * General y Mías: un control segmentado de dos links a la misma pantalla. Son
+ * links (cambian la URL, `?tab=mias`) y no pestañas ARIA: el encendido lleva
+ * `aria-current="page"`. El encendido es un bloque lleno del color del
+ * deporte; el otro, texto sobre el `chip` del carril.
+ */
+function Segmentos({ statsBase, activeTab }: { statsBase: string; activeTab: 'torneo' | 'mias' }) {
+  const segment = (on: boolean) =>
+    `press flex min-h-[44px] items-center justify-center rounded-[11px] text-[16px] font-bold ${
+      on ? 'bg-sport text-on-sport' : 'text-muted'
+    }`
   return (
-    <div className="rounded-[14px] border border-line bg-surface p-[14px]">
-      <p className="text-[12px] font-extrabold uppercase tracking-[.13em] text-muted">{label}</p>
-      <p className="mt-1 text-[22px] font-extrabold">{value}</p>
-    </div>
+    <nav aria-label="Qué estadísticas" className="px-4 pt-4">
+      <div className="grid grid-cols-2 gap-1 rounded-btn bg-chip p-1">
+        <Link href={statsBase} aria-current={activeTab === 'torneo' ? 'page' : undefined} className={segment(activeTab === 'torneo')}>
+          General
+        </Link>
+        <Link
+          href={statsBase + '?tab=mias'}
+          aria-current={activeTab === 'mias' ? 'page' : undefined}
+          className={segment(activeTab === 'mias')}
+        >
+          Mías
+        </Link>
+      </div>
+    </nav>
   )
 }
 
-function PlayerLink({ base, entryId, nameOf }: { base: string; entryId: EntryId; nameOf: NameOf }) {
+/**
+ * Un ranking en barras planas del color del deporte: nombre, barra y el
+ * número, en una línea por jugador para que las barras arranquen todas a la
+ * misma altura y se comparen de un vistazo. Toda la fila lleva al perfil.
+ */
+function Barras({ title, rows, gente }: { title: string; rows: BarRow[]; gente: Gente }) {
+  if (rows.length === 0) return null
   return (
-    <Link href={`${base}/jugador/${entryId}`} className="inline-flex min-h-[44px] items-center hover:underline">
-      {nameOf.get(entryId) ?? ''}
+    <Seccion title={title}>
+      <ol>
+        {rows.map((row) => {
+          const isMe = row.entryId === gente.viewer
+          return (
+            <li
+              key={row.entryId}
+              className={`relative grid min-h-[48px] grid-cols-[7.5rem_1fr_3.5rem] items-center gap-3 px-4 py-1.5 press-fila${
+                isMe ? ` ${VOS_FILA}` : ''
+              }`}
+            >
+              <span className="flex min-w-0 items-center gap-1.5">
+                <Link
+                  href={perfilHref(gente.base, row.entryId, gente.desde)}
+                  className="min-w-0 text-[16px] leading-tight font-semibold [overflow-wrap:anywhere] after:absolute after:inset-0"
+                >
+                  {gente.nameOf.get(row.entryId) ?? ''}
+                </Link>
+                {isMe && <Vos />}
+              </span>
+              <span aria-hidden="true" className="h-2.5 overflow-hidden rounded-pill bg-current/15">
+                <span className="block h-full rounded-pill bg-sport" style={{ width: `${row.pct}%` }} />
+              </span>
+              <span className="font-cond text-right text-[26px]">{row.pct}%</span>
+            </li>
+          )
+        })}
+      </ol>
+    </Seccion>
+  )
+}
+
+/**
+ * Una fila de persona con avatar: quién, qué dato es (la línea gris) y el
+ * número a la derecha. Toda la fila lleva al perfil.
+ */
+function FilaDestacada({
+  entryId,
+  label,
+  value,
+  gente,
+}: {
+  entryId: EntryId
+  label: string
+  value: ReactNode
+  gente: Gente
+}) {
+  const name = gente.nameOf.get(entryId) ?? ''
+  const isMe = entryId === gente.viewer
+  return (
+    <li className={`relative ${rowClass} press-fila${isMe ? ` ${VOS_FILA}` : ''}`}>
+      <Avatar name={name} />
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-1.5">
+          <Link
+            href={perfilHref(gente.base, entryId, gente.desde)}
+            className={`${rowTitle} min-w-0 [overflow-wrap:anywhere] after:absolute after:inset-0`}
+          >
+            {name}
+          </Link>
+          {isMe && <Vos />}
+        </span>
+        <span className={rowMeta}>{label}</span>
+      </span>
+      {value}
+    </li>
+  )
+}
+
+/** Sube (azul) o baja (rojo) con triángulo y número, como el cambio de la Tabla. */
+function Movimiento({ movement }: { movement: number }) {
+  const sube = movement > 0
+  return (
+    <span className={`font-cond flex shrink-0 items-center gap-1 text-[34px] ${sube ? 'text-up' : 'text-down'}`}>
+      <svg aria-hidden="true" viewBox="0 0 10 10" className="h-3.5 w-3.5 fill-current">
+        <path d={sube ? 'M5 1.5L9.5 8.5H.5z' : 'M5 8.5L.5 1.5h9z'} />
+      </svg>
+      {Math.abs(movement)}
+      <span className="sr-only">{sube ? ' puestos arriba' : ' puestos abajo'}</span>
+    </span>
+  )
+}
+
+/**
+ * Un nombre de la dupla: link a su perfil, con la marca si es el que mira. Es
+ * texto corrido (los dos nombres pueden partirse en dos líneas), así que el
+ * blanco de 44 lo da el relleno vertical y no la caja; la marca va en el
+ * nombre, no en el relleno. El relleno de un `<a>` en línea no mueve las
+ * líneas: 14 por lado sobre la letra (17-19 px de caja) da 45 o más; con 12
+ * medía 41-43 (T17).
+ */
+function NombreDupla({ entryId, gente }: { entryId: EntryId; gente: Gente }) {
+  const name = gente.nameOf.get(entryId) ?? ''
+  return (
+    <Link href={perfilHref(gente.base, entryId, gente.desde)} className="py-3.5">
+      <span className={entryId === gente.viewer ? 'marca-vos' : undefined}>{name}</span>
     </Link>
   )
 }
 
-function BarRanking({ title, rows, base, nameOf }: { title: string; rows: BarRow[]; base: string; nameOf: NameOf }) {
-  if (rows.length === 0) return null
+/**
+ * Las duplas: la mejor, en un bloque del tinte del deporte con su
+ * efectividad grande; el resto, en filas. Cada fila tiene dos links (uno por
+ * nombre), así que acá la fila entera no se toca.
+ */
+function Duplas({ best, rest, gente }: { best: PartnerRecord | null; rest: PartnerRecord[]; gente: Gente }) {
+  if (best === null && rest.length === 0) return null
   return (
-    <section className="flex flex-col gap-2.5">
-      <p className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">{title}</p>
-      <div className="flex flex-col gap-2.5">
-        {rows.map((row, index) => (
-          <Link key={row.entryId} href={`${base}/jugador/${row.entryId}`} className="flex min-h-[44px] flex-col justify-center gap-1">
-            <div className="flex items-center justify-between">
-              <span className="text-[13.5px] font-bold">{nameOf.get(row.entryId) ?? ''}</span>
-              <span className="text-[12.5px] font-extrabold text-muted">{row.pct}%</span>
-            </div>
-            <div className="h-[7px] rounded-full bg-chip">
-              <div
-                className={`h-full rounded-full ${index === 0 ? 'bg-accent' : 'bg-muted'}`}
-                style={{ width: `${row.pct}%` }}
-              />
-            </div>
-          </Link>
-        ))}
-      </div>
-    </section>
-  )
-}
-
-function Duplas({ title, rows, base, nameOf }: { title: string; rows: PartnerRecord[]; base: string; nameOf: NameOf }) {
-  if (rows.length === 0) return null
-  return (
-    <section className="flex flex-col gap-2.5">
-      <p className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">{title}</p>
-      <div className="rounded-[14px] border border-line bg-surface px-[14px]">
-        {rows.map((record) => {
-          const eff = effectiveness(record)
-          return (
-            <div
-              key={pairKey(record.entryId, record.partner)}
-              className="flex items-center justify-between gap-2 border-b border-line py-2.5 last:border-b-0"
-            >
-              <div>
-                <p className="text-[14px] font-bold">
-                  <PlayerLink base={base} entryId={record.entryId} nameOf={nameOf} />
-                  {' y '}
-                  <PlayerLink base={base} entryId={record.partner} nameOf={nameOf} />
-                </p>
-                <p className="text-[12px] font-semibold text-muted">jugaron {record.together} fechas</p>
-              </div>
-              <span
-                className={`shrink-0 rounded-full px-2.5 py-1 text-[12px] font-extrabold ${
-                  eff >= 50 ? 'bg-ok-bg text-up' : 'bg-chip text-muted'
-                }`}
-              >
-                {eff}%
+    <>
+      {best !== null && (
+        <Seccion title="Mejor dupla del torneo">
+          <div className="mx-4 flex items-center gap-3 rounded-tile bg-sport-tint py-2 pr-4 pl-3">
+            {/* Los avatares sobre un aro del fondo: el tono del avatar es el
+                mismo tinte del bloque y sin aro se perdería. */}
+            <span aria-hidden="true" className="flex shrink-0">
+              <span className="rounded-full bg-bg p-[3px]">
+                <Avatar name={gente.nameOf.get(best.entryId) ?? ''} />
               </span>
-            </div>
-          )
-        })}
-      </div>
-    </section>
+              <span className="-ml-3 rounded-full bg-bg p-[3px]">
+                <Avatar name={gente.nameOf.get(best.partner) ?? ''} />
+              </span>
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block pt-2 text-[17px] leading-snug font-bold">
+                <NombreDupla entryId={best.entryId} gente={gente} />
+                {' y '}
+                <NombreDupla entryId={best.partner} gente={gente} />
+              </span>
+              <span className="block pb-1 text-[14px] text-muted">{metaDupla(best)}</span>
+            </span>
+            <span className="font-cond shrink-0 text-[44px] text-sport">{effectiveness(best)}%</span>
+          </div>
+        </Seccion>
+      )}
+      {rest.length > 0 && (
+        <Seccion title="Las demás duplas">
+          <ul>
+            {rest.map((record) => (
+              <li key={pairKey(record.entryId, record.partner)} className={`${rowClass} py-1`}>
+                <span className="min-w-0 flex-1">
+                  <span className="block pt-1 text-[16px] leading-snug font-semibold">
+                    <NombreDupla entryId={record.entryId} gente={gente} />
+                    {' y '}
+                    <NombreDupla entryId={record.partner} gente={gente} />
+                  </span>
+                  <span className="block pb-1 text-[14px] text-muted">{metaDupla(record)}</span>
+                </span>
+                <span className={`font-cond shrink-0 text-[30px] ${effectiveness(record) >= 50 ? 'text-sport' : 'text-muted'}`}>
+                  {effectiveness(record)}%
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Seccion>
+      )}
+    </>
   )
 }
 
-function InsufficientData({
+function metaDupla(record: PartnerRecord): string {
+  return `${record.won}-${record.lost}, ${record.together === 1 ? '1 fecha' : `${record.together} fechas`}`
+}
+
+/**
+ * El estado vacío: lo que falta en números (fechas cerradas de las que
+ * hacen falta) y a dónde ir para que llegue, no un párrafo explicándolo.
+ */
+function FaltanFechas({
   closedCount,
-  disciplineLabel,
   showPairs,
+  fechasHref,
 }: {
   closedCount: number
-  disciplineLabel: string | null
-  /** "La mejor dupla" y "con quién te va bien" sólo existen con parejas que rotan. */
+  /** "Duplas" sólo existe con parejas que rotan. */
   showPairs: boolean
+  fechasHref: string
 }) {
   const missing = MIN_CLOSED_MATCHDAYS_FOR_STATS - closedCount
   return (
-    <div className="flex flex-col gap-3 pt-4">
-      <h1 className="text-[26px] font-extrabold tracking-[-.03em]">
-        Estadísticas{disciplineLabel !== null ? ` · ${disciplineLabel}` : ''}
-      </h1>
-      <p className="text-pretty text-[13.5px] leading-[1.5] font-[550] text-muted">
-        Todavía no hay estadísticas: hacen falta al menos {MIN_CLOSED_MATCHDAYS_FOR_STATS} fechas cerradas y{' '}
-        {closedCount === 0 ? 'todavía no cerró ninguna' : 'sólo cerró 1'}.
-      </p>
-      <p className="text-pretty text-[13.5px] leading-[1.5] font-[550] text-muted">
-        Cuando cierre {missing === 1 ? 'la próxima fecha' : `${missing} fechas más`} vas a ver acá el % de partidos
-        ganados de todo el plantel, {showPairs ? 'la mejor dupla del torneo, con quién te va bien, ' : ''}las rachas
-        de títulos y el presentismo.
-      </p>
+    <div className="px-4 pt-5">
+      <div className="rounded-tile bg-sport-tint p-4">
+        <div aria-hidden="true" className="flex gap-1.5">
+          {Array.from({ length: MIN_CLOSED_MATCHDAYS_FOR_STATS }, (_, index) => (
+            <i
+              key={index}
+              className={`h-3 w-8 rounded-[4px] ${index < closedCount ? 'bg-sport' : 'shadow-[inset_0_0_0_1.5px_var(--color-sport)]'}`}
+            />
+          ))}
+        </div>
+        <h2 className="font-titulo mt-3 text-[28px]">
+          {missing === 1 ? 'Falta 1 fecha' : `Faltan ${missing} fechas`}
+        </h2>
+        <p className="mt-1 text-[15px] text-muted">
+          {closedCount} de {MIN_CLOSED_MATCHDAYS_FOR_STATS} fechas cerradas. Después: % de partidos ganados,{' '}
+          {showPairs ? 'duplas, ' : ''}rachas y presentismo.
+        </p>
+      </div>
+      <Link href={fechasHref} className={`${button('primary', { size: 'lg', full: true })} mt-4`}>
+        Ir a las fechas
+      </Link>
     </div>
   )
 }
@@ -267,8 +418,39 @@ export default async function StatsPage({ params, searchParams }: PageProps) {
   // jugar, y con parejas fijas la dupla es siempre la misma.
   const showPairs = discipline.pairSize === 2 && !fixedTeams
 
+  // El encabezado de las tres caras (General, Mías, sin datos): sube a donde
+  // sube la Tabla (`volverDestination`: Mis torneos con un deporte, la Tabla
+  // general con más) y nombra el destino. A la derecha, tu puesto en amarillo
+  // como en la Tabla, cuando ya hay uno que decir.
+  const hero = (mine: { position: number; points: number } | null) => (
+    <Hero
+      back={volverDestination(seasonId, header.disciplines.length)}
+      kicker={header.name}
+      title={`Estadísticas${disciplineLabel !== null ? ` de ${disciplineLabel}` : ''}`}
+      subtitle={`${history.length} de ${config.regularMatchdays} fechas jugadas`}
+      sport={discipline.kind}
+      right={
+        mine === null ? undefined : (
+          <p>
+            <span className="sr-only">Vas </span>
+            <span className="font-cond block text-[64px] text-vos">
+              {mine.position}
+              <span className="align-top text-[32px]">°</span>
+            </span>
+            <span className="text-[14px] text-on-block-soft">{mine.points} pts</span>
+          </p>
+        )
+      }
+    />
+  )
+
   if (history.length < MIN_CLOSED_MATCHDAYS_FOR_STATS) {
-    return <InsufficientData closedCount={history.length} disciplineLabel={disciplineLabel} showPairs={showPairs} />
+    return (
+      <div className="flex flex-col">
+        {hero(null)}
+        <FaltanFechas closedCount={history.length} showPairs={showPairs} fechasHref={`${base}/fechas`} />
+      </div>
+    )
   }
 
   const nameOf: NameOf = new Map(entries.map((entry) => [entry.id, entry.displayName]))
@@ -336,7 +518,6 @@ export default async function StatsPage({ params, searchParams }: PageProps) {
   const restPairs = dedupePairs(partnerRecords(history))
     .filter((record) => best === null || pairKey(record.entryId, record.partner) !== pairKey(best.entryId, best.partner))
     .sort((a, b) => b.together - a.together)
-  const duplasRows = best === null ? restPairs : [best, ...restPairs]
 
   // ── Mías ────────────────────────────────────────────────────────────────
   const myTally = viewerEntryId === null ? undefined : talliesByEntry.get(viewerEntryId)
@@ -344,6 +525,19 @@ export default async function StatsPage({ params, searchParams }: PageProps) {
   const myEffectiveness = myTally === undefined ? 0 : pct(myTally.matchesWon, myTally.matchesPlayed)
   const myNetGames = myTally === undefined ? 0 : myTally.gamesFor - myTally.gamesAgainst
   const myBestMatchday = viewerEntryId === null ? null : bestMatchdayFor(awardsByMatchday, viewerEntryId)
+  const myRow = viewerEntryId === null ? undefined : ranked.find((row) => row.entryId === viewerEntryId)
+  // Tus puntos fecha por fecha, contadas y descartadas: el gráfico del Stats
+  // del prototipo, con la misma cuenta que el perfil (`markMatchdays`).
+  const myMarks =
+    viewerEntryId === null || myRow === undefined
+      ? []
+      : markMatchdays(
+          history.map((matchday) => matchday.number),
+          awardsByMatchday,
+          viewerEntryId,
+          myRow.counted,
+          myRow.discarded,
+        )
 
   const myPartners: BarRow[] =
     viewerEntryId === null
@@ -353,92 +547,93 @@ export default async function StatsPage({ params, searchParams }: PageProps) {
           .map((record) => ({ entryId: record.partner, pct: effectiveness(record) }))
           .sort((a, b) => b.pct - a.pct)
 
-  return (
-    <div className="flex flex-col gap-4 pt-4">
-      <h1 className="text-[26px] font-extrabold tracking-[-.03em]">
-        Estadísticas{disciplineLabel !== null ? ` · ${disciplineLabel}` : ''}
-      </h1>
+  const gente: Gente = { base, nameOf, viewer: viewerEntryId, desde: activeTab === 'mias' ? 'mias' : 'stats' }
 
-      <div className="flex gap-2">
-        <Link
-          href={statsBase}
-          className={`flex min-h-[44px] items-center rounded-full px-[15px] text-[12px] font-extrabold ${
-            activeTab === 'torneo' ? 'bg-accent text-accent-text' : 'bg-chip text-muted'
-          }`}
-        >
-          Del torneo
-        </Link>
-        <Link
-          href={statsBase + '?tab=mias'}
-          className={`flex min-h-[44px] items-center rounded-full px-[15px] text-[12px] font-extrabold ${
-            activeTab === 'mias' ? 'bg-accent text-accent-text' : 'bg-chip text-muted'
-          }`}
-        >
-          Mías
-        </Link>
-      </div>
+  return (
+    <div className="flex flex-col">
+      {hero(myRow === undefined ? null : { position: myRow.position, points: myRow.points })}
+      <Segmentos statsBase={statsBase} activeTab={activeTab} />
 
       {activeTab === 'torneo' ? (
         <>
-          <div className="grid grid-cols-2 gap-3">
-            <StatCard label="Partidos jugados" value={totalMatches} />
-            <StatCard label={`${cap(unit)} totales`} value={totalGames} />
-            <StatCard label="Fecha más pareja" value={evenestMatchdayNumber !== null ? `Fecha ${evenestMatchdayNumber}` : '—'} />
-            <StatCard
-              label="Racha más larga"
-              value={
-                <>
-                  <PlayerLink base={base} entryId={longestStreak.entryId} nameOf={nameOf} />
-                  {` · ${longestStreak.longest}`}
-                </>
-              }
-            />
-
-            {/* En alza y en baja: quién más se movió al cerrar la última fecha.
-                Si no se movió nadie —pasa, y más cuanto más avanzado el año—
-                las dos dicen "—" en vez de inventar un puesto. */}
-            <StatCard
-              label="En alza"
-              value={
-                climber === null ? (
-                  '—'
-                ) : (
-                  <span className="text-up">
-                    <PlayerLink base={base} entryId={climber.entryId} nameOf={nameOf} />
-                    {` ▲${climber.movement ?? 0}`}
-                  </span>
-                )
-              }
-            />
-            <StatCard
-              label="En baja"
-              value={
-                faller === null ? (
-                  '—'
-                ) : (
-                  <span className="text-down">
-                    <PlayerLink base={base} entryId={faller.entryId} nameOf={nameOf} />
-                    {` ▼${Math.abs(faller.movement ?? 0)}`}
-                  </span>
-                )
-              }
+          <div className="grid grid-cols-3 gap-2.5 px-4 pt-4">
+            <Dato label="Partidos jugados" value={totalMatches} />
+            <Dato label={`${cap(unit)} totales`} value={totalGames} />
+            <Dato
+              label="Fecha más pareja"
+              value={evenestMatchdayNumber ?? '—'}
+              href={evenestMatchdayNumber === null ? undefined : `${base}/fechas/${evenestMatchdayNumber}`}
             />
           </div>
 
-          <BarRanking title="% de partidos ganados" rows={winPctRows} base={base} nameOf={nameOf} />
-          <BarRanking title="Presentismo" rows={presentismoRows} base={base} nameOf={nameOf} />
-          {showPairs && <Duplas title="Mejor dupla del torneo" rows={duplasRows} base={base} nameOf={nameOf} />}
+          {/* Racha, en alza y en baja: quién, y el número. En alza y en baja
+              son quién más se movió al cerrar la última fecha; si no se movió
+              nadie —pasa, y más cuanto más avanzado el año— no hay fila en vez
+              de inventar un puesto. */}
+          <Seccion title="Destacados">
+            <ul>
+              <FilaDestacada
+                entryId={longestStreak.entryId}
+                label="Racha más larga"
+                gente={gente}
+                value={
+                  <span className="font-cond shrink-0 text-[34px] text-sport">
+                    {longestStreak.longest}
+                    <span className="sr-only"> fechas ganadas seguidas</span>
+                  </span>
+                }
+              />
+              {climber !== null && (
+                <FilaDestacada
+                  entryId={climber.entryId}
+                  label="En alza"
+                  gente={gente}
+                  value={<Movimiento movement={climber.movement ?? 0} />}
+                />
+              )}
+              {faller !== null && (
+                <FilaDestacada
+                  entryId={faller.entryId}
+                  label="En baja"
+                  gente={gente}
+                  value={<Movimiento movement={faller.movement ?? 0} />}
+                />
+              )}
+            </ul>
+          </Seccion>
+
+          <Barras title="% de partidos ganados" rows={winPctRows} gente={gente} />
+          <Barras title="Presentismo" rows={presentismoRows} gente={gente} />
+          {showPairs && <Duplas best={best} rest={restPairs} gente={gente} />}
         </>
+      ) : myMatchesPlayed === 0 ? (
+        // No jugó todavía (o mira sin estar en el plantel): lo que falta es
+        // jugar, y el camino es la lista de fechas.
+        <div className="px-4 pt-5">
+          <div className="rounded-tile bg-sport-tint p-4">
+            <h2 className="font-titulo text-[28px]">Todavía no jugaste</h2>
+            <p className="mt-1 text-[15px] text-muted">Tus partidos, tu efectividad y tus puntos por fecha van acá.</p>
+          </div>
+          <Link href={`${base}/fechas`} className={`${button('primary', { size: 'lg', full: true })} mt-4`}>
+            Ir a las fechas
+          </Link>
+        </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-3">
-            <StatCard label="Partidos" value={myMatchesPlayed} />
-            <StatCard label="Efectividad" value={`${myEffectiveness}%`} />
-            <StatCard label={`${cap(unit)} a favor`} value={formatSigned(myNetGames)} />
-            <StatCard label="Mejor fecha" value={myBestMatchday !== null ? `Fecha ${myBestMatchday}` : '—'} />
+          <div className="grid grid-cols-2 gap-2.5 px-4 pt-4">
+            <Dato label="Partidos" value={myMatchesPlayed} />
+            <Dato label="Efectividad" value={`${myEffectiveness}%`} />
+            <Dato label={`Dif. ${unit}`} value={formatSigned(myNetGames)} />
+            <Dato
+              label="Mejor fecha"
+              value={myBestMatchday ?? '—'}
+              href={myBestMatchday === null ? undefined : `${base}/fechas/${myBestMatchday}`}
+            />
           </div>
 
-          {showPairs && <BarRanking title="Con quién te va bien" rows={myPartners} base={base} nameOf={nameOf} />}
+          <PuntosPorFecha title="Tus puntos por fecha" marks={myMarks} />
+
+          {showPairs && <Barras title="Con quién te va bien" rows={myPartners} gente={gente} />}
         </>
       )}
     </div>

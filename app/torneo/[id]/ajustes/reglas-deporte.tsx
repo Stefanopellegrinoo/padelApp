@@ -15,6 +15,8 @@ import {
 import { PersonalizarReglas } from '@/app/deporte/personalizar-reglas'
 import { rulesFromSeed, type DisciplineRules } from '@/app/deporte/personalizar-reglas-state'
 import { offeredModalities } from '@/app/deporte/tarjeta-state'
+import { Reglamento } from '@/app/torneo/[id]/reglas/reglamento-vista'
+import { button } from '@/app/ui/button'
 import { saveDisciplineRules } from './actions'
 
 /** Verdad por el congelado de la fecha: una fecha toma su formato al confirmarse (docs/torneos-deportes.md §7). */
@@ -47,7 +49,10 @@ function fichaOf(kind: string, saved: DisciplineRules['config'], modality: Modal
  * `saveDisciplineRules`, que escribe sólo la diferencia: si sale bien la hoja se cierra; si no,
  * sigue abierta con el error.
  *
- * `id="formato"` (el ancla de la fila "Formato" de Ajustes) lo pone el contenedor, no esta tarjeta.
+ * Es una sección de la pantalla (título y márgenes de `Section`), no una tarjeta adentro de otra:
+ * el reglamento se dibuja igual que en Reglas (`Reglamento`), con el borde del color del deporte
+ * (`data-deporte`). Abajo, "Cambiar el formato con fechas ya jugadas no recalcula la tabla vieja":
+ * es la ayuda que hace falta antes de tocar "Personalizar reglas".
  */
 export function ReglasDeporte({
   seasonId,
@@ -105,32 +110,19 @@ export function ReglasDeporte({
   }
 
   return (
-    <section
-      data-reglas-deporte={disciplineId}
-      aria-labelledby={titleId}
-      className="flex flex-col gap-3 rounded-card border border-line bg-surface p-4"
-    >
-      <h2 id={titleId} className="text-[17px] font-extrabold">
+    <section data-reglas-deporte={disciplineId} data-deporte={kind} aria-labelledby={titleId} className="px-4 pt-5">
+      <h2 id={titleId} className="font-titulo text-[26px]">
         {`Reglas de ${sportLabel(kind)}`}
       </h2>
-      <p className="text-[14px] font-extrabold">{`${modalityLabel(kind, modality)} · se elige al crear el torneo`}</p>
-      <ul className="flex flex-col gap-2">
-        {lines.map((line) => (
-          <li key={line.key} className="flex gap-2 text-pretty text-[14px] font-semibold leading-snug">
-            <span aria-hidden="true" className="font-extrabold text-up">
-              ✓
-            </span>
-            <span>{line.text}</span>
-          </li>
-        ))}
-      </ul>
-      <button
-        type="button"
-        onClick={open}
-        className="min-h-[44px] rounded-field bg-chip p-3 text-center text-[14px] font-extrabold text-text"
-      >
+      <p className="mt-2 mb-4 text-[16px]">
+        <span className="font-bold">{modalityLabel(kind, modality)}</span>
+        <span className="block text-[14px] text-muted">La modalidad se elige al crear el torneo</span>
+      </p>
+      <Reglamento lines={lines} points={rules.config.points} />
+      <button type="button" onClick={open} className={`${button('secondary', { full: true })} mt-5`}>
         Personalizar reglas
       </button>
+      <p className="mt-2 text-[14px] text-muted">Cambiar el formato con fechas ya jugadas no recalcula la tabla vieja</p>
 
       {draft !== null && (
         <PersonalizarReglas

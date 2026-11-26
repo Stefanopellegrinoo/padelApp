@@ -7,13 +7,11 @@ import {
   type ReglamentoLine,
   type SeasonConfig,
 } from '@/core'
+import { button } from '@/app/ui/button'
+import { Hero } from '@/app/ui/hero'
 import { RulesAccordion, type RuleRow } from './accordion'
-import { renderAdminMarkdown } from './markdown'
-
-/** "Marce" en el handoff (README línea 341) es el ejemplo, no un nombre fijo: se sustituye por quien organiza. */
-function introOf(adminName: string): string {
-  return `Las reglas de este torneo, como quedaron cuando ${adminName} lo creó.`
-}
+import { TEXTO_DE_LA_CASA, renderAdminMarkdown } from './markdown'
+import { Reglamento } from './reglamento-vista'
 
 /** Va una sola vez, al final: lo que vale para todos los deportes del torneo. */
 const FECHA_ESPECIAL = 'Alguna fecha puede jugarse a otra cosa: se avisa en esa fecha.'
@@ -48,7 +46,7 @@ const ROWS: Array<{
     section: 'Cómo se arman las parejas',
     value: () => 'Cruzando el orden de desempate',
   },
-  { title: 'Puntos por posición', section: 'Los puntos', value: (c) => c.points.join(' · ') },
+  { title: 'Puntos por posición', section: 'Los puntos', value: (c) => c.points.join(', ') },
   {
     title: 'Orden de desempate',
     section: 'Los desempates',
@@ -96,6 +94,8 @@ function rulesRowsOf(config: SeasonConfig, shape: DisciplineShape, label: string
  */
 export interface RulesBlock {
   label: string
+  /** El `kind` del deporte, para su color (`data-deporte`). */
+  kind?: string
   /** El reglamento en criollo (`reglamento`), que va ARRIBA. */
   lines: ReglamentoLine[]
   /** Para el acordeón de "Más detalle". */
@@ -111,6 +111,9 @@ export interface RulesBlock {
 
 export interface RulesBodyProps {
   seasonId: string
+  seasonName: string
+  /** El "Volver" del encabezado: con sesión, al torneo; sin sesión, al inicio. */
+  back: { href: string; label: string }
   /** Un bloque por disciplina, en el orden `position, created_at` que trae `season_public_formats`. */
   disciplines: readonly RulesBlock[]
   adminName: string
@@ -119,28 +122,34 @@ export interface RulesBodyProps {
 }
 
 /**
- * El cuerpo de la pantalla de Reglas, sin leer nada.
+ * La pantalla de Reglas entera, sin leer nada.
  *
  * Las dos ramas —con sesión y sin sesión— lo renderizan con los mismos props, y
- * por eso son la misma pantalla y no dos que se van a despegar.
+ * por eso son la misma pantalla y no dos que se van a despegar. Es la que se
+ * pega en el grupo: tiene que leerse bien sin cuenta y sin la barra de abajo.
  *
- * Una tarjeta por deporte, siempre con su título (docs/torneos-deportes.md §6),
- * y adentro, en este orden: el reglamento en criollo; las reglas de la casa,
- * si las hay; y el detalle de siempre, CERRADO bajo "Más detalle". El detalle
- * se ajustó para no contradecir al reglamento, pero no se borró.
+ * Arriba el `Hero` (el torneo, "Reglas" y quién organiza). Después una sección
+ * por deporte, siempre con su título (docs/torneos-deportes.md §6), y adentro,
+ * en este orden: el reglamento como datos (`Reglamento`: una regla por línea,
+ * los puntos por puesto en casilleros); las reglas de la casa, si las hay, en
+ * letra de leer; y el detalle de siempre, CERRADO bajo "Más detalle". El
+ * detalle se ajustó para no contradecir al reglamento, pero no se borró.
  *
  * `<details>` nativo y no un estado de React: abre con toque, Enter y Espacio
  * sin una línea de JS, y llega cerrado.
  */
-export function RulesBody({ seasonId, disciplines, adminName, isAdmin }: RulesBodyProps) {
+export function RulesBody({ seasonId, seasonName, back, disciplines, adminName, isAdmin }: RulesBodyProps) {
   // Con 2+ deportes las reglas se editan en el Ajustes de cada uno, no en el general.
   const single = disciplines.length === 1
   return (
-    <div className="flex flex-col gap-4 pt-4">
-      <h1 className="text-[26px] font-extrabold tracking-[-.03em]">Reglas</h1>
-      <p className="text-pretty text-[13.5px] leading-[1.5] font-[550] text-muted">
-        {introOf(adminName)}
-      </p>
+    <div className="pb-6">
+      <Hero
+        back={back}
+        kicker={seasonName}
+        title="Reglas"
+        subtitle={`Organiza ${adminName}`}
+        sport={single ? disciplines[0]?.kind : undefined}
+      />
 
       {disciplines.map((discipline, index) => {
         const hasText = discipline.text.trim().length > 0
@@ -149,19 +158,15 @@ export function RulesBody({ seasonId, disciplines, adminName, isAdmin }: RulesBo
           // del mismo `kind` (buildable desde PR13) muestran el mismo título.
           // Feo pero honesto: no afirma nada falso, sólo no distingue una de
           // otra. Subir: una columna de nombre por disciplina, hoy no existe.
-          <section key={index} className="flex flex-col gap-3 rounded-card border border-line bg-surface p-4">
-            <h2 className="text-[17px] font-extrabold tracking-[-.02em]">{discipline.label}</h2>
-            <p className="text-pretty text-[14px] leading-[1.5] font-[550] text-text">
-              {discipline.lines.map((line) => line.text).join(' ')}
-            </p>
+          <section key={index} data-deporte={discipline.kind} className="px-4 pt-6">
+            <h2 className="font-titulo mb-4 text-[26px]">{discipline.label}</h2>
+            <Reglamento lines={discipline.lines} points={discipline.config.points} />
 
             {hasText && (
-              <div className="flex flex-col gap-1">
-                <h3 className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">
-                  Reglas de la casa
-                </h3>
+              <div className="mt-6">
+                <h3 className="mb-2 text-[14px] font-semibold text-muted">Reglas de la casa</h3>
                 <div
-                  className="space-y-2 text-pretty text-[13.5px] leading-[1.5] font-[550] text-text [&_li]:mt-1 [&_strong]:font-extrabold [&_ul]:list-disc [&_ul]:pl-5"
+                  className={`${TEXTO_DE_LA_CASA} rounded-tile bg-surface px-4 py-3.5`}
                   // El HTML viene de `renderAdminMarkdown`, que escapa todo el texto libre del admin
                   // antes de aplicarle el subconjunto de formato — ver `markdown.ts`.
                   dangerouslySetInnerHTML={{ __html: renderAdminMarkdown(discipline.text) }}
@@ -169,10 +174,10 @@ export function RulesBody({ seasonId, disciplines, adminName, isAdmin }: RulesBo
               </div>
             )}
 
-            <details className="group">
-              <summary className="flex min-h-[44px] cursor-pointer list-none items-center justify-between rounded-field text-[14px] font-extrabold text-accent-link outline-none focus-visible:ring-2 focus-visible:ring-accent-link [&::-webkit-details-marker]:hidden">
+            <details className="group mt-4">
+              <summary className="flex min-h-[44px] cursor-pointer list-none items-center justify-between rounded-btn text-[16px] font-semibold text-accent-link [&::-webkit-details-marker]:hidden">
                 <span>Más detalle</span>
-                <span aria-hidden className="text-[16px] leading-none">
+                <span aria-hidden className="text-[18px] leading-none">
                   <span className="group-open:hidden">›</span>
                   <span className="hidden group-open:inline">⌄</span>
                 </span>
@@ -185,7 +190,7 @@ export function RulesBody({ seasonId, disciplines, adminName, isAdmin }: RulesBo
             {isAdmin && !single && discipline.slug !== undefined && (
               <Link
                 href={`/torneo/${seasonId}/${discipline.slug}/ajustes`}
-                className="rounded-field border-[1.5px] border-line p-4 text-center text-[14px] font-extrabold"
+                className={`${button('secondary', { full: true })} mt-3`}
               >
                 Editar reglas
               </Link>
@@ -194,15 +199,14 @@ export function RulesBody({ seasonId, disciplines, adminName, isAdmin }: RulesBo
         )
       })}
 
-      <p className="text-pretty text-[12.5px] leading-[1.5] font-[550] text-muted">{FECHA_ESPECIAL}</p>
+      <p className="mx-4 mt-6 border-t border-line pt-4 text-pretty text-[15px] text-muted">{FECHA_ESPECIAL}</p>
 
       {isAdmin && single && (
-        <Link
-          href={`/torneo/${seasonId}/ajustes`}
-          className="rounded-field border-[1.5px] border-line p-4 text-center text-[14px] font-extrabold"
-        >
-          Editar reglas
-        </Link>
+        <div className="px-4 pt-4">
+          <Link href={`/torneo/${seasonId}/ajustes`} className={button('secondary', { full: true })}>
+            Editar reglas
+          </Link>
+        </div>
       )}
     </div>
   )

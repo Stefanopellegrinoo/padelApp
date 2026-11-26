@@ -1,0 +1,754 @@
+<!doctype html>
+<html lang="es" data-start="__START__" data-tema="__TEMA__">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#1F45E0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0E1630" media="(prefers-color-scheme: dark)">
+<script>
+// Tema antes del primer pintado: ?tema=oscuro o ?tema=claro manda; si no, el del sistema.
+(function () {
+  var r = document.documentElement, q = new URLSearchParams(location.search).get('tema');
+  if (q === 'oscuro' || q === 'claro') r.setAttribute('data-tema', q);
+  var t = r.getAttribute('data-tema');
+  if (t !== 'oscuro' && t !== 'claro') return;
+  document.querySelectorAll('meta[name="theme-color"]').forEach(function (m) { m.setAttribute('content', t === 'oscuro' ? '#0E1630' : '#1F45E0'); });
+  document.querySelector('meta[name="color-scheme"]').setAttribute('content', t === 'oscuro' ? 'dark' : 'light');
+})();
+</script>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Pibes, prototipo</title>
+<style>
+/*__FONT__*/
+:root{
+  --blue:#1F45E0; --blue-tint:#E8EDFF; --on-blue-soft:#C9D3FF;
+  --green:#0B7A3B; --green-tint:#E3F5EA;
+  --ball:#DFFF4F;
+  --ink:#0E1A4A; --muted:#4B5675; --line:#DCE1EE; --off:#EEF1F7;
+  --down:#B42318; --down-vos:#8E1B12;
+  --bg:#FFFFFF; --surface:#FFFFFF; --surface-2:#FFFFFF;
+  --block:#1F45E0; --on-block:#FFFFFF; --pill:#FFFFFF;
+  --tint-press:#D9E1FF; --off-text:#5A6480;
+  --cta:#0E1A4A; --on-cta:#FFFFFF;
+  --vos-row:#DFFF4F; --vos-edge:transparent; --vos-pos:#0E1A4A; --vos-pj:#0E1A4A;
+  --scrim:rgba(14,26,74,.5); --sheet-edge:transparent;
+  --toast-bg:#0E1A4A; --toast-text:#FFFFFF; --toast-action:#C9D3FF;
+  --flash:#C9D3FF; --focus:#0E1A4A;
+  --mark-bg:#DFFF4F; --mark-text:#0E1A4A; --mark-line:transparent;
+  --choice:#E8EDFF; --choice-edge:transparent;
+  --avatar-bg:#FFFFFF; --avatar-text:#1F45E0;
+  color-scheme:light dark;
+  --r-block:24px; --r-tile:18px; --r-btn:14px;
+  --ease-out:cubic-bezier(.23,1,.32,1);
+  --ease-drawer:cubic-bezier(.32,.72,0,1);
+  --t-press:140ms; --t-nav:280ms; --t-sheet-in:280ms; --t-sheet-out:200ms;
+  --safe-b:env(safe-area-inset-bottom,0px); --safe-t:env(safe-area-inset-top,0px);
+}
+/*__DARK__*/
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg)}
+body{font-family:'Archivo',system-ui,sans-serif;font-stretch:100%;font-weight:420;font-size:16px;line-height:1.45;color:var(--ink);-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent;overflow:hidden}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;text-align:inherit;touch-action:manipulation}
+.num{font-stretch:62%;font-weight:850;font-variant-numeric:tabular-nums;letter-spacing:-.01em;line-height:.9}
+.h{font-stretch:75%;font-weight:800;letter-spacing:-.01em;line-height:1}
+mark.vos{background:var(--mark-bg);color:var(--mark-text);text-decoration:underline 2px var(--mark-line);text-underline-offset:4px;padding:0 3px;border-radius:4px;box-decoration-break:clone;-webkit-box-decoration-break:clone}
+svg.i{width:24px;height:24px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+svg.i.s{width:18px;height:18px}
+
+/* press feedback */
+.press{transition:transform var(--t-press) var(--ease-out),background-color var(--t-press) ease}
+.press:active{transform:scale(.97)}
+.row-press{transition:background-color var(--t-press) ease}
+.row-press:active{background-color:var(--blue-tint)}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px;border-radius:6px}
+.on-blue :focus-visible{outline-color:#fff}
+
+/* app frame */
+#app{position:relative;height:100dvh;max-width:430px;margin:0 auto;overflow:clip;background:var(--bg)}
+.screen{position:absolute;inset:0;display:none;flex-direction:column;background:var(--bg)}
+.screen.active{display:flex}
+.scroll{flex:1;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.pad{padding:0 16px}
+
+/* back */
+.back{display:inline-flex;align-items:center;gap:4px;min-height:44px;padding:0 12px 0 4px;margin-left:-4px;font-weight:600;font-size:16px;border-radius:12px}
+.on-blue .back{color:#fff}
+.on-blue .back:active{background:rgba(255,255,255,.14)}
+.back:active{background:var(--blue-tint)}
+
+/* buttons */
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;min-height:56px;border-radius:var(--r-btn);font-weight:700;font-size:17px;width:100%}
+.btn-ink{background:var(--cta);color:var(--on-cta)}
+.btn-white{background:var(--pill);color:var(--block)}
+.btn[aria-disabled="true"]{background:var(--off);color:var(--off-text);cursor:not-allowed}
+.btn[aria-disabled="true"]:active{transform:none}
+.bar{flex:none;padding:12px 16px calc(12px + var(--safe-b));background:var(--surface);border-top:1px solid var(--line)}
+
+/* ---------- inicio ---------- */
+.hero{background:var(--block);color:var(--on-block);border-radius:0 0 var(--r-block) var(--r-block);padding:calc(14px + var(--safe-t)) 20px 20px}
+.hero-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.hero-torneo{display:flex;align-items:center;gap:8px;font-weight:600;color:var(--on-blue-soft);font-size:15px}
+.avatar{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;font-weight:750;font-size:15px;flex:none}
+.hero .avatar{background:var(--avatar-bg);color:var(--avatar-text)}
+.hero-fecha{font-size:72px;margin-top:6px}
+.hero-when{font-size:21px;font-weight:700;margin-top:8px;font-stretch:88%}
+.hero-where{display:flex;align-items:center;gap:6px;color:var(--on-blue-soft);font-size:16px;margin-top:2px}
+.hero-conf{margin-top:16px;display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
+.hero-conf .txt{font-size:15px;line-height:1.35;margin-top:8px}
+.pill{display:inline-flex;align-items:center;gap:2px;min-height:48px;padding:0 12px 0 18px;border-radius:999px;background:var(--pill);color:var(--block);font-weight:750;font-size:16px;flex:none}
+.pips{display:flex;gap:4px}
+.pips i{width:12px;height:12px;border-radius:3px;background:#fff}
+.pips i.no{background:transparent;box-shadow:inset 0 0 0 1.5px var(--on-blue-soft)}
+.hero-conf b{font-weight:700}
+.hero-conf .txt span{color:var(--on-blue-soft);display:block}
+
+.sec{padding:20px 16px 0}
+.sec-h{font-size:26px;margin-bottom:12px}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.tile{border-radius:var(--r-tile);padding:14px 14px 16px;display:flex;flex-direction:column}
+.tile.padel{background:var(--blue-tint);color:var(--blue)}
+.tile.fifa{background:var(--green-tint);color:var(--green)}
+.tile .pos{display:flex;align-items:flex-end;gap:4px;margin-top:10px}
+.tile .pos .num{font-size:64px;line-height:.78}
+.deg{font-size:.5em;vertical-align:.62em;margin-left:1px}
+.tile .pos small{font-size:17px;font-weight:700;line-height:1}
+.tile .name{color:var(--ink);font-weight:700;font-size:16px;line-height:1.2;margin-top:10px;min-height:2.4em}
+.tile .meta{color:var(--muted);font-size:14px;margin-top:2px}
+.tile-top{display:flex;justify-content:space-between;align-items:center}
+.sport{font-size:14px;font-weight:700}
+.make{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px}
+.make button{border-radius:var(--r-btn);padding:8px 4px;min-height:48px;display:flex;flex-direction:column;justify-content:flex-start}
+.make button:active{background:var(--blue-tint)}
+.make b{display:flex;align-items:center;gap:6px;font-weight:700;font-size:16px;color:var(--blue)}
+.make span{color:var(--muted);font-size:13px;line-height:1.3;margin-top:2px;padding-left:24px}
+
+.friends{list-style:none;margin:0 -16px}
+.friend{display:flex;align-items:center;gap:12px;width:100%;padding:12px 16px;min-height:72px}
+.friend + .friend,.friends li + li .friend{border-top:1px solid var(--line)}
+.friend .avatar{background:var(--blue-tint);color:var(--blue)}
+.friend .avatar.fifa{background:var(--green-tint);color:var(--green)}
+.friend .who{flex:1;min-width:0}
+.friend .who b{display:block;font-weight:700;font-size:17px}
+.friend .who span{color:var(--muted);font-size:14px}
+.hist{display:flex;align-items:baseline;gap:5px}
+.hist .num{font-size:34px}
+.hist small{color:var(--muted);font-weight:600;font-size:15px}
+.end-space{height:24px}
+
+/* ---------- torneo ---------- */
+.thead{background:var(--block);color:var(--on-block);padding:calc(6px + var(--safe-t)) 16px 18px;border-radius:0 0 var(--r-block) var(--r-block);flex:none}
+.thead-row{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;margin-top:4px}
+.thead h1{font-size:34px}
+.thead p{color:var(--on-blue-soft);font-size:15px;margin-top:6px}
+.me{text-align:right}
+.me .num{font-size:64px;color:var(--ball);display:block}
+.me span{color:var(--on-blue-soft);font-size:14px}
+.tab{display:none}
+.tab.on{display:block}
+
+.table{list-style:none}
+.thr,.tr{display:grid;grid-template-columns:40px 1fr 46px 50px 44px;align-items:center;padding:0 16px;gap:4px}
+.thr{color:var(--muted);font-size:13px;font-weight:600;height:36px}
+.thr :nth-child(n+3),.tr :nth-child(n+3){text-align:right}
+.tr{height:46px;border-top:1px solid var(--line)}
+.tr .p{font-size:26px}
+.tr .n{font-weight:600;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tr .pts{font-size:26px}
+.tr .pj{color:var(--muted);font-variant-numeric:tabular-nums}
+.tr.vos{background:var(--vos-row);border-top-color:transparent;box-shadow:inset 4px 0 0 var(--vos-edge)}
+.tr.vos .p{color:var(--vos-pos)}
+.tr.vos + .tr{border-top-color:transparent}
+.tr.vos .pj{color:var(--vos-pj)}
+.tag{font-size:13px;font-weight:600;color:var(--ink);margin-left:6px}
+.chg{display:inline-flex;align-items:center;justify-content:flex-end;gap:2px;font-weight:700;font-size:14px;font-variant-numeric:tabular-nums}
+.chg.up{color:var(--blue)} .chg.down{color:var(--down)} .chg.eq{color:var(--muted)}
+.chg svg{width:10px;height:10px;fill:currentColor}
+.tr.vos .chg.down{color:var(--down-vos)}
+.cut{display:flex;align-items:center;gap:8px;padding:6px 16px;color:var(--blue);font-weight:700;font-size:13px}
+.cut::before,.cut::after{content:"";height:2px;background:var(--blue);flex:1}
+.cut::before{flex:0 0 20px}
+.note{color:var(--muted);font-size:14px;padding:12px 16px 20px}
+
+.flist{list-style:none}
+.frow{display:flex;align-items:center;gap:12px;padding:0 16px;min-height:56px;border-top:1px solid var(--line);width:100%}
+.frow:first-child{border-top:0}
+.frow .fn{font-size:24px;width:30px}
+.frow .fw{flex:1}
+.frow .fw b{font-weight:650}
+.frow .fw span{display:block;color:var(--muted);font-size:14px}
+.frow .fp{font-size:24px}
+.frow.future{color:var(--muted)}
+.frow.today{background:var(--block);color:var(--on-block);border-radius:var(--r-tile);margin:8px 0;border:0;min-height:72px}
+.frow.today .fw span{color:var(--on-blue-soft)}
+.frow.today + .frow{border-top:0}
+.fl-wrap{padding:8px 16px 20px}
+.fl-wrap .frow{padding:0 4px}
+.fl-wrap .frow.today{padding:0 16px;margin:8px -12px;width:calc(100% + 24px)}
+.fl-sub{font-size:20px;padding:14px 4px 4px}
+
+.stat-big{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;padding:20px 16px 4px}
+.stat-big div{background:var(--blue-tint);border-radius:var(--r-tile);padding:12px}
+.stat-big .num{font-size:44px;color:var(--blue);display:block}
+.stat-big span{font-size:13px;color:var(--ink);font-weight:600;line-height:1.25;display:block;margin-top:6px}
+.chart{padding:20px 16px 8px}
+.chart h2{font-size:22px;margin-bottom:14px}
+.bars{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;align-items:end;height:240px}
+.bar-c{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:6px}
+.bar-c .v{font-size:20px}
+.bar-c i{display:block;width:100%;border-radius:8px 8px 3px 3px;background:var(--blue)}
+.bar-c.desc i{background:repeating-linear-gradient(135deg,var(--blue-tint) 0 5px,var(--bg) 5px 9px);box-shadow:inset 0 0 0 1.5px var(--blue)}
+.bar-c.desc .v{color:var(--muted)}
+.bar-x{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-top:8px;text-align:center;color:var(--muted);font-size:13px;font-weight:600}
+.legend{display:flex;gap:16px;padding:12px 16px 0;color:var(--muted);font-size:14px}
+.best{padding:20px 16px 24px;font-size:17px}
+.best b{font-weight:700}
+.legend span{display:flex;align-items:center;gap:6px}
+.legend i{width:14px;height:14px;border-radius:3px;background:var(--blue)}
+.legend i.d{background:repeating-linear-gradient(135deg,var(--blue-tint) 0 3px,var(--bg) 3px 5px);box-shadow:inset 0 0 0 1.5px var(--blue)}
+
+.rules{padding:20px 16px 24px;display:flex;flex-direction:column;gap:12px}
+.rule{border-left:4px solid var(--blue);padding:2px 0 2px 14px}
+.rule b{display:block;font-size:18px;font-weight:700;line-height:1.3}
+.rule span{color:var(--muted);font-size:15px}
+
+.tabbar{flex:none;display:grid;grid-template-columns:repeat(4,1fr);background:var(--surface);border-top:1px solid var(--line);padding-bottom:var(--safe-b)}
+.tabbar button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:62px;color:var(--muted);font-size:13px;font-weight:600;position:relative}
+.tabbar button[aria-selected="true"]{color:var(--blue);font-weight:750}
+.tabbar button[aria-selected="true"]::before{content:"";position:absolute;top:0;left:22%;right:22%;height:3px;border-radius:0 0 3px 3px;background:var(--blue)}
+
+/* ---------- fecha ---------- */
+.fhead{background:var(--block);color:var(--on-block);padding:calc(6px + var(--safe-t)) 16px 20px;border-radius:0 0 var(--r-block) var(--r-block)}
+.fhead .top{display:flex;justify-content:space-between;align-items:center}
+.live{display:inline-flex;align-items:center;gap:6px;font-weight:700;font-size:14px;background:var(--ball);color:var(--ink);padding:4px 10px;border-radius:999px}
+.live i{width:8px;height:8px;border-radius:50%;background:var(--ink)}
+.fhead .num.big{font-size:84px;margin-top:6px;display:block}
+.fhead .when{font-weight:700;font-size:19px;margin-top:10px;font-stretch:88%}
+.fhead .fmt{color:var(--on-blue-soft);font-size:15px;margin-top:2px}
+.round{padding:20px 16px 0}
+.round-h{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px}
+.round-h h2{font-size:24px}
+.round-h span{font-size:14px;font-weight:650;color:var(--muted)}
+.round-h span.now{color:var(--blue)}
+.matches{display:flex;flex-direction:column;gap:10px}
+.match{display:flex;align-items:center;gap:12px;width:100%;border-radius:var(--r-tile);padding:12px 14px 12px 16px;min-height:84px}
+.match.done{border:1.5px solid var(--line)}
+.match.open{background:var(--blue-tint)}
+.match .teams{flex:1;display:flex;flex-direction:column;gap:6px;min-width:0}
+.line{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.line .t{font-size:17px;font-weight:500;color:var(--muted)}
+.line.w .t{font-weight:700;color:var(--ink)}
+.line .num{font-size:32px;color:var(--muted)}
+.line.w .num{color:var(--ink)}
+.match.open .t{color:var(--ink);font-weight:600}
+.vs{font-size:13px;color:var(--muted);font-weight:600;line-height:1}
+.load{flex:none;display:inline-flex;align-items:center;gap:4px;background:var(--block);color:var(--on-block);font-weight:700;font-size:15px;border-radius:999px;padding:0 14px;height:40px}
+.match.open:active{background:var(--tint-press)}
+.flash{animation:flash 700ms var(--ease-out)}
+@keyframes flash{from{background-color:var(--flash);border-color:var(--flash)}to{background-color:var(--bg)}}
+.fbar .why{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.fbar .why b{font-weight:750;font-size:17px}
+.mpips{display:flex;gap:4px}
+.mpips i{width:22px;height:8px;border-radius:4px;background:var(--blue)}
+.mpips i.no{background:var(--line)}
+
+/* ---------- amigo ---------- */
+.atop{padding:calc(6px + var(--safe-t)) 16px 0}
+.aname{display:flex;align-items:center;gap:14px;padding:8px 16px 16px}
+.aname .avatar{width:56px;height:56px;font-size:19px;background:var(--blue-tint);color:var(--blue)}
+.aname h1{font-size:38px}
+.aname p{color:var(--muted);font-size:15px;margin-top:4px}
+.score{margin:0 16px;background:var(--block);color:var(--on-block);border-radius:var(--r-block);padding:18px 20px 18px}
+.score-n{display:grid;grid-template-columns:1fr auto 1fr;align-items:end}
+.score-n .num{font-size:120px;line-height:.8}
+.score-n .me{color:var(--ball);text-align:left}
+.score-n .him{text-align:right}
+.score-n .a{font-size:22px;font-weight:700;color:var(--on-blue-soft);padding-bottom:8px}
+.score-l{display:flex;justify-content:space-between;margin-top:10px;font-weight:700;font-size:16px}
+.score-l span:last-child{color:var(--on-blue-soft)}
+.streak{display:flex;gap:5px;margin-top:22px;align-items:center}
+.streak i{flex:1;height:22px;border-radius:5px;background:var(--ball)}
+.streak i.l{background:transparent;box-shadow:inset 0 0 0 2px var(--on-blue-soft)}
+.streak-l{display:flex;justify-content:space-between;color:var(--on-blue-soft);font-size:13px;margin-top:6px}
+.games{list-style:none;padding:0 16px}
+.game{display:grid;grid-template-columns:1fr auto;align-items:center;gap:4px 12px;padding:12px 0;border-top:1px solid var(--line);min-height:64px}
+.game:first-child{border-top:0}
+.game b{font-weight:700;font-size:17px}
+.game b.won{color:var(--blue)}
+.game span{color:var(--muted);font-size:14px;grid-column:1}
+.game .num{grid-row:1 / span 2;grid-column:2;font-size:30px;word-spacing:4px;color:var(--ink)}
+
+/* ---------- hoja ---------- */
+.scrim{position:absolute;inset:0;background:var(--scrim);opacity:0;pointer-events:none;transition:opacity var(--t-sheet-out) ease;z-index:40}
+.scrim.on{opacity:1;pointer-events:auto;transition-duration:var(--t-sheet-in)}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:41;background:var(--surface-2);box-shadow:inset 0 1px 0 var(--sheet-edge);border-radius:var(--r-block) var(--r-block) 0 0;padding:0 16px calc(20px + var(--safe-b));transform:translateY(100%);transition:transform var(--t-sheet-out) var(--ease-out);visibility:hidden}
+.sheet.on{transform:translateY(0);transition:transform var(--t-sheet-in) var(--ease-drawer);visibility:visible}
+.sheet.drag{transition:none}
+.sheet:focus,.sheet:focus-visible{outline:none}
+.grab{display:flex;justify-content:center;padding:10px 0 4px;touch-action:none;cursor:grab}
+.grab i{width:40px;height:5px;border-radius:3px;background:var(--line)}
+.sh-top{display:flex;align-items:center;justify-content:space-between;touch-action:none}
+.sh-top h2{font-size:24px}
+.sh-top button{min-height:44px;padding:0 6px 0 12px;font-weight:600;color:var(--blue);border-radius:12px}
+.sh-q{font-weight:700;font-size:17px;margin:14px 0 10px}
+.sh-q span{color:var(--muted);font-weight:500}
+.who-won{display:flex;flex-direction:column;gap:10px}
+.who-won button{display:flex;align-items:center;justify-content:space-between;min-height:64px;border-radius:var(--r-btn);padding:0 18px;font-size:19px;font-weight:700;background:var(--choice);box-shadow:inset 0 0 0 1.5px var(--choice-edge);color:var(--ink)}
+.who-won button svg{opacity:0;transform:scale(.9);transition:opacity 160ms ease,transform 160ms var(--ease-out)}
+.who-won button[aria-pressed="true"]{background:var(--block);color:var(--on-block);box-shadow:none}
+.who-won button[aria-pressed="true"] svg{opacity:1;transform:none}
+.gpick{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+.gpick button{min-height:60px;border-radius:var(--r-btn);border:1.5px solid var(--line);font-size:30px;display:grid;place-items:center}
+.gpick button:active{background:var(--block);color:var(--on-block);border-color:var(--block)}
+.gpick[aria-disabled="true"] button{opacity:.4;pointer-events:none}
+.sh-hint{color:var(--muted);font-size:14px;margin-top:10px;min-height:20px}
+
+/* toast */
+.toast{position:absolute;left:16px;right:16px;bottom:calc(96px + var(--safe-b));z-index:60;background:var(--toast-bg);color:var(--toast-text);border-radius:var(--r-btn);padding:8px 8px 8px 16px;min-height:56px;display:flex;align-items:center;justify-content:space-between;gap:12px;font-weight:600;opacity:0;transform:translateY(12px);pointer-events:none;transition:opacity 180ms ease,transform 180ms var(--ease-out)}
+.toast.on{opacity:1;transform:none;pointer-events:auto;transition-duration:240ms}
+.toast button{color:var(--toast-action);font-weight:750;min-height:44px;padding:0 10px;border-radius:10px}
+.toast button[hidden]{display:none}
+
+@media (prefers-reduced-motion: reduce){
+  .press:active{transform:none}
+  .sheet,.sheet.on{transition:opacity 160ms ease;transform:none}
+  .sheet{opacity:0}.sheet.on{opacity:1}
+  .toast,.toast.on{transform:none}
+  .flash{animation-duration:400ms}
+  .who-won button svg{transform:none}
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-padel" viewBox="0 0 24 24"><path d="M9.2 14.8l-4.6 4.6"/><path d="M8.5 15.5c-1.6-1.6-1.2-5.6 1.4-8.2s6.6-3 8.2-1.4.6 5.2-2 7.8-6 3.4-7.6 1.8z"/><circle cx="18.5" cy="18.5" r="1.6"/></symbol>
+  <symbol id="i-pad" viewBox="0 0 24 24"><path d="M7 8h10a4 4 0 0 1 4 4l.5 4a2.5 2.5 0 0 1-4.5 1.5L15.5 16h-7L7 17.5A2.5 2.5 0 0 1 2.5 16L3 12a4 4 0 0 1 4-4z"/><path d="M7.5 11v3M6 12.5h3"/><path d="M15.5 12h.01M17.5 13.5h.01"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.4"/></symbol>
+  <symbol id="i-table" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/><path d="M8 4v16"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M5 20V11M12 20V5M19 20v-6"/></symbol>
+  <symbol id="i-rules" viewBox="0 0 24 24"><path d="M6 3.5h9l4 4v13H6z"/><path d="M9.5 11.5h6M9.5 15.5h6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 3L5 13.5h6L10 21l8-10.5h-6z"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></symbol>
+  <symbol id="t-up" viewBox="0 0 10 10"><path d="M5 1.5L9.5 8.5H.5z"/></symbol>
+  <symbol id="t-down" viewBox="0 0 10 10"><path d="M5 8.5L.5 1.5h9z"/></symbol>
+</svg>
+
+<div id="app">
+
+<!-- INICIO -->
+<section class="screen" id="s-inicio" aria-label="Inicio">
+  <div class="scroll">
+    <div class="hero on-blue">
+      <div class="hero-top">
+        <span class="hero-torneo"><svg class="i s"><use href="#i-padel"/></svg>Los Pibes del Martes</span>
+        <span class="avatar" role="img" aria-label="Martín, tu perfil">MP</span>
+      </div>
+      <div class="num hero-fecha">Fecha 8</div>
+      <div class="hero-when">Martes 18/11, 20:30</div>
+      <div class="hero-where"><svg class="i s"><use href="#i-pin"/></svg>Club Ciudad</div>
+      <div class="hero-conf">
+        <div>
+          <div class="pips" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="no"></i><i class="no"></i></div>
+          <div class="txt"><b>10 de 12</b> confirmaron<span>Parejas sin sortear</span></div>
+        </div>
+        <button class="pill press" data-go="fecha">Ver la fecha<svg class="i s"><use href="#i-chev"/></svg></button>
+      </div>
+    </div>
+
+    <div class="sec">
+      <h2 class="h sec-h">Tus torneos</h2>
+      <div class="tiles">
+        <button class="tile padel press" data-go="tabla" aria-label="Los Pibes del Martes, pádel, vas 3° de 12, fecha 7 de 12">
+          <span class="tile-top"><span class="sport">Pádel</span><svg class="i"><use href="#i-padel"/></svg></span>
+          <span class="name">Los Pibes del Martes</span>
+          <span class="pos"><span class="num">3<span class="deg">°</span></span><small>de 12</small></span>
+          <span class="meta">Fecha 7 de 12</span>
+        </button>
+        <button class="tile fifa press" data-soon="FIFA de los Viernes" aria-label="FIFA de los Viernes, vas 1° de 6, fecha 4 de 8">
+          <span class="tile-top"><span class="sport">FIFA</span><svg class="i"><use href="#i-pad"/></svg></span>
+          <span class="name">FIFA de los Viernes</span>
+          <span class="pos"><span class="num">1<span class="deg">°</span></span><small>de 6</small></span>
+          <span class="meta">Fecha 4 de 8</span>
+        </button>
+      </div>
+      <div class="make">
+        <button class="press" data-soon="Crear torneo"><b><svg class="i s"><use href="#i-plus"/></svg>Crear torneo</b></button>
+        <button class="press" data-soon="Torneo rápido"><b><svg class="i s"><use href="#i-bolt"/></svg>Torneo rápido</b><span>Una tarde, sin tabla ni fechas</span></button>
+      </div>
+    </div>
+
+    <div class="sec">
+      <h2 class="h sec-h">Amigos</h2>
+      <ul class="friends">
+        <li><button class="friend row-press" data-go="amigo">
+          <span class="avatar">NA</span>
+          <span class="who"><b>Nico Arias</b><span>Le ganaste 6-4 6-3, hace 2 días</span></span>
+          <span class="hist" aria-label="Historial 7 a 5"><span class="num">7</span><small>a</small><span class="num">5</span></span>
+        </button></li>
+        <li><button class="friend row-press" data-soon="Facu Gómez">
+          <span class="avatar fifa">FG</span>
+          <span class="who"><b>Facu Gómez</b><span>Perdiste 1-3 al FIFA, el viernes</span></span>
+          <span class="hist" aria-label="Historial 4 a 6"><span class="num">4</span><small>a</small><span class="num">6</span></span>
+        </button></li>
+        <li><button class="friend row-press" data-soon="Juampi Ledesma">
+          <span class="avatar">JL</span>
+          <span class="who"><b>Juampi Ledesma</b><span>Le ganaste 6-2 7-5, hace una semana</span></span>
+          <span class="hist" aria-label="Historial 3 a 1"><span class="num">3</span><small>a</small><span class="num">1</span></span>
+        </button></li>
+      </ul>
+    </div>
+    <div class="end-space"></div>
+  </div>
+  <div class="bar"><button class="btn btn-ink press" data-soon="Cargar partido"><svg class="i"><use href="#i-plus"/></svg>Cargar partido</button></div>
+</section>
+
+<!-- TORNEO -->
+<section class="screen" id="s-torneo" aria-label="Los Pibes del Martes">
+  <header class="thead on-blue">
+    <button class="back" data-back="inicio"><svg class="i"><use href="#i-back"/></svg>Inicio</button>
+    <div class="thead-row">
+      <div><h1 class="h">Los Pibes del Martes</h1><p>Pádel, fecha 7 de 12</p></div>
+      <div class="me"><span class="num">3°</span><span>51 pts</span></div>
+    </div>
+  </header>
+  <div class="scroll">
+    <div class="tab" id="tab-tabla" role="tabpanel" aria-label="Tabla">
+      <div class="thr" aria-hidden="true"><span></span><span>Jugador</span><span></span><span>Fechas</span><span>Pts</span></div>
+      <ol class="table" id="tabla-rows"></ol>
+      <p class="note">Los 4 primeros van al Masters. Se descartan las 2 peores fechas de cada uno.</p>
+    </div>
+    <div class="tab" id="tab-fechas" role="tabpanel" aria-label="Fechas">
+      <ol class="flist fl-wrap" id="flist"></ol>
+    </div>
+    <div class="tab" id="tab-stats" role="tabpanel" aria-label="Stats">
+      <div class="chart">
+        <h2 class="h">Tus puntos por fecha</h2>
+        <div class="bars" id="bars" role="img" aria-label="Puntos por fecha: 9, 7, 10, no fuiste, 8, 6, 11. Se descartan la fecha 4 y la 6."></div>
+        <div class="bar-x" aria-hidden="true"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span></div>
+      </div>
+      <div class="legend"><span><i></i>Cuenta</span><span><i class="d"></i>Se descarta</span></div>
+      <p class="best">Jugaste 6 de 7. Tu mejor fecha fue la 7, con <b>11&nbsp;pts</b>.</p>
+    </div>
+    <div class="tab" id="tab-reglas" role="tabpanel" aria-label="Reglas">
+      <div class="rules">
+        <div class="rule"><b>Una fecha cada martes</b><span>12 fechas. Las parejas se sortean entre los que confirman.</span></div>
+        <div class="rule"><b>Todos contra todos</b><span>Cada pareja juega con todas, a un set de 6 games.</span></div>
+        <div class="rule"><b>Los 4 primeros van al Masters</b><span>En la tabla, la línea azul marca el corte.</span></div>
+        <div class="rule"><b>Se descartan tus 2 peores fechas</b><span>De las 12, cuentan tus mejores 10.</span></div>
+      </div>
+    </div>
+  </div>
+  <nav class="tabbar" role="tablist" aria-label="Torneo">
+    <button class="row-press" role="tab" data-tab="tabla"><svg class="i"><use href="#i-table"/></svg>Tabla</button>
+    <button class="row-press" role="tab" data-tab="fechas"><svg class="i"><use href="#i-cal"/></svg>Fechas</button>
+    <button class="row-press" role="tab" data-tab="stats"><svg class="i"><use href="#i-chart"/></svg>Stats</button>
+    <button class="row-press" role="tab" data-tab="reglas"><svg class="i"><use href="#i-rules"/></svg>Reglas</button>
+  </nav>
+</section>
+
+<!-- FECHA -->
+<section class="screen" id="s-fecha" aria-label="Fecha 8">
+  <div class="scroll">
+    <header class="fhead on-blue">
+      <div class="top">
+        <button class="back" data-back="fechas"><svg class="i"><use href="#i-back"/></svg>Los Pibes</button>
+      </div>
+      <span class="num big">Fecha 8</span>
+      <div class="when">Martes 18/11, Club Ciudad</div>
+      <div class="fmt">4 parejas, todos contra todos, un set a 6 games</div>
+    </header>
+    <div id="rounds"></div>
+    <div class="end-space"></div>
+  </div>
+  <div class="bar fbar">
+    <div class="why"><b id="faltan" aria-live="polite">Faltan 4 partidos</b><span class="mpips" id="mpips" aria-hidden="true"></span></div>
+    <button class="btn btn-ink press" id="cerrar" aria-disabled="true" aria-describedby="faltan">Cerrar la fecha</button>
+  </div>
+</section>
+
+<!-- AMIGO -->
+<section class="screen" id="s-amigo" aria-label="Nico Arias">
+  <div class="scroll">
+    <div class="atop"><button class="back" data-back="inicio"><svg class="i"><use href="#i-back"/></svg>Inicio</button></div>
+    <div class="aname">
+      <div><h1 class="h">Nico Arias</h1><p>12 partidos de pádel</p></div>
+    </div>
+    <div class="score on-blue" role="img" aria-label="Historial: ganaste 7, ganó Nico 5. Últimos 12 resultados.">
+      <div class="score-n"><span class="num me">7</span><span class="a">a</span><span class="num him">5</span></div>
+      <div class="score-l"><span>Ganaste vos</span><span>Ganó Nico</span></div>
+      <div class="streak" aria-hidden="true"><i></i><i class="l"></i><i></i><i></i><i class="l"></i><i></i><i class="l"></i><i class="l"></i><i></i><i></i><i class="l"></i><i></i></div>
+      <div class="streak-l" aria-hidden="true"><span>Hace 3 meses</span><span>Hace 2 días</span></div>
+    </div>
+    <div class="sec" style="padding-bottom:4px"><h2 class="h sec-h" style="margin-bottom:4px">Últimos partidos</h2></div>
+    <ul class="games">
+      <li class="game"><b class="won">Ganaste</b><span class="num">6-4 6-3</span><span>Hace 2 días, Club Ciudad</span></li>
+      <li class="game"><b>Perdiste</b><span class="num">4-6 6-7</span><span>Martes 4/11, Club Ciudad</span></li>
+      <li class="game"><b class="won">Ganaste</b><span class="num">6-3 6-4</span><span>Martes 28/10, Club Ciudad</span></li>
+      <li class="game"><b class="won">Ganaste</b><span class="num">7-5 6-4</span><span>Martes 21/10, Club Ciudad</span></li>
+      <li class="game"><b>Perdiste</b><span class="num">3-6 6-4 4-6</span><span>Martes 14/10, Padel Norte</span></li>
+    </ul>
+    <div class="end-space"></div>
+  </div>
+  <div class="bar"><button class="btn btn-ink press" data-soon="Cargar partido con Nico"><svg class="i"><use href="#i-plus"/></svg>Cargar partido con Nico</button></div>
+</section>
+
+<div class="scrim" id="scrim"></div>
+<div class="sheet" id="sheet" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="sh-title">
+  <div class="grab" id="grab"><i></i></div>
+  <div class="sh-top" id="shtop"><h2 class="h" id="sh-title">Ronda 2</h2><button class="press" id="sh-close">Cancelar</button></div>
+  <p class="sh-q">Ganó</p>
+  <div class="who-won" id="who"></div>
+  <p class="sh-q" id="gq">Games de los que perdieron</p>
+  <div class="gpick" id="gpick" aria-disabled="true"></div>
+  <p class="sh-hint" id="shint">Tocá primero la pareja que ganó.</p>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"><span id="toast-t"></span><button id="toast-b" hidden>Deshacer</button></div>
+</div>
+
+<script>
+(() => {
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)');
+
+  /* ---------- datos ---------- */
+  const tabla = [
+    [1,'Nico Arias',58,7,0],[2,'Lucas Ferro',54,7,1],[3,'Martín',51,6,-1],[4,'Juampi Ledesma',47,7,2],
+    [5,'Tomi Herrera',44,6,0],[6,'Gonza Paz',40,7,-2],[7,'Facu Gómez',38,5,1],[8,'Seba Ruiz',35,6,-1],
+    [9,'Pato Vidal',31,6,0],[10,'Mati Rossi',27,5,1],[11,'Fede Quiroga',22,4,-1],[12,'Rama Sosa',18,4,0]
+  ];
+  const fechas = [
+    ['30/9',9],['7/10',7],['14/10',10],['21/10',null],['28/10',8],['4/11',6],['11/11',11],
+    ['18/11','hoy'],['25/11'],['2/12'],['9/12'],['16/12']
+  ];
+  const P = { A:'Martín y Tomi', B:'Nico y Lucas', C:'Juampi y Gonza', D:'Facu y Seba' };
+  const rounds = [
+    [{a:'A',b:'B',w:'A',g:4},{a:'C',b:'D',w:'D',g:3}],
+    [{a:'A',b:'C'},{a:'B',b:'D'}],
+    [{a:'A',b:'D'},{a:'B',b:'C'}]
+  ];
+  const pairHTML = k => k === 'A' ? '<mark class="vos">Martín</mark> y Tomi' : P[k];
+
+  /* ---------- tabla, fechas, stats ---------- */
+  const chg = d => d > 0 ? `<span class="chg up" aria-label="sube ${d}"><svg><use href="#t-up"/></svg>${d}</span>`
+    : d < 0 ? `<span class="chg down" aria-label="baja ${-d}"><svg><use href="#t-down"/></svg>${-d}</span>`
+    : `<span class="chg eq" aria-label="igual">=</span>`;
+  $('#tabla-rows').innerHTML = tabla.map(([p,n,pts,pj,d]) =>
+    `<li class="tr${p===3?' vos':''}"><span class="num p">${p}</span><span class="n">${n}${p===3?'<span class="tag">vos</span>':''}</span>${chg(d)}<span class="pj">${pj}</span><span class="num pts">${pts}</span></li>` +
+    (p === 4 ? '<li class="cut" aria-label="Corte del Masters">Masters</li>' : '')).join('');
+
+  $('#flist').innerHTML = fechas.map(([d,pts],i) => {
+    const n = i + 1;
+    if (pts === 'hoy') return `<li><button class="frow today press" data-go="fecha"><span class="num fn">${n}</span><span class="fw"><b>Martes ${d}</b><span>En juego, faltan cargar partidos</span></span><svg class="i"><use href="#i-chev"/></svg></button></li>`;
+    const sub = n === 9 ? '<li class="h fl-sub" aria-hidden="true">Por jugar</li>' : '';
+    if (pts === undefined) return `${sub}<li class="frow future"><span class="num fn">${n}</span><span class="fw"><b>Martes ${d}</b></span></li>`;
+    const ptsHTML = `<span class="num fp"${pts ? '' : ' style="color:var(--muted)"'}>${pts || 0}<small style="font-size:14px;font-stretch:100%;font-weight:600;color:var(--muted)"> pts</small></span>`;
+    return `<li class="frow"><span class="num fn">${n}</span><span class="fw"><b>Martes ${d}</b>${pts === null ? '<span>No fuiste</span>' : ''}</span>${ptsHTML}</li>`;
+  }).join('');
+
+  const pts = [9,7,10,0,8,6,11], desc = [3,5];
+  $('#bars').innerHTML = pts.map((v,i) =>
+    `<div class="bar-c${desc.includes(i)?' desc':''}"><span class="num v">${v || '0'}</span><i style="height:${Math.max(v/11*190,6)}px"></i></div>`).join('');
+
+  /* ---------- fecha ---------- */
+  const all = () => rounds.flat();
+  const left = () => all().filter(m => !m.w).length;
+  function renderFecha(flashKey) {
+    let firstOpen = rounds.findIndex(r => r.some(m => !m.w));
+    $('#rounds').innerHTML = rounds.map((r, ri) => {
+      const st = r.every(m => m.w) ? ['Terminada',''] : ri === firstOpen ? ['En juego','now'] : ['Pendiente',''];
+      return `<section class="round"><div class="round-h"><h2 class="h">Ronda ${ri+1}</h2><span class="${st[1]}">${st[0]}</span></div><div class="matches">` +
+        r.map((m, mi) => {
+          const key = ri + '-' + mi;
+          if (m.w) {
+            const l = m.w === m.a ? m.b : m.a;
+            const line = (k) => `<div class="line${k===m.w?' w':''}"><span class="t">${pairHTML(k)}</span><span class="num">${k===m.w?6:m.g}</span></div>`;
+            return `<div class="match done${flashKey===key?' flash':''}" data-key="${key}" aria-label="${P[m.w]} 6, ${P[l]} ${m.g}"><div class="teams">${line(m.a)}${line(m.b)}</div></div>`;
+          }
+          return `<button class="match open press" data-match="${key}" aria-label="Cargar ${P[m.a]} contra ${P[m.b]}"><span class="teams"><span class="t" style="font-size:17px;font-weight:600">${pairHTML(m.a)}</span><span class="vs">contra</span><span class="t" style="font-size:17px;font-weight:600">${pairHTML(m.b)}</span></span><span class="load">Cargar</span></button>`;
+        }).join('') + '</div></section>';
+    }).join('');
+    const n = left();
+    $('#faltan').textContent = n === 0 ? 'Todos los partidos cargados' : n === 1 ? 'Falta 1 partido' : `Faltan ${n} partidos`;
+    $('#mpips').innerHTML = all().map(m => `<i class="${m.w?'':'no'}"></i>`).join('');
+    const c = $('#cerrar');
+    if (n === 0) c.removeAttribute('aria-disabled');
+    else c.setAttribute('aria-disabled','true');
+  }
+
+  /* ---------- hoja ---------- */
+  let cur = null, pick = null, lastFocus = null;
+  function openSheet(key, winner, instant) {
+    const [ri, mi] = key.split('-').map(Number), m = rounds[ri][mi];
+    cur = { ri, mi, m }; pick = null;
+    $('#sh-title').textContent = 'Ronda ' + (ri + 1);
+    $('#who').innerHTML = [m.a, m.b].map(k => `<button class="press" data-w="${k}" aria-pressed="false"><span>${P[k]}</span><svg class="i"><use href="#i-check"/></svg></button>`).join('');
+    $('#gpick').innerHTML = [0,1,2,3,4,5].map(g => `<button class="num press" data-g="${g}" aria-label="${g} games">${g}</button>`).join('');
+    setWinner(winner || null);
+    const s = $('#sheet');
+    if (instant) { s.style.transition = 'none'; $('#scrim').style.transition = 'none'; }
+    lastFocus = document.activeElement;
+    s.classList.add('on'); $('#scrim').classList.add('on');
+    if (instant) requestAnimationFrame(() => requestAnimationFrame(() => { s.style.transition = ''; $('#scrim').style.transition = ''; }));
+    s.style.transform = '';
+    s.focus({ preventScroll: true });
+  }
+  function setWinner(k) {
+    pick = k;
+    $$('#who button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.w === k)));
+    const g = $('#gpick');
+    if (k) {
+      const loser = k === cur.m.a ? cur.m.b : cur.m.a;
+      $('#gq').innerHTML = `Games de ${P[loser]}`;
+      g.removeAttribute('aria-disabled');
+      $('#shint').textContent = 'Con este toque se guarda.';
+    } else {
+      $('#gq').textContent = 'Games de los que perdieron';
+      g.setAttribute('aria-disabled','true');
+      $('#shint').textContent = 'Tocá primero la pareja que ganó.';
+    }
+  }
+  function closeSheet() {
+    const s = $('#sheet');
+    s.classList.remove('on', 'drag'); s.style.transform = '';
+    $('#scrim').classList.remove('on');
+    cur = null;
+    if (lastFocus && lastFocus.isConnected) lastFocus.focus({ preventScroll: true });
+  }
+  $('#who').addEventListener('click', e => { const b = e.target.closest('[data-w]'); if (b) setWinner(b.dataset.w); });
+  $('#gpick').addEventListener('click', e => {
+    const b = e.target.closest('[data-g]'); if (!b || !pick || !cur) return;
+    const { m, ri, mi } = cur; m.w = pick; m.g = Number(b.dataset.g);
+    const saved = { m, key: ri + '-' + mi };
+    closeSheet();
+    renderFecha(saved.key);
+    toast(`Guardado: ${P[m.w]} 6-${m.g}`, () => { delete saved.m.w; delete saved.m.g; renderFecha(); });
+    lastFocus = null;
+    const el = $(`[data-key="${saved.key}"]`); if (el) el.scrollIntoView({ block: 'nearest', behavior: reduce.matches ? 'auto' : 'smooth' });
+  });
+  $('#sh-close').addEventListener('click', closeSheet);
+  $('#scrim').addEventListener('click', closeSheet);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && cur) closeSheet(); });
+
+  // arrastrar para cerrar: umbral por distancia o por velocidad
+  (() => {
+    let y0 = 0, t0 = 0, dy = 0, on = false;
+    const s = $('#sheet');
+    const down = e => { if (on) return; on = true; y0 = e.clientY; t0 = performance.now(); dy = 0; s.classList.add('drag'); e.currentTarget.setPointerCapture(e.pointerId); };
+    const move = e => { if (!on) return; dy = e.clientY - y0; const y = dy > 0 ? dy : -Math.sqrt(-dy) * 2; s.style.transform = `translateY(${y}px)`; };
+    const up = () => { if (!on) return; on = false; s.classList.remove('drag');
+      const v = Math.abs(dy) / Math.max(performance.now() - t0, 1);
+      if (dy > 110 || (dy > 10 && v > 0.11)) closeSheet(); else s.style.transform = ''; };
+    ['#grab', '#shtop'].forEach(sel => { const el = $(sel);
+      el.addEventListener('pointerdown', e => { if (e.target.closest('button')) return; down(e); });
+      el.addEventListener('pointermove', move); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up); });
+  })();
+
+  /* ---------- toast ---------- */
+  let tt;
+  function toast(text, undo) {
+    const t = $('#toast'), b = $('#toast-b');
+    $('#toast-t').textContent = text;
+    b.hidden = !undo;
+    // siempre arriba de la barra de abajo de la pantalla activa, para no tapar el contador
+    const bar = $('.screen.active .bar, .screen.active .tabbar');
+    t.style.bottom = (bar ? bar.offsetHeight : 0) + 12 + 'px';
+    b.onclick = undo ? () => { undo(); hide(); } : null;
+    t.classList.add('on');
+    clearTimeout(tt); tt = setTimeout(hide, undo ? 4500 : 2500);
+    function hide() { t.classList.remove('on'); }
+  }
+
+  /* ---------- navegación ---------- */
+  const STATES = {
+    inicio: { s: 's-inicio', d: 0 },
+    tabla: { s: 's-torneo', d: 1, tab: 'tabla' }, fechas: { s: 's-torneo', d: 1, tab: 'fechas' },
+    stats: { s: 's-torneo', d: 1, tab: 'stats' }, reglas: { s: 's-torneo', d: 1, tab: 'reglas' },
+    fecha: { s: 's-fecha', d: 2 }, hoja: { s: 's-fecha', d: 2, sheet: true },
+    amigo: { s: 's-amigo', d: 1 }
+  };
+  let state = null, depthStack = 0;
+  function setTab(tab) {
+    $$('.tab').forEach(t => t.classList.toggle('on', t.id === 'tab-' + tab));
+    $$('.tabbar button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === tab)));
+    $('#s-torneo .scroll').scrollTop = 0;
+  }
+  function show(name, instant) {
+    const to = STATES[name] || STATES.inicio, from = state && STATES[state];
+    if (to.tab) setTab(to.tab);
+    if (name === 'hoja') { renderFecha(); }
+    if (cur && name !== 'hoja') closeSheet();
+    const nEl = $('#' + to.s), oEl = from && $('#' + from.s);
+    if (oEl !== nEl) {
+      nEl.classList.add('active');
+      if (oEl && !instant) slide(nEl, oEl, to.d >= from.d);
+      else if (oEl) oEl.classList.remove('active');
+    }
+    state = name;
+    if (to.sheet) openSheet('1-0', 'A', instant);
+  }
+  let anims = [];
+  function slide(nEl, oEl, fwd) {
+    anims.forEach(a => a.finish()); anims = [];
+    const opt = { duration: 280, easing: 'cubic-bezier(.32,.72,0,1)' };
+    let a1, a2;
+    if (reduce.matches) {
+      a1 = nEl.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 160, easing: 'ease' });
+      a2 = oEl.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: 'ease' });
+    } else if (fwd) {
+      nEl.style.zIndex = 2; oEl.style.zIndex = 1;
+      a1 = nEl.animate([{ transform: 'translateX(100%)' }, { transform: 'translateX(0)' }], opt);
+      a2 = oEl.animate([{ transform: 'translateX(0)', opacity: 1 }, { transform: 'translateX(-25%)', opacity: .7 }], opt);
+    } else {
+      nEl.style.zIndex = 1; oEl.style.zIndex = 2;
+      a1 = nEl.animate([{ transform: 'translateX(-25%)', opacity: .7 }, { transform: 'translateX(0)', opacity: 1 }], { ...opt, duration: 240 });
+      a2 = oEl.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(100%)' }], { ...opt, duration: 240 });
+    }
+    anims = [a1, a2];
+    a2.onfinish = () => { oEl.classList.remove('active'); nEl.style.zIndex = oEl.style.zIndex = ''; };
+    const h = nEl.querySelector('h1, .back, button'); if (h) setTimeout(() => h.focus({ preventScroll: true }), 0);
+  }
+  // "Volver" dice a dónde vuelve: al padre por defecto, o a la pantalla desde la que llegaste
+  const LABEL = { inicio: 'Inicio', tabla: 'Los Pibes', fechas: 'Los Pibes', stats: 'Los Pibes', reglas: 'Los Pibes' };
+  function setBack(name, from) {
+    const b = $('#' + STATES[name].s + ' [data-back]'); if (!b) return;
+    const target = from && LABEL[from] ? from : b.dataset.back;
+    b.lastChild.textContent = LABEL[target] || 'Volver';
+  }
+  function go(name) {
+    if (name === state) return;
+    const sameScreen = STATES[name].s === STATES[state].s;
+    if (sameScreen) { history.replaceState(history.state, '', '#' + name); show(name); return; }
+    setBack(name, state);
+    history.pushState({ d: ++depthStack }, '', '#' + name);
+    show(name);
+  }
+  function back(parent) {
+    if (depthStack > 0) history.back();
+    else { history.replaceState(null, '', '#' + parent); show(parent); }
+  }
+  addEventListener('popstate', () => { depthStack = Math.max(0, (history.state && history.state.d) || 0); show(location.hash.slice(1) || start); });
+
+  document.addEventListener('click', e => {
+    const g = e.target.closest('[data-go]'); if (g) { go(g.dataset.go); return; }
+    const b = e.target.closest('[data-back]'); if (b) { back(b.dataset.back); return; }
+    const t = e.target.closest('[data-tab]'); if (t) { go(t.dataset.tab); return; }
+    const m = e.target.closest('[data-match]'); if (m) { openSheet(m.dataset.match); return; }
+    const s = e.target.closest('[data-soon]'); if (s) { toast(`${s.dataset.soon}: no está en este prototipo`); return; }
+    if (e.target.closest('#cerrar')) {
+      if (left() > 0) toast(left() === 1 ? 'Falta cargar 1 partido' : `Faltan cargar ${left()} partidos`);
+      else toast('Fecha 8 cerrada');
+    }
+  });
+
+  const start = location.hash.slice(1) || document.documentElement.dataset.start || 'inicio';
+  renderFecha();
+  show(STATES[start] ? start : 'inicio', true);
+})();
+</script>
+</body>
+</html>

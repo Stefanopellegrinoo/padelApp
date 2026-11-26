@@ -75,7 +75,7 @@ export function championRecord(
   const diff = scoreFor - scoreAgainst
   const sign = diff >= 0 ? '+' : ''
   const partidos = allowsDraw ? `${won}–${drawn}–${lost}` : `${won}–${lost}`
-  return `${partidos} · ${sign}${diff} ${unit}`
+  return `${partidos}, ${sign}${diff} ${unit}`
 }
 
 /** Los nombres del lado unidos con `&`: uno solo cuando la disciplina es de a uno. */

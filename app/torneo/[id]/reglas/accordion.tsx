@@ -13,27 +13,26 @@ export function RulesAccordion({ rows }: { rows: RuleRow[] }) {
   const [openTitle, setOpenTitle] = useState<string | null>(null)
 
   return (
-    <div>
+    <div className="border-t border-line">
       {rows.map((row) => {
         const isOpen = row.title === openTitle
         return (
           <div key={row.title} className="border-b border-line">
             <button
               type="button"
+              aria-expanded={isOpen}
               onClick={() => setOpenTitle(isOpen ? null : row.title)}
-              className="flex w-full items-center justify-between gap-3 py-[15px] text-left"
+              className="flex min-h-[56px] w-full items-center justify-between gap-3 py-2.5 text-left"
             >
               <span className="flex-1">
-                <span className="block text-[14.5px] font-[750]">{row.title}</span>
-                <span className="block text-[12.5px] font-bold text-accent-link">{row.value}</span>
+                <span className="block text-[16px] font-semibold">{row.title}</span>
+                <span className="block text-[15px] text-muted">{row.value}</span>
               </span>
-              <span className="text-[13px] font-extrabold text-muted">{isOpen ? '−' : '+'}</span>
+              <span aria-hidden="true" className="w-6 text-center text-[20px] font-semibold text-accent-link">
+                {isOpen ? '−' : '+'}
+              </span>
             </button>
-            {isOpen && (
-              <p className="text-pretty px-[15px] pt-0 pb-[15px] text-[13px] leading-[1.5] font-[550] text-muted">
-                {row.body}
-              </p>
-            )}
+            {isOpen && <p className="text-pretty pb-4 text-[16px] leading-[1.5] text-muted">{row.body}</p>}
           </div>
         )
       })}

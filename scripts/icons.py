@@ -5,9 +5,12 @@ y las líneas de saque. Se eligió por encima de una letra porque a 60pt en la
 pantalla de inicio una "P" es indistinguible de cualquier otra app, y la
 silueta 2:1 de la cancha no.
 
-Los colores salen de `app/globals.css` — el verde es `--color-accent` del tema
-claro y las líneas son `--color-text` del oscuro. Si cambia la paleta, se
-cambian acá y se corre `python3 scripts/icons.py`.
+Los colores salen de `app/globals.css` (el sistema del prototipo,
+`design/prototipo/tokens.md`): el fondo es el azul cancha, `--color-block` del
+tema claro, y las líneas son `--color-on-block`, blanco. En la pantalla de
+arranque oscura la pala va sobre el bloque del tema oscuro, que baja un poco
+para no encandilar sobre el azul noche. Si cambia la paleta, se cambian acá y
+se corre `python3 scripts/icons.py` (pide Pillow).
 
 La marca ocupa el 58% del lienzo a propósito: los íconos se declaran
 `any maskable`, y Android recorta hasta el 80% central. Con este margen el
@@ -18,8 +21,9 @@ import os
 
 from PIL import Image, ImageDraw
 
-VERDE = (14, 92, 63)
-LINEA = (234, 242, 238)
+AZUL = (31, 69, 224)  # #1F45E0, `--color-block` claro
+AZUL_OSCURO = (38, 67, 188)  # #2643BC, `--color-block` oscuro
+LINEA = (255, 255, 255)  # `--color-on-block`
 SALIDA = "public"
 
 # Se dibuja UNA vez en grande y se reduce: PIL no antialiasea las líneas, así
@@ -27,7 +31,7 @@ SALIDA = "public"
 LIENZO = 2048
 
 
-def raqueta() -> Image.Image:
+def raqueta(fondo: tuple[int, int, int] = AZUL) -> Image.Image:
     """La pala, de frente.
 
     La primera versión de esto era la cancha vista desde arriba y se leía como
@@ -36,7 +40,7 @@ def raqueta() -> Image.Image:
     óvalo corto con mango corto es una silueta que no se parece a nada más, y
     los agujeros la separan de una raqueta de tenis incluso borroneada.
     """
-    img = Image.new("RGBA", (LIENZO, LIENZO), (*VERDE, 255))
+    img = Image.new("RGBA", (LIENZO, LIENZO), (*fondo, 255))
     d = ImageDraw.Draw(img)
 
     grosor = int(LIENZO * 0.030)
@@ -84,21 +88,25 @@ def raqueta() -> Image.Image:
 # `background_color` del manifest: sin estas imágenes, la app instalada queda
 # en negro hasta que llega el HTML, y en un arranque en frío del servidor eso
 # son segundos. Una por tamaño de iPhone en vertical (ancho y alto en puntos,
-# densidad), en claro y en oscuro con el `--color-bg` de cada tema. Un iPhone
-# nuevo que no esté acá vuelve al negro: se agrega su fila.
+# densidad), en claro y en oscuro con el `--color-bg` de cada tema (blanco y
+# azul noche) y la pala sobre el bloque de ese tema. Un iPhone nuevo que no
+# esté acá vuelve al negro: se agrega su fila.
 IPHONES = [
     (320, 568, 2), (375, 667, 2), (414, 736, 3), (375, 812, 3), (414, 896, 2),
     (414, 896, 3), (390, 844, 3), (428, 926, 3), (393, 852, 3), (430, 932, 3),
     (402, 874, 3), (440, 956, 3), (420, 912, 3),
 ]
-FONDOS = {"light": (255, 255, 255), "dark": (13, 21, 18)}
+# Tema: (`--color-bg`, el bloque donde va la pala).
+FONDOS = {"light": ((255, 255, 255), AZUL), "dark": ((14, 22, 48), AZUL_OSCURO)}
 
 
-def splash(base: Image.Image) -> None:
+def splash() -> None:
     os.makedirs(f"{SALIDA}/splash", exist_ok=True)
     lado = 0.28  # del ancho: el ícono de la pantalla de inicio, un poco más grande.
+    palas = {tema: raqueta(bloque) for tema, (_, bloque) in FONDOS.items()}
     for w, h, dpr in IPHONES:
-        for tema, fondo in FONDOS.items():
+        for tema, (fondo, _) in FONDOS.items():
+            base = palas[tema]
             img = Image.new("RGB", (w * dpr, h * dpr), fondo)
             n = int(w * dpr * lado)
             icono = base.resize((n, n), Image.LANCZOS)
@@ -118,7 +126,7 @@ def main() -> None:
     ]:
         base.resize((size, size), Image.LANCZOS).save(nombre)
         print(f"  {nombre}  {size}x{size}")
-    splash(base)
+    splash()
     print(f"  {SALIDA}/splash/  {len(IPHONES) * len(FONDOS)} pantallas de arranque")
 
 

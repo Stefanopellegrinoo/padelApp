@@ -63,22 +63,32 @@ export default function RapidoPage() {
     guardar(cargarMarcador(torneo, indice, a, b))
   }
 
-  if (!cargado) return <main className="min-h-dvh bg-bg" />
+  // Mientras no se leyó el storage: el lugar del encabezado, así el bloque
+  // de color no aparece de golpe sobre una pantalla blanca.
+  if (!cargado) {
+    return (
+      <main className="mx-auto min-h-dvh w-full max-w-lg bg-bg">
+        <div aria-hidden="true" className="h-[148px] rounded-b-block bg-block" />
+      </main>
+    )
+  }
+
+  const aviso = sinStorage ? (
+    <p role="alert" className="mx-4 mt-4 rounded-tile bg-live-bg px-4 py-3 text-[15px] font-semibold text-live">
+      Este navegador no deja guardar. Podés jugar igual, pero si recargás se pierde.
+    </p>
+  ) : undefined
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-bg text-text">
-      {sinStorage && (
-        <p className="mx-6 mt-4 rounded-field bg-live-bg px-3 py-2.5 text-[12.5px] font-bold text-live">
-          Este navegador no deja guardar. Podés jugar igual, pero si recargás se pierde.
-        </p>
-      )}
       {torneo === null ? (
-        <Armar onEmpezar={empezar} />
+        <Armar onEmpezar={empezar} aviso={aviso} />
       ) : (
         <Jugar
           torneo={torneo}
           onCargarMarcador={cargarUnMarcador}
           onNuevoTorneo={() => guardar(null)}
+          aviso={aviso}
         />
       )}
     </main>

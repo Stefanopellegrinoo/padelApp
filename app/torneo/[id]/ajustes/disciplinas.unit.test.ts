@@ -36,7 +36,6 @@ function html(overrides: Partial<Parameters<typeof NuevoDeporte>[0]> = {}): stri
       onPersonalizar: () => {},
       onToggle: () => {},
       onSubmit: () => {},
-      onCancel: () => {},
       ...overrides,
     }),
   )
@@ -54,9 +53,11 @@ describe('NuevoDeporte', () => {
     const markup = html()
 
     expect(markup).toContain('Por nivel')
-    expect(markup).toContain('el orden del torneo')
+    expect(markup).toContain('vos los ordenás')
     expect(markup).toContain('Al azar')
+    expect(markup).toContain('sortea la app')
     expect(markup).toContain('Igual que Pádel')
+    expect(markup).toContain('el mismo orden')
   })
 
   it('sin otro deporte en el torneo no hay "Igual que"', () => {

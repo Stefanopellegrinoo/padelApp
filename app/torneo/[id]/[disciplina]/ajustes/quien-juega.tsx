@@ -3,6 +3,10 @@
 import { useState, useTransition } from 'react'
 import type { DisciplineId } from '@/core'
 import { addDisciplineMember, dropDisciplineMember, type WriteResult } from '@/app/torneo/[id]/ajustes/actions'
+import { Aviso, FILA, GRUPO } from '@/app/torneo/[id]/ajustes/piezas'
+import { Avatar } from '@/app/ui/avatar'
+import { rowMeta, rowTitle } from '@/app/ui/row'
+import { Section } from '@/app/ui/section'
 
 export interface QuienJuegaMemberVM {
   entryId: string
@@ -11,10 +15,9 @@ export interface QuienJuegaMemberVM {
   playsDiscipline: boolean
 }
 
-// Mismo botón que `Plantel` (`../../ajustes/plantel.tsx`): `min-h-[44px]` es
-// el mínimo de Apple para tocar con el dedo.
-const ACTION =
-  'flex min-h-[44px] items-center rounded-field bg-chip px-3.5 text-[12.5px] font-extrabold text-muted transition-opacity disabled:opacity-45'
+// La acción de cada fila: 44 de alto (el mínimo para el dedo) y chica de ancho. "Sacar" no va en
+// rojo: la persona sigue en el torneo, sólo deja de jugar este deporte.
+const ACTION = 'press min-h-[44px] shrink-0 rounded-btn bg-chip px-3.5 text-[16px] font-semibold text-text'
 
 /**
  * "Quién juega" (§2.6 del diseño): el plantel del CONTENEDOR, marcando quién
@@ -68,47 +71,50 @@ export function QuienJuega({
     })
   }
 
+  const playing = members.filter((member) => member.playsDiscipline).length
   return (
-    <section
-      data-quien-juega={disciplineId}
-      data-quien-juega-label={disciplineLabel}
-      className="flex flex-col gap-2"
-    >
-      <h2 className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">Quién juega</h2>
+    <section data-quien-juega={disciplineId} data-quien-juega-label={disciplineLabel}>
+      <Section
+        title="Quién juega"
+        action={<span className="text-[16px] text-muted">{`${playing} de ${members.length}`}</span>}
+      >
+        <ul className={GRUPO}>
+          {members.map((member) => (
+            <li key={member.entryId} className={FILA}>
+              <Avatar name={member.name} />
+              <span className="min-w-0 flex-1">
+                <span className={`${rowTitle} truncate`}>{member.name}</span>
+                <span className={rowMeta}>{member.playsDiscipline ? 'Juega' : 'No juega'}</span>
+              </span>
+              {member.playsDiscipline ? (
+                <button
+                  type="button"
+                  className={ACTION}
+                  disabled={pending}
+                  onClick={() => run(() => dropDisciplineMember(seasonId, disciplineId, member.entryId, disciplineLabel))}
+                >
+                  Sacar
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className={ACTION}
+                  disabled={pending}
+                  onClick={() => run(() => addDisciplineMember(seasonId, disciplineId, member.entryId))}
+                >
+                  Agregar
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
 
-      <div className="overflow-hidden rounded-[14px] border border-line bg-surface">
-        {members.map((member, index) => (
-          <div
-            key={member.entryId}
-            className={`flex items-center justify-between gap-3 px-3 py-3 ${index > 0 ? 'border-t border-line' : ''}`}
-          >
-            <span className="truncate text-[14px] font-bold">{member.name}</span>
-            {member.playsDiscipline ? (
-              <button
-                type="button"
-                className={ACTION}
-                disabled={pending}
-                onClick={() => run(() => dropDisciplineMember(seasonId, disciplineId, member.entryId, disciplineLabel))}
-              >
-                Sacar
-              </button>
-            ) : (
-              <button
-                type="button"
-                className={ACTION}
-                disabled={pending}
-                onClick={() => run(() => addDisciplineMember(seasonId, disciplineId, member.entryId))}
-              >
-                Agregar
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
-
-      {error !== null && (
-        <p className="rounded-field bg-live-bg px-3 py-2.5 text-[12.5px] font-bold text-live">{error}</p>
-      )}
+        {error !== null && (
+          <Aviso alerta className="mt-3">
+            {error}
+          </Aviso>
+        )}
+      </Section>
     </section>
   )
 }

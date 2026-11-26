@@ -2,117 +2,193 @@
 
 import { useState } from 'react'
 import type { Deporte, Partido } from './rapido-state'
-import { marcadorDeDosToques, nombreLado, puntosDelPerdedor, type Lado } from './jugar-logic'
+import {
+  marcadorDeDosToques,
+  nombreLado,
+  puntosDelPerdedor,
+  toqueDelMarcador,
+  unidadDe,
+  type Lado,
+} from './jugar-logic'
 
-interface PartidoRowProps {
-  partido: Partido
-  jugadores: string[]
-  deporte: Deporte
-  onCargarMarcador: (a: number, b: number) => void
-}
-
-const TAP = 'min-h-[44px] rounded-field bg-chip px-3 text-[13.5px] font-extrabold'
-const ROTULO = 'text-[12px] font-extrabold uppercase tracking-[.14em] text-muted'
+const PREGUNTA = 'mt-3.5 mb-2.5 text-[17px] font-bold'
+const cap = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
 
 /**
- * Una fila de partido y su carga en dos toques, el mismo patrón que ya usa la
- * carga de una fecha (`carga-state.ts`): quién ganó, y con cuántos se quedó el
- * que perdió, elegido de una lista acotada de botones. El ganador siempre se
- * lleva el objetivo entero.
+ * Un partido de la lista, con la cara de la carga de una fecha
+ * (`TarjetaPartido`): sin marcador es el bloque tintado con "Cargar"; con
+ * marcador, las dos filas con el ganador en tinta y el perdedor apagado. Las
+ * dos son un botón entero que abre la hoja (`HojaPartido`): sin el toque
+ * extra de abrir un panel, y lo cargado se corrige tocándolo.
  *
- * Antes eran dos `<input type="number">` libres que autoguardaban en cada
- * tecla. Con botones no hace falta parsear texto, ni poner un techo, ni pensar
- * qué pasa si alguien gira la rueda del mouse encima del input: nada de lo que
- * sale de acá puede ser rechazado por `cargarMarcador`. Es la promesa de la
- * home, textual: "Cargás el resultado en dos toques, sin teclado".
- *
- * Un partido ya cargado muestra su marcador y vuelve a abrir el panel al
- * tocarlo. Corregir es cargarlo de nuevo, así que no hace falta ningún
- * "borrar": el segundo toque pisa lo que había.
- *
- * En la pantalla no existe el empate — ni el pádel ni el ping pong empatan.
- * `cargarMarcador` lo acepta por generalidad, pero acá no hay dos toques que
- * lo produzcan.
+ * El `id` es para "Siguiente": el foco va a la tarjeta antes de abrir la
+ * hoja, así al cerrarla vuelve ahí. `destella`: es la recién guardada.
  */
-export function PartidoRow({ partido, jugadores, deporte, onCargarMarcador }: PartidoRowProps) {
-  const [abierto, setAbierto] = useState(false)
-  const [ganador, setGanador] = useState<Lado | null>(null)
-
+export function TarjetaPartido({
+  indice,
+  partido,
+  jugadores,
+  destella = false,
+  onAbrir,
+}: {
+  indice: number
+  partido: Partido
+  jugadores: string[]
+  destella?: boolean
+  onAbrir: () => void
+}) {
+  const destello = destella ? ' destello' : ''
   const nombreA = nombreLado(jugadores, partido.a)
   const nombreB = nombreLado(jugadores, partido.b)
+  const marcador = partido.marcador
 
-  // El botón de la fila es su propio cancelar: volver a tocarlo cierra el
-  // panel y tira el ganador a medio elegir.
-  const alternar = () => {
-    setGanador(null)
-    setAbierto(!abierto)
+  if (marcador === null) {
+    return (
+      <button
+        id={`partido-${indice}`}
+        type="button"
+        aria-label={`Cargar ${nombreA} contra ${nombreB}`}
+        onClick={onAbrir}
+        className={`flex min-h-[84px] w-full items-center gap-3 rounded-tile bg-sport-tint py-3 pr-3.5 pl-4 text-left active:bg-opcion${destello}`}
+      >
+        <span className="flex min-w-0 flex-1 flex-col gap-1.5">
+          <span className="text-[17px] font-semibold text-text">{nombreA}</span>
+          <span className="text-[13px] leading-none font-semibold text-muted">contra</span>
+          <span className="text-[17px] font-semibold text-text">{nombreB}</span>
+        </span>
+        <span className="flex h-10 shrink-0 items-center rounded-pill bg-block px-3.5 text-[15px] font-bold text-on-block">
+          Cargar
+        </span>
+      </button>
+    )
   }
 
-  const elegirPuntos = (puntosPerdedor: number) => {
-    if (ganador === null) return
-    const marcador = marcadorDeDosToques(ganador, puntosPerdedor, deporte)
-    onCargarMarcador(marcador.a, marcador.b)
-    setGanador(null)
-    setAbierto(false)
+  const fila = (lado: Lado) => {
+    const propio = lado === 'a' ? marcador.a : marcador.b
+    const ajeno = lado === 'a' ? marcador.b : marcador.a
+    const perdio = propio < ajeno
+    return (
+      <span className="flex items-center justify-between gap-2">
+        <span className={`min-w-0 text-[17px] ${perdio ? 'font-medium text-muted' : 'font-bold text-text'}`}>
+          {lado === 'a' ? nombreA : nombreB}
+        </span>
+        <span className={`font-cond shrink-0 text-[32px] ${perdio ? 'text-muted' : 'text-text'}`}>{propio}</span>
+      </span>
+    )
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded-[14px] border border-line bg-surface p-3">
-      <button
-        type="button"
-        onClick={alternar}
-        aria-expanded={abierto}
-        className="flex min-h-[44px] items-center gap-3 text-left"
-      >
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-[14.5px] font-bold">{nombreA}</span>
-          <span className="block truncate text-[14.5px] font-bold text-muted">{nombreB}</span>
-        </span>
-        {partido.marcador === null ? (
-          <span className="shrink-0 rounded-full bg-chip px-3 py-1.5 text-[12.5px] font-extrabold text-muted">
-            Cargar
-          </span>
-        ) : (
-          <span className="shrink-0 text-right text-[15px] font-extrabold tabular-nums">
-            <span className="block">{partido.marcador.a}</span>
-            <span className="block text-muted">{partido.marcador.b}</span>
-          </span>
-        )}
-      </button>
+    <button
+      id={`partido-${indice}`}
+      type="button"
+      aria-label={`Corregir ${nombreA} ${marcador.a}, ${nombreB} ${marcador.b}`}
+      onClick={onAbrir}
+      className={`press-fila flex min-h-[76px] w-full flex-col gap-1.5 rounded-tile border-[1.5px] border-line px-4 py-3 text-left${destello}`}
+    >
+      {fila('a')}
+      {fila('b')}
+    </button>
+  )
+}
 
-      {abierto && (
-        <div className="flex flex-col gap-2">
-          {ganador === null ? (
-            <>
-              <p className={ROTULO}>¿Quién ganó?</p>
-              <button type="button" className={TAP} onClick={() => setGanador('a')}>
-                {nombreA}
-              </button>
-              <button type="button" className={TAP} onClick={() => setGanador('b')}>
-                {nombreB}
-              </button>
-            </>
-          ) : (
-            <>
-              {/* Nombra al que perdió, no "el perdedor": es lo único que
-                  confirma qué se tocó recién, y el primer toque no se ve. */}
-              <p className={ROTULO}>Puntos de {ganador === 'a' ? nombreB : nombreA}</p>
-              <div className="flex flex-wrap gap-2">
-                {puntosDelPerdedor(deporte).map((puntos) => (
-                  <button
-                    key={puntos}
-                    type="button"
-                    className={`${TAP} min-w-[44px] text-center tabular-nums`}
-                    onClick={() => elegirPuntos(puntos)}
-                  >
-                    {puntos}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-      )}
+/**
+ * El contenido de la hoja de un partido: la carga en dos toques, el mismo
+ * patrón que la carga de una fecha. Quién ganó, y con cuántos se quedó el que
+ * perdió, de una lista acotada de botones; el segundo toque guarda. El
+ * ganador siempre se lleva el objetivo entero (`marcadorDeDosToques`), así que
+ * nada de lo que sale de acá lo puede rechazar `cargarMarcador`, y en la
+ * pantalla no existe el empate: ni el pádel ni el ping pong empatan.
+ *
+ * Un partido cargado abre con lo que tiene (`toqueDelMarcador`): el ganador
+ * elegido y su número marcado, así corregir es un toque. Cambiar de ganador
+ * suelta el número. Va montada con `key` por apertura: cada vez arranca de lo
+ * que dice el partido, no de un intento anterior.
+ */
+export function HojaPartido({
+  partido,
+  jugadores,
+  deporte,
+  onGuardar,
+}: {
+  partido: Partido
+  jugadores: string[]
+  deporte: Deporte
+  onGuardar: (a: number, b: number) => void
+}) {
+  const previo = toqueDelMarcador(partido.marcador, deporte)
+  const [ganador, setGanador] = useState<Lado | null>(previo.ganador)
+  const [elegido, setElegido] = useState<number | null>(previo.perdedor)
+
+  const nombreDe = (lado: Lado) => nombreLado(jugadores, lado === 'a' ? partido.a : partido.b)
+  const perdedor = ganador === null ? null : nombreDe(ganador === 'a' ? 'b' : 'a')
+  const opciones = puntosDelPerdedor(deporte)
+  const unidad = unidadDe(deporte)
+
+  const elegirPuntos = (puntos: number) => {
+    if (ganador === null) return
+    setElegido(puntos)
+    const marcador = marcadorDeDosToques(ganador, puntos, deporte)
+    onGuardar(marcador.a, marcador.b)
+  }
+
+  return (
+    <div>
+      <p className={PREGUNTA}>Ganó</p>
+      <div className="flex flex-col gap-2.5">
+        {(['a', 'b'] as const).map((lado) => (
+          <button
+            key={lado}
+            type="button"
+            aria-pressed={ganador === lado}
+            onClick={() => {
+              if (ganador !== lado) setElegido(null)
+              setGanador(lado)
+            }}
+            className={`flex min-h-[64px] items-center justify-between gap-3 rounded-btn px-[18px] text-left text-[19px] font-bold ${
+              ganador === lado
+                ? 'bg-block text-on-block'
+                : 'bg-opcion text-text shadow-[inset_0_0_0_1.5px_var(--color-opcion-borde)]'
+            }`}
+          >
+            <span className="min-w-0">{nombreDe(lado)}</span>
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              className={`h-6 w-6 shrink-0 fill-none stroke-current stroke-2 [stroke-linecap:round] [stroke-linejoin:round] ${
+                ganador === lado ? '' : 'invisible'
+              }`}
+            >
+              <path d="M5 12.5l4.5 4.5L19 7.5" />
+            </svg>
+          </button>
+        ))}
+      </div>
+      {/* Nombra al que perdió, no "el perdedor": es lo que confirma qué se
+          tocó recién. Sin ganador los números se ven pero no se tocan: la
+          hoja no salta de alto entre un toque y otro. */}
+      <p className={PREGUNTA}>{perdedor === null ? `${cap(unidad)} del que perdió` : `${cap(unidad)} de ${perdedor}`}</p>
+      <div className={`grid gap-2 ${opciones.length <= 4 ? 'grid-cols-4' : 'grid-cols-6'}`}>
+        {opciones.map((puntos) => {
+          const activo = elegido === puntos
+          return (
+            <button
+              key={puntos}
+              type="button"
+              disabled={ganador === null}
+              aria-pressed={activo}
+              onClick={() => elegirPuntos(puntos)}
+              className={`font-cond flex min-h-[60px] items-center justify-center rounded-btn border-[1.5px] text-[30px] ${
+                activo ? 'border-block bg-block text-on-block' : 'border-line text-text active:bg-sport-tint'
+              }`}
+            >
+              {puntos}
+            </button>
+          )
+        })}
+      </div>
+      <p aria-live="polite" className="mt-2.5 min-h-5 text-[15px] text-muted">
+        {ganador === null ? 'Tocá primero quién ganó.' : 'Con este toque se guarda.'}
+      </p>
     </div>
   )
 }

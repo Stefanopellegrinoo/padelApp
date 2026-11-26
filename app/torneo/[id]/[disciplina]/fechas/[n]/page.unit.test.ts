@@ -194,6 +194,8 @@ vi.mock('@/db/read', async (importOriginal) => {
     seasonMatchdaysOf: async () => [matchdaySummary()],
     entriesOf: async () => entries(),
     attendancesOf: async () => new Map(),
+    // Quién mira: nadie del plantel, así ninguna fila sale marcada como "vos".
+    myEntryId: async () => null,
     pairLocksOf: async () => [],
     matchdayDetail: async () => ({
       matchday: matchdaySummary(),
@@ -284,7 +286,8 @@ describe('la fecha GROUPS_KNOCKOUT en juego — fase y llave (REQ-D8-1, decisió
 
     const html = await render()
 
-    expect(html).toContain('Fase actual: Fase de grupos')
+    // La fase la dicen los títulos de sus secciones; "Fase actual: …" la repetía (S8d, T17).
+    expect(html).not.toContain('Fase actual')
     expect(html).toContain('Grupo 1')
     expect(html).toContain('Grupo 2')
     expect(html).not.toContain('>Cerrar fase<')
@@ -308,7 +311,7 @@ describe('la fecha GROUPS_KNOCKOUT en juego — fase y llave (REQ-D8-1, decisió
    * "Cerrar fecha" tiene que estar HABILITADO igual — el fix de
    * `remainingMatches` es lo que hace que esto no quede roto.
    */
-  it('con la final jugada: no ofrece "Cerrar fase", y "Cerrar fecha" no queda trabado por el tercer puesto sin jugar', async () => {
+  it('con la final jugada: no ofrece "Cerrar fase", y "Cerrar la fecha" no queda trabado por el tercer puesto sin jugar', async () => {
     escena.status = 'OPEN'
     escena.formato = { kind: 'GROUPS_KNOCKOUT', groups: 2, qualifiersPerGroup: 2 }
     escena.sides = ALL_SIDES
@@ -321,8 +324,11 @@ describe('la fecha GROUPS_KNOCKOUT en juego — fase y llave (REQ-D8-1, decisió
     const html = await render()
 
     expect(html).not.toContain('>Cerrar fase<')
-    expect(html).toContain('>Cerrar fecha<')
-    expect(html).not.toContain('falta 1 partido')
+    // El rediseño dice "Cerrar la fecha", como el prototipo, y la razón va arriba del botón.
+    const boton = /<button[^>]*>Cerrar la fecha<\/button>/.exec(html)?.[0] ?? ''
+    expect(boton).not.toBe('')
+    expect(boton).not.toContain('disabled')
+    expect(html).not.toContain('Falta 1 partido')
   })
 })
 
@@ -651,7 +657,7 @@ describe('la fecha GROUPS_KNOCKOUT cerrada — la llave no se pierde al cerrar (
 
     expect(html).toContain('Semifinal')
     expect(html).toContain('Final')
-    expect(html).not.toMatch(/Ronda \d+ de/)
+    expect(html).not.toMatch(/>Ronda \d+</)
   })
 
   it('el PG de la tabla cuenta sólo los partidos de grupo — la misma tabla que decidió los puntos (standingsFromBracket, D1)', async () => {
@@ -693,7 +699,7 @@ describe('la fecha GROUPS_KNOCKOUT cerrada — la llave no se pierde al cerrar (
 })
 
 describe('no-regresión — una fecha ROUND_ROBIN sigue viendo exactamente lo de siempre (REQ-D7-1)', () => {
-  it('sin "Fase actual", con el acordeón de Rondas de siempre', async () => {
+  it('sin "Fase actual", con las Rondas de siempre', async () => {
     escena.status = 'OPEN'
     escena.formato = { kind: 'ROUND_ROBIN' }
     escena.sides = [1, 2, 3, 4].map(side)
@@ -708,7 +714,7 @@ describe('no-regresión — una fecha ROUND_ROBIN sigue viendo exactamente lo de
 
     expect(html).not.toContain('Fase actual:')
     expect(html).not.toContain('>Cerrar fase<')
-    expect(html).toContain('Ronda 1 de')
+    expect(html).toContain('>Ronda 1<')
   })
 })
 
@@ -1032,7 +1038,7 @@ describe('el armado en DRAFT — Automático antes de sortear (§7, hallazgo de 
 
     const btnAutomatico = /<button[^>]*>Automático/.exec(html)?.[0] ?? ''
     expect(btnAutomatico).toContain('aria-checked="true"')
-    expect(html).toContain('→ 4 grupos + llave (vienen 12)')
+    expect(html).toContain('4 grupos + llave (vienen 12)')
     expect(html).toContain('20 partidos')
     expect(html).not.toContain('66 partidos')
     expect(html).toContain('Cómo quedan los grupos')
@@ -1053,8 +1059,12 @@ describe('la tarjeta del partido: con más de un set cuenta SETS, con uno solo l
   }
   /** El puntaje que la tarjeta dibuja al lado del nombre, sólo en la parte de partidos (antes de la tabla). */
   function scoreOf(html: string, name: string): string | undefined {
+    return scoresOf(html, name)[0]
+  }
+  /** Todos los puntajes de un lado, tarjeta por tarjeta, en el orden de la pantalla. */
+  function scoresOf(html: string, name: string): string[] {
     const partidos = html.slice(0, html.indexOf('Tabla de la fecha'))
-    return new RegExp(`${name}</span><span[^>]*>(\\d+|–)</span>`).exec(partidos)?.[1]
+    return [...partidos.matchAll(new RegExp(`${name}</span><span[^>]*>(\\d+|–)</span>`, 'g'))].map((m) => m[1]!)
   }
 
   it('ping pong 11-0, 9-11, 9-11 dice 1 a 2 (no 29 a 22) y un set de pádel 4-2 sigue diciendo 4 a 2', async () => {
@@ -1072,13 +1082,13 @@ describe('la tarjeta del partido: con más de un set cuenta SETS, con uno solo l
 
     const html = (await render()).replaceAll('<!-- -->', '')
 
-    // La ronda 1, completa, queda en su fila resumen.
-    expect(html).toContain('Jugador 1 1–2 Jugador 2')
-    expect(html).toContain('Jugador 3 4–2 Jugador 4')
-    expect(html).not.toContain('29–22')
-    // La ronda 2 está abierta: la tarjeta.
-    expect(scoreOf(html, 'Jugador 1')).toBe('2')
-    expect(scoreOf(html, 'Jugador 3')).toBe('1')
+    // La ronda 1, completa, ya no se pliega en una fila resumen (S8e: un partido
+    // terminado puede hacer falta corregirlo): sus tarjetas se ven como las de la 2.
+    expect(scoresOf(html, 'Jugador 1')).toEqual(['1', '2'])
+    expect(scoresOf(html, 'Jugador 2')).toEqual(['2'])
+    expect(scoresOf(html, 'Jugador 3')).toEqual(['4', '1'])
+    expect(scoresOf(html, 'Jugador 4')).toEqual(['2'])
+    expect(html).not.toContain('>29<')
   })
 
   it('en la llave también: sets ganados con más de un set, games con uno', async () => {
@@ -1214,12 +1224,15 @@ describe('con parejas fijas no hay pareja "Defensora" (R17)', () => {
 
   it('control: con parejas que rotan, la fecha abierta marca a la campeona anterior como defensora', async () => {
     fecha2('OPEN', false)
-    expect(await render('2')).toContain('· Defensora')
+    const html = await render('2')
+    // "Defensora" es su propia marca al lado del nombre, sin "·" (el prototipo no lo usa).
+    expect(html).toMatch(/>Defensora<\/span>/)
+    expect(html).not.toContain('·')
   })
 
   it('parejas fijas: la fecha abierta tampoco marca a la campeona anterior como defensora', async () => {
     fecha2('OPEN', true)
-    expect(await render('2')).not.toContain('· Defensora')
+    expect(await render('2')).not.toContain('Defensora')
   })
 })
 
@@ -1257,5 +1270,52 @@ describe('la fecha GROUPS_KNOCKOUT cerrada — sin pie de desempate de la tabla 
     const html = await render()
 
     expect(html).not.toMatch(/quedó \d+° por/)
+  })
+})
+
+describe('S8e — quién toca un partido y qué abre', () => {
+  function fechaAbierta(isAdmin: boolean) {
+    escena.status = 'OPEN'
+    escena.isAdmin = isAdmin
+    escena.pairSize = 1
+    escena.formato = { kind: 'ROUND_ROBIN' }
+    escena.sides = [1, 2, 3, 4].map(side)
+    escena.matches = [playedMatch('GRUPO', 1, 1, 1, 2), unplayedMatch('GRUPO', 1, 1, 3, 4)]
+  }
+
+  afterEach(() => {
+    escena.isAdmin = true
+  })
+
+  it('quien organiza: el partido sin cargar abre la carga y el cargado se corrige, los dos con su nombre', async () => {
+    fechaAbierta(true)
+    const html = await render()
+    expect(html).toContain('aria-label="Cargar Jugador 3 contra Jugador 4"')
+    expect(html).toContain('aria-label="Corregir Jugador 1 3, Jugador 2 1"')
+    expect(html).not.toContain('Cargar resultado')
+  })
+
+  it('un jugador sin permiso de carga ve los partidos, pero no son botones', async () => {
+    fechaAbierta(false)
+    const html = await render()
+    expect(html).not.toContain('aria-label="Cargar')
+    expect(html).not.toContain('aria-label="Corregir')
+    expect(html).toContain('Jugador 3')
+  })
+
+  it('la fecha cerrada no se carga más, ni para quien organiza', async () => {
+    fechaAbierta(true)
+    escena.status = 'CLOSED'
+    escena.matches = [playedMatch('GRUPO', 1, 1, 1, 2), playedMatch('GRUPO', 1, 1, 3, 4)]
+    const html = await render()
+    expect(html).not.toContain('aria-label="Corregir')
+  })
+
+  it('el encabezado vuelve a Fechas y dice cuántos partidos hay cargados', async () => {
+    fechaAbierta(true)
+    const html = (await render()).replaceAll('<!-- -->', '')
+    expect(html).toMatch(/<a[^>]*href="\/torneo\/s1\/fifa\/fechas"[^>]*>.*Fechas<\/a>/)
+    expect(html).toContain('1 de 2')
+    expect(html).toContain('Falta 1 partido')
   })
 })

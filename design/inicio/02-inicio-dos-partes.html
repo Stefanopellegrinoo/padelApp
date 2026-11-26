@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>B · Inicio con las dos partes</title>
+<style>
+  :root {
+    --bg: #ffffff; --surface: #f4f6f3; --chip: #eaefea; --line: #e4e9e5;
+    --text: #10231a; --muted: #5f6e66; --accent: #0e5c3f; --accent-text: #ffffff;
+    --accent-link: #0e5c3f; --up: #27794e; --ok-bg: #e6f2ea; --down: #b24b31;
+    --r-field: 12px; --r-card: 16px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1512; --surface: #16201c; --chip: #1b2823; --line: #21302a;
+      --text: #eaf2ee; --muted: #8ea298; --accent: #0f6b48; --accent-text: #dbf5e8;
+      --accent-link: #34c08a; --up: #34c08a; --ok-bg: #12291f; --down: #ff9a6b;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: Archivo, ui-sans-serif, system-ui, sans-serif; width: 390px; }
+  a { color: inherit; text-decoration: none; }
+  a:focus-visible, button:focus-visible { outline: 3px solid var(--accent-link); outline-offset: 2px; border-radius: 6px; }
+  main { display: flex; flex-direction: column; gap: 12px; padding: 0 20px 28px; }
+  header { display: flex; align-items: center; justify-content: space-between; padding-top: 16px; }
+  .hello { font-size: 13.5px; font-weight: 550; color: var(--muted); }
+  h1 { font-size: 26px; font-weight: 800; letter-spacing: -.03em; }
+  .me { width: 40px; height: 40px; border-radius: 50%; background: var(--chip); color: var(--muted); display: grid; place-items: center; font-size: 12px; font-weight: 800; border: 0; font-family: inherit; }
+  .micro { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .13em; color: var(--muted); }
+  h2 { margin-top: 12px; display: flex; justify-content: space-between; align-items: baseline; }
+  h2 a { font-size: 13px; font-weight: 800; letter-spacing: 0; text-transform: none; color: var(--accent-link); }
+  .next { display: block; background: var(--accent); color: var(--accent-text); border-radius: var(--r-card); padding: 18px; }
+  .next .micro { color: var(--accent-text); opacity: .8; }
+  .next .t { font-size: 22px; font-weight: 800; letter-spacing: -.02em; margin-top: 6px; }
+  .next .d { font-size: 14px; font-weight: 600; margin-top: 2px; opacity: .9; }
+  .next .row { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,.22); }
+  .next .pos { font-size: 15px; font-weight: 800; }
+  .next .go { font-size: 14px; font-weight: 800; }
+  .list { border: 1px solid var(--line); border-radius: var(--r-card); background: var(--surface); }
+  .li { display: flex; gap: 12px; align-items: center; padding: 12px 14px; min-height: 64px; }
+  .li + .li { border-top: 1px solid var(--line); }
+  .ic { width: 40px; height: 40px; border-radius: var(--r-field); display: grid; place-items: center; background: var(--chip); color: var(--text); flex-shrink: 0; }
+  .ic svg { width: 20px; height: 20px; }
+  .av { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 800; background: var(--ok-bg); color: var(--up); flex-shrink: 0; }
+  .li b { display: block; font-size: 15px; font-weight: 700; }
+  .sub { display: block; font-size: 12.5px; font-weight: 600; color: var(--muted); }
+  .rk { margin-left: auto; text-align: right; flex-shrink: 0; }
+  .rk strong { display: block; font-size: 17px; font-weight: 800; }
+  .rk span { font-size: 11px; font-weight: 700; color: var(--muted); }
+  .w { color: var(--up); font-weight: 800; }
+  .l { color: var(--down); font-weight: 800; }
+  .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 4px; }
+  .btn { display: flex; flex-direction: column; justify-content: center; min-height: 64px; border-radius: var(--r-field); padding: 12px; text-align: center; font-size: 14px; font-weight: 800; border: 1px solid var(--line); }
+  .btn small { font-size: 11.5px; font-weight: 600; color: var(--muted); padding-top: 2px; }
+  .add { display: flex; align-items: center; justify-content: center; gap: 8px; border: 1px dashed var(--line); border-radius: var(--r-field); min-height: 48px; font-size: 14px; font-weight: 800; color: var(--accent-link); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div><p class="hello">Hola, Martín</p><h1>Inicio</h1></div>
+    <button class="me" aria-label="Tu cuenta">MP</button>
+  </header>
+
+  <h2 class="micro">Lo próximo</h2>
+  <a class="next" href="#">
+    <p class="micro">Pádel · Los Pibes del Martes</p>
+    <p class="t">Fecha 8 · Martes 18/11</p>
+    <p class="d">20:30 · Club Ciudad · 10 confirmados</p>
+    <div class="row"><span class="pos">Vas 3° de 12</span><span class="go">Ver la fecha ›</span></div>
+  </a>
+
+  <h2 class="micro">Tus torneos</h2>
+  <div class="list">
+    <a class="li" href="#">
+      <span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg></span>
+      <span><b>Los Pibes del Martes</b><span class="sub">Pádel · Fecha 7 de 12</span></span>
+      <span class="rk"><strong>3°</strong><span>de 12</span></span>
+    </a>
+    <a class="li" href="#">
+      <span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg></span>
+      <span><b>FIFA de los Viernes</b><span class="sub">FIFA · Fecha 4 de 8</span></span>
+      <span class="rk"><strong>1°</strong><span>de 6</span></span>
+    </a>
+  </div>
+
+  <h2 class="micro">Con tus amigos <a href="#">Ver todos</a></h2>
+  <div class="list">
+    <a class="li" href="#"><span class="av">NA</span><span><b>Nico Arias</b><span class="sub"><span class="w">Ganaste 6-4 6-3</span> · hace 2 días</span></span><span class="rk"><strong>7–5</strong><span>historial</span></span></a>
+    <a class="li" href="#"><span class="av">FG</span><span><b>Facu Gómez</b><span class="sub"><span class="l">Perdiste 1-3</span> · el viernes</span></span><span class="rk"><strong>4–6</strong><span>historial</span></span></a>
+    <a class="li" href="#"><span class="av">JL</span><span><b>Juampi Ledesma</b><span class="sub"><span class="w">Ganaste 6-2 7-5</span> · hace 1 semana</span></span><span class="rk"><strong>3–1</strong><span>historial</span></span></a>
+  </div>
+  <a class="add" href="#">+ Cargar un partido con un amigo</a>
+
+  <h2 class="micro">Armar algo nuevo</h2>
+  <div class="actions">
+    <a class="btn" href="#">Torneo<small>Con tabla y fechas</small></a>
+    <a class="btn" href="#">Torneo rápido<small>Una tarde, sin tabla</small></a>
+  </div>
+</main>
+</body>
+</html>

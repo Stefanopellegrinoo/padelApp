@@ -1,4 +1,4 @@
-import type { MatchFormat, SetsSport } from '@/core'
+import { isSportId, sportOf, type MatchFormat, type SetsSport, type SportId } from '@/core'
 import { EdgeError } from '@/db/errors'
 import type { CasualPlayerInput } from '@/db/friends'
 import { isComplete, type LoadState } from '@/app/torneo/[id]/[disciplina]/fechas/[n]/carga-state'
@@ -135,4 +135,98 @@ export function chooseDeuce(state: LoadState, loser: number, format: MatchFormat
   const set =
     state.pendingWinner === 'A' ? { gamesA: loser + 2, gamesB: loser } : { gamesA: loser, gamesB: loser + 2 }
   return { sets: [...state.sets, set], pendingWinner: null }
+}
+
+// ── lo que el formulario trae puesto (S8e) ──────────────────────────────────
+
+/** Hoy en `YYYY-MM-DD` con la fecha local: `played_on` no tiene hora. */
+export function hoyISO(now: Date = new Date()): string {
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+}
+
+/** Dónde queda lo último que se usó para cargar un partido con un amigo (`localStorage`). */
+export const RECUERDO_KEY = 'padel:partido-con-amigo'
+
+type FormatoRecordado = Pick<MatchFormat, 'setsToWin' | 'gamesPerSet'>
+
+/** Lo último que se usó: el deporte, el modo y, por deporte de sets, el formato. */
+export interface Recuerdo {
+  sport: SportId
+  mode: Mode
+  formats: Partial<Record<SportId, FormatoRecordado>>
+}
+
+/**
+ * Lee lo recordado. Es un borde como cualquier otro: lo pudo escribir otra
+ * versión de la app, así que lo que no sirve (JSON roto, un deporte que ya no
+ * está, un formato fuera del rango del deporte) se descarta pedazo a pedazo y
+ * nunca tira.
+ */
+export function leerRecuerdo(raw: string | null): Recuerdo | null {
+  if (raw === null) return null
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    return null
+  }
+  if (typeof parsed !== 'object' || parsed === null) return null
+  const { sport, mode, formats } = parsed as Record<string, unknown>
+  if (typeof sport !== 'string' || !isSportId(sport)) return null
+  const limpios: Recuerdo['formats'] = {}
+  if (typeof formats === 'object' && formats !== null) {
+    for (const [id, format] of Object.entries(formats)) {
+      if (!isSportId(id) || typeof format !== 'object' || format === null) continue
+      const info = sportOf(id)
+      if (info.family !== 'sets') continue
+      const { setsToWin, gamesPerSet } = format as Record<string, unknown>
+      const dentro = (n: unknown, r: { min: number; max: number }) =>
+        typeof n === 'number' && Number.isInteger(n) && n >= r.min && n <= r.max
+      if (dentro(setsToWin, info.setsToWin) && dentro(gamesPerSet, info.gamesPerSet)) {
+        limpios[id] = { setsToWin: setsToWin as number, gamesPerSet: gamesPerSet as number }
+      }
+    }
+  }
+  return { sport, mode: mode === '2v2' ? '2v2' : '1v1', formats: limpios }
+}
+
+/** El formato con el que arranca un deporte de sets: el recordado, o el del deporte. */
+export function formatoInicial(sport: SetsSport, id: SportId, recuerdo: Recuerdo | null): MatchFormat {
+  const recordado = recuerdo?.formats[id]
+  return recordado === undefined ? sport.format : { ...sport.format, ...recordado }
+}
+
+/** Quién ganó según el marcador, o `null` si no lo dice (vacío o empatado: puede haber penales). */
+export function outcomeDelMarcador(mine: string, theirs: string): 'won' | 'lost' | null {
+  if (!/^\d+$/.test(mine.trim()) || !/^\d+$/.test(theirs.trim())) return null
+  const a = Number(mine)
+  const b = Number(theirs)
+  return a > b ? 'won' : a < b ? 'lost' : null
+}
+
+const VERBO = {
+  '1v1': { won: 'Ganaste', lost: 'Perdiste', drew: 'Empataste' },
+  '2v2': { won: 'Ganaron', lost: 'Perdieron', drew: 'Empataron' },
+} as const
+
+/**
+ * Lo que dice el aviso después de guardar: "Ganaste 6-4 6-3", desde tu lado y
+ * como se canta. Con sets, el resultado sale de los sets; con goles, del
+ * "quién ganó" y el marcador si lo hay.
+ */
+export function resumenPartido(
+  mode: Mode,
+  resultado:
+    | { family: 'sets'; sets: readonly PadelSet[] }
+    | { family: 'goals'; outcome: 'won' | 'lost' | 'drew'; scoreMine: string; scoreTheirs: string },
+): string {
+  if (resultado.family === 'sets') {
+    const mine = resultado.sets.filter((set) => set.mine > set.theirs).length
+    const theirs = resultado.sets.filter((set) => set.theirs > set.mine).length
+    const outcome = mine > theirs ? 'won' : mine < theirs ? 'lost' : 'drew'
+    return `${VERBO[mode][outcome]} ${resultado.sets.map((set) => `${set.mine}-${set.theirs}`).join(' ')}`
+  }
+  const { outcome, scoreMine, scoreTheirs } = resultado
+  const marcador = scoreMine.trim() !== '' && scoreTheirs.trim() !== '' ? ` ${scoreMine.trim()}-${scoreTheirs.trim()}` : ''
+  return `${VERBO[mode][outcome]}${marcador}`
 }

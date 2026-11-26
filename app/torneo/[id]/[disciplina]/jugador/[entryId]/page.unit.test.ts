@@ -139,6 +139,8 @@ vi.mock('@/db/read', async (importOriginal) => {
       disciplines: header(),
     })),
     seasonSquadMembersOf: vi.fn(async () => containerSquad()),
+    // Quién mira: nadie por defecto; el caso de "vos" lo pisa una vez.
+    myEntryId: vi.fn(async () => null),
     // Las tres lecturas devuelven algo DISTINTO según qué `disciplineId`
     // reciban -- si la pantalla dejara de pasarlo, las tres caerían al
     // `else` de pádel sin importar el slug de la URL.
@@ -151,13 +153,19 @@ vi.mock('@/db/read', async (importOriginal) => {
   }
 })
 
-async function render(disciplina: string, entryId = 'e1'): Promise<string> {
+async function render(disciplina: string, entryId = 'e1', desde?: string): Promise<string> {
   const { default: JugadorPage } = await import('./page')
   return renderToStaticMarkup(
     await JugadorPage({
       params: Promise.resolve({ id: 's1', disciplina, entryId }),
+      searchParams: Promise.resolve(desde === undefined ? {} : { desde }),
     }),
   )
+}
+
+/** El `<a>` entero (apertura, contenido, cierre) cuyo texto visible es `text`. */
+function linkWith(html: string, text: string): string | undefined {
+  return html.match(new RegExp(`<a [^>]*>(?:(?!</a>).)*?${text}(?:(?!</a>).)*?</a>`))?.[0]
 }
 
 describe('Jugador trae las estadísticas de la disciplina de la URL, no la [0] de la temporada', () => {
@@ -167,7 +175,7 @@ describe('Jugador trae las estadísticas de la disciplina de la URL, no la [0] d
     expect(html).toContain('Padel Uno')
     expect(html).not.toContain('Fifa Uno')
     expect(html).toContain('100%')
-    expect(html).toContain('1° de 2 · 20 puntos')
+    expect(html).toContain('1° de 2, 20 puntos')
   })
 
   it('con el slug de FIFA, el MISMO entryId (e1) sale subcampeón: 2° con 5 puntos (countBestOf de FIFA, no el de pádel), 0% de efectividad', async () => {
@@ -177,15 +185,18 @@ describe('Jugador trae las estadísticas de la disciplina de la URL, no la [0] d
     expect(html).not.toContain('Padel Uno')
     expect(html).toContain('0%')
     expect(html).not.toContain('100%')
-    expect(html).toContain('2° de 2 · 5 puntos')
+    expect(html).toContain('2° de 2, 5 puntos')
   })
 
   it('con 2+ disciplinas, el nombre dice cuál está mostrando', async () => {
     const htmlFifa = await render('fifa')
     const htmlPadel = await render('padel')
 
-    expect(htmlFifa).toContain('Fifa Uno · FIFA')
-    expect(htmlPadel).toContain('Padel Uno · Pádel')
+    // El deporte va arriba, con el torneo; el título es el nombre solo. Sin "·" (el prototipo no lo usa).
+    expect(htmlFifa).toContain('Torneo de prueba, FIFA')
+    expect(htmlPadel).toContain('Torneo de prueba, Pádel')
+    expect(htmlPadel).toMatch(/<h1[^>]*>Padel Uno<\/h1>/)
+    expect(htmlPadel).not.toContain('·')
   })
 
   it('un socio del torneo que no juega ESTA disciplina dice cuál le falta, no un genérico "esta disciplina"', async () => {
@@ -280,6 +291,55 @@ describe('Jugador trae las estadísticas de la disciplina de la URL, no la [0] d
 
     const html = await render('fifa', 'e1')
 
-    expect(html).toContain('1° de 2 · 10 puntos')
+    expect(html).toContain('1° de 2, 10 puntos')
+  })
+})
+
+describe('Jugador: Volver dice a dónde vuelve', () => {
+  it('sin origen, a la Tabla del deporte', async () => {
+    expect(linkWith(await render('padel'), 'Tabla')).toContain('href="/torneo/s1/padel"')
+  })
+
+  it('desde Stats, a Estadísticas; desde Mías, a Mías', async () => {
+    expect(linkWith(await render('padel', 'e1', 'stats'), 'Estadísticas')).toContain('href="/torneo/s1/padel/stats"')
+    expect(linkWith(await render('fifa', 'e1', 'mias'), 'Estadísticas')).toContain('href="/torneo/s1/fifa/stats?tab=mias"')
+  })
+
+  it('un origen que no se conoce cae en la Tabla', async () => {
+    expect(linkWith(await render('padel', 'e1', 'cualquiera'), 'Tabla')).toContain('href="/torneo/s1/padel"')
+  })
+})
+
+describe('Jugador: compañeros y rivales son filas que llevan a su perfil', () => {
+  it('el rival enlaza a su perfil y conserva de dónde se vino', async () => {
+    const html = await render('padel', 'e1', 'stats')
+
+    expect(linkWith(html, 'Padel Dos')).toContain('href="/torneo/s1/padel/jugador/e2?desde=stats"')
+  })
+})
+
+describe('Jugador: tu perfil', () => {
+  it('tu propio perfil lleva la marca "vos" arriba; en el de otro, la marca va en tu fila', async () => {
+    const { myEntryId } = await import('@/db/read')
+    const header = (html: string) => html.match(/<header[^>]*>.*<\/header>/)?.[0] ?? ''
+
+    vi.mocked(myEntryId).mockResolvedValueOnce('e1')
+    expect(header(await render('padel', 'e1'))).toMatch(/>vos</)
+
+    vi.mocked(myEntryId).mockResolvedValueOnce('e2')
+    const other = await render('padel', 'e1')
+    expect(header(other)).not.toMatch(/>vos</)
+    const rival = other.match(/<li[^>]*>(?:(?!<\/li>).)*Padel Dos(?:(?!<\/li>).)*<\/li>/)?.[0]
+    expect(rival).toMatch(/>vos</)
+  })
+
+  it('muestra los puntos de cada fecha', async () => {
+    expect(await render('padel')).toContain('Puntos por fecha: fecha 1, 10; fecha 2, 10')
+  })
+
+  it('quien no jugó este deporte tiene a mano las fechas', async () => {
+    const html = await render('padel', 'e3')
+
+    expect(linkWith(html, 'Ver las fechas')).toContain('href="/torneo/s1/padel/fechas"')
   })
 })

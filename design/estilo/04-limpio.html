@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Estilo 4 · Limpio</title>
+<style>
+  /* Mínimo y tipográfico: blanco, casi negro, verde solo como detalle. Sin tarjetas: jerarquía con tamaño de letra, aire y líneas finas. */
+  :root {
+    --bg: #ffffff; --text: #0b0f0d; --muted: #5a625e; --line: #e6e8e7; --soft: #f3f4f3;
+    --accent: #0b7a4b; --up: #0b7a4b; --down: #b42318;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: Archivo, "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; width: 390px; -webkit-font-smoothing: antialiased; }
+  a { color: inherit; text-decoration: none; }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--text); outline-offset: 4px; border-radius: 4px; }
+  main { padding: 0 24px 36px; }
+  header { display: flex; align-items: center; justify-content: space-between; padding-top: 24px; }
+  .hello { font-size: 14px; font-weight: 500; color: var(--muted); }
+  h1 { font-size: 22px; font-weight: 700; letter-spacing: -.02em; }
+  .me { width: 44px; height: 44px; border-radius: 50%; background: var(--bg); color: var(--text); border: 1.5px solid var(--text); display: grid; place-items: center; font-size: 13px; font-weight: 700; font-family: inherit; }
+
+  /* Etiqueta de sección: chica, gris, con un punto verde; la única dosis de color fija. */
+  .label { display: flex; align-items: center; justify-content: space-between; font-size: 13px; font-weight: 600; color: var(--muted); padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+  .label span::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-right: 8px; vertical-align: 2px; }
+  .label a { color: var(--accent); font-weight: 700; min-height: 44px; display: inline-flex; align-items: center; margin: -14px 0; }
+  section { margin-top: 40px; }
+
+  /* Hero: bloque de texto grande, sin caja. */
+  .next { display: block; padding-top: 20px; }
+  .next .k { font-size: 14px; font-weight: 600; color: var(--muted); }
+  .next .t { font-size: 44px; font-weight: 800; letter-spacing: -.045em; line-height: 1; margin-top: 10px; }
+  .next .d { font-size: 16px; font-weight: 500; color: var(--muted); margin-top: 10px; line-height: 1.45; }
+  .next .d b { color: var(--text); font-weight: 600; }
+  .next .row { display: flex; align-items: flex-end; justify-content: space-between; margin-top: 28px; }
+  .pos { font-size: 15px; font-weight: 500; color: var(--muted); }
+  .pos strong { display: block; font-size: 64px; font-weight: 800; letter-spacing: -.06em; line-height: .9; color: var(--text); font-variant-numeric: tabular-nums; margin-top: 4px; }
+  .pos small { font-size: 17px; font-weight: 600; letter-spacing: 0; color: var(--muted); }
+  .go { display: inline-flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 20px; border-radius: 10px; background: var(--text); color: var(--bg); font-size: 15px; font-weight: 700; }
+  .go svg { width: 16px; height: 16px; }
+
+  /* Filas: sin fondo, separadas por líneas finas. */
+  .row-l { display: flex; align-items: center; gap: 16px; min-height: 76px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+  .row-l b { display: block; font-size: 17px; font-weight: 650; letter-spacing: -.01em; }
+  .sub { display: block; font-size: 14px; font-weight: 500; color: var(--muted); margin-top: 2px; }
+  .num { margin-left: auto; text-align: right; flex-shrink: 0; }
+  .num strong { display: block; font-size: 26px; font-weight: 750; letter-spacing: -.04em; line-height: 1; font-variant-numeric: tabular-nums; }
+  .num span { font-size: 12.5px; font-weight: 500; color: var(--muted); }
+  .av { width: 40px; height: 40px; border-radius: 50%; background: var(--soft); display: grid; place-items: center; font-size: 13px; font-weight: 700; flex-shrink: 0; }
+  .w { color: var(--up); font-weight: 600; } .l { color: var(--down); font-weight: 600; }
+
+  .add { display: flex; align-items: center; gap: 10px; min-height: 56px; font-size: 15px; font-weight: 650; border-bottom: 1px solid var(--line); }
+  .add i { width: 28px; height: 28px; border-radius: 50%; border: 1.5px solid var(--accent); color: var(--accent); display: grid; place-items: center; font-style: normal; font-size: 17px; font-weight: 600; line-height: 1; }
+
+  .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 40px; }
+  .btn { display: flex; align-items: center; justify-content: center; min-height: 54px; border-radius: 10px; font-size: 15px; font-weight: 700; }
+  .primary { background: var(--text); color: var(--bg); }
+  .secondary { border: 1.5px solid var(--text); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div><p class="hello">Hola, Martín</p><h1>Inicio</h1></div>
+    <button class="me" aria-label="Tu cuenta">MP</button>
+  </header>
+
+  <section aria-labelledby="h-next">
+    <h2 class="label" id="h-next"><span>Lo próximo</span></h2>
+    <a class="next" href="#" aria-label="Fecha 8 de Los Pibes del Martes, martes 18/11, ver la fecha">
+      <p class="k">Pádel · Los Pibes del Martes · Fecha 8</p>
+      <p class="t">Martes 18/11</p>
+      <p class="d"><b>20:30</b> en Club Ciudad · <b>10</b> confirmados</p>
+      <div class="row">
+        <p class="pos">Vas<strong>3°<small> de 12</small></strong></p>
+        <span class="go">Ver la fecha <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4"/></svg></span>
+      </div>
+    </a>
+  </section>
+
+  <section aria-labelledby="h-torneos">
+    <h2 class="label" id="h-torneos"><span>Tus torneos</span></h2>
+    <a class="row-l" href="#"><span><b>Los Pibes del Martes</b><span class="sub">Pádel · Fecha 7/12</span></span><span class="num"><strong>3°</strong><span>de 12</span></span></a>
+    <a class="row-l" href="#"><span><b>FIFA de los Viernes</b><span class="sub">FIFA · Fecha 4/8</span></span><span class="num"><strong>1°</strong><span>de 6</span></span></a>
+  </section>
+
+  <section aria-labelledby="h-amigos">
+    <h2 class="label" id="h-amigos"><span>Con tus amigos</span><a href="#">Ver todos</a></h2>
+    <a class="row-l" href="#"><span class="av">NA</span><span><b>Nico Arias</b><span class="sub"><span class="w">Ganaste 6-4 6-3</span> · hace 2 días</span></span><span class="num"><strong>7–5</strong><span>historial</span></span></a>
+    <a class="row-l" href="#"><span class="av">FG</span><span><b>Facu Gómez</b><span class="sub"><span class="l">Perdiste 1-3</span> · el viernes</span></span><span class="num"><strong>4–6</strong><span>historial</span></span></a>
+    <a class="row-l" href="#"><span class="av">JL</span><span><b>Juampi Ledesma</b><span class="sub"><span class="w">Ganaste 6-2 7-5</span> · hace 1 semana</span></span><span class="num"><strong>3–1</strong><span>historial</span></span></a>
+    <a class="add" href="#"><i aria-hidden="true">+</i>Cargar un partido con un amigo</a>
+  </section>
+
+  <nav class="actions" aria-label="Armar algo nuevo">
+    <a class="btn primary" href="#">Crear torneo</a>
+    <a class="btn secondary" href="#">Torneo rápido</a>
+  </nav>
+</main>
+</body>
+</html>

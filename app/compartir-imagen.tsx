@@ -23,12 +23,20 @@ const MARGEN = 64
 const ALTO_FILA = 72
 const CABECERA = 210
 const PIE = 110
-// La paleta oscura de la app (`globals.css`): la imagen se ve igual en cualquier chat.
-const FONDO = '#0d1512'
-const SUPERFICIE = '#16201c'
-const TEXTO = '#eaf2ee'
-const TENUE = '#8ea298'
-const ACENTO = '#34c08a'
+// La paleta clara del prototipo (`globals.css`), fija: la imagen se ve igual en
+// cualquier chat y con cualquier tema. Arriba el bloque azul cancha, como el
+// encabezado de la app; abajo filas en tinta separadas por una línea. Sin
+// amarillo: la imagen la ve todo el grupo y no hay un "vos".
+const FONDO = '#ffffff'
+const BLOQUE = '#1f45e0'
+const EN_BLOQUE = '#ffffff'
+const EN_BLOQUE_SUAVE = '#c9d3ff'
+const TINTA = '#0e1a4a'
+const TENUE = '#4b5675'
+const LINEA = '#dce1ee'
+// El radio de 24 px de los bloques, a la escala de la imagen (1080 de ancho
+// contra los ~390 del teléfono).
+const RADIO = 56
 
 /**
  * "Compartir": una imagen de la tabla para mandar al grupo de WhatsApp, que la
@@ -93,47 +101,72 @@ async function dibujar(titulo: string, subtitulo: string, filas: readonly FilaIm
   ctx.fillRect(0, 0, canvas.width, canvas.height)
   ctx.textBaseline = 'middle'
 
-  ctx.fillStyle = TEXTO
-  ctx.font = `800 56px ${fuente}`
-  ctx.fillText(recortar(ctx, titulo, ANCHO - 2 * MARGEN), MARGEN, 100)
-  ctx.fillStyle = TENUE
-  ctx.font = `600 30px ${fuente}`
-  ctx.fillText(recortar(ctx, subtitulo, ANCHO - 2 * MARGEN), MARGEN, 158)
+  // El bloque del encabezado, con las esquinas de abajo redondeadas.
+  const altoBloque = CABECERA - 24
+  ctx.fillStyle = BLOQUE
+  ctx.beginPath()
+  ctx.moveTo(0, 0)
+  ctx.lineTo(ANCHO, 0)
+  ctx.lineTo(ANCHO, altoBloque - RADIO)
+  ctx.arcTo(ANCHO, altoBloque, ANCHO - RADIO, altoBloque, RADIO)
+  ctx.lineTo(RADIO, altoBloque)
+  ctx.arcTo(0, altoBloque, 0, altoBloque - RADIO, RADIO)
+  ctx.closePath()
+  ctx.fill()
 
-  let franja = 0
+  // Títulos y números en la cara condensada de Archivo, donde el canvas la sabe
+  // pedir (`fontStretch`); si no, sale ancha y no pasa nada. Va DESPUÉS de
+  // `ctx.font`, que la vuelve a `normal` cada vez que se asigna.
+  const condensada = () => {
+    if ('fontStretch' in ctx) ctx.fontStretch = 'condensed'
+  }
+
+  ctx.fillStyle = EN_BLOQUE
+  ctx.font = `800 64px ${fuente}`
+  condensada()
+  ctx.fillText(recortar(ctx, titulo, ANCHO - 2 * MARGEN), MARGEN, 84)
+  ctx.fillStyle = EN_BLOQUE_SUAVE
+  ctx.font = `600 30px ${fuente}`
+  ctx.fillText(recortar(ctx, subtitulo, ANCHO - 2 * MARGEN), MARGEN, 144)
+
+  let primera = true
   const lider = filas.findIndex((fila) => fila.puntos !== undefined)
   filas.forEach((fila, index) => {
     const y = CABECERA + index * ALTO_FILA
     const centro = y + ALTO_FILA / 2
     ctx.textAlign = 'left'
     if (fila.titulo) {
-      franja = 0
+      primera = true
       ctx.fillStyle = TENUE
-      ctx.font = `800 28px ${fuente}`
+      ctx.font = `700 28px ${fuente}`
       ctx.fillText(recortar(ctx, fila.nombre, ANCHO - 2 * MARGEN), MARGEN, centro + 8)
       return
     }
-    if (franja++ % 2 === 0) {
-      ctx.fillStyle = SUPERFICIE
-      ctx.fillRect(MARGEN / 2, y, ANCHO - MARGEN, ALTO_FILA)
+    // El divisor va arriba de cada fila salvo la primera de su grupo, como en
+    // las listas de la app.
+    if (!primera) {
+      ctx.fillStyle = LINEA
+      ctx.fillRect(MARGEN, y, ANCHO - 2 * MARGEN, 2)
     }
+    primera = false
     let anchoDer = -32
     if (fila.puntos !== undefined) {
       const der = `${fila.puntos} ${Number(fila.puntos) === 1 ? 'pt' : 'pts'}`
-      ctx.font = `800 34px ${fuente}`
-      ctx.fillStyle = index === lider ? ACENTO : TEXTO
+      ctx.font = `800 40px ${fuente}`
+      condensada()
+      ctx.fillStyle = index === lider ? BLOQUE : TINTA
       ctx.textAlign = 'right'
       ctx.fillText(der, ANCHO - MARGEN, centro)
       anchoDer = ctx.measureText(der).width
       ctx.textAlign = 'left'
     }
-    const ancho = ANCHO - 2 * MARGEN - anchoDer - 32
+    const anchoNombre = ANCHO - 2 * MARGEN - anchoDer - 32
     // Un partido de parejas es largo: achicar antes de que el "…" se coma al rival.
     let tamaño = 34
     do ctx.font = `700 ${tamaño--}px ${fuente}`
-    while (fila.puntos === undefined && tamaño >= 24 && ctx.measureText(fila.nombre).width > ancho)
-    ctx.fillStyle = TEXTO
-    ctx.fillText(recortar(ctx, fila.nombre, ancho), MARGEN, centro)
+    while (fila.puntos === undefined && tamaño >= 24 && ctx.measureText(fila.nombre).width > anchoNombre)
+    ctx.fillStyle = TINTA
+    ctx.fillText(recortar(ctx, fila.nombre, anchoNombre), MARGEN, centro)
   })
 
   ctx.fillStyle = TENUE

@@ -1,147 +1,230 @@
 'use client'
 
-import { Volver } from '@/app/torneo/[id]/volver'
-import { useEffect, useRef, useState } from 'react'
-import { campeon, tabla, terminado, type TorneoRapido } from './rapido-state'
-import { agruparPorRonda } from './jugar-logic'
-import { PartidoRow } from './partido-row'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { button } from '@/app/ui/button'
+import { Hero } from '@/app/ui/hero'
+import { Sheet } from '@/app/ui/sheet'
+import { Toast } from '@/app/ui/toast'
+import { DEPORTE_LABEL, VOLVER_INICIO, campeon, tabla, terminado, type Armado, type TorneoRapido } from './rapido-state'
+import { agruparPorRonda, nombreLado, resumenGuardado, siguienteSinCargar } from './jugar-logic'
+import { HojaPartido, TarjetaPartido } from './partido-row'
 import { Tabla } from './tabla'
 
-/**
- * La única confirmación de la ruta: "Nuevo torneo rápido" pisa el único
- * torneo guardado, y eso no se deshace. El resto de las acciones (cargar un
- * marcador) son inofensivas y no la necesitan.
- *
- * Es un `<dialog>` nativo abierto con `showModal()` y no un `fixed inset-0`:
- * así el modal, el foco al abrir, el trap de foco y el Escape los pone la
- * plataforma. Escribir un trap de foco a mano para dos botones sería mucho más
- * código y peor. `onClose` cubre las dos salidas —el Escape y el botón— porque
- * el `<dialog>` dispara `close` en las dos.
- */
-function ConfirmarNuevo({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
-  const dialogo = useRef<HTMLDialogElement>(null)
+/** Cómo se juega, en dos palabras: va de subtítulo del encabezado. */
+function formatoDe(armado: Armado): string {
+  if (armado.modalidad === 'INDIVIDUAL') return 'Individual'
+  if (armado.modoParejas === 'FIJAS') return 'Parejas fijas'
+  if (armado.modoParejas === 'SORTEADAS') return 'Parejas sorteadas'
+  return 'Parejas rotativas'
+}
 
-  useEffect(() => {
-    dialogo.current?.showModal()
-  }, [])
-
-  return (
-    <dialog
-      ref={dialogo}
-      onClose={onCancel}
-      aria-labelledby="confirmar-nuevo-titulo"
-      className="mx-auto mb-0 mt-auto w-full max-w-lg border-0 bg-transparent p-6 pb-[26px] text-text backdrop:bg-scrim"
-    >
-      <div className="rounded-card border border-line bg-surface p-5">
-        <h2 id="confirmar-nuevo-titulo" className="text-[19px] font-extrabold tracking-[-.02em]">
-          ¿Arrancar un torneo nuevo?
-        </h2>
-        <p className="mt-2 text-pretty text-[13.5px] font-[550] leading-[1.5] text-muted">
-          Se borra este torneo de este teléfono. No hay forma de recuperarlo después.
-        </p>
-        <div className="mt-4 flex flex-col gap-2">
-          <button
-            type="button"
-            onClick={onConfirm}
-            className="rounded-field bg-chip p-3.5 text-center text-[14.5px] font-extrabold"
-          >
-            Sí, empezar de nuevo
-          </button>
-          <button
-            type="button"
-            onClick={() => dialogo.current?.close()}
-            className="rounded-field bg-accent p-3.5 text-center text-[14.5px] font-extrabold text-accent-text"
-          >
-            Seguir con este
-          </button>
-        </div>
-      </div>
-    </dialog>
-  )
+/** Los que faltan de una ronda, dichos: "Falta 1", "Faltan 2". */
+function faltan(cuantos: number): string {
+  return cuantos === 1 ? 'Falta 1' : `Faltan ${cuantos}`
 }
 
 interface JugarProps {
   torneo: TorneoRapido
   onCargarMarcador: (indice: number, a: number, b: number) => void
   onNuevoTorneo: () => void
+  /** El aviso de `page.tsx` cuando el navegador no deja guardar: va debajo del encabezado. */
+  aviso?: ReactNode
 }
 
 /**
- * Jugar (y, cuando `terminado(torneo)`, también hace de pantalla Terminado):
- * los partidos por ronda, la tabla actualizándose sola, y el campeón arriba
- * en cuanto no queda ningún marcador pendiente.
+ * Jugar (y, cuando `terminado(torneo)`, también la pantalla del campeón): los
+ * partidos por ronda, la tabla actualizándose sola, y el campeón en el
+ * encabezado en cuanto no queda ningún marcador pendiente.
  *
- * "Nuevo torneo rápido" se ve SIEMPRE, no sólo con el torneo terminado.
- * Escondido detrás de `acabo` un torneo a medio jugar era una ratonera: si te
+ * La carga (S8e): tocar el partido abre la hoja y el segundo toque guarda.
+ * Después de guardar, la hoja se cierra y el aviso dice qué se guardó y ofrece
+ * "Siguiente", el próximo sin cargar, a un toque. Es una acción del aviso y no
+ * un salto solo: mover la pantalla sin que nadie lo pida desorienta. Con el
+ * último cargado, la acción es ver al campeón. La tarjeta recién guardada
+ * destella 700 ms (`destello`, `globals.css`), como en la fecha.
+ *
+ * "Nuevo torneo" se ve SIEMPRE, no sólo con el torneo terminado. Escondido
+ * detrás de `acabo` un torneo a medio jugar era una ratonera: si te
  * equivocaste de deporte al armarlo, ir a `/` y volver te devuelve acá —hay un
  * torneo guardado— y la única salida era inventar resultados en todos los
- * partidos para que el botón apareciera. Pisar el torneo sigue preguntando.
+ * partidos para que el botón apareciera. Pisar el torneo sigue preguntando,
+ * en una hoja: es lo único de la ruta que no se deshace.
  */
-export function Jugar({ torneo, onCargarMarcador, onNuevoTorneo }: JugarProps) {
+export function Jugar({ torneo, onCargarMarcador, onNuevoTorneo, aviso }: JugarProps) {
+  // `vez` cambia en cada apertura: la hoja arranca de cero aunque se reabra el
+  // mismo partido. `indice` se queda al cerrar para que baje con su contenido.
+  const [hoja, setHoja] = useState<{ indice: number; open: boolean; vez: number } | null>(null)
+  const [guardado, setGuardado] = useState<{ texto: string; indice: number } | null>(null)
   const [confirmando, setConfirmando] = useState(false)
+  // La tarjeta que destella; `vez` hace un objeto nuevo en cada guardado, que reinicia el reloj.
+  const [destello, setDestello] = useState<{ indice: number; vez: number } | null>(null)
+  const campeonRef = useRef<HTMLDivElement>(null)
 
-  const grupos = agruparPorRonda(torneo.partidos)
+  useEffect(() => {
+    if (destello === null) return
+    const timer = setTimeout(() => setDestello(null), 700)
+    return () => clearTimeout(timer)
+  }, [destello])
+
+  const { armado, jugadores, partidos } = torneo
+  const grupos = agruparPorRonda(partidos)
   const filas = tabla(torneo)
   const acabo = terminado(torneo)
   const ganador = campeon(torneo)
+  const jugados = partidos.filter((partido) => partido.marcador !== null).length
+
+  const abrir = (indice: number) => setHoja((prev) => ({ indice, open: true, vez: (prev?.vez ?? 0) + 1 }))
+  const cerrar = () => setHoja((prev) => (prev === null ? null : { ...prev, open: false }))
+  const partido = hoja === null ? undefined : partidos[hoja.indice]
+
+  // Con la lista de AHORA: cuando se toca "Siguiente" el guardado ya está.
+  const siguiente = guardado === null ? null : siguienteSinCargar(partidos, guardado.indice)
+
+  const irA = (indice: number) => {
+    // El foco va a la tarjeta antes de abrir: la hoja vuelve ahí al cerrarse,
+    // y el aviso que tenía el botón ya no existe.
+    const tarjeta = document.getElementById(`partido-${indice}`)
+    tarjeta?.focus({ preventScroll: true })
+    tarjeta?.scrollIntoView?.({ block: 'center' })
+    abrir(indice)
+  }
+
+  const verCampeon = () => {
+    campeonRef.current?.focus({ preventScroll: true })
+    window.scrollTo?.({ top: 0 })
+  }
+
+  const accion =
+    siguiente !== null
+      ? { label: 'Siguiente', onClick: () => irA(siguiente) }
+      : acabo && guardado !== null
+        ? { label: 'Ver campeón', onClick: verCampeon }
+        : undefined
+
+  const esPareja = (ganador?.jugadores.length ?? 0) > 1
 
   return (
-    <div className="flex flex-1 flex-col gap-4 px-6 pt-4 pb-[26px]">
-      <div className="flex items-center justify-between">
-        <Volver href="/" />
-      </div>
-
-      {acabo && ganador !== null && (
-        <div className="rounded-card bg-accent p-4 text-accent-text">
-          <p className="text-[12px] font-extrabold uppercase tracking-[.14em] opacity-90">Campeón</p>
-          <p className="mt-1 text-[19px] font-extrabold">{ganador.jugadores.join(' y ')}</p>
-        </div>
-      )}
-
-      <h1 className="text-[22px] font-extrabold tracking-[-.03em]">
-        {torneo.armado.nombre.trim() || 'Torneo rápido'}
-      </h1>
-
-      <div className="flex flex-1 flex-col gap-5 overflow-y-auto">
-        {grupos.map((grupo) => (
-          <section key={grupo.ronda} className="flex flex-col gap-2">
-            <p className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">
-              Ronda {grupo.ronda}
+    <div data-deporte={armado.deporte} className="flex flex-1 flex-col pb-[calc(24px+env(safe-area-inset-bottom))]">
+      <Hero
+        back={VOLVER_INICIO}
+        kicker={DEPORTE_LABEL[armado.deporte]}
+        title={armado.nombre.trim() || 'Torneo rápido'}
+        subtitle={formatoDe(armado)}
+        sport={armado.deporte}
+        right={
+          acabo ? undefined : (
+            <p>
+              <span className="font-cond block text-[56px]">{jugados}</span>
+              <span className="text-[14px] text-on-block-soft">
+                de {partidos.length} jugados
+              </span>
             </p>
-            <div className="flex flex-col gap-2">
-              {grupo.items.map(({ indice, partido }) => (
-                <PartidoRow
+          )
+        }
+      >
+        {acabo && ganador !== null && (
+          <div
+            ref={campeonRef}
+            tabIndex={-1}
+            className="mt-4 flex items-center gap-3 rounded-tile bg-on-block px-4 py-3 text-block"
+          >
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              className="h-9 w-9 shrink-0 fill-none stroke-current stroke-2 [stroke-linecap:round] [stroke-linejoin:round]"
+            >
+              <path d="M7 4h10v5a5 5 0 0 1-10 0z" />
+              <path d="M7 6H4.5v1.5A3 3 0 0 0 7.5 10.5M17 6h2.5v1.5a3 3 0 0 1-3 3" />
+              <path d="M12 14v3.5M8.5 20.5h7M9.5 17.5h5v3h-5z" />
+            </svg>
+            <div className="min-w-0 flex-1">
+              <p className="text-[14px] font-bold">{esPareja ? 'Campeones' : 'Campeón'}</p>
+              <p className="font-titulo text-[28px] [overflow-wrap:anywhere]">{ganador.jugadores.join(' y ')}</p>
+            </div>
+            <p className="shrink-0 text-right">
+              <span className="font-cond block text-[40px]">{ganador.ganados}</span>
+              <span className="text-[14px] font-semibold">ganados</span>
+            </p>
+          </div>
+        )}
+      </Hero>
+      {aviso}
+
+      {grupos.map((grupo) => {
+        const pendientes = grupo.items.filter(({ partido: p }) => p.marcador === null).length
+        return (
+          <section key={grupo.ronda} className="px-4 pt-5">
+            <div className="mb-2.5 flex items-baseline justify-between gap-3">
+              <h2 className="font-titulo text-[24px]">Ronda {grupo.ronda}</h2>
+              {pendientes > 0 && <span className="text-[14px] font-semibold text-sport">{faltan(pendientes)}</span>}
+            </div>
+            <div className="flex flex-col gap-2.5">
+              {grupo.items.map(({ indice, partido: p }) => (
+                <TarjetaPartido
                   key={indice}
-                  partido={partido}
-                  jugadores={torneo.jugadores}
-                  deporte={torneo.armado.deporte}
-                  onCargarMarcador={(a, b) => onCargarMarcador(indice, a, b)}
+                  indice={indice}
+                  partido={p}
+                  jugadores={jugadores}
+                  destella={destello?.indice === indice}
+                  onAbrir={() => abrir(indice)}
                 />
               ))}
             </div>
           </section>
-        ))}
+        )
+      })}
 
-        <section className="flex flex-col gap-2">
-          <p className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">Tabla</p>
-          <Tabla filas={filas} />
-        </section>
+      <section className="pt-6">
+        <h2 className="px-4 font-titulo text-[24px]">Tabla</h2>
+        <Tabla filas={filas} />
+      </section>
+
+      <div className="px-4 pt-6">
+        {/* Con el torneo terminado empezar otro es el paso que sigue, así que
+            va de primario. Mientras se juega es la salida de emergencia y no
+            compite con los partidos. */}
+        <button
+          type="button"
+          onClick={() => setConfirmando(true)}
+          className={acabo ? button('primary', { size: 'lg', full: true }) : button('secondary', { full: true })}
+        >
+          Nuevo torneo
+        </button>
       </div>
 
-      {/* Con el torneo terminado empezar otro es el paso que sigue, así que va
-          de primario. Mientras se está jugando es apenas la salida de
-          emergencia y no tiene que competir con los partidos. */}
-      <button
-        type="button"
-        onClick={() => setConfirmando(true)}
-        className={`rounded-field p-4 text-center text-[15px] font-extrabold ${
-          acabo ? 'bg-accent text-accent-text' : 'border-[1.5px] border-line text-muted'
-        }`}
-      >
-        Nuevo torneo rápido
-      </button>
+      <Sheet open={hoja?.open ?? false} onClose={cerrar} title={partido === undefined ? '' : `Ronda ${partido.ronda}`}>
+        {partido !== undefined && hoja !== null && (
+          <HojaPartido
+            key={hoja.vez}
+            partido={partido}
+            jugadores={jugadores}
+            deporte={armado.deporte}
+            onGuardar={(a, b) => {
+              onCargarMarcador(hoja.indice, a, b)
+              cerrar()
+              const texto = resumenGuardado(nombreLado(jugadores, partido.a), nombreLado(jugadores, partido.b), { a, b })
+              setGuardado({ texto: `Guardado: ${texto}`, indice: hoja.indice })
+              setDestello((prev) => ({ indice: hoja.indice, vez: (prev?.vez ?? 0) + 1 }))
+            }}
+          />
+        )}
+      </Sheet>
 
-      {confirmando && <ConfirmarNuevo onCancel={() => setConfirmando(false)} onConfirm={onNuevoTorneo} />}
+      <Sheet open={confirmando} onClose={() => setConfirmando(false)} title="¿Arrancar un torneo nuevo?">
+        <p className="mt-2 text-[16px] text-muted">Se borra este torneo del teléfono y no se recupera.</p>
+        <button
+          type="button"
+          onClick={() => {
+            setConfirmando(false)
+            onNuevoTorneo()
+          }}
+          className={`${button('danger', { size: 'lg', full: true })} mt-4`}
+        >
+          Sí, empezar de nuevo
+        </button>
+      </Sheet>
+
+      <Toast message={guardado?.texto ?? null} action={accion} onDismiss={() => setGuardado(null)} />
     </div>
   )
 }

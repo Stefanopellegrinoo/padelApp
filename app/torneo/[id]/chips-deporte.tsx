@@ -17,18 +17,25 @@ export function ChipsDeporte({ seasonId, sports }: ChipsDeporteProps) {
   if (chips.length === 0) return null
 
   return (
-    // `overflow-x-auto` en la fila y no en la página: con muchos deportes
-    // scrollea el carril de chips, no el body. `shrink-0` + `whitespace-nowrap`
-    // en cada chip para que ninguno se parta en dos líneas ni se achique.
-    <nav aria-label="Deportes" className="flex gap-2 overflow-x-auto pt-3">
+    // Arriba de todo, en el color del bloque, pegado al encabezado de la
+    // pantalla (`Hero`): se lee como parte de él. `overflow-x-auto` en la fila
+    // y no en la página: con muchos deportes scrollea el carril de chips, no
+    // el body. `shrink-0` + `whitespace-nowrap` en cada chip para que ninguno
+    // se parta en dos líneas ni se achique. El encendido es la píldora blanca
+    // del bloque (`onBlock`); los otros, el contorno.
+    <nav
+      aria-label="Deportes"
+      className="flex gap-2 overflow-x-auto bg-block px-4 pt-[calc(8px+env(safe-area-inset-top))] pb-1 [--color-focus:var(--color-on-block)]"
+    >
       {chips.map((chip) => (
-        // Mismo chip que "Del torneo"/"Mías" de Stats (`[disciplina]/stats/page.tsx`).
         <Link
           key={chip.href}
           href={chip.href}
           aria-current={chip.isActive ? 'page' : undefined}
-          className={`flex min-h-[44px] shrink-0 items-center whitespace-nowrap rounded-full px-[15px] text-[12px] font-extrabold ${
-            chip.isActive ? 'bg-accent text-accent-text' : 'bg-chip text-muted'
+          className={`press flex min-h-[44px] shrink-0 items-center whitespace-nowrap rounded-pill px-4 text-[15px] font-bold ${
+            chip.isActive
+              ? 'bg-on-block text-block'
+              : 'text-on-block ring-[1.5px] ring-on-block-soft ring-inset active:bg-on-block/15'
           }`}
         >
           {chip.label}

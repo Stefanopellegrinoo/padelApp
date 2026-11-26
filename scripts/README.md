@@ -11,6 +11,7 @@ resuelven Playwright desde `PLAYWRIGHT_DIR` (`playwright.mjs`), no desde
 | `ux-seed.ts` | Siembra la escena para medir feedback táctil (`npx tsx scripts/ux-seed.ts`). |
 | `deadlock/battery.sh` | Gate de deadlocks del camino de escritura del plantel (`npm run test:deadlock`). |
 | `ux-measure.mjs` | Mide `T_first_visible_change_ms` de 23 toques y compara contra `ux-baseline.json`. |
+| `design-gallery.mjs` | Galería de solo lectura de las maquetas de `design/` en `http://100.81.177.86:8091/`, visible solo en la tailnet (`node scripts/design-gallery.mjs`; `GALLERY_HOST` y `GALLERY_PORT` la cambian). En el servidor corre como servicio de usuario `padel-design-gallery` (`~/.config/systemd/user/`), que arranca solo al reiniciar. |
 
 ## Correr la medición de feedback táctil
 

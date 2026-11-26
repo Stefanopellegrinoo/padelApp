@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { DisciplineId } from '@/core'
-import { currentDisciplineSlug, navTabs, sportChips, sportsOf } from './nav-state'
+import { currentDisciplineSlug, navTabs, sportChips, sportKindAt, sportsOf } from './nav-state'
 
 const seasonId = 's1'
 const base = `/torneo/${seasonId}`
@@ -227,16 +227,47 @@ describe('sportsOf — el slug y el nombre de cada deporte', () => {
 
   it('en el orden que llega, con el slug de URL y el nombre del registro', () => {
     expect(sportsOf([discipline('d1', 'PADEL'), discipline('d2', 'PING_PONG')])).toEqual([
-      { slug: 'padel', label: 'Pádel' },
-      { slug: 'ping-pong', label: 'Ping pong' },
+      { slug: 'padel', label: 'Pádel', kind: 'PADEL' },
+      { slug: 'ping-pong', label: 'Ping pong', kind: 'PING_PONG' },
     ])
   })
 
   it('un mismo deporte dos veces se numera como el slug: el primero pelado, el segundo con " 2"', () => {
     expect(sportsOf([discipline('d1', 'PADEL'), discipline('d2', 'FIFA'), discipline('d3', 'PADEL')])).toEqual([
-      { slug: 'padel', label: 'Pádel' },
-      { slug: 'fifa', label: 'FIFA' },
-      { slug: 'padel-2', label: 'Pádel 2' },
+      { slug: 'padel', label: 'Pádel', kind: 'PADEL' },
+      { slug: 'fifa', label: 'FIFA', kind: 'FIFA' },
+      { slug: 'padel-2', label: 'Pádel 2', kind: 'PADEL' },
     ])
+  })
+})
+
+/**
+ * El color de la pantalla (`data-deporte` en el contenedor del torneo): el
+ * `kind` del deporte que trae la URL. Sin deporte en la URL —la tabla general,
+ * Reglas, Ajustes— no hay color propio y queda el azul de siempre.
+ */
+describe('sportKindAt — el deporte de la pantalla', () => {
+  const withKind = [
+    { slug: 'padel', label: 'Pádel', kind: 'PADEL' },
+    { slug: 'fifa', label: 'FIFA', kind: 'FIFA' },
+  ]
+
+  it.each([
+    [`${base}/fifa`, 'FIFA'],
+    [`${base}/fifa/fechas/3`, 'FIFA'],
+    [`${base}/fifa/jugador/e1`, 'FIFA'],
+    [`${base}/padel/stats`, 'PADEL'],
+  ])('en %s es %s', (pathname, kind) => {
+    expect(sportKindAt(seasonId, withKind, pathname)).toBe(kind)
+  })
+
+  it.each([
+    ['la tabla general', base],
+    ['Reglas', `${base}/reglas`],
+    ['Ajustes', `${base}/ajustes`],
+    ['un slug que no es de la temporada', `${base}/basquet`],
+    ['otro torneo', '/torneo/s2/fifa'],
+  ])('en %s no hay deporte (%s)', (_case, pathname) => {
+    expect(sportKindAt(seasonId, withKind, pathname)).toBeNull()
   })
 })

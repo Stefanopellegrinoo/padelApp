@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Estilo 5 · Enérgico</title>
+<style>
+  /* Enérgico: fondo claro, números pesados como protagonistas y líneas de cancha en el hero.
+     Acento azul cancha (#0b4fd1) en vez del verde oscuro actual: es el color de la mayoría de las canchas de pádel,
+     se separa claramente de la app de hoy, mantiene contraste AA con texto blanco (6,9:1) y sobre blanco,
+     y bajo el sol un azul saturado se lee mejor que un verde oscuro, que tiende a verse negro. */
+  :root {
+    --bg: #f1f4f9; --surface: #ffffff; --line: #dde3ee; --text: #0a1630; --muted: #4c586e;
+    --accent: #0b4fd1; --accent-ink: #083a9c; --on-accent: #ffffff; --tint: #e3ebfb;
+    --up: #0d7a3e; --down: #c0261b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: Archivo, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; width: 390px; }
+  a { color: inherit; text-decoration: none; }
+  a:focus-visible, button:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; border-radius: 10px; }
+  .next:focus-visible { outline-color: var(--text); }
+  main { display: flex; flex-direction: column; gap: 12px; padding: 0 16px 32px; }
+  header { display: flex; align-items: center; justify-content: space-between; padding: 20px 4px 4px; }
+  .hello { font-size: 14px; font-weight: 600; color: var(--muted); }
+  h1 { font-size: 30px; font-weight: 900; letter-spacing: -.035em; line-height: 1.05; }
+  .me { width: 46px; height: 46px; border-radius: 14px; background: var(--text); color: #ffffff; display: grid; place-items: center; font-size: 14px; font-weight: 800; border: 0; font-family: inherit; }
+  h2 { font-size: 18px; font-weight: 850; letter-spacing: -.02em; margin: 14px 4px 0; display: flex; justify-content: space-between; align-items: center; }
+  h2 a { font-size: 14px; font-weight: 800; color: var(--accent); min-height: 44px; display: inline-flex; align-items: center; margin: -12px 0; }
+
+  /* Hero: bloque azul cancha con las líneas de la cancha dibujadas y la posición en número gigante. */
+  .next { display: block; position: relative; overflow: hidden; background: var(--accent); color: var(--on-accent); border-radius: 20px; padding: 18px 18px 18px; }
+  .court { position: absolute; right: -36px; top: -18px; width: 230px; height: 260px; color: rgba(255,255,255,.22); pointer-events: none; }
+  .next > *:not(.court) { position: relative; }
+  .k { font-size: 13px; font-weight: 800; display: inline-block; background: rgba(255,255,255,.18); padding: 6px 10px; border-radius: 8px; }
+  .next .t { font-size: 24px; font-weight: 850; letter-spacing: -.03em; margin-top: 14px; }
+  .next .d { font-size: 15px; font-weight: 600; margin-top: 4px; }
+  .hero-num { display: flex; align-items: flex-end; gap: 10px; margin-top: 14px; }
+  .hero-num strong { font-size: 104px; font-weight: 900; letter-spacing: -.07em; line-height: .78; font-variant-numeric: tabular-nums; }
+  .hero-num span { font-size: 16px; font-weight: 800; line-height: 1.2; padding-bottom: 2px; }
+  .go { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 18px; min-height: 52px; border-radius: 12px; background: #ffffff; color: var(--accent-ink); font-size: 16px; font-weight: 850; }
+  .go svg { width: 18px; height: 18px; }
+
+  /* Torneos: dos bloques con la posición como número pesado. */
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .t-card { background: var(--surface); border-radius: 16px; padding: 14px; min-height: 140px; display: flex; flex-direction: column; justify-content: space-between; border-bottom: 4px solid var(--accent); }
+  .t-card .s { font-size: 12.5px; font-weight: 750; color: var(--muted); }
+  .t-card b { display: block; font-size: 16px; font-weight: 850; letter-spacing: -.02em; line-height: 1.15; margin-top: 4px; }
+  .t-card .pos { font-size: 46px; font-weight: 900; letter-spacing: -.06em; line-height: .9; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .t-card .pos small { font-size: 14px; font-weight: 750; letter-spacing: 0; color: var(--muted); }
+
+  /* Amigos: el historial es el número grande, con una barra de ganados/perdidos. */
+  .list { background: var(--surface); border-radius: 16px; }
+  .li { display: flex; gap: 12px; align-items: center; padding: 12px 14px; min-height: 72px; }
+  .li + .li { border-top: 1px solid var(--line); }
+  .av { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; font-size: 13.5px; font-weight: 850; background: var(--tint); color: var(--accent-ink); flex-shrink: 0; }
+  .li .who { min-width: 0; }
+  .li b { display: block; font-size: 16px; font-weight: 800; }
+  .sub { display: block; font-size: 13px; font-weight: 600; color: var(--muted); }
+  .w { color: var(--up); font-weight: 800; } .l { color: var(--down); font-weight: 800; }
+  .rec { margin-left: auto; text-align: right; flex-shrink: 0; width: 64px; }
+  .rec strong { display: block; font-size: 28px; font-weight: 900; letter-spacing: -.05em; line-height: 1; font-variant-numeric: tabular-nums; }
+  .bar { display: flex; height: 5px; border-radius: 3px; overflow: hidden; margin-top: 6px; background: #cfd6e2; }
+  .bar i { display: block; background: var(--accent); }
+
+  .add { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 52px; border-radius: 14px; border: 2px solid var(--accent); color: var(--accent); background: var(--surface); font-size: 15px; font-weight: 850; }
+  .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 6px; }
+  .btn { display: flex; align-items: center; justify-content: center; min-height: 58px; border-radius: 14px; font-size: 16px; font-weight: 850; }
+  .primary { background: var(--text); color: #ffffff; }
+  .secondary { background: var(--surface); color: var(--text); border: 2px solid var(--text); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div><p class="hello">Hola, Martín</p><h1>Inicio</h1></div>
+    <button class="me" aria-label="Tu cuenta">MP</button>
+  </header>
+
+  <h2 id="h-next">Lo próximo</h2>
+  <a class="next" href="#" aria-labelledby="h-next n-t n-go">
+    <svg class="court" viewBox="0 0 200 260" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true">
+      <rect x="10" y="10" width="180" height="240" rx="2"/>
+      <line x1="10" y1="130" x2="190" y2="130" stroke-width="5"/>
+      <line x1="10" y1="62" x2="190" y2="62"/>
+      <line x1="10" y1="198" x2="190" y2="198"/>
+      <line x1="100" y1="62" x2="100" y2="198"/>
+    </svg>
+    <span class="k">Pádel · Los Pibes del Martes</span>
+    <p class="t" id="n-t">Fecha 8 · Martes 18/11</p>
+    <p class="d">20:30 · Club Ciudad · 10 confirmados</p>
+    <p class="hero-num"><span>Vas</span><strong>3°</strong><span>de 12</span></p>
+    <span class="go" id="n-go">Ver la fecha <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4"/></svg></span>
+  </a>
+
+  <h2>Tus torneos</h2>
+  <div class="cards">
+    <a class="t-card" href="#"><div><p class="s">Pádel · Fecha 7/12</p><b>Los Pibes del Martes</b></div><p class="pos">3°<small> de 12</small></p></a>
+    <a class="t-card" href="#"><div><p class="s">FIFA · Fecha 4/8</p><b>FIFA de los Viernes</b></div><p class="pos">1°<small> de 6</small></p></a>
+  </div>
+
+  <h2>Con tus amigos <a href="#">Ver todos</a></h2>
+  <div class="list">
+    <a class="li" href="#"><span class="av">NA</span><span class="who"><b>Nico Arias</b><span class="sub"><span class="w">Ganaste 6-4 6-3</span> · hace 2 días</span></span><span class="rec"><strong>7–5</strong><span class="bar" aria-hidden="true"><i style="width:58%"></i></span></span></a>
+    <a class="li" href="#"><span class="av">FG</span><span class="who"><b>Facu Gómez</b><span class="sub"><span class="l">Perdiste 1-3</span> · el viernes</span></span><span class="rec"><strong>4–6</strong><span class="bar" aria-hidden="true"><i style="width:40%"></i></span></span></a>
+    <a class="li" href="#"><span class="av">JL</span><span class="who"><b>Juampi Ledesma</b><span class="sub"><span class="w">Ganaste 6-2 7-5</span> · hace 1 semana</span></span><span class="rec"><strong>3–1</strong><span class="bar" aria-hidden="true"><i style="width:75%"></i></span></span></a>
+  </div>
+  <a class="add" href="#">+ Cargar un partido con un amigo</a>
+
+  <nav class="actions" aria-label="Armar algo nuevo">
+    <a class="btn primary" href="#">Crear torneo</a>
+    <a class="btn secondary" href="#">Torneo rápido</a>
+  </nav>
+</main>
+</body>
+</html>

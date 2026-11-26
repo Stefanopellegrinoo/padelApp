@@ -44,8 +44,9 @@ export function mastersCutoffFor(hasMasters: boolean, rowCount: number, mastersR
 
 /**
  * La Tabla de un deporte de parejas fijas: una fila por pareja ("Fede &
- * Martina"), con los puntos, el movimiento y el lugar del mejor ubicado de los
- * dos; los sueltos quedan como están. Los puestos se numeran de nuevo, 1..n.
+ * Martina"), con los puntos, el movimiento, las fechas jugadas y el lugar del
+ * mejor ubicado de los dos; es tuya si estás en ella, vayas primero o segundo.
+ * Los sueltos quedan como están. Los puestos se numeran de nuevo, 1..n.
  * El orden sale de la tabla de entrada (`rows`, ya ordenada), nunca del orden de
  * `teams`: `teamsOf` devuelve en orden de uuid los equipos que se crearon en
  * una sola inserción. El nombre sí sigue el orden del equipo (`a & b`), para
@@ -95,7 +96,7 @@ export function pairRows(
         : {
             ...row,
             displayName: `${team.first.displayName} & ${team.second.displayName}`,
-            initials: team.first.initials.slice(0, 1) + team.second.initials.slice(0, 1),
+            isMe: team.first.isMe || team.second.isMe,
           },
     )
     if (covered < MASTERS_SIZE) {
@@ -209,4 +210,33 @@ export function defendersOf(
     matchdayNumber: last.number,
     names: lastWinnerIds.map((entryId) => nameOf.get(entryId) ?? ''),
   }
+}
+
+/**
+ * El pie de la Tabla: las dos reglas que explican lo que se ve, en una línea.
+ * El Masters (la línea del corte) y el descarte (por qué los puntos no son la
+ * suma de todo). `null` si ninguna aplica.
+ */
+export function footnoteOf(
+  hasMasters: boolean,
+  config: { regularMatchdays: number; countBestOf: number },
+): string | null {
+  const parts = [
+    hasMasters ? `Los ${MASTERS_SIZE} primeros van al Masters.` : null,
+    config.countBestOf < config.regularMatchdays
+      ? `Cuentan las mejores ${config.countBestOf} de ${config.regularMatchdays} fechas.`
+      : null,
+  ].filter((part) => part !== null)
+  return parts.length === 0 ? null : parts.join(' ')
+}
+
+/**
+ * Debajo del nombre del torneo, en el encabezado: el deporte y por qué fecha
+ * va ("Pádel, fecha 7 de 12"). Terminado lo dice; sin arrancar (`SETUP`) no
+ * hay fecha que contar.
+ */
+export function subtitleOf(sport: string, status: string, activeMatchday: number, regularMatchdays: number): string {
+  if (status === 'FINISHED') return `${sport}, terminado`
+  if (status === 'SETUP') return sport
+  return `${sport}, fecha ${activeMatchday} de ${regularMatchdays}`
 }

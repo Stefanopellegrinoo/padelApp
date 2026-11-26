@@ -1,5 +1,8 @@
 import type { MatchFormat, SetScore } from '@/core'
 import { matchError } from '@/db/validate'
+// Ciclo con `cargar-state` (que importa `isComplete` de acá): sólo se usa al
+// llamar, nunca al cargar el módulo, así que el orden de evaluación no importa.
+import { deuceOptions } from '@/app/amigos/[playerId]/cargar-state'
 
 /**
  * Cuántos dígitos entran en un lado del marcador abierto.
@@ -68,10 +71,8 @@ export function goalsRejected(text: string): boolean {
  */
 export function goalsError(goalsA: string, goalsB: string): string | null {
   if (!goalsRejected(goalsA) && !goalsRejected(goalsB)) return null
-  return (
-    `Va un número entero por lado, de hasta ${MAX_GOAL_DIGITS} dígitos. ` +
-    `Un 3-1 se carga como 3 en un lado y 1 en el otro.`
-  )
+  // Una oración (S8d): el tope de dígitos ya lo pone el `maxLength` del campo.
+  return 'Un número por lado: un 3-1 se carga 3 y 1.'
 }
 
 /**
@@ -171,4 +172,70 @@ export function loserGamesOptions(format: MatchFormat): number[] {
  */
 export function isComplete(state: LoadState, format: MatchFormat): boolean {
   return matchError(state.sets, format, false) === null
+}
+
+/**
+ * El guardado rebotó: se vuelve al toque de antes del último, con lo cargado
+ * en la mano. El último set sale (es el que no se pudo guardar) y su ganador
+ * queda elegido, así que volver a tocar el mismo número es reintentar.
+ *
+ * Antes la hoja se tiraba entera: el estado completo no pedía nada más, y la
+ * salida fácil fue empezar de cero. Eso hacía cargar el partido de nuevo por
+ * un error de red.
+ */
+export function retomarUltimoSet(state: LoadState): LoadState {
+  const last = state.sets.at(-1)
+  if (last === undefined) return state
+  return { sets: state.sets.slice(0, -1), pendingWinner: last.gamesA > last.gamesB ? 'A' : 'B' }
+}
+
+/**
+ * Qué toque produjo un set ya cargado: quién ganó y qué botón del perdedor
+ * (un número, o uno de ventaja). Es lo que prende la hoja al corregir. `null`
+ * si ningún botón de este formato da ese set —un empate, o un set cargado con
+ * otro formato—: ahí la hoja pregunta como si fuera nuevo.
+ */
+export function toqueDelSet(
+  set: SetScore,
+  format: MatchFormat,
+): { winner: 'A' | 'B'; loser: number; deuce: boolean } | null {
+  if (set.gamesA === set.gamesB) return null
+  const winner = set.gamesA > set.gamesB ? 'A' : 'B'
+  const won = Math.max(set.gamesA, set.gamesB)
+  const loser = Math.min(set.gamesA, set.gamesB)
+  if (won === format.gamesPerSet && loserGamesOptions(format).includes(loser)) return { winner, loser, deuce: false }
+  if (won === loser + 2 && deuceOptions(format).includes(loser)) return { winner, loser, deuce: true }
+  return null
+}
+
+/**
+ * El partido al que lleva "Siguiente" después de guardar: el primero sin
+ * cargar DESPUÉS del guardado, en el orden de la pantalla, y si no queda
+ * ninguno abajo, el primero de arriba. Nunca el recién guardado: la lista
+ * puede llegar antes que la página nueva y todavía tenerlo sin cargar.
+ */
+export function siguienteSinCargar(
+  orden: readonly { matchId: string; loaded: boolean }[],
+  guardado: string,
+): string | null {
+  const desde = orden.findIndex((partido) => partido.matchId === guardado)
+  const vuelta = [...orden.slice(desde + 1), ...orden.slice(0, Math.max(desde, 0))]
+  return vuelta.find((partido) => !partido.loaded && partido.matchId !== guardado)?.matchId ?? null
+}
+
+/**
+ * "Martín & Tomi 6-3": el ganador y sus games primero, set por set, como se
+ * canta un resultado. Un empate (FIFA) no tiene ganador y nombra a los dos.
+ */
+export function resumenGuardado(pairAName: string, pairBName: string, sets: readonly SetScore[]): string {
+  let setsA = 0
+  let setsB = 0
+  for (const set of sets) {
+    if (set.gamesA > set.gamesB) setsA++
+    else if (set.gamesB > set.gamesA) setsB++
+  }
+  if (setsA === setsB) return `${pairAName} ${sets.map((set) => `${set.gamesA}-${set.gamesB}`).join(' ')} ${pairBName}`
+  const ganoA = setsA > setsB
+  const marcador = sets.map((set) => (ganoA ? `${set.gamesA}-${set.gamesB}` : `${set.gamesB}-${set.gamesA}`))
+  return `${ganoA ? pairAName : pairBName} ${marcador.join(' ')}`
 }

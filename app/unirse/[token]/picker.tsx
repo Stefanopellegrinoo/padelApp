@@ -1,8 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { initials } from '@/app/format'
 import { SubmitButton } from '@/app/submit-button'
+import { Avatar } from '@/app/ui/avatar'
+import { button } from '@/app/ui/button'
 import type { Database } from '@/db/database.types'
 import { claimSeat } from './actions'
 
@@ -31,61 +32,72 @@ export function Picker({ token, seats, initialSelected, claimError, adminName }:
 
   return (
     <>
-      <p className="text-[12px] font-extrabold text-muted">¿Cuál sos vos?</p>
+      <section className="flex-1 px-4 pt-5 pb-4">
+        <h2 className="mb-3 font-titulo text-[26px]">¿Cuál sos vos?</h2>
+        <ul className="flex flex-col gap-2">
+          {seats.map((seat) => {
+            if (seat.claimed) {
+              return (
+                <li key={seat.entry_id}>
+                  <button
+                    type="button"
+                    disabled
+                    className="flex min-h-[56px] w-full items-center gap-3 rounded-btn border-[1.5px] border-dashed border-line px-3 text-left disabled:opacity-100"
+                  >
+                    <Avatar name={seat.display_name} />
+                    <span className="flex-1 text-[17px] font-semibold text-muted">{seat.display_name}</span>
+                    <span className="text-[14px] font-semibold text-muted">Ya entró</span>
+                  </button>
+                </li>
+              )
+            }
 
-      <div className="flex flex-col gap-2">
-        {seats.map((seat) => {
-          if (seat.claimed) {
+            // El asiento elegido es "vos": el amarillo del sistema, que en
+            // toda la app marca sólo lo tuyo (en oscuro, la fila elevada con
+            // el borde amarillo). Los demás, sin relleno: en oscuro un
+            // relleno de opción quedaba más claro que la fila elegida.
+            const isSelected = seat.entry_id === selected
             return (
-              <button
-                key={seat.entry_id}
-                type="button"
-                disabled
-                className="flex items-center gap-3 rounded-field border border-line bg-surface p-3"
-              >
-                <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full bg-chip text-[12px] font-extrabold">
-                  {initials(seat.display_name)}
-                </span>
-                <span className="flex-1 text-[15px] font-[650]">{seat.display_name}</span>
-                <span className="text-[12px] font-extrabold text-muted">Ya entró</span>
-              </button>
+              <li key={seat.entry_id}>
+                <button
+                  type="button"
+                  aria-pressed={isSelected}
+                  onClick={() => setSelected((prev) => (prev === seat.entry_id ? null : seat.entry_id))}
+                  className={`flex min-h-[56px] w-full items-center gap-3 rounded-btn px-3 text-left ${
+                    isSelected
+                      ? 'bg-vos-fila shadow-[inset_4px_0_0_var(--color-vos-borde),inset_0_0_0_2px_var(--color-vos-borde)]'
+                      : 'bg-bg shadow-[inset_0_0_0_1.5px_var(--color-line)]'
+                  }`}
+                >
+                  <Avatar name={seat.display_name} />
+                  <span className="flex-1 text-[17px] font-bold">{seat.display_name}</span>
+                  {isSelected && (
+                    <span className="flex items-center gap-1 text-[15px] font-bold">
+                      <svg
+                        aria-hidden="true"
+                        viewBox="0 0 24 24"
+                        className="h-5 w-5 fill-none stroke-current stroke-[2.5] [stroke-linecap:round] [stroke-linejoin:round]"
+                      >
+                        <path d="M5 12.5l4.5 4.5L19 7.5" />
+                      </svg>
+                      Sos vos
+                    </span>
+                  )}
+                </button>
+              </li>
             )
-          }
+          })}
+        </ul>
 
-          const isSelected = seat.entry_id === selected
-          return (
-            <button
-              key={seat.entry_id}
-              type="button"
-              onClick={() => setSelected((prev) => (prev === seat.entry_id ? null : seat.entry_id))}
-              className={`flex items-center gap-3 rounded-field border p-3 ${
-                isSelected ? 'border-[1.5px] border-accent bg-ok-bg' : 'border-line bg-surface'
-              }`}
-            >
-              <span
-                className={`flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full text-[12px] font-extrabold ${
-                  isSelected ? 'bg-accent text-accent-text' : 'bg-chip text-text'
-                }`}
-              >
-                {initials(seat.display_name)}
-              </span>
-              <span className={`flex-1 text-[15px] ${isSelected ? 'font-extrabold' : 'font-[650]'}`}>
-                {seat.display_name}
-              </span>
-              {isSelected && <span className="text-[12px] font-extrabold text-up">Sos vos</span>}
-            </button>
-          )
-        })}
-      </div>
+        {claimError !== undefined && <p className="mt-3 text-[14px] font-semibold text-live">{claimError}</p>}
+      </section>
 
-      {claimError !== undefined && <p className="text-[12px] font-bold text-live">{claimError}</p>}
-
-      <div className="mt-auto flex flex-col gap-3">
+      <div className="sticky bottom-0 flex flex-col gap-2 border-t border-line bg-surface px-4 pt-3 pb-[calc(12px+env(safe-area-inset-bottom))]">
         {selectedSeat !== null ? (
           <form action={claimSeat}>
             <input type="hidden" name="token" value={token} />
             <input type="hidden" name="entryId" value={selectedSeat.entry_id} />
-            <SubmitButton className="w-full rounded-field bg-accent p-4 text-center text-[15px] font-extrabold text-accent-text">
+            <SubmitButton className={button('primary', { size: 'lg', full: true })}>
               Entrar como {selectedSeat.display_name}
             </SubmitButton>
           </form>
@@ -93,14 +105,12 @@ export function Picker({ token, seats, initialSelected, claimError, adminName }:
           <button
             type="button"
             disabled
-            className="w-full rounded-field bg-chip p-4 text-center text-[15px] font-extrabold text-muted"
+            className="flex min-h-[56px] w-full items-center justify-center rounded-btn bg-chip px-5 text-[17px] font-bold text-muted disabled:opacity-100"
           >
             Elegí tu nombre
           </button>
         )}
-        <p className="text-center text-[12px] font-[550] text-muted">
-          Si tu nombre no está o ya lo tomó otro, avisale a {adminName}.
-        </p>
+        <p className="text-center text-[14px] text-muted">Si tu nombre no está o ya lo tomó otro, avisale a {adminName}.</p>
       </div>
     </>
   )

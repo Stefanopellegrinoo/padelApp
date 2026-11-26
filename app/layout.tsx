@@ -1,13 +1,29 @@
 import type { Metadata, Viewport } from 'next'
-import { Archivo } from 'next/font/google'
+import localFont from 'next/font/local'
 import './globals.css'
 import { Historial } from './torneo/[id]/volver'
 import { PullToRefresh } from './pull-to-refresh'
 import { ServiceWorker } from './service-worker'
 
-const archivo = Archivo({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700', '800'],
+/**
+ * Archivo variable con los dos ejes: el peso (100-900) viene con la variable y
+ * el ancho (`wdth`, 62-125) se pide aparte. De una sola familia salen el texto
+ * (100%), los títulos (75%, `font-titulo`) y los números de marcador (62%,
+ * `font-cond`). `variable` la deja en `--font-archivo`, que es lo que lee
+ * `--font-sans` en `globals.css`.
+ *
+ * Local y no `next/font/google`: el archivo que sirve Google para estos dos
+ * ejes deja huecos entre letras ("f echa", "p ts"), medido lado a lado contra
+ * este, que es el de fontsource que usó el prototipo (`design/prototipo/`).
+ * Licencia OFL en `fonts/OFL.txt`.
+ */
+const archivo = localFont({
+  src: './fonts/archivo-wdth.woff2',
+  weight: '100 900',
+  style: 'normal',
+  display: 'swap',
+  declarations: [{ prop: 'font-stretch', value: '62% 125%' }],
+  variable: '--font-archivo',
 })
 
 // Las pantallas de arranque de iOS que genera `scripts/icons.py` (misma lista
@@ -64,16 +80,18 @@ export const viewport: Viewport = {
   // Dos, uno por paleta: la app ya sigue al sistema con
   // `prefers-color-scheme` en `globals.css`, y un `theme_color` solo dejaría la
   // barra del navegador oscura sobre una app clara. El manifest lleva el
-  // oscuro nada más porque ahí sólo entra uno.
+  // oscuro nada más porque ahí sólo entra uno. En claro es el azul cancha del
+  // bloque de arriba, así la barra continúa el encabezado; en oscuro, el fondo
+  // azul noche.
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
-    { media: '(prefers-color-scheme: dark)', color: '#0d1512' },
+    { media: '(prefers-color-scheme: light)', color: '#1F45E0' },
+    { media: '(prefers-color-scheme: dark)', color: '#0E1630' },
   ],
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es">
+    <html lang="es" className={archivo.variable}>
       <body className={archivo.className}>
         {children}
         <ServiceWorker />

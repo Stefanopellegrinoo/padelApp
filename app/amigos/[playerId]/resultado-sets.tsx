@@ -5,55 +5,70 @@ import {
   chooseLoserGames,
   chooseWinner,
   isComplete,
-  loserGamesOptions,
-  startLoad,
   type LoadState,
 } from '@/app/torneo/[id]/[disciplina]/fechas/[n]/carga-state'
+import { BotonesDelPerdedor } from '@/app/torneo/[id]/[disciplina]/fechas/[n]/carga'
 import { Stepper } from '@/app/stepper'
-import { chooseDeuce, deuceOptions, setsField } from './cargar-state'
-import { LABEL, LEGEND } from './estilos'
+import { chooseDeuce, setsField } from './cargar-state'
+import { LABEL, PREGUNTA } from './estilos'
 
 type FormatKey = 'setsToWin' | 'gamesPerSet'
 
 /**
  * El resultado de un deporte de sets (pádel, ping pong): el formato con un
  * `Stepper` por eje que el deporte deja elegir (`min < max`; lo fijo no se
- * muestra) y los sets con la máquina de dos toques de la carga de fechas
- * (`carga-state.ts`, A = mi lado). Sin estado propio: todo vive en `CasualForm`.
+ * muestra) y los sets con la misma hoja de dos toques de la fecha
+ * (`carga-state.ts`, A = mi lado): quién ganó, y con cuántos se quedó el que
+ * perdió. Sin estado propio: todo vive en `CasualForm`, que es quien guarda
+ * en el toque que cierra el partido.
+ *
+ * `load` es lo que se va tocando y `final` lo que se guardaría (al corregir,
+ * lo tocado más lo guardado que falta): las pastillas y el campo oculto son
+ * de `final`. `elegido` es el número marcado del set en curso al corregir.
  */
 export function ResultadoSets({
   sport,
   format,
   load,
-  otherSide,
+  final = load,
+  elegido = null,
+  mineName,
+  otherName,
+  pending,
   onFormat,
   onLoad,
+  onRestart,
 }: {
   sport: SetsSport
   format: MatchFormat
   load: LoadState
-  /** Cómo se llama el otro lado en los botones ("el otro lado" o el nombre del amigo). */
-  otherSide: string
+  final?: LoadState
+  elegido?: { loser: number; deuce: boolean } | null
+  /** Los dos lados como se leen en los botones: "Vos" y "Fede", o las parejas. */
+  mineName: string
+  otherName: string
+  pending: boolean
   onFormat: (key: FormatKey, value: number) => void
   onLoad: (next: LoadState) => void
+  /** "Volver a cargar": de cero. */
+  onRestart: () => void
 }) {
   const cap = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
   const labels: Record<FormatKey, string> = {
-    setsToWin: 'Sets por partido',
+    setsToWin: 'Sets para ganar',
     gamesPerSet: `${cap(sport.unit)} por set`,
   }
   const steppers = (['setsToWin', 'gamesPerSet'] as const).filter((key) => sport[key].min < sport[key].max)
   return (
-    <div className="flex flex-col gap-3">
-      <span className={LEGEND}>Resultado</span>
+    <div className="flex flex-col">
       <input type="hidden" name="setsToWin" value={format.setsToWin} />
       <input type="hidden" name="gamesPerSet" value={format.gamesPerSet} />
-      <input type="hidden" name="sets" value={setsField(load)} />
+      <input type="hidden" name="sets" value={setsField(final)} />
       {steppers.length > 0 && (
-        <div className="flex flex-col divide-y divide-line rounded-field border border-line bg-bg px-3">
+        <div className="mt-2 flex flex-col divide-y divide-line">
           {steppers.map((key) => (
-            <div key={key} data-stepper={key} className="flex items-center justify-between gap-3 py-2">
-              <span className="text-[13.5px] font-bold">{labels[key]}</span>
+            <div key={key} data-stepper={key} className="flex min-h-[56px] items-center justify-between gap-3">
+              <span className={LABEL}>{labels[key]}</span>
               <Stepper
                 value={format[key]}
                 min={sport[key].min}
@@ -64,99 +79,121 @@ export function ResultadoSets({
           ))}
         </div>
       )}
-      <SetsTaps unit={sport.unit} load={load} format={format} otherSide={otherSide} onChange={onLoad} />
+      <SetsTaps
+        unit={sport.unit}
+        load={load}
+        pastillas={final.sets}
+        elegido={elegido}
+        format={format}
+        mineName={mineName}
+        otherName={otherName}
+        pending={pending}
+        onChange={onLoad}
+        onRestart={onRestart}
+      />
     </div>
   )
 }
 
-const TAP = 'min-h-[44px] flex-1 rounded-field bg-chip px-3 text-[14px] font-extrabold'
-
 /**
- * Los sets ya cargados y los dos toques del set en curso (A = mi lado).
- *
- * Cada set es una pastilla como las marcas de fecha de la ficha del jugador:
- * verde llena si lo ganó tu lado, gris si no. El marcador se lee de un vistazo
- * sin tener que parsear "6-3 · 4-6".
+ * Los sets ya cargados y los dos toques del set en curso (A = mi lado), con
+ * la cara de la hoja de la fecha: los dos lados como opciones grandes y los
+ * números del perdedor en la cara condensada (`BotonesDelPerdedor`, el mismo
+ * componente). Cada set cargado es una pastilla: del color del deporte si lo
+ * ganó tu lado, gris si no.
  */
 function SetsTaps({
   unit,
   load,
+  pastillas,
+  elegido,
   format,
-  otherSide,
+  mineName,
+  otherName,
+  pending,
   onChange,
+  onRestart,
 }: {
   unit: string
   load: LoadState
+  pastillas: LoadState['sets']
+  elegido: { loser: number; deuce: boolean } | null
   format: MatchFormat
-  otherSide: string
+  mineName: string
+  otherName: string
+  pending: boolean
   onChange: (next: LoadState) => void
+  onRestart: () => void
 }) {
   const complete = isComplete(load, format)
+  const ganador = load.pendingWinner
+  const nombreDe = (lado: 'A' | 'B') => (lado === 'A' ? mineName : otherName)
+  const multiSet = format.setsToWin > 1
   return (
-    <div className="flex flex-col gap-2.5">
-      <div className="flex flex-wrap items-center gap-1.5" aria-live="polite">
-        {load.sets.length === 0 ? (
-          <p className="text-[13px] font-semibold text-muted">Todavía no cargaste ninguno.</p>
-        ) : (
-          load.sets.map((set, index) => (
+    <div className="flex flex-col">
+      {(multiSet || pastillas.length > 0) && (
+        <div className="mt-4 flex flex-wrap items-center gap-2" aria-live="polite">
+          {!complete && <p className="font-titulo text-[20px]">Set {load.sets.length + 1}</p>}
+          {pastillas.map((set, index) => (
             <span
               key={index}
               aria-label={`Set ${index + 1}: ${set.gamesA} a ${set.gamesB}`}
-              className={`flex h-[38px] min-w-[52px] items-center justify-center rounded-[9px] px-2.5 text-[15px] font-extrabold tabular-nums ${
-                set.gamesA > set.gamesB ? 'bg-accent text-accent-text' : 'bg-chip text-muted'
+              className={`font-cond flex h-[40px] min-w-[56px] items-center justify-center rounded-[10px] px-2.5 text-[26px] ${
+                set.gamesA > set.gamesB ? 'bg-sport text-on-sport' : 'bg-chip text-muted'
               }`}
             >
               {set.gamesA}-{set.gamesB}
             </span>
-          ))
-        )}
-        {complete && <span className="text-[12px] font-extrabold text-up">Partido cerrado ✓</span>}
-      </div>
-      {!complete && load.pendingWinner === null && (
-        <>
-          <span className={LABEL}>¿Quién ganó el set {load.sets.length + 1}?</span>
-          <div className="flex gap-2">
-            <button type="button" className={TAP} onClick={() => onChange(chooseWinner(load, 'A'))}>
-              Ganó mi lado
-            </button>
-            <button type="button" className={TAP} onClick={() => onChange(chooseWinner(load, 'B'))}>
-              Ganó {otherSide}
-            </button>
-          </div>
-        </>
+          ))}
+        </div>
       )}
-      {!complete && load.pendingWinner !== null && (
+      {!complete && (
         <>
-          <span className={LABEL}>{`¿Cuántos ${unit} hizo el que perdió?`}</span>
-          <div className="flex flex-wrap gap-2">
-            {loserGamesOptions(format).map((games) => (
+          <p className={`${PREGUNTA} mt-4 mb-2.5`}>Ganó</p>
+          <div className="grid grid-cols-2 gap-2.5">
+            {(['A', 'B'] as const).map((lado) => (
               <button
-                key={games}
+                key={lado}
                 type="button"
-                className={`${TAP} min-w-[52px] tabular-nums`}
-                onClick={() => onChange(chooseLoserGames(load, games, format))}
+                aria-pressed={ganador === lado}
+                disabled={pending}
+                onClick={() => onChange(chooseWinner(load, lado))}
+                className={`flex min-h-[64px] items-center justify-between gap-2 rounded-btn px-4 text-left text-[18px] leading-tight font-bold ${
+                  ganador === lado
+                    ? 'bg-block text-on-block'
+                    : 'bg-opcion text-text shadow-[inset_0_0_0_1.5px_var(--color-opcion-borde)]'
+                }`}
               >
-                {games}
-              </button>
-            ))}
-            {deuceOptions(format).map((loser) => (
-              <button
-                key={`deuce-${loser}`}
-                type="button"
-                className={`${TAP} min-w-[52px] tabular-nums`}
-                onClick={() => onChange(chooseDeuce(load, loser, format))}
-              >
-                {loser + 2}-{loser}
+                <span className="min-w-0">{nombreDe(lado)}</span>
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 24 24"
+                  className={`h-6 w-6 shrink-0 fill-none stroke-current stroke-2 [stroke-linecap:round] [stroke-linejoin:round] ${
+                    ganador === lado ? '' : 'invisible'
+                  }`}
+                >
+                  <path d="M5 12.5l4.5 4.5L19 7.5" />
+                </svg>
               </button>
             ))}
           </div>
+          <BotonesDelPerdedor
+            format={format}
+            unit={unit}
+            loserName={ganador === null ? null : nombreDe(ganador === 'A' ? 'B' : 'A')}
+            pending={pending}
+            elegido={elegido}
+            onLoser={(n) => onChange(chooseLoserGames(load, n, format))}
+            onDeuce={(loser) => onChange(chooseDeuce(load, loser, format))}
+          />
         </>
       )}
-      {(load.sets.length > 0 || load.pendingWinner !== null) && (
+      {(load.sets.length > 0 || ganador !== null) && (
         <button
           type="button"
-          className="-my-1 flex min-h-[40px] items-center self-start text-[12.5px] font-extrabold text-accent-link"
-          onClick={() => onChange(startLoad())}
+          disabled={pending}
+          className="mt-2 flex min-h-[44px] items-center self-start rounded-btn px-1 text-[16px] font-bold text-accent-link"
+          onClick={onRestart}
         >
           Volver a cargar
         </button>

@@ -13,7 +13,10 @@ import {
   type Duo,
   type SideSize,
 } from '@/core'
-import { initials, matchdayFormatLabel } from '@/app/format'
+import { matchdayFormatLabel } from '@/app/format'
+import { Avatar } from '@/app/ui/avatar'
+import { VOS_FILA } from '@/app/torneo/[id]/[disciplina]/jugador/piezas'
+import { button } from '@/app/ui/button'
 import { BloquePartido } from '@/app/deporte/personalizar-reglas'
 import { setsSportOf } from '@/app/deporte/personalizar-reglas-state'
 import {
@@ -171,7 +174,12 @@ interface ArmadoProps {
   groupPreview: GroupPreviewVM[] | null
 }
 
-const STEP_TITLE = 'text-[15px] font-extrabold tracking-[-.02em]'
+const STEP_TITLE = 'font-titulo text-[22px]'
+const ALERTA = 'rounded-btn bg-live-bg px-3 py-2.5 text-[15px] font-semibold text-live'
+const NOTA = 'text-[15px] text-muted'
+/** Un botón principal apagado: se lee (no se atenúa), con la razón en el aviso de arriba. */
+const APAGADO =
+  'flex min-h-[56px] items-center justify-center rounded-btn bg-chip px-5 text-[17px] font-bold text-muted disabled:opacity-100'
 
 /**
  * El armado de una fecha en `DRAFT`, que es la pantalla que el admin usa parado
@@ -355,9 +363,12 @@ export function Armado({
   const canConfirm = canDraw && pairs.length > 0 && !guestUnnamed
 
   return (
-    <div className="flex flex-col gap-4">
-      <section className="rounded-card border border-line bg-surface p-4">
-        <p className="text-center text-[32px] font-extrabold leading-none">{confirmed} confirmados</p>
+    <div className="flex flex-col gap-6">
+      <section className="rounded-block bg-surface p-5">
+        <p className="flex items-baseline justify-center gap-2">
+          <span className="font-cond text-[64px]">{confirmed}</span>
+          <span className="text-[19px] font-bold">confirmados</span>
+        </p>
         {/* `invisible` y no desmontar: el bloque mide unos 36px justo encima de
             la lista de asientos, así que sacarlo del layout hace saltar las
             filas bajo el dedo en el primer toque de una ráfaga y volver a
@@ -367,7 +378,7 @@ export function Armado({
             mintiendo. */}
         <div className={sizeSettled ? '' : 'invisible'}>
           {needsLooseGuest ? (
-            <p className="mt-2 rounded-field bg-warn-bg px-3 py-2 text-center text-[12.5px] font-bold">
+            <p className="mt-3 rounded-btn bg-warn-bg px-3 py-2.5 text-center text-[15px] font-semibold">
               Son impares. Se suma 1 invitado y la fecha queda de {eventualSize}.
             </p>
           ) : complete ? (
@@ -375,11 +386,11 @@ export function Armado({
             // de a uno crecen distinto: 12 jugadores son 66 partidos donde 12
             // de a dos son 15. Ese número es el que hace pedir el formato de
             // grupos (REQ-D8-1, PR21), que es la salida a W32.
-            <p className="mt-2 text-center text-[12.5px] font-[600] text-muted">
-              La fecha es de {size} · {sides} {label.sides} · {matches} partidos
+            <p className="mt-2 text-center text-[15px] text-muted">
+              La fecha es de {size}, {sides} {label.sides}, {matches} partidos
             </p>
           ) : (
-            <p className="mt-2 rounded-field bg-warn-bg px-3 py-2 text-center text-[12.5px] font-bold">
+            <p className="mt-3 rounded-btn bg-warn-bg px-3 py-2.5 text-center text-[15px] font-semibold">
               Son {size} y sólo se juega de a pares. Falta uno.
             </p>
           )}
@@ -422,70 +433,32 @@ export function Armado({
           `generatePairs` corre al confirmar, así que el reparto que se ve
           acá es el reparto real, no uno inventado. */}
       {groupPreview !== null && (
-        <section className="flex flex-col gap-3 rounded-card border border-line bg-surface p-4">
+        <section className="flex flex-col gap-3 rounded-tile bg-surface p-4">
           <div className="flex flex-col gap-1">
             <h2 className={STEP_TITLE}>Cómo quedan los grupos</h2>
-            <p className="text-[12px] font-[600] text-muted">
+            <p className={NOTA}>
               Con el orden de hoy. Si cambia quién viene, puede cambiar el reparto.
             </p>
           </div>
           {groupPreview.map((group) => (
             <div key={group.number} className="flex flex-col gap-1.5">
-              <p className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">
-                Grupo {group.number}
-              </p>
-              <p className="text-[13.5px] font-[650]">{group.names.join(' · ')}</p>
+              <p className="font-titulo text-[18px]">{`Grupo ${group.number}`}</p>
+              <p className="text-[16px] font-semibold">{group.names.join(', ')}</p>
             </div>
           ))}
         </section>
       )}
 
       <section className="flex flex-col gap-2">
-        <div className="flex items-center justify-between gap-2 border-b border-line pb-2">
+        <div className="flex items-baseline justify-between gap-2">
           <h2 className={STEP_TITLE}>Quién viene</h2>
-          <span className="text-[12.5px] font-bold text-muted">
+          <span className="font-cond text-[24px] text-muted">
             {confirmed}/{seats.length}
           </span>
         </div>
 
         {optimisticSeats.map((seat) => (
-          <button
-            key={seat.entryId}
-            type="button"
-            // Sin `disabled`, a propósito: `setAttendance` escribe un estado
-            // ABSOLUTO (no un toggle), así que un segundo toque mientras el
-            // primero sigue en vuelo es inofensivo — como mucho el usuario
-            // pidió lo mismo dos veces, o volvió al estado del que salió.
-            // Next además serializa las Server Actions en orden de toque, así
-            // que no hay escritura corriendo por delante de otra.
-            onClick={() => tickAttendance(seat)}
-            // Opacity is reserved for "the system is working" (the global
-            // `:disabled` rule). Resting states speak in color instead — the
-            // "No viene" chip and the "Avisó que no va" line already carry
-            // this state, so dimming the whole row here would also swallow
-            // the `disabled:opacity-45` feedback on tap.
-            className={`flex items-center gap-3 rounded-field border border-line bg-surface p-3 text-left ${
-              seat.playing ? '' : 'text-muted'
-            }`}
-          >
-            <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full bg-chip text-[12px] font-extrabold text-muted">
-              {initials(seat.name)}
-            </span>
-            <span className="flex flex-1 flex-col">
-              <span className="text-[14.5px] font-bold">{seat.name}</span>
-              {/* ponytail: `attendances` no guarda quién escribió la fila, así que
-                  "avisó" es todo ausente. Si algún día importa distinguir al que
-                  avisó del que sacó el admin, es una columna nueva. */}
-              {!seat.playing && <span className="text-[12px] font-[600] text-muted">Avisó que no va</span>}
-            </span>
-            <span
-              className={`shrink-0 rounded-full px-[10px] py-[6px] text-[12px] font-extrabold ${
-                seat.playing ? 'bg-ok-bg text-up' : 'bg-chip text-muted'
-              }`}
-            >
-              {seat.playing ? 'Viene' : 'No viene'}
-            </span>
-          </button>
+          <Asiento key={seat.entryId} seat={seat} onTick={() => tickAttendance(seat)} />
         ))}
       </section>
 
@@ -526,7 +499,7 @@ export function Armado({
           onClick={() => run(() => addLooseGuest(seasonId, matchdayId, matchdayNumber))}
           // `min-h-11` = 44px: `p-3` sobre 13.5px daba 42 y esta pantalla se usa
           // parado en el club, con el celular en una mano.
-          className="min-h-11 rounded-field border-[1.5px] border-line p-3 text-[13.5px] font-extrabold"
+          className={button('secondary', { full: true })}
         >
           + Agregar invitado
         </button>
@@ -538,7 +511,7 @@ export function Armado({
           es sumar más. */}
       {(label.guestPairSection || guestPairs.length > 0) && (
         <section className="flex flex-col gap-2">
-          <h2 className={`${STEP_TITLE} border-b border-line pb-2`}>{label.guestSection}</h2>
+          <h2 className={STEP_TITLE}>{label.guestSection}</h2>
 
           {guestPairs.map((pair, index) => (
             <ParejaInvitada
@@ -566,13 +539,13 @@ export function Armado({
 
           {label.guestPairSection && (
             <>
-              <p className="text-[12px] font-[600] text-muted">{label.guestNote}</p>
+              <p className={NOTA}>{label.guestNote}</p>
 
               <button
                 type="button"
                 disabled={pending}
                 onClick={() => run(() => addGuestPair(seasonId, matchdayId, matchdayNumber))}
-                className="min-h-11 rounded-field border-[1.5px] border-line p-3 text-[13.5px] font-extrabold"
+                className={button('secondary', { full: true })}
               >
                 {label.addGuest}
               </button>
@@ -595,35 +568,35 @@ export function Armado({
 
       {pairs.length > 0 && (
         <section className="flex flex-col gap-2">
-          <h2 className={`${STEP_TITLE} border-b border-line pb-2`}>{label.drawn}</h2>
+          <h2 className={STEP_TITLE}>{label.drawn}</h2>
           {pairs.map((pair, index) => (
             <div
               key={pair.key}
-              className={`flex items-center gap-3 rounded-field border bg-surface p-3 ${
-                pair.defending ? 'border-up' : 'border-line'
+              className={`flex min-h-[56px] items-center gap-3 rounded-tile px-3 py-2 ${
+                pair.defending ? 'bg-sport-tint' : 'bg-surface'
               }`}
             >
               {/* S85 (verify-report-pr21-cierre #4016): `w-4` (16px) recorta "10"/"11"/"12"
                   (18px medidos con Chromium real, Archivo 800) — sólo muerde con 10+
                   lados, la capacidad que abrió esta cadena. `w-5` (20px) los contiene
                   sin overflow, medido a 360 px y 390 px. */}
-              <span className="w-5 shrink-0 text-[14px] font-extrabold text-muted">{index + 1}</span>
-              <span className="flex-1 text-[14.5px] font-[750]">{pair.names}</span>
+              <span className="font-cond w-5 shrink-0 text-[22px] text-muted">{index + 1}</span>
+              <span className="min-w-0 flex-1 text-[17px] font-semibold">{pair.names}</span>
               {pair.defending && (
-                <span className="shrink-0 rounded-full bg-ok-bg px-[10px] py-[6px] text-[12px] font-extrabold text-up">
+                <span className="shrink-0 rounded-pill bg-surface-2 px-3 py-1.5 text-[14px] font-semibold text-sport">
                   Defensora
                 </span>
               )}
               {pair.withGuest && (
-                <span className="shrink-0 rounded-full bg-chip px-[10px] py-[6px] text-[12px] font-extrabold text-muted">
+                <span className="shrink-0 rounded-pill bg-chip px-3 py-1.5 text-[14px] font-semibold text-muted">
                   Invitado
                 </span>
               )}
             </div>
           ))}
-          <p className="text-[12px] font-[600] text-muted">{label.drawNote}</p>
+          <p className={NOTA}>{label.drawNote}</p>
           {handPairs.length > 0 && (
-            <p className="text-[12px] font-[600] text-muted">Las parejas a mano quedan como las armaste.</p>
+            <p className={NOTA}>Las parejas a mano quedan como las armaste.</p>
           )}
         </section>
       )}
@@ -640,7 +613,7 @@ export function Armado({
           arriba queda afuera a propósito: cambia con cada tilde y anunciarla
           sería ruido encima del ruido. */}
       {sizeSettled && tooFew && (
-        <p role="alert" className="rounded-field bg-live-bg px-3 py-2.5 text-[12.5px] font-bold text-live">
+        <p role="alert" className={ALERTA}>
           Con {confirmed} no alcanza para armar una fecha. Hacen falta {minSquadFor(sideSize)}.
         </p>
       )}
@@ -651,7 +624,7 @@ export function Armado({
           habilitado y el sorteo se caía adentro de `core/` con un `Error`
           crudo en vez de un mensaje pensado para que alguien lo lea. */}
       {sizeSettled && tooManyToPair && (
-        <p role="alert" className="rounded-field bg-live-bg px-3 py-2.5 text-[12.5px] font-bold text-live">
+        <p role="alert" className={ALERTA}>
           {/* `eventualSize`, no `confirmed`: el flag `tooManyToPair` se calcula
               sobre `eventualSize` (el suelto que ya está sentado incluido), y
               con 12 confirmados más un suelto eso da 13 -- mostrar `confirmed`
@@ -672,17 +645,17 @@ export function Armado({
           distintos. `canDraw` sí lo mira siempre — apagar un botón de más es
           barato, un cartel rojo que miente no. */}
       {sizeSettled && guestsOutnumberSquad && (
-        <p role="alert" className="rounded-field bg-live-bg px-3 py-2.5 text-[12.5px] font-bold text-live">
+        <p role="alert" className={ALERTA}>
           {guestsOutnumberNote(sideSize, toTheDraw, freeSquad)}
         </p>
       )}
       {guestUnnamed && pairs.length > 0 && (
-        <p role="alert" className="rounded-field bg-live-bg px-3 py-2.5 text-[12.5px] font-bold text-live">
+        <p role="alert" className={ALERTA}>
           Ponele nombre al invitado antes de confirmar.
         </p>
       )}
       {error !== null && (
-        <p role="alert" className="rounded-field bg-live-bg px-3 py-2.5 text-[12.5px] font-bold text-live">
+        <p role="alert" className={ALERTA}>
           {error}
         </p>
       )}
@@ -692,9 +665,13 @@ export function Armado({
           type="button"
           disabled={!canDraw}
           onClick={() => run(() => drawPairs(seasonId, matchdayId, matchdayNumber))}
-          className={`rounded-field p-4 text-[15px] font-extrabold ${
-            pairs.length > 0 ? 'border-[1.5px] border-line' : 'flex-1 text-center'
-          } ${!canDraw ? 'bg-chip text-muted' : pairs.length > 0 ? '' : 'bg-accent text-accent-text'}`}
+          className={
+            pairs.length > 0
+              ? button('secondary', { size: 'lg' })
+              : canDraw
+                ? `${button('primary', { size: 'lg' })} flex-1`
+                : `${APAGADO} flex-1`
+          }
         >
           {pairs.length > 0 ? 'Regenerar' : label.draw}
         </button>
@@ -704,9 +681,7 @@ export function Armado({
             type="button"
             disabled={!canConfirm}
             onClick={() => run(() => confirmMatchday(seasonId, matchdayId, matchdayNumber))}
-            className={`flex-1 rounded-field p-4 text-center text-[15px] font-extrabold ${
-              canConfirm ? 'bg-accent text-accent-text' : 'bg-chip text-muted'
-            }`}
+            className={`${canConfirm ? button('primary', { size: 'lg' }) : APAGADO} flex-1`}
           >
             Confirmar fecha
           </button>
@@ -747,10 +722,10 @@ export function Armado({
  * El techo de tres botones ya lo aceptó #4014; esto es sólo la primera vez
  * que se vio el wrinkle y se lo mide en vez de forzar un arreglo.
  */
-const FORMATO_BOTON = 'flex-1 rounded-field border-[1.5px] p-3 text-[13.5px] font-extrabold'
-const FORMATO_ELEGIDO = 'border-accent bg-accent text-accent-text'
-const FORMATO_LIBRE = 'border-line'
-const AUTOMATICO_LINEA = 'mt-0.5 block text-[12px] font-semibold opacity-80'
+const FORMATO_BOTON = 'min-h-[52px] flex-1 rounded-btn border-[1.5px] p-3 text-[16px] font-bold'
+const FORMATO_ELEGIDO = 'border-block bg-block text-on-block'
+const FORMATO_LIBRE = 'border-line text-text'
+const AUTOMATICO_LINEA = 'mt-0.5 block text-[14px] font-semibold'
 
 /**
  * El selector de formato de la fecha (REQ-D8-1): "todos contra todos"
@@ -787,7 +762,7 @@ const AUTOMATICO_LINEA = 'mt-0.5 block text-[12px] font-semibold opacity-80'
  *
  * "Automático" (§7) va arriba, a lo ancho: es una opción más del radiogroup
  * (`aria-checked` con `AUTO` guardado) y su segunda línea dice lo que
- * elegiría con los que vienen, `→ 2 grupos + llave (vienen 8)`. Esa línea es
+ * elegiría con los que vienen, `2 grupos + llave (vienen 8)`. Esa línea es
  * lo que antes era la leyenda "Sugerido: …" (W77, decisión #4022): sigue
  * siendo TEXTO, nunca un `aria-checked` sobre el botón de ese formato, para
  * que no repita el error de S81 — "lo que elegiría Automático" y "lo
@@ -805,6 +780,58 @@ const AUTOMATICO_LINEA = 'mt-0.5 block text-[12px] font-semibold opacity-80'
  * sorteo; si se arman todas, la fecha queda entera a mano. Repetir una pareja
  * de las fechas anteriores se permite —el admin manda— pero se avisa.
  */
+/**
+ * Un asiento de "Quién viene": tocarlo dice si viene o no. El tuyo lleva la
+ * marca de "vos" (la fila amarilla en claro, el borde amarillo en oscuro, y
+ * "vos" al lado del nombre), como en el Plantel de Ajustes: el amarillo es
+ * sólo tuyo.
+ *
+ * Exportado para renderizarlo en la suite.
+ */
+export function Asiento({ seat, onTick }: { seat: SeatVM; onTick: () => void }) {
+  const vos = seat.vos === true
+  return (
+    <button
+      type="button"
+      // Sin `disabled`, a propósito: `setAttendance` escribe un estado
+      // ABSOLUTO (no un toggle), así que un segundo toque mientras el
+      // primero sigue en vuelo es inofensivo — como mucho el usuario
+      // pidió lo mismo dos veces, o volvió al estado del que salió.
+      // Next además serializa las Server Actions en orden de toque, así
+      // que no hay escritura corriendo por delante de otra.
+      onClick={onTick}
+      // Opacity is reserved for "the system is working" (the global
+      // `:disabled` rule). Resting states speak in color instead — the
+      // "No viene" chip and the "Avisó que no va" line already carry
+      // this state, so dimming the whole row here would also swallow
+      // the `disabled:opacity-45` feedback on tap.
+      // La tuya va a sangre, como tu fila en la tabla de la fecha: el amarillo no queda pegado al avatar.
+      className={`press-fila flex min-h-[64px] items-center gap-3 border-t border-line py-2 text-left ${
+        vos ? `-mx-4 px-4 ${VOS_FILA}` : `-mx-1 px-1 ${seat.playing ? '' : 'text-muted'}`
+      }`}
+    >
+      <Avatar name={seat.name} />
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="text-[17px] font-semibold">
+          {seat.name}
+          {vos && <span className="ml-1.5 text-[14px] font-semibold">vos</span>}
+        </span>
+        {/* ponytail: `attendances` no guarda quién escribió la fila, así que
+            "avisó" es todo ausente. Si algún día importa distinguir al que
+            avisó del que sacó el admin, es una columna nueva. */}
+        {!seat.playing && <span className={NOTA}>Avisó que no va</span>}
+      </span>
+      <span
+        className={`shrink-0 rounded-pill px-3 py-1.5 text-[14px] font-semibold ${
+          seat.playing ? 'bg-sport-tint text-sport' : 'bg-chip text-muted'
+        }`}
+      >
+        {seat.playing ? 'Viene' : 'No viene'}
+      </span>
+    </button>
+  )
+}
+
 export function ParejasAMano({
   handPairs,
   seats,
@@ -829,22 +856,19 @@ export function ParejasAMano({
   const b = available.has(second) && second !== a ? second : ''
   const canLock = a !== '' && b !== '' && !pending
   const selectClass =
-    'min-h-11 w-full rounded-field border border-line bg-surface p-[10px] text-[13.5px] font-bold outline-none'
+    'min-h-11 w-full rounded-btn border-[1.5px] border-line bg-surface-2 p-[10px] text-[16px] font-semibold text-text'
 
   return (
     <section className="flex flex-col gap-2">
-      <h2 className={`${STEP_TITLE} border-b border-line pb-2`}>Parejas a mano</h2>
-      <p className="text-[12px] font-[600] text-muted">
-        Armá las parejas que quieras. Las que no armes salen del sorteo; si las armás todas, la fecha
-        queda entera a mano.
-      </p>
+      <h2 className={STEP_TITLE}>Parejas a mano</h2>
+      <p className={NOTA}>Las que no armes salen del sorteo.</p>
 
       {handPairs.map((hand) => {
         const absent = handPairAbsent(seats, hand)
         return (
-          <div key={hand.lockId} className="flex flex-col gap-1.5 rounded-field border border-line bg-surface p-3">
+          <div key={hand.lockId} className="flex flex-col gap-1.5 rounded-tile bg-surface p-3">
             <div className="flex items-center gap-3">
-              <span className="flex-1 text-[14.5px] font-[750]">
+              <span className="min-w-0 flex-1 text-[17px] font-semibold">
                 {hand.a.name} y {hand.b.name}
               </span>
               <button
@@ -852,18 +876,18 @@ export function ParejasAMano({
                 disabled={pending}
                 onClick={() => onUnlock(hand.lockId)}
                 aria-label={`Deshacer la pareja de ${hand.a.name} y ${hand.b.name}`}
-                className="min-h-11 shrink-0 rounded-field border-[1.5px] border-line px-3 text-[12.5px] font-extrabold"
+                className={`${button('secondary')} shrink-0`}
               >
                 Deshacer
               </button>
             </div>
             {absent ? (
-              <p role="alert" className="text-[12px] font-bold text-live">
+              <p role="alert" className="text-[15px] font-semibold text-live">
                 Uno de los dos no viene. Deshacé la pareja para poder sortear.
               </p>
             ) : (
               hand.repeated && (
-                <p className="text-[12px] font-bold text-muted">Ya jugaron juntos hace poco. Igual se puede.</p>
+                <p className={NOTA}>Ya jugaron juntos hace poco. Igual se puede.</p>
               )
             )}
           </div>
@@ -871,7 +895,7 @@ export function ParejasAMano({
       })}
 
       {options.length >= 2 ? (
-        <div className="flex flex-col gap-2 rounded-field border-[1.5px] border-dashed border-line p-3">
+        <div className="flex flex-col gap-2 rounded-tile border-[1.5px] border-dashed border-line p-3">
           <select
             value={a}
             disabled={pending}
@@ -910,9 +934,7 @@ export function ParejasAMano({
               setFirst('')
               setSecond('')
             }}
-            className={`min-h-11 rounded-field p-3 text-[13.5px] font-extrabold ${
-              canLock ? 'bg-accent text-accent-text' : 'bg-chip text-muted'
-            }`}
+            className={canLock ? button('primary', { full: true }) : `${APAGADO} min-h-11 text-[16px]`}
           >
             Armar pareja
           </button>
@@ -920,7 +942,7 @@ export function ParejasAMano({
       ) : (
         options.length === 0 &&
         handPairs.length > 0 && (
-          <p className="text-[12px] font-bold text-up">No queda nadie para el sorteo: las armaste a mano.</p>
+          <p className="text-[15px] font-semibold text-sport">No queda nadie para el sorteo: las armaste a mano.</p>
         )
       )}
     </section>
@@ -978,7 +1000,7 @@ export function SelectorDeFormato({
   const automatico = formato.kind === 'AUTO'
   return (
     <section className="flex flex-col gap-2">
-      <h2 className={`${STEP_TITLE} border-b border-line pb-2`}>Formato de la fecha</h2>
+      <h2 className={STEP_TITLE}>Formato de la fecha</h2>
       <div className="flex flex-col gap-2" role="radiogroup" aria-label="Formato de la fecha">
         <button
           type="button"
@@ -995,7 +1017,7 @@ export function SelectorDeFormato({
             <span className={`${AUTOMATICO_LINEA} invisible`}>{'\u00a0'}</span>
           ) : (
             resolvedIsShown && (
-              <span className={AUTOMATICO_LINEA}>{`→ ${matchdayFormatLabel(resolved)} (vienen ${headcount})`}</span>
+              <span className={AUTOMATICO_LINEA}>{`${matchdayFormatLabel(resolved)} (vienen ${headcount})`}</span>
             )
           )}
         </button>
@@ -1068,7 +1090,7 @@ export function EstaFechaSeJuegaA({
   return (
     <section className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-[13.5px] font-bold">{`Esta fecha se juega a: ${matchFormatLabel(effective, unit)}`}</p>
+        <p className="text-[16px] font-semibold">{`Esta fecha se juega a: ${matchFormatLabel(effective, unit)}`}</p>
         {/* Es su propio cancelar, como "Cargar resultado": volver a tocarlo
             cierra los controles y tira el borrador. */}
         <button
@@ -1076,7 +1098,7 @@ export function EstaFechaSeJuegaA({
           disabled={pending}
           aria-expanded={draft !== null}
           onClick={() => setDraft(draft === null ? effective : null)}
-          className="min-h-11 shrink-0 px-1 text-[13.5px] font-extrabold text-accent-link"
+          className={`${button('ghost')} shrink-0 px-2`}
         >
           Cambiar
         </button>
@@ -1090,7 +1112,7 @@ export function EstaFechaSeJuegaA({
                 type="button"
                 disabled={pending}
                 onClick={() => save(null)}
-                className="min-h-11 flex-1 rounded-field border-[1.5px] border-line p-3 text-[13.5px] font-extrabold"
+                className={`${button('secondary')} flex-1`}
               >
                 Como el torneo
               </button>
@@ -1099,7 +1121,7 @@ export function EstaFechaSeJuegaA({
               type="button"
               disabled={pending}
               onClick={() => save({ setsToWin: draft.setsToWin, gamesPerSet: draft.gamesPerSet })}
-              className="min-h-11 flex-1 rounded-field bg-accent p-3 text-[13.5px] font-extrabold text-accent-text"
+              className={`${button('primary')} flex-1`}
             >
               Guardar
             </button>
@@ -1145,7 +1167,7 @@ function ParejaInvitada({
   const removeLabel = named.length > 0 ? `Sacar a ${named.join(' y ')}` : `Sacar ${label}`
 
   return (
-    <div className="relative rounded-card border-[1.5px] border-dashed border-line bg-surface p-4">
+    <div className="relative rounded-tile border-[1.5px] border-dashed border-line bg-surface p-4">
       {/* El foco se escucha SÓLO sobre los campos. La cruz queda afuera de esta
           región a propósito: adentro, al apretarla recibía el foco, eso la
           ocultaba a sí misma y el click no llegaba a dispararse nunca. */}
@@ -1170,8 +1192,8 @@ function ParejaInvitada({
               if (event.target.value.trim() === guest.name.trim()) return
               onName(guest.entryId, event.target.value)
             }}
-            className={`rounded-field border-[1.5px] bg-surface p-[15px] text-[15px] font-[750] outline-none placeholder:font-medium placeholder:text-muted ${
-              guest.name.trim().length === 0 ? 'border-accent' : 'border-line'
+            className={`rounded-btn border-[1.5px] bg-surface-2 p-[14px] text-[16px] font-semibold text-text placeholder:font-normal placeholder:text-muted ${
+              guest.name.trim().length === 0 ? 'border-sport' : 'border-line'
             }`}
           />
         ))}
@@ -1266,7 +1288,7 @@ function GuestCard({
         : `Sacar al invitado ${position}`
 
   return (
-    <section className="relative rounded-card border-[1.5px] border-dashed border-line bg-surface p-4">
+    <section className="relative rounded-tile border-[1.5px] border-dashed border-line bg-surface p-4">
       <div
         className="flex flex-col gap-2"
         onFocus={() => setFocused(true)}
@@ -1284,7 +1306,7 @@ function GuestCard({
             de verdad pide una columna nueva en `entries` (ver
             `addLooseGuestSeat`), así que el texto dice lo que la pantalla SÍ
             sabe: si la paridad exige ese asiento, o si se lo puede llevar. */}
-        <p className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">
+        <p className="text-[15px] font-semibold text-muted">
           {required ? 'Falta uno para armar parejas' : 'Lo podés sacar'}
         </p>
 
@@ -1299,8 +1321,8 @@ function GuestCard({
           // nombra a la vista y nada lo nombraba para un lector de pantalla. Va
           // por posición y no por `who`, que acá sería el propio valor.
           aria-label={position === null ? 'Nombre del invitado' : `Nombre del invitado ${position}`}
-          className={`rounded-field border-[1.5px] bg-surface p-[15px] text-[16px] font-[750] outline-none ${
-            name.trim().length === 0 ? 'border-accent' : 'border-line'
+          className={`rounded-btn border-[1.5px] bg-surface-2 p-[14px] text-[16px] font-semibold text-text ${
+            name.trim().length === 0 ? 'border-sport' : 'border-line'
           }`}
         />
 
@@ -1309,7 +1331,7 @@ function GuestCard({
             se elija acá — leerla antes es leerla sobre una elección que todavía
             no se hizo. */}
         {partner && (
-          <label className="flex items-center gap-2 text-[12.5px] font-bold">
+          <label className="flex items-center gap-2 text-[15px] font-semibold">
             Juega con
             <select
               value={guest.partnerId ?? ''}
@@ -1319,7 +1341,7 @@ function GuestCard({
               // esta tarjeta: así el nombre accesible contiene al visible (WCAG
               // 2.5.3) y además distingue un `<select>` del de al lado.
               aria-label={`Juega con — ${who}`}
-              className="min-h-11 flex-1 rounded-field border border-line bg-surface p-[10px] text-[13.5px] font-bold outline-none"
+              className="min-h-11 min-w-0 flex-1 rounded-btn border-[1.5px] border-line bg-surface-2 p-[10px] text-[16px] font-semibold text-text"
             >
               {/* Es la opción "al sorteo", y tiene que decir qué va a pasar:
                   "El que toque" no se leía como una opción, se leía como que
@@ -1353,13 +1375,13 @@ function GuestCard({
           // Sin pareja el invitado no cobra ni le hace cobrar a nadie, y el
           // sorteo de a uno lo manda al final: esta nota reemplaza a las tres de
           // abajo (puntos de la pareja, "va último", "elegile compañero").
-          <p className="text-[12px] font-[600] text-muted">
+          <p className={NOTA}>
             Juega solo y no suma puntos para el campeonato. Va al final del orden: nadie sabe cómo juega.
           </p>
         ) : partnerAbsent ? (
           <p
             role="alert"
-            className="rounded-field bg-live-bg px-3 py-2.5 text-[12px] font-bold text-live"
+            className={ALERTA}
           >
             {partnerName ?? 'El compañero elegido'} no juega esta fecha. Elegile otro compañero, o
             dejalo al sorteo.
@@ -1368,7 +1390,7 @@ function GuestCard({
           /* La diferencia que le cambia el campeonato al admin: un invitado
              suelto le hace cobrar puntos a su compañero del torneo, y una
              pareja invitada no le hace cobrar a ninguno de los dos. */
-          <p className="text-[12px] font-[600] text-muted">
+          <p className={NOTA}>
             Los puntos de la pareja los cobra{' '}
             {partnerName === null ? 'el que salga en el sorteo' : partnerName}. En una pareja
             invitada no cobra ninguno de los dos.
@@ -1389,7 +1411,7 @@ function GuestCard({
             mismo y sólo uno lo es: el ÚLTIMO de la lista es el que cae con el
             líder de la tabla (ver `PairingInput.guestIds`). */}
         {partner && guest.partnerId === null && (
-          <p className="text-[12px] font-[600] text-muted">
+          <p className={NOTA}>
             {toTheDraw > 1
               ? 'Va al fondo del sorteo, con los otros invitados: nadie sabe cómo juegan. Si lo conocés, elegile compañero.'
               : 'Va último en el sorteo: nadie sabe cómo juega. Si lo conocés, elegile compañero.'}

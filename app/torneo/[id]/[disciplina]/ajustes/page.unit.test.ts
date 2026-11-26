@@ -147,7 +147,7 @@ describe('Ajustes de una disciplina trae los datos de la disciplina de la URL, n
     escena.disciplines = PADEL_Y_FIFA
     const html = await render('fifa')
 
-    expect(html).toContain('>Ajustes · FIFA</h1>')
+    expect(html).toContain('>Ajustes de FIFA</h1>')
     expect(html).toContain('Reglas de FIFA')
     expect(html).toContain('Partidos a goles; se puede empatar.')
     expect(html).not.toContain('Masters')
@@ -181,7 +181,7 @@ describe('Ajustes de una disciplina trae los datos de la disciplina de la URL, n
     escena.disciplines = PADEL_Y_FIFA
     const html = await render('padel')
 
-    expect(html).toContain('>Ajustes · Pádel</h1>')
+    expect(html).toContain('>Ajustes de Pádel</h1>')
     expect(html).toContain('Reglas de Pádel')
     expect(html).toContain('Partidos a 1 set de 4 games.')
     expect(html).toContain('Masters al final con los 4 mejores.')
@@ -217,7 +217,7 @@ describe('Ajustes de una disciplina trae los datos de la disciplina de la URL, n
     escena.disciplines = SOLO_PADEL
     const html = await render('padel')
     expect(html).toContain('>Ajustes</h1>')
-    expect(html).not.toContain('>Ajustes · Pádel</h1>')
+    expect(html).not.toContain('>Ajustes de Pádel</h1>')
   })
 })
 

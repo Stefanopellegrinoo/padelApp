@@ -3,6 +3,10 @@
 import { useState, useTransition } from 'react'
 import type { DisciplineId } from '@/core'
 import { addTeam, removeTeam, type WriteResult } from '@/app/torneo/[id]/ajustes/actions'
+import { Aviso, CAMPO, FILA, GRUPO } from '@/app/torneo/[id]/ajustes/piezas'
+import { button } from '@/app/ui/button'
+import { rowTitle } from '@/app/ui/row'
+import { Section } from '@/app/ui/section'
 
 export interface EquipoVM {
   id: string
@@ -15,10 +19,8 @@ export interface EquipoMemberVM {
   name: string
 }
 
-// Mismo botón que `Plantel`/`QuienJuega`: `min-h-[44px]` es el mínimo de Apple
-// para tocar con el dedo.
-const ACTION =
-  'flex min-h-[44px] items-center rounded-field bg-chip px-3.5 text-[12.5px] font-extrabold text-muted transition-opacity disabled:opacity-45'
+// Mismo botón que `QuienJuega`: 44 de alto, el mínimo para el dedo.
+const ACTION = 'press min-h-[44px] shrink-0 rounded-btn bg-chip px-3.5 text-[16px] font-semibold text-text'
 
 /**
  * Equipos fijos (docs/tipos-de-torneo.md §1): arma o deshace un equipo — sin
@@ -84,84 +86,80 @@ export function Equipos({
   const canArmar = !pending && entryA !== '' && entryB !== '' && entryA !== entryB
 
   return (
-    <section data-equipos={disciplineId} data-equipos-season={seasonId} className="flex flex-col gap-2">
-      <h2 className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">Equipos</h2>
+    <section data-equipos={disciplineId} data-equipos-season={seasonId}>
+      <Section title="Equipos">
+        {teams.length > 0 && (
+          <ul className={`${GRUPO} mb-3`}>
+            {teams.map((team) => (
+              <li key={team.id} className={FILA}>
+                <span className={`${rowTitle} min-w-0 flex-1 truncate`}>
+                  {team.aName} y {team.bName}
+                </span>
+                <button
+                  type="button"
+                  className={ACTION}
+                  disabled={pending}
+                  onClick={() => run(() => removeTeam(seasonId, team.id))}
+                >
+                  Deshacer
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
 
-      {teams.length > 0 && (
-        <div className="overflow-hidden rounded-[14px] border border-line bg-surface">
-          {teams.map((team, index) => (
-            <div
-              key={team.id}
-              className={`flex items-center justify-between gap-3 px-3 py-3 ${index > 0 ? 'border-t border-line' : ''}`}
-            >
-              <span className="truncate text-[14px] font-bold">
-                {team.aName} y {team.bName}
-              </span>
-              <button
-                type="button"
-                className={ACTION}
-                disabled={pending}
-                onClick={() => run(() => removeTeam(seasonId, team.id))}
-              >
-                Deshacer
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {freeMembers.length >= 2 && (
-        <form
-          onSubmit={(event) => {
-            event.preventDefault()
-            if (!canArmar) return
-            run(() => addTeam(seasonId, disciplineId, entryA, entryB))
-          }}
-          className="flex flex-col gap-2 rounded-field border-[1.5px] border-accent bg-surface p-3"
-        >
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <select
-              aria-label="Primer integrante"
-              value={entryA}
-              disabled={pending}
-              onChange={(event) => setEntryA(event.target.value)}
-              className="min-h-[44px] flex-1 rounded-field border border-line bg-surface p-[10px] text-[16px] font-bold outline-none"
-            >
-              <option value="">Elegí a alguien</option>
-              {freeMembers.map((member) => (
-                <option key={member.entryId} value={member.entryId}>
-                  {member.name}
-                </option>
-              ))}
-            </select>
-            <select
-              aria-label="Segundo integrante"
-              value={entryB}
-              disabled={pending}
-              onChange={(event) => setEntryB(event.target.value)}
-              className="min-h-[44px] flex-1 rounded-field border border-line bg-surface p-[10px] text-[16px] font-bold outline-none"
-            >
-              <option value="">Elegí a alguien</option>
-              {freeMembers.map((member) => (
-                <option key={member.entryId} value={member.entryId}>
-                  {member.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <button
-            type="submit"
-            disabled={!canArmar}
-            className="flex min-h-[44px] items-center justify-center rounded-field bg-accent p-[10px] text-[13.5px] font-extrabold text-accent-text disabled:opacity-45"
+        {freeMembers.length >= 2 && (
+          <form
+            onSubmit={(event) => {
+              event.preventDefault()
+              if (!canArmar) return
+              run(() => addTeam(seasonId, disciplineId, entryA, entryB))
+            }}
+            className="flex flex-col gap-3 rounded-tile bg-surface p-4"
           >
-            Armar equipo
-          </button>
-        </form>
-      )}
+            <p className="text-[17px] font-bold">Nuevo equipo</p>
+            <div className="grid grid-cols-2 gap-2">
+              <select
+                aria-label="Primer integrante"
+                value={entryA}
+                disabled={pending}
+                onChange={(event) => setEntryA(event.target.value)}
+                className={CAMPO}
+              >
+                <option value="">Elegí a alguien</option>
+                {freeMembers.map((member) => (
+                  <option key={member.entryId} value={member.entryId}>
+                    {member.name}
+                  </option>
+                ))}
+              </select>
+              <select
+                aria-label="Segundo integrante"
+                value={entryB}
+                disabled={pending}
+                onChange={(event) => setEntryB(event.target.value)}
+                className={CAMPO}
+              >
+                <option value="">Elegí a alguien</option>
+                {freeMembers.map((member) => (
+                  <option key={member.entryId} value={member.entryId}>
+                    {member.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button type="submit" disabled={!canArmar} className={button('primary', { full: true })}>
+              Armar equipo
+            </button>
+          </form>
+        )}
 
-      {error !== null && (
-        <p className="rounded-field bg-live-bg px-3 py-2.5 text-[12.5px] font-bold text-live">{error}</p>
-      )}
+        {error !== null && (
+          <Aviso alerta className="mt-3">
+            {error}
+          </Aviso>
+        )}
+      </Section>
     </section>
   )
 }

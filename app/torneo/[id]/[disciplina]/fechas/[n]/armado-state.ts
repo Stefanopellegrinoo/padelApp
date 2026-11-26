@@ -25,6 +25,8 @@ export interface SeatVM {
   name: string
   /** Sin fila de asistencia es `true`: el default es venir, y `seedAttendances` hace que la base opine lo mismo. */
   playing: boolean
+  /** Es el asiento de quien mira: lleva la marca de "vos". */
+  vos?: boolean
 }
 
 /** Lo que un toque afirma: este asiento juega, o no. Nunca "dalo vuelta". */
@@ -191,10 +193,10 @@ export function matchFormatLabel(format: MatchFormat, unit: string): string {
   return formatsLabel([{ label: '', matchFormat: format, unit }])
 }
 
-/** "Fecha 3 · 1 set a 6 games", o null si la fecha se juega igual que el deporte hoy (§7). */
+/** "Fecha 3, 1 set a 6 games", o null si la fecha se juega igual que el deporte hoy (§7). */
 export function formatoNotice(number: number, effective: MatchFormat, discipline: MatchFormat, unit: string): string | null {
   const label = matchFormatLabel(effective, unit)
-  return label === matchFormatLabel(discipline, unit) ? null : `Fecha ${number} · ${label}`
+  return label === matchFormatLabel(discipline, unit) ? null : `Fecha ${number}, ${label}`
 }
 
 /** Lo que el sorteo tiene para repartir en esta fecha. */
@@ -434,8 +436,7 @@ export function armadoWords(
       ? {
           sides: 'jugadores',
           guestSection: 'Jugadores invitados',
-          guestNote:
-            'Juegan solos, como todos, y no suman puntos para el campeonato. Entran de a dos.',
+          guestNote: 'No suman puntos. Entran de a dos.',
           addGuest: '+ Agregar 2 invitados',
           guestPairNoun: 'los dos invitados',
           draw: 'Ordenar jugadores',
@@ -447,8 +448,7 @@ export function armadoWords(
       : {
           sides: 'parejas',
           guestSection: 'Parejas invitadas',
-          guestNote:
-            'Juegan juntos y no suman puntos para el campeonato: es un amistoso adentro de la fecha.',
+          guestNote: 'No suman puntos.',
           addGuest: '+ Agregar pareja invitada',
           guestPairNoun: 'la pareja invitada',
           draw: 'Generar parejas',

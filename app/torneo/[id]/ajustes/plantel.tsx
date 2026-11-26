@@ -1,8 +1,14 @@
 'use client'
 
-import { useState, useTransition } from 'react'
-import { initials } from '@/app/format'
+import { useRef, useState, useTransition, type ReactNode } from 'react'
+import { Avatar } from '@/app/ui/avatar'
+import { button } from '@/app/ui/button'
+import { rowMeta, rowTitle } from '@/app/ui/row'
+import { Section } from '@/app/ui/section'
+import { Sheet } from '@/app/ui/sheet'
 import { addSeat, dropSeat, editSeatName, takeSeat, unlinkSeatOwner, type WriteResult } from './actions'
+import { VOS_FILA } from '@/app/torneo/[id]/[disciplina]/jugador/piezas'
+import { Aviso, CAMPO, Chevron, FILA_CAJA, GRUPO, ROTULO } from './piezas'
 
 export interface SeatVM {
   entryId: string
@@ -11,46 +17,62 @@ export interface SeatVM {
   ownerName: string | null
 }
 
-// `min-h-[44px]`: medían 29 de alto, y entre ellos está "Sacar", que es
-// destructivo. 44 es el mínimo de la guía de Apple para tocar con el dedo.
-const ACTION =
-  'flex min-h-[44px] items-center rounded-field bg-chip px-3.5 text-[12.5px] font-extrabold text-muted transition-opacity disabled:opacity-45'
-
 /**
- * El plantel desde Ajustes: renombrar un asiento, soltar el reclamo de quien lo
- * tomó, sacarlo, agregar uno nuevo, y quedarse con uno.
+ * El plantel desde Ajustes: la lista, y una hoja por asiento para renombrarlo,
+ * quedarse con él, soltar el reclamo de quien lo tomó o sacarlo; otra hoja
+ * para sumar uno nuevo.
  *
- * No toca `squadSize` ni `points` (decisión registrada 3): eso vive en Formato,
- * y mientras las dos cosas no coincidan la pantalla lo dice con `validateConfig`
- * en vez de arreglarlo por su cuenta.
+ * Antes cada asiento llevaba sus tres o cuatro botones a la vista, "Sacar"
+ * incluido, y el renombre guardaba al salir del campo: una lista de 8 era un
+ * muro de botones grises con el destructivo mezclado. Ahora la lista es de
+ * nombres y lo que se hace con uno está en su hoja, con "Sacar" en rojo y
+ * aparte. Si una acción rebota, la hoja sigue abierta con el motivo.
+ *
+ * No toca `squadSize` ni `points` (decisión registrada 3): eso vive en las
+ * reglas del deporte, y mientras las dos cosas no coincidan la pantalla lo
+ * dice con `validateConfig` en vez de arreglarlo por su cuenta.
  *
  * `canTakeSeat` es "quien organiza todavía no tiene asiento". Se pasa desde la
- * página, que es la que puede preguntarlo (`myEntryId`), y apaga el botón entero
- * en vez de dejarlo fallar: `claim_seat` rebota el segundo reclamo, pero ofrecer
- * un botón que siempre rebota es el defecto que ya apareció en "Reabrir fecha".
+ * página, que es la que puede preguntarlo (`myEntryId`), y esconde "Este soy
+ * yo" en vez de dejarlo fallar: `claim_seat` rebota el segundo reclamo, pero
+ * ofrecer un botón que siempre rebota es el defecto que ya apareció en
+ * "Reabrir fecha".
  *
- * El alta (spec "Ubicar al que llega en el orden de desempate") ya no es un
- * único input con submit al `onBlur`: agregarle el select de posición al lado
- * hubiera hecho que blurear el nombre PARA llegar al select dispare el alta
- * con lo que hubiera tipeado hasta ahí. Por eso es un `<form>` con botón
- * "Agregar" explícito — mismo motivo por el que `BorrarFecha` tiene su propio
- * "Borrar" en vez de un blur.
+ * El alta (spec "Ubicar al que llega en el orden de desempate") es un
+ * `<form>` con nombre, posición y "Agregar" explícito: con el select al lado,
+ * guardar al salir del nombre dispararía el alta a mitad de camino.
+ *
+ * `children` va arriba de la lista: el link de invitación y los avisos de
+ * plantel, que son de esta sección.
  */
 export function Plantel({
   seasonId,
   seats,
   canTakeSeat,
+  me = null,
+  children,
 }: {
   seasonId: string
   seats: SeatVM[]
   canTakeSeat: boolean
+  /** Tu asiento, si tenés: su fila va marcada como tuya (el amarillo es sólo para eso). */
+  me?: string | null
+  children?: ReactNode
 }) {
   const [pending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
-  const [editing, setEditing] = useState<string | null>(null)
+  // La hoja del asiento: `seatOpen` la abre y la cierra; `seatId` queda puesto
+  // mientras baja, para que no se vacíe en la animación.
+  const [seatId, setSeatId] = useState<string | null>(null)
+  const [seatOpen, setSeatOpen] = useState(false)
+  const [nombre, setNombre] = useState('')
   const [adding, setAdding] = useState(false)
   const [newName, setNewName] = useState('')
   const [newBefore, setNewBefore] = useState('')
+  const nombreRef = useRef<HTMLInputElement>(null)
+  const nuevoRef = useRef<HTMLInputElement>(null)
+
+  const seat = seats.find((candidate) => candidate.entryId === seatId) ?? null
 
   const run = (work: () => Promise<WriteResult>) => {
     setError(null)
@@ -60,184 +82,188 @@ export function Plantel({
         setError(result.error)
         return
       }
-      setEditing(null)
+      setSeatOpen(false)
       setAdding(false)
     })
   }
 
+  const openSeat = (target: SeatVM) => {
+    setError(null)
+    setSeatId(target.entryId)
+    setNombre(target.name)
+    setSeatOpen(true)
+  }
+  const openAdd = () => {
+    setError(null)
+    setNewName('')
+    setNewBefore('')
+    setAdding(true)
+  }
+
   return (
-    <section id="plantel" className="flex flex-col gap-2 scroll-mt-4">
-      <h2 className="text-[12px] font-extrabold uppercase tracking-[.14em] text-muted">Plantel</h2>
+    <Section
+      title="Plantel"
+      action={<span className="text-[16px] text-muted">{seats.length === 1 ? '1 jugador' : `${seats.length} jugadores`}</span>}
+    >
+      {children}
 
-      <div className="overflow-hidden rounded-[14px] border border-line bg-surface">
-        {seats.map((seat, index) => (
-          <div key={seat.entryId} className={`flex flex-col gap-2 p-3 ${index > 0 ? 'border-t border-line' : ''}`}>
-            <div className="flex items-center gap-3">
-              <span className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full bg-chip text-[12px] font-extrabold text-muted">
-                {initials(seat.name)}
-              </span>
-              <span className="flex min-w-0 flex-1 flex-col">
-                <span className="truncate text-[14px] font-bold">{seat.name}</span>
-                <span className="text-[12px] font-[600] text-muted">
-                  {seat.ownerName ?? 'Sin dueño'}
+      <ul className={GRUPO}>
+        {seats.map((candidate) => (
+          <li key={candidate.entryId} className="border-t border-line first:border-t-0">
+            <button
+              type="button"
+              onClick={() => openSeat(candidate)}
+              className={`${FILA_CAJA} press-fila${candidate.entryId === me ? ` ${VOS_FILA}` : ''}`}
+            >
+              <Avatar name={candidate.name} />
+              <span className="min-w-0 flex-1">
+                <span className={`${rowTitle} truncate`}>
+                  {candidate.name}
+                  {candidate.entryId === me && <span className="ml-1.5 text-[14px] font-semibold">vos</span>}
                 </span>
+                <span className={rowMeta}>{candidate.ownerName ?? 'Sin dueño'}</span>
               </span>
-            </div>
+              <Chevron />
+            </button>
+          </li>
+        ))}
+      </ul>
 
-            {editing === seat.entryId ? (
-              <input
-                autoFocus
-                defaultValue={seat.name}
-                disabled={pending}
-                onBlur={(event) => {
-                  const next = event.target.value
-                  if (next.trim() === seat.name.trim()) {
-                    setEditing(null)
-                    return
-                  }
-                  run(() => editSeatName(seasonId, seat.entryId, next))
-                }}
-                className="rounded-field border-[1.5px] border-accent bg-surface p-[10px] text-[16px] font-[750] outline-none"
-              />
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                <button type="button" className={ACTION} onClick={() => setEditing(seat.entryId)}>
-                  Editar nombre
-                </button>
-                {canTakeSeat && seat.ownerName === null && (
-                  <button
-                    type="button"
-                    className={ACTION}
-                    disabled={pending}
-                    onClick={() => run(() => takeSeat(seasonId, seat.entryId))}
-                  >
-                    Este soy yo
-                  </button>
-                )}
-                {seat.ownerName !== null && (
-                  <button
-                    type="button"
-                    className={ACTION}
-                    disabled={pending}
-                    onClick={() => run(() => unlinkSeatOwner(seasonId, seat.entryId))}
-                  >
-                    Desvincular
-                  </button>
-                )}
+      <button type="button" onClick={openAdd} className={`${button('secondary', { full: true })} mt-3`}>
+        + Agregar jugador
+      </button>
+
+      <Sheet open={seatOpen} onClose={() => setSeatOpen(false)} title={seat?.name ?? ''} initialFocus={nombreRef}>
+        {seat !== null && (
+          <div className="flex flex-col gap-5 pt-4">
+            <form
+              onSubmit={(event) => {
+                event.preventDefault()
+                if (pending) return
+                if (nombre.trim() === seat.name.trim()) {
+                  setSeatOpen(false)
+                  return
+                }
+                run(() => editSeatName(seasonId, seat.entryId, nombre))
+              }}
+              className="flex flex-col gap-3"
+            >
+              <label>
+                <span className={ROTULO}>Nombre</span>
+                <input
+                  ref={nombreRef}
+                  name="nombre"
+                  value={nombre}
+                  disabled={pending}
+                  autoComplete="off"
+                  onChange={(event) => setNombre(event.target.value)}
+                  className={CAMPO}
+                />
+              </label>
+              <button
+                type="submit"
+                disabled={pending || nombre.trim().length === 0}
+                className={button('primary', { full: true })}
+              >
+                Guardar
+              </button>
+            </form>
+
+            <div className="flex flex-col gap-2">
+              <p className="text-[15px] text-muted">
+                {seat.ownerName === null ? 'Sin dueño: lo reclama quien entra con el link' : `Cuenta: ${seat.ownerName}`}
+              </p>
+              {canTakeSeat && seat.ownerName === null && (
                 <button
                   type="button"
-                  className={ACTION}
                   disabled={pending}
-                  onClick={() => run(() => dropSeat(seasonId, seat.entryId))}
+                  onClick={() => run(() => takeSeat(seasonId, seat.entryId))}
+                  className={button('secondary', { full: true })}
                 >
-                  Sacar
+                  Este soy yo
                 </button>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
+              )}
+              {seat.ownerName !== null && (
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => run(() => unlinkSeatOwner(seasonId, seat.entryId))}
+                  className={button('secondary', { full: true })}
+                >
+                  Desvincular
+                </button>
+              )}
+            </div>
 
-      {adding ? (
-        // Nombre y select en un `<form>` con botón explícito: el input solo
-        // (con submit al blur) no alcanza en cuanto hay un segundo control —
-        // blurear el nombre para llegar al select de posición disparaba el
-        // alta con lo que hubiera en el campo en ese instante.
+            {error !== null && <Aviso alerta>{error}</Aviso>}
+
+            <div className="border-t border-line pt-4">
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => run(() => dropSeat(seasonId, seat.entryId))}
+                className={button('danger', { full: true })}
+              >
+                Sacar
+              </button>
+            </div>
+          </div>
+        )}
+      </Sheet>
+
+      <Sheet open={adding} onClose={() => setAdding(false)} title="Agregar jugador" initialFocus={nuevoRef}>
         <form
           onSubmit={(event) => {
             event.preventDefault()
-            // El `pending` no lo cubren los `disabled`: un Enter en el input
-            // dispara el submit del form igual, y el handler es el último
-            // lugar donde se puede frenar un alta duplicada.
+            // El `pending` no lo cubren los `disabled`: un Enter en el campo
+            // manda el form igual, y acá es el último lugar donde se frena un
+            // alta duplicada.
             if (pending || newName.trim().length === 0) return
             run(() => addSeat(seasonId, newName, newBefore === '' ? null : newBefore))
           }}
-          className="flex flex-col gap-2 rounded-field border-[1.5px] border-accent bg-surface p-3"
+          className="flex flex-col gap-4 pt-4"
         >
-          {/* `aria-label` y no un `<label>` visible: el placeholder ya dice qué
-              va acá y sumar un rótulo arriba desbalancea el bloque, pero un
-              placeholder NO es nombre accesible —desaparece al tipear— y un
-              lector de pantalla anunciaba "edit text, blank". El `<select>` de
-              abajo sí tiene `<label>` porque su rótulo es visible. */}
-          <input
-            autoFocus
-            aria-label="Nombre"
-            placeholder="Nombre"
-            disabled={pending}
-            value={newName}
-            onChange={(event) => setNewName(event.target.value)}
-            className="rounded-field border border-line bg-surface p-[10px] text-[16px] font-[750] outline-none placeholder:font-medium placeholder:text-muted"
-          />
+          <label>
+            <span className={ROTULO}>Nombre</span>
+            <input
+              ref={nuevoRef}
+              name="nuevo"
+              value={newName}
+              disabled={pending}
+              autoComplete="off"
+              onChange={(event) => setNewName(event.target.value)}
+              className={CAMPO}
+            />
+          </label>
           {/* `seats` ya llega ordenado por seedPosition (ajustes/page.tsx), así
               que el select sale en el mismo orden que el plantel — igual que
               "Juega con" en GuestCard. */}
-          <label className="flex items-center gap-2 text-[12.5px] font-bold">
-            Posición
-            {/* `min-h-[44px]`: misma regla que `ACTION` acá arriba. Sin él, el
-                alto sale de `p-[10px]` más el line-height de preflight, que
-                para 16px da menos de 44 — el mínimo se pone explícito en vez de
-                depender de esa cuenta. `text-[16px]` y no 13.5: abajo de 16 iOS
-                hace zoom solo al enfocar, que es de lo que ya se cuida el input
-                del nombre. */}
+          <label>
+            <span className={ROTULO}>Posición en el desempate</span>
             <select
               value={newBefore}
               disabled={pending}
               onChange={(event) => setNewBefore(event.target.value)}
-              className="min-h-[44px] flex-1 rounded-field border border-line bg-surface p-[10px] text-[16px] font-bold outline-none"
+              className={CAMPO}
             >
               <option value="">Al final</option>
-              {seats.map((seat) => (
-                <option key={seat.entryId} value={seat.entryId}>
-                  Antes de {seat.name}
+              {seats.map((candidate) => (
+                <option key={candidate.entryId} value={candidate.entryId}>
+                  Antes de {candidate.name}
                 </option>
               ))}
             </select>
           </label>
-          <div className="flex items-center gap-2">
-            {/* `flex min-h-[44px] items-center justify-center` en vez de
-                `text-center`: con `p-[10px]` y el line-height de preflight, un
-                botón de 13.5px queda abajo del mínimo de 44 que este mismo
-                archivo se impone en `ACTION`. El `min-h` fija el piso y el
-                `flex` centra el texto adentro del alto resultante, que es lo
-                que `text-center` solo no hace. */}
-            <button
-              type="submit"
-              disabled={pending || newName.trim().length === 0}
-              className="flex min-h-[44px] flex-1 items-center justify-center rounded-field bg-accent p-[10px] text-[13.5px] font-extrabold text-accent-text disabled:opacity-45"
-            >
-              Agregar
-            </button>
-            <button
-              type="button"
-              disabled={pending}
-              onClick={() => {
-                setAdding(false)
-                setNewName('')
-                setNewBefore('')
-              }}
-              className="flex min-h-[44px] flex-1 items-center justify-center rounded-field bg-chip p-[10px] text-[13.5px] font-extrabold text-muted"
-            >
-              Cancelar
-            </button>
-          </div>
+          {error !== null && <Aviso alerta>{error}</Aviso>}
+          <button
+            type="submit"
+            disabled={pending || newName.trim().length === 0}
+            className={button('primary', { size: 'lg', full: true })}
+          >
+            Agregar
+          </button>
         </form>
-      ) : (
-        <button
-          type="button"
-          onClick={() => {
-            setAdding(true)
-            setNewName('')
-            setNewBefore('')
-          }}
-          className="rounded-field border-[1.5px] border-line p-3 text-[13.5px] font-extrabold"
-        >
-          + Agregar jugador
-        </button>
-      )}
-
-      {error !== null && (
-        <p className="rounded-field bg-live-bg px-3 py-2.5 text-[12.5px] font-bold text-live">{error}</p>
-      )}
-    </section>
+      </Sheet>
+    </Section>
   )
 }

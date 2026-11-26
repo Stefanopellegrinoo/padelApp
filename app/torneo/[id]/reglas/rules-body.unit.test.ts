@@ -70,9 +70,11 @@ function bloque(
 const PADEL = (text = '') => bloque('PADEL', 'Pádel', PADEL_CONFIG, PADEL_SHAPE, text)
 const FIFA = (text = '') => bloque('FIFA', 'FIFA', FIFA_CONFIG, FIFA_SHAPE, text)
 
+const VOLVER = { href: '/torneos', label: 'Mis torneos' }
+
 function html(disciplines: RulesBlock[], adminName = 'Marce', isAdmin = false): string {
   return renderToStaticMarkup(
-    createElement(RulesBody, { seasonId: 'season-1', disciplines, adminName, isAdmin }),
+    createElement(RulesBody, { seasonId: 'season-1', seasonName: 'Los Pibes', back: VOLVER, disciplines, adminName, isAdmin }),
   )
 }
 
@@ -86,22 +88,33 @@ const LINEA_FIJA = 'Alguna fecha puede jugarse a otra cosa: se avisa en esa fech
 describe('Reglas — un bloque por deporte, con el reglamento arriba', () => {
   it('Pádel + FIFA: un título por deporte', () => {
     const out = html([PADEL(), FIFA()])
-    expect(out).toMatch(/<h2 class="text-\[17px\] font-extrabold[^"]*">Pádel<\/h2>/)
-    expect(out).toMatch(/<h2 class="text-\[17px\] font-extrabold[^"]*">FIFA<\/h2>/)
+    expect(out).toMatch(/<h2 class="font-titulo[^"]*">Pádel<\/h2>/)
+    expect(out).toMatch(/<h2 class="font-titulo[^"]*">FIFA<\/h2>/)
   })
 
   it('con un solo deporte el título igual aparece', () => {
     expect(html([PADEL()])).toContain('>Pádel</h2>')
   })
 
-  it('el reglamento sale como UN párrafo con las líneas unidas, antes de "Más detalle"', () => {
+  it('el reglamento sale como datos, una regla por línea y en orden, antes de "Más detalle"', () => {
     const out = html([PADEL()])
-    const parrafo = reglamento({ kind: 'PADEL', ...PADEL_SHAPE, formatoDefault: ROUND_ROBIN, config: PADEL_CONFIG })
-      .map((line) => line.text)
-      .join(' ')
-    expect(out).toContain(`>${parrafo}</p>`)
-    expect(parrafo).toContain('se arma por nivel')
-    expect(out.indexOf('se arma por nivel')).toBeLessThan(out.indexOf('<details'))
+    const lines = reglamento({ kind: 'PADEL', ...PADEL_SHAPE, formatoDefault: ROUND_ROBIN, config: PADEL_CONFIG })
+    const enOrden = lines
+      .filter((line) => line.key !== 'puntos')
+      .map((line) => out.indexOf(`>${line.text}</span>`))
+    expect(enOrden.every((at) => at !== -1)).toBe(true)
+    expect(enOrden).toEqual([...enOrden].sort((a, b) => a - b))
+    expect(out).toContain('se arma por nivel')
+    expect(enOrden.at(-1)!).toBeLessThan(out.indexOf('<details'))
+  })
+
+  it('los puntos van como casilleros por puesto, no como frase', () => {
+    const out = html([PADEL()])
+    expect(out).not.toContain('Gana 10')
+    expect(out).toContain('>Puntos por puesto<')
+    for (const [index, value] of PADEL_CONFIG.points.filter((points) => points > 0).entries()) {
+      expect(out).toContain(`>${index + 1}°</span><span class="font-cond block text-[30px] text-sport">${value}</span>`)
+    }
   })
 
   it('en Pádel + FIFA cada bloque dice SU reglamento, antes de SU "Más detalle"', () => {
@@ -114,14 +127,15 @@ describe('Reglas — un bloque por deporte, con el reglamento arriba', () => {
     expect(fifa).toContain('Partidos a goles; se puede empatar.')
     expect(fifa).not.toContain('Masters al final')
     for (const bloqueHtml of [padel, fifa]) {
-      expect(bloqueHtml.indexOf('Gana 10')).toBeLessThan(bloqueHtml.indexOf('<details'))
+      expect(bloqueHtml.indexOf('>Puntos por puesto<')).toBeLessThan(bloqueHtml.indexOf('<details'))
     }
   })
 
   it('un torneo anterior a la ficha (sin `firstFecha`) no inventa cómo se armó la primera fecha', () => {
     const existente = bloque('PADEL', 'Pádel', defaultConfig(8), PADEL_SHAPE)
     const out = html([existente])
-    expect(out).toContain('Parejas que rotan. Partidos a 1 set de 4 games.')
+    expect(out).toContain('>Parejas que rotan.</span>')
+    expect(out).toContain('>Partidos a 1 set de 4 games.</span>')
     expect(out).toContain('Cada fecha, todos contra todos.')
     expect(out).not.toContain('primera fecha')
   })
@@ -137,8 +151,12 @@ describe('Reglas — un bloque por deporte, con el reglamento arriba', () => {
     expect(out.match(/<details/g)).toHaveLength(2)
   })
 
-  it('la intro nombra a quien organiza, y "Editar reglas" sólo aparece para el admin', () => {
-    expect(html([PADEL()], 'Marce')).toContain('Las reglas de este torneo, como quedaron cuando Marce lo creó.')
+  it('el encabezado nombra el torneo y a quien organiza, y "Editar reglas" sólo aparece para el admin', () => {
+    const out = html([PADEL()], 'Marce')
+    expect(out).toContain('>Reglas</h1>')
+    expect(out).toContain('Los Pibes')
+    expect(out).toContain('Organiza Marce')
+    expect(out).toContain('href="/torneos"')
     expect(html([PADEL()])).not.toContain('Editar reglas')
     expect(html([PADEL()], 'Marce', true)).toContain('href="/torneo/season-1/ajustes"')
   })
@@ -161,12 +179,12 @@ describe('Reglas — "Más detalle", cerrado, con el acordeón de siempre', () =
     expect(out).toMatch(/<summary[^>]*><span>Más detalle<\/span>/)
   })
 
-  it('el summary mide 44px, es link de acento, y tiene foco visible y marcador propio', () => {
+  it('el summary mide 44px, es link de acento y tiene marcador propio (el foco visible es el global)', () => {
     const summary = /<summary[^>]*>/.exec(html([PADEL()]))?.[0] ?? ''
     expect(summary).toContain('min-h-[44px]')
     expect(summary).toContain('text-accent-link')
-    expect(summary).toContain('font-extrabold')
-    expect(summary).toContain('focus-visible:ring-2')
+    expect(summary).toContain('font-semibold')
+    expect(summary).not.toContain('outline-none')
     // El `&` sale escapado del HTML (`&amp;`): se mira lo que sigue.
     expect(summary).toContain('::-webkit-details-marker]:hidden')
   })
@@ -229,7 +247,7 @@ describe('Reglas — las reglas de la casa, el texto libre de cada deporte', () 
     expect(html([PADEL()])).not.toContain('Reglas de la casa')
     const out = html([PADEL('Traer pelotas nuevas.')])
     expect(out).toContain('Traer pelotas nuevas.')
-    expect(out.indexOf('Gana 10')).toBeLessThan(out.indexOf('Reglas de la casa'))
+    expect(out.indexOf('>Puntos por puesto<')).toBeLessThan(out.indexOf('Reglas de la casa'))
     expect(out.indexOf('Reglas de la casa')).toBeLessThan(out.indexOf('<details'))
   })
 
@@ -260,7 +278,16 @@ describe('Reglas — el acordeón de "Más detalle" sigue abriendo', () => {
     document.body.appendChild(container)
     const root = createRoot(container)
     await act(async () => {
-      root.render(createElement(RulesBody, { seasonId: 's1', disciplines: [PADEL()], adminName: 'Marce', isAdmin: false }))
+      root.render(
+        createElement(RulesBody, {
+          seasonId: 's1',
+          seasonName: 'Los Pibes',
+          back: VOLVER,
+          disciplines: [PADEL()],
+          adminName: 'Marce',
+          isAdmin: false,
+        }),
+      )
     })
     expect(container.textContent).not.toContain('se suma un invitado')
 

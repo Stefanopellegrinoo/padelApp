@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Estilo 1 · Cancha</title>
+<style>
+  /* Evolución del sistema actual: mismo verde y misma tipografía, más aire, números grandes y superficies tintadas. */
+  :root {
+    --bg: #f6f8f5; --surface: #ffffff; --chip: #e8efe9; --line: #dfe7e1;
+    --text: #0f2219; --muted: #56675d; --accent: #0e5c3f; --accent-2: #1f8a5b;
+    --on-accent: #ffffff; --up: #1f7a4c; --down: #b0442b; --ok-bg: #e3f1e8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: Archivo, ui-sans-serif, system-ui, sans-serif; width: 390px; }
+  a { color: inherit; text-decoration: none; }
+  a:focus-visible, button:focus-visible { outline: 3px solid var(--accent-2); outline-offset: 3px; border-radius: 8px; }
+  main { display: flex; flex-direction: column; gap: 14px; padding: 0 20px 32px; }
+  header { display: flex; align-items: center; justify-content: space-between; padding-top: 20px; }
+  .hello { font-size: 14px; font-weight: 600; color: var(--muted); }
+  h1 { font-size: 30px; font-weight: 800; letter-spacing: -.035em; }
+  .me { width: 44px; height: 44px; border-radius: 50%; background: var(--accent); color: var(--on-accent); display: grid; place-items: center; font-size: 13px; font-weight: 800; border: 0; font-family: inherit; }
+  h2 { font-size: 15px; font-weight: 800; letter-spacing: -.01em; margin-top: 14px; display: flex; justify-content: space-between; align-items: baseline; }
+  h2 a { font-size: 13.5px; color: var(--accent-2); }
+  .next { display: block; border-radius: 22px; padding: 20px; color: var(--on-accent); background: linear-gradient(150deg, #0e5c3f 0%, #157a52 100%); position: relative; overflow: hidden; }
+  .next::after { content: ""; position: absolute; right: -40px; top: -40px; width: 160px; height: 160px; border: 2px solid rgba(255,255,255,.14); border-radius: 50%; }
+  .tag { display: inline-block; font-size: 12px; font-weight: 800; background: rgba(255,255,255,.16); padding: 5px 10px; border-radius: 999px; }
+  .next .t { font-size: 26px; font-weight: 800; letter-spacing: -.03em; margin-top: 12px; }
+  .next .d { font-size: 14.5px; font-weight: 600; margin-top: 4px; opacity: .92; }
+  .next .row { display: flex; align-items: center; justify-content: space-between; margin-top: 18px; }
+  .big { font-size: 40px; font-weight: 800; letter-spacing: -.04em; line-height: 1; }
+  .big small { font-size: 14px; font-weight: 700; letter-spacing: 0; opacity: .9; }
+  .go { background: #ffffff; color: var(--accent); font-size: 14px; font-weight: 800; padding: 12px 16px; border-radius: 14px; }
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .t-card { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 14px; min-height: 120px; display: flex; flex-direction: column; justify-content: space-between; }
+  .t-card .s { font-size: 12px; font-weight: 700; color: var(--muted); }
+  .t-card b { font-size: 15.5px; font-weight: 800; letter-spacing: -.02em; line-height: 1.2; display: block; margin-top: 4px; }
+  .t-card .pos { font-size: 28px; font-weight: 800; letter-spacing: -.04em; color: var(--accent); }
+  .t-card .pos small { font-size: 12px; color: var(--muted); font-weight: 700; letter-spacing: 0; }
+  .list { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; }
+  .li { display: flex; gap: 12px; align-items: center; padding: 13px 14px; min-height: 66px; }
+  .li + .li { border-top: 1px solid var(--line); }
+  .av { width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 800; background: var(--ok-bg); color: var(--accent); flex-shrink: 0; }
+  .li b { display: block; font-size: 15.5px; font-weight: 750; }
+  .sub { display: block; font-size: 13px; font-weight: 600; color: var(--muted); }
+  .w { color: var(--up); font-weight: 800; } .l { color: var(--down); font-weight: 800; }
+  .rk { margin-left: auto; text-align: right; }
+  .rk strong { display: block; font-size: 18px; font-weight: 800; letter-spacing: -.02em; }
+  .rk span { font-size: 11.5px; font-weight: 700; color: var(--muted); }
+  .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .btn { display: flex; align-items: center; justify-content: center; min-height: 56px; border-radius: 14px; font-size: 15px; font-weight: 800; }
+  .primary { background: var(--accent); color: var(--on-accent); }
+  .secondary { background: var(--surface); border: 1px solid var(--line); }
+  .add { color: var(--accent-2); font-size: 14.5px; font-weight: 800; text-align: center; padding: 6px 0; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div><p class="hello">Hola, Martín</p><h1>Inicio</h1></div>
+    <button class="me" aria-label="Tu cuenta">MP</button>
+  </header>
+
+  <a class="next" href="#">
+    <span class="tag">Pádel · Los Pibes del Martes</span>
+    <p class="t">Martes 18/11 · Fecha 8</p>
+    <p class="d">20:30 · Club Ciudad · 10 confirmados</p>
+    <div class="row"><p class="big">3° <small>de 12</small></p><span class="go">Ver la fecha</span></div>
+  </a>
+
+  <h2>Tus torneos</h2>
+  <div class="cards">
+    <a class="t-card" href="#"><div><p class="s">Pádel · Fecha 7/12</p><b>Los Pibes del Martes</b></div><p class="pos">3° <small>de 12</small></p></a>
+    <a class="t-card" href="#"><div><p class="s">FIFA · Fecha 4/8</p><b>FIFA de los Viernes</b></div><p class="pos">1° <small>de 6</small></p></a>
+  </div>
+
+  <h2>Con tus amigos <a href="#">Ver todos</a></h2>
+  <div class="list">
+    <a class="li" href="#"><span class="av">NA</span><span><b>Nico Arias</b><span class="sub"><span class="w">Ganaste 6-4 6-3</span> · hace 2 días</span></span><span class="rk"><strong>7–5</strong><span>historial</span></span></a>
+    <a class="li" href="#"><span class="av">FG</span><span><b>Facu Gómez</b><span class="sub"><span class="l">Perdiste 1-3</span> · el viernes</span></span><span class="rk"><strong>4–6</strong><span>historial</span></span></a>
+    <a class="li" href="#"><span class="av">JL</span><span><b>Juampi Ledesma</b><span class="sub"><span class="w">Ganaste 6-2 7-5</span> · hace 1 semana</span></span><span class="rk"><strong>3–1</strong><span>historial</span></span></a>
+  </div>
+  <a class="add" href="#">+ Cargar un partido con un amigo</a>
+
+  <div class="actions">
+    <a class="btn primary" href="#">Crear torneo</a>
+    <a class="btn secondary" href="#">Torneo rápido</a>
+  </div>
+</main>
+</body>
+</html>

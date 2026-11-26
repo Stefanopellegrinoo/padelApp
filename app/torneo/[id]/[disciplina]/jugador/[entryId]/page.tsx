@@ -1,4 +1,4 @@
-import { Volver } from '@/app/torneo/[id]/volver'
+import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import {
   computeRanking,
@@ -15,24 +15,33 @@ import {
   type EntryId,
   type SeasonConfig,
 } from '@/core'
-import { awardsOf, closedHistoryAll, entriesOf, seasonHeader, seasonSquadMembersOf } from '@/db/read'
+import { awardsOf, closedHistoryAll, entriesOf, myEntryId, seasonHeader, seasonSquadMembersOf } from '@/db/read'
 import { serverClient } from '@/db/server'
-import { initials } from '@/app/format'
+import { Avatar } from '@/app/ui/avatar'
+import { button } from '@/app/ui/button'
+import { Hero } from '@/app/ui/hero'
+import { row as rowClass, rowMeta, rowTitle } from '@/app/ui/row'
+import { desdeOf, perfilHref, volverDelJugador, type Desde } from '../origen'
+import { Dato, markMatchdays, PuntosPorFecha, Seccion, Vos, VOS_FILA } from '../piezas'
 
 interface PageProps {
   params: Promise<{ id: string; disciplina: string; entryId: string }>
+  /** `?desde=stats|mias`: de dónde se llegó, para nombrar el destino del `Volver` (`../origen.ts`). */
+  searchParams: Promise<{ desde?: string }>
 }
 
 /**
- * La trayectoria del año, dibujada.
+ * La trayectoria del año, dibujada: el puesto en la tabla al cierre de cada
+ * fecha, con el número debajo de cada punto.
  *
  * SVG en línea y no una librería de gráficos: son cuatro cuentas y el proyecto
  * no admite dependencias nuevas. **El eje va al revés** —el 1° arriba— porque un
  * puesto más chico es mejor, y una línea que baja cuando mejorás se lee al
- * revés de lo que pasó.
+ * revés de lo que pasó. Plana, en el color del deporte (`--color-sport`).
  *
  * `viewBox` con `preserveAspectRatio="none"` y ancho 100%: se estira al ancho
- * del teléfono sin que haya que medir nada del lado del cliente.
+ * del teléfono sin que haya que medir nada del lado del cliente. Cada punto va
+ * en el centro de su columna para quedar encima de su número.
  */
 function Trayectoria({
   trail,
@@ -42,60 +51,67 @@ function Trayectoria({
   squadSize: number
 }) {
   const width = 100
-  const height = 34
-  const last = trail[trail.length - 1]
-  const first = trail[0]
-  if (last === undefined || first === undefined) return null
+  const height = 48
+  if (trail.length === 0) return null
 
   // De 1 a `squadSize` repartido en la altura, con un margen para que el punto
   // del 1° y el del último no queden cortados por el borde.
   const y = (position: number) =>
-    squadSize <= 1 ? height / 2 : 3 + ((position - 1) / (squadSize - 1)) * (height - 6)
-  const x = (index: number) =>
-    trail.length <= 1 ? width / 2 : (index / (trail.length - 1)) * width
+    squadSize <= 1 ? height / 2 : 4 + ((position - 1) / (squadSize - 1)) * (height - 8)
+  const x = (index: number) => ((index + 0.5) / trail.length) * width
 
   const points = trail.map((step, index) => `${x(index)},${y(step.position)}`).join(' ')
-  const climbed = last.position < first.position
-  const stroke = climbed ? 'var(--color-up)' : last.position > first.position ? 'var(--color-down)' : 'var(--color-muted)'
+  const columns = { gridTemplateColumns: `repeat(${trail.length}, minmax(0, 1fr))` }
 
   return (
-    <div className="flex flex-col gap-2 rounded-[14px] border border-line bg-surface p-[14px]">
-      <div className="flex items-baseline justify-between gap-2">
-        <p className="text-[12px] font-extrabold uppercase tracking-[.13em] text-muted">
-          Cómo viene
-        </p>
-        <p className="text-[12px] font-[600] text-muted">
-          Arrancó {first.position}° · va {last.position}°
-        </p>
+    <Seccion title="Puesto en la tabla">
+      <div className="px-4">
+        <div
+          role="img"
+          aria-label={`Puesto por fecha: ${trail.map((step) => `fecha ${step.number}, ${step.position}°`).join('; ')}`}
+          className="relative mt-1 h-[104px]"
+        >
+          <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" aria-hidden="true" className="absolute inset-0 h-full w-full">
+            <polyline
+              points={points}
+              fill="none"
+              stroke="var(--color-sport)"
+              strokeWidth="3"
+              strokeLinejoin="round"
+              strokeLinecap="round"
+              vectorEffect="non-scaling-stroke"
+            />
+          </svg>
+          {/* Los puntos van en HTML y no en el SVG: estirado con
+              `preserveAspectRatio="none"`, un círculo saldría ovalado. */}
+          {trail.map((step, index) => {
+            const top = (y(step.position) / height) * 100
+            return (
+              <span key={step.number} aria-hidden="true">
+                <span
+                  className="absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-sport"
+                  style={{ left: `${x(index)}%`, top: `${top}%` }}
+                />
+                {/* El puesto pegado a su punto: abajo si el punto está
+                    arriba, arriba si está abajo, para no salirse. */}
+                <span
+                  className={`font-cond absolute -translate-x-1/2 text-[24px] ${top > 55 ? '-mt-2.5 -translate-y-full' : 'mt-2.5'}`}
+                  style={{ left: `${x(index)}%`, top: `${top}%` }}
+                >
+                  {step.position}
+                  <span className="align-top text-[14px]">°</span>
+                </span>
+              </span>
+            )
+          })}
+        </div>
+        <div aria-hidden="true" className="mt-2 grid gap-1.5 text-center text-[13px] font-semibold text-muted" style={columns}>
+          {trail.map((step) => (
+            <span key={step.number}>F{step.number}</span>
+          ))}
+        </div>
       </div>
-
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        preserveAspectRatio="none"
-        className="h-[34px] w-full"
-        role="img"
-        aria-label={`Puesto por fecha: ${trail.map((step) => `fecha ${step.number}, ${step.position}°`).join('; ')}`}
-      >
-        <polyline
-          points={points}
-          fill="none"
-          stroke={stroke}
-          strokeWidth="1.5"
-          strokeLinejoin="round"
-          strokeLinecap="round"
-          vectorEffect="non-scaling-stroke"
-        />
-        <circle cx={x(trail.length - 1)} cy={y(last.position)} r="2.5" fill={stroke} vectorEffect="non-scaling-stroke" />
-      </svg>
-
-      <div className="flex justify-between">
-        {trail.map((step) => (
-          <span key={step.number} className="text-[12px] font-bold text-muted">
-            F{step.number}
-          </span>
-        ))}
-      </div>
-    </div>
+    </Seccion>
   )
 }
 
@@ -135,46 +151,56 @@ function positionsByMatchday(
   return trail
 }
 
-interface MatchdayMark {
-  number: number
-  status: 'counted' | 'discarded' | 'absent'
-  points: number | null
-}
-
 function formatSigned(value: number): string {
   return value > 0 ? `+${value}` : `${value}`
 }
 
 /**
- * Marca cada fecha cerrada como contada, descartada o ausencia — sin
- * recalcular la regla de las mejores N. `RankingRow.counted`/`discarded` ya la
- * resolvieron; esto sólo empareja el puntaje de cada fecha contra esos dos
- * arrays (por valor, tipo multiset: un empate exacto en el corte cae en
- * cualquiera de las fechas empatadas, da lo mismo cuál, porque valen lo mismo).
+ * Una fila de compañero o de rival: avatar, nombre (el link al perfil, que
+ * cubre la fila entera), una línea gris y el resultado en números grandes.
+ * La del que mira lleva la marca de "vos".
  */
-function markMatchdays(
-  matchdayNumbers: number[],
-  awardsByMatchday: Map<number, Award[]>,
-  entryId: EntryId,
-  counted: readonly number[],
-  discarded: readonly number[],
-): MatchdayMark[] {
-  const countedPool = [...counted]
-  const discardedPool = [...discarded]
-
-  return matchdayNumbers.map((number): MatchdayMark => {
-    const award = (awardsByMatchday.get(number) ?? []).find((candidate) => candidate.entryId === entryId)
-    if (award === undefined) return { number, status: 'absent', points: null }
-
-    const countedIndex = countedPool.indexOf(award.points)
-    if (countedIndex !== -1) {
-      countedPool.splice(countedIndex, 1)
-      return { number, status: 'counted', points: award.points }
-    }
-    const discardedIndex = discardedPool.indexOf(award.points)
-    if (discardedIndex !== -1) discardedPool.splice(discardedIndex, 1)
-    return { number, status: 'discarded', points: award.points }
-  })
+function FilaPersona({
+  name,
+  href,
+  meta,
+  won,
+  lost,
+  tone,
+  isMe,
+}: {
+  name: string
+  href: string
+  meta: string
+  won: number
+  lost: number
+  tone: 'up' | 'down' | 'muted'
+  isMe: boolean
+}) {
+  return (
+    <li className={`relative ${rowClass} press-fila${isMe ? ` ${VOS_FILA}` : ''}`}>
+      <Avatar name={name} />
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-1.5">
+          <Link href={href} className={`${rowTitle} min-w-0 [overflow-wrap:anywhere] after:absolute after:inset-0`}>
+            {name}
+          </Link>
+          {isMe && <Vos />}
+        </span>
+        <span className={rowMeta}>{meta}</span>
+      </span>
+      <span
+        className={`font-cond shrink-0 text-[30px] ${tone === 'up' ? 'text-up' : tone === 'down' ? 'text-down' : 'text-muted'}`}
+      >
+        <span aria-hidden="true">
+          {won}-{lost}
+        </span>
+        <span className="sr-only">
+          {won} ganados, {lost} perdidos
+        </span>
+      </span>
+    </li>
+  )
 }
 
 /**
@@ -200,8 +226,9 @@ function markMatchdays(
  * otra disciplina (o ninguna) igual encuentra su nombre acá, con "Todavía no
  * jugó {disciplina}" en vez de un 404.
  */
-export default async function JugadorPage({ params }: PageProps) {
+export default async function JugadorPage({ params, searchParams }: PageProps) {
   const { id: seasonId, disciplina, entryId } = await params
+  const desde: Desde | null = desdeOf((await searchParams).desde)
   const supabase = await serverClient()
 
   const header = await seasonHeader(supabase, seasonId)
@@ -210,25 +237,19 @@ export default async function JugadorPage({ params }: PageProps) {
 
   const disciplineLabel = header.disciplines.length > 1 ? sportLabel(discipline.kind) : null
 
-  // Deliberadamente SIN discipliner: `volverDestination` (`tabla-state.ts`)
-  // ya decide esto para la Tabla -- `/torneos` con una sola disciplina,
-  // `/torneo/{seasonId}` (el contenedor) con 2+ -- y reusarlo acá rompería
-  // el byte-a-byte con una sola disciplina: hoy, `/torneo/{seasonId}`
-  // redirige (`singleDisciplineRedirect`, `tabla-state.ts`) a la MISMA tabla
-  // a la que iría `/torneo/{seasonId}/{disciplina}` directo; `volverDestination`
-  // en cambio manda a "Mis torneos", afuera de la temporada. Con 2+
-  // disciplinas se vuelve al contenedor (Tabla general), no a la tabla
-  // puntual de la que vino -- la razón por la que se eligió así (la Tabla
-  // GLOBAL enlazaba acá sin una disciplina a la que apuntar) ya no aplica,
-  // esa fila dejó de ser clickeable, pero el valor no se revisó de nuevo en
-  // esta tarea: Task 3 es quien scopea el resto del nav.
-  const volverHref = `/torneo/${seasonId}`
+  // El perfil es del deporte de la URL: `Volver` sube a la Tabla de ESE
+  // deporte, o vuelve a Stats si se vino de ahí (`?desde=`, `../origen.ts`).
+  // Antes iba a `/torneo/{seasonId}` (el contenedor: con 2+ deportes, la
+  // Tabla general) y decía "Volver" a secas, sin nombrar a dónde.
+  const base = `/torneo/${seasonId}/${disciplina}`
+  const volver = volverDelJugador(base, desde)
 
-  const [squad, entries, history, awardsByMatchday] = await Promise.all([
+  const [squad, entries, history, awardsByMatchday, viewerEntryId] = await Promise.all([
     seasonSquadMembersOf(supabase, seasonId),
     entriesOf(supabase, seasonId, discipline.id),
     closedHistoryAll(supabase, seasonId, discipline.id),
     awardsOf(supabase, seasonId, discipline.id),
+    myEntryId(supabase, seasonId),
   ])
 
   // La identidad se resuelve con el plantel de LA TEMPORADA (C11, verify
@@ -254,18 +275,18 @@ export default async function JugadorPage({ params }: PageProps) {
   const entry = squadEntries.find((candidate) => candidate.id === entryId)
   if (entry === undefined) {
     return (
-      <div className="flex flex-col gap-3 pt-4">
-        <Volver href={volverHref} />
-        <div className="flex items-center gap-3 rounded-card border border-line bg-surface p-4">
-          <span className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full bg-accent text-[19px] font-extrabold text-accent-text">
-            {initials(member.displayName)}
-          </span>
-          <div>
-            <p className="text-[19px] font-extrabold">{member.displayName}</p>
-            <p className="text-[12.5px] font-semibold text-muted">
-              {disciplineLabel !== null ? `Todavía no jugó ${disciplineLabel}` : 'Todavía no jugó esta disciplina'}
-            </p>
-          </div>
+      <div className="flex flex-col">
+        <Hero
+          back={volver}
+          kicker={header.name}
+          title={member.displayName}
+          subtitle={disciplineLabel !== null ? `Todavía no jugó ${disciplineLabel}` : 'Todavía no jugó esta disciplina'}
+          sport={discipline.kind}
+        />
+        <div className="px-4 pt-5">
+          <Link href={`${base}/fechas`} className={button('secondary', { full: true })}>
+            Ver las fechas
+          </Link>
         </div>
       </div>
     )
@@ -326,118 +347,92 @@ export default async function JugadorPage({ params }: PageProps) {
     (a, b) => b.won + b.lost - (a.won + a.lost) || b.won - b.lost - (a.won - a.lost),
   )
 
+  const isMe = entryId === viewerEntryId
+  const fechasJugadas = tally.matchdaysPlayed
+
   return (
-    <div className="flex flex-col gap-3 pt-4">
-      <Volver href={volverHref} />
+    <div className="flex flex-col">
+      <Hero
+        back={volver}
+        kicker={disciplineLabel !== null ? `${header.name}, ${disciplineLabel}` : header.name}
+        title={entry.displayName}
+        // Lo tuyo, en amarillo: el puesto de la derecha y esta marca.
+        subtitle={isMe ? <span className="font-bold text-vos">vos</span> : undefined}
+        sport={discipline.kind}
+        right={
+          // Lo de `HeroTabla`: el puesto grande, en amarillo si es el tuyo.
+          <p>
+            <span className="sr-only">
+              {row.position}° de {squadEntries.length}, {row.points} puntos
+            </span>
+            <span aria-hidden="true">
+              <span className={`font-cond block text-[64px] ${isMe ? 'text-vos' : ''}`}>
+                {row.position}
+                <span className="align-top text-[32px]">°</span>
+              </span>
+              <span className="block text-[14px] text-on-block-soft">de {squadEntries.length}</span>
+              <span className="block text-[14px] text-on-block-soft">{row.points} pts</span>
+            </span>
+          </p>
+        }
+      />
 
-      <div className="flex items-center gap-3 rounded-card border border-line bg-surface p-4">
-        <span className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full bg-accent text-[19px] font-extrabold text-accent-text">
-          {initials(entry.displayName)}
-        </span>
-        <div>
-          <p className="text-[19px] font-extrabold">
-            {entry.displayName}
-            {disciplineLabel !== null ? ` · ${disciplineLabel}` : ''}
-          </p>
-          <p className="text-[12.5px] font-semibold text-muted">
-            {row.position}° de {squadEntries.length} · {row.points} puntos · {tally.matchdaysPlayed} fechas
-            jugadas
-          </p>
-        </div>
+      <div className="grid grid-cols-3 gap-2.5 px-4 pt-5">
+        <Dato label="Partidos" value={`${tally.matchesWon}-${matchesLost}`} />
+        <Dato label="Efectividad" value={`${efectividad}%`} />
+        <Dato label={`Dif. ${unit}`} value={formatSigned(difGames)} />
+        <Dato label="Fechas ganadas" value={fechasGanadas} />
+        <Dato label="Racha de títulos" value={longestStreak} />
+        <Dato label="Fechas jugadas" value={fechasJugadas} />
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
-        <div className="rounded-[14px] border border-line bg-surface p-[14px]">
-          <p className="text-[12px] font-extrabold uppercase tracking-[.13em] text-muted">Efectividad</p>
-          <p className="mt-1 text-[20px] font-extrabold">{efectividad}%</p>
-        </div>
-        <div className="rounded-[14px] border border-line bg-surface p-[14px]">
-          <p className="text-[12px] font-extrabold uppercase tracking-[.13em] text-muted">Fechas ganadas</p>
-          <p className="mt-1 text-[20px] font-extrabold">{fechasGanadas}</p>
-        </div>
-        <div className="rounded-[14px] border border-line bg-surface p-[14px]">
-          <p className="text-[12px] font-extrabold uppercase tracking-[.13em] text-muted">{`Dif. ${unit}`}</p>
-          <p className="mt-1 text-[20px] font-extrabold">{formatSigned(difGames)}</p>
-        </div>
-        <div className="rounded-[14px] border border-line bg-surface p-[14px]">
-          <p className="text-[12px] font-extrabold uppercase tracking-[.13em] text-muted">Racha</p>
-          <p className="mt-1 text-[20px] font-extrabold">{longestStreak}</p>
-        </div>
-        <div className="rounded-[14px] border border-line bg-surface p-[14px]">
-          <p className="text-[12px] font-extrabold uppercase tracking-[.13em] text-muted">Partidos</p>
-          <p className="mt-1 text-[20px] font-extrabold">
-            {tally.matchesWon}-{matchesLost}
-          </p>
-        </div>
-      </div>
-
-      {marks.length > 0 && (
-        <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${marks.length}, 1fr)` }}>
-          {marks.map((mark) => (
-            <div key={mark.number} className="flex flex-col items-center gap-1">
-              <div
-                className={`flex h-[38px] w-full items-center justify-center rounded-[9px] text-[13px] font-extrabold ${
-                  mark.status === 'counted'
-                    ? 'bg-accent text-accent-text'
-                    : mark.status === 'discarded'
-                      ? 'bg-chip text-muted'
-                      : 'bg-chip text-muted opacity-50'
-                }`}
-              >
-                {mark.points ?? '–'}
-              </div>
-              <p className="text-[12px] font-bold text-muted">F{mark.number}</p>
-            </div>
-          ))}
-        </div>
-      )}
+      <PuntosPorFecha title="Puntos por fecha" marks={marks} />
 
       {trail.length >= 2 && <Trayectoria trail={trail} squadSize={seedOrder.length} />}
 
       {myRecords.length > 0 && (
-        <div className="flex flex-col gap-2">
-          <p className="text-[15px] font-extrabold tracking-[-.02em]">Con quién le va mejor</p>
-          <div className="flex flex-col">
+        <Seccion title={isMe ? 'Con quién te va mejor' : 'Con quién le va mejor'}>
+          <ul>
             {myRecords.map((record) => {
-              const positive = record.won - record.lost > 0
+              const balance = record.won - record.lost
               return (
-                <div key={record.partner} className="flex items-center gap-3 p-2">
-                  <span className="flex h-[28px] w-[28px] shrink-0 items-center justify-center rounded-full bg-chip text-[12px] font-extrabold text-muted">
-                    {initials(nameById.get(record.partner) ?? '')}
-                  </span>
-                  <span className="flex-1 text-[14px] font-bold">{nameById.get(record.partner) ?? ''}</span>
-                  <span className={`text-[12.5px] font-extrabold ${positive ? 'text-up' : 'text-muted'}`}>
-                    {record.won}-{record.lost}
-                  </span>
-                </div>
+                <FilaPersona
+                  key={record.partner}
+                  name={nameById.get(record.partner) ?? ''}
+                  href={perfilHref(base, record.partner, desde)}
+                  meta={record.together === 1 ? '1 fecha juntos' : `${record.together} fechas juntos`}
+                  won={record.won}
+                  lost={record.lost}
+                  tone={balance > 0 ? 'up' : 'muted'}
+                  isMe={record.partner === viewerEntryId}
+                />
               )
             })}
-          </div>
-        </div>
+          </ul>
+        </Seccion>
       )}
 
       {rivals.length > 0 && (
-        <div className="flex flex-col gap-2">
-          <p className="text-[15px] font-extrabold tracking-[-.02em]">Cara a cara</p>
-          <div className="flex flex-col">
+        <Seccion title="Cara a cara">
+          <ul>
             {rivals.map((record) => {
               const balance = record.won - record.lost
+              const played = record.won + record.lost
               return (
-                <div key={record.rival} className="flex items-center gap-3 p-2">
-                  <span className="flex h-[28px] w-[28px] shrink-0 items-center justify-center rounded-full bg-chip text-[12px] font-extrabold text-muted">
-                    {initials(nameById.get(record.rival) ?? '')}
-                  </span>
-                  <span className="flex-1 text-[14px] font-bold">{nameById.get(record.rival) ?? ''}</span>
-                  <span
-                    className={`text-[12.5px] font-extrabold ${balance > 0 ? 'text-up' : balance < 0 ? 'text-down' : 'text-muted'}`}
-                  >
-                    {record.won}-{record.lost}
-                  </span>
-                </div>
+                <FilaPersona
+                  key={record.rival}
+                  name={nameById.get(record.rival) ?? ''}
+                  href={perfilHref(base, record.rival, desde)}
+                  meta={played === 1 ? '1 partido' : `${played} partidos`}
+                  won={record.won}
+                  lost={record.lost}
+                  tone={balance > 0 ? 'up' : balance < 0 ? 'down' : 'muted'}
+                  isMe={record.rival === viewerEntryId}
+                />
               )
             })}
-          </div>
-        </div>
+          </ul>
+        </Seccion>
       )}
     </div>
   )

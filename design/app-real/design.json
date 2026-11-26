@@ -1,0 +1,28 @@
+{
+  "title": "App real",
+  "brief": "Una sola dirección con terminación de app de iOS: barras del sistema, listas agrupadas, íconos, avatares y la carga de resultados en una hoja, con el color del deporte como único gesto de marca.",
+  "feature": "odd/tasks/rediseno-app.md",
+  "artboards": [
+    {
+      "file": "01-inicio.html",
+      "title": "Inicio",
+      "tradeoff": "Entra en una pantalla sin scroll, con la próxima fecha arriba y Cargar partido fijo abajo; Crear torneo y Torneo rápido quedan como filas dentro de Torneos y no como botones grandes.",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "file": "02-tabla.html",
+      "title": "Tabla",
+      "tradeoff": "Los 12 entran en una pantalla con filas de 44 px y la zona del Masters marcada con la barra azul de las tablas deportivas; a cambio, el detalle por fecha queda para otra pantalla.",
+      "width": 390,
+      "height": 844
+    },
+    {
+      "file": "03-fecha.html",
+      "title": "La fecha",
+      "tradeoff": "La carga es una hoja de dos toques sin teclado en la mitad de abajo; Cerrar la fecha queda arriba, deshabilitado con Faltan 4 partidos, porque se toca una sola vez por noche.",
+      "width": 390,
+      "height": 844
+    }
+  ]
+}

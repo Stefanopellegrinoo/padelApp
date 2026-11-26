@@ -1,0 +1,10 @@
+{
+  "title": "Dirección Superficie",
+  "brief": "La app toma los materiales del club: todo es papel blanco y el césped azul o verde aparece solo donde se juega, con la cancha vista desde arriba separando parejas y marcando el corte del Masters.",
+  "feature": "odd/tasks/rediseno-app.md",
+  "artboards": [
+    { "file": "01-inicio.html", "title": "Inicio", "tradeoff": "La próxima fecha se reconoce al toque como una cancha, pero ocupa media pantalla y empuja a los amigos hacia abajo.", "width": 390, "height": 1293 },
+    { "file": "02-tabla.html", "title": "Tabla", "tradeoff": "El Masters se ve sin leer nada porque los 4 juegan adentro de la cancha; los demás quedan más apagados de lo que a algunos les gustaría.", "width": 390, "height": 1007 },
+    { "file": "03-fecha.html", "title": "La fecha", "tradeoff": "Cargar es tocar la mitad de la cancha que ganó y después los games, con una mano; la pantalla queda larga y hay que bajar para cerrar la fecha.", "width": 390, "height": 1225 }
+  ]
+}

@@ -1,27 +1,95 @@
 @import 'tailwindcss';
 
-@theme {
-  --font-sans: Archivo, ui-sans-serif, system-ui, sans-serif;
+/* ── el sistema del prototipo (`design/prototipo/`, tokens en `tokens.md`) ───
+   Los nombres de siempre (`bg`, `surface`, `chip`, `accent`, `live`…) se
+   quedan y apuntan a la paleta nueva, así una pantalla que nadie tocó ya sale
+   en azul cancha. Lo que agrega el prototipo va con nombre propio:
+
+   - `block`/`on-block`/`on-block-soft`: el bloque de color del encabezado.
+   - `sport`/`sport-tint`/`on-sport`: el color del deporte, que cambia con
+     `data-deporte` (abajo). Pádel, ping pong y básquet en azul; FIFA y fútbol
+     en verde. `text-sport` sirve sobre fondo y sobre `sport-tint`;
+     `bg-sport` va con `text-on-sport`. En los dos temas.
+   - `cta`/`on-cta`: el botón principal (tinta en claro, azul en oscuro).
+   - `vos`/`on-vos`: el amarillo pelota. SOLO marca lo del usuario (su fila, su
+     nombre, su puesto). En claro es fondo (`bg-vos text-on-vos`); en oscuro
+     no hay fondo amarillo: para el nombre está `.marca-vos`.
+   - `live` NO es "en juego": en toda la app es error y acción destructiva
+     ("¿Borrar?", el mensaje de un campo, eliminar). Por eso es el rojo del
+     prototipo (`--down`), no el azul. "En juego" es `text-sport`.
+   - `up` es el azul (el prototipo marca "sube" y "Ganaste" en azul); `down`,
+     el rojo, siempre con triángulo o con texto al lado.
+
+   Cada par texto/fondo pasa AA (4.5) en los dos temas: los del prototipo
+   están medidos en `design/prototipo/tokens.md`, los nuevos (superficie,
+   chip, `live-bg`, `warn-bg`, el bloque de FIFA) se midieron en T6. `static` emite todas las
+   variables aunque ninguna utilidad las use: `data-deporte` y los colores
+   por deporte se leen sólo con `var()`. */
+@theme static {
+  --font-sans: var(--font-archivo), Archivo, ui-sans-serif, system-ui, sans-serif;
 
   --color-bg: #ffffff;
-  --color-surface: #f4f6f3;
-  --color-chip: #eaefea;
-  --color-line: #e4e9e5;
-  --color-text: #10231a;
-  --color-muted: #5f6e66;
-  --color-accent: #0e5c3f;
+  --color-surface: #f4f6fb;
+  --color-surface-2: #ffffff;
+  --color-chip: #eef1f7;
+  --color-line: #dce1ee;
+  --color-text: #0e1a4a;
+  --color-ink: #0e1a4a;
+  --color-muted: #4b5675;
+  --color-accent: #1f45e0;
   --color-accent-text: #ffffff;
-  --color-accent-link: #0e5c3f;
-  --color-live: #c13d27;
-  --color-live-bg: #fbeae6;
-  --color-up: #27794e;
-  --color-ok-bg: #e6f2ea;
-  --color-down: #b24b31;
-  --color-warn-bg: #f8ece4;
-  --color-scrim: rgba(10, 25, 18, 0.45);
+  --color-accent-link: #1f45e0;
+  --color-live: #b42318;
+  --color-live-bg: #fdecea;
+  --color-up: #1f45e0;
+  --color-ok-bg: #e8edff;
+  --color-down: #b42318;
+  --color-warn-bg: #fff0e0;
+  --color-scrim: rgba(14, 26, 74, 0.5);
+  --color-focus: #0e1a4a;
 
-  --radius-field: 12px;
-  --radius-card: 16px;
+  --color-padel: #1f45e0;
+  --color-padel-tint: #e8edff;
+  --color-on-padel: #ffffff;
+  --color-fifa: #0b7a3b;
+  --color-fifa-tint: #e3f5ea;
+  --color-on-fifa: #ffffff;
+  --color-fifa-block: #0b7a3b;
+  --color-fifa-block-soft: #e3f5ea;
+  --color-sport: var(--color-padel);
+  --color-sport-tint: var(--color-padel-tint);
+  --color-on-sport: var(--color-on-padel);
+
+  --color-block: #1f45e0;
+  --color-on-block: #ffffff;
+  --color-on-block-soft: #c9d3ff;
+  --color-cta: #0e1a4a;
+  --color-on-cta: #ffffff;
+  --color-vos: #dfff4f;
+  --color-on-vos: #0e1a4a;
+  --color-vos-fila: #dfff4f;
+  --color-vos-borde: transparent;
+  --color-opcion: #e8edff;
+  --color-opcion-borde: transparent;
+  --color-destello: #c9d3ff;
+  --color-toast: #0e1a4a;
+  --color-on-toast: #ffffff;
+  --color-toast-action: #c9d3ff;
+  --color-hoja-borde: transparent;
+
+  /* Radios por jerarquía: bloque grande, bloque chico, botón, píldora. `field`
+     y `card` son los de siempre, ahora iguales a `btn` y `tile`. */
+  --radius-field: 14px;
+  --radius-card: 18px;
+  --radius-block: 24px;
+  --radius-tile: 18px;
+  --radius-btn: 14px;
+  --radius-pill: 9999px;
+
+  /* `ease-out` es de Tailwind y lo usan las pantallas: el del prototipo va
+     con otro nombre para no cambiarles el ritmo. */
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-salida: cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 /* ── el tema oscuro va en `:root`, NO en un `@theme` ────────────────────────
@@ -42,26 +110,80 @@
 
    Ningún gate lo agarró en tres planes: `scripts/smoke.mjs` recorre "en claro y
    en oscuro" pero sólo asierta 200. Un recorrido de temas que no compara un
-   color prueba que las rutas existen, no que el tema exista. */
+   color prueba que las rutas existen, no que el tema exista.
+
+   El oscuro del prototipo es diseñado, no invertido: azul noche (no negro),
+   el azul y el verde de texto suben de tono y el bloque baja un poco para no
+   encandilar. `sport` y compañía no se repiten acá: son `var()` a `padel` y
+   `fifa`, que sí cambian. */
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-bg: #0d1512;
-    --color-surface: #16201c;
-    --color-chip: #1b2823;
-    --color-line: #21302a;
-    --color-text: #eaf2ee;
-    --color-muted: #8ea298;
-    --color-accent: #0f6b48;
-    --color-accent-text: #dbf5e8;
-    --color-accent-link: #34c08a;
-    --color-live: #ff8368;
-    --color-live-bg: #2a1a15;
-    --color-up: #34c08a;
-    --color-ok-bg: #12291f;
-    --color-down: #ff9a6b;
-    --color-warn-bg: #2a2016;
-    --color-scrim: rgba(0, 0, 0, 0.6);
+    --color-bg: #0e1630;
+    --color-surface: #141e3d;
+    --color-surface-2: #1b2750;
+    --color-chip: #1e2846;
+    --color-line: #384679;
+    --color-text: #edf0fa;
+    --color-ink: #edf0fa;
+    --color-muted: #a3aecf;
+    --color-accent: #2643bc;
+    --color-accent-text: #ffffff;
+    --color-accent-link: #8da4ff;
+    --color-live: #ff8b7b;
+    --color-live-bg: #3a1a28;
+    --color-up: #8da4ff;
+    --color-ok-bg: #1b2a60;
+    --color-down: #ff8b7b;
+    --color-warn-bg: #36260f;
+    --color-scrim: rgba(4, 8, 22, 0.72);
+    --color-focus: #edf0fa;
+
+    --color-padel: #8da4ff;
+    --color-padel-tint: #1b2a60;
+    --color-on-padel: #0e1630;
+    --color-fifa: #6cd49a;
+    --color-fifa-tint: #133a2a;
+    --color-on-fifa: #0e1630;
+    --color-fifa-block: #17683c;
+    --color-fifa-block-soft: #cdefda;
+
+    --color-block: #2643bc;
+    --color-on-block: #ffffff;
+    --color-on-block-soft: #c9d3ff;
+    --color-cta: #2643bc;
+    --color-on-cta: #ffffff;
+    --color-vos-fila: #1b2750;
+    --color-vos-borde: #dfff4f;
+    --color-opcion: #2a3a78;
+    --color-opcion-borde: #4a5a96;
+    --color-destello: #2a3f8f;
+    --color-toast: #edf0fa;
+    --color-on-toast: #0e1a4a;
+    --color-toast-action: #1f45e0;
+    --color-hoja-borde: #384679;
   }
+}
+
+/* El deporte de lo que se está mirando: `data-deporte={kind}` en el contenedor
+   (el `kind` de `core/sports.ts`) y adentro `bg-sport`, `text-sport`,
+   `bg-sport-tint` y `bg-block` toman su color. Sin atributo, pádel. Los dos
+   grupos se nombran enteros para que un pádel adentro de un FIFA vuelva a
+   azul. Ping pong y básquet comparten el azul: el prototipo tiene dos colores
+   de deporte y un tercero sería inventar. */
+[data-deporte='PADEL'],
+[data-deporte='PING_PONG'],
+[data-deporte='BASQUET'] {
+  --color-sport: var(--color-padel);
+  --color-sport-tint: var(--color-padel-tint);
+  --color-on-sport: var(--color-on-padel);
+}
+[data-deporte='FIFA'],
+[data-deporte='FUTBOL'] {
+  --color-sport: var(--color-fifa);
+  --color-sport-tint: var(--color-fifa-tint);
+  --color-on-sport: var(--color-on-fifa);
+  --color-block: var(--color-fifa-block);
+  --color-on-block-soft: var(--color-fifa-block-soft);
 }
 
 html {
@@ -72,6 +194,8 @@ html {
   color-scheme: light dark;
   touch-action: manipulation;
   overscroll-behavior-y: none;
+  /* El gris de iOS al tocar sobra: la respuesta es la presión de abajo. */
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Nav y botones se tocan, no se seleccionan: sin el menú de "copiar" al
@@ -86,6 +210,24 @@ body {
   background: var(--color-bg);
   color: var(--color-text);
   font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── foco visible ────────────────────────────────────────────────────────────
+   Va SIN capa a propósito: el CSS sin capa le gana a cualquier utilidad, así
+   que el anillo sobrevive a los ~19 `outline-none` de los inputs, que lo
+   borraban sin poner nada en su lugar. Sobre un bloque de color el anillo
+   tiene que ser claro: `Hero` pisa `--color-focus` con `on-block`, y
+   cualquier otro bloque puede hacer lo mismo con
+   `[--color-focus:var(--color-on-block)]`.
+   El `<dialog>` recibe el foco al abrirse para que el primer botón no
+   amanezca con anillo (ver `app/ui/sheet.tsx`): él no lo dibuja. */
+:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
+}
+dialog:focus-visible {
+  outline: none;
 }
 
 @layer base {
@@ -96,5 +238,189 @@ body {
      without a refactor. */
   :disabled {
     opacity: 0.45;
+  }
+
+  /* Presión: todo botón se achica a .97 mientras se aprieta. Sólo `scale`
+     (es transform, no mueve el layout) y sólo si el sistema no pidió menos
+     movimiento. En `base` para que una fila que no quiera achicarse lo apague
+     con `active:scale-100`. Un `<a>` con cara de botón se suma con `press`. */
+  @media (prefers-reduced-motion: no-preference) {
+    button:not(:disabled),
+    [role='button'],
+    summary {
+      transition: scale 140ms var(--ease-salida);
+    }
+    button:not(:disabled):active,
+    [role='button']:active,
+    summary:active {
+      scale: 0.97;
+    }
+  }
+}
+
+/* La presión de un link que se ve como botón (los `<button>` ya la tienen). */
+@utility press {
+  @media (prefers-reduced-motion: no-preference) {
+    transition: scale 140ms var(--ease-salida);
+    &:active {
+      scale: 0.97;
+    }
+  }
+}
+
+/* Las filas de una lista no se achican: cambian de fondo al tocarlas. */
+@utility press-fila {
+  scale: none;
+  transition: background-color 140ms ease;
+  &:active {
+    background-color: var(--color-sport-tint);
+  }
+}
+
+/* El destello del partido recién guardado (el `.flash` del prototipo): el
+   fondo y el borde arrancan en `destello` y vuelven a los suyos en 700 ms.
+   Sin `to`: cada tarjeta vuelve a SU fondo (tinte, o ninguno). La clase la
+   pone la pantalla al guardar y la saca al terminar. */
+@keyframes destello {
+  from {
+    background-color: var(--color-destello);
+    border-color: var(--color-destello);
+  }
+}
+@utility destello {
+  animation: destello 700ms var(--ease-salida);
+}
+
+/* La cara condensada de Archivo (eje de ancho del `next/font` del layout).
+   `font-cond`: números de marcador —puesto, puntos, games, "Fecha 8"—,
+   tabulares para que las columnas no bailen. `font-titulo`: títulos. Para
+   anchos intermedios está `font-stretch-[88%]` de Tailwind. */
+@utility font-cond {
+  font-stretch: 62%;
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  line-height: 0.9;
+}
+@utility font-titulo {
+  font-stretch: 75%;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1;
+}
+
+/* Lo tuyo, en el texto: tu nombre en una pareja. En claro, resaltado
+   amarillo con tinta; en oscuro, texto amarillo subrayado sin relleno (una
+   pastilla de neón sobre azul noche es lo que el usuario rechazó). */
+@utility marca-vos {
+  background: var(--color-vos);
+  color: var(--color-on-vos);
+  padding: 0 3px;
+  border-radius: 4px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  @media (prefers-color-scheme: dark) {
+    background: transparent;
+    color: var(--color-vos);
+    text-decoration: underline 2px var(--color-vos);
+    text-underline-offset: 4px;
+  }
+}
+
+/* ── hoja inferior (`app/ui/sheet.tsx`) ──────────────────────────────────────
+   Sin capa, como el foco: así el `transition` propio le gana a la regla de
+   movimiento reducido de abajo (más específica) y a lo que traiga el
+   `className`. Sube con la curva de cajón en 280 ms y baja más rápido, en
+   200; `@starting-style` da el punto de partida al abrir y `allow-discrete`
+   deja que `display`/`overlay` esperen la bajada antes de esconderla (donde no
+   hay soporte, cierra sin animar, que no rompe nada). */
+.hoja {
+  margin: auto auto 0;
+  width: 100%;
+  max-width: 32rem;
+  max-height: calc(100dvh - 24px - env(safe-area-inset-top, 0px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 0;
+  padding: 0;
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  border-radius: var(--radius-block) var(--radius-block) 0 0;
+  box-shadow: inset 0 1px 0 var(--color-hoja-borde);
+  transform: translateY(100%);
+  transition:
+    transform 200ms var(--ease-salida),
+    overlay 200ms allow-discrete,
+    display 200ms allow-discrete;
+}
+.hoja[open] {
+  transform: none;
+  transition:
+    transform 280ms var(--ease-drawer),
+    overlay 280ms allow-discrete,
+    display 280ms allow-discrete;
+}
+.hoja.arrastrando {
+  transition: none;
+}
+.hoja::backdrop {
+  background: rgba(14, 26, 74, 0.5);
+  background: var(--color-scrim);
+  opacity: 0;
+  transition:
+    opacity 200ms ease,
+    overlay 200ms allow-discrete,
+    display 200ms allow-discrete;
+}
+.hoja[open]::backdrop {
+  opacity: 1;
+  transition-duration: 280ms;
+}
+@starting-style {
+  .hoja[open] {
+    transform: translateY(100%);
+  }
+  .hoja[open]::backdrop {
+    opacity: 0;
+  }
+}
+
+/* ── movimiento reducido ─────────────────────────────────────────────────────
+   Sin capa: le gana a `animate-pulse`, `animate-spin` y a cualquier
+   `transition-*` de las pantallas. La hoja sólo funde (la regla `.hoja` es más
+   específica que `*`). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 1ms;
+    animation-iteration-count: 1;
+    transition-duration: 1ms;
+    scroll-behavior: auto;
+  }
+  /* El destello no mueve nada, es un cambio de color: queda, más corto
+     (como en el prototipo), para que se vea qué se guardó. */
+  .destello {
+    animation-duration: 400ms;
+  }
+  .hoja,
+  .hoja[open] {
+    transform: none;
+    transition:
+      opacity 160ms ease,
+      overlay 160ms allow-discrete,
+      display 160ms allow-discrete;
+  }
+  .hoja {
+    opacity: 0;
+  }
+  .hoja[open] {
+    opacity: 1;
+  }
+  @starting-style {
+    .hoja[open] {
+      transform: none;
+      opacity: 0;
+    }
   }
 }

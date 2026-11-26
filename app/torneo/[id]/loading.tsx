@@ -1,3 +1,5 @@
+import { Skeleton } from '@/app/ui/skeleton'
+
 /**
  * Lo que se ve mientras la pantalla nueva viene del servidor.
  *
@@ -13,20 +15,25 @@
  * layout —con su nav— queda montado y sólo se reemplaza el contenido. Eso hace
  * que la pestaña tocada se marque como activa al instante, que es la mitad de
  * la respuesta que faltaba.
+ *
+ * La forma es la de las pantallas del prototipo: el encabezado en bloque de
+ * borde a borde (en `chip`, no en azul: un bloque de color vacío se leería
+ * como una pantalla que llegó rota) y las filas de 48 de la tabla.
  */
-function Barra({ className }: { className: string }) {
-  return <div className={`animate-pulse rounded-field bg-chip ${className}`} />
-}
-
 export default function Loading() {
   return (
-    <div className="flex flex-col gap-3 pt-4" aria-busy="true" aria-label="Cargando">
-      <Barra className="h-[26px] w-[110px] rounded-full" />
-      <Barra className="h-[30px] w-2/3" />
-      <Barra className="h-[86px] rounded-card" />
-      {[0, 1, 2, 3, 4, 5].map((row) => (
-        <Barra key={row} className="h-[56px]" />
-      ))}
+    <div aria-busy="true" aria-label="Cargando">
+      <Skeleton className="h-[164px] rounded-t-none rounded-b-block" />
+      <Skeleton className="mx-4 mt-4 h-[64px]" />
+      <ol className="mt-4">
+        {[0, 1, 2, 3, 4, 5, 6, 7].map((row) => (
+          <li key={row} className="flex min-h-[48px] items-center gap-4 border-t border-line px-4 first:border-t-0">
+            <Skeleton className="h-6 w-5 rounded-[6px]" />
+            <Skeleton className="h-4 flex-1 rounded-[6px]" />
+            <Skeleton className="h-6 w-8 rounded-[6px]" />
+          </li>
+        ))}
+      </ol>
     </div>
   )
 }

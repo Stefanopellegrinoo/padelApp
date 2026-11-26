@@ -57,3 +57,10 @@ Ajedrez trae una forma nueva de anotar (gana/pierde/tablas) y bowling una fecha 
   - Detalles menores, quedan así: un 4-3 viejo con amigos se abre como "a 3 games" al corregirlo, pero se guarda bien; algunos tonos de deporte son cercanos y los distingue el ícono.
   - Se commitea su prueba de permisos como `db/matchday-scores-rls.db.test.ts` (5 tests, verdes; se forzó un fallo para comprobar que de verdad protege).
 - L13 El usuario eligió "Mergear a main local, sin push". Merge c007cfc en `main` local, que ya tenía el rediseño sin publicar: typecheck limpio y unit 2175 verde sobre main. `main` queda 45 commits adelante de `origin/main`; producción no cambia. Para publicar hay que hacer push de main (CI una vez + Vercel).
+- L14 Revisión nativa (RDD). El candidato completo, `main` local contra `origin/main`, excede el presupuesto de contexto (`lens_context_budget_exceeded`). El usuario eligió revisar solo la parte de riesgo: se armó en un worktree temporal la porción de base de datos del bowling (0109-0111, `db/matchday.ts`, `core/ranking-fecha.ts`; 695 líneas) y se revisó con las lentes risk + reliability.
+  - Resultado: aprobada (lineage review-e2b92a1136325dc1, acknowledgement hecho).
+  - Hallazgos no bloqueantes, quedan como trabajo aparte:
+    - (1) Una fecha RANKING de Masters no podría cerrarse. Inalcanzable: el bowling no tiene Masters.
+    - (2) "Faltan tests de core/ranking-fecha.ts:58-72". Existen en `core/ranking-fecha.test.ts` (13 tests); el revisor no los vio porque la porción no incluía los tests.
+    - (3) `closeRankingMatchday` (`db/matchday.ts:1506`) devolvería un error crudo si la lista de puntos fuera más corta que los presentes. Hoy no pasa, porque los puntos se arman según el tamaño del plantel.
+  - Worktree y rama temporales borrados.

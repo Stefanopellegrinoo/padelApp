@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { CampoFecha } from '@/app/ui/campo-fecha'
 import { changeMatchdayDate } from './actions'
 
 /**
@@ -16,8 +17,8 @@ import { changeMatchdayDate } from './actions'
  * reabrir nada. Y el grant de la base es por columna (`update (played_on)`),
  * así que desde acá no se puede tocar el estado ni el número aunque se quiera.
  *
- * Guarda al cambiar el valor, sin botón: es un `<input type="date">`, y el
- * picker nativo ya tiene su propio "listo".
+ * Guarda al cambiar el valor, sin botón: la fila (`CampoFecha`) abre el
+ * selector nativo del teléfono, que ya tiene su propio "listo".
  */
 export function DiaDeLaFecha({
   seasonId,
@@ -49,19 +50,15 @@ export function DiaDeLaFecha({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="flex items-center justify-between gap-3">
-        <label htmlFor="dia" className="text-[16px] font-semibold">
-          Se juega el
-        </label>
-        <input
-          id="dia"
-          type="date"
-          value={value}
-          disabled={pending}
-          onChange={(event) => save(event.target.value)}
-          className="min-h-11 rounded-btn border-[1.5px] border-line bg-surface-2 px-3 py-2 text-[16px] font-semibold text-text"
-        />
-      </div>
+      <CampoFecha
+        id="dia"
+        value={value}
+        onChange={save}
+        label="Se juega el"
+        kicker="Se juega el"
+        disabled={pending}
+        pending={pending}
+      />
       {error !== null && (
         <p role="alert" className="text-[15px] font-semibold text-live">
           {error}

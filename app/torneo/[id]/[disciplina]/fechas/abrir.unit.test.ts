@@ -63,3 +63,29 @@ describe('AbrirFecha — el texto del botón', () => {
     expect(botonDe()).toContain('Abrir fecha 3<')
   })
 })
+
+/**
+ * T18: el día se elige con el control de fecha de la app (`CampoFecha`), arriba y a lo ancho, y
+ * no con el `<input type="date">` pelado al lado del botón, que en 320 px no entraba. El campo
+ * nativo sigue ahí (transparente), con el mismo nombre accesible y 16 px.
+ */
+describe('Abrir fecha y armar el Masters — el día', () => {
+  it('Abrir fecha: "Se juega el" con el día escrito, y el botón a lo ancho abajo', async () => {
+    const markup = renderToStaticMarkup(
+      createElement(AbrirFecha, { seasonId: 's1', disciplineId: 'd1' as DisciplineId, number: 3 }),
+    )
+    expect(markup).toMatch(/<input[^>]*type="date"[^>]*aria-label="Día de la fecha"/)
+    expect(markup).toContain('Se juega el')
+    expect(markup).toContain('Cambiar')
+    expect(markup.indexOf('type="date"')).toBeLessThan(markup.indexOf('Abrir fecha 3'))
+    expect(markup).toMatch(/<button[^>]*class="[^"]*w-full[^"]*"[^>]*>Abrir fecha 3/)
+  })
+
+  it('Armar el Masters: el mismo control, con su nombre', async () => {
+    const { ArmarMasters } = await import('./[n]/masters')
+    const markup = renderToStaticMarkup(createElement(ArmarMasters, { seasonId: 's1', disciplineId: 'd1' as DisciplineId }))
+    expect(markup).toMatch(/<input[^>]*type="date"[^>]*aria-label="Día del Masters"/)
+    expect(markup).toContain('Se juega el')
+    expect(markup).toMatch(/<button[^>]*class="[^"]*w-full[^"]*"[^>]*>Armar el Masters/)
+  })
+})

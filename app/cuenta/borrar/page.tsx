@@ -30,7 +30,7 @@ export default async function BorrarCuentaPage({ searchParams }: { searchParams:
       <div className="flex flex-col gap-3 px-4 pt-5">
         <Bloque titulo="Se borra">
           <li>
-            Tu login: <span className="font-semibold break-all">{user.email}</span>
+            Tu login: <span className="font-semibold [overflow-wrap:anywhere]">{user.email}</span>
           </li>
           <li>Tus amistades</li>
           <li>No vas a poder volver a entrar con esta cuenta.</li>

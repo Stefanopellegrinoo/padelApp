@@ -3,10 +3,11 @@
 import { useEffect, useState, useTransition } from 'react'
 import type { DisciplineId } from '@/core'
 import { button } from '@/app/ui/button'
+import { CampoFecha } from '@/app/ui/campo-fecha'
 import { openNextMatchday } from '../../actions'
 
 /**
- * Hoy, en el `YYYY-MM-DD` que pide `<input type="date">`, armado con los
+ * Hoy, en el `YYYY-MM-DD` que pide el campo de fecha (`CampoFecha`), armado con los
  * componentes locales: `toISOString()` es UTC y con huso negativo devuelve ayer.
  *
  * Se exporta para poder probarla: lo que hay que garantizar es que use los
@@ -66,27 +67,19 @@ export function AbrirFecha({ seasonId, disciplineId, number, sportName }: AbrirF
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex items-center gap-2">
-        {/* Sin label visible: el control nativo ya se explica (decisión
-            registrada 7). Para el lector de pantalla sí lo nombra. */}
-        <input
-          type="date"
-          value={playedOn}
-          aria-label="Día de la fecha"
-          onChange={(event) => setPlayedOn(event.target.value)}
-          className="min-h-[56px] rounded-btn border-[1.5px] border-line bg-surface-2 px-3 text-[16px] font-semibold text-text"
-        />
-        <button
-          type="button"
-          onClick={open}
-          disabled={blocked}
-          className={`${button('primary', { size: 'lg' })} flex-1 flex-col gap-0 leading-tight`}
-        >
-          Abrir fecha {number}
-          {/* Renglón propio y más chico: al lado del selector de fecha no entra en uno. */}
-          {sportName !== undefined && <span className="block text-[14px] font-semibold"> de {sportName}</span>}
-        </button>
-      </div>
+      {/* El día arriba, a lo ancho, y el botón abajo: uno al lado del otro no
+          entran en un teléfono de 320 px. */}
+      <CampoFecha value={playedOn} onChange={setPlayedOn} label="Día de la fecha" kicker="Se juega el" />
+      <button
+        type="button"
+        onClick={open}
+        disabled={blocked}
+        className={`${button('primary', { size: 'lg', full: true })} flex-col gap-0 leading-tight`}
+      >
+        Abrir fecha {number}
+        {/* Renglón propio y más chico: el nombre del deporte puede ser largo. */}
+        {sportName !== undefined && <span className="block text-[14px] font-semibold"> de {sportName}</span>}
+      </button>
 
       {error !== null && (
         <p role="alert" className="rounded-btn bg-live-bg px-3 py-2.5 text-[15px] font-semibold text-live">

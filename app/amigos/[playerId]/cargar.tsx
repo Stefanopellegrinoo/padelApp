@@ -8,6 +8,7 @@ import { mensajeDeFalla } from '@/app/torneo/[id]/[disciplina]/fechas/[n]/sin-co
 import { SubmitButton } from '@/app/submit-button'
 import { IconoDeporte } from '@/app/torneos/inicio/iconos'
 import { button } from '@/app/ui/button'
+import { CampoFecha } from '@/app/ui/campo-fecha'
 import { Sheet } from '@/app/ui/sheet'
 import { editCasualMatch, removeCasualMatch, type CasualFormState } from '../actions'
 import {
@@ -39,8 +40,9 @@ const INITIAL_STATE: CasualFormState = { error: null }
  * color al elegirlo, con el ícono al lado del nombre para que once entren en cuatro filas cortas.
  * En oscuro el tinte casi no se separa de la hoja: el borde de su color lo recorta.
  */
+// En 320 px el ícono va arriba del nombre: al lado le dejaba ~52 px y "Ajedrez" se partía en "Ajedre / z".
 const DEPORTE_BLOQUE =
-  'relative flex min-h-[52px] min-w-0 cursor-pointer items-center gap-1.5 rounded-tile bg-sport-tint py-2 pr-1.5 pl-2 text-left text-sport dark:shadow-[inset_0_0_0_1.5px_color-mix(in_srgb,var(--color-sport)_40%,transparent)] has-[:checked]:bg-sport has-[:checked]:text-on-sport has-[:checked]:shadow-none has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-focus'
+  'relative flex min-h-[52px] min-w-0 cursor-pointer flex-col items-start justify-center gap-1 rounded-tile min-[360px]:flex-row min-[360px]:items-center min-[360px]:justify-start min-[360px]:gap-1.5 bg-sport-tint py-2 pr-1.5 pl-2 text-left text-sport dark:shadow-[inset_0_0_0_1.5px_color-mix(in_srgb,var(--color-sport)_40%,transparent)] has-[:checked]:bg-sport has-[:checked]:text-on-sport has-[:checked]:shadow-none has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-focus'
 
 /** La tilde del deporte elegido: una pastilla en la esquina, para no robarle ancho al nombre. */
 function Tilde() {
@@ -477,7 +479,9 @@ export function CasualForm({
         </div>
       </fieldset>
 
-      <div className="mt-3 grid grid-cols-2 gap-3">
+      {/* "Juegan" y la fecha, uno abajo del otro: el día escrito ("Jueves 26 nov") no entra en
+          media pantalla de 320 px. */}
+      <div className="mt-3 flex flex-col gap-3">
         {soloUnoContraUno ? (
           <div className="flex min-w-0 flex-col gap-1.5">
             <span className={LABEL}>Juegan</span>
@@ -508,20 +512,15 @@ export function CasualForm({
             <p className="flex min-h-[48px] items-center text-[16px] font-bold">{initial.roster}</p>
           </div>
         )}
-        <div className="flex min-w-0 flex-col gap-1.5">
-          <label htmlFor={`${uid}-fecha`} className={LABEL}>
-            Fecha
-          </label>
-          <input
-            id={`${uid}-fecha`}
-            name="playedOn"
-            type="date"
-            value={playedOn}
-            onChange={(e) => setPlayedOn(e.target.value)}
-            required
-            className={`${INPUT} dark:scheme-dark`}
-          />
-        </div>
+        <CampoFecha
+          id={`${uid}-fecha`}
+          name="playedOn"
+          value={playedOn}
+          onChange={setPlayedOn}
+          label="Fecha del partido"
+          kicker="Fecha"
+          required
+        />
       </div>
 
       {initial === undefined && !rivalFijo && (

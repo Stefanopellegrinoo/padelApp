@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { MASTERS_SIZE, type DisciplineId } from '@/core'
 import { Avatar } from '@/app/ui/avatar'
 import { button } from '@/app/ui/button'
+import { CampoFecha } from '@/app/ui/campo-fecha'
 import { buildMasters, confirmMatchday, drawMastersPairs, type WriteResult } from './actions'
 import { BorrarFecha } from './borrar'
 
@@ -39,29 +40,21 @@ export function ArmarMasters({
 
   return (
     <div className="mt-4 flex flex-col gap-2">
-      <div className="flex items-center gap-2">
-        <input
-          type="date"
-          value={playedOn}
-          aria-label="Día del Masters"
-          onChange={(event) => setPlayedOn(event.target.value)}
-          className="min-h-[56px] rounded-btn border-[1.5px] border-line bg-surface-2 px-3 text-[16px] font-semibold text-text"
-        />
-        <button
-          type="button"
-          disabled={pending || playedOn === ''}
-          onClick={() => {
-            setError(null)
-            startTransition(async () => {
-              const result = await buildMasters(seasonId, disciplineId, playedOn)
-              if (!result.ok) setError(result.error)
-            })
-          }}
-          className={`${button('primary', { size: 'lg' })} flex-1`}
-        >
-          Armar el Masters
-        </button>
-      </div>
+      <CampoFecha value={playedOn} onChange={setPlayedOn} label="Día del Masters" kicker="Se juega el" />
+      <button
+        type="button"
+        disabled={pending || playedOn === ''}
+        onClick={() => {
+          setError(null)
+          startTransition(async () => {
+            const result = await buildMasters(seasonId, disciplineId, playedOn)
+            if (!result.ok) setError(result.error)
+          })
+        }}
+        className={button('primary', { size: 'lg', full: true })}
+      >
+        Armar el Masters
+      </button>
       {error !== null && (
         <p role="alert" className={ERROR_NOTE}>
           {error}

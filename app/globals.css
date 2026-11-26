@@ -358,6 +358,15 @@ html {
   overscroll-behavior-y: none;
   /* El gris de iOS al tocar sobra: la respuesta es la presión de abajo. */
   -webkit-tap-highlight-color: transparent;
+  /* Safari agranda el texto por su cuenta al girar el teléfono; el tamaño lo
+     pone la app (el zoom con los dedos sigue andando). */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  /* Red de seguridad, no arreglo: cada desborde se corrige en su pantalla y
+     `scripts/mobile-audit.mjs` lo controla. Si algo se escapara igual, la
+     pantalla no se corre de costado ni se achica. `clip` y no `hidden`:
+     `hidden` arma un contenedor de scroll y rompe los `sticky`. */
+  overflow-x: clip;
 }
 
 /* Nav y botones se tocan, no se seleccionan: sin el menú de "copiar" al

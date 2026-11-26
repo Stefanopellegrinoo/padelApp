@@ -117,7 +117,8 @@ describe('Desempate — columnas', () => {
   it('la general (sin columnas de fecha) sólo puesto, nombre y puntos', () => {
     const markup = html([row(1, { played: null, movement: null })], { showMatchdayColumns: false })
     expect(markup).not.toContain('>Fechas<')
-    expect(filas(markup)[0]).toContain('grid-cols-[40px_1fr_56px]')
+    // Tres columnas siempre; en 320 px el puesto se angosta para dejarle lugar al nombre (T18).
+    expect(filas(markup)[0]).toContain('grid-cols-[32px_1fr_56px] min-[375px]:grid-cols-[40px_1fr_56px]')
   })
 })
 

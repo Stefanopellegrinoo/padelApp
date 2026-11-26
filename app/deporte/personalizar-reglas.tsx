@@ -71,13 +71,13 @@ function Fila({
   fixed?: string
   children: ReactNode
 }) {
+  // El título al lado de la perilla y la ayuda abajo, a todo el ancho: al lado de un stepper de
+  // 140 px, en 320 px la ayuda quedaba en una columna de ~100 px ("A 4 con / ventaja de / 2: 4-2…").
   return (
-    <div data-stepper={stepper} data-fixed={fixed} className={FILA}>
-      <div className="min-w-0">
-        <p className={TITULO_FILA}>{titulo}</p>
-        <p className={AYUDA}>{hint}</p>
-      </div>
+    <div data-stepper={stepper} data-fixed={fixed} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 py-3.5">
+      <p className={TITULO_FILA}>{titulo}</p>
       {children}
+      <p className={`${AYUDA} col-span-2`}>{hint}</p>
     </div>
   )
 }

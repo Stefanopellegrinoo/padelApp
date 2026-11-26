@@ -27,11 +27,13 @@ export function Vos() {
 export function Dato({ label, value, href }: { label: string; value: ReactNode; href?: string }) {
   const body = (
     <>
-      <span className="font-cond block text-[44px] text-sport">{value}</span>
-      <span className="mt-1.5 block text-[13px] leading-tight font-semibold">{label}</span>
+      {/* De a tres en 320 px queda una baldosa de ~89 px: el número se achica con
+          la pantalla (44 px desde ~420) para que "100%" entre entero. */}
+      <span className="font-cond block text-[clamp(32px,10.4vw,44px)] text-sport">{value}</span>
+      <span className="mt-1.5 block text-[13px] leading-tight font-semibold [overflow-wrap:anywhere]">{label}</span>
     </>
   )
-  const box = 'flex min-h-[96px] flex-col justify-end rounded-tile bg-sport-tint px-3 pt-3 pb-3.5'
+  const box = 'flex min-h-[96px] min-w-0 flex-col justify-end rounded-tile bg-sport-tint px-2.5 pt-3 pb-3.5'
   return href === undefined ? (
     <div className={box}>{body}</div>
   ) : (

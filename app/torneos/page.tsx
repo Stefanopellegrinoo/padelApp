@@ -349,18 +349,20 @@ function HeroFecha({ fecha, estado }: { fecha: FechaViva; estado: EstadoFecha })
       {dia !== null && (
         <p className="text-[16px] text-on-block-soft">{fecha.status === 'OPEN' ? 'En juego' : 'Armándose'}</p>
       )}
-      <div className="mt-4 flex items-end justify-between gap-3">
+      {/* Los cuadraditos van en su propio renglón, a todo el ancho: al lado de "Ver la fecha", en
+          320 px se partían en dos filas. Hasta 16 entran en un renglón de 288 px. */}
+      {pips.total > 0 && pips.total <= 16 && (
+        <span aria-hidden="true" className="mt-4 flex flex-wrap gap-1">
+          {Array.from({ length: pips.total }, (_, i) => (
+            <i
+              key={i}
+              className={`h-3 w-3 rounded-[3px] ${i < pips.llenos ? 'bg-on-block' : 'shadow-[inset_0_0_0_1.5px_var(--color-on-block-soft)]'}`}
+            />
+          ))}
+        </span>
+      )}
+      <div className={`${pips.total > 0 && pips.total <= 16 ? 'mt-2' : 'mt-4'} flex items-end justify-between gap-3`}>
         <div className="min-w-0">
-          {pips.total > 0 && pips.total <= 16 && (
-            <span aria-hidden="true" className="mb-2 flex flex-wrap gap-1">
-              {Array.from({ length: pips.total }, (_, i) => (
-                <i
-                  key={i}
-                  className={`h-3 w-3 rounded-[3px] ${i < pips.llenos ? 'bg-on-block' : 'shadow-[inset_0_0_0_1.5px_var(--color-on-block-soft)]'}`}
-                />
-              ))}
-            </span>
-          )}
           {estado.kind === 'OPEN' ? (
             <p className="text-[15px] leading-snug">
               <b className="font-bold">{faltanTexto(estado.faltan)}</b>

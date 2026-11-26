@@ -32,6 +32,19 @@ export function matchdayFull(iso: string): string {
   return `${get('weekday')} ${get('day')} ${get('month')}`
 }
 
+/**
+ * `"Jueves 26 nov"` — el día elegido en el control de fecha (`app/ui/campo-fecha.tsx`).
+ * De otro año lo agrega (`"Miércoles 26 nov 2025"`): un partido viejo no se confunde
+ * con uno de este año. Vacío, vacío.
+ */
+export function diaLargo(iso: string, hoy: Date = new Date()): string {
+  if (iso === '') return ''
+  const dia = matchdayFull(iso)
+  const year = Number(iso.slice(0, 4))
+  const texto = dia.charAt(0).toUpperCase() + dia.slice(1)
+  return year === hoy.getFullYear() ? texto : `${texto} ${year}`
+}
+
 /** Las iniciales para el avatar: primera del nombre y primera del apellido si lo hay. */
 export function initials(name: string): string {
   const parts = name.trim().split(/\s+/)

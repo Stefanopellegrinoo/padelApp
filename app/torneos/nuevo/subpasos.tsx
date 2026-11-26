@@ -185,7 +185,7 @@ export function OrdenarPorNivel({
                 refs.current[position] = row
               }}
               style={offset === 0 ? undefined : { transform: `translateY(${offset}px)` }}
-              className={`${FILA} flex min-h-[56px] items-center gap-2 py-1.5 pl-3 pr-1 ${
+              className={`${FILA} flex min-h-[56px] items-center gap-1.5 py-1.5 pl-3 pr-1 min-[375px]:gap-2 ${
                 agarrada
                   ? 'relative z-10 shadow-[0_10px_24px_var(--color-scrim),inset_0_0_0_2px_var(--color-sport)]'
                   : arrastre !== null
@@ -194,7 +194,8 @@ export function OrdenarPorNivel({
               }`}
             >
               <span className="w-6 shrink-0 text-center font-cond text-[26px]">{(lugares?.indexOf(position) ?? position) + 1}</span>
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sport-tint text-[13px] font-bold text-sport">
+              {/* En 320 px las iniciales se van: repiten el nombre y le quitaban el lugar (se partía en "Tom / ás"). */}
+              <span className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-full bg-sport-tint text-[13px] font-bold text-sport min-[375px]:flex">
                 {jugadores.length === 1 ? initials(nombre) : jugadores.map((jugador) => initials(jugador)[0] ?? '').join('')}
               </span>
               <span className="min-w-0 flex-1 break-words text-[17px] font-bold leading-tight">{nombre}</span>

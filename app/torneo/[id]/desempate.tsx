@@ -47,9 +47,13 @@ interface DesempateProps {
   footnote?: string | null
 }
 
-/** Puesto, nombre, cambio, fechas y puntos, como el prototipo; la general sólo puesto, nombre y puntos. */
-const COLS_DEPORTE = 'grid-cols-[40px_1fr_44px_48px_48px]'
-const COLS_GENERAL = 'grid-cols-[40px_1fr_56px]'
+/**
+ * Puesto, nombre, cambio, fechas y puntos, como el prototipo; la general sólo puesto, nombre y puntos.
+ * En 320 px las columnas fijas se angostan: con las de siempre al nombre le quedaban ~20 px al lado
+ * de "vos" y del ⓘ, y se partía letra por letra ("M a rt ín").
+ */
+const COLS_DEPORTE = 'grid-cols-[32px_1fr_36px_44px_40px] min-[375px]:grid-cols-[40px_1fr_44px_48px_48px]'
+const COLS_GENERAL = 'grid-cols-[32px_1fr_56px] min-[375px]:grid-cols-[40px_1fr_56px]'
 
 /** Sube (azul) o baja (rojo) siempre con triángulo y número; "=" si no se movió; nada si no hay contra qué. */
 function Cambio({ movement }: { movement: number | null }) {
@@ -219,7 +223,8 @@ function Fila({
         }${href === null ? '' : ' press-fila'}${mine}`}
       >
         <span className={`font-cond text-[26px]${row.isMe ? ' dark:text-vos' : ''}`}>{row.position}</span>
-        <span className="flex min-w-0 items-center gap-1.5">
+        {/* Si el nombre, "vos" y el ⓘ no entran en un renglón, "vos" y el ⓘ bajan: el nombre no se parte. */}
+        <span className="flex min-w-0 flex-wrap items-center gap-x-1.5">
           {href === null ? (
             <span className="min-w-0 py-1 text-[16px] leading-tight font-semibold [overflow-wrap:anywhere]">{row.displayName}</span>
           ) : (
@@ -237,7 +242,8 @@ function Fila({
               type="button"
               onClick={onTie}
               aria-label={`Desempate de ${row.displayName}`}
-              className="relative z-10 -my-1 flex h-11 min-w-11 shrink-0 items-center justify-center rounded-full text-[16px] font-bold text-accent-link"
+              // 44 px para el dedo, pero ocupa 24 en el renglón: el margen negativo le deja lugar al nombre.
+              className="relative z-10 -mx-2.5 -my-1 flex h-11 min-w-11 shrink-0 items-center justify-center rounded-full text-[16px] font-bold text-accent-link"
             >
               ⓘ
             </button>

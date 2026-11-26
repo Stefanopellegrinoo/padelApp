@@ -761,8 +761,15 @@ export function Rayitas({
 }) {
   if (total === 0 || total > 12) return null
   return (
-    // Se achican (nunca más de 22) antes que empujar el texto de al lado.
-    <span aria-hidden="true" className={`flex min-w-0 flex-1 gap-1 ${alinear === 'end' ? 'justify-end' : 'justify-start'}`}>
+    // Se achican (nunca más de 22) antes que empujar el texto de al lado, pero
+    // nunca por debajo de 6 cada una: el ancho mínimo es el de todas a 6 más los
+    // huecos, y si al lado del texto no entra, el renglón las baja (`flex-wrap`
+    // en quien las usa) en vez de montarlas sobre las letras.
+    <span
+      aria-hidden="true"
+      style={{ minWidth: total * 6 + (total - 1) * 4 }}
+      className={`flex flex-1 gap-1 ${alinear === 'end' ? 'justify-end' : 'justify-start'}`}
+    >
       {Array.from({ length: total }, (_, index) => (
         <i key={index} className={`h-2 max-w-[22px] min-w-1.5 flex-1 rounded-full ${index < total - remaining ? className : vacia}`} />
       ))}
@@ -844,7 +851,7 @@ export function CierreFecha({
     <div className="flex flex-col gap-3">
       {status === 'OPEN' && (
         <div className="flex flex-col gap-2.5">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
             <b id={faltanId} className="shrink-0 text-[17px] font-[750]">
               {pinos ? faltanPinos(remaining) : faltanPartidos(remaining)}
             </b>

@@ -11,6 +11,7 @@
     "test:watch": "vitest",
     "test:db": "vitest run --config vitest.db.config.ts",
     "test:deadlock": "scripts/deadlock/battery.sh",
+    "audit:mobile": "node scripts/mobile-audit.mjs",
     "typecheck": "tsc --noEmit",
     "db:start": "supabase start",
     "db:reset": "supabase db reset",

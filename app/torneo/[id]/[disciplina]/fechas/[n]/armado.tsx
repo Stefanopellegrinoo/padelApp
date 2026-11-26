@@ -1332,7 +1332,9 @@ function GuestCard({
             se elija acá — leerla antes es leerla sobre una elección que todavía
             no se hizo. */}
         {partner && (
-          <label className="flex items-center gap-2 text-[15px] font-semibold">
+          // El rótulo arriba y el select a lo ancho: al lado, en 320 px "El que salga en el sorteo"
+          // quedaba cortado en "El que salga en e".
+          <label className="flex flex-col gap-1.5 text-[15px] font-semibold">
             Juega con
             <select
               value={guest.partnerId ?? ''}
@@ -1342,7 +1344,7 @@ function GuestCard({
               // esta tarjeta: así el nombre accesible contiene al visible (WCAG
               // 2.5.3) y además distingue un `<select>` del de al lado.
               aria-label={`Juega con — ${who}`}
-              className="min-h-11 min-w-0 flex-1 rounded-btn border-[1.5px] border-line bg-surface-2 p-[10px] text-[16px] font-semibold text-text"
+              className="min-h-11 w-full min-w-0 rounded-btn border-[1.5px] border-line bg-surface-2 p-[10px] text-[16px] font-semibold text-text"
             >
               {/* Es la opción "al sorteo", y tiene que decir qué va a pasar:
                   "El que toque" no se leía como una opción, se leía como que

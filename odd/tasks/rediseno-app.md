@@ -29,9 +29,9 @@ Cada decisión se maqueta en `design/<slug>/`, el usuario elige y queda anotada 
 
 - [x] T0 · S1-S4 · inline · Definir el objetivo y qué buscamos.
 - [x] T1 · S2-S6 · inline · Decisión 1, pantalla de entrada: elegida B (`design/inicio/02-inicio-dos-partes.html`). Commit: —
-- [ ] T2 · S5-S7 · worker · Estilo: ronda 1 (01-03) sin ganador; ronda 2 (04-06) variantes de la familia de 01 en `design/estilo/`. Commit: —
-- [ ] T3 · S3-S5 · inline · Decisión 2, cómo te movés (navegación de la app y del torneo).
-- [ ] T4 · S3-S5 · inline · Decisión 3, flujos clave: crear torneo, la fecha en el club, historial con un amigo.
+- [x] T2 · S5-S7 · worker · Estilo: rondas 1-4 y test de gusto sin ganador; ronda 5 (`design/prototipo/`) elegida. Commit: 3067bfa
+- [x] T3 · S3-S5 · inline · Decisión 2, cómo te movés: resuelta en el prototipo y en T7/T11 (Inicio con las dos partes, barra del torneo, Volver con destino). Commit: 8f129bc, 039d6b9
+- [x] T4 · S3-S5 · inline · Decisión 3, flujos clave: resueltos en T8 (fecha), T12 (amigo), T13 (crear torneo). Commit: c04186c, a175945, 45f4d6e
 - [x] T5 · S5 · inline · Cerrar el estilo: elegido el prototipo de la ronda 5 (`design/prototipo/`), claro y oscuro. Commit: 3067bfa
 - [x] T6 · S8a-S8c · worker · Base: tokens claro/oscuro en `app/globals.css` (nombres actuales remapeados + nuevos: deporte, bloque, cta, vos), Archivo variable con eje de ancho, radios, foco, presión, movimiento reducido, theme-color y manifest; primitivas compartidas (`app/ui/`: encabezado en bloque, botones, filas, avatar, esqueleto, hoja inferior, Volver). Commit: 18d7e1c
 - [x] T7 · S8a-S8d · worker · Torneo: layout, barra inferior, chips de deporte, Tabla por deporte y general, desempate. Commit: 8f129bc
@@ -43,7 +43,7 @@ Cada decisión se maqueta en `design/<slug>/`, el usuario elige y queda anotada 
 - [x] T13 · S8a-S8d · worker · Crear torneo (asistente) y reglas del deporte. Commit: 45f4d6e
 - [x] T14 · S8a-S8e · worker · Torneo rápido. Commit: ebd57d5
 - [x] T15 · S8a · worker · Privacidad, borrar cuenta, error, not-found, offline.html, imagen OG, imagen para compartir, ícono y splash. Commit: bf5472a
-- [ ] T16 · S8a-S8e · verify · Suite completa, build, recorrido de todas las rutas en claro y oscuro a 390 px con datos sembrados, contraste y carga de resultados en navegador. Commit: —
+- [x] T16 · S8a-S8e · verify · Suite completa, build, recorrido de todas las rutas en claro y oscuro a 390 px con datos sembrados, contraste y carga de resultados en navegador; pulido y correcciones (T17). Commit: 7201408, 81069a1
 
 ## Log
 

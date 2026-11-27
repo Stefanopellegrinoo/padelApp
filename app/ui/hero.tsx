@@ -9,7 +9,9 @@ import { Volver } from '@/app/torneo/[id]/volver'
  * del título, a la derecha (tu puesto, "3°"); `children`, debajo de todo
  * (confirmaciones, la píldora "Ver la fecha"). `action` va arriba a la
  * derecha, en la línea de `Volver` (el chip de amistad del perfil); sin ella
- * `Volver` sale suelto, como siempre.
+ * `Volver` sale suelto, como siempre. `titleAction` va en la línea del
+ * título, centrada con él ("Compartir mi link" en Amigos); sin ella el título
+ * sale igual que siempre.
  *
  * `titleVariant`: `'title'` (34 px, ancho 75 %) para un nombre, `'number'`
  * (72 px, ancho 62 %) para un número que se lee de lejos, "Fecha 8".
@@ -28,6 +30,7 @@ export function Hero({
   subtitle,
   right,
   action,
+  titleAction,
   children,
   titleVariant = 'title',
   sport,
@@ -38,6 +41,7 @@ export function Hero({
   subtitle?: ReactNode
   right?: ReactNode
   action?: ReactNode
+  titleAction?: ReactNode
   children?: ReactNode
   titleVariant?: 'title' | 'number'
   sport?: string
@@ -64,8 +68,15 @@ export function Hero({
         <div className="mt-2 flex items-center gap-2 text-[15px] font-semibold text-on-block-soft">{kicker}</div>
       )}
       <div className="mt-1 flex items-end justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className={titleClass}>{title}</h1>
+        <div className={titleAction === undefined ? 'min-w-0' : 'min-w-0 flex-1'}>
+          {titleAction === undefined ? (
+            <h1 className={titleClass}>{title}</h1>
+          ) : (
+            <div className="flex items-center justify-between gap-3">
+              <h1 className={`${titleClass} min-w-0`}>{title}</h1>
+              {titleAction}
+            </div>
+          )}
           {subtitle !== undefined && <p className="mt-1.5 text-[15px] text-on-block-soft">{subtitle}</p>}
         </div>
         {right !== undefined && <div className="shrink-0 text-right">{right}</div>}

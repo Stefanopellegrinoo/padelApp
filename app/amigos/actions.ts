@@ -7,7 +7,7 @@ import {
   addFriend,
   cancelFriendRequest,
   rejectFriendRequest,
-  requestFriendship,
+  rotateFriendInvite,
   createCasualMatch,
   updateCasualMatch,
   deleteCasualMatch,
@@ -19,44 +19,23 @@ import { playersFromJson } from './[playerId]/cargar-state'
 import { assertFriendPlays, casualInputFrom, redirectTarget } from './casual-form-data'
 
 /**
- * Las escrituras de Amigos que NO tienen estado de cliente que muestre un
- * error -- mismo patrón que `renameTournament`
- * (`app/torneo/[id]/ajustes/actions.ts`): un `<form>` sin JavaScript, y el
- * error vuelve por la query. La única escritura que la usa (pedir amistad por
- * ID) siempre vuelve a `/amigos` -- por eso el destino es fijo, no un
- * parámetro. Aceptar un pedido ya no pasa por acá: va por la persona, con
- * `aceptarPedidoDe` (odd/tasks/amigos-faciles.md, T3).
- *
- * Review final de 2b, Minor 4: `removeCasualMatch` (más abajo) pasaba por
- * acá también, con un `path` parametrizado a `/amigos/{playerId}` armado con
- * el `friendPlayerId` del `<form>`. Pero el redirect correcto usa el
- * `friendPlayerId` que DEVUELVE `deleteCasualMatch` -- se conoce recién
- * DESPUÉS de escribir, y este helper arma su `path` ANTES de llamar a
- * `work`. No hay forma de que un solo parámetro sirva a la vez de "destino
- * fijo, conocido de entrada" (este caso) y "destino que depende de si la
- * escritura funcionó" (el de borrar) -- por eso `removeCasualMatch` ahora
- * arma su propio try/catch, como ya hace `editCasualMatch`, y este helper
- * volvió a los dos casos para los que alcanza con un destino fijo.
+ * "Cambiar el link" en la hoja "Tu link de amistad" (`link.tsx`,
+ * odd/tasks/amigos-faciles.md, S5): un token nuevo, y el de ahora deja de
+ * andar. Sin redirect, como las de abajo: la hoja se queda abierta y muestra
+ * el link nuevo, o el error.
  */
-async function onAmigos(
-  work: (supabase: Awaited<ReturnType<typeof serverClient>>) => Promise<void>,
-): Promise<void> {
-  let problem: string | null = null
+export async function cambiarMiLink(): Promise<{ ok: true; token: string } | { ok: false; error: string }> {
+  let token: string
   try {
     const supabase = await serverClient()
-    await work(supabase)
+    token = await rotateFriendInvite(supabase)
   } catch (error) {
     if (!(error instanceof EdgeError)) throw error
-    problem = error.message
+    return { ok: false, error: error.message }
   }
 
   revalidatePath('/amigos')
-  redirect(problem === null ? '/amigos' : `/amigos?error=${encodeURIComponent(problem)}`)
-}
-
-export async function sendFriendRequest(formData: FormData): Promise<void> {
-  const friendPlayerId = String(formData.get('friendPlayerId') ?? '').trim()
-  await onAmigos((supabase) => requestFriendship(supabase, friendPlayerId))
+  return { ok: true, token }
 }
 
 // ── la amistad con una persona: el perfil del torneo (S2), Inicio y Amigos (S4) ──
@@ -208,7 +187,7 @@ export async function editCasualMatch(state: CasualFormState, formData: FormData
 /**
  * Borra un partido casual. Patrón sin-JS: no hay nada que validar en el
  * borde ni un campo que mantener tipeado tras un error -- un botón que puede
- * fallar y volver con `?error=...`, igual que `sendFriendRequest`.
+ * fallar y volver con `?error=...`.
  *
  * En éxito, mismo criterio de redirect que `editCasualMatch`. En error no hay fila que leer (el borrado no llegó a pasar), así
  * que ahí sí se usa el del `<form>` -- es el único valor disponible para

@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation'
 import { matchdayDay } from '@/app/format'
+import { AvisoAlEntrar } from '@/app/ui/aviso-al-entrar'
 import { Hero } from '@/app/ui/hero'
 import { Section } from '@/app/ui/section'
 import { sportLabel } from '@/core'
@@ -25,8 +26,12 @@ interface PageProps {
    *
    * `?cargar=1`: el atajo de "Cargar partido" de Inicio. Llega con la hoja
    * del partido abierta (`CargarConAmigo`, que después lo saca de la URL).
+   *
+   * `?amistad=nueva`: se llegó sumándose con un link de amistad
+   * (`/amigo/[token]`, odd/tasks/amigos-faciles.md, S5). Avisa "Listo, ya son
+   * amigos" y sale de la URL (`AvisoAlEntrar`).
    */
-  searchParams: Promise<{ error?: string; desde?: string; cargar?: string }>
+  searchParams: Promise<{ error?: string; desde?: string; cargar?: string; amistad?: string }>
 }
 
 /** Cuántos resultados entran en la racha del bloque, como en el prototipo. */
@@ -67,7 +72,7 @@ function deportesDe(partidos: readonly SharedMatch[]): { kinds: string[]; texto:
  */
 export default async function AmigoPage({ params, searchParams }: PageProps) {
   const { playerId } = await params
-  const { error, desde, cargar } = await searchParams
+  const { error, desde, cargar, amistad } = await searchParams
   const supabase = await serverClient()
 
   const [nombres, partidos, amigos, { data: yo }] = await Promise.all([
@@ -154,6 +159,14 @@ export default async function AmigoPage({ params, searchParams }: PageProps) {
           .filter((amigo) => amigo.accepted)
           .map((amigo) => ({ playerId: amigo.playerId, displayName: amigo.displayName }))}
       />
+      {amistad === 'nueva' && (
+        <AvisoAlEntrar
+          message="Listo, ya son amigos"
+          param="amistad"
+          // Arriba del botón de abajo, como el aviso de `CargarConAmigo`.
+          className="bottom-[calc(96px+env(safe-area-inset-bottom))]"
+        />
+      )}
     </main>
   )
 }

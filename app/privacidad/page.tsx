@@ -34,6 +34,7 @@ export default function PrivacidadPage() {
 
         <Seccion titulo="Quién los ve">
           <li>Los demás jugadores de un torneo ven tu nombre y tus resultados en ese torneo.</li>
+          <li>Quien tenga tu link de amistad ve tu nombre. Si lo cambiás, el de antes deja de andar.</li>
           <li>Tu mail no lo ve nadie más.</li>
           <li>
             Los datos se guardan en Supabase (base de datos) y la app corre en Vercel, los dos en San Pablo, Brasil.

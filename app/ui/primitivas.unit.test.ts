@@ -69,6 +69,26 @@ describe('Hero con una acción arriba a la derecha (amigos-faciles, S2)', () => 
   })
 })
 
+describe('Hero con una acción en la línea del título (amigos-faciles, S5)', () => {
+  it('la acción va al lado del título, centrada con él, y el subtítulo sigue abajo', () => {
+    const html = renderToStaticMarkup(
+      createElement(Hero, {
+        back: { href: '/torneos', label: 'Inicio' },
+        title: 'Amigos',
+        subtitle: '2 amigos',
+        titleAction: createElement('button', { type: 'button' }, 'Compartir mi link'),
+      }),
+    )
+    const fila = html.match(/<div class="([^"]*)"><h1[^>]*>Amigos<\/h1><button type="button">Compartir mi link<\/button><\/div><p[^>]*>2 amigos<\/p>/)
+    expect(fila?.[1]?.split(' ')).toEqual(expect.arrayContaining(['flex', 'items-center', 'justify-between']))
+  })
+
+  it('sin ella el título sale como siempre: el h1 suelto, seguido del subtítulo', () => {
+    const html = renderToStaticMarkup(createElement(Hero, { title: 'Amigos', subtitle: '2 amigos' }))
+    expect(html).toMatch(/<div class="min-w-0"><h1[^>]*>Amigos<\/h1><p[^>]*>2 amigos<\/p><\/div>/)
+  })
+})
+
 describe('chip', () => {
   it('mide 34 a la vista y 44 para el dedo, y se aprieta (S6)', () => {
     for (const v of ['onBlock', 'hueca', 'claro'] as const) {

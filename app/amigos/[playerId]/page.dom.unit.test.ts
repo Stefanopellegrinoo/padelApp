@@ -110,3 +110,27 @@ describe('Volver en el historial con un amigo', () => {
     expect(back).not.toHaveBeenCalled()
   })
 })
+
+// odd/tasks/amigos-faciles.md, T4, S5: quien se sumó con un link de amistad cae acá con
+// `?amistad=nueva` y ve "Listo, ya son amigos". El parámetro sale de la URL para que recargar no
+// lo repita.
+describe('el aviso al sumarse con un link de amistad', () => {
+  async function abrirCon(searchParams: { desde?: string; amistad?: string }) {
+    const page = await AmigoPage({ params: Promise.resolve({ playerId: 'p-nico' }), searchParams: Promise.resolve(searchParams) })
+    await act(async () => root.render(page))
+  }
+  const aviso = () => [...host.querySelectorAll('[role="status"]')].map((el) => el.textContent).join('')
+
+  it('con `?amistad=nueva` avisa "Listo, ya son amigos" y saca el parámetro de la URL', async () => {
+    window.history.replaceState(null, '', '/amigos/p-nico?desde=amigos&amistad=nueva')
+    await abrirCon({ desde: 'amigos', amistad: 'nueva' })
+    expect(aviso()).toBe('Listo, ya son amigos')
+    expect(window.location.pathname + window.location.search).toBe('/amigos/p-nico?desde=amigos')
+  })
+
+  it('sin el parámetro no hay aviso', async () => {
+    window.history.replaceState(null, '', '/amigos/p-nico?desde=amigos')
+    await abrirCon({ desde: 'amigos' })
+    expect(aviso()).toBe('')
+  })
+})

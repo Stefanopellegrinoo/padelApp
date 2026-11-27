@@ -1,24 +1,17 @@
 import Link from 'next/link'
-import { SubmitButton } from '@/app/submit-button'
 import { ultimoResultado } from '@/app/torneos/inicio/estado'
 import { Icono } from '@/app/torneos/inicio/iconos'
 import { Avatar } from '@/app/ui/avatar'
-import { button } from '@/app/ui/button'
 import { Hero } from '@/app/ui/hero'
 import { rowPress } from '@/app/ui/row'
 import { Section } from '@/app/ui/section'
-import { friendsOf, genteDeTusTorneos, historyWith } from '@/db/friends'
+import { friendsOf, genteDeTusTorneos, historyWith, myFriendInvite } from '@/db/friends'
 import { ordenarAmigos, pedidosRecibidos, resumenAmigo, type AmigoInicio } from '@/db/inicio'
 import { serverClient } from '@/db/server'
-import { sendFriendRequest } from './actions'
 import { GenteDeTusTorneos } from './gente'
-import { MiId } from './mi-id'
+import { CompartirMiLink } from './link'
 import { PedidosEnviados, TePidieron } from './pedidos'
 import { metaEnviado } from './pedidos-texto'
-
-interface PageProps {
-  searchParams: Promise<{ error?: string }>
-}
 
 /**
  * Amigos — la lista, y el único lugar para pedir/aceptar una amistad.
@@ -28,22 +21,20 @@ interface PageProps {
  * amigos como en Inicio (último resultado y cara a cara, con el mismo
  * `resumenAmigo` de `db/inicio.ts`, así las dos pantallas no cuentan
  * distinto); la gente de tus torneos que todavía no agregaste (`gente.tsx`);
- * las solicitudes que mandaste, con cuánto hace y "Cancelar"; y al final cómo
- * sumar a alguien.
+ * las solicitudes que mandaste, con cuánto hace y "Cancelar".
  *
- * No hay buscador de jugadores (ver `mi-id.tsx`): agregar a alguien pide su
- * ID, que esa persona copia desde acá mismo y te pasa por fuera de la app.
- * Es la vía que el diseño deja abierta para "agregar a alguien que ya tiene
- * cuenta" sin abrir ninguna superficie de lectura nueva (§5.5).
+ * No hay buscador de jugadores (la lista está cerrada a propósito, 0103):
+ * para sumar a alguien que no está en tus torneos va "Compartir mi link", en
+ * la línea del título (odd/tasks/amigos-faciles.md, S5). Quien lo abre queda
+ * como tu amigo (`/amigo/[token]`). Reemplaza al ID que había que copiar.
  */
-export default async function AmigosPage({ searchParams }: PageProps) {
-  const { error } = await searchParams
+export default async function AmigosPage() {
   const supabase = await serverClient()
 
-  const [amigos, { data: myPlayerId }, gente] = await Promise.all([
+  const [amigos, gente, token] = await Promise.all([
     friendsOf(supabase),
-    supabase.rpc('my_player_id'),
     genteDeTusTorneos(supabase),
+    myFriendInvite(supabase),
   ])
 
   const ahora = new Date()
@@ -66,6 +57,7 @@ export default async function AmigosPage({ searchParams }: PageProps) {
       <Hero
         back={{ href: '/torneos', label: 'Inicio' }}
         title="Amigos"
+        titleAction={<CompartirMiLink token={token} />}
         subtitle={
           aceptados.length === 0
             ? 'Sin amigos todavía'
@@ -83,7 +75,7 @@ export default async function AmigosPage({ searchParams }: PageProps) {
             <Icono name="amigos" className="h-8 w-8" />
             <p className="min-w-0 flex-1">
               <span className="block text-[17px] font-bold text-text">Sumá al primero</span>
-              <span className="block text-[15px] text-muted">Con su ID, acá abajo</span>
+              <span className="block text-[15px] text-muted">Compartí tu link, acá arriba</span>
             </p>
           </div>
         ) : (
@@ -98,37 +90,6 @@ export default async function AmigosPage({ searchParams }: PageProps) {
       <GenteDeTusTorneos gente={gente} />
 
       <PedidosEnviados enviados={enviadas} />
-
-      <Section title="Sumar un amigo" className="pt-7">
-        <div className="flex flex-col gap-4">
-          <MiId playerId={myPlayerId ?? ''} />
-          <form action={sendFriendRequest} className="flex flex-col gap-2">
-            <label htmlFor="friendPlayerId" className="text-[15px] font-semibold text-muted">
-              El ID de tu amigo
-            </label>
-            <div className="flex gap-2">
-              <input
-                id="friendPlayerId"
-                name="friendPlayerId"
-                placeholder="Pegalo acá"
-                required
-                autoComplete="off"
-                aria-invalid={error !== undefined || undefined}
-                aria-describedby={error === undefined ? undefined : 'amigos-error'}
-                className={`min-h-[48px] min-w-0 flex-1 rounded-btn border-[1.5px] bg-surface-2 px-3 text-[16px] font-semibold ${
-                  error === undefined ? 'border-line' : 'border-live'
-                }`}
-              />
-              <SubmitButton className={`${button('primary')} min-h-[48px] shrink-0`}>Pedir</SubmitButton>
-            </div>
-            {error !== undefined && (
-              <p id="amigos-error" role="alert" className="rounded-btn bg-live-bg px-3 py-2.5 text-[15px] font-semibold text-live">
-                {error}
-              </p>
-            )}
-          </form>
-        </div>
-      </Section>
     </main>
   )
 }

@@ -33,4 +33,10 @@ describe('/privacidad', () => {
     for (const lista of page.querySelectorAll('ul')) expect(lista.className).toContain('text-[17px]')
     expect(page.querySelector('a[href="/cuenta/borrar"]')?.textContent).toBe('Borrar cuenta')
   })
+
+  it('quien tenga tu link de amistad ve tu nombre, y el link se puede cambiar', () => {
+    expect(pantalla().textContent).toContain(
+      'Quien tenga tu link de amistad ve tu nombre. Si lo cambiás, el de antes deja de andar.',
+    )
+  })
 })

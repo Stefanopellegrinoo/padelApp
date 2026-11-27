@@ -20,7 +20,7 @@ vi.mock('@/db/server', () => ({
 }))
 
 vi.mock('@/app/amigos/actions', () => ({
-  sendFriendRequest: vi.fn(),
+  cambiarMiLink: vi.fn(),
   agregarAmigo: vi.fn(),
   aceptarPedidoDe: vi.fn(),
   rechazarPedidoDe: vi.fn(),
@@ -37,6 +37,7 @@ vi.mock('@/db/friends', async (importOriginal) => {
     historyWith: vi.fn(async () => []),
     genteDeTusTorneos: vi.fn(async () => []),
     torneosCompartidosCon: vi.fn(async () => new Map()),
+    myFriendInvite: vi.fn(async () => 'abc0000000000000000000000000000f'),
   }
 })
 
@@ -71,15 +72,17 @@ afterEach(() => {
 
 async function render(): Promise<string> {
   const { default: AmigosPage } = await import('./page')
-  return renderToStaticMarkup(await AmigosPage({ searchParams: Promise.resolve({}) }))
+  return renderToStaticMarkup(await AmigosPage())
 }
 
-const titulos = (html: string) => [...html.matchAll(/<h2[^>]*>([^<]*)<\/h2>/g)].map((m) => m[1])
+// Las secciones de la pantalla, sin el título de la hoja del link, que vive en el encabezado.
+const titulos = (html: string) =>
+  [...html.slice(html.indexOf('</header>')).matchAll(/<h2[^>]*>([^<]*)<\/h2>/g)].map((m) => m[1])
 
 describe('/amigos', () => {
   it('"Gente de tus torneos" va justo abajo de "Tus amigos", con su fila y "Agregar"', async () => {
     const html = await render()
-    expect(titulos(html)).toEqual(['Te pidieron', 'Tus amigos', 'Gente de tus torneos', 'Pedidos enviados', 'Sumar un amigo'])
+    expect(titulos(html)).toEqual(['Te pidieron', 'Tus amigos', 'Gente de tus torneos', 'Pedidos enviados'])
     expect(html).toContain('Jugaron con vos y tienen cuenta')
     expect(html).toContain('Seba Molina')
     expect(html).toContain('2 torneos · 9 fechas juntos')
@@ -89,7 +92,7 @@ describe('/amigos', () => {
   it('sin nadie para sugerir, la sección no está y el resto sigue igual', async () => {
     vi.mocked(genteDeTusTorneos).mockResolvedValueOnce([])
     const html = await render()
-    expect(titulos(html)).toEqual(['Te pidieron', 'Tus amigos', 'Pedidos enviados', 'Sumar un amigo'])
+    expect(titulos(html)).toEqual(['Te pidieron', 'Tus amigos', 'Pedidos enviados'])
     expect(html).toContain('Nico Arias')
     expect(html).toContain('Juampi Ledesma')
     expect(html).toContain('Tomi Sosa')
@@ -112,7 +115,7 @@ describe('/amigos', () => {
 
   it('"Pedidos enviados": "Sin respuesta · hace 3 días" y "Cancelar", sin el viejo "Pendiente"', async () => {
     const html = await render()
-    const enviados = html.slice(html.search(/<h2[^>]*>Pedidos enviados<\/h2>/), html.search(/<h2[^>]*>Sumar un amigo<\/h2>/))
+    const enviados = html.slice(html.search(/<h2[^>]*>Pedidos enviados<\/h2>/))
     expect(enviados).toContain('Tomi Sosa')
     expect(enviados).toContain('Sin respuesta · hace 3 días')
     expect(enviados).toMatch(/aria-label="Cancelar el pedido a Tomi"[^>]*>Cancelar<\/button>/)
@@ -122,8 +125,34 @@ describe('/amigos', () => {
   it('sin pedidos, ni las secciones ni la lectura de torneos compartidos', async () => {
     vi.mocked(friendsOf).mockResolvedValueOnce([amigo({ playerId: 'p-nico', displayName: 'Nico Arias' })])
     const html = await render()
-    expect(titulos(html)).toEqual(['Tus amigos', 'Gente de tus torneos', 'Sumar un amigo'])
+    expect(titulos(html)).toEqual(['Tus amigos', 'Gente de tus torneos'])
     expect(torneosCompartidosCon).not.toHaveBeenCalled()
+  })
+
+  // odd/tasks/amigos-faciles.md, T4, S5: "Compartir mi link" en la línea del título, y el ID se va.
+  it('"Compartir mi link" va en la misma línea que el título "Amigos"', async () => {
+    const html = await render()
+    expect(html).toMatch(
+      /<div class="[^"]*flex[^"]*items-center[^"]*"><h1[^>]*>Amigos<\/h1><button[^>]*>.*?Compartir mi link<\/button>/,
+    )
+    // La hoja ya lleva el link, armado en el cliente con el origen de la página.
+    expect(html).toContain('/amigo/abc0000000000000000000000000000f')
+  })
+
+  it('el cuadro del ID y el formulario para pegarlo ya no están', async () => {
+    const html = await render()
+    expect(html).not.toContain('Tu ID')
+    expect(html).not.toContain('Sumar un amigo')
+    expect(html).not.toContain('name="friendPlayerId"')
+    expect(html).not.toContain('p-yo')
+  })
+
+  it('sin amigos, "Sumá al primero" manda al link y no al ID', async () => {
+    vi.mocked(friendsOf).mockResolvedValueOnce([])
+    const html = await render()
+    expect(html).toContain('Sumá al primero')
+    expect(html).toContain('Compartí tu link, acá arriba')
+    expect(html).not.toContain('Con su ID')
   })
 
   it('si la lectura falla, la pantalla no se arma con datos a medias', async () => {

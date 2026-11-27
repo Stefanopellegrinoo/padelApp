@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>B · Gente de tus torneos</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  /* Tokens de app/globals.css, tema claro */
+  --bg:#ffffff;--surface:#f4f6fb;--chip:#eef1f7;--line:#dce1ee;
+  --text:#0e1a4a;--muted:#4b5675;--link:#1f45e0;
+  --live:#b42318;--live-bg:#fdecea;--up:#1f45e0;
+  --sport:#1f45e0;--sport-tint:#e8edff;
+  --block:#1f45e0;--on-block:#ffffff;--on-block-soft:#c9d3ff;
+  --cta:#0e1a4a;--on-cta:#ffffff;--vos:#dfff4f;--on-vos:#0e1a4a;
+  --opcion:#e8edff;--toast:#0e1a4a;--on-toast:#ffffff;--toast-action:#c9d3ff;
+  --focus:#0e1a4a;
+}
+html{-webkit-font-smoothing:antialiased}
+body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-size:16px;line-height:1.35;color:var(--text);background:var(--chip)}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+a{color:inherit;text-decoration:none}
+ul{list-style:none}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px;border-radius:10px}
+.hero :focus-visible{outline-color:var(--on-block)}
+.ico{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cond,.titulo{font-family:"Archivo Narrow","Roboto Condensed","Arial Narrow",system-ui,sans-serif}
+.cond{font-stretch:62%;font-weight:800;font-variant-numeric:tabular-nums;line-height:.9;letter-spacing:-.01em}
+.titulo{font-stretch:75%;font-weight:800;line-height:1.05;letter-spacing:-.01em}
+.vos{background:var(--vos);color:var(--on-vos);padding:0 3px;border-radius:4px}
+
+/* la lámina */
+.board{width:max-content;padding:40px 48px 48px}
+.board-head{max-width:1000px;margin-bottom:28px}
+.tag{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;padding:5px 11px;border-radius:999px;background:var(--bg);color:var(--muted);margin-bottom:12px}
+.board-head h1{font-size:42px}
+.board-head p{font-size:18px;color:var(--muted);margin-top:10px;max-width:880px}
+.strip{display:flex;gap:32px;align-items:flex-start}
+.step{width:390px;flex:none}
+.cap{min-height:100px;margin-bottom:14px}
+.cap h2{display:flex;align-items:center;gap:10px;font-size:18px;font-weight:800}
+.cap .n{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--cta);color:var(--on-cta);font-size:14px;font-weight:800;flex:none}
+.cap p{font-size:15px;color:var(--muted);margin-top:6px}
+.notes{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:32px;max-width:1656px}
+.note{background:var(--bg);border-radius:18px;padding:16px 18px}
+.note h3{font-size:15px;font-weight:800;margin-bottom:6px}
+.note p{font-size:15px;color:var(--muted)}
+
+/* el teléfono */
+.phone{position:relative;width:390px;height:600px;background:var(--bg);border-radius:44px;overflow:hidden;border:1px solid var(--line)}
+.status{height:47px;display:flex;align-items:center;justify-content:space-between;padding:0 14px 0 30px;font-size:16px;font-weight:600}
+.status .sys{display:flex;gap:6px;align-items:center}
+
+/* encabezado: el Hero de app/ui/hero.tsx */
+.hero{background:var(--block);color:var(--on-block);border-radius:0 0 24px 24px;padding:0 16px 20px}
+.volver{display:inline-flex;align-items:center;gap:4px;min-height:44px;margin:-6px 0 -6px -4px;padding-right:12px;font-size:16px;font-weight:600}
+.volver .ico{width:24px;height:24px}
+.kicker{margin-top:8px;font-size:15px;font-weight:600;color:var(--on-block-soft)}
+.hero-main{margin-top:4px;display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
+.hero-main .titulo{font-size:34px}
+.puesto{text-align:right;flex:none}
+.puesto .cond{display:block;font-size:64px}
+.puesto sup{font-size:32px;vertical-align:top;line-height:1}
+.puesto small{display:block;font-size:14px;color:var(--on-block-soft)}
+.hero-acc{margin-top:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.pill{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 18px;border-radius:999px;font-size:16px;font-weight:800}
+.pill .ico{width:20px;height:20px;stroke-width:2.4}
+.pill.on{background:var(--on-block);color:var(--block)}
+.pill.hueca{color:var(--on-block);box-shadow:inset 0 0 0 1.5px var(--on-block-soft)}
+.aviso-hero{margin-top:16px;background:var(--bg);color:var(--text);border-radius:18px;padding:12px 12px 12px 16px;display:flex;align-items:center;gap:10px}
+.aviso-hero p{flex:1;font-size:16px;font-weight:700;line-height:1.25}
+.aviso-hero small{display:block;font-size:14px;font-weight:400;color:var(--muted)}
+
+/* cuerpo */
+.datos{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:20px 16px 0}
+.dato{background:var(--surface);border-radius:18px;padding:12px 12px 14px}
+.dato .cond{display:block;font-size:34px}
+.dato .l{display:block;margin-top:6px;font-size:13px;font-weight:600;color:var(--muted)}
+.sec{padding:22px 16px 0}
+.sec .titulo{font-size:26px;margin-bottom:12px}
+.list{margin:0 -16px}
+.row{display:flex;align-items:center;gap:12px;min-height:72px;padding:12px 16px;border-top:1px solid var(--line)}
+.row:first-child{border-top:0}
+.av{display:grid;place-items:center;width:44px;height:44px;border-radius:50%;font-size:15px;font-weight:750;flex:none}
+.t0{background:var(--sport-tint);color:var(--sport)}
+.t1{background:var(--chip);color:var(--text)}
+.body{flex:1;min-width:0}
+.name{display:block;font-size:17px;font-weight:700;line-height:1.2}
+.meta{display:block;font-size:14px;color:var(--muted);margin-top:2px}
+.rec{display:flex;align-items:baseline;gap:5px;flex:none}
+.rec .cond{font-size:34px}
+.rec small{font-size:15px;font-weight:600;color:var(--muted)}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 16px;border-radius:14px;font-size:16px;font-weight:700;flex:none}
+.btn.primary{background:var(--cta);color:var(--on-cta)}
+.btn.x{width:44px;padding:0;background:var(--chip);color:var(--muted)}
+.btn.x .ico{width:20px;height:20px}
+
+.toast{position:absolute;left:16px;right:16px;bottom:28px;background:var(--toast);color:var(--on-toast);border-radius:14px;padding:6px 6px 6px 16px;display:flex;align-items:center;gap:12px;font-weight:600;min-height:56px}
+.toast span{flex:1}
+.toast button{color:var(--toast-action);font-weight:800;min-height:44px;padding:0 12px;border-radius:10px}
+
+/* compartido entre láminas de amigos-faciles */
+.phone{height:844px}
+.home-ind{position:absolute;left:50%;bottom:8px;width:134px;height:5px;margin-left:-67px;border-radius:3px;background:var(--text)}
+.hero .sub{margin-top:6px;font-size:15px;color:var(--on-block-soft)}
+.cuenta{position:absolute;top:50px;right:16px;width:44px;height:44px;border-radius:50%;display:grid;place-items:center;background:var(--on-block);color:var(--block);font-size:15px;font-weight:750}
+.phone:has(.cuenta) .kicker{padding-right:56px}
+.sec-h{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:12px}
+.sec-h .titulo{margin-bottom:0}
+.sec-h a{font-size:16px;font-weight:700;color:var(--link);min-height:44px;display:inline-flex;align-items:center}
+.sec .hint{font-size:15px;color:var(--muted);margin:-6px 0 8px}
+.row.dest{background:var(--sport-tint);border-top-color:transparent}
+.row.dest + .row{border-top-color:transparent}
+.tile{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;background:var(--sport-tint);color:var(--sport);flex:none}
+.pos{text-align:right;flex:none}.pos .cond{font-size:30px;color:var(--sport)}.pos small{display:block;font-size:13px;color:var(--muted)}
+.gano{color:var(--up);font-weight:600}.perdio{color:var(--text);font-weight:600}
+.btn .ico{width:20px;height:20px}
+.btn.secondary{background:var(--chip);color:var(--text)}
+.btn.ghost{color:var(--link)}
+.btn.agregar{background:var(--opcion);color:var(--link)}
+.btn.enviado{color:var(--muted);padding:0 8px}
+/* Agregar, más chico (feedback): 34 px a la vista, 44 px de toque */
+.btn.agregar,.btn.enviado{position:relative;min-height:34px;padding:0 12px;border-radius:999px;font-size:14px;font-weight:800;gap:6px}
+.btn.agregar .ico,.btn.enviado .ico{width:16px;height:16px;stroke-width:2.4}
+.btn.agregar::after,.btn.enviado::after{content:"";position:absolute;inset:-5px -4px}
+.btn.lg{min-height:56px;font-size:17px;padding:0 20px}
+.btn.full{width:100%}
+.toolbar{position:absolute;left:0;right:0;bottom:0;padding:12px 16px 34px;background:var(--bg);border-top:1px solid var(--line)}
+.note.abierta{box-shadow:inset 0 0 0 2px var(--text)}
+
+/* esta lámina */
+.board{width:1300px;height:1220px}
+.notes.col{grid-template-columns:1fr;width:360px;margin-top:114px;flex:none}
+/* filas que son links: el <a class="row"> vive dentro de su <li> */
+.list li + li > a.row{border-top:1px solid var(--line)}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <!-- Trazos de Lucide (ISC), copiados a mano. -->
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+  <symbol id="i-user-plus" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M22 11h-6"/></symbol>
+  <symbol id="i-racket" viewBox="0 0 24 24"><g transform="rotate(-20 12 12)"><path d="M11 1.5c3.6 0 6 2.7 6 6.3 0 3.3-2 5.9-4 6.7h-4c-2-.8-4-3.4-4-6.7 0-3.6 2.4-6.3 6-6.3Z"/><rect x="9.5" y="14.5" width="3" height="7.5" rx="1.2"/><path d="M9 6h.01M13 6h.01M11 8.5h.01M9 11h.01M13 11h.01"/></g><circle cx="19.5" cy="19" r="2.2"/></symbol>
+</defs></svg>
+
+<main class="board">
+  <header class="board-head">
+    <span class="tag">Sin migración · riesgo bajo</span>
+    <h1 class="titulo">B · Gente de tus torneos</h1>
+    <p>En vez de un buscador, la app ya sabe a quién conocés: los que jugaron torneos con vos y tienen cuenta. Ordenados por cuántas fechas compartieron, con Agregar de un toque.</p>
+  </header>
+
+  <div class="strip">
+    <!-- 1 · en Amigos -->
+    <section class="step" aria-labelledby="c1">
+      <div class="cap">
+        <h2 id="c1"><span class="n">1</span>En Amigos</h2>
+        <p>Abajo de tus amigos, la gente de tus torneos que todavía no lo es. Tocá Agregar y probá: cambia a Enviado.</p>
+      </div>
+      <div class="phone">
+        <header class="hero">
+          <div class="status" aria-hidden="true"><span>9:41</span><span class="sys"><svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg><svg width="27" height="13" viewBox="0 0 27 13" fill="currentColor"><rect x=".5" y=".5" width="23" height="12" rx="3.8" fill="none" stroke="currentColor" stroke-opacity=".6"/><rect x="2" y="2" width="20" height="9" rx="2.5"/></svg></span></div>
+          <a class="volver" href="#inicio"><svg class="ico"><use href="#i-back"/></svg>Inicio</a>
+          <div class="hero-main">
+            <h3 class="titulo">Amigos</h3>
+          </div>
+          <p class="sub">2 amigos</p>
+        </header>
+        <div class="sec">
+          <h4 class="titulo">Tus amigos</h4>
+          <ul class="list">
+            <li><a class="row" href="#nico"><span class="av t0" aria-hidden="true">NA</span><span class="body"><span class="name">Nico Arias</span><span class="meta"><span class="gano">Ganaste 6-4 6-3</span>, hace 2 días</span></span><span class="rec"><span class="sr">7 a 5</span><span class="cond" aria-hidden="true">7</span><small aria-hidden="true">a</small><span class="cond" aria-hidden="true">5</span></span><svg class="ico" aria-hidden="true"><use href="#i-chev"/></svg></a></li>
+            <li><a class="row" href="#facu"><span class="av t1" aria-hidden="true">FG</span><span class="body"><span class="name">Facu Gómez</span><span class="meta"><span class="perdio">Perdiste 1-3</span>, el viernes</span></span><span class="rec"><span class="sr">4 a 6</span><span class="cond" aria-hidden="true">4</span><small aria-hidden="true">a</small><span class="cond" aria-hidden="true">6</span></span><svg class="ico" aria-hidden="true"><use href="#i-chev"/></svg></a></li>
+          </ul>
+        </div>
+        <div class="sec">
+          <h4 class="titulo">Gente de tus torneos</h4>
+          <p class="hint">Jugaron con vos y tienen cuenta</p>
+          <ul class="list">
+            <li class="row"><span class="av t0" aria-hidden="true">SM</span><span class="body"><span class="name">Seba Molina</span><span class="meta">2 torneos · 9 fechas juntos</span></span><button type="button" class="btn agregar" data-agregar aria-pressed="false" aria-label="Agregar a Seba Molina"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            <li class="row"><span class="av t1" aria-hidden="true">LF</span><span class="body"><span class="name">Lucas Ferreyra</span><span class="meta">Los Pibes del Martes · 7 fechas</span></span><button type="button" class="btn agregar" data-agregar aria-pressed="false" aria-label="Agregar a Lucas Ferreyra"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            <li class="row"><span class="av t0" aria-hidden="true">TS</span><span class="body"><span class="name">Tomi Sosa</span><span class="meta">Los Pibes del Martes · 6 fechas</span></span><button type="button" class="btn enviado" data-agregar aria-pressed="true" aria-label="Agregar a Tomi Sosa"><svg class="ico" aria-hidden="true"><use href="#i-check"/></svg><span>Enviado</span></button></li>
+            <li class="row"><span class="av t1" aria-hidden="true">GR</span><span class="body"><span class="name">Gonza Ruiz</span><span class="meta">FIFA de los Viernes · 4 fechas</span></span><button type="button" class="btn agregar" data-agregar aria-pressed="false" aria-label="Agregar a Gonza Ruiz"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+          </ul>
+          <a class="btn ghost" href="#gente">Ver los 11</a>
+        </div>
+        <span class="home-ind" aria-hidden="true"></span>
+      </div>
+    </section>
+
+    <!-- 2 · en Inicio, sin amigos -->
+    <section class="step" aria-labelledby="c2">
+      <div class="cap">
+        <h2 id="c2"><span class="n">2</span>En Inicio, sin amigos todavía</h2>
+        <p>En vez de 'Sumá un amigo', directamente las personas con las que más jugaste.</p>
+      </div>
+      <div class="phone">
+        <header class="hero">
+          <div class="status" aria-hidden="true"><span>9:41</span><span class="sys"><svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg><svg width="27" height="13" viewBox="0 0 27 13" fill="currentColor"><rect x=".5" y=".5" width="23" height="12" rx="3.8" fill="none" stroke="currentColor" stroke-opacity=".6"/><rect x="2" y="2" width="20" height="9" rx="2.5"/></svg></span></div>
+          <div class="kicker">Próxima fecha · Los Pibes del Martes</div>
+          <div class="hero-main">
+            <h3 class="titulo">Fecha 8</h3>
+          </div>
+          <p class="sub">Martes 18/11, 20:30 · Club Ciudad</p>
+        </header>
+        <a class="cuenta" href="#cuenta" aria-label="Tu cuenta, Martín">MP</a>
+        <div class="sec">
+          <h4 class="titulo">Tus torneos</h4>
+          <ul class="list">
+            <li><a class="row" href="#torneo"><span class="tile" aria-hidden="true"><svg class="ico"><use href="#i-racket"/></svg></span><span class="body"><span class="name">Los Pibes del Martes</span><span class="meta">Fecha 7 de 12</span></span><span class="pos"><span class="sr">3° de 12</span><span aria-hidden="true"><span class="cond">3°</span><small>de 12</small></span></span></a></li>
+          </ul>
+        </div>
+        <div class="sec">
+          <h4 class="titulo">Amigos</h4>
+          <p class="hint">Empezá por la gente de tus torneos</p>
+          <ul class="list">
+            <li class="row"><span class="av t0" aria-hidden="true">SM</span><span class="body"><span class="name">Seba Molina</span><span class="meta">2 torneos · 9 fechas juntos</span></span><button type="button" class="btn agregar" data-agregar aria-pressed="false" aria-label="Agregar a Seba Molina"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            <li class="row"><span class="av t1" aria-hidden="true">LF</span><span class="body"><span class="name">Lucas Ferreyra</span><span class="meta">Los Pibes del Martes · 7 fechas</span></span><button type="button" class="btn agregar" data-agregar aria-pressed="false" aria-label="Agregar a Lucas Ferreyra"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+          </ul>
+          <a class="btn ghost" href="#gente">Ver más gente</a>
+        </div>
+        <nav class="toolbar" aria-label="Acciones">
+          <a class="btn primary lg full" href="#cargar"><svg class="ico" aria-hidden="true"><use href="#i-plus"/></svg>Cargar partido</a>
+        </nav>
+        <span class="home-ind" aria-hidden="true"></span>
+      </div>
+    </section>
+
+    <div class="notes col">
+      <article class="note"><h3>Por qué no un buscador</h3><p>La lista de todos los jugadores se cerró a propósito (migración 0103): un buscador por nombre la vuelve a abrir. Esto solo muestra gente que ya ves en tus torneos.</p></article>
+      <article class="note"><h3>Quién aparece</h3><p>Gente con cuenta que compartió al menos un torneo con vos, que no es tu amiga y no tiene un pedido pendiente con vos. Primero los que más fechas jugaron con vos.</p></article>
+      <article class="note"><h3>Quién no</h3><p>Los lugares del torneo que nadie reclamó todavía (sin cuenta), y vos.</p></article>
+      <article class="note abierta"><h3>A decidir</h3><p>Si alguien rechaza tu pedido, hoy el pedido se borra y volvería a aparecer acá. ¿Lo dejamos así o lo escondemos? Esconderlo necesita guardar el rechazo: una migración chica.</p></article>
+    </div>
+  </div>
+</main>
+<script>
+document.querySelectorAll('[data-agregar]').forEach(function (b) {
+  b.addEventListener('click', function () {
+    var enviado = b.getAttribute('aria-pressed') !== 'true';
+    b.setAttribute('aria-pressed', String(enviado));
+    b.classList.toggle('agregar', !enviado);
+    b.classList.toggle('enviado', enviado);
+    b.querySelector('use').setAttribute('href', enviado ? '#i-check' : '#i-user-plus');
+    b.querySelector('span').textContent = enviado ? 'Enviado' : 'Agregar';
+  });
+});
+</script>
+</body>
+</html>

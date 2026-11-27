@@ -1,0 +1,35 @@
+{
+  "title": "Sumar amigos sin fricción",
+  "brief": "Que sumar amigos sea fácil y cómodo: desde el perfil del torneo, con sugerencias de la gente de tus torneos, con los pedidos a la vista en Inicio y con un link de amistad que reemplaza el ID de 36 caracteres.",
+  "feature": "odd/tasks/amigos-faciles.md",
+  "artboards": [
+    {
+      "file": "01-perfil-del-torneo.html",
+      "title": "A · Agregar desde el perfil del torneo",
+      "tradeoff": "Chip chico arriba a la derecha (recomendado): el perfil queda como hoy y no empuja nada; a cambio, es menos llamativo que un botón grande. Muestra también al lado del nombre y en una fila abajo.",
+      "width": 1752,
+      "height": 1800
+    },
+    {
+      "file": "02-gente-de-tus-torneos.html",
+      "title": "B · Gente de tus torneos",
+      "tradeoff": "Reemplaza al buscador sin reabrir el directorio de jugadores; a cambio, solo sugiere gente con la que ya compartiste un torneo.",
+      "width": 1300,
+      "height": 1220
+    },
+    {
+      "file": "03-pedidos-visibles.html",
+      "title": "C · Los pedidos se ven",
+      "tradeoff": "Los pedidos aparecen en Inicio y se pueden rechazar o retirar; a cambio, Inicio suma una fila más cuando hay un pedido, y rechazar no se puede deshacer.",
+      "width": 1330,
+      "height": 1440
+    },
+    {
+      "file": "04-link-de-amistad.html",
+      "title": "D · Tu link de amistad",
+      "tradeoff": "Un toque y quedan amigos, sin copiar IDs; a cambio, necesita una migración y funciones nuevas en la base, con revisión de seguridad aparte.",
+      "width": 1752,
+      "height": 1440
+    }
+  ]
+}

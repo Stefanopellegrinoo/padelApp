@@ -64,3 +64,13 @@ Ajedrez trae una forma nueva de anotar (gana/pierde/tablas) y bowling una fecha 
     - (2) "Faltan tests de core/ranking-fecha.ts:58-72". Existen en `core/ranking-fecha.test.ts` (13 tests); el revisor no los vio porque la porción no incluía los tests.
     - (3) `closeRankingMatchday` (`db/matchday.ts:1506`) devolvería un error crudo si la lista de puntos fuera más corta que los presentes. Hoy no pasa, porque los puntos se arman según el tamaño del plantel.
   - Worktree y rama temporales borrados.
+- L15 (2026-11-27) Migraciones en producción. Pedido textual: "OSea si lo podes hacer vos directo, cuidando los datos qu hay en produccion, esto es improtate que no se borre nada, hacelo. Pero los datos de la db de prod son importatne".
+  - Credenciales: la CLI de Supabase usó su login propio del proyecto vinculado; el orquestador no leyó ninguna.
+  - Proceso:
+    - `db push --linked --dry-run`: faltaban solo 0109, 0110 y 0111.
+    - Backup completo (roles, esquema y datos) en `/home/stefano/backups/padelapp-prod/2026-11-27-115903/`, permisos 700/600, fuera del repo.
+    - Revisión: ninguna sentencia borra ni modifica filas al aplicarse.
+    - `db push`: EXIT 0.
+    - Segundo volcado de datos: las 54 tablas con el mismo conteo de filas, más `matchday_scores` vacía.
+    - El dry-run posterior da "Remote database is up to date", y la app publicada responde 200.
+  - Producción sigue con el código viejo, compatible porque para los formatos existentes las funciones hacen lo mismo. El bowling funciona recién cuando se publique `main`.

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { defaultConfig, type Award, type DisciplineId, type EntryId } from '@/core'
 import type { AmigoInicio } from '@/db/inicio'
 import { amigosDeInicio } from '@/db/inicio'
+import { genteDeTusTorneos, type GenteDeTorneo } from '@/db/friends'
 import {
   attendancesOf,
   entriesOf,
@@ -126,6 +127,13 @@ vi.mock('@/db/server', () => ({
 
 vi.mock('@/db/inicio', () => ({ amigosDeInicio: vi.fn(async () => []) }))
 
+vi.mock('@/db/friends', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/db/friends')>()
+  return { ...real, genteDeTusTorneos: vi.fn(async () => []) }
+})
+
+vi.mock('@/app/amigos/actions', () => ({ agregarAmigo: vi.fn() }))
+
 vi.mock('@/db/read', async (importOriginal) => {
   const real = await importOriginal<typeof import('@/db/read')>()
   return {
@@ -146,6 +154,7 @@ beforeEach(() => {
   vi.mocked(mySeasons).mockResolvedValue([header()])
   vi.mocked(seasonMatchdaysOf).mockResolvedValue([matchday()])
   vi.mocked(amigosDeInicio).mockResolvedValue([])
+  vi.mocked(genteDeTusTorneos).mockClear().mockResolvedValue([])
 })
 
 async function render(): Promise<string> {
@@ -279,10 +288,41 @@ describe('Inicio, amigos', () => {
     expect(fila).toMatch(/aria-label="Historial: ganaste 7, perdiste 5"/)
   })
 
-  it('sin amigos, la sección invita a sumar uno', async () => {
+  it('sin amigos ni nadie para sugerir, la sección invita a sumar uno', async () => {
     const html = await render()
     expect(html).toMatch(/<h2[^>]*>Amigos<\/h2>/)
     expect(linkA(html, '/amigos')).toContain('Sumá un amigo')
+  })
+
+  const gente = (n: number): GenteDeTorneo[] =>
+    Array.from({ length: n }, (_, i) => ({
+      playerId: `p-${i}`,
+      displayName: `Persona ${i}`,
+      torneos: ['Los Pibes del Martes'],
+      fechasJuntos: 7 - i,
+    }))
+
+  it('sin amigos, empieza por la gente de tus torneos: las dos primeras con "Agregar" y "Ver más gente"', async () => {
+    vi.mocked(genteDeTusTorneos).mockResolvedValueOnce(gente(3))
+    const html = await render()
+    const amigos = html.slice(html.search(/<h2[^>]*>Amigos<\/h2>/))
+    expect(amigos).toContain('Empezá por la gente de tus torneos')
+    expect(amigos).toContain('Persona 0')
+    expect(amigos).toContain('Los Pibes del Martes · 7 fechas')
+    expect(amigos).toContain('Persona 1')
+    expect(amigos).not.toContain('Persona 2')
+    expect(amigos).toContain('aria-label="Agregar a Persona 0"')
+    expect(linkA(amigos, '/amigos')).toContain('Ver más gente')
+    expect(html).not.toContain('Sumá un amigo')
+  })
+
+  it('con amigos, Inicio no sugiere a nadie ni lee la gente de tus torneos', async () => {
+    vi.mocked(amigosDeInicio).mockResolvedValueOnce([NICO])
+    const html = await render()
+    expect(genteDeTusTorneos).not.toHaveBeenCalled()
+    expect(html).not.toContain('Empezá por la gente de tus torneos')
+    expect(linkA(html, '/amigos')).toContain('Ver todos')
+    expect(linkA(html, '/amigos/p-nico')).toContain('Nico Arias')
   })
 })
 

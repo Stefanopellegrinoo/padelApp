@@ -23,6 +23,8 @@ const TRAZOS = {
   plus: 'M12 5v14M5 12h14',
   bolt: 'M13 3L5 13.5h6L10 21l8-10.5h-6z',
   chev: 'M9 5l7 7-7 7',
+  check: 'M20 6 9 17l-5-5',
+  sumarPersona: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0zM19 8v6M22 11h-6',
   amigos:
     'M16 19v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1M9.5 10a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM21 19v-1a4 4 0 0 0-3-3.87M15.5 3.13a3.5 3.5 0 0 1 0 6.75',
 } as const satisfies Record<SportIcono, string> & Record<string, string>

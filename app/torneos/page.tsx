@@ -7,6 +7,7 @@ import {
   type DisciplineRanking,
 } from '@/core'
 import type { Client } from '@/db/client'
+import { genteDeTusTorneos } from '@/db/friends'
 import { amigosDeInicio, type AmigoInicio } from '@/db/inicio'
 import {
   attendancesOf,
@@ -21,6 +22,7 @@ import {
   type SeasonHeader,
 } from '@/db/read'
 import { serverClient } from '@/db/server'
+import { EmpezaPorTusTorneos } from '@/app/amigos/gente'
 import { Avatar } from '@/app/ui/avatar'
 import { button } from '@/app/ui/button'
 import { Hero } from '@/app/ui/hero'
@@ -188,6 +190,9 @@ export default async function InicioPage() {
     })(),
     user === null ? Promise.resolve([]) : amigosDeInicio(supabase),
   ])
+  // Sin amigos todavía, la sección empieza por la gente de tus torneos (S3).
+  // Con amigos no se lee: Inicio queda como estaba.
+  const gente = user !== null && amigos.length === 0 ? await genteDeTusTorneos(supabase) : []
 
   const live = ordenarPorCercania(
     cards
@@ -264,24 +269,30 @@ export default async function InicioPage() {
           ) : undefined
         }
       >
-        <ul className="-mx-4">
-          {amigos.length === 0 ? (
-            <li>
-              <Link href="/amigos" className={`${rowPress} min-h-[72px]`}>
-                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-sport-tint text-sport">
-                  <Icono name="plus" />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-[17px] font-bold">Sumá un amigo</span>
-                  <span className="block text-[14px] text-muted">El historial con cada uno</span>
-                </span>
-                <Icono name="chev" className="h-6 w-6 text-muted" />
-              </Link>
-            </li>
-          ) : (
-            amigos.slice(0, AMIGOS_EN_INICIO).map((amigo) => <FilaAmigo key={amigo.playerId} amigo={amigo} />)
-          )}
-        </ul>
+        {amigos.length === 0 ? (
+          <EmpezaPorTusTorneos gente={gente}>
+            <ul className="-mx-4">
+              <li>
+                <Link href="/amigos" className={`${rowPress} min-h-[72px]`}>
+                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-sport-tint text-sport">
+                    <Icono name="plus" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[17px] font-bold">Sumá un amigo</span>
+                    <span className="block text-[14px] text-muted">El historial con cada uno</span>
+                  </span>
+                  <Icono name="chev" className="h-6 w-6 text-muted" />
+                </Link>
+              </li>
+            </ul>
+          </EmpezaPorTusTorneos>
+        ) : (
+          <ul className="-mx-4">
+            {amigos.slice(0, AMIGOS_EN_INICIO).map((amigo) => (
+              <FilaAmigo key={amigo.playerId} amigo={amigo} />
+            ))}
+          </ul>
+        )}
       </Section>
 
       {finished.length > 0 && (

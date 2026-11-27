@@ -7,10 +7,11 @@ import { button } from '@/app/ui/button'
 import { Hero } from '@/app/ui/hero'
 import { row, rowPress } from '@/app/ui/row'
 import { Section } from '@/app/ui/section'
-import { friendsOf, historyWith } from '@/db/friends'
+import { friendsOf, genteDeTusTorneos, historyWith } from '@/db/friends'
 import { ordenarAmigos, resumenAmigo, type AmigoInicio } from '@/db/inicio'
 import { serverClient } from '@/db/server'
 import { accept, sendFriendRequest } from './actions'
+import { GenteDeTusTorneos } from './gente'
 import { MiId } from './mi-id'
 
 interface PageProps {
@@ -23,7 +24,8 @@ interface PageProps {
  * Arriba lo que espera algo de vos (te pidieron ser amigos); después tus
  * amigos como en Inicio (último resultado y cara a cara, con el mismo
  * `resumenAmigo` de `db/inicio.ts`, así las dos pantallas no cuentan
- * distinto); las solicitudes que mandaste; y al final cómo sumar a alguien.
+ * distinto); la gente de tus torneos que todavía no agregaste (`gente.tsx`);
+ * las solicitudes que mandaste; y al final cómo sumar a alguien.
  *
  * No hay buscador de jugadores (ver `mi-id.tsx`): agregar a alguien pide su
  * ID, que esa persona copia desde acá mismo y te pasa por fuera de la app.
@@ -34,7 +36,11 @@ export default async function AmigosPage({ searchParams }: PageProps) {
   const { error } = await searchParams
   const supabase = await serverClient()
 
-  const [amigos, { data: myPlayerId }] = await Promise.all([friendsOf(supabase), supabase.rpc('my_player_id')])
+  const [amigos, { data: myPlayerId }, gente] = await Promise.all([
+    friendsOf(supabase),
+    supabase.rpc('my_player_id'),
+    genteDeTusTorneos(supabase),
+  ])
 
   const recibidas = amigos.filter((amigo) => !amigo.accepted && amigo.theyAsked)
   const enviadas = amigos.filter((amigo) => !amigo.accepted && !amigo.theyAsked)
@@ -95,6 +101,8 @@ export default async function AmigosPage({ searchParams }: PageProps) {
           </ul>
         )}
       </Section>
+
+      <GenteDeTusTorneos gente={gente} />
 
       {enviadas.length > 0 && (
         <Section title="Pedidos enviados" className="pt-7">

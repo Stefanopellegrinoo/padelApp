@@ -1258,3 +1258,228 @@ export async function casualParticipantIds(supabase: Client, matchId: string): P
     fila.player_id === null ? [] : [fila.player_id],
   )
 }
+
+// ── gente de tus torneos (odd/tasks/amigos-faciles.md, T2, S3) ──────────────
+
+/** Alguien con cuenta que jugó un torneo conmigo y todavía no es mi amigo ni tiene un pedido conmigo. */
+export interface GenteDeTorneo {
+  playerId: string
+  displayName: string
+  /** Los nombres de los torneos que compartimos, por nombre. Nunca vacío. */
+  torneos: string[]
+  /** En cuántas fechas de torneo jugamos los dos (decisión del orquestador). Puede ser 0. */
+  fechasJuntos: number
+}
+
+/** El techo de filas de PostgREST (`max_rows`, `supabase/config.toml`): una página. */
+const PAGINA = 1000
+
+/**
+ * Cuántos uuids van en una IN. Medido (ver el `ponytail:` de `historyWith`):
+ * 218 entran en la URL, 219 dan 414. 150 deja margen.
+ */
+const TANDA_IN = 150
+
+/** Cuántos ids por llamada a `player_display_names`: la función también corta en `max_rows`. */
+const TANDA_NOMBRES = 500
+
+function enTandas<T>(items: readonly T[], tamaño: number): T[][] {
+  const tandas: T[][] = []
+  for (let i = 0; i < items.length; i += tamaño) tandas.push(items.slice(i, i + tamaño))
+  return tandas
+}
+
+/**
+ * Todas las filas de una consulta, de a páginas de 1000 con `.range()`. La
+ * consulta tiene que traer `count: 'exact'` y un orden total (termina en una
+ * clave única): sin orden, dos páginas pueden repetir o saltear filas. Si el
+ * total cambia entre páginas (alguien escribió en el medio), falla en vez de
+ * contar sobre una mezcla de dos fotos -- mismo criterio que `assertComplete`.
+ */
+async function todasLasFilas<T>(
+  consulta: string,
+  pagina: (desde: number, hasta: number) => PromiseLike<{
+    data: T[] | null
+    error: { message: string } | null
+    count: number | null
+  }>,
+): Promise<T[]> {
+  const filas: T[] = []
+  let total: number | null = null
+  for (;;) {
+    const result = await pagina(filas.length, filas.length + PAGINA - 1)
+    if (result.error !== null) {
+      throw new EdgeError(`No se pudo leer la gente de tus torneos (${consulta}): ${result.error.message}`)
+    }
+    const data = result.data ?? []
+    if (result.count === null || (total !== null && result.count !== total)) {
+      throw new EdgeError(`No se pudo leer completa la gente de tus torneos (${consulta}). Recargá la pantalla.`)
+    }
+    total = result.count
+    filas.push(...data)
+    if (filas.length >= total) return filas
+    if (data.length === 0) {
+      throw new EdgeError(`No se pudo leer completa la gente de tus torneos (${consulta}). Recargá la pantalla.`)
+    }
+  }
+}
+
+/** `todasLasFilas` para una IN larga: una consulta por tanda de `TANDA_IN` ids, en paralelo. */
+async function todasLasFilasPorTandas<T>(
+  consulta: string,
+  ids: readonly string[],
+  pagina: (tanda: string[], desde: number, hasta: number) => PromiseLike<{
+    data: T[] | null
+    error: { message: string } | null
+    count: number | null
+  }>,
+): Promise<T[]> {
+  const tandas = await Promise.all(
+    enTandas(ids, TANDA_IN).map((tanda) => todasLasFilas(consulta, (desde, hasta) => pagina(tanda, desde, hasta))),
+  )
+  return tandas.flat()
+}
+
+/**
+ * La gente de mis torneos a la que todavía no agregué (S3): con cuenta, que
+ * tiene un asiento en alguna de mis temporadas, que no soy yo y que no tiene
+ * ninguna fila en `friendships` conmigo -- ni amistad ni pedido, en ninguna
+ * dirección (esos van en "Te pidieron" y "Pedidos enviados"). Un pedido
+ * rechazado se borra (`rejectFriendRequest`), así que esa persona vuelve a
+ * aparecer, como pide S3. Primero los que más fechas jugaron conmigo; con
+ * las mismas, por nombre y después por id, así el orden es total.
+ *
+ * Todo arranca de MIS filas, así que crece con lo que yo jugué y no con el
+ * tamaño de la base. La RLS ya acota cada lectura a mis temporadas
+ * (`entries_read`, `seasons_read` y `match_participants`, 0002/0071):
+ *
+ * 1. `my_player_id`.
+ * 2. Mis asientos (`entries` mías): mis temporadas.
+ * 3. En paralelo: los asientos con cuenta de esas temporadas, las fechas en
+ *    las que jugué (`match_participants` míos), mis filas de `friendships`
+ *    y los nombres de las temporadas.
+ * 4. Quién más jugó en esas fechas (`match_participants` por `matchday_id`).
+ * 5. Los nombres (`player_display_names`, 0103: `players` ya no se lee directo).
+ *
+ * Cada lectura pagina con `.range()` sobre un orden total (`todasLasFilas`):
+ * pasar de 1000 filas no corta nada en silencio. Las IN van de a 150 ids
+ * (`TANDA_IN`) y los nombres de a 500: ninguna lista larga llega a la URL ni
+ * al techo de filas de la función. Para alguien con una temporada de 12
+ * personas y 12 fechas son 8 pedidos; cada 1000 filas o cada 150 temporadas o
+ * fechas más suma uno por consulta.
+ */
+export async function genteDeTusTorneos(supabase: Client): Promise<GenteDeTorneo[]> {
+  const me = await myPlayerId(supabase, 'ver la gente de tus torneos')
+
+  const misAsientos = await todasLasFilas('tus torneos', (desde, hasta) =>
+    supabase
+      .from('entries')
+      .select('id, season_id', { count: 'exact' })
+      .eq('player_id', me)
+      .order('id', { ascending: true })
+      .range(desde, hasta),
+  )
+  const seasonIds = [...new Set(misAsientos.map((fila) => fila.season_id))]
+  if (seasonIds.length === 0) return []
+
+  const [asientos, misPartidos, amistades, temporadas] = await Promise.all([
+    todasLasFilasPorTandas('asientos', seasonIds, (tanda, desde, hasta) =>
+      supabase
+        .from('entries')
+        .select('id, season_id, player_id', { count: 'exact' })
+        .in('season_id', tanda)
+        .not('player_id', 'is', null)
+        .neq('player_id', me)
+        .order('id', { ascending: true })
+        .range(desde, hasta),
+    ),
+    todasLasFilas('tus fechas', (desde, hasta) =>
+      supabase
+        .from('match_participants')
+        .select('match_id, matchday_id', { count: 'exact' })
+        .eq('player_id', me)
+        .order('match_id', { ascending: true })
+        .order('pair_id', { ascending: true })
+        .range(desde, hasta),
+    ),
+    // `friendships_read` (0070) ya acota a mis filas.
+    todasLasFilas('amigos', (desde, hasta) =>
+      supabase
+        .from('friendships')
+        .select('id, player_a, player_b', { count: 'exact' })
+        .order('id', { ascending: true })
+        .range(desde, hasta),
+    ),
+    todasLasFilasPorTandas('torneos', seasonIds, (tanda, desde, hasta) =>
+      supabase
+        .from('seasons')
+        .select('id, name', { count: 'exact' })
+        .in('id', tanda)
+        .order('id', { ascending: true })
+        .range(desde, hasta),
+    ),
+  ])
+
+  const conAlgo = new Set(amistades.map((fila) => (fila.player_a === me ? fila.player_b : fila.player_a)))
+  const nombreDeTemporada = new Map(temporadas.map((fila) => [fila.id, fila.name]))
+
+  const temporadasDe = new Map<string, Set<string>>()
+  for (const asiento of asientos) {
+    // El filtro de arriba ya saca los null; el tipo no lo sabe.
+    const playerId = requireColumn(asiento.player_id, 'player_id')
+    if (conAlgo.has(playerId)) continue
+    const bucket = temporadasDe.get(playerId) ?? new Set<string>()
+    bucket.add(asiento.season_id)
+    temporadasDe.set(playerId, bucket)
+  }
+  if (temporadasDe.size === 0) return []
+
+  // Una fila por partido mío: la fecha se repite. `match_participants` es una
+  // vista, por eso `requireColumn`.
+  const misFechas = [...new Set(misPartidos.map((fila) => requireColumn(fila.matchday_id, 'matchday_id')))]
+  const [enMisFechas, nombres] = await Promise.all([
+    todasLasFilasPorTandas('fechas juntos', misFechas, (tanda, desde, hasta) =>
+      supabase
+        .from('match_participants')
+        .select('match_id, pair_id, matchday_id, player_id', { count: 'exact' })
+        .in('matchday_id', tanda)
+        .neq('player_id', me)
+        .order('match_id', { ascending: true })
+        .order('pair_id', { ascending: true })
+        .order('player_id', { ascending: true })
+        .range(desde, hasta),
+    ),
+    Promise.all(enTandas([...temporadasDe.keys()], TANDA_NOMBRES).map((tanda) => playerNames(supabase, tanda))),
+  ])
+
+  const fechasDe = new Map<string, Set<string>>()
+  for (const fila of enMisFechas) {
+    const playerId = requireColumn(fila.player_id, 'player_id')
+    const bucket = fechasDe.get(playerId) ?? new Set<string>()
+    bucket.add(requireColumn(fila.matchday_id, 'matchday_id'))
+    fechasDe.set(playerId, bucket)
+  }
+  const nombrePorId = new Map(nombres.flatMap((mapa) => [...mapa]))
+
+  return [...temporadasDe.entries()]
+    .map(([playerId, suyas]) => ({
+      playerId,
+      // Comparte una temporada conmigo: `player_display_names` siempre lo
+      // resuelve. Que falte es un corte o la función rota -- falla fuerte.
+      displayName: requireName(nombrePorId, playerId),
+      torneos: [...suyas]
+        .map((seasonId) => {
+          const nombre = nombreDeTemporada.get(seasonId)
+          if (nombre === undefined) throw new EdgeError(`No se pudo leer el torneo ${seasonId}.`)
+          return nombre
+        })
+        .sort((a, b) => a.localeCompare(b, 'es')),
+      fechasJuntos: fechasDe.get(playerId)?.size ?? 0,
+    }))
+    .sort(
+      (a, b) =>
+        b.fechasJuntos - a.fechasJuntos ||
+        a.displayName.localeCompare(b.displayName, 'es') ||
+        (a.playerId < b.playerId ? -1 : a.playerId > b.playerId ? 1 : 0),
+    )
+}

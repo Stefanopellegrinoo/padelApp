@@ -4,7 +4,7 @@ import {
   MAX_EMAIL_LENGTH,
   MAX_PASSWORD_LENGTH,
 } from '@/core/input-limits'
-import { MIN_PASSWORD, signInError, signUpError } from './validate'
+import { MIN_PASSWORD, signInError, signUpError, signUpUsernameError } from './validate'
 
 const VALID_NAME = 'Juan Pérez'
 const VALID_EMAIL = 'juan@example.com'
@@ -48,6 +48,26 @@ describe('signUpError', () => {
     const clave = 'a'.repeat(MAX_PASSWORD_LENGTH + 1)
     expect(signUpError(VALID_NAME, VALID_EMAIL, clave)).toContain('no puede pasar')
     expect(signUpError(VALID_NAME, VALID_EMAIL, 'a'.repeat(MAX_PASSWORD_LENGTH))).toBeNull()
+  })
+})
+
+// El @usuario del registro (odd/tasks/amigos-faciles.md, S7): el mismo formato que la base.
+describe('signUpUsernameError', () => {
+  it('deja pasar uno válido, con o sin la @ y en cualquier mayúscula', () => {
+    expect(signUpUsernameError('martinperez')).toBeNull()
+    expect(signUpUsernameError('@Nico.Arias')).toBeNull()
+  })
+
+  it('lo pide si falta', () => {
+    expect(signUpUsernameError('')).toBe('Elegí tu @usuario.')
+  })
+
+  it('rechaza el formato con el mensaje de la base', () => {
+    for (const malo of ['ab', 'a'.repeat(21), '.nico', 'nico arias', 'niño']) {
+      expect(signUpUsernameError(malo), malo).toBe(
+        'Usá de 3 a 20 letras, números, punto o guion bajo, empezando con una letra o un número.',
+      )
+    }
   })
 })
 

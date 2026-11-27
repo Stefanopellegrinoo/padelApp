@@ -47,6 +47,17 @@ export async function middleware(request: NextRequest) {
     return redirect
   }
 
+  // La puerta del @usuario (odd/tasks/amigos-faciles.md, S7): quien tiene
+  // sesión y todavía no lo eligió va una sola vez a `/elegir-usuario`, y de
+  // ahí vuelve a donde iba. Sólo en las privadas —la propia pantalla, el
+  // login, el registro, Privacidad y borrar la cuenta no lo son— y sólo en
+  // GET: un POST es una server action (cerrar sesión, por ejemplo) y no tiene
+  // que rebotar.
+  if (user !== null && request.method === 'GET' && isPrivatePath(request.nextUrl.pathname)) {
+    const elegir = await usernameGate(supabase as unknown as Client, request, response, user.id)
+    if (elegir !== null) return elegir
+  }
+
   // REQ-NR-5: PnP-1000 tiene bookmarkeada `/torneo/{id}/fechas/{n}` (sin
   // disciplina, PR 10). Se resuelve ACÁ y no en un `page.tsx` de esa ruta:
   // así la mudanza de `fechas/[n]/` a `[disciplina]/fechas/[n]/` sigue siendo
@@ -79,6 +90,53 @@ export async function middleware(request: NextRequest) {
   }
 
   return response
+}
+
+/**
+ * La cookie que recuerda que ESTE usuario ya eligió su @usuario, para no
+ * preguntarle a la base en cada pedido. Guarda el id del usuario y no un
+ * "sí": una cookie de otra sesión en el mismo navegador no sirve. Falsificarla
+ * sólo saltea la pantalla para uno mismo, que no gana nada: el @usuario lo
+ * pide la base al buscar y nadie escribe `players` directo (0118).
+ */
+const USERNAME_COOKIE = 'padel-usuario'
+const USERNAME_COOKIE_MAX_AGE = 60 * 60 * 24 * 365
+
+/**
+ * Una RPC (`my_username`, 0122) si la cookie no dice ya que sí. Devuelve el
+ * redirect a `/elegir-usuario?next=<adonde iba>` o `null` para seguir. Si la
+ * pregunta falla, deja pasar: la puerta es para que todos elijan uno, no una
+ * defensa, y frenar la app entera por eso sería peor.
+ */
+async function usernameGate(
+  supabase: Client,
+  request: NextRequest,
+  response: NextResponse,
+  userId: string,
+): Promise<NextResponse | null> {
+  if (request.cookies.get(USERNAME_COOKIE)?.value === userId) return null
+
+  const { data, error } = await supabase.rpc('my_username')
+  if (error !== null) return null
+
+  if (data !== null) {
+    response.cookies.set(USERNAME_COOKIE, userId, {
+      ...sessionCookieOptions,
+      sameSite: 'lax',
+      path: '/',
+      maxAge: USERNAME_COOKIE_MAX_AGE,
+    })
+    return null
+  }
+
+  const elegir = request.nextUrl.clone()
+  elegir.pathname = '/elegir-usuario'
+  elegir.search = ''
+  elegir.searchParams.set('next', request.nextUrl.pathname + request.nextUrl.search)
+  // Las cookies de un refresco viajan igual que en el redirect al login.
+  const redirect = NextResponse.redirect(elegir)
+  for (const cookie of response.cookies.getAll()) redirect.cookies.set(cookie)
+  return redirect
 }
 
 /**

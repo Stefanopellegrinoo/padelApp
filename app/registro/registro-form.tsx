@@ -7,6 +7,7 @@ import { signUp, type FormState } from '@/app/auth/actions'
 import { safeNextPath } from '@/app/auth/next-path'
 import { browserClient } from '@/db/client'
 import { button } from '@/app/ui/button'
+import { CampoUsuario, useEstadoUsuario, usuarioUsable } from '@/app/ui/campo-usuario'
 import { Hero } from '@/app/ui/hero'
 import { CampoClave, IconoGoogle, Separador, campoClase, etiqueta, mensajeError } from '@/app/login/campo'
 
@@ -19,6 +20,8 @@ export default function RegistroForm() {
   const [state, formAction, pending] = useActionState(signUp, INITIAL_STATE)
   const [googlePending, startGoogle] = useTransition()
   const [displayName, setDisplayName] = useState('')
+  const [username, setUsername] = useState('')
+  const usernameEstado = useEstadoUsuario(username)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -30,6 +33,7 @@ export default function RegistroForm() {
     password.length > 0 && password.length < MIN_PASSWORD ? `Mínimo ${MIN_PASSWORD} caracteres.` : null
   const canSubmit =
     displayName.trim().length > 0 &&
+    usuarioUsable(username, usernameEstado) &&
     EMAIL.test(email) &&
     password.length >= MIN_PASSWORD &&
     !pending
@@ -87,6 +91,8 @@ export default function RegistroForm() {
               className={campoClase(false)}
             />
           </div>
+
+          <CampoUsuario value={username} onChange={setUsername} estado={usernameEstado} />
 
           <div className="flex flex-col gap-1.5">
             <label htmlFor="email" className={etiqueta}>

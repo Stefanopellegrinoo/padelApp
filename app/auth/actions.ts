@@ -6,8 +6,9 @@ import type { Client } from '@/db/client'
 import { EdgeError } from '@/db/errors'
 import { mySeasons } from '@/db/read'
 import { serverClient } from '@/db/server'
+import { myUsername, normalizeUsername, usernameAvailable } from '@/db/usuario'
 import { afterLogin } from './next-path'
-import { signInError, signUpError } from './validate'
+import { signInError, signUpError, signUpUsernameError } from './validate'
 
 export interface FormState {
   error: string | null
@@ -29,24 +30,53 @@ export interface FormState {
  * —con una sola temporada, directo a su tabla— porque no existía una pantalla
  * donde elegir. Ahora existe, y un camino distinto para el mismo destino sólo
  * es una rama más que puede quedar mal.
+ *
+ * Sin @usuario (S7, odd/tasks/amigos-faciles.md), primero la pantalla única,
+ * que después sigue al destino. Tiene que decidirse acá y no sólo en el
+ * middleware: el `redirect` de una server action se dibuja en la MISMA
+ * respuesta del POST, así que el middleware nunca ve un GET al destino. Si
+ * no se pudo preguntar, sigue derecho y la puerta del middleware lo agarra en
+ * la próxima pantalla privada.
  */
-async function loginDestination(_supabase: Client, next: string): Promise<string> {
-  return afterLogin(next)
+async function loginDestination(supabase: Client, next: string): Promise<string> {
+  const destination = afterLogin(next)
+  try {
+    if ((await myUsername(supabase)) === null) {
+      return `/elegir-usuario?next=${encodeURIComponent(destination)}`
+    }
+  } catch (error) {
+    if (!(error instanceof EdgeError)) throw error
+  }
+  return destination
 }
 
 export async function signUp(_state: FormState, form: FormData): Promise<FormState> {
   const displayName = String(form.get('displayName') ?? '').trim()
   const email = String(form.get('email') ?? '').trim()
   const password = String(form.get('password') ?? '')
+  const username = normalizeUsername(String(form.get('username') ?? ''))
 
-  const validation = signUpError(displayName, email, password)
+  const validation = signUpError(displayName, email, password) ?? signUpUsernameError(username)
   if (validation !== null) return { error: validation }
 
   const supabase = await serverClient()
+
+  // El @usuario (S7) viaja en el metadata y lo guarda el trigger de alta
+  // (0119). Uno tomado se frena acá con el motivo; si la pregunta falla, el
+  // alta sigue igual: el trigger nunca la tira por el @usuario, y quien se
+  // quede sin él lo elige en `/elegir-usuario`.
+  let taken = false
+  try {
+    taken = !(await usernameAvailable(supabase, username))
+  } catch (error) {
+    if (!(error instanceof EdgeError)) throw error
+  }
+  if (taken) return { error: 'Ese @usuario ya está en uso.' }
+
   const { error } = await supabase.auth.signUp({
     email,
     password,
-    options: { data: { display_name: displayName } },
+    options: { data: { display_name: displayName, username } },
   })
   if (error !== null) return { error: 'No pudimos crear la cuenta. Probá de nuevo.' }
 

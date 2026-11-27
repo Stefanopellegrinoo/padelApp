@@ -3,6 +3,7 @@ import {
   MAX_EMAIL_LENGTH,
   MAX_PASSWORD_LENGTH,
 } from '@/core/input-limits'
+import { usernameError } from '@/db/usuario'
 
 export const MIN_PASSWORD = 6
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
@@ -30,6 +31,15 @@ export function signUpError(displayName: string, email: string, password: string
     return `La contraseña no puede pasar de ${MAX_PASSWORD_LENGTH} caracteres.`
   }
   return null
+}
+
+/**
+ * El @usuario del registro (odd/tasks/amigos-faciles.md, S7), con la misma
+ * regla que el `check` de la base. Va aparte de `signUpError` porque la base
+ * lo vuelve a mirar en el alta, y ahí uno tomado no frena la cuenta.
+ */
+export function signUpUsernameError(username: string): string | null {
+  return usernameError(username)
 }
 
 /**

@@ -524,6 +524,38 @@ export type Database = {
           },
         ]
       }
+      friend_invites: {
+        Row: {
+          created_at: string
+          player_id: string
+          token: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          player_id: string
+          token: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          player_id?: string
+          token?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "friend_invites_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: true
+            referencedRelation: "players"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       friendships: {
         Row: {
           accepted_at: string | null
@@ -1031,6 +1063,7 @@ export type Database = {
       }
     }
     Functions: {
+      accept_friend_invite: { Args: { p_token: string }; Returns: string }
       add_squad_seat: {
         Args: {
           p_before?: string
@@ -1068,6 +1101,14 @@ export type Database = {
         Returns: string
       }
       delete_my_account: { Args: never; Returns: undefined }
+      friend_invite_preview: {
+        Args: { p_token: string }
+        Returns: {
+          display_name: string
+          inviter_id: string
+          relation: string
+        }[]
+      }
       is_casual_participant: { Args: { p_match: string }; Returns: boolean }
       is_participant: { Args: { p_season: string }; Returns: boolean }
       is_season_admin: { Args: { p_season: string }; Returns: boolean }
@@ -1080,6 +1121,7 @@ export type Database = {
         Returns: boolean
       }
       matchday_season: { Args: { p_matchday: string }; Returns: string }
+      my_friend_invite: { Args: never; Returns: string }
       my_player_id: { Args: never; Returns: string }
       open_matchday: { Args: { p_matchday: string }; Returns: undefined }
       player_display_names: {
@@ -1098,6 +1140,7 @@ export type Database = {
       regenerate_invite_token: { Args: { p_season: string }; Returns: string }
       remove_squad_seat: { Args: { p_entry: string }; Returns: undefined }
       reopen_matchday: { Args: { p_matchday: string }; Returns: undefined }
+      rotate_friend_invite: { Args: never; Returns: string }
       save_casual_match: {
         Args: {
           p_id: string

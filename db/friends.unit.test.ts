@@ -887,3 +887,34 @@ describe('parseCasualResult', () => {
     })
   })
 })
+
+// El link de amistad (odd/tasks/amigos-faciles.md, S5): los mensajes de la base para una persona
+// (`raise exception`, P0001) llegan tal cual; cualquier otro error lleva qué se estaba haciendo.
+describe('el link de amistad: errores y forma de la respuesta', async () => {
+  const { acceptFriendInvite, friendInvitePreview, rotateFriendInvite } = await import('./friends')
+  const cliente = (respuesta: { data: unknown; error: { code?: string; message: string } | null }) =>
+    ({ rpc: async () => respuesta }) as unknown as Client
+
+  it('un rechazo de la base para la persona llega con su mensaje exacto', async () => {
+    const supabase = cliente({ data: null, error: { code: 'P0001', message: 'Este link ya no anda, pedile uno nuevo' } })
+    await expect(acceptFriendInvite(supabase, 'x')).rejects.toThrow(new EdgeError('Este link ya no anda, pedile uno nuevo'))
+  })
+
+  it('cualquier otro error dice qué se estaba haciendo', async () => {
+    const supabase = cliente({ data: null, error: { code: '42501', message: 'permission denied' } })
+    await expect(rotateFriendInvite(supabase)).rejects.toThrow(new EdgeError('No se pudo cambiar el link: permission denied'))
+  })
+
+  it('la vista previa: nada es `null`, y una relación desconocida no pasa como válida', async () => {
+    expect(await friendInvitePreview(cliente({ data: [], error: null }), 'x')).toBeNull()
+    const fila = { inviter_id: 'p-martin', display_name: 'Martín Pérez', relation: 'pending' }
+    expect(await friendInvitePreview(cliente({ data: [fila], error: null }), 'x')).toEqual({
+      inviterId: 'p-martin',
+      displayName: 'Martín Pérez',
+      relation: 'pending',
+    })
+    await expect(friendInvitePreview(cliente({ data: [{ ...fila, relation: 'jefe' }], error: null }), 'x')).rejects.toThrow(
+      EdgeError,
+    )
+  })
+})

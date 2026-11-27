@@ -32,6 +32,9 @@ const TABLES = [
   'casual_matches',
   'casual_match_players',
   'casual_match_sets',
+  // El link de amistad (0112, amigos-faciles T4): anon afuera, y un extraño
+  // no lee el link de nadie.
+  'friend_invites',
 ] as const
 
 // `match_participants` (0071) va en un array aparte, no adentro de `TABLES`:

@@ -781,6 +781,66 @@ export async function rejectFriendRequest(supabase: Client, friendPlayerId: stri
   await borrarPedido(supabase, friendPlayerId, 'suyo')
 }
 
+// ── el link de amistad (odd/tasks/amigos-faciles.md, S5; 0112-0116) ─────────────
+// Todo por funciones `security definer` que sacan la identidad de `auth.uid()`:
+// ninguna recibe el jugador de quien llama. Sus errores para una persona salen
+// con `raise exception` (P0001) y viajan tal cual; cualquier otro es un fallo
+// de verdad y lleva su contexto.
+
+function errorDelLink(error: { code?: string; message: string }, queHacia: string): EdgeError {
+  return new EdgeError(error.code === 'P0001' ? error.message : `No se pudo ${queHacia}: ${error.message}`)
+}
+
+/** Tu link de amistad (el token): lo crea la primera vez y después devuelve siempre el mismo. */
+export async function myFriendInvite(supabase: Client): Promise<string> {
+  const { data, error } = await supabase.rpc('my_friend_invite')
+  if (error !== null) throw errorDelLink(error, 'leer tu link de amistad')
+  return data
+}
+
+/** "Cambiar el link": uno nuevo, y el de ahora deja de andar. Las amistades hechas siguen. */
+export async function rotateFriendInvite(supabase: Client): Promise<string> {
+  const { data, error } = await supabase.rpc('rotate_friend_invite')
+  if (error !== null) throw errorDelLink(error, 'cambiar el link')
+  return data
+}
+
+/** Cómo estás con quien te pasó el link: vos mismo, ya amigos, un pedido pendiente (de cualquiera de los dos) o nada. */
+export type FriendInviteRelation = 'self' | 'friends' | 'pending' | 'none'
+
+export interface FriendInvitePreview {
+  inviterId: string
+  displayName: string
+  relation: FriendInviteRelation
+}
+
+const RELACIONES: readonly FriendInviteRelation[] = ['self', 'friends', 'pending', 'none']
+
+/**
+ * Lo que muestra `/amigo/[token]`: quién invita y cómo estás con esa persona.
+ * `null` si el link no existe o se cambió; la base no dice cuál de las dos.
+ */
+export async function friendInvitePreview(supabase: Client, token: string): Promise<FriendInvitePreview | null> {
+  const { data, error } = await supabase.rpc('friend_invite_preview', { p_token: token })
+  if (error !== null) throw errorDelLink(error, 'leer el link de amistad')
+  const fila = data?.[0]
+  if (fila === undefined) return null
+  const relation = RELACIONES.find((r) => r === fila.relation)
+  if (relation === undefined) throw new EdgeError(`El link de amistad trajo una relación desconocida: ${fila.relation}.`)
+  return { inviterId: fila.inviter_id, displayName: fila.display_name, relation }
+}
+
+/**
+ * "Sumarme como amigo": quedan amigos al toque, o acepta el pedido pendiente
+ * que hubiera entre los dos. Ya amigos no es un error. Devuelve el jugador que
+ * invitó, para ir a su historial.
+ */
+export async function acceptFriendInvite(supabase: Client, token: string): Promise<string> {
+  const { data, error } = await supabase.rpc('accept_friend_invite', { p_token: token })
+  if (error !== null) throw errorDelLink(error, 'sumarte como amigo')
+  return data
+}
+
 export interface Friend {
   friendshipId: string
   playerId: string

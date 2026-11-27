@@ -947,18 +947,21 @@ export type Database = {
           display_name: string
           id: string
           user_id: string | null
+          username: string | null
         }
         Insert: {
           created_at?: string
           display_name: string
           id?: string
           user_id?: string | null
+          username?: string | null
         }
         Update: {
           created_at?: string
           display_name?: string
           id?: string
           user_id?: string | null
+          username?: string | null
         }
         Relationships: []
       }
@@ -1074,6 +1077,7 @@ export type Database = {
         Returns: string
       }
       cancel_matchday: { Args: { p_matchday: string }; Returns: undefined }
+      choose_my_username: { Args: { p_username: string }; Returns: string }
       claim_creator_seat: { Args: { p_entry: string }; Returns: undefined }
       claim_seat: {
         Args: { p_entry: string; p_token: string }
@@ -1123,6 +1127,7 @@ export type Database = {
       matchday_season: { Args: { p_matchday: string }; Returns: string }
       my_friend_invite: { Args: never; Returns: string }
       my_player_id: { Args: never; Returns: string }
+      my_username: { Args: never; Returns: string }
       open_matchday: { Args: { p_matchday: string }; Returns: undefined }
       player_display_names: {
         Args: { p_ids: string[] }
@@ -1217,6 +1222,7 @@ export type Database = {
         Returns: undefined
       }
       unlink_seat: { Args: { p_entry: string }; Returns: undefined }
+      username_available: { Args: { p_username: string }; Returns: boolean }
     }
     Enums: {
       [_ in never]: never

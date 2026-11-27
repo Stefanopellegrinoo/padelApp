@@ -682,6 +682,32 @@ describe('RLS — funciones', () => {
     const { error } = await anonClient().rpc('players_with_account', { p_ids: ['00000000-0000-0000-0000-000000000000'] })
     expect(error?.code).toBe('42501')
   })
+
+  // El @usuario (0120-0122, amigos-faciles T7): elegirlo y leer el tuyo piden
+  // sesión. `username_available` es la única abierta a anon, porque el registro
+  // es anónimo, y sólo contesta sí o no por un @usuario exacto.
+  it('anon no puede elegir ni leer un @usuario; sólo preguntar si uno está libre', async () => {
+    const anon = anonClient()
+    const elegir = await anon.rpc('choose_my_username', { p_username: 'anon.colado' })
+    const mio = await anon.rpc('my_username')
+    expect(elegir.error?.code).toBe('42501')
+    expect(mio.error?.code).toBe('42501')
+
+    const libre = await anon.rpc('username_available', { p_username: 'anon.colado' })
+    expect(libre.error).toBeNull()
+    expect(typeof libre.data).toBe('boolean')
+  })
+
+  it('nadie con sesión escribe players directo', async () => {
+    const yo = await createTestUser()
+    const update = await yo.client.from('players').update({ display_name: 'Otro nombre' }).eq('id', yo.playerId)
+    const insert = await yo.client.from('players').insert({ display_name: 'Colado' })
+    const borrar = await yo.client.from('players').delete().eq('id', yo.playerId)
+    for (const { error } of [update, insert, borrar]) expect(error?.code).toBe('42501')
+
+    const { data } = await adminClient().from('players').select('display_name').eq('id', yo.playerId).single()
+    expect(data?.display_name).not.toBe('Otro nombre')
+  })
 })
 
 /*

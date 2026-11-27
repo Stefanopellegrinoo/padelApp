@@ -37,10 +37,22 @@ afterEach(() => {
 })
 
 function persona(n: number, over: Partial<GenteDeTorneo> = {}): GenteDeTorneo {
-  return { playerId: `p${n}`, displayName: `Persona ${n}`, torneos: ['Los Pibes del Martes'], fechasJuntos: 10 - n, ...over }
+  return {
+    playerId: `p${n}`,
+    displayName: `Persona ${n}`,
+    seasonIds: ['s-martes'],
+    torneos: ['Los Pibes del Martes'],
+    fechasJuntos: 10 - n,
+    ...over,
+  }
 }
 
-const SEBA = persona(1, { displayName: 'Seba Molina', torneos: ['Los Pibes del Martes', 'FIFA de los Viernes'], fechasJuntos: 9 })
+const SEBA = persona(1, {
+  displayName: 'Seba Molina',
+  seasonIds: ['s-martes', 's-viernes'],
+  torneos: ['Los Pibes del Martes', 'FIFA de los Viernes'],
+  fechasJuntos: 9,
+})
 const LUCAS = persona(2, { displayName: 'Lucas Ferreyra', fechasJuntos: 7 })
 
 const boton = (texto: string) =>
@@ -60,10 +72,12 @@ describe('GenteDeTusTorneos (Amigos)', () => {
     expect(host.textContent).toContain('Jugaron con vos y tienen cuenta')
     expect(filas()).toHaveLength(2)
     expect(filas()[0]?.textContent).toContain('Seba Molina')
-    expect(filas()[0]?.textContent).toContain('2 torneos · 9 fechas juntos')
-    expect(filas()[1]?.textContent).toContain('Los Pibes del Martes · 7 fechas')
+    // S11: los torneos, sin fechas (antes "2 torneos · 9 fechas juntos" y "Los Pibes del Martes · 7 fechas").
+    expect(filas()[0]?.textContent).toContain('Los Pibes del Martes y FIFA de los Viernes')
+    expect(filas()[1]?.textContent).toContain('Los Pibes del Martes')
+    expect(host.textContent).not.toMatch(/fecha|torneos ·/)
     expect(filas()[0]?.querySelector('button')?.getAttribute('aria-label')).toBe('Agregar a Seba Molina')
-    expect(boton('Ver los 2')).toBeUndefined()
+    expect(host.querySelector('a[href="/amigos/gente"]')).toBeNull()
   })
 
   it('sin nadie para sugerir, no hay sección', () => {
@@ -71,13 +85,37 @@ describe('GenteDeTusTorneos (Amigos)', () => {
     expect(host.innerHTML).toBe('')
   })
 
-  it('muestra 4; "Ver los 11" muestra el resto', async () => {
+  // S10: la lista no es infinita.
+  it('muestra las primeras 5, en el orden que llegan, y "Ver todas (11)" lleva a /amigos/gente', () => {
     const once = Array.from({ length: 11 }, (_, i) => persona(i + 1))
     act(() => root.render(createElement(GenteDeTusTorneos, { gente: once })))
-    expect(filas()).toHaveLength(4)
-    await tocar(boton('Ver los 11'))
-    expect(filas()).toHaveLength(11)
+    expect(filas().map((fila) => fila.querySelector('button')?.getAttribute('aria-label'))).toEqual([
+      'Agregar a Persona 1',
+      'Agregar a Persona 2',
+      'Agregar a Persona 3',
+      'Agregar a Persona 4',
+      'Agregar a Persona 5',
+    ])
+    const ver = [...host.querySelectorAll('a[href="/amigos/gente"]')]
+    expect(ver.length).toBeGreaterThan(0)
+    expect(ver.every((link) => link.textContent === 'Ver todas (11)')).toBe(true)
+    // El de arriba va en la línea del título.
+    expect(host.querySelector('h2')?.parentElement?.querySelector('a[href="/amigos/gente"]')?.textContent).toBe('Ver todas (11)')
+    // Ya no se despliega acá: el viejo "Ver los N" no está.
     expect(boton('Ver los 11')).toBeUndefined()
+  })
+
+  it('con 5 o menos, todas a la vista y sin "Ver todas"', () => {
+    act(() => root.render(createElement(GenteDeTusTorneos, { gente: Array.from({ length: 5 }, (_, i) => persona(i + 1)) })))
+    expect(filas()).toHaveLength(5)
+    expect(host.querySelector('a[href="/amigos/gente"]')).toBeNull()
+    expect(host.textContent).not.toContain('Ver todas')
+  })
+
+  it('con 6, "Ver todas (6)"', () => {
+    act(() => root.render(createElement(GenteDeTusTorneos, { gente: Array.from({ length: 6 }, (_, i) => persona(i + 1)) })))
+    expect(filas()).toHaveLength(5)
+    expect(host.querySelector('a[href="/amigos/gente"]')?.textContent).toBe('Ver todas (6)')
   })
 
   it('"Agregar" manda el pedido y la fila queda en "Enviado", aunque el servidor ya no la sugiera', async () => {
@@ -119,21 +157,24 @@ describe('GenteDeTusTorneos (Amigos)', () => {
 describe('EmpezaPorTusTorneos (Inicio sin amigos)', () => {
   const sumaUnAmigo = createElement('li', null, 'Sumá un amigo')
 
-  it('"Empezá por la gente de tus torneos", las dos primeras con "Agregar" y "Ver más gente" a /amigos', () => {
+  it('"Empezá por la gente de tus torneos", las dos primeras con "Agregar" y "Ver más gente" a /amigos/gente', () => {
     act(() => root.render(createElement(EmpezaPorTusTorneos, { gente: [SEBA, LUCAS, persona(3)], children: sumaUnAmigo })))
     expect(host.textContent).toContain('Empezá por la gente de tus torneos')
     expect(filas()).toHaveLength(2)
     expect(filas()[0]?.textContent).toContain('Seba Molina')
     expect(filas()[1]?.textContent).toContain('Lucas Ferreyra')
     expect(boton('Agregar')).toBeDefined()
-    const ver = host.querySelector('a[href="/amigos"]')
+    expect(host.querySelector('a[href="/amigos"]')).toBeNull()
+    const ver = host.querySelector('a[href="/amigos/gente"]')
     expect(ver?.textContent).toBe('Ver más gente')
+    expect(filas()[0]?.textContent).toContain('Los Pibes del Martes y FIFA de los Viernes')
     expect(host.textContent).not.toContain('Sumá un amigo')
   })
 
   it('con dos o menos no hay más gente que ver', () => {
     act(() => root.render(createElement(EmpezaPorTusTorneos, { gente: [SEBA, LUCAS], children: sumaUnAmigo })))
-    expect(host.querySelector('a[href="/amigos"]')).toBeNull()
+    expect(host.querySelector('a[href="/amigos/gente"]')).toBeNull()
+    expect(host.textContent).not.toContain('Ver más gente')
   })
 
   it('sin nadie para sugerir, queda lo de siempre ("Sumá un amigo")', () => {

@@ -2011,6 +2011,14 @@ async function aGranel(admin: TestUser, temporadas: number, porTemporada: string
   return seasonIds
 }
 
+/** Le pone nombre y fecha de creación a cada temporada, con `service_role`: el orden de S11 sale de ahí. */
+async function escenaDeTorneos(temporadas: Array<[string, string, string]>): Promise<void> {
+  for (const [id, name, created_at] of temporadas) {
+    const { error } = await adminClient().from('seasons').update({ name, created_at }).eq('id', id)
+    if (error !== null) throw new Error(error.message)
+  }
+}
+
 describe('genteDeTusTorneos', () => {
   it('sólo gente con cuenta de mis torneos: ni yo, ni amigos, ni pedidos en ninguna dirección, ni lugares sin reclamar', async () => {
     const yo = await createTestUser()
@@ -2040,6 +2048,7 @@ describe('genteDeTusTorneos', () => {
       {
         playerId: conocido.playerId,
         displayName: await nombreDe(conocido.playerId),
+        seasonIds: [seasonId],
         torneos: [await nombreDeTemporada(seasonId)],
         fechasJuntos: 0,
       },
@@ -2070,16 +2079,22 @@ describe('genteDeTusTorneos', () => {
 
     const gente = await genteDeTusTorneos(yo.client)
 
+    // El torneo más nuevo primero (S11): t2 se creó después que t1.
     expect(de(gente, dosFechas.playerId)).toEqual({
       playerId: dosFechas.playerId,
       displayName: await nombreDe(dosFechas.playerId),
-      torneos: [await nombreDeTemporada(t1.seasonId), await nombreDeTemporada(t2.seasonId)].sort((a, b) => a.localeCompare(b, 'es')),
+      seasonIds: [t2.seasonId, t1.seasonId],
+      torneos: [await nombreDeTemporada(t2.seasonId), await nombreDeTemporada(t1.seasonId)],
       fechasJuntos: 2,
     })
     expect(de(gente, unaFecha.playerId)?.fechasJuntos).toBe(1)
     expect(de(gente, unaFecha.playerId)?.torneos).toHaveLength(2)
     expect(de(gente, unaFecha.playerId)?.torneos).toContain(await nombreDeTemporada(t3))
-    expect(de(gente, ninguna.playerId)).toMatchObject({ fechasJuntos: 0, torneos: [await nombreDeTemporada(t4.seasonId)] })
+    expect(de(gente, ninguna.playerId)).toMatchObject({
+      fechasJuntos: 0,
+      seasonIds: [t4.seasonId],
+      torneos: [await nombreDeTemporada(t4.seasonId)],
+    })
     // Un relleno del torneo 1 jugó esa fecha conmigo, pero es un jugador
     // tipeado, sin cuenta: no aparece (S3, "tienen cuenta").
     expect(de(gente, relleno1[0]!)).toBeUndefined()
@@ -2094,6 +2109,31 @@ describe('genteDeTusTorneos', () => {
     expect(ids(gente)).toEqual(ids(orden))
     expect(ids(gente)[0]).toBe(dosFechas.playerId)
     expect(ids(gente).at(-1)).toBe(ninguna.playerId)
+  })
+
+  // S11: qué torneo va primero tiene que ser siempre el mismo.
+  it('los torneos de cada persona: el más nuevo primero; con la misma fecha, por nombre; seasonIds en el mismo orden', async () => {
+    const yo = await createTestUser()
+    const otro = await createTestUser()
+    const viejo = await createSeason({ admin: yo, squad: [yo.playerId, otro.playerId] })
+    const nuevoB = await createSeason({ admin: yo, squad: [yo.playerId, otro.playerId] })
+    const nuevoA = await createSeason({ admin: yo, squad: [yo.playerId, otro.playerId] })
+    await escenaDeTorneos([
+      [viejo.seasonId, `Viejo ${Date.now()}`, '2026-01-01T00:00:00Z'],
+      [nuevoB.seasonId, `Nuevo B ${Date.now()}`, '2026-03-01T00:00:00Z'],
+      [nuevoA.seasonId, `Nuevo A ${Date.now()}`, '2026-03-01T00:00:00Z'],
+    ])
+
+    const [persona] = await genteDeTusTorneos(yo.client)
+
+    expect(persona?.seasonIds).toEqual([nuevoA.seasonId, nuevoB.seasonId, viejo.seasonId])
+    expect(persona?.torneos).toEqual([
+      await nombreDeTemporada(nuevoA.seasonId),
+      await nombreDeTemporada(nuevoB.seasonId),
+      await nombreDeTemporada(viejo.seasonId),
+    ])
+    // Y lo mismo en los pedidos (`torneosCompartidosCon`).
+    expect((await torneosCompartidosCon(yo.client, [otro.playerId])).get(otro.playerId)).toEqual(persona?.torneos)
   })
 
   it('al pedirle amistad deja de aparecer; si rechaza, vuelve (S3)', async () => {
@@ -2229,7 +2269,7 @@ describe('quien borró su cuenta', () => {
 // ── de dónde lo conocés (odd/tasks/amigos-faciles.md, T3, S4) ───────────────
 
 describe('torneosCompartidosCon', () => {
-  it('uno, varios o ninguno: los nombres de los torneos que comparto con cada uno, por nombre', async () => {
+  it('uno, varios o ninguno: los nombres de los torneos que comparto con cada uno, el más nuevo primero', async () => {
     const yo = await createTestUser()
     const uno = await createTestUser()
     const varios = await createTestUser()
@@ -2244,7 +2284,7 @@ describe('torneosCompartidosCon', () => {
     expect(torneos).toEqual(
       new Map([
         [uno.playerId, [await nombreDeTemporada(t1.seasonId)]],
-        [varios.playerId, [await nombreDeTemporada(t1.seasonId), await nombreDeTemporada(t2.seasonId)].sort((a, b) => a.localeCompare(b, 'es'))],
+        [varios.playerId, [await nombreDeTemporada(t2.seasonId), await nombreDeTemporada(t1.seasonId)]],
         [ninguno.playerId, []],
       ]),
     )

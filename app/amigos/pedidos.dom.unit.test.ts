@@ -108,12 +108,14 @@ describe('PedidosEnInicio', () => {
 })
 
 describe('TePidieron (Amigos)', () => {
-  it('"Te pidieron" con "De <torneo>" (varios: "y N más"), Aceptar y ✕; sin torneo, sin meta', () => {
+  it('"Te pidieron" con "De <torneos>" en el formato de S11, Aceptar y ✕; sin torneo, sin meta', () => {
     const varios = { ...JUAMPI, torneos: ['Los Pibes del Martes', 'FIFA de los Viernes'] }
     act(() => root.render(createElement(TePidieron, { pedidos: [varios, RAMA] })))
     expect(host.querySelector('h2')?.textContent).toBe('Te pidieron')
     const [juampi, rama] = filas()
-    expect(juampi?.textContent).toContain('De Los Pibes del Martes y 1 más')
+    // S11: con dos, los dos nombres (antes "De Los Pibes del Martes y 1 más").
+    expect(juampi?.textContent).toContain('De Los Pibes del Martes y FIFA de los Viernes')
+    expect(juampi?.textContent).not.toContain('y 1 más')
     expect(rama?.textContent).toBe('RBRama BenítezAceptar')
     expect(porLabel('Rechazar el pedido de Rama')).not.toBeNull()
   })

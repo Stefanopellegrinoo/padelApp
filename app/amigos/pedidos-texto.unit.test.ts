@@ -1,26 +1,21 @@
 import { describe, expect, it } from 'vitest'
-import { deDonde, metaEnviado, metaRecibidoEnAmigos, metaRecibidoEnInicio } from './pedidos-texto'
+import { metaEnviado, metaRecibidoEnAmigos, metaRecibidoEnInicio } from './pedidos-texto'
 
-// Las palabras de los pedidos (odd/tasks/amigos-faciles.md, S4).
-describe('deDonde: de dónde lo conocés, por los torneos compartidos', () => {
-  it('uno: su nombre; varios: el primero y cuántos más; ninguno: nada', () => {
-    expect(deDonde(['Los Pibes del Martes'])).toBe('Los Pibes del Martes')
-    expect(deDonde(['Los Pibes del Martes', 'FIFA de los Viernes'])).toBe('Los Pibes del Martes y 1 más')
-    expect(deDonde(['A', 'B', 'C'])).toBe('A y 2 más')
-    expect(deDonde([])).toBeNull()
-  })
-})
-
+// Las palabras de los pedidos (odd/tasks/amigos-faciles.md, S4), con los torneos en el formato de S11.
 describe('el pedido recibido', () => {
-  it('en Inicio: "Te pidió ser amigos · <torneo>", o sólo "Te pidió ser amigos"', () => {
+  it('en Inicio: "Te pidió ser amigos · <torneos>", o sólo "Te pidió ser amigos"', () => {
     expect(metaRecibidoEnInicio(['Los Pibes del Martes'])).toBe('Te pidió ser amigos · Los Pibes del Martes')
-    expect(metaRecibidoEnInicio(['A', 'B'])).toBe('Te pidió ser amigos · A y 1 más')
+    expect(metaRecibidoEnInicio(['Los Pibes del Martes', 'Copa del Jueves'])).toBe(
+      'Te pidió ser amigos · Los Pibes del Martes y Copa del Jueves',
+    )
+    expect(metaRecibidoEnInicio(['A', 'B', 'C'])).toBe('Te pidió ser amigos · A y 2 más')
     expect(metaRecibidoEnInicio([])).toBe('Te pidió ser amigos')
   })
 
-  it('en Amigos: "De <torneo>", o nada', () => {
+  it('en Amigos: "De <torneos>", o nada', () => {
     expect(metaRecibidoEnAmigos(['Los Pibes del Martes'])).toBe('De Los Pibes del Martes')
-    expect(metaRecibidoEnAmigos(['A', 'B'])).toBe('De A y 1 más')
+    expect(metaRecibidoEnAmigos(['Los Pibes del Martes', 'Copa del Jueves'])).toBe('De Los Pibes del Martes y Copa del Jueves')
+    expect(metaRecibidoEnAmigos(['A', 'B', 'C'])).toBe('De A y 2 más')
     expect(metaRecibidoEnAmigos([])).toBeNull()
   })
 })

@@ -1359,8 +1359,13 @@ export async function casualParticipantIds(supabase: Client, matchId: string): P
 export interface GenteDeTorneo {
   playerId: string
   displayName: string
-  /** Los nombres de los torneos que compartimos, por nombre. Nunca vacío. */
+  /**
+   * Los nombres de los torneos que compartimos, el más nuevo primero
+   * (`enOrdenDeTorneo`): el formato de S11 muestra el primero. Nunca vacío.
+   */
   torneos: string[]
+  /** Los ids de esos torneos, en el mismo orden que `torneos`: el filtro de "Ver todas" (S10). */
+  seasonIds: string[]
   /** En cuántas fechas de torneo jugamos los dos (decisión del orquestador). Puede ser 0. */
   fechasJuntos: number
 }
@@ -1376,6 +1381,39 @@ const TANDA_IN = 150
 
 /** Cuántos ids por llamada a `player_display_names`: la función también corta en `max_rows`. */
 const TANDA_NOMBRES = 500
+
+/** Lo que hace falta de una temporada para nombrarla y ordenarla. */
+interface TemporadaCompartida {
+  id: string
+  name: string
+  created_at: string
+}
+
+/**
+ * Los torneos compartidos, siempre en el mismo orden (S11, el primero es el
+ * que se nombra): el más nuevo primero (`created_at`), y con la misma fecha
+ * por nombre y después por id, así el orden es total. El más nuevo es el que
+ * estás jugando o jugaste último: de ahí lo tenés más presente. Lo usan
+ * `genteDeTusTorneos` y `torneosCompartidosCon`, así las sugerencias y los
+ * pedidos nombran el mismo torneo.
+ */
+function enOrdenDeTorneo(
+  seasonIds: Iterable<string>,
+  temporadaPorId: ReadonlyMap<string, TemporadaCompartida>,
+): TemporadaCompartida[] {
+  return [...seasonIds]
+    .map((seasonId) => {
+      const temporada = temporadaPorId.get(seasonId)
+      if (temporada === undefined) throw new EdgeError(`No se pudo leer el torneo ${seasonId}.`)
+      return temporada
+    })
+    .sort(
+      (a, b) =>
+        Date.parse(b.created_at) - Date.parse(a.created_at) ||
+        a.name.localeCompare(b.name, 'es') ||
+        (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+    )
+}
 
 function enTandas<T>(items: readonly T[], tamaño: number): T[][] {
   const tandas: T[][] = []
@@ -1529,7 +1567,7 @@ export async function genteDeTusTorneos(supabase: Client): Promise<GenteDeTorneo
     todasLasFilasPorTandas('torneos', seasonIds, (tanda, desde, hasta) =>
       supabase
         .from('seasons')
-        .select('id, name', { count: 'exact' })
+        .select('id, name, created_at', { count: 'exact' })
         .in('id', tanda)
         .order('id', { ascending: true })
         .range(desde, hasta),
@@ -1537,7 +1575,7 @@ export async function genteDeTusTorneos(supabase: Client): Promise<GenteDeTorneo
   ])
 
   const conAlgo = new Set(amistades.map((fila) => (fila.player_a === me ? fila.player_b : fila.player_a)))
-  const nombreDeTemporada = new Map(temporadas.map((fila) => [fila.id, fila.name]))
+  const temporadaPorId = new Map(temporadas.map((fila) => [fila.id, fila]))
 
   const temporadasDe = new Map<string, Set<string>>()
   for (const asiento of asientos) {
@@ -1580,20 +1618,18 @@ export async function genteDeTusTorneos(supabase: Client): Promise<GenteDeTorneo
 
   return [...temporadasDe.entries()]
     .filter(([playerId]) => conCuenta.has(playerId))
-    .map(([playerId, suyas]) => ({
-      playerId,
-      // Comparte una temporada conmigo: `player_display_names` siempre lo
-      // resuelve. Que falte es un corte o la función rota -- falla fuerte.
-      displayName: requireName(nombrePorId, playerId),
-      torneos: [...suyas]
-        .map((seasonId) => {
-          const nombre = nombreDeTemporada.get(seasonId)
-          if (nombre === undefined) throw new EdgeError(`No se pudo leer el torneo ${seasonId}.`)
-          return nombre
-        })
-        .sort((a, b) => a.localeCompare(b, 'es')),
-      fechasJuntos: fechasDe.get(playerId)?.size ?? 0,
-    }))
+    .map(([playerId, suyas]) => {
+      const torneos = enOrdenDeTorneo(suyas, temporadaPorId)
+      return {
+        playerId,
+        // Comparte una temporada conmigo: `player_display_names` siempre lo
+        // resuelve. Que falte es un corte o la función rota -- falla fuerte.
+        displayName: requireName(nombrePorId, playerId),
+        torneos: torneos.map((temporada) => temporada.name),
+        seasonIds: torneos.map((temporada) => temporada.id),
+        fechasJuntos: fechasDe.get(playerId)?.size ?? 0,
+      }
+    })
     .sort(
       (a, b) =>
         b.fechasJuntos - a.fechasJuntos ||
@@ -1606,8 +1642,8 @@ export async function genteDeTusTorneos(supabase: Client): Promise<GenteDeTorneo
 
 /**
  * Los torneos que comparto con cada una de `playerIds`: "De Los Pibes del
- * Martes" en un pedido. Por persona, los nombres ordenados como en
- * `genteDeTusTorneos`; quien no comparte ninguno queda con `[]`, y la
+ * Martes" en un pedido. Por persona, los nombres en el orden de
+ * `enOrdenDeTorneo`, como en `genteDeTusTorneos`; quien no comparte ninguno queda con `[]`, y la
  * pantalla no dice nada.
  *
  * Compartir es tener los dos un asiento: un torneo que administro sin jugar
@@ -1671,24 +1707,18 @@ export async function torneosCompartidosCon(
           (tanda, desde, hasta) =>
             supabase
               .from('seasons')
-              .select('id, name', { count: 'exact' })
+              .select('id, name, created_at', { count: 'exact' })
               .in('id', tanda)
               .order('id', { ascending: true })
               .range(desde, hasta),
           que,
         )
-  const nombreDeTemporada = new Map(temporadas.map((fila) => [fila.id, fila.name]))
+  const temporadaPorId = new Map(temporadas.map((fila) => [fila.id, fila]))
 
   return new Map(
     [...temporadasDe.entries()].map(([playerId, ids]) => [
       playerId,
-      [...ids]
-        .map((seasonId) => {
-          const nombre = nombreDeTemporada.get(seasonId)
-          if (nombre === undefined) throw new EdgeError(`No se pudo leer el torneo ${seasonId}.`)
-          return nombre
-        })
-        .sort((a, b) => a.localeCompare(b, 'es')),
+      enOrdenDeTorneo(ids, temporadaPorId).map((temporada) => temporada.name),
     ]),
   )
 }

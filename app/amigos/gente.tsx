@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useState, useTransition, type ReactNode } from 'react'
+import { useState, useTransition, type ReactNode, type RefObject } from 'react'
 import { Icono } from '@/app/torneos/inicio/iconos'
 import { Avatar } from '@/app/ui/avatar'
 import { button } from '@/app/ui/button'
@@ -14,9 +14,11 @@ import { agregarAmigo } from './actions'
 import { GENTE_EN_AMIGOS, GENTE_EN_INICIO, metaDeGente } from './gente-texto'
 
 /**
- * "Gente de tus torneos" (odd/tasks/amigos-faciles.md, S3,
- * `design/amigos-faciles/02-gente-de-tus-torneos.html`): en Amigos, abajo de
- * tus amigos; en Inicio, cuando todavía no tenés ninguno.
+ * "Gente de tus torneos" (odd/tasks/amigos-faciles.md, S3, S10, S11,
+ * `design/amigos-faciles/08-gente-de-tus-torneos-paginada.html`): en Amigos,
+ * abajo de tus amigos, las primeras 5 y "Ver todas"; en Inicio, cuando
+ * todavía no tenés ninguno. "Ver todas" es `/amigos/gente` (`gente/todas.tsx`),
+ * con las mismas filas.
  *
  * La lista es una FOTO de cuando se abrió la pantalla (`useState` con la
  * primera que llega): "Agregar" revalida la página, y el servidor ya no
@@ -27,7 +29,7 @@ import { GENTE_EN_AMIGOS, GENTE_EN_INICIO, metaDeGente } from './gente-texto'
 
 type Estado = 'none' | 'sent' | 'friends'
 
-function useGente(gente: GenteDeTorneo[], avisoClassName?: string) {
+export function useGente(gente: GenteDeTorneo[], avisoClassName?: string) {
   const [foto] = useState(gente)
   const [estados, setEstados] = useState<Record<string, Estado>>({})
   const [error, setError] = useState<string | null>(null)
@@ -40,8 +42,9 @@ function useGente(gente: GenteDeTorneo[], avisoClassName?: string) {
       else setEstados((antes) => ({ ...antes, [playerId]: result.estado }))
     })
 
-  const filas = (personas: GenteDeTorneo[]) => (
-    <ul className="-mx-4">
+  // `lista`: para mover el foco a una fila (las filas se enfocan con `tabIndex={-1}`).
+  const filas = (personas: GenteDeTorneo[], lista?: RefObject<HTMLUListElement | null>) => (
+    <ul ref={lista} className="-mx-4">
       {personas.map((persona) => (
         <FilaGente
           key={persona.playerId}
@@ -71,7 +74,7 @@ function FilaGente({
   onAgregar: () => void
 }) {
   return (
-    <li className={`${row} min-h-[72px]`}>
+    <li tabIndex={-1} className={`${row} min-h-[72px]`}>
       <Avatar name={persona.displayName} />
       <span className="min-w-0 flex-1">
         <span className="line-clamp-2 block text-[17px] leading-tight font-bold break-words">{persona.displayName}</span>
@@ -98,21 +101,38 @@ function FilaGente({
   )
 }
 
-/** En Amigos: la sección entera, con las primeras cuatro y "Ver los N". Sin nadie, no hay sección. */
+/**
+ * En Amigos: la sección entera, con las primeras 5 y "Ver todas (N)" a
+ * `/amigos/gente`, en la línea del título y abajo de la lista, como la
+ * maqueta. Con 5 o menos no hay a dónde ir. Sin nadie, no hay sección.
+ */
 export function GenteDeTusTorneos({ gente }: { gente: GenteDeTorneo[] }) {
   const { foto, filas, aviso } = useGente(gente)
-  const [todos, setTodos] = useState(false)
   if (foto.length === 0) return null
 
-  const hayMas = foto.length > GENTE_EN_AMIGOS && !todos
+  const hayMas = foto.length > GENTE_EN_AMIGOS
+  const verTodas = `Ver todas (${foto.length})`
   return (
-    <Section title="Gente de tus torneos" className="pt-7">
+    <Section
+      title="Gente de tus torneos"
+      className="pt-7"
+      action={
+        hayMas && (
+          <Link
+            href="/amigos/gente"
+            className="press -my-2 flex min-h-[44px] items-center px-1 text-[16px] font-bold whitespace-nowrap text-accent-link"
+          >
+            {verTodas}
+          </Link>
+        )
+      }
+    >
       <p className="-mt-1.5 mb-2 text-[15px] text-muted">Jugaron con vos y tienen cuenta</p>
-      {filas(hayMas ? foto.slice(0, GENTE_EN_AMIGOS) : foto)}
+      {filas(foto.slice(0, GENTE_EN_AMIGOS))}
       {hayMas && (
-        <button type="button" onClick={() => setTodos(true)} className={button('ghost')}>
-          Ver los {foto.length}
-        </button>
+        <Link href="/amigos/gente" className={button('ghost')}>
+          {verTodas}
+        </Link>
       )}
       {aviso}
     </Section>
@@ -121,7 +141,8 @@ export function GenteDeTusTorneos({ gente }: { gente: GenteDeTorneo[] }) {
 
 /**
  * En Inicio, adentro de "Amigos", cuando todavía no tenés ninguno: las dos
- * primeras personas y "Ver más gente". Sin nadie para sugerir, `children` (lo
+ * primeras personas y "Ver más gente", que lleva a "Ver todas" (`/amigos/gente`).
+ * Sin nadie para sugerir, `children` (lo
  * de siempre, "Sumá un amigo").
  */
 export function EmpezaPorTusTorneos({ gente, children }: { gente: GenteDeTorneo[]; children: ReactNode }) {
@@ -134,7 +155,7 @@ export function EmpezaPorTusTorneos({ gente, children }: { gente: GenteDeTorneo[
       <p className="-mt-1.5 mb-2 text-[15px] text-muted">Empezá por la gente de tus torneos</p>
       {filas(foto.slice(0, GENTE_EN_INICIO))}
       {foto.length > GENTE_EN_INICIO && (
-        <Link href="/amigos" className={button('ghost')}>
+        <Link href="/amigos/gente" className={button('ghost')}>
           Ver más gente
         </Link>
       )}

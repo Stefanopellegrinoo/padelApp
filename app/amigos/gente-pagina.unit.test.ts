@@ -51,7 +51,21 @@ const amigo = (over: Partial<Friend>): Friend => ({
   ...over,
 })
 
-const SEBA: GenteDeTorneo = { playerId: 'p-seba', displayName: 'Seba Molina', torneos: ['A', 'B'], fechasJuntos: 9 }
+const SEBA: GenteDeTorneo = {
+  playerId: 'p-seba',
+  displayName: 'Seba Molina',
+  seasonIds: ['s-martes', 's-jueves'],
+  torneos: ['Los Pibes del Martes', 'Copa del Jueves'],
+  fechasJuntos: 9,
+}
+
+const persona = (n: number): GenteDeTorneo => ({
+  playerId: `p-${n}`,
+  displayName: `Persona ${n}`,
+  seasonIds: ['s-martes'],
+  torneos: ['Los Pibes del Martes'],
+  fechasJuntos: 10 - n,
+})
 
 beforeEach(() => {
   vi.mocked(friendsOf).mockResolvedValue([
@@ -85,8 +99,26 @@ describe('/amigos', () => {
     expect(titulos(html)).toEqual(['Te pidieron', 'Tus amigos', 'Gente de tus torneos', 'Pedidos enviados'])
     expect(html).toContain('Jugaron con vos y tienen cuenta')
     expect(html).toContain('Seba Molina')
-    expect(html).toContain('2 torneos · 9 fechas juntos')
+    // S11: los torneos, sin fechas (antes "2 torneos · 9 fechas juntos").
+    expect(html).toContain('Los Pibes del Martes y Copa del Jueves')
+    expect(html).not.toContain('fechas juntos')
     expect(html).toContain('aria-label="Agregar a Seba Molina"')
+    expect(html).not.toContain('href="/amigos/gente"')
+  })
+
+  // S10: en Amigos, las primeras 5 y "Ver todas (N)".
+  it('con 7 para sugerir: las primeras 5 y "Ver todas (7)" a /amigos/gente', async () => {
+    vi.mocked(genteDeTusTorneos).mockResolvedValueOnce(Array.from({ length: 7 }, (_, i) => persona(i + 1)))
+    const html = await render()
+    const gente = html.slice(html.search(/<h2[^>]*>Gente de tus torneos<\/h2>/), html.search(/<h2[^>]*>Pedidos enviados<\/h2>/))
+    expect([...gente.matchAll(/aria-label="Agregar a ([^"]*)"/g)].map((m) => m[1])).toEqual([
+      'Persona 1',
+      'Persona 2',
+      'Persona 3',
+      'Persona 4',
+      'Persona 5',
+    ])
+    expect(gente).toMatch(/<a [^>]*href="\/amigos\/gente"[^>]*>Ver todas \(7\)<\/a>/)
   })
 
   it('sin nadie para sugerir, la sección no está y el resto sigue igual', async () => {

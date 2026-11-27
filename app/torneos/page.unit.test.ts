@@ -305,21 +305,25 @@ describe('Inicio, amigos', () => {
     Array.from({ length: n }, (_, i) => ({
       playerId: `p-${i}`,
       displayName: `Persona ${i}`,
+      seasonIds: ['s-martes'],
       torneos: ['Los Pibes del Martes'],
       fechasJuntos: 7 - i,
     }))
 
-  it('sin amigos, empieza por la gente de tus torneos: las dos primeras con "Agregar" y "Ver más gente"', async () => {
+  it('sin amigos, empieza por la gente de tus torneos: las dos primeras con "Agregar" y "Ver más gente" a /amigos/gente', async () => {
     vi.mocked(genteDeTusTorneos).mockResolvedValueOnce(gente(3))
     const html = await render()
     const amigos = html.slice(html.search(/<h2[^>]*>Amigos<\/h2>/))
     expect(amigos).toContain('Empezá por la gente de tus torneos')
     expect(amigos).toContain('Persona 0')
-    expect(amigos).toContain('Los Pibes del Martes · 7 fechas')
+    // S11: sin fechas (antes "Los Pibes del Martes · 7 fechas").
+    expect(amigos).toContain('Los Pibes del Martes</span>')
+    expect(amigos).not.toContain('fechas')
     expect(amigos).toContain('Persona 1')
     expect(amigos).not.toContain('Persona 2')
     expect(amigos).toContain('aria-label="Agregar a Persona 0"')
-    expect(linkA(amigos, '/amigos')).toContain('Ver más gente')
+    expect(linkA(amigos, '/amigos/gente')).toContain('Ver más gente')
+    expect(linkA(amigos, '/amigos')).toBeNull()
     expect(html).not.toContain('Sumá un amigo')
   })
 
@@ -356,13 +360,22 @@ describe('Inicio, pedidos de amistad', () => {
   it('sin amigos: el pedido igual se ve, antes de la gente de tus torneos', async () => {
     vi.mocked(pedidosRecibidos).mockResolvedValueOnce([{ ...JUAMPI, torneos: [] }])
     vi.mocked(genteDeTusTorneos).mockResolvedValueOnce([
-      { playerId: 'p-seba', displayName: 'Seba Molina', torneos: ['A'], fechasJuntos: 2 },
+      { playerId: 'p-seba', displayName: 'Seba Molina', seasonIds: ['s-a'], torneos: ['A'], fechasJuntos: 2 },
     ])
     const amigos = amigosDe(await render())
     expect(amigos).toContain('Te pidió ser amigos')
     expect(amigos).not.toContain('Te pidió ser amigos ·')
     expect(amigos.indexOf('Juampi Ledesma')).toBeLessThan(amigos.indexOf('Empezá por la gente de tus torneos'))
     expect(amigos).toContain('Seba Molina')
+  })
+
+  // S11: los torneos compartidos con el formato de toda la app.
+  it('con dos torneos compartidos: "Te pidió ser amigos · Los Pibes del Martes y Copa del Jueves"', async () => {
+    vi.mocked(amigosDeInicio).mockResolvedValueOnce([NICO])
+    vi.mocked(pedidosRecibidos).mockResolvedValueOnce([{ ...JUAMPI, torneos: ['Los Pibes del Martes', 'Copa del Jueves'] }])
+    const amigos = amigosDe(await render())
+    expect(amigos).toContain('Te pidió ser amigos · Los Pibes del Martes y Copa del Jueves')
+    expect(amigos).not.toContain('y 1 más')
   })
 
   it('las amistades se leen una vez y se comparten entre amigos y pedidos', async () => {

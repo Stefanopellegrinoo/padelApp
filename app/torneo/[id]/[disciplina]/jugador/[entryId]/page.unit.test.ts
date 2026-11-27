@@ -499,6 +499,22 @@ describe('Jugador: la amistad con la persona del perfil', () => {
     expect(header(await render('padel', 'e1'))).not.toMatch(/Agregar|Enviado/)
   })
 
+  // L13: quien borró su cuenta (0108) conserva el asiento y su `playerId`;
+  // `friendshipWith` da null para él y el perfil queda sin chip ni tarjeta.
+  it('un lugar cuya persona borró la cuenta: sin chip ni tarjeta, y el resto del perfil igual', async () => {
+    const { friendshipWith } = await import('@/db/friends')
+    await conCuenta()
+    vi.mocked(friendshipWith).mockResolvedValueOnce(null)
+    const html = await render('padel', 'e1')
+
+    expect(friendshipWith).toHaveBeenLastCalledWith(expect.anything(), 'p1')
+    expect(header(html)).not.toMatch(/Agregar|Enviado|Amigos|te pidió/)
+    expect(header(html)).toMatch(/^<header[^>]*><a /)
+    expect(html).toMatch(/<h1[^>]*>Padel Uno<\/h1>/)
+    expect(html).toContain('1° de 2, 20 puntos')
+    expect(html).toContain('Puntos por fecha: fecha 1, 10; fecha 2, 10')
+  })
+
   it('también en el perfil de quien todavía no jugó este deporte', async () => {
     await conCuenta()
     const html = await render('padel', 'e3')

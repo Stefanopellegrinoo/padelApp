@@ -1132,6 +1132,12 @@ export type Database = {
         }[]
       }
       players_can_score: { Args: { p_season: string }; Returns: boolean }
+      players_with_account: {
+        Args: { p_ids: string[] }
+        Returns: {
+          id: string
+        }[]
+      }
       promote_guest: {
         Args: { p_before?: string; p_entry: string }
         Returns: undefined

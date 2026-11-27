@@ -19,6 +19,7 @@ import {
   rejectFriendRequest,
   genteDeTusTorneos,
   torneosCompartidosCon,
+  playersWithAccount,
   type GenteDeTorneo,
   type SharedMatch,
   type TournamentMatch,
@@ -2079,8 +2080,9 @@ describe('genteDeTusTorneos', () => {
     expect(de(gente, unaFecha.playerId)?.torneos).toHaveLength(2)
     expect(de(gente, unaFecha.playerId)?.torneos).toContain(await nombreDeTemporada(t3))
     expect(de(gente, ninguna.playerId)).toMatchObject({ fechasJuntos: 0, torneos: [await nombreDeTemporada(t4.seasonId)] })
-    // Un relleno del torneo 1 jugó esa fecha conmigo: 1.
-    expect(de(gente, relleno1[0]!)?.fechasJuntos).toBe(1)
+    // Un relleno del torneo 1 jugó esa fecha conmigo, pero es un jugador
+    // tipeado, sin cuenta: no aparece (S3, "tienen cuenta").
+    expect(de(gente, relleno1[0]!)).toBeUndefined()
 
     // Primero más fechas; con las mismas, por nombre y después por id: un orden total.
     const orden = [...gente].sort(
@@ -2110,20 +2112,41 @@ describe('genteDeTusTorneos', () => {
     expect(ids(await genteDeTusTorneos(yo.client))).toEqual([otro.playerId])
   })
 
-  it('más de 1000 personas en mis torneos: las trae todas, sin cortar', async () => {
+  it('más de 1000 personas en mis torneos: no corta, y quien no tiene cuenta no aparece', async () => {
     const yo = await createTestUser()
+    const conCuenta = [await createTestUser(), await createTestUser(), await createTestUser()]
     const db = adminClient()
+    // 1100 jugadores tipeados, sin cuenta: llenan la primera página de asientos.
     const { data: players, error } = await db
       .from('players')
       .insert(Array.from({ length: 1100 }, (_, i) => ({ display_name: `Granel ${Date.now()}-${i}` })))
       .select('id')
     if (error !== null) throw new Error(error.message)
-    await aGranel(yo, 1, [[yo.playerId, ...players.map((p) => p.id)]])
+    const [seasonId] = await aGranel(yo, 1, [[yo.playerId, ...players.map((p) => p.id)]])
+    // Los asientos de los que tienen cuenta, con ids que ordenan después de
+    // todos los demás: caen en la segunda página de `.order('id')`. Si la
+    // lectura cortara en 1000 filas, no aparecerían.
+    const { data: disciplina, error: dError } = await db.from('disciplines').select('id').eq('season_id', seasonId!).single()
+    if (dError !== null) throw new Error(dError.message)
+    const hex = (largo: number) => Array.from({ length: largo }, () => Math.floor(Math.random() * 16).toString(16)).join('')
+    const asientos = conCuenta.map((persona, i) => ({
+      id: `ffffffff-${hex(4)}-4${hex(3)}-8${hex(3)}-${hex(12)}`,
+      season_id: seasonId!,
+      player_id: persona.playerId,
+      display_name: `Granel con cuenta ${i}`,
+      kind: 'SQUAD',
+    }))
+    const { error: eError } = await db.from('entries').insert(asientos)
+    if (eError !== null) throw new Error(eError.message)
+    const { error: deError } = await db.from('discipline_entries').insert(
+      asientos.map((asiento, i) => ({ discipline_id: disciplina.id, entry_id: asiento.id, season_id: seasonId!, seed_position: 1101 + i })),
+    )
+    if (deError !== null) throw new Error(deError.message)
 
     const gente = await genteDeTusTorneos(yo.client)
 
-    expect(new Set(ids(gente))).toEqual(new Set(players.map((p) => p.id)))
-    expect(gente.every((persona) => persona.displayName.startsWith('Granel ') && persona.fechasJuntos === 0)).toBe(true)
+    expect(new Set(ids(gente))).toEqual(new Set(conCuenta.map((persona) => persona.playerId)))
+    expect(gente.every((persona) => persona.fechasJuntos === 0)).toBe(true)
   }, 60_000)
 
   it('más de 219 torneos compartidos: no rompe la URL de la IN', async () => {
@@ -2136,6 +2159,71 @@ describe('genteDeTusTorneos', () => {
     expect(ids(gente)).toEqual([otro.playerId])
     expect(gente[0]?.torneos).toHaveLength(250)
   }, 60_000)
+})
+
+// ── quien borró su cuenta (odd/tasks/amigos-faciles.md, S2-S3, L13) ─────────
+// `delete_my_account` (0108) deja el asiento y su `player_id`, pero el jugador
+// queda sin `user_id`: no hay a quién mandarle un pedido. Se borra por el
+// camino real, llamando la función con la sesión de quien se va.
+
+async function borrarCuenta(persona: TestUser): Promise<void> {
+  const { error } = await persona.client.rpc('delete_my_account')
+  if (error !== null) throw new Error(error.message)
+}
+
+/** Todas las filas de `friendships` de un jugador, releídas con `service_role`. */
+async function amistadesDe(playerId: string) {
+  const { data, error } = await adminClient()
+    .from('friendships')
+    .select('*')
+    .or(`player_a.eq.${playerId},player_b.eq.${playerId}`)
+    .order('id', { ascending: true })
+  if (error !== null) throw new Error(error.message)
+  return data
+}
+
+describe('quien borró su cuenta', () => {
+  async function escena() {
+    const yo = await createTestUser()
+    const otro = await createTestUser()
+    const seFue = await createTestUser()
+    await createSeason({ admin: yo, squad: [yo.playerId, otro.playerId, seFue.playerId] })
+    await borrarCuenta(seFue)
+    return { yo, otro, seFue }
+  }
+
+  it('no aparece en "Gente de tus torneos"', async () => {
+    const { yo, otro } = await escena()
+    expect(ids(await genteDeTusTorneos(yo.client))).toEqual([otro.playerId])
+  })
+
+  it('en el perfil del torneo no hay control: friendshipWith da null', async () => {
+    const { yo, otro, seFue } = await escena()
+    expect(await friendshipWith(yo.client, seFue.playerId)).toBeNull()
+    expect(await friendshipWith(yo.client, otro.playerId)).toEqual({ kind: 'none' })
+  })
+
+  it('addFriend no manda el pedido: "Esa persona ya no tiene cuenta." y friendships no cambia', async () => {
+    const { yo, seFue } = await escena()
+    const antes = await amistadesDe(yo.playerId)
+
+    const intento = addFriend(yo.client, seFue.playerId)
+    await expect(intento).rejects.toThrow(EdgeError)
+    await expect(intento).rejects.toThrow('Esa persona ya no tiene cuenta.')
+
+    expect(await amistadesDe(yo.playerId)).toEqual(antes)
+    expect(await amistadesDe(seFue.playerId)).toEqual([])
+  })
+
+  it('playersWithAccount: de la gente con la que tengo contexto, sólo los que tienen cuenta', async () => {
+    const { yo, otro, seFue } = await escena()
+    const extraño = await createTestUser()
+
+    expect(await playersWithAccount(yo.client, [])).toEqual(new Set())
+    expect(await playersWithAccount(yo.client, [yo.playerId, otro.playerId, seFue.playerId, extraño.playerId])).toEqual(
+      new Set([yo.playerId, otro.playerId]),
+    )
+  })
 })
 
 // ── de dónde lo conocés (odd/tasks/amigos-faciles.md, T3, S4) ───────────────

@@ -693,12 +693,29 @@ function parCon(me: string, friendPlayerId: string): [string, string] {
 }
 
 /**
- * La amistad con `friendPlayerId`, vista desde el caller. `null` si no hay
- * sesión o si es uno mismo: ahí no hay amistad posible, y la pantalla no
- * muestra nada. Un tercero no ve filas ajenas (`friendships_read`, 0070), así
- * que para él la respuesta es `none`.
+ * Si `playerId` es alguien con quien tengo contexto (el de
+ * `player_display_names`, 0103) y no tiene cuenta: la borró (0108) o es un
+ * jugador tipeado que nadie reclamó. De un extraño `players_with_account`
+ * (0117) no responde, así que para él da false y todo queda como antes.
  */
-export async function friendshipWith(supabase: Client, friendPlayerId: string): Promise<FriendshipStatus | null> {
+async function yaNoTieneCuenta(supabase: Client, playerId: string): Promise<boolean> {
+  const [nombres, conCuenta] = await Promise.all([
+    playerNames(supabase, [playerId]),
+    playersWithAccount(supabase, [playerId]),
+  ])
+  return nombres.has(playerId) && !conCuenta.has(playerId)
+}
+
+/**
+ * `friendshipWith` sin juntar los casos sin amistad posible: `addFriend`
+ * necesita saber si es porque la persona ya no tiene cuenta. Sin fila entre
+ * los dos es el único caso que lo pregunta: borrar la cuenta (0108) se lleva
+ * las amistades y los pedidos.
+ */
+async function amistadCon(
+  supabase: Client,
+  friendPlayerId: string,
+): Promise<FriendshipStatus | 'sin cuenta' | null> {
   const { data: me, error: idError } = await supabase.rpc('my_player_id')
   if (idError !== null) throw new EdgeError(`No se pudo identificar tu cuenta: ${idError.message}`)
   if (me === null || me === friendPlayerId) return null
@@ -713,10 +730,22 @@ export async function friendshipWith(supabase: Client, friendPlayerId: string): 
   if (error?.code === '22P02') throw new EdgeError('Ese ID no es válido.')
   if (error !== null) throw new EdgeError(`No se pudo leer la amistad: ${error.message}`)
 
-  if (fila === null) return { kind: 'none' }
+  if (fila === null) return (await yaNoTieneCuenta(supabase, friendPlayerId)) ? 'sin cuenta' : { kind: 'none' }
   if (fila.accepted_at !== null) return { kind: 'friends', friendshipId: fila.id }
   if (fila.requested_by === me) return { kind: 'sent', friendshipId: fila.id }
   return { kind: 'received', friendshipId: fila.id, requestedAt: fila.created_at }
+}
+
+/**
+ * La amistad con `friendPlayerId`, vista desde el caller. `null` si no hay
+ * sesión, si es uno mismo o si la persona ya no tiene cuenta (la borró,
+ * 0108): ahí no hay amistad posible, y la pantalla no muestra nada. Un
+ * tercero no ve filas ajenas (`friendships_read`, 0070), así que para él la
+ * respuesta es `none`.
+ */
+export async function friendshipWith(supabase: Client, friendPlayerId: string): Promise<FriendshipStatus | null> {
+  const estado = await amistadCon(supabase, friendPlayerId)
+  return estado === 'sin cuenta' ? null : estado
 }
 
 /**
@@ -724,10 +753,12 @@ export async function friendshipWith(supabase: Client, friendPlayerId: string): 
  * acepta SU pedido en vez de crear otro (decisión del orquestador en
  * odd/tasks/amigos-faciles.md) -- en la pantalla no pasa, porque ahí va la
  * tarjeta, pero una pantalla vieja sí puede mandarlo. Con el pedido ya hecho,
- * o ya amigos, no toca nada. Devuelve en qué quedó.
+ * o ya amigos, no toca nada. Devuelve en qué quedó. A quien ya no tiene
+ * cuenta no le manda nada: el pedido no lo vería nadie.
  */
 export async function addFriend(supabase: Client, friendPlayerId: string): Promise<'sent' | 'friends'> {
-  const estado = await friendshipWith(supabase, friendPlayerId)
+  const estado = await amistadCon(supabase, friendPlayerId)
+  if (estado === 'sin cuenta') throw new EdgeError('Esa persona ya no tiene cuenta.')
   if (estado?.kind === 'received') {
     await acceptFriendship(supabase, estado.friendshipId)
     return 'friends'
@@ -1353,6 +1384,23 @@ function enTandas<T>(items: readonly T[], tamaño: number): T[][] {
 }
 
 /**
+ * De `playerIds`, los que siguen teniendo cuenta (`players_with_account`,
+ * 0117). Sólo responde por gente con la que tengo contexto, como
+ * `player_display_names`: un extraño nunca sale, tenga cuenta o no. De a
+ * `TANDA_NOMBRES` ids por llamada, por el mismo techo de filas.
+ */
+export async function playersWithAccount(supabase: Client, playerIds: readonly string[]): Promise<Set<string>> {
+  const tandas = await Promise.all(
+    enTandas([...new Set(playerIds)], TANDA_NOMBRES).map(async (tanda) => {
+      const { data, error } = await supabase.rpc('players_with_account', { p_ids: tanda })
+      if (error !== null) throw new EdgeError(`No se pudo saber quién tiene cuenta: ${error.message}`)
+      return data.map((fila) => fila.id)
+    }),
+  )
+  return new Set(tandas.flat())
+}
+
+/**
  * Todas las filas de una consulta, de a páginas de 1000 con `.range()`. La
  * consulta tiene que traer `count: 'exact'` y un orden total (termina en una
  * clave única): sin orden, dos páginas pueden repetir o saltear filas. Si el
@@ -1424,7 +1472,10 @@ async function todasLasFilasPorTandas<T>(
  *    las que jugué (`match_participants` míos), mis filas de `friendships`
  *    y los nombres de las temporadas.
  * 4. Quién más jugó en esas fechas (`match_participants` por `matchday_id`).
- * 5. Los nombres (`player_display_names`, 0103: `players` ya no se lee directo).
+ * 5. Los nombres (`player_display_names`, 0103: `players` ya no se lee directo)
+ *    y quién tiene cuenta (`players_with_account`, 0117): quien la borró
+ *    (0108) conserva su asiento, pero no va, porque la sección promete
+ *    "tienen cuenta".
  *
  * Cada lectura pagina con `.range()` sobre un orden total (`todasLasFilas`):
  * pasar de 1000 filas no corta nada en silencio. Las IN van de a 150 ids
@@ -1502,7 +1553,7 @@ export async function genteDeTusTorneos(supabase: Client): Promise<GenteDeTorneo
   // Una fila por partido mío: la fecha se repite. `match_participants` es una
   // vista, por eso `requireColumn`.
   const misFechas = [...new Set(misPartidos.map((fila) => requireColumn(fila.matchday_id, 'matchday_id')))]
-  const [enMisFechas, nombres] = await Promise.all([
+  const [enMisFechas, nombres, conCuenta] = await Promise.all([
     todasLasFilasPorTandas('fechas juntos', misFechas, (tanda, desde, hasta) =>
       supabase
         .from('match_participants')
@@ -1515,6 +1566,7 @@ export async function genteDeTusTorneos(supabase: Client): Promise<GenteDeTorneo
         .range(desde, hasta),
     ),
     Promise.all(enTandas([...temporadasDe.keys()], TANDA_NOMBRES).map((tanda) => playerNames(supabase, tanda))),
+    playersWithAccount(supabase, [...temporadasDe.keys()]),
   ])
 
   const fechasDe = new Map<string, Set<string>>()
@@ -1527,6 +1579,7 @@ export async function genteDeTusTorneos(supabase: Client): Promise<GenteDeTorneo
   const nombrePorId = new Map(nombres.flatMap((mapa) => [...mapa]))
 
   return [...temporadasDe.entries()]
+    .filter(([playerId]) => conCuenta.has(playerId))
     .map(([playerId, suyas]) => ({
       playerId,
       // Comparte una temporada conmigo: `player_display_names` siempre lo

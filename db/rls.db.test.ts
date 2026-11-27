@@ -677,6 +677,57 @@ describe('RLS — funciones', () => {
       expect(error?.code).toBe('42501')
     }
   })
+
+  it('anon no puede ejecutar players_with_account', async () => {
+    const { error } = await anonClient().rpc('players_with_account', { p_ids: ['00000000-0000-0000-0000-000000000000'] })
+    expect(error?.code).toBe('42501')
+  })
+})
+
+/*
+ * `players_with_account` (0117, amigos-faciles L13): quién sigue teniendo
+ * cuenta, sin abrir `players.user_id`. Responde sólo por gente con la que el
+ * que llama ya tiene contexto (el de `player_display_names`, 0103): de un
+ * extraño no dice nada, tenga cuenta o no.
+ */
+describe('players_with_account', () => {
+  it('de mis torneos, sólo los ids con cuenta; nunca el user_id', async () => {
+    const yo = await createTestUser()
+    const otro = await createTestUser()
+    const seFue = await createTestUser()
+    await createSeason({ admin: yo, squad: [yo.playerId, otro.playerId, seFue.playerId] })
+    const { error: deleteError } = await seFue.client.rpc('delete_my_account')
+    if (deleteError) throw new Error(deleteError.message)
+
+    const { data, error } = await yo.client.rpc('players_with_account', {
+      p_ids: [yo.playerId, otro.playerId, seFue.playerId],
+    })
+
+    expect(error).toBeNull()
+    expect(data?.map((fila) => fila.id).sort()).toEqual([yo.playerId, otro.playerId].sort())
+    expect(data?.every((fila) => Object.keys(fila).join() === 'id')).toBe(true)
+  })
+
+  it('de un extraño sin contexto no dice nada, tenga cuenta o no', async () => {
+    const yo = await createTestUser()
+    const conCuenta = await createTestUser()
+    const seFue = await createTestUser()
+    const { error: deleteError } = await seFue.client.rpc('delete_my_account')
+    if (deleteError) throw new Error(deleteError.message)
+    const { data: tipeado, error: insertError } = await adminClient()
+      .from('players')
+      .insert({ display_name: `Tipeado ${Date.now()}` })
+      .select('id')
+      .single()
+    if (insertError) throw new Error(insertError.message)
+
+    const { data, error } = await yo.client.rpc('players_with_account', {
+      p_ids: [conCuenta.playerId, seFue.playerId, tipeado.id],
+    })
+
+    expect(error).toBeNull()
+    expect(data).toEqual([])
+  })
 })
 
 /*

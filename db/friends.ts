@@ -675,6 +675,112 @@ export async function acceptFriendship(supabase: Client, friendshipId: string): 
   }
 }
 
+// ── la amistad con UNA persona, por el par (odd/tasks/amigos-faciles.md, S2) ──
+// El perfil del torneo conoce a la persona, no la fila: todo va por
+// `friendPlayerId`. El par se arma con `.eq` sobre las dos columnas, nunca con
+// un `.or()` de texto -- el id viene de un formulario, y meterlo en un filtro
+// armado a mano dejaría colar comas y paréntesis en la consulta.
+
+/** En qué está la amistad entre el caller y otra persona. `requestedAt` es el `created_at` del pedido. */
+export type FriendshipStatus =
+  | { kind: 'none' }
+  | { kind: 'sent'; friendshipId: string }
+  | { kind: 'received'; friendshipId: string; requestedAt: string }
+  | { kind: 'friends'; friendshipId: string }
+
+function parCon(me: string, friendPlayerId: string): [string, string] {
+  return me < friendPlayerId ? [me, friendPlayerId] : [friendPlayerId, me]
+}
+
+/**
+ * La amistad con `friendPlayerId`, vista desde el caller. `null` si no hay
+ * sesión o si es uno mismo: ahí no hay amistad posible, y la pantalla no
+ * muestra nada. Un tercero no ve filas ajenas (`friendships_read`, 0070), así
+ * que para él la respuesta es `none`.
+ */
+export async function friendshipWith(supabase: Client, friendPlayerId: string): Promise<FriendshipStatus | null> {
+  const { data: me, error: idError } = await supabase.rpc('my_player_id')
+  if (idError !== null) throw new EdgeError(`No se pudo identificar tu cuenta: ${idError.message}`)
+  if (me === null || me === friendPlayerId) return null
+
+  const [playerA, playerB] = parCon(me, friendPlayerId)
+  const { data: fila, error } = await supabase
+    .from('friendships')
+    .select('id, requested_by, accepted_at, created_at')
+    .eq('player_a', playerA)
+    .eq('player_b', playerB)
+    .maybeSingle()
+  if (error?.code === '22P02') throw new EdgeError('Ese ID no es válido.')
+  if (error !== null) throw new EdgeError(`No se pudo leer la amistad: ${error.message}`)
+
+  if (fila === null) return { kind: 'none' }
+  if (fila.accepted_at !== null) return { kind: 'friends', friendshipId: fila.id }
+  if (fila.requested_by === me) return { kind: 'sent', friendshipId: fila.id }
+  return { kind: 'received', friendshipId: fila.id, requestedAt: fila.created_at }
+}
+
+/**
+ * "Agregar" en el perfil: manda el pedido. Si el otro ya me había pedido,
+ * acepta SU pedido en vez de crear otro (decisión del orquestador en
+ * odd/tasks/amigos-faciles.md) -- en la pantalla no pasa, porque ahí va la
+ * tarjeta, pero una pantalla vieja sí puede mandarlo. Con el pedido ya hecho,
+ * o ya amigos, no toca nada. Devuelve en qué quedó.
+ */
+export async function addFriend(supabase: Client, friendPlayerId: string): Promise<'sent' | 'friends'> {
+  const estado = await friendshipWith(supabase, friendPlayerId)
+  if (estado?.kind === 'received') {
+    await acceptFriendship(supabase, estado.friendshipId)
+    return 'friends'
+  }
+  if (estado?.kind === 'sent' || estado?.kind === 'friends') return estado.kind
+  // `null` (uno mismo o sin sesión) también cae acá: `requestFriendship` ya
+  // tiene el mensaje de cada caso.
+  await requestFriendship(supabase, friendPlayerId)
+  return 'sent'
+}
+
+/** "Aceptar" en la tarjeta del perfil: el pedido que me hizo `friendPlayerId`. Ya amigos no es un error. */
+export async function acceptFriendRequestFrom(supabase: Client, friendPlayerId: string): Promise<void> {
+  const estado = await friendshipWith(supabase, friendPlayerId)
+  if (estado?.kind === 'friends') return
+  if (estado?.kind !== 'received') throw new EdgeError('No se pudo aceptar: el pedido ya no está.')
+  await acceptFriendship(supabase, estado.friendshipId)
+}
+
+/**
+ * Borra un pedido PENDIENTE del par: el mío ("Deshacer") o el del otro (✕,
+ * rechazar). `friendships_delete` (0070) deja borrar a cualquiera de los dos
+ * en cualquier momento, así que acotar a pendiente y a quién lo pidió es
+ * cosa de esta función: "Deshacer" un segundo tarde no puede borrar una
+ * amistad que el otro acaba de aceptar. `count: 'exact'` porque un DELETE que
+ * no toca ninguna fila no es un error en PostgREST.
+ */
+async function borrarPedido(supabase: Client, friendPlayerId: string, de: 'mio' | 'suyo'): Promise<void> {
+  const verbo = de === 'mio' ? 'deshacer' : 'rechazar'
+  const me = await myPlayerId(supabase, `${verbo} un pedido`)
+  const [playerA, playerB] = parCon(me, friendPlayerId)
+  const { error, count } = await supabase
+    .from('friendships')
+    .delete({ count: 'exact' })
+    .eq('player_a', playerA)
+    .eq('player_b', playerB)
+    .eq('requested_by', de === 'mio' ? me : friendPlayerId)
+    .is('accepted_at', null)
+  if (error?.code === '22P02') throw new EdgeError('Ese ID no es válido.')
+  if (error !== null) throw new EdgeError(`No se pudo ${verbo}: ${error.message}`)
+  if (count === 0) throw new EdgeError(`No se pudo ${verbo}: el pedido ya no está pendiente.`)
+}
+
+/** "Deshacer" en el aviso: borra MI pedido pendiente a `friendPlayerId`. */
+export async function cancelFriendRequest(supabase: Client, friendPlayerId: string): Promise<void> {
+  await borrarPedido(supabase, friendPlayerId, 'mio')
+}
+
+/** ✕ en la tarjeta: rechaza (borra) el pedido pendiente que me hizo `friendPlayerId`. Sin aviso al otro. */
+export async function rejectFriendRequest(supabase: Client, friendPlayerId: string): Promise<void> {
+  await borrarPedido(supabase, friendPlayerId, 'suyo')
+}
+
 export interface Friend {
   friendshipId: string
   playerId: string

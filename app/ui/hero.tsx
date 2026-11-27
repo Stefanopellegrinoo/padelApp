@@ -7,7 +7,9 @@ import { Volver } from '@/app/torneo/[id]/volver'
  * `Volver` con su destino, el `kicker` (de qué es: "Pádel", el torneo), el
  * título grande y el `subtitle` en el blanco suave. `right` va a la altura
  * del título, a la derecha (tu puesto, "3°"); `children`, debajo de todo
- * (confirmaciones, la píldora "Ver la fecha").
+ * (confirmaciones, la píldora "Ver la fecha"). `action` va arriba a la
+ * derecha, en la línea de `Volver` (el chip de amistad del perfil); sin ella
+ * `Volver` sale suelto, como siempre.
  *
  * `titleVariant`: `'title'` (34 px, ancho 75 %) para un nombre, `'number'`
  * (72 px, ancho 62 %) para un número que se lee de lejos, "Fecha 8".
@@ -25,6 +27,7 @@ export function Hero({
   title,
   subtitle,
   right,
+  action,
   children,
   titleVariant = 'title',
   sport,
@@ -34,6 +37,7 @@ export function Hero({
   title: ReactNode
   subtitle?: ReactNode
   right?: ReactNode
+  action?: ReactNode
   children?: ReactNode
   titleVariant?: 'title' | 'number'
   sport?: string
@@ -42,12 +46,20 @@ export function Hero({
     titleVariant === 'number'
       ? 'font-cond text-[72px]'
       : 'font-titulo text-[34px] text-balance'
+  const volver = back === undefined ? null : <Volver href={back.href} label={back.label} desanda={back.desanda} />
   return (
     <header
       data-deporte={sport}
       className="rounded-b-block bg-block px-4 pt-[calc(6px+env(safe-area-inset-top))] pb-5 text-on-block [--color-focus:var(--color-on-block)]"
     >
-      {back !== undefined && <Volver href={back.href} label={back.label} desanda={back.desanda} />}
+      {action === undefined ? (
+        volver
+      ) : (
+        <div className="flex items-center justify-between gap-3">
+          {volver ?? <span />}
+          {action}
+        </div>
+      )}
       {kicker !== undefined && (
         <div className="mt-2 flex items-center gap-2 text-[15px] font-semibold text-on-block-soft">{kicker}</div>
       )}

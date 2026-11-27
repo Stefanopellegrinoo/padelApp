@@ -120,6 +120,19 @@ vi.mock('next/navigation', async (importOriginal) => {
   return { ...real, notFound: vi.fn(() => { throw new Error('NEXT_NOT_FOUND') }) }
 })
 
+// La amistad con la persona del perfil (amigos-faciles, S2): sin nada entre los dos por defecto;
+// cada caso pisa el estado una vez. Las acciones no corren acá: sólo se dibuja el control.
+vi.mock('@/db/friends', () => ({
+  friendshipWith: vi.fn(async () => ({ kind: 'none' })),
+}))
+
+vi.mock('@/app/amigos/actions', () => ({
+  agregarAmigo: vi.fn(),
+  deshacerPedido: vi.fn(),
+  aceptarPedidoDe: vi.fn(),
+  rechazarPedidoDe: vi.fn(),
+}))
+
 vi.mock('@/db/server', () => ({
   serverClient: async () => ({}),
 }))
@@ -392,5 +405,105 @@ describe('Jugador del ajedrez: ganadas, perdidas y tablas', () => {
     expect(rival).toContain('2 partidos')
     expect(rival).toMatch(/>2-0</)
     expect(rival).toContain('2 ganados, 0 perdidos')
+  })
+})
+
+// odd/tasks/amigos-faciles.md, S2: el control de amistad, arriba a la derecha, en la línea de Volver.
+describe('Jugador: la amistad con la persona del perfil', () => {
+  const header = (html: string) => html.match(/<header[^>]*>.*<\/header>/)?.[0] ?? ''
+  /** La fila de arriba del Hero: Volver y, a su derecha, el control. */
+  const filaDeArriba = (html: string) => header(html).match(/^<header[^>]*><div class="[^"]*">(.*?)<\/div><div/)?.[1] ?? ''
+
+  /** `e1` es "Padel Uno" con cuenta (`p1`); el que mira es `p0`, sin lugar en el torneo. */
+  async function conCuenta() {
+    const { seasonSquadMembersOf } = await import('@/db/read')
+    vi.mocked(seasonSquadMembersOf).mockResolvedValueOnce([
+      { id: 'e1', displayName: 'Padel Uno', playerId: 'p1' },
+      { id: 'e2', displayName: 'Padel Dos', playerId: null },
+      { id: 'e3', displayName: 'Jugador Fantasma', playerId: 'p3' },
+    ])
+  }
+
+  it('no son amigos: chip "Agregar" a la derecha de Volver, con el primer nombre', async () => {
+    const { friendshipWith } = await import('@/db/friends')
+    await conCuenta()
+    const html = await render('padel', 'e1')
+
+    expect(friendshipWith).toHaveBeenLastCalledWith(expect.anything(), 'p1')
+    const fila = filaDeArriba(html)
+    expect(fila).toMatch(/<a [^>]*href="\/torneo\/s1\/padel"[^>]*>.*Tabla<\/a>/)
+    expect(fila).toMatch(/<button[^>]*aria-label="Agregar a Padel como amigo"[^>]*>.*Agregar<\/button>/)
+  })
+
+  it('pedido enviado: chip "Enviado"', async () => {
+    const { friendshipWith } = await import('@/db/friends')
+    await conCuenta()
+    vi.mocked(friendshipWith).mockResolvedValueOnce({ kind: 'sent', friendshipId: 'f1' })
+    const fila = filaDeArriba(await render('padel', 'e1'))
+
+    expect(fila).toContain('Enviado')
+    expect(fila).not.toContain('Agregar')
+  })
+
+  it('él te pidió: la tarjeta blanca en el encabezado, sin chip', async () => {
+    const { friendshipWith } = await import('@/db/friends')
+    await conCuenta()
+    const dosDias = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000 - 60_000).toISOString()
+    vi.mocked(friendshipWith).mockResolvedValueOnce({ kind: 'received', friendshipId: 'f1', requestedAt: dosDias })
+    const html = await render('padel', 'e1')
+
+    expect(filaDeArriba(html)).not.toMatch(/Agregar|Enviado|Amigos/)
+    const tarjeta = header(html)
+    expect(tarjeta).toContain('Padel te pidió ser amigos')
+    expect(tarjeta).toContain('Hace 2 días')
+    expect(tarjeta).toMatch(/<button[^>]*>Aceptar<\/button>/)
+    expect(tarjeta).toContain('aria-label="Rechazar el pedido de Padel"')
+  })
+
+  it('ya son amigos: "Amigos ›" lleva al historial entre los dos', async () => {
+    const { friendshipWith } = await import('@/db/friends')
+    await conCuenta()
+    vi.mocked(friendshipWith).mockResolvedValueOnce({ kind: 'friends', friendshipId: 'f1' })
+    const fila = filaDeArriba(await render('padel', 'e1'))
+
+    expect(linkWith(fila, 'Amigos')).toContain('href="/amigos/p1?desde=amigos"')
+  })
+
+  it('en tu propio perfil no aparece', async () => {
+    const { myEntryId } = await import('@/db/read')
+    const { friendshipWith } = await import('@/db/friends')
+    await conCuenta()
+    vi.mocked(myEntryId).mockResolvedValueOnce('e1')
+    vi.mocked(friendshipWith).mockClear()
+    const html = await render('padel', 'e1')
+
+    expect(header(html)).not.toMatch(/Agregar|Enviado/)
+    expect(friendshipWith).not.toHaveBeenCalled()
+  })
+
+  it('en un lugar que nadie reclamó (sin cuenta) no aparece', async () => {
+    const { friendshipWith } = await import('@/db/friends')
+    vi.mocked(friendshipWith).mockClear()
+    const html = await render('padel', 'e2')
+
+    expect(header(html)).not.toMatch(/Agregar|Enviado/)
+    expect(friendshipWith).not.toHaveBeenCalled()
+    // Sin control, el Hero queda como siempre: Volver suelto.
+    expect(header(html)).toMatch(/^<header[^>]*><a /)
+  })
+
+  it('si la base dice que no hay amistad posible (null), no aparece', async () => {
+    const { friendshipWith } = await import('@/db/friends')
+    await conCuenta()
+    vi.mocked(friendshipWith).mockResolvedValueOnce(null)
+    expect(header(await render('padel', 'e1'))).not.toMatch(/Agregar|Enviado/)
+  })
+
+  it('también en el perfil de quien todavía no jugó este deporte', async () => {
+    await conCuenta()
+    const html = await render('padel', 'e3')
+
+    expect(html).toContain('Todavía no jugó Pádel')
+    expect(filaDeArriba(html)).toContain('aria-label="Agregar a Jugador como amigo"')
   })
 })

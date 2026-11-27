@@ -12,6 +12,11 @@ import {
   updateCasualMatch,
   deleteCasualMatch,
   casualParticipantIds,
+  friendshipWith,
+  addFriend,
+  cancelFriendRequest,
+  acceptFriendRequestFrom,
+  rejectFriendRequest,
   type SharedMatch,
   type TournamentMatch,
   type CasualMatch,
@@ -1699,5 +1704,223 @@ describe('casualParticipantIds', () => {
     expect((await casualParticipantIds(yo.client, matchId)).sort()).toEqual([yo.playerId, amigo.playerId].sort())
     expect(await casualParticipantIds(yo.client, '')).toEqual([])
     await expect(casualParticipantIds(yo.client, 'no-es-uuid')).rejects.toThrow('Ese ID no es válido.')
+  })
+})
+
+
+// ── amigos fáciles, A: la amistad desde el perfil del torneo
+// (odd/tasks/amigos-faciles.md, S2) ──────────────────────────────────────────
+// Todo por el par (`friendPlayerId`), nunca por el id de la fila: la pantalla
+// sólo conoce a la persona. Cada rechazo se asierta también sobre la fila,
+// releída con `adminClient()`: un error que igual borró o aceptó es peor que
+// ninguno.
+
+/** La fila del par tal cual está en la base (o `null`), sin pasar por la RLS. */
+async function filaDelPar(a: string, b: string) {
+  const [playerA, playerB] = a < b ? [a, b] : [b, a]
+  const { data, error } = await adminClient()
+    .from('friendships')
+    .select('id, requested_by, accepted_at, created_at')
+    .eq('player_a', playerA)
+    .eq('player_b', playerB)
+  if (error !== null) throw new Error(error.message)
+  expect(data.length).toBeLessThanOrEqual(1)
+  return data[0] ?? null
+}
+
+describe('friendshipWith', () => {
+  it('dice en qué está la amistad con esa persona, desde cada lado', async () => {
+    const yo = await createTestUser()
+    const otro = await createTestUser()
+
+    expect(await friendshipWith(yo.client, otro.playerId)).toEqual({ kind: 'none' })
+
+    await requestFriendship(yo.client, otro.playerId)
+    const fila = await filaDelPar(yo.playerId, otro.playerId)
+    expect(await friendshipWith(yo.client, otro.playerId)).toEqual({ kind: 'sent', friendshipId: fila?.id })
+    // `requestedAt` es el `created_at` de la fila: de ahí sale "Hace 2 días".
+    expect(await friendshipWith(otro.client, yo.playerId)).toEqual({
+      kind: 'received',
+      friendshipId: fila?.id,
+      requestedAt: fila?.created_at,
+    })
+
+    await acceptFriendship(otro.client, fila!.id)
+    expect(await friendshipWith(yo.client, otro.playerId)).toEqual({ kind: 'friends', friendshipId: fila?.id })
+    expect(await friendshipWith(otro.client, yo.playerId)).toEqual({ kind: 'friends', friendshipId: fila?.id })
+  })
+
+  it('con uno mismo no hay amistad posible: null', async () => {
+    const yo = await createTestUser()
+    expect(await friendshipWith(yo.client, yo.playerId)).toBeNull()
+  })
+
+  it('un tercero no ve la amistad ajena: para él, ninguna', async () => {
+    const uno = await createTestUser()
+    const dos = await createTestUser()
+    const ajeno = await createTestUser()
+    await amistadAceptada(uno.playerId, dos.playerId)
+
+    expect(await friendshipWith(ajeno.client, dos.playerId)).toEqual({ kind: 'none' })
+  })
+
+  it('un id que no es uuid da "Ese ID no es válido."', async () => {
+    const yo = await createTestUser()
+    await expect(friendshipWith(yo.client, 'no-es-uuid')).rejects.toThrow('Ese ID no es válido.')
+  })
+})
+
+describe('addFriend', () => {
+  it('sin nada entre los dos, manda el pedido: una fila pendiente pedida por mí', async () => {
+    const yo = await createTestUser()
+    const otro = await createTestUser()
+
+    expect(await addFriend(yo.client, otro.playerId)).toBe('sent')
+
+    const fila = await filaDelPar(yo.playerId, otro.playerId)
+    expect(fila?.requested_by).toBe(yo.playerId)
+    expect(fila?.accepted_at).toBeNull()
+  })
+
+  it('si el otro ya me había pedido, acepta SU pedido en vez de crear otro', async () => {
+    const yo = await createTestUser()
+    const otro = await createTestUser()
+    await requestFriendship(otro.client, yo.playerId)
+    const antes = await filaDelPar(yo.playerId, otro.playerId)
+
+    expect(await addFriend(yo.client, otro.playerId)).toBe('friends')
+
+    const despues = await filaDelPar(yo.playerId, otro.playerId)
+    expect(despues?.id).toBe(antes?.id)
+    expect(despues?.requested_by).toBe(otro.playerId)
+    expect(despues?.accepted_at).not.toBeNull()
+  })
+
+  it('una pantalla vieja (ya pedido, o ya amigos) no toca la fila', async () => {
+    const yo = await createTestUser()
+    const otro = await createTestUser()
+    await requestFriendship(yo.client, otro.playerId)
+    const pedido = await filaDelPar(yo.playerId, otro.playerId)
+
+    expect(await addFriend(yo.client, otro.playerId)).toBe('sent')
+    expect(await filaDelPar(yo.playerId, otro.playerId)).toEqual(pedido)
+
+    const amigo = await createTestUser()
+    await amistadAceptada(amigo.playerId, yo.playerId)
+    const amistad = await filaDelPar(yo.playerId, amigo.playerId)
+    expect(await addFriend(yo.client, amigo.playerId)).toBe('friends')
+    expect(await filaDelPar(yo.playerId, amigo.playerId)).toEqual(amistad)
+  })
+
+  it('a uno mismo no: EdgeError y ninguna fila', async () => {
+    const yo = await createTestUser()
+    await expect(addFriend(yo.client, yo.playerId)).rejects.toThrow('No te podés agregar a vos mismo como amigo.')
+  })
+})
+
+describe('cancelFriendRequest (Deshacer)', () => {
+  it('borra mi pedido pendiente', async () => {
+    const yo = await createTestUser()
+    const otro = await createTestUser()
+    await requestFriendship(yo.client, otro.playerId)
+
+    await cancelFriendRequest(yo.client, otro.playerId)
+
+    expect(await filaDelPar(yo.playerId, otro.playerId)).toBeNull()
+  })
+
+  it('si el otro ya aceptó, no borra la amistad', async () => {
+    const yo = await createTestUser()
+    const otro = await createTestUser()
+    await amistadAceptada(yo.playerId, otro.playerId)
+    const antes = await filaDelPar(yo.playerId, otro.playerId)
+
+    await expect(cancelFriendRequest(yo.client, otro.playerId)).rejects.toThrow(
+      'No se pudo deshacer: el pedido ya no está pendiente.',
+    )
+    expect(await filaDelPar(yo.playerId, otro.playerId)).toEqual(antes)
+  })
+
+  it('no borra un pedido que me hizo el otro: ése se rechaza, no se deshace', async () => {
+    const yo = await createTestUser()
+    const otro = await createTestUser()
+    await amistadPendiente(otro.playerId, yo.playerId)
+    const antes = await filaDelPar(yo.playerId, otro.playerId)
+
+    await expect(cancelFriendRequest(yo.client, otro.playerId)).rejects.toThrow(EdgeError)
+    expect(await filaDelPar(yo.playerId, otro.playerId)).toEqual(antes)
+  })
+})
+
+describe('acceptFriendRequestFrom (Aceptar en la tarjeta)', () => {
+  it('acepta el pedido que me hizo esa persona', async () => {
+    const yo = await createTestUser()
+    const otro = await createTestUser()
+    await amistadPendiente(otro.playerId, yo.playerId)
+
+    await acceptFriendRequestFrom(yo.client, otro.playerId)
+
+    expect((await filaDelPar(yo.playerId, otro.playerId))?.accepted_at).not.toBeNull()
+  })
+
+  it('si el pedido ya no está (lo canceló), avisa y no crea nada', async () => {
+    const yo = await createTestUser()
+    const otro = await createTestUser()
+
+    await expect(acceptFriendRequestFrom(yo.client, otro.playerId)).rejects.toThrow(
+      'No se pudo aceptar: el pedido ya no está.',
+    )
+    expect(await filaDelPar(yo.playerId, otro.playerId)).toBeNull()
+  })
+
+  it('mi propio pedido no lo puedo aceptar yo: la fila queda pendiente', async () => {
+    const yo = await createTestUser()
+    const otro = await createTestUser()
+    await amistadPendiente(yo.playerId, otro.playerId)
+    const antes = await filaDelPar(yo.playerId, otro.playerId)
+
+    await expect(acceptFriendRequestFrom(yo.client, otro.playerId)).rejects.toThrow(EdgeError)
+    expect(await filaDelPar(yo.playerId, otro.playerId)).toEqual(antes)
+  })
+})
+
+describe('rejectFriendRequest (✕ en la tarjeta)', () => {
+  it('borra el pedido que me hizo esa persona', async () => {
+    const yo = await createTestUser()
+    const otro = await createTestUser()
+    await amistadPendiente(otro.playerId, yo.playerId)
+
+    await rejectFriendRequest(yo.client, otro.playerId)
+
+    expect(await filaDelPar(yo.playerId, otro.playerId)).toBeNull()
+  })
+
+  it('no borra una amistad ya aceptada ni mi propio pedido', async () => {
+    const yo = await createTestUser()
+    const amigo = await createTestUser()
+    await amistadAceptada(amigo.playerId, yo.playerId)
+    const amistad = await filaDelPar(yo.playerId, amigo.playerId)
+    await expect(rejectFriendRequest(yo.client, amigo.playerId)).rejects.toThrow(
+      'No se pudo rechazar: el pedido ya no está pendiente.',
+    )
+    expect(await filaDelPar(yo.playerId, amigo.playerId)).toEqual(amistad)
+
+    const otro = await createTestUser()
+    await amistadPendiente(yo.playerId, otro.playerId)
+    const mio = await filaDelPar(yo.playerId, otro.playerId)
+    await expect(rejectFriendRequest(yo.client, otro.playerId)).rejects.toThrow(EdgeError)
+    expect(await filaDelPar(yo.playerId, otro.playerId)).toEqual(mio)
+  })
+
+  it('un tercero no puede borrar el pedido ajeno', async () => {
+    const uno = await createTestUser()
+    const dos = await createTestUser()
+    const ajeno = await createTestUser()
+    await amistadPendiente(uno.playerId, dos.playerId)
+    const antes = await filaDelPar(uno.playerId, dos.playerId)
+
+    await expect(rejectFriendRequest(ajeno.client, uno.playerId)).rejects.toThrow(EdgeError)
+    await expect(cancelFriendRequest(ajeno.client, dos.playerId)).rejects.toThrow(EdgeError)
+    expect(await filaDelPar(uno.playerId, dos.playerId)).toEqual(antes)
   })
 })

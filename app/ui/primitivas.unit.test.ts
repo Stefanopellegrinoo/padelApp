@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { Avatar, avatarTone, initials } from './avatar'
 import { button, type ButtonVariant } from './button'
+import { chip } from './chip'
 import { Hero } from './hero'
 import { row, rowPress } from './row'
 import { Section } from './section'
@@ -46,6 +47,41 @@ describe('Hero', () => {
     expect(clases(fecha, /<h1[^>]*class="([^"]*)"/)).toContain('font-cond')
     expect(fecha).not.toContain('<a')
     expect(fecha).not.toContain('data-deporte')
+  })
+})
+
+describe('Hero con una acción arriba a la derecha (amigos-faciles, S2)', () => {
+  it('la acción va en la misma línea que Volver, a la derecha', () => {
+    const html = renderToStaticMarkup(
+      createElement(Hero, {
+        back: { href: '/torneo/s1/padel', label: 'Tabla' },
+        action: createElement('button', { type: 'button' }, 'Agregar'),
+        title: 'Nico Arias',
+      }),
+    )
+    const fila = html.match(/<header[^>]*><div class="([^"]*)"><a[^>]*>.*?Tabla<\/a><button type="button">Agregar<\/button><\/div>/)
+    expect(fila?.[1]?.split(' ')).toEqual(expect.arrayContaining(['flex', 'items-center', 'justify-between']))
+  })
+
+  it('sin acción el Hero sale igual que siempre: Volver suelto, primero del header', () => {
+    const html = renderToStaticMarkup(createElement(Hero, { back: { href: '/torneos', label: 'Inicio' }, title: 'X' }))
+    expect(html).toMatch(/^<header[^>]*><a /)
+  })
+})
+
+describe('chip', () => {
+  it('mide 34 a la vista y 44 para el dedo, y se aprieta (S6)', () => {
+    for (const v of ['onBlock', 'hueca', 'claro'] as const) {
+      expect(chip(v).split(' ')).toEqual(
+        expect.arrayContaining(['press', 'relative', 'min-h-[34px]', 'rounded-pill', 'after:absolute', 'after:-inset-y-[5px]']),
+      )
+    }
+  })
+
+  it('cada variante tiene su par de colores', () => {
+    expect(chip('onBlock').split(' ')).toEqual(expect.arrayContaining(['bg-on-block', 'text-block']))
+    expect(chip('hueca').split(' ')).toEqual(expect.arrayContaining(['text-on-block']))
+    expect(chip('claro').split(' ')).toEqual(expect.arrayContaining(['bg-opcion', 'text-accent-link']))
   })
 })
 

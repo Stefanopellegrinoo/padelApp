@@ -4,6 +4,10 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import {
   acceptFriendship,
+  acceptFriendRequestFrom,
+  addFriend,
+  cancelFriendRequest,
+  rejectFriendRequest,
   requestFriendship,
   createCasualMatch,
   updateCasualMatch,
@@ -58,6 +62,72 @@ export async function sendFriendRequest(formData: FormData): Promise<void> {
 export async function accept(formData: FormData): Promise<void> {
   const friendshipId = String(formData.get('friendshipId') ?? '')
   await onAmigos((supabase) => acceptFriendship(supabase, friendshipId))
+}
+
+// ── la amistad desde el perfil del torneo (odd/tasks/amigos-faciles.md, S2) ──
+
+export type AmistadResult = { ok: true } | { ok: false; error: string }
+
+/**
+ * Las cuatro escrituras del control del perfil del torneo. Sin redirect: la
+ * pantalla se queda donde está, con su `?desde=` intacto, y `revalidatePath`
+ * le trae el estado nuevo de la base. Mismo registro que `cancelTheMatchday`
+ * (`fechas/[n]/actions.ts`): llamadas directas desde el cliente, con el error
+ * de vuelta en el resultado.
+ *
+ * Todas van por la persona (`friendPlayerId`), no por el id de la fila: la
+ * pantalla no tiene por qué confiar en un id que vino del cliente, y
+ * `db/friends.ts` resuelve la fila del par con la sesión.
+ */
+async function enElPerfil<T extends object>(
+  work: (supabase: Awaited<ReturnType<typeof serverClient>>) => Promise<T>,
+): Promise<({ ok: true } & T) | { ok: false; error: string }> {
+  let result: T
+  try {
+    const supabase = await serverClient()
+    result = await work(supabase)
+  } catch (error) {
+    if (!(error instanceof EdgeError)) throw error
+    return { ok: false, error: error.message }
+  }
+
+  // Todos los perfiles del torneo (el de esta persona, y el chip en cualquier
+  // otro lugar donde aparezca), la lista de Amigos e Inicio.
+  revalidatePath('/torneo/[id]/[disciplina]/jugador/[entryId]', 'page')
+  revalidatePath('/amigos')
+  revalidatePath('/torneos')
+  return { ok: true, ...result }
+}
+
+/** "Agregar": `estado` dice en qué quedó -- `friends` si el otro ya había pedido y esto lo aceptó. */
+export async function agregarAmigo(
+  friendPlayerId: string,
+): Promise<{ ok: true; estado: 'sent' | 'friends' } | { ok: false; error: string }> {
+  return enElPerfil(async (supabase) => ({ estado: await addFriend(supabase, friendPlayerId) }))
+}
+
+/** "Deshacer" en el aviso: borra mi pedido, si sigue pendiente. */
+export async function deshacerPedido(friendPlayerId: string): Promise<AmistadResult> {
+  return enElPerfil(async (supabase) => {
+    await cancelFriendRequest(supabase, friendPlayerId)
+    return {}
+  })
+}
+
+/** "Aceptar" en la tarjeta del encabezado. */
+export async function aceptarPedidoDe(friendPlayerId: string): Promise<AmistadResult> {
+  return enElPerfil(async (supabase) => {
+    await acceptFriendRequestFrom(supabase, friendPlayerId)
+    return {}
+  })
+}
+
+/** ✕ en la tarjeta: rechaza el pedido. Al otro no le llega ningún aviso. */
+export async function rechazarPedidoDe(friendPlayerId: string): Promise<AmistadResult> {
+  return enElPerfil(async (supabase) => {
+    await rejectFriendRequest(supabase, friendPlayerId)
+    return {}
+  })
 }
 
 // ── el partido casual: cargar, editar, borrar ───────────────────────────────

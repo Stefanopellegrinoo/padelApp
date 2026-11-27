@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import type { ReactNode } from 'react'
 import { notFound } from 'next/navigation'
 import {
   computeRanking,
@@ -26,11 +27,14 @@ import {
   seasonHeader,
   seasonSquadMembersOf,
 } from '@/db/read'
+import { friendshipWith, type FriendshipStatus } from '@/db/friends'
 import { serverClient } from '@/db/server'
 import { Avatar } from '@/app/ui/avatar'
 import { button } from '@/app/ui/button'
 import { Hero } from '@/app/ui/hero'
 import { row as rowClass, rowMeta, rowTitle } from '@/app/ui/row'
+import { ChipAmistad, PedidoRecibido } from '../amistad'
+import { haceCuanto, primerNombre } from '../amistad-texto'
 import { desdeOf, perfilHref, volverDelJugador, type Desde } from '../origen'
 import { Dato, markMatchdays, PuntosPorFecha, Seccion, Vos, VOS_FILA } from '../piezas'
 
@@ -215,6 +219,27 @@ function FilaPersona({
 }
 
 /**
+ * La amistad con la persona del perfil (odd/tasks/amigos-faciles.md, S2): el
+ * chip para la fila de Volver (`action` del Hero) o, si el otro ya pidió, la
+ * tarjeta para abajo del nombre (`children`). Nada si no hay a quién pedirle
+ * (`status` en null: tu perfil, un lugar sin cuenta, o la base que dice que
+ * no hay amistad posible). `displayName` es el del título: el chip y la
+ * tarjeta nombran a la misma persona que se lee arriba.
+ */
+function controlDeAmistad(
+  status: FriendshipStatus | null,
+  playerId: string | null,
+  displayName: string,
+): { action?: ReactNode; card?: ReactNode } {
+  if (status === null || playerId === null) return {}
+  const nombre = primerNombre(displayName)
+  if (status.kind === 'received') {
+    return { card: <PedidoRecibido playerId={playerId} nombre={nombre} hace={haceCuanto(status.requestedAt, new Date())} /> }
+  }
+  return { action: <ChipAmistad playerId={playerId} nombre={nombre} estado={status.kind} /> }
+}
+
+/**
  * Perfil de jugador — handoff §11. Se llega tocando una fila de la Tabla; no
  * está en la nav. No implementa editar el nombre propio (Plan 4): el asiento
  * reclamado, el sin dueño y el propio se ven exactamente igual, porque las
@@ -277,6 +302,11 @@ export default async function JugadorPage({ params, searchParams }: PageProps) {
   const member = squad.find((candidate) => candidate.id === entryId)
   if (member === undefined) notFound()
 
+  // Sin control de amistad en tu propio perfil ni en un lugar que nadie
+  // reclamó: no hay a quién mandarle el pedido.
+  const friendship =
+    member.playerId === null || entryId === viewerEntryId ? null : await friendshipWith(supabase, member.playerId)
+
   const squadEntries = entries
     .filter((candidate) => candidate.kind === 'SQUAD')
     .sort((a, b) => a.seedPosition - b.seedPosition)
@@ -288,15 +318,19 @@ export default async function JugadorPage({ params, searchParams }: PageProps) {
   // 2+ disciplinas el texto nombra cuál; con una sola sale igual que siempre.
   const entry = squadEntries.find((candidate) => candidate.id === entryId)
   if (entry === undefined) {
+    const amistad = controlDeAmistad(friendship, member.playerId, member.displayName)
     return (
       <div className="flex flex-col">
         <Hero
           back={volver}
+          action={amistad.action}
           kicker={header.name}
           title={member.displayName}
           subtitle={disciplineLabel !== null ? `Todavía no jugó ${disciplineLabel}` : 'Todavía no jugó esta disciplina'}
           sport={discipline.kind}
-        />
+        >
+          {amistad.card}
+        </Hero>
         <div className="px-4 pt-5">
           <Link href={`${base}/fechas`} className={button('secondary', { full: true })}>
             Ver las fechas
@@ -368,11 +402,13 @@ export default async function JugadorPage({ params, searchParams }: PageProps) {
   const isMe = entryId === viewerEntryId
   const pins = rankingTallies(scoresByMatchday, [entryId])[0]
   const fechasJugadas = byPins ? (pins?.played ?? 0) : tally.matchdaysPlayed
+  const amistad = controlDeAmistad(friendship, member.playerId, entry.displayName)
 
   return (
     <div className="flex flex-col">
       <Hero
         back={volver}
+        action={amistad.action}
         kicker={disciplineLabel !== null ? `${header.name}, ${disciplineLabel}` : header.name}
         title={entry.displayName}
         // Lo tuyo, en amarillo: el puesto de la derecha y esta marca.
@@ -394,7 +430,9 @@ export default async function JugadorPage({ params, searchParams }: PageProps) {
             </span>
           </p>
         }
-      />
+      >
+        {amistad.card}
+      </Hero>
 
       <div className="grid grid-cols-3 gap-2.5 px-4 pt-5">
         {byPins ? (

@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F · El perfil</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  /* Tokens de app/globals.css, tema claro */
+  --bg:#ffffff;--surface:#f4f6fb;--chip:#eef1f7;--line:#dce1ee;
+  --text:#0e1a4a;--muted:#4b5675;--link:#1f45e0;
+  --live:#b42318;--live-bg:#fdecea;--up:#1f45e0;
+  --sport:#1f45e0;--sport-tint:#e8edff;
+  --block:#1f45e0;--on-block:#ffffff;--on-block-soft:#c9d3ff;
+  --cta:#0e1a4a;--on-cta:#ffffff;--vos:#dfff4f;--on-vos:#0e1a4a;
+  --opcion:#e8edff;--toast:#0e1a4a;--on-toast:#ffffff;--toast-action:#c9d3ff;
+  --focus:#0e1a4a;
+}
+html{-webkit-font-smoothing:antialiased}
+body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-size:16px;line-height:1.35;color:var(--text);background:var(--chip)}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+a{color:inherit;text-decoration:none}
+ul{list-style:none}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px;border-radius:10px}
+.hero :focus-visible{outline-color:var(--on-block)}
+.ico{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cond,.titulo{font-family:"Archivo Narrow","Roboto Condensed","Arial Narrow",system-ui,sans-serif}
+.cond{font-stretch:62%;font-weight:800;font-variant-numeric:tabular-nums;line-height:.9;letter-spacing:-.01em}
+.titulo{font-stretch:75%;font-weight:800;line-height:1.05;letter-spacing:-.01em}
+
+/* la lámina */
+.board{width:max-content;padding:40px 48px 48px}
+.board-head{max-width:1000px;margin-bottom:28px}
+.tag{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;padding:5px 11px;border-radius:999px;background:var(--bg);color:var(--muted);margin-bottom:12px}
+.board-head h1{font-size:42px}
+.board-head p{font-size:18px;color:var(--muted);margin-top:10px;max-width:880px}
+.strip{display:flex;gap:32px;align-items:flex-start}
+.step{width:390px;flex:none}
+.cap{min-height:100px;margin-bottom:14px}
+.cap h2{display:flex;align-items:center;gap:10px;font-size:18px;font-weight:800}
+.cap .n{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--cta);color:var(--on-cta);font-size:14px;font-weight:800;flex:none}
+.cap p{font-size:15px;color:var(--muted);margin-top:6px}
+.notes{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:32px;max-width:1234px}
+.note{background:var(--bg);border-radius:18px;padding:16px 18px}
+.note h3{font-size:15px;font-weight:800;margin-bottom:6px}
+.note p{font-size:15px;color:var(--muted)}
+
+/* el teléfono */
+.phone{position:relative;width:390px;height:844px;background:var(--bg);border-radius:44px;overflow:hidden;border:1px solid var(--line)}
+.status{height:47px;display:flex;align-items:center;justify-content:space-between;padding:0 14px 0 30px;font-size:16px;font-weight:600}
+.status .sys{display:flex;gap:6px;align-items:center}
+.home-ind{position:absolute;left:50%;bottom:8px;width:134px;height:5px;margin-left:-67px;border-radius:3px;background:var(--text)}
+
+/* encabezado: el Hero de app/ui/hero.tsx, con el avatar grande de 04 */
+.hero{background:var(--block);color:var(--on-block);border-radius:0 0 24px 24px;padding:0 16px 20px}
+.volver{display:inline-flex;align-items:center;gap:4px;min-height:44px;margin:-6px 0 -6px -4px;padding-right:12px;font-size:16px;font-weight:600}
+.volver .ico{width:24px;height:24px}
+.kicker{margin-top:8px;font-size:15px;font-weight:600;color:var(--on-block-soft)}
+.av-xl{width:88px;height:88px;border-radius:50%;display:grid;place-items:center;margin-top:12px;background:var(--on-block);color:var(--block);font-size:30px;font-weight:750}
+.hero-main{margin-top:12px}
+.hero-main .titulo{font-size:34px}
+.hero .usuario{display:flex;align-items:center;gap:6px;margin-top:6px;font-size:16px;font-weight:600;color:var(--on-block-soft)}
+.hero .usuario .ico{width:16px;height:16px}
+.hero .fijo{margin-top:2px;font-size:14px;color:var(--on-block-soft)}
+.hero-acc{margin-top:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.pill{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 18px;border-radius:999px;font-size:16px;font-weight:800}
+.pill .ico{width:20px;height:20px;stroke-width:2.4}
+.pill.on{background:var(--on-block);color:var(--block)}
+.pill.hueca{color:var(--on-block);box-shadow:inset 0 0 0 1.5px var(--on-block-soft)}
+
+/* cuerpo */
+.sec{padding:22px 16px 0}
+.sec .titulo{font-size:26px;margin-bottom:12px}
+.list{margin:0 -16px}
+.row{display:flex;align-items:center;gap:12px;min-height:72px;padding:12px 16px;border-top:1px solid var(--line)}
+.list li:first-child > .row{border-top:0}
+.row.corta{min-height:60px}
+.row > .ico{color:var(--muted)}
+.tile{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;background:var(--sport-tint);color:var(--sport);flex:none}
+.tile.gris{background:var(--chip);color:var(--text)}
+.body{flex:1;min-width:0}
+.name{display:block;font-size:17px;font-weight:700;line-height:1.2}
+.meta{display:block;font-size:14px;color:var(--muted);margin-top:2px}
+.row.peligro .name{color:var(--live)}
+.row.peligro .tile{background:var(--live-bg);color:var(--live)}
+
+/* cara a cara: los números grandes y angostos de la app */
+.cara{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.dato{background:var(--surface);border-radius:18px;padding:12px 14px 14px}
+.dato .cond{display:block;font-size:52px}
+.dato .l{display:block;margin-top:6px;font-size:14px;font-weight:600;color:var(--muted)}
+.dato.gano .cond{color:var(--up)}
+.cara + .list{margin-top:8px}
+
+/* interruptor: 51 x 31 a la vista, 44 de toque */
+.ajuste{display:flex;align-items:flex-start;gap:14px;padding:4px 0 0}
+.ajuste .body .name{font-size:17px}
+.ajuste .meta{font-size:15px;margin-top:4px}
+.switch{position:relative;width:51px;height:31px;border-radius:999px;background:var(--muted);flex:none;margin-top:2px}
+.switch::before{content:"";position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:var(--bg)}
+.switch::after{content:"";position:absolute;inset:-7px -4px}
+.switch[aria-checked="true"]{background:var(--block)}
+.switch[aria-checked="true"]::before{transform:translateX(20px)}
+.switch:focus-visible{border-radius:999px}
+@media (prefers-reduced-motion:no-preference){
+  .switch,.switch::before{transition:background-color .15s ease,transform .15s ease}
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <!-- Trazos de Lucide (ISC), copiados a mano. -->
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-user-plus" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M22 11h-6"/></symbol>
+  <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 2v13"/><path d="m16 6-4-4-4 4"/><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></symbol>
+  <symbol id="i-racket" viewBox="0 0 24 24"><g transform="rotate(-20 12 12)"><path d="M11 1.5c3.6 0 6 2.7 6 6.3 0 3.3-2 5.9-4 6.7h-4c-2-.8-4-3.4-4-6.7 0-3.6 2.4-6.3 6-6.3Z"/><rect x="9.5" y="14.5" width="3" height="7.5" rx="1.2"/><path d="M9 6h.01M13 6h.01M11 8.5h.01M9 11h.01M13 11h.01"/></g><circle cx="19.5" cy="19" r="2.2"/></symbol>
+</defs></svg>
+
+<main class="board">
+  <header class="board-head">
+    <span class="tag">Sin migración · riesgo bajo</span>
+    <h1 class="titulo">F · El perfil</h1>
+    <p>Lo justo, como elegiste: quién es, cómo sumarlo y qué tienen en común. Si ya son amigos, el cara a cara y el historial. El tuyo trae tu @usuario, si te pueden encontrar y tu link.</p>
+  </header>
+
+  <div class="strip">
+    <!-- 1 · otro jugador, todavía no son amigos -->
+    <section class="step" aria-labelledby="c1">
+      <div class="cap">
+        <h2 id="c1"><span class="n">1</span>Alguien que no es tu amigo</h2>
+        <p>Llegaste desde el buscador. Agregar está a la vista, y abajo, solo los torneos que comparten.</p>
+      </div>
+      <div class="phone">
+        <header class="hero">
+          <div class="status" aria-hidden="true"><span>9:41</span><span class="sys"><svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg><svg width="27" height="13" viewBox="0 0 27 13" fill="currentColor"><rect x=".5" y=".5" width="23" height="12" rx="3.8" fill="none" stroke="currentColor" stroke-opacity=".6"/><rect x="2" y="2" width="20" height="9" rx="2.5"/></svg></span></div>
+          <a class="volver" href="#amigos"><svg class="ico" aria-hidden="true"><use href="#i-back"/></svg>Amigos</a>
+          <div class="av-xl" aria-hidden="true">NI</div>
+          <div class="hero-main">
+            <h3 class="titulo">Nicolás Ibarra</h3>
+            <p class="usuario">@nicoibarra</p>
+          </div>
+          <div class="hero-acc">
+            <button class="pill on" type="button" data-agregar><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar amigo</span></button>
+          </div>
+        </header>
+        <div class="sec">
+          <h4 class="titulo">Torneos que comparten</h4>
+          <ul class="list">
+            <li><a class="row" href="#torneo-pibes"><span class="tile" aria-hidden="true"><svg class="ico"><use href="#i-racket"/></svg></span><span class="body"><span class="name">Los Pibes del Martes</span><span class="meta">Pádel</span></span><svg class="ico" aria-hidden="true"><use href="#i-chev"/></svg></a></li>
+          </ul>
+        </div>
+        <div class="home-ind" aria-hidden="true"></div>
+      </div>
+    </section>
+
+    <!-- 2 · un amigo -->
+    <section class="step" aria-labelledby="c2">
+      <div class="cap">
+        <h2 id="c2"><span class="n">2</span>Un amigo</h2>
+        <p>Como ya son amigos, suma el cara a cara y el acceso al historial entre los dos.</p>
+      </div>
+      <div class="phone">
+        <header class="hero">
+          <div class="status" aria-hidden="true"><span>9:41</span><span class="sys"><svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg><svg width="27" height="13" viewBox="0 0 27 13" fill="currentColor"><rect x=".5" y=".5" width="23" height="12" rx="3.8" fill="none" stroke="currentColor" stroke-opacity=".6"/><rect x="2" y="2" width="20" height="9" rx="2.5"/></svg></span></div>
+          <a class="volver" href="#amigos"><svg class="ico" aria-hidden="true"><use href="#i-back"/></svg>Amigos</a>
+          <div class="av-xl" aria-hidden="true">NA</div>
+          <div class="hero-main">
+            <h3 class="titulo">Nico Arias</h3>
+            <p class="usuario">@nico.arias</p>
+          </div>
+          <div class="hero-acc">
+            <span class="pill hueca"><svg class="ico" aria-hidden="true"><use href="#i-check"/></svg>Amigos</span>
+          </div>
+        </header>
+        <div class="sec">
+          <h4 class="titulo">Cara a cara</h4>
+          <div class="cara">
+            <p class="dato gano"><span class="cond">7</span><span class="l">Ganaste</span></p>
+            <p class="dato"><span class="cond">5</span><span class="l">Perdiste</span></p>
+          </div>
+          <ul class="list">
+            <li><a class="row corta" href="#historial-nico"><span class="tile" aria-hidden="true"><svg class="ico"><use href="#i-clock"/></svg></span><span class="body"><span class="name">Ver historial</span><span class="meta">El último, hace 2 días</span></span><svg class="ico" aria-hidden="true"><use href="#i-chev"/></svg></a></li>
+          </ul>
+        </div>
+        <div class="sec">
+          <h4 class="titulo">Torneos que comparten</h4>
+          <ul class="list">
+            <li><a class="row" href="#torneo-pibes"><span class="tile" aria-hidden="true"><svg class="ico"><use href="#i-racket"/></svg></span><span class="body"><span class="name">Los Pibes del Martes</span><span class="meta">Pádel</span></span><svg class="ico" aria-hidden="true"><use href="#i-chev"/></svg></a></li>
+            <li><a class="row" href="#torneo-copa"><span class="tile" aria-hidden="true"><svg class="ico"><use href="#i-racket"/></svg></span><span class="body"><span class="name">Copa del Jueves</span><span class="meta">Pádel</span></span><svg class="ico" aria-hidden="true"><use href="#i-chev"/></svg></a></li>
+          </ul>
+        </div>
+        <div class="home-ind" aria-hidden="true"></div>
+      </div>
+    </section>
+
+    <!-- 3 · tu perfil -->
+    <section class="step" aria-labelledby="c3">
+      <div class="cap">
+        <h2 id="c3"><span class="n">3</span>Tu perfil</h2>
+        <p>Tu @usuario, fijo; si te pueden encontrar por él, y tu link para sumar gente. Privacidad y borrar la cuenta quedan acá a mano.</p>
+      </div>
+      <div class="phone">
+        <header class="hero">
+          <div class="status" aria-hidden="true"><span>9:41</span><span class="sys"><svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg><svg width="27" height="13" viewBox="0 0 27 13" fill="currentColor"><rect x=".5" y=".5" width="23" height="12" rx="3.8" fill="none" stroke="currentColor" stroke-opacity=".6"/><rect x="2" y="2" width="20" height="9" rx="2.5"/></svg></span></div>
+          <a class="volver" href="#inicio"><svg class="ico" aria-hidden="true"><use href="#i-back"/></svg>Inicio</a>
+          <div class="kicker">Tu perfil</div>
+          <div class="av-xl" aria-hidden="true">MP</div>
+          <div class="hero-main">
+            <h3 class="titulo">Martín Pérez</h3>
+            <p class="usuario">@martinperez<svg class="ico" aria-hidden="true"><use href="#i-lock"/></svg></p>
+            <p class="fijo">Tu @usuario no se puede cambiar</p>
+          </div>
+          <div class="hero-acc">
+            <button class="pill on" type="button"><svg class="ico" aria-hidden="true"><use href="#i-share"/></svg>Compartir mi link</button>
+          </div>
+        </header>
+        <div class="sec">
+          <div class="ajuste">
+            <span class="body">
+              <span class="name" id="buscable-t">Que me encuentren por mi usuario</span>
+              <span class="meta" id="buscable-d">Si lo apagás, solo te encuentran con tu link o desde un torneo.</span>
+            </span>
+            <button class="switch" type="button" role="switch" aria-checked="true" aria-labelledby="buscable-t" aria-describedby="buscable-d"></button>
+          </div>
+        </div>
+        <div class="sec">
+          <ul class="list">
+            <li><a class="row corta" href="#privacidad"><span class="tile gris" aria-hidden="true"><svg class="ico"><use href="#i-shield"/></svg></span><span class="body"><span class="name">Privacidad</span></span><svg class="ico" aria-hidden="true"><use href="#i-chev"/></svg></a></li>
+            <li><a class="row corta peligro" href="#borrar-cuenta"><span class="tile" aria-hidden="true"><svg class="ico"><use href="#i-trash"/></svg></span><span class="body"><span class="name">Borrar cuenta</span></span><svg class="ico" aria-hidden="true"><use href="#i-chev"/></svg></a></li>
+          </ul>
+        </div>
+        <div class="home-ind" aria-hidden="true"></div>
+      </div>
+    </section>
+  </div>
+
+  <div class="notes">
+    <article class="note"><h3>Qué muestra y qué no</h3><p>Nombre, @usuario, la amistad y los torneos que comparten. El cara a cara y el historial, solo entre amigos. No muestra números de torneos que no comparten: eso sigue en el perfil de cada torneo, para quien juega ahí.</p></article>
+    <article class="note"><h3>De dónde llegás</h3><p>Del buscador, de Gente de tus torneos y de los pedidos: tocar un nombre abre el perfil. Y desde el perfil, cada torneo que comparten te lleva a ese torneo.</p></article>
+    <article class="note"><h3>Tu nombre no se cambia acá</h3><p>Los jugadores están cerrados a escrituras a propósito (0002). Abrirlos para editar el nombre es otra decisión, fuera de este pedido. Por eso el perfil solo lee, y no lleva migración.</p></article>
+    <article class="note"><h3>La dirección usa el id</h3><p>El perfil vive en /perfil/&lt;id&gt; y /perfil es el tuyo. Con el id y no con el @usuario, también tiene perfil quien todavía no eligió el suyo: sale sin la línea del @.</p></article>
+  </div>
+</main>
+<script>
+  // Solo para probar la maqueta: el interruptor y el pedido de amistad.
+  document.querySelectorAll('.switch').forEach(function (s) {
+    s.addEventListener('click', function () {
+      s.setAttribute('aria-checked', s.getAttribute('aria-checked') === 'true' ? 'false' : 'true')
+    })
+  })
+  document.querySelectorAll('[data-agregar]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      b.className = 'pill hueca'
+      b.querySelector('use').setAttribute('href', '#i-check')
+      b.querySelector('span').textContent = 'Enviado'
+      b.disabled = true
+    })
+  })
+</script>
+</body>
+</html>

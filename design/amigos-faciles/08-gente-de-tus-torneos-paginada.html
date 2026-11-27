@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>H · Gente de tus torneos, de a 20</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  /* Tokens de app/globals.css, tema claro */
+  --bg:#ffffff;--surface:#f4f6fb;--chip:#eef1f7;--line:#dce1ee;
+  --text:#0e1a4a;--muted:#4b5675;--link:#1f45e0;
+  --live:#b42318;--live-bg:#fdecea;--up:#1f45e0;
+  --sport:#1f45e0;--sport-tint:#e8edff;
+  --block:#1f45e0;--on-block:#ffffff;--on-block-soft:#c9d3ff;
+  --cta:#0e1a4a;--on-cta:#ffffff;--vos:#dfff4f;--on-vos:#0e1a4a;
+  --opcion:#e8edff;--toast:#0e1a4a;--on-toast:#ffffff;--toast-action:#c9d3ff;
+  --focus:#0e1a4a;
+}
+html{-webkit-font-smoothing:antialiased}
+body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-size:16px;line-height:1.35;color:var(--text);background:var(--chip)}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+a{color:inherit;text-decoration:none}
+ul{list-style:none}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px;border-radius:10px}
+.hero :focus-visible{outline-color:var(--on-block)}
+.ico{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cond,.titulo{font-family:"Archivo Narrow","Roboto Condensed","Arial Narrow",system-ui,sans-serif}
+.cond{font-stretch:62%;font-weight:800;font-variant-numeric:tabular-nums;line-height:.9;letter-spacing:-.01em}
+.titulo{font-stretch:75%;font-weight:800;line-height:1.05;letter-spacing:-.01em}
+
+/* la lámina */
+.board{width:1752px;padding:40px 48px 48px}
+.board-head{max-width:1000px;margin-bottom:28px}
+.tag{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;padding:5px 11px;border-radius:999px;background:var(--bg);color:var(--muted);margin-bottom:12px}
+.board-head h1{font-size:42px}
+.board-head p{font-size:18px;color:var(--muted);margin-top:10px;max-width:880px}
+.strip{display:flex;gap:32px;align-items:flex-start}
+.step{width:390px;flex:none}
+.cap{min-height:100px;margin-bottom:14px}
+.cap h2{display:flex;align-items:center;gap:10px;font-size:18px;font-weight:800}
+.cap .n{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--cta);color:var(--on-cta);font-size:14px;font-weight:800;flex:none}
+.cap p{font-size:15px;color:var(--muted);margin-top:6px}
+.notes{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:32px;max-width:1656px}
+.note{background:var(--bg);border-radius:18px;padding:16px 18px}
+.note h3{font-size:15px;font-weight:800;margin-bottom:6px}
+.note p{font-size:15px;color:var(--muted)}
+
+/* el teléfono */
+.phone{position:relative;width:390px;height:844px;background:var(--bg);border-radius:44px;overflow:hidden;border:1px solid var(--line)}
+/* la pantalla se desliza adentro del teléfono */
+.pantalla{position:absolute;inset:0;overflow-y:auto;scrollbar-width:none;padding-bottom:40px}
+.pantalla::-webkit-scrollbar{display:none}
+.status{height:47px;display:flex;align-items:center;justify-content:space-between;padding:0 14px 0 30px;font-size:16px;font-weight:600}
+.status .sys{display:flex;gap:6px;align-items:center}
+.home-ind{position:absolute;left:50%;bottom:8px;width:134px;height:5px;margin-left:-67px;border-radius:3px;background:var(--text)}
+
+/* encabezado: el Hero de app/ui/hero.tsx */
+.hero{background:var(--block);color:var(--on-block);border-radius:0 0 24px 24px;padding:0 16px 20px}
+.volver{display:inline-flex;align-items:center;gap:4px;min-height:44px;margin:-6px 0 -6px -4px;padding-right:12px;font-size:16px;font-weight:600}
+.volver .ico{width:24px;height:24px}
+.hero-main{margin-top:4px;display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
+.hero-main .titulo{font-size:34px}
+.hero .sub{margin-top:6px;font-size:15px;color:var(--on-block-soft)}
+.hero-main.en-linea{align-items:center}
+.pill{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 18px;border-radius:999px;font-size:16px;font-weight:800}
+.pill .ico{width:20px;height:20px;stroke-width:2.4}
+.pill.on{background:var(--on-block);color:var(--block)}
+.hero-main.en-linea .pill{flex:none;white-space:nowrap;font-size:15px;padding:0 14px;gap:6px}
+.hero-main.en-linea .pill .ico{width:18px;height:18px}
+
+/* cuerpo */
+.sec{padding:22px 16px 0}
+.sec .titulo{font-size:26px;margin-bottom:12px}
+.sec .hint{font-size:15px;color:var(--muted);margin:-6px 0 8px}
+.sec-h{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:12px}
+.sec-h .titulo{margin-bottom:0}
+.sec-h a{font-size:16px;font-weight:700;color:var(--link);min-height:44px;display:inline-flex;align-items:center;white-space:nowrap}
+.list{margin:0 -16px}
+.row{display:flex;align-items:center;gap:12px;min-height:72px;padding:12px 16px}
+.list li + li > .row,.list li.row + li.row{border-top:1px solid var(--line)}
+.av{display:grid;place-items:center;width:44px;height:44px;border-radius:50%;font-size:15px;font-weight:750;flex:none}
+.t0{background:var(--sport-tint);color:var(--sport)}
+.t1{background:var(--chip);color:var(--text)}
+.body{flex:1;min-width:0}
+.name{display:block;font-size:17px;font-weight:700;line-height:1.2}
+.meta{display:block;font-size:14px;color:var(--muted);margin-top:2px}
+.rec{display:flex;align-items:baseline;gap:5px;flex:none}
+.rec .cond{font-size:34px}
+.rec small{font-size:15px;font-weight:600;color:var(--muted)}
+.gano{color:var(--up);font-weight:600}.perdio{color:var(--text);font-weight:600}
+/* fila que abre el perfil (S9), con Agregar al lado */
+.hit{flex:1;min-width:0;display:flex;align-items:center;gap:12px;min-height:48px}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 16px;border-radius:14px;font-size:16px;font-weight:700;flex:none}
+.btn .ico{width:20px;height:20px}
+.btn.secondary{background:var(--chip);color:var(--text)}
+.btn.ghost{color:var(--link)}
+.btn.full{width:100%}
+.btn.agregar{background:var(--opcion);color:var(--link)}
+.btn.enviado{color:var(--muted)}
+/* Agregar, más chico (S6): 34 px a la vista, 44 px de toque */
+.btn.agregar,.btn.enviado{position:relative;min-height:34px;padding:0 12px;border-radius:999px;font-size:14px;font-weight:800;gap:6px}
+.btn.enviado{padding:0 8px}
+.btn.agregar .ico,.btn.enviado .ico{width:16px;height:16px;stroke-width:2.4}
+.btn.agregar::after,.btn.enviado::after{content:"";position:absolute;inset:-5px -4px}
+
+/* el buscador (lámina E), igual en Amigos */
+.buscar{padding:16px 16px 0}
+.campo{display:flex;align-items:center;gap:10px;min-height:48px;padding:0 4px 0 14px;background:var(--surface);border-radius:14px;box-shadow:inset 0 0 0 1px var(--line)}
+.campo > .ico{color:var(--muted);width:20px;height:20px}
+.campo input{flex:1;min-width:0;min-height:44px;border:0;background:none;font:inherit;font-size:17px;color:var(--text)}
+.campo input::placeholder{color:var(--muted);opacity:1}
+.campo input:focus-visible{outline:none}
+.campo:focus-within{box-shadow:inset 0 0 0 2px var(--link)}
+.campo:has(input:focus-visible){outline:3px solid var(--focus);outline-offset:2px}
+.buscar .hint{font-size:14px;color:var(--muted);margin-top:8px}
+
+/* filtro por torneo: se desliza de costado */
+.filtros{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding:8px 16px;margin-top:8px}
+.filtros::-webkit-scrollbar{display:none}
+.fchip{position:relative;flex:none;white-space:nowrap;min-height:36px;padding:0 14px;border-radius:999px;background:var(--chip);color:var(--text);font-size:15px;font-weight:700}
+.fchip::after{content:"";position:absolute;inset:-4px -4px}
+.fchip[aria-pressed="true"]{background:var(--cta);color:var(--on-cta)}
+.lista{padding:4px 16px 0}
+.mas{padding:16px 16px 0}
+.fin{padding:18px 16px 0;font-size:14px;color:var(--muted);text-align:center}
+
+@media (prefers-reduced-motion:no-preference){
+  .btn,.fchip,.campo{transition:background-color .15s ease,color .15s ease,box-shadow .15s ease}
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <!-- Trazos de Lucide (ISC), copiados a mano. -->
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-chev-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 2v13"/><path d="m16 6-4-4-4 4"/><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/></symbol>
+  <symbol id="i-user-plus" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M22 11h-6"/></symbol>
+</defs></svg>
+
+<main class="board">
+  <header class="board-head">
+    <span class="tag">Sin migración · riesgo bajo</span>
+    <h1 class="titulo">H · Gente de tus torneos, de a 20</h1>
+    <p>La lista deja de ser infinita: en Amigos van las primeras 5 y «Ver todas». Esa pantalla filtra por torneo y muestra de a 20, con «Mostrar más». Sin fechas: cada fila dice de qué torneos lo conocés, con el mismo formato en toda la app.</p>
+  </header>
+
+  <div class="strip">
+    <!-- 1 · en Amigos -->
+    <section class="step" aria-labelledby="c1">
+      <div class="cap">
+        <h2 id="c1"><span class="n">1</span>En Amigos, las primeras 5</h2>
+        <p>«Ver todas (23)» va en la línea del título, a mano sin bajar. Cada fila abre el perfil; Agregar actúa ahí mismo.</p>
+      </div>
+      <div class="phone">
+        <div class="pantalla">
+          <header class="hero">
+            <div class="status" aria-hidden="true"><span>9:41</span><span class="sys"><svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg><svg width="27" height="13" viewBox="0 0 27 13" fill="currentColor"><rect x=".5" y=".5" width="23" height="12" rx="3.8" fill="none" stroke="currentColor" stroke-opacity=".6"/><rect x="2" y="2" width="20" height="9" rx="2.5"/></svg></span></div>
+            <a class="volver" href="#inicio"><svg class="ico" aria-hidden="true"><use href="#i-back"/></svg>Inicio</a>
+            <div class="hero-main en-linea">
+              <h3 class="titulo">Amigos</h3>
+              <button class="pill on" type="button"><svg class="ico" aria-hidden="true"><use href="#i-share"/></svg>Compartir mi link</button>
+            </div>
+            <p class="sub">2 amigos</p>
+          </header>
+          <form class="buscar" role="search" action="#" onsubmit="return false">
+            <label class="sr" for="q1">Buscar por @usuario</label>
+            <div class="campo"><svg class="ico" aria-hidden="true"><use href="#i-search"/></svg><input id="q1" type="search" placeholder="Buscá por @usuario" autocomplete="off" autocapitalize="none" spellcheck="false"></div>
+          </form>
+          <div class="sec">
+            <h4 class="titulo">Tus amigos</h4>
+            <ul class="list">
+              <li><a class="row" href="#nico"><span class="av t0" aria-hidden="true">NA</span><span class="body"><span class="name">Nico Arias</span><span class="meta"><span class="gano">Ganaste 6-4 6-3</span>, hace 2 días</span></span><span class="rec"><span class="sr">7 a 5</span><span class="cond" aria-hidden="true">7</span><small aria-hidden="true">a</small><span class="cond" aria-hidden="true">5</span></span><svg class="ico" aria-hidden="true"><use href="#i-chev"/></svg></a></li>
+              <li><a class="row" href="#facu"><span class="av t1" aria-hidden="true">FG</span><span class="body"><span class="name">Facu Gómez</span><span class="meta"><span class="perdio">Perdiste 1-3</span>, el viernes</span></span><span class="rec"><span class="sr">4 a 6</span><span class="cond" aria-hidden="true">4</span><small aria-hidden="true">a</small><span class="cond" aria-hidden="true">6</span></span><svg class="ico" aria-hidden="true"><use href="#i-chev"/></svg></a></li>
+            </ul>
+          </div>
+          <div class="sec">
+            <div class="sec-h"><h4 class="titulo">Gente de tus torneos</h4><a href="#gente">Ver todas (23)</a></div>
+            <p class="hint">Jugaron con vos y tienen cuenta</p>
+            <ul class="list">
+            <li class="row"><a class="hit" href="#perfil-seba"><span class="av t0" aria-hidden="true">SM</span><span class="body"><span class="name">Seba Molina</span><span class="meta">Los Pibes del Martes y 2 más</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Seba Molina" aria-label="Agregar a Seba Molina"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            <li class="row"><a class="hit" href="#perfil-lucas"><span class="av t1" aria-hidden="true">LF</span><span class="body"><span class="name">Lucas Ferreyra</span><span class="meta">Los Pibes del Martes y Copa del Jueves</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Lucas Ferreyra" aria-label="Agregar a Lucas Ferreyra"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            <li class="row"><a class="hit" href="#perfil-tomi"><span class="av t0" aria-hidden="true">TS</span><span class="body"><span class="name">Tomi Sosa</span><span class="meta">Los Pibes del Martes</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Tomi Sosa" aria-label="Agregar a Tomi Sosa"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            <li class="row"><a class="hit" href="#perfil-gonza"><span class="av t1" aria-hidden="true">GR</span><span class="body"><span class="name">Gonza Ruiz</span><span class="meta">FIFA de los Viernes</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Gonza Ruiz" aria-label="Agregar a Gonza Ruiz"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            <li class="row"><a class="hit" href="#perfil-nicoibarra"><span class="av t0" aria-hidden="true">NI</span><span class="body"><span class="name">Nicolás Ibarra</span><span class="meta">Los Pibes del Martes y FIFA de los Viernes</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Nicolás Ibarra" aria-label="Agregar a Nicolás Ibarra"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            </ul>
+            <a class="btn ghost" href="#gente">Ver todas (23)</a>
+          </div>
+        </div>
+        <span class="home-ind" aria-hidden="true"></span>
+      </div>
+    </section>
+
+    <!-- 2 · Ver todas -->
+    <section class="step" aria-labelledby="c2">
+      <div class="cap">
+        <h2 id="c2"><span class="n">2</span>Ver todas</h2>
+        <p>Arriba, un chip por torneo; se deslizan de costado. Abajo, las primeras 20, en el mismo orden que en Amigos. Deslizá la lista.</p>
+      </div>
+      <div class="phone">
+        <div class="pantalla">
+          <header class="hero">
+            <div class="status" aria-hidden="true"><span>9:41</span><span class="sys"><svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg><svg width="27" height="13" viewBox="0 0 27 13" fill="currentColor"><rect x=".5" y=".5" width="23" height="12" rx="3.8" fill="none" stroke="currentColor" stroke-opacity=".6"/><rect x="2" y="2" width="20" height="9" rx="2.5"/></svg></span></div>
+            <a class="volver" href="#amigos"><svg class="ico" aria-hidden="true"><use href="#i-back"/></svg>Amigos</a>
+            <div class="hero-main">
+              <h3 class="titulo">Gente de tus torneos</h3>
+            </div>
+            <p class="sub">23 personas</p>
+          </header>
+          <div class="filtros" role="group" aria-label="Filtrar por torneo">
+            <button class="fchip" type="button" aria-pressed="true">Todos</button>
+            <button class="fchip" type="button" aria-pressed="false">Los Pibes del Martes</button>
+            <button class="fchip" type="button" aria-pressed="false">Copa del Jueves</button>
+            <button class="fchip" type="button" aria-pressed="false">FIFA de los Viernes</button>
+          </div>
+          <div class="lista">
+            <ul class="list">
+            <li class="row"><a class="hit" href="#perfil-seba"><span class="av t0" aria-hidden="true">SM</span><span class="body"><span class="name">Seba Molina</span><span class="meta">Los Pibes del Martes y 2 más</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Seba Molina" aria-label="Agregar a Seba Molina"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            <li class="row"><a class="hit" href="#perfil-lucas"><span class="av t1" aria-hidden="true">LF</span><span class="body"><span class="name">Lucas Ferreyra</span><span class="meta">Los Pibes del Martes y Copa del Jueves</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Lucas Ferreyra" aria-label="Agregar a Lucas Ferreyra"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            <li class="row"><a class="hit" href="#perfil-tomi"><span class="av t0" aria-hidden="true">TS</span><span class="body"><span class="name">Tomi Sosa</span><span class="meta">Los Pibes del Martes</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Tomi Sosa" aria-label="Agregar a Tomi Sosa"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            <li class="row"><a class="hit" href="#perfil-gonza"><span class="av t1" aria-hidden="true">GR</span><span class="body"><span class="name">Gonza Ruiz</span><span class="meta">FIFA de los Viernes</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Gonza Ruiz" aria-label="Agregar a Gonza Ruiz"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            <li class="row"><a class="hit" href="#perfil-nicoibarra"><span class="av t0" aria-hidden="true">NI</span><span class="body"><span class="name">Nicolás Ibarra</span><span class="meta">Los Pibes del Martes y FIFA de los Viernes</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Nicolás Ibarra" aria-label="Agregar a Nicolás Ibarra"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            <li class="row"><a class="hit" href="#perfil-fede"><span class="av t1" aria-hidden="true">FC</span><span class="body"><span class="name">Fede Castro</span><span class="meta">Los Pibes del Martes</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Fede Castro" aria-label="Agregar a Fede Castro"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            <li class="row"><a class="hit" href="#perfil-mati"><span class="av t0" aria-hidden="true">MR</span><span class="body"><span class="name">Mati Romero</span><span class="meta">Copa del Jueves</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Mati Romero" aria-label="Agregar a Mati Romero"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            <li class="row"><a class="hit" href="#perfil-agus"><span class="av t1" aria-hidden="true">AH</span><span class="body"><span class="name">Agus Herrera</span><span class="meta">FIFA de los Viernes</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Agus Herrera" aria-label="Agregar a Agus Herrera"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            <li class="row"><a class="hit" href="#perfil-pato"><span class="av t0" aria-hidden="true">PA</span><span class="body"><span class="name">Pato Acosta</span><span class="meta">Copa del Jueves y FIFA de los Viernes</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Pato Acosta" aria-label="Agregar a Pato Acosta"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            <li class="row"><a class="hit" href="#perfil-leo"><span class="av t1" aria-hidden="true">LD</span><span class="body"><span class="name">Leo Domínguez</span><span class="meta">Los Pibes del Martes</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Leo Domínguez" aria-label="Agregar a Leo Domínguez"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            <li class="row"><a class="hit" href="#perfil-santi"><span class="av t0" aria-hidden="true">SV</span><span class="body"><span class="name">Santi Vera</span><span class="meta">FIFA de los Viernes</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Santi Vera" aria-label="Agregar a Santi Vera"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            <li class="row"><a class="hit" href="#perfil-fran"><span class="av t1" aria-hidden="true">FM</span><span class="body"><span class="name">Fran Medina</span><span class="meta">Copa del Jueves</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Fran Medina" aria-label="Agregar a Fran Medina"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            <li class="row"><a class="hit" href="#perfil-joaco"><span class="av t0" aria-hidden="true">JS</span><span class="body"><span class="name">Joaco Suárez</span><span class="meta">Los Pibes del Martes</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Joaco Suárez" aria-label="Agregar a Joaco Suárez"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            <li class="row"><a class="hit" href="#perfil-maxi"><span class="av t1" aria-hidden="true">MO</span><span class="body"><span class="name">Maxi Ojeda</span><span class="meta">Los Pibes del Martes y Copa del Jueves</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Maxi Ojeda" aria-label="Agregar a Maxi Ojeda"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            <li class="row"><a class="hit" href="#perfil-diego"><span class="av t0" aria-hidden="true">DL</span><span class="body"><span class="name">Diego Luna</span><span class="meta">FIFA de los Viernes</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Diego Luna" aria-label="Agregar a Diego Luna"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            <li class="row"><a class="hit" href="#perfil-pablo"><span class="av t1" aria-hidden="true">PC</span><span class="body"><span class="name">Pablo Cabrera</span><span class="meta">Los Pibes del Martes</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Pablo Cabrera" aria-label="Agregar a Pablo Cabrera"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            <li class="row"><a class="hit" href="#perfil-emi"><span class="av t0" aria-hidden="true">EQ</span><span class="body"><span class="name">Emi Quiroga</span><span class="meta">FIFA de los Viernes</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Emi Quiroga" aria-label="Agregar a Emi Quiroga"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            <li class="row"><a class="hit" href="#perfil-bruno"><span class="av t1" aria-hidden="true">BG</span><span class="body"><span class="name">Bruno Giménez</span><span class="meta">Copa del Jueves</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Bruno Giménez" aria-label="Agregar a Bruno Giménez"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            <li class="row"><a class="hit" href="#perfil-fer"><span class="av t0" aria-hidden="true">FA</span><span class="body"><span class="name">Fer Aguirre</span><span class="meta">Los Pibes del Martes</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Fer Aguirre" aria-label="Agregar a Fer Aguirre"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            <li class="row"><a class="hit" href="#perfil-cami"><span class="av t1" aria-hidden="true">CT</span><span class="body"><span class="name">Cami Torres</span><span class="meta">FIFA de los Viernes</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Cami Torres" aria-label="Agregar a Cami Torres"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            <li class="row" hidden data-resto><a class="hit" href="#perfil-lauti"><span class="av t0" aria-hidden="true">LP</span><span class="body"><span class="name">Lauti Paz</span><span class="meta">Copa del Jueves y FIFA de los Viernes</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Lauti Paz" aria-label="Agregar a Lauti Paz"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            <li class="row" hidden data-resto><a class="hit" href="#perfil-manu"><span class="av t1" aria-hidden="true">MR</span><span class="body"><span class="name">Manu Ríos</span><span class="meta">Los Pibes del Martes</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Manu Ríos" aria-label="Agregar a Manu Ríos"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            <li class="row" hidden data-resto><a class="hit" href="#perfil-kevin"><span class="av t0" aria-hidden="true">KG</span><span class="body"><span class="name">Kevin Godoy</span><span class="meta">FIFA de los Viernes</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Kevin Godoy" aria-label="Agregar a Kevin Godoy"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            </ul>
+          </div>
+          <div class="mas"><button class="btn secondary full" type="button" data-mas><svg class="ico" aria-hidden="true"><use href="#i-chev-down"/></svg>Mostrar más (3)</button></div>
+        </div>
+        <span class="home-ind" aria-hidden="true"></span>
+      </div>
+    </section>
+
+    <!-- 3 · al final de las 20 -->
+    <section class="step" aria-labelledby="c3">
+      <div class="cap">
+        <h2 id="c3"><span class="n">3</span>Al final de las 20</h2>
+        <p>«Mostrar más (3)» dice cuántas quedan. Tocalo: suma las que faltan abajo, sin perder dónde estabas.</p>
+      </div>
+      <div class="phone">
+        <div class="pantalla">
+          <div class="status" aria-hidden="true"><span>9:41</span><span class="sys"><svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg><svg width="27" height="13" viewBox="0 0 27 13" fill="currentColor"><rect x=".5" y=".5" width="23" height="12" rx="3.8" fill="none" stroke="currentColor" stroke-opacity=".6"/><rect x="2" y="2" width="20" height="9" rx="2.5"/></svg></span></div>
+          <div class="lista">
+            <ul class="list" aria-label="Gente de tus torneos, de la 15 en adelante">
+            <li class="row"><a class="hit" href="#perfil-diego"><span class="av t0" aria-hidden="true">DL</span><span class="body"><span class="name">Diego Luna</span><span class="meta">FIFA de los Viernes</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Diego Luna" aria-label="Agregar a Diego Luna"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            <li class="row"><a class="hit" href="#perfil-pablo"><span class="av t1" aria-hidden="true">PC</span><span class="body"><span class="name">Pablo Cabrera</span><span class="meta">Los Pibes del Martes</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Pablo Cabrera" aria-label="Agregar a Pablo Cabrera"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            <li class="row"><a class="hit" href="#perfil-emi"><span class="av t0" aria-hidden="true">EQ</span><span class="body"><span class="name">Emi Quiroga</span><span class="meta">FIFA de los Viernes</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Emi Quiroga" aria-label="Agregar a Emi Quiroga"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            <li class="row"><a class="hit" href="#perfil-bruno"><span class="av t1" aria-hidden="true">BG</span><span class="body"><span class="name">Bruno Giménez</span><span class="meta">Copa del Jueves</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Bruno Giménez" aria-label="Agregar a Bruno Giménez"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            <li class="row"><a class="hit" href="#perfil-fer"><span class="av t0" aria-hidden="true">FA</span><span class="body"><span class="name">Fer Aguirre</span><span class="meta">Los Pibes del Martes</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Fer Aguirre" aria-label="Agregar a Fer Aguirre"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            <li class="row"><a class="hit" href="#perfil-cami"><span class="av t1" aria-hidden="true">CT</span><span class="body"><span class="name">Cami Torres</span><span class="meta">FIFA de los Viernes</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Cami Torres" aria-label="Agregar a Cami Torres"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            <li class="row" hidden data-resto><a class="hit" href="#perfil-lauti"><span class="av t0" aria-hidden="true">LP</span><span class="body"><span class="name">Lauti Paz</span><span class="meta">Copa del Jueves y FIFA de los Viernes</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Lauti Paz" aria-label="Agregar a Lauti Paz"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            <li class="row" hidden data-resto><a class="hit" href="#perfil-manu"><span class="av t1" aria-hidden="true">MR</span><span class="body"><span class="name">Manu Ríos</span><span class="meta">Los Pibes del Martes</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Manu Ríos" aria-label="Agregar a Manu Ríos"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            <li class="row" hidden data-resto><a class="hit" href="#perfil-kevin"><span class="av t0" aria-hidden="true">KG</span><span class="body"><span class="name">Kevin Godoy</span><span class="meta">FIFA de los Viernes</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Kevin Godoy" aria-label="Agregar a Kevin Godoy"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            </ul>
+          </div>
+          <div class="mas"><button class="btn secondary full" type="button" data-mas><svg class="ico" aria-hidden="true"><use href="#i-chev-down"/></svg>Mostrar más (3)</button></div>
+        </div>
+        <span class="home-ind" aria-hidden="true"></span>
+      </div>
+    </section>
+
+    <!-- 4 · filtrado por un torneo -->
+    <section class="step" aria-labelledby="c4">
+      <div class="cap">
+        <h2 id="c4"><span class="n">4</span>Solo Copa del Jueves</h2>
+        <p>Un toque en el chip y quedan los de ese torneo. Son 8: entran todas, sin «Mostrar más».</p>
+      </div>
+      <div class="phone">
+        <div class="pantalla">
+          <header class="hero">
+            <div class="status" aria-hidden="true"><span>9:41</span><span class="sys"><svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg><svg width="27" height="13" viewBox="0 0 27 13" fill="currentColor"><rect x=".5" y=".5" width="23" height="12" rx="3.8" fill="none" stroke="currentColor" stroke-opacity=".6"/><rect x="2" y="2" width="20" height="9" rx="2.5"/></svg></span></div>
+            <a class="volver" href="#amigos"><svg class="ico" aria-hidden="true"><use href="#i-back"/></svg>Amigos</a>
+            <div class="hero-main">
+              <h3 class="titulo">Gente de tus torneos</h3>
+            </div>
+            <p class="sub">8 personas</p>
+          </header>
+          <div class="filtros" role="group" aria-label="Filtrar por torneo" data-centrar>
+            <button class="fchip" type="button" aria-pressed="false">Todos</button>
+            <button class="fchip" type="button" aria-pressed="false">Los Pibes del Martes</button>
+            <button class="fchip" type="button" aria-pressed="true">Copa del Jueves</button>
+            <button class="fchip" type="button" aria-pressed="false">FIFA de los Viernes</button>
+          </div>
+          <div class="lista">
+            <ul class="list">
+            <li class="row"><a class="hit" href="#perfil-seba"><span class="av t0" aria-hidden="true">SM</span><span class="body"><span class="name">Seba Molina</span><span class="meta">Los Pibes del Martes y 2 más</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Seba Molina" aria-label="Agregar a Seba Molina"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            <li class="row"><a class="hit" href="#perfil-lucas"><span class="av t1" aria-hidden="true">LF</span><span class="body"><span class="name">Lucas Ferreyra</span><span class="meta">Los Pibes del Martes y Copa del Jueves</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Lucas Ferreyra" aria-label="Agregar a Lucas Ferreyra"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            <li class="row"><a class="hit" href="#perfil-mati"><span class="av t0" aria-hidden="true">MR</span><span class="body"><span class="name">Mati Romero</span><span class="meta">Copa del Jueves</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Mati Romero" aria-label="Agregar a Mati Romero"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            <li class="row"><a class="hit" href="#perfil-pato"><span class="av t0" aria-hidden="true">PA</span><span class="body"><span class="name">Pato Acosta</span><span class="meta">Copa del Jueves y FIFA de los Viernes</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Pato Acosta" aria-label="Agregar a Pato Acosta"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            <li class="row"><a class="hit" href="#perfil-fran"><span class="av t1" aria-hidden="true">FM</span><span class="body"><span class="name">Fran Medina</span><span class="meta">Copa del Jueves</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Fran Medina" aria-label="Agregar a Fran Medina"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            <li class="row"><a class="hit" href="#perfil-maxi"><span class="av t1" aria-hidden="true">MO</span><span class="body"><span class="name">Maxi Ojeda</span><span class="meta">Los Pibes del Martes y Copa del Jueves</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Maxi Ojeda" aria-label="Agregar a Maxi Ojeda"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            <li class="row"><a class="hit" href="#perfil-bruno"><span class="av t1" aria-hidden="true">BG</span><span class="body"><span class="name">Bruno Giménez</span><span class="meta">Copa del Jueves</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Bruno Giménez" aria-label="Agregar a Bruno Giménez"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            <li class="row"><a class="hit" href="#perfil-lauti"><span class="av t0" aria-hidden="true">LP</span><span class="body"><span class="name">Lauti Paz</span><span class="meta">Copa del Jueves y FIFA de los Viernes</span></span></a><button type="button" class="btn agregar" data-agregar data-nombre="Lauti Paz" aria-label="Agregar a Lauti Paz"><svg class="ico" aria-hidden="true"><use href="#i-user-plus"/></svg><span>Agregar</span></button></li>
+            </ul>
+          </div>
+        </div>
+        <span class="home-ind" aria-hidden="true"></span>
+      </div>
+    </section>
+  </div>
+
+  <div class="notes">
+    <article class="note"><h3>En qué orden</h3><p>Primero los que más fechas jugaron con vos, pero el número no se muestra. Cada fila dice solo de qué torneos lo conocés, igual que en los pedidos y en el perfil: «Los Pibes del Martes», «… y Copa del Jueves» o «… y 2 más».</p></article>
+    <article class="note"><h3>De a 20, no páginas numeradas</h3><p>En el teléfono es más cómodo seguir bajando que apuntarle a «1 2 3 ›» con el dedo. «Mostrar más» suma las siguientes 20 debajo de las que ya viste y dice cuántas quedan; las 5 de Amigos alcanzan para el día a día.</p></article>
+    <article class="note"><h3>Filtrar por torneo</h3><p>En una lista larga, lo más fácil es acordarte de dónde conocés a alguien. Hay un chip por cada torneo tuyo con gente para sugerir, y el número de arriba cambia con el filtro. Para alguien puntual está el buscador por @usuario (lámina E).</p></article>
+    <article class="note"><h3>En Inicio, igual que hoy</h3><p>Si todavía no tenés amigos, Inicio sigue mostrando las 2 primeras con «Ver más gente», que aparece solo si hay más de 2 y lleva a esta pantalla.</p></article>
+  </div>
+</main>
+<script>
+document.querySelectorAll('[data-agregar]').forEach(function (b) {
+  b.addEventListener('click', function () {
+    var enviado = b.classList.contains('agregar');
+    var nombre = b.getAttribute('data-nombre');
+    b.classList.toggle('agregar', !enviado);
+    b.classList.toggle('enviado', enviado);
+    b.setAttribute('aria-label', enviado ? 'Pedido enviado a ' + nombre : 'Agregar a ' + nombre);
+    b.querySelector('use').setAttribute('href', enviado ? '#i-check' : '#i-user-plus');
+    b.querySelector('span').textContent = enviado ? 'Enviado' : 'Agregar';
+  });
+});
+// Mostrar más: suma las que faltan abajo y lleva el foco a la primera nueva.
+document.querySelectorAll('[data-mas]').forEach(function (b) {
+  b.addEventListener('click', function () {
+    var pantalla = b.closest('.pantalla');
+    var resto = pantalla.querySelectorAll('[data-resto]');
+    resto.forEach(function (li) { li.hidden = false; });
+    var fin = document.createElement('p');
+    fin.className = 'fin';
+    fin.setAttribute('role', 'status');
+    fin.textContent = 'Son todas: 23 personas';
+    b.parentNode.replaceWith(fin);
+    if (resto[0]) resto[0].querySelector('a').focus();
+  });
+});
+// Con un torneo elegido, su chip queda a la vista.
+document.querySelectorAll('[data-centrar]').forEach(function (f) {
+  var on = f.querySelector('[aria-pressed="true"]');
+  if (on) f.scrollLeft = on.offsetLeft - f.offsetLeft - 48;
+});
+</script>
+</body>
+</html>

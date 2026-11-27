@@ -30,6 +30,34 @@
       "tradeoff": "Un toque y quedan amigos, sin copiar IDs; a cambio, necesita una migración y funciones nuevas en la base, con revisión de seguridad aparte.",
       "width": 1752,
       "height": 1440
+    },
+    {
+      "file": "05-buscar-por-usuario.html",
+      "title": "E · Buscar por @usuario",
+      "tradeoff": "Encontrás a cualquiera que te pasó su @usuario sin reabrir la lista de jugadores; a cambio, una función nueva en la base con revisión de seguridad.",
+      "width": 1752,
+      "height": 1452
+    },
+    {
+      "file": "06-perfil.html",
+      "title": "F · El perfil",
+      "tradeoff": "El perfil lee por las reglas que ya existen, así que no expone nada nuevo; a cambio, tu nombre no se edita desde ahí.",
+      "width": 1330,
+      "height": 1468
+    },
+    {
+      "file": "07-elegir-usuario.html",
+      "title": "G · Elegí tu @usuario",
+      "tradeoff": "Un @usuario fijo y elegido por cada uno; a cambio, una confirmación, una pantalla única para las cuentas que ya existen y una columna nueva en producción.",
+      "width": 1752,
+      "height": 1432
+    },
+    {
+      "file": "08-gente-de-tus-torneos-paginada.html",
+      "title": "H · Gente de tus torneos, de a 20",
+      "tradeoff": "La lista deja de ser infinita y se filtra por torneo, sin tocar la base; a cambio, pasadas las 20 personas hay que tocar \"Mostrar más\".",
+      "width": 1752,
+      "height": 1452
     }
   ]
 }

@@ -74,3 +74,4 @@ Ajedrez trae una forma nueva de anotar (gana/pierde/tablas) y bowling una fecha 
     - Segundo volcado de datos: las 54 tablas con el mismo conteo de filas, más `matchday_scores` vacía.
     - El dry-run posterior da "Remote database is up to date", y la app publicada responde 200.
   - Producción sigue con el código viejo, compatible porque para los formatos existentes las funciones hacen lo mismo. El bowling funciona recién cuando se publique `main`.
+- L16 (2026-11-27) Publicado: push de `main` b2c21fe..0cd608b (52 commits: rediseño, deportes nuevos, arreglos para celular). El CI pasó (typecheck, unit y build; test:db con Postgres real), el PR #51 quedó MERGED y Vercel publicó 0cd608b. Pendiente: verificar la app publicada en su dominio real. `padel-app.vercel.app` hoy sirve otro sitio ("Alta Volea") y las URLs del proyecto piden login de Vercel; hace falta que el usuario indique el dominio.

@@ -7,8 +7,8 @@ import {
   type DisciplineRanking,
 } from '@/core'
 import type { Client } from '@/db/client'
-import { genteDeTusTorneos } from '@/db/friends'
-import { amigosDeInicio, type AmigoInicio } from '@/db/inicio'
+import { friendsOf, genteDeTusTorneos } from '@/db/friends'
+import { amigosDeInicio, pedidosRecibidos, type AmigoInicio, type PedidoRecibido } from '@/db/inicio'
 import {
   attendancesOf,
   entriesOf,
@@ -23,6 +23,7 @@ import {
 } from '@/db/read'
 import { serverClient } from '@/db/server'
 import { EmpezaPorTusTorneos } from '@/app/amigos/gente'
+import { PedidosEnInicio } from '@/app/amigos/pedidos'
 import { Avatar } from '@/app/ui/avatar'
 import { button } from '@/app/ui/button'
 import { Hero } from '@/app/ui/hero'
@@ -181,14 +182,14 @@ export default async function InicioPage() {
 
   const headers = await mySeasons(supabase)
   const hoy = hoyISO()
-  const [cards, myName, amigos] = await Promise.all([
+  const [cards, myName, { amigos, pedidos }] = await Promise.all([
     Promise.all(headers.map((header) => cardFor(supabase, header))),
     (async () => {
       const { data: playerId } = await supabase.rpc('my_player_id')
       if (playerId === null) return ''
       return (await playerNames(supabase, [playerId])).get(playerId) ?? ''
     })(),
-    user === null ? Promise.resolve([]) : amigosDeInicio(supabase),
+    user === null ? Promise.resolve({ amigos: [], pedidos: [] }) : amigosYPedidos(supabase),
   ])
   // Sin amigos todavía, la sección empieza por la gente de tus torneos (S3).
   // Con amigos no se lee: Inicio queda como estaba.
@@ -269,6 +270,9 @@ export default async function InicioPage() {
           ) : undefined
         }
       >
+        {/* Los pedidos que te hicieron, arriba de todo (S4), con y sin amigos. Va siempre en el
+            mismo lugar: al aceptar el último, el aviso "Ahora sos amigo de…" sigue montado. */}
+        {user !== null && <PedidosEnInicio pedidos={pedidos} />}
         {amigos.length === 0 ? (
           <EmpezaPorTusTorneos gente={gente}>
             <ul className="-mx-4">
@@ -333,6 +337,16 @@ export default async function InicioPage() {
       )}
     </main>
   )
+}
+
+/**
+ * Tus amigos y los pedidos que te hicieron (odd/tasks/amigos-faciles.md, S4),
+ * de una sola lectura de `friendships`.
+ */
+async function amigosYPedidos(supabase: Client): Promise<{ amigos: AmigoInicio[]; pedidos: PedidoRecibido[] }> {
+  const todos = await friendsOf(supabase)
+  const [amigos, pedidos] = await Promise.all([amigosDeInicio(supabase, todos), pedidosRecibidos(supabase, todos)])
+  return { amigos, pedidos }
 }
 
 /** El bloque de la fecha más cercana: el torneo, "Fecha 8", el día, cómo viene y el link. */

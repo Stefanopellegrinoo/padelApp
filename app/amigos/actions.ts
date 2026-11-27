@@ -3,7 +3,6 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import {
-  acceptFriendship,
   acceptFriendRequestFrom,
   addFriend,
   cancelFriendRequest,
@@ -23,9 +22,10 @@ import { assertFriendPlays, casualInputFrom, redirectTarget } from './casual-for
  * Las escrituras de Amigos que NO tienen estado de cliente que muestre un
  * error -- mismo patrón que `renameTournament`
  * (`app/torneo/[id]/ajustes/actions.ts`): un `<form>` sin JavaScript, y el
- * error vuelve por la query. Las dos únicas escrituras que la usan (pedir y
- * aceptar amistad) siempre vuelven a `/amigos` -- por eso el destino es fijo,
- * no un parámetro.
+ * error vuelve por la query. La única escritura que la usa (pedir amistad por
+ * ID) siempre vuelve a `/amigos` -- por eso el destino es fijo, no un
+ * parámetro. Aceptar un pedido ya no pasa por acá: va por la persona, con
+ * `aceptarPedidoDe` (odd/tasks/amigos-faciles.md, T3).
  *
  * Review final de 2b, Minor 4: `removeCasualMatch` (más abajo) pasaba por
  * acá también, con un `path` parametrizado a `/amigos/{playerId}` armado con
@@ -59,17 +59,13 @@ export async function sendFriendRequest(formData: FormData): Promise<void> {
   await onAmigos((supabase) => requestFriendship(supabase, friendPlayerId))
 }
 
-export async function accept(formData: FormData): Promise<void> {
-  const friendshipId = String(formData.get('friendshipId') ?? '')
-  await onAmigos((supabase) => acceptFriendship(supabase, friendshipId))
-}
-
-// ── la amistad desde el perfil del torneo (odd/tasks/amigos-faciles.md, S2) ──
+// ── la amistad con una persona: el perfil del torneo (S2), Inicio y Amigos (S4) ──
 
 export type AmistadResult = { ok: true } | { ok: false; error: string }
 
 /**
- * Las cuatro escrituras del control del perfil del torneo. Sin redirect: la
+ * Las cuatro escrituras del control del perfil del torneo, que también usan
+ * los pedidos de Inicio y de Amigos (`pedidos.tsx`). Sin redirect: la
  * pantalla se queda donde está, con su `?desde=` intacto, y `revalidatePath`
  * le trae el estado nuevo de la base. Mismo registro que `cancelTheMatchday`
  * (`fechas/[n]/actions.ts`): llamadas directas desde el cliente, con el error
@@ -106,7 +102,7 @@ export async function agregarAmigo(
   return enElPerfil(async (supabase) => ({ estado: await addFriend(supabase, friendPlayerId) }))
 }
 
-/** "Deshacer" en el aviso: borra mi pedido, si sigue pendiente. */
+/** "Deshacer" en el aviso, o "Cancelar" en "Pedidos enviados": borra mi pedido, si sigue pendiente. */
 export async function deshacerPedido(friendPlayerId: string): Promise<AmistadResult> {
   return enElPerfil(async (supabase) => {
     await cancelFriendRequest(supabase, friendPlayerId)
@@ -114,7 +110,7 @@ export async function deshacerPedido(friendPlayerId: string): Promise<AmistadRes
   })
 }
 
-/** "Aceptar" en la tarjeta del encabezado. */
+/** "Aceptar" en la tarjeta del encabezado, o en un pedido de Inicio o de Amigos. */
 export async function aceptarPedidoDe(friendPlayerId: string): Promise<AmistadResult> {
   return enElPerfil(async (supabase) => {
     await acceptFriendRequestFrom(supabase, friendPlayerId)
@@ -122,7 +118,7 @@ export async function aceptarPedidoDe(friendPlayerId: string): Promise<AmistadRe
   })
 }
 
-/** ✕ en la tarjeta: rechaza el pedido. Al otro no le llega ningún aviso. */
+/** ✕ en la tarjeta o en un pedido: rechaza el pedido. Al otro no le llega ningún aviso. */
 export async function rechazarPedidoDe(friendPlayerId: string): Promise<AmistadResult> {
   return enElPerfil(async (supabase) => {
     await rejectFriendRequest(supabase, friendPlayerId)
@@ -212,7 +208,7 @@ export async function editCasualMatch(state: CasualFormState, formData: FormData
 /**
  * Borra un partido casual. Patrón sin-JS: no hay nada que validar en el
  * borde ni un campo que mantener tipeado tras un error -- un botón que puede
- * fallar y volver con `?error=...`, igual que `accept`.
+ * fallar y volver con `?error=...`, igual que `sendFriendRequest`.
  *
  * En éxito, mismo criterio de redirect que `editCasualMatch`. En error no hay fila que leer (el borrado no llegó a pasar), así
  * que ahí sí se usa el del `<form>` -- es el único valor disponible para
@@ -222,8 +218,9 @@ export async function editCasualMatch(state: CasualFormState, formData: FormData
 export async function removeCasualMatch(formData: FormData): Promise<void> {
   const matchId = String(formData.get('matchId') ?? '')
   const submitted = String(formData.get('friendPlayerId') ?? '')
-  // De dónde se llegó al perfil (`?desde=amigos`): que Volver siga diciendo lo mismo.
-  const desde = formData.get('desde') === 'amigos' ? 'desde=amigos' : null
+  // De dónde se llegó al perfil (`?desde=amigos` o `?desde=torneo`): que Volver siga diciendo lo mismo.
+  const origen = formData.get('desde')
+  const desde = origen === 'amigos' || origen === 'torneo' ? `desde=${origen}` : null
   let path = `/amigos/${submitted}`
   let problem: string | null = null
   try {

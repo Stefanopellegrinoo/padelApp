@@ -19,6 +19,8 @@ interface PageProps {
    * ACÁ con el error en la URL y nadie lo leía -- fallaba en silencio.
    *
    * `?desde=amigos`: se llegó desde la lista de Amigos, y Volver lleva ahí.
+   * `?desde=torneo`: se llegó con "Amigos ›" desde el perfil del torneo, y
+   * Volver desanda hasta ahí (`history.back()`; si no hay nada atrás, Inicio).
    * Sin él (desde Inicio, o un link compartido) Volver va a Inicio.
    *
    * `?cargar=1`: el atajo de "Cargar partido" de Inicio. Llega con la hoja
@@ -83,12 +85,17 @@ export default async function AmigoPage({ params, searchParams }: PageProps) {
   const deportes = deportesDe(partidos)
   const enContra = partidos.filter((partido) => !partido.together)
   const juntos = partidos.filter((partido) => partido.together)
-  const desdeAmigos = desde === 'amigos'
+  const back =
+    desde === 'amigos'
+      ? { href: '/amigos', label: 'Amigos' }
+      : desde === 'torneo'
+        ? { href: '/torneos' }
+        : { href: '/torneos', label: 'Inicio' }
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-bg pb-[calc(104px+env(safe-area-inset-bottom))] text-text">
       <Hero
-        back={desdeAmigos ? { href: '/amigos', label: 'Amigos' } : { href: '/torneos', label: 'Inicio' }}
+        back={back}
         // Un solo deporte pinta el bloque con su color; con varios, azul cancha.
         sport={deportes.kinds.length === 1 ? deportes.kinds[0] : undefined}
         title={nombre}

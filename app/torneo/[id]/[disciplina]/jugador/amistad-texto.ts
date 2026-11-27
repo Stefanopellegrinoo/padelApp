@@ -22,11 +22,10 @@ export function haceCuanto(desde: string, ahora: Date): string {
 }
 
 /**
- * "Amigos ›" lleva al historial entre los dos. `?desde=amigos` hace que su
- * Volver diga "Amigos" (`app/amigos/[playerId]/page.tsx`): el perfil del
- * torneo no es un origen que esa pantalla conozca, y entre Inicio y la lista
- * de Amigos, ésta es la que sigue el hilo de "son amigos".
+ * "Amigos ›" lleva al historial entre los dos. `?desde=torneo` hace que su
+ * Volver desande hasta este perfil (`app/amigos/[playerId]/page.tsx`), en
+ * vez de mandarte a la lista de Amigos.
  */
 export function amigosHref(playerId: string): string {
-  return `/amigos/${playerId}?desde=amigos`
+  return `/amigos/${playerId}?desde=torneo`
 }

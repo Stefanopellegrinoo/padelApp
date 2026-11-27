@@ -18,6 +18,7 @@ import {
   acceptFriendRequestFrom,
   rejectFriendRequest,
   genteDeTusTorneos,
+  torneosCompartidosCon,
   type GenteDeTorneo,
   type SharedMatch,
   type TournamentMatch,
@@ -835,6 +836,22 @@ describe('friendsOf', () => {
     const conTres = amigos.find((f) => f.playerId === tres.playerId)
     expect(conTres?.accepted).toBe(false)
     expect(conTres?.theyAsked).toBe(false)
+  })
+
+  it('trae cuándo se pidió (`created_at`): de ahí sale "hace N días" en "Pedidos enviados"', async () => {
+    const uno = await createTestUser()
+    const dos = await createTestUser()
+    await requestFriendship(uno.client, dos.playerId)
+    const { data: fila, error } = await adminClient()
+      .from('friendships')
+      .select('created_at')
+      .eq('requested_by', uno.playerId)
+      .single()
+    if (error !== null) throw new Error(error.message)
+
+    const [conDos] = await friendsOf(uno.client)
+    expect(conDos?.createdAt).toBe(fila.created_at)
+    expect((await friendsOf(dos.client))[0]?.createdAt).toBe(fila.created_at)
   })
 
   it('no ve amistades ajenas', async () => {
@@ -1958,6 +1975,41 @@ async function unaFechaSin(admin: TestUser, ausente: string, otros: string[]): P
 const ids = (gente: GenteDeTorneo[]) => gente.map((persona) => persona.playerId)
 const de = (gente: GenteDeTorneo[], playerId: string) => gente.find((persona) => persona.playerId === playerId)
 
+// Los dos techos que ya mordieron a este repo: PostgREST corta cada select
+// en 1000 filas sin avisar, y una IN de ~219 uuids da 414. Escena armada a
+// granel con `service_role` (un insert por tabla), con su disciplina y sus
+// asientos de disciplina: los tripwires globales de `discipline.db.test.ts`.
+async function aGranel(admin: TestUser, temporadas: number, porTemporada: string[][]): Promise<string[]> {
+  const db = adminClient()
+  const { data: seasons, error } = await db
+    .from('seasons')
+    .insert(Array.from({ length: temporadas }, (_, i) => ({ name: `Granel ${Date.now()}-${i}`, created_by: admin.userId })))
+    .select('id')
+  if (error !== null) throw new Error(error.message)
+  const seasonIds = seasons.map((season) => season.id)
+  const { data: disciplines, error: dError } = await db
+    .from('disciplines')
+    .insert(seasonIds.map((season_id) => ({ season_id, kind: 'PADEL', config: defaultConfig(8) as never, position: 0 })))
+    .select('id, season_id')
+  if (dError !== null) throw new Error(dError.message)
+  const filas = seasonIds.flatMap((season_id, i) =>
+    (porTemporada[i] ?? []).map((player_id, j) => ({ season_id, player_id, display_name: `Granel ${j}`, kind: 'SQUAD' })),
+  )
+  const { data: entries, error: eError } = await db.from('entries').insert(filas).select('id, season_id')
+  if (eError !== null) throw new Error(eError.message)
+  const disciplinaDe = new Map(disciplines.map((d) => [d.season_id, d.id]))
+  const { error: deError } = await db.from('discipline_entries').insert(
+    entries.map((entry, seed_position) => ({
+      discipline_id: disciplinaDe.get(entry.season_id)!,
+      entry_id: entry.id,
+      season_id: entry.season_id,
+      seed_position,
+    })),
+  )
+  if (deError !== null) throw new Error(deError.message)
+  return seasonIds
+}
+
 describe('genteDeTusTorneos', () => {
   it('sólo gente con cuenta de mis torneos: ni yo, ni amigos, ni pedidos en ninguna dirección, ni lugares sin reclamar', async () => {
     const yo = await createTestUser()
@@ -2058,41 +2110,6 @@ describe('genteDeTusTorneos', () => {
     expect(ids(await genteDeTusTorneos(yo.client))).toEqual([otro.playerId])
   })
 
-  // Los dos techos que ya mordieron a este repo: PostgREST corta cada select
-  // en 1000 filas sin avisar, y una IN de ~219 uuids da 414. Escena armada a
-  // granel con `service_role` (un insert por tabla), con su disciplina y sus
-  // asientos de disciplina: los tripwires globales de `discipline.db.test.ts`.
-  async function aGranel(admin: TestUser, temporadas: number, porTemporada: string[][]): Promise<string[]> {
-    const db = adminClient()
-    const { data: seasons, error } = await db
-      .from('seasons')
-      .insert(Array.from({ length: temporadas }, (_, i) => ({ name: `Granel ${Date.now()}-${i}`, created_by: admin.userId })))
-      .select('id')
-    if (error !== null) throw new Error(error.message)
-    const seasonIds = seasons.map((season) => season.id)
-    const { data: disciplines, error: dError } = await db
-      .from('disciplines')
-      .insert(seasonIds.map((season_id) => ({ season_id, kind: 'PADEL', config: defaultConfig(8) as never, position: 0 })))
-      .select('id, season_id')
-    if (dError !== null) throw new Error(dError.message)
-    const filas = seasonIds.flatMap((season_id, i) =>
-      (porTemporada[i] ?? []).map((player_id, j) => ({ season_id, player_id, display_name: `Granel ${j}`, kind: 'SQUAD' })),
-    )
-    const { data: entries, error: eError } = await db.from('entries').insert(filas).select('id, season_id')
-    if (eError !== null) throw new Error(eError.message)
-    const disciplinaDe = new Map(disciplines.map((d) => [d.season_id, d.id]))
-    const { error: deError } = await db.from('discipline_entries').insert(
-      entries.map((entry, seed_position) => ({
-        discipline_id: disciplinaDe.get(entry.season_id)!,
-        entry_id: entry.id,
-        season_id: entry.season_id,
-        seed_position,
-      })),
-    )
-    if (deError !== null) throw new Error(deError.message)
-    return seasonIds
-  }
-
   it('más de 1000 personas en mis torneos: las trae todas, sin cortar', async () => {
     const yo = await createTestUser()
     const db = adminClient()
@@ -2119,4 +2136,70 @@ describe('genteDeTusTorneos', () => {
     expect(ids(gente)).toEqual([otro.playerId])
     expect(gente[0]?.torneos).toHaveLength(250)
   }, 60_000)
+})
+
+// ── de dónde lo conocés (odd/tasks/amigos-faciles.md, T3, S4) ───────────────
+
+describe('torneosCompartidosCon', () => {
+  it('uno, varios o ninguno: los nombres de los torneos que comparto con cada uno, por nombre', async () => {
+    const yo = await createTestUser()
+    const uno = await createTestUser()
+    const varios = await createTestUser()
+    const ninguno = await createTestUser()
+    const t1 = await createSeason({ admin: yo, squad: [yo.playerId, uno.playerId, varios.playerId] })
+    const t2 = await createSeason({ admin: yo, squad: [yo.playerId, varios.playerId] })
+    // `ninguno` juega un torneo sin mí.
+    await createSeason({ admin: ninguno, squad: [ninguno.playerId, uno.playerId] })
+
+    const torneos = await torneosCompartidosCon(yo.client, [uno.playerId, varios.playerId, ninguno.playerId])
+
+    expect(torneos).toEqual(
+      new Map([
+        [uno.playerId, [await nombreDeTemporada(t1.seasonId)]],
+        [varios.playerId, [await nombreDeTemporada(t1.seasonId), await nombreDeTemporada(t2.seasonId)].sort((a, b) => a.localeCompare(b, 'es'))],
+        [ninguno.playerId, []],
+      ]),
+    )
+  })
+
+  it('un torneo que administro pero no juego no es compartido', async () => {
+    const yo = await createTestUser()
+    const otro = await createTestUser()
+    // Lo creé yo (lo veo por `is_participant`), pero no tengo asiento.
+    await createSeason({ admin: yo, squad: [otro.playerId] })
+
+    expect(await torneosCompartidosCon(yo.client, [otro.playerId])).toEqual(new Map([[otro.playerId, []]]))
+  })
+
+  it('sin nadie para buscar, no lee nada', async () => {
+    const yo = await createTestUser()
+    expect(await torneosCompartidosCon(yo.client, [])).toEqual(new Map())
+  })
+
+  it('250 personas (más de las 218 que entran en una IN): van en tandas, sin romper la URL', async () => {
+    const yo = await createTestUser()
+    const { data: players, error } = await adminClient()
+      .from('players')
+      .insert(Array.from({ length: 250 }, (_, i) => ({ display_name: `Granel ${Date.now()}-${i}` })))
+      .select('id')
+    if (error !== null) throw new Error(error.message)
+    const [seasonId] = await aGranel(yo, 1, [[yo.playerId, ...players.map((p) => p.id)]])
+    const nombre = await nombreDeTemporada(seasonId!)
+
+    const torneos = await torneosCompartidosCon(yo.client, players.map((p) => p.id))
+
+    expect(torneos.size).toBe(250)
+    expect([...torneos.values()].every((nombres) => nombres.length === 1 && nombres[0] === nombre)).toBe(true)
+  }, 60_000)
+
+  it('más de 1000 torneos compartidos: pagina mis asientos y los suyos, y los nombres van en tandas', async () => {
+    const yo = await createTestUser()
+    const otro = await createTestUser()
+    await aGranel(yo, 1050, Array.from({ length: 1050 }, () => [yo.playerId, otro.playerId]))
+
+    const torneos = await torneosCompartidosCon(yo.client, [otro.playerId])
+
+    expect(torneos.get(otro.playerId)).toHaveLength(1050)
+    expect(new Set(torneos.get(otro.playerId)).size).toBe(1050)
+  }, 120_000)
 })

@@ -670,7 +670,7 @@ export function CasualMatchRow({
   dataDeporte?: string
   /** "Perdiste 1-2": el nombre del botón. */
   resumen: string
-  /** `'amigos'` si al perfil se llegó desde la lista: Borrar vuelve con el mismo Volver. */
+  /** De dónde se llegó al perfil (`'amigos'` desde la lista, `'torneo'` desde el perfil del torneo): Borrar vuelve con el mismo Volver. */
   desde?: string
   children: ReactNode
 }) {

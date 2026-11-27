@@ -5,14 +5,16 @@ import { Icono } from '@/app/torneos/inicio/iconos'
 import { Avatar } from '@/app/ui/avatar'
 import { button } from '@/app/ui/button'
 import { Hero } from '@/app/ui/hero'
-import { row, rowPress } from '@/app/ui/row'
+import { rowPress } from '@/app/ui/row'
 import { Section } from '@/app/ui/section'
 import { friendsOf, genteDeTusTorneos, historyWith } from '@/db/friends'
-import { ordenarAmigos, resumenAmigo, type AmigoInicio } from '@/db/inicio'
+import { ordenarAmigos, pedidosRecibidos, resumenAmigo, type AmigoInicio } from '@/db/inicio'
 import { serverClient } from '@/db/server'
-import { accept, sendFriendRequest } from './actions'
+import { sendFriendRequest } from './actions'
 import { GenteDeTusTorneos } from './gente'
 import { MiId } from './mi-id'
+import { PedidosEnviados, TePidieron } from './pedidos'
+import { metaEnviado } from './pedidos-texto'
 
 interface PageProps {
   searchParams: Promise<{ error?: string }>
@@ -21,11 +23,13 @@ interface PageProps {
 /**
  * Amigos — la lista, y el único lugar para pedir/aceptar una amistad.
  *
- * Arriba lo que espera algo de vos (te pidieron ser amigos); después tus
+ * Arriba lo que espera algo de vos (te pidieron ser amigos, con de dónde lo
+ * conocés, `pedidos.tsx`); después tus
  * amigos como en Inicio (último resultado y cara a cara, con el mismo
  * `resumenAmigo` de `db/inicio.ts`, así las dos pantallas no cuentan
  * distinto); la gente de tus torneos que todavía no agregaste (`gente.tsx`);
- * las solicitudes que mandaste; y al final cómo sumar a alguien.
+ * las solicitudes que mandaste, con cuánto hace y "Cancelar"; y al final cómo
+ * sumar a alguien.
  *
  * No hay buscador de jugadores (ver `mi-id.tsx`): agregar a alguien pide su
  * ID, que esa persona copia desde acá mismo y te pasa por fuera de la app.
@@ -42,16 +46,20 @@ export default async function AmigosPage({ searchParams }: PageProps) {
     genteDeTusTorneos(supabase),
   ])
 
-  const recibidas = amigos.filter((amigo) => !amigo.accepted && amigo.theyAsked)
-  const enviadas = amigos.filter((amigo) => !amigo.accepted && !amigo.theyAsked)
+  const ahora = new Date()
+  const enviadas = amigos
+    .filter((amigo) => !amigo.accepted && !amigo.theyAsked)
+    .map((amigo) => ({ playerId: amigo.playerId, displayName: amigo.displayName, meta: metaEnviado(amigo.createdAt, ahora) }))
   // Un `historyWith` por amigo, en paralelo: lo mismo que Inicio (`amigosDeInicio`).
-  const aceptados = ordenarAmigos(
-    await Promise.all(
+  const [recibidas, resumenes] = await Promise.all([
+    pedidosRecibidos(supabase, amigos),
+    Promise.all(
       amigos
         .filter((amigo) => amigo.accepted)
         .map(async (amigo) => resumenAmigo(amigo, await historyWith(supabase, amigo.playerId))),
     ),
-  )
+  ])
+  const aceptados = ordenarAmigos(resumenes)
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-bg pb-[calc(24px+env(safe-area-inset-bottom))] text-text">
@@ -67,22 +75,7 @@ export default async function AmigosPage({ searchParams }: PageProps) {
         }
       />
 
-      {recibidas.length > 0 && (
-        <Section title="Te pidieron">
-          <ul className="-mx-4">
-            {recibidas.map((amigo) => (
-              <li key={amigo.friendshipId} className={`${row} min-h-[72px]`}>
-                <Avatar name={amigo.displayName} />
-                <span className="min-w-0 flex-1 truncate text-[17px] font-bold">{amigo.displayName}</span>
-                <form action={accept}>
-                  <input type="hidden" name="friendshipId" value={amigo.friendshipId} />
-                  <SubmitButton className={button('primary')}>Aceptar</SubmitButton>
-                </form>
-              </li>
-            ))}
-          </ul>
-        </Section>
-      )}
+      <TePidieron pedidos={recibidas} />
 
       <Section title="Tus amigos">
         {aceptados.length === 0 ? (
@@ -104,21 +97,7 @@ export default async function AmigosPage({ searchParams }: PageProps) {
 
       <GenteDeTusTorneos gente={gente} />
 
-      {enviadas.length > 0 && (
-        <Section title="Pedidos enviados" className="pt-7">
-          <ul className="-mx-4">
-            {enviadas.map((amigo) => (
-              <li key={amigo.friendshipId} className={`${row} min-h-[64px]`}>
-                <Avatar name={amigo.displayName} />
-                <span className="min-w-0 flex-1 truncate text-[17px] font-semibold text-muted">{amigo.displayName}</span>
-                <span className="shrink-0 rounded-pill bg-chip px-3 py-1.5 text-[14px] font-semibold text-muted">
-                  Pendiente
-                </span>
-              </li>
-            ))}
-          </ul>
-        </Section>
-      )}
+      <PedidosEnviados enviados={enviadas} />
 
       <Section title="Sumar un amigo" className="pt-7">
         <div className="flex flex-col gap-4">

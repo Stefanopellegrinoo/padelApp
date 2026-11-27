@@ -1,6 +1,17 @@
-import { describe, expect, it } from 'vitest'
-import type { CasualMatch, SharedMatch, TournamentMatch } from './friends'
-import { ordenarAmigos, resumenAmigo } from './inicio'
+import { describe, expect, it, vi } from 'vitest'
+import type { Client } from './client'
+import { friendsOf, historyWith, torneosCompartidosCon, type CasualMatch, type Friend, type SharedMatch, type TournamentMatch } from './friends'
+import { amigosDeInicio, ordenarAmigos, pedidosRecibidos, resumenAmigo } from './inicio'
+
+vi.mock('./friends', async (importOriginal) => {
+  const real = await importOriginal<typeof import('./friends')>()
+  return {
+    ...real,
+    friendsOf: vi.fn(async () => []),
+    historyWith: vi.fn(async () => []),
+    torneosCompartidosCon: vi.fn(async () => new Map()),
+  }
+})
 
 /**
  * Las partes puras de la lectura de Inicio (`db/inicio.ts`): el resumen de un
@@ -111,5 +122,65 @@ describe('ordenarAmigos', () => {
       'Viejo',
       'Sin día',
     ])
+  })
+})
+
+// ── los pedidos de Inicio (odd/tasks/amigos-faciles.md, T3, S4) ─────────────
+
+const cliente = {} as Client
+
+const amistad = (over: Partial<Friend>): Friend => ({
+  friendshipId: `f-${over.playerId}`,
+  playerId: 'p',
+  displayName: 'Alguien',
+  accepted: true,
+  theyAsked: false,
+  createdAt: '2026-11-24T12:00:00Z',
+  ...over,
+})
+
+const NICO_AMIGO = amistad({ playerId: 'p-nico', displayName: 'Nico Arias' })
+const JUAMPI = amistad({ playerId: 'p-juampi', displayName: 'Juampi Ledesma', accepted: false, theyAsked: true })
+const RAMA = amistad({ playerId: 'p-rama', displayName: 'Rama Benítez', accepted: false, theyAsked: true })
+const TOMI = amistad({ playerId: 'p-tomi', displayName: 'Tomi Sosa', accepted: false, theyAsked: false })
+
+describe('pedidosRecibidos', () => {
+  it('sólo los pendientes que me hicieron, con los torneos que compartimos', async () => {
+    vi.mocked(torneosCompartidosCon).mockResolvedValueOnce(
+      new Map([
+        ['p-juampi', ['Los Pibes del Martes']],
+        ['p-rama', []],
+      ]),
+    )
+    const pedidos = await pedidosRecibidos(cliente, [NICO_AMIGO, JUAMPI, TOMI, RAMA])
+    expect(torneosCompartidosCon).toHaveBeenLastCalledWith(cliente, ['p-juampi', 'p-rama'])
+    expect(pedidos).toEqual([
+      { playerId: 'p-juampi', displayName: 'Juampi Ledesma', torneos: ['Los Pibes del Martes'] },
+      { playerId: 'p-rama', displayName: 'Rama Benítez', torneos: [] },
+    ])
+  })
+
+  it('sin pedidos no lee nada', async () => {
+    vi.mocked(torneosCompartidosCon).mockClear()
+    expect(await pedidosRecibidos(cliente, [NICO_AMIGO, TOMI])).toEqual([])
+    expect(torneosCompartidosCon).not.toHaveBeenCalled()
+  })
+})
+
+describe('amigosDeInicio', () => {
+  it('con las amistades ya leídas no las vuelve a leer, y deja afuera las pendientes', async () => {
+    vi.mocked(friendsOf).mockClear()
+    vi.mocked(historyWith).mockClear()
+    const amigos = await amigosDeInicio(cliente, [NICO_AMIGO, JUAMPI, TOMI])
+    expect(friendsOf).not.toHaveBeenCalled()
+    expect(historyWith).toHaveBeenCalledTimes(1)
+    expect(amigos.map((amigo) => amigo.playerId)).toEqual(['p-nico'])
+  })
+
+  it('sin ellas, las lee como siempre', async () => {
+    vi.mocked(friendsOf).mockClear().mockResolvedValueOnce([NICO_AMIGO, JUAMPI])
+    const amigos = await amigosDeInicio(cliente)
+    expect(friendsOf).toHaveBeenCalledWith(cliente)
+    expect(amigos.map((amigo) => amigo.playerId)).toEqual(['p-nico'])
   })
 })

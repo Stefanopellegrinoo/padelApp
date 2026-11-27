@@ -466,7 +466,7 @@ describe('Jugador: la amistad con la persona del perfil', () => {
     vi.mocked(friendshipWith).mockResolvedValueOnce({ kind: 'friends', friendshipId: 'f1' })
     const fila = filaDeArriba(await render('padel', 'e1'))
 
-    expect(linkWith(fila, 'Amigos')).toContain('href="/amigos/p1?desde=amigos"')
+    expect(linkWith(fila, 'Amigos')).toContain('href="/amigos/p1?desde=torneo"')
   })
 
   it('en tu propio perfil no aparece', async () => {

@@ -23,7 +23,7 @@ export interface HistorialProps {
    * mismo historial.
    */
   partidos: readonly SharedMatch[]
-  /** `'amigos'` si al perfil se llegó desde la lista (`?desde=amigos`): borrar vuelve igual. */
+  /** De dónde se llegó al perfil (`?desde=amigos` desde la lista, `?desde=torneo` desde el perfil del torneo): borrar vuelve igual. */
   desde?: string
   /** Tu `players.id`: lo que cargaste vos (y nadie editó) no lleva la línea de autoría. */
   yo?: string

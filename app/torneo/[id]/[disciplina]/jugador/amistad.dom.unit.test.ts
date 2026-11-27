@@ -92,7 +92,7 @@ describe('ChipAmistad', () => {
     act(() => root.render(createElement(ChipAmistad, { playerId: 'p2', nombre: 'Nico', estado: 'friends' })))
     const link = host.querySelector('a') as HTMLAnchorElement
     expect(link.textContent).toBe('Amigos')
-    expect(link.getAttribute('href')).toBe('/amigos/p2?desde=amigos')
+    expect(link.getAttribute('href')).toBe('/amigos/p2?desde=torneo')
     expect(link.getAttribute('aria-label')).toBe('Amigos: ver el historial con Nico')
   })
 

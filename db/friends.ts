@@ -787,6 +787,8 @@ export interface Friend {
   displayName: string
   accepted: boolean
   theyAsked: boolean
+  /** Cuándo se pidió (`created_at` de la fila): el "hace 3 días" de "Pedidos enviados". */
+  createdAt: string
 }
 
 /**
@@ -811,7 +813,7 @@ export async function friendsOf(supabase: Client): Promise<Friend[]> {
 
   const { data: filas, error } = await supabase
     .from('friendships')
-    .select('id, player_a, player_b, requested_by, accepted_at')
+    .select('id, player_a, player_b, requested_by, accepted_at, created_at')
   if (error !== null) throw new EdgeError(`No se pudieron leer tus amigos: ${error.message}`)
 
   const otroDe = (fila: { player_a: string; player_b: string }): string =>
@@ -828,6 +830,7 @@ export async function friendsOf(supabase: Client): Promise<Friend[]> {
       displayName: nombrePor.get(playerId) ?? '',
       accepted: fila.accepted_at !== null,
       theyAsked: fila.requested_by !== me,
+      createdAt: fila.created_at,
     }
   })
 }
@@ -1303,23 +1306,24 @@ async function todasLasFilas<T>(
     error: { message: string } | null
     count: number | null
   }>,
+  que = 'la gente de tus torneos',
 ): Promise<T[]> {
   const filas: T[] = []
   let total: number | null = null
   for (;;) {
     const result = await pagina(filas.length, filas.length + PAGINA - 1)
     if (result.error !== null) {
-      throw new EdgeError(`No se pudo leer la gente de tus torneos (${consulta}): ${result.error.message}`)
+      throw new EdgeError(`No se pudo leer ${que} (${consulta}): ${result.error.message}`)
     }
     const data = result.data ?? []
     if (result.count === null || (total !== null && result.count !== total)) {
-      throw new EdgeError(`No se pudo leer completa la gente de tus torneos (${consulta}). Recargá la pantalla.`)
+      throw new EdgeError(`No se pudo leer completa ${que} (${consulta}). Recargá la pantalla.`)
     }
     total = result.count
     filas.push(...data)
     if (filas.length >= total) return filas
     if (data.length === 0) {
-      throw new EdgeError(`No se pudo leer completa la gente de tus torneos (${consulta}). Recargá la pantalla.`)
+      throw new EdgeError(`No se pudo leer completa ${que} (${consulta}). Recargá la pantalla.`)
     }
   }
 }
@@ -1333,9 +1337,10 @@ async function todasLasFilasPorTandas<T>(
     error: { message: string } | null
     count: number | null
   }>,
+  que?: string,
 ): Promise<T[]> {
   const tandas = await Promise.all(
-    enTandas(ids, TANDA_IN).map((tanda) => todasLasFilas(consulta, (desde, hasta) => pagina(tanda, desde, hasta))),
+    enTandas(ids, TANDA_IN).map((tanda) => todasLasFilas(consulta, (desde, hasta) => pagina(tanda, desde, hasta), que)),
   )
   return tandas.flat()
 }
@@ -1482,4 +1487,95 @@ export async function genteDeTusTorneos(supabase: Client): Promise<GenteDeTorneo
         a.displayName.localeCompare(b.displayName, 'es') ||
         (a.playerId < b.playerId ? -1 : a.playerId > b.playerId ? 1 : 0),
     )
+}
+
+// ── de dónde lo conocés (odd/tasks/amigos-faciles.md, T3, S4) ───────────────
+
+/**
+ * Los torneos que comparto con cada una de `playerIds`: "De Los Pibes del
+ * Martes" en un pedido. Por persona, los nombres ordenados como en
+ * `genteDeTusTorneos`; quien no comparte ninguno queda con `[]`, y la
+ * pantalla no dice nada.
+ *
+ * Compartir es tener los dos un asiento: un torneo que administro sin jugar
+ * lo veo (`is_participant`, 0002) pero no cuenta. Por eso arranca de mis
+ * asientos, y los de ellos se filtran contra esas temporadas.
+ *
+ * Mismos techos que `genteDeTusTorneos`: cada lectura pagina con un orden
+ * total, y los ids van de a `TANDA_IN` por IN. Sin nadie para buscar no lee
+ * nada; con algunos pedidos son 4 consultas.
+ */
+export async function torneosCompartidosCon(
+  supabase: Client,
+  playerIds: readonly string[],
+): Promise<Map<string, string[]>> {
+  const personas = [...new Set(playerIds)]
+  if (personas.length === 0) return new Map()
+  const que = 'de dónde conocés a quien te pidió'
+  const me = await myPlayerId(supabase, 'ver de dónde conocés a alguien')
+
+  const [misAsientos, suyos] = await Promise.all([
+    todasLasFilas(
+      'tus torneos',
+      (desde, hasta) =>
+        supabase
+          .from('entries')
+          .select('id, season_id', { count: 'exact' })
+          .eq('player_id', me)
+          .order('id', { ascending: true })
+          .range(desde, hasta),
+      que,
+    ),
+    // `entries_read` ya acota a las temporadas que veo.
+    todasLasFilasPorTandas(
+      'sus torneos',
+      personas,
+      (tanda, desde, hasta) =>
+        supabase
+          .from('entries')
+          .select('id, season_id, player_id', { count: 'exact' })
+          .in('player_id', tanda)
+          .order('id', { ascending: true })
+          .range(desde, hasta),
+      que,
+    ),
+  ])
+
+  const mias = new Set(misAsientos.map((fila) => fila.season_id))
+  const temporadasDe = new Map(personas.map((playerId) => [playerId, new Set<string>()]))
+  for (const asiento of suyos) {
+    if (!mias.has(asiento.season_id)) continue
+    temporadasDe.get(requireColumn(asiento.player_id, 'player_id'))?.add(asiento.season_id)
+  }
+
+  const compartidas = [...new Set([...temporadasDe.values()].flatMap((ids) => [...ids]))]
+  const temporadas =
+    compartidas.length === 0
+      ? []
+      : await todasLasFilasPorTandas(
+          'nombres de torneos',
+          compartidas,
+          (tanda, desde, hasta) =>
+            supabase
+              .from('seasons')
+              .select('id, name', { count: 'exact' })
+              .in('id', tanda)
+              .order('id', { ascending: true })
+              .range(desde, hasta),
+          que,
+        )
+  const nombreDeTemporada = new Map(temporadas.map((fila) => [fila.id, fila.name]))
+
+  return new Map(
+    [...temporadasDe.entries()].map(([playerId, ids]) => [
+      playerId,
+      [...ids]
+        .map((seasonId) => {
+          const nombre = nombreDeTemporada.get(seasonId)
+          if (nombre === undefined) throw new EdgeError(`No se pudo leer el torneo ${seasonId}.`)
+          return nombre
+        })
+        .sort((a, b) => a.localeCompare(b, 'es')),
+    ]),
+  )
 }

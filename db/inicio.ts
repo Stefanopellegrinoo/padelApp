@@ -1,5 +1,5 @@
 import type { Client } from './client'
-import { friendsOf, historyWith, type SharedMatch } from './friends'
+import { friendsOf, historyWith, torneosCompartidosCon, type Friend, type SharedMatch } from './friends'
 
 /**
  * Lo que Inicio (`app/torneos/page.tsx`) muestra de cada amigo: el cara a
@@ -70,17 +70,46 @@ export function ordenarAmigos(amigos: readonly AmigoInicio[]): AmigoInicio[] {
 
 /**
  * Los amigos aceptados con su resumen, en el orden de Inicio. Las pendientes
- * no van: no hay historial que mostrar y aceptarlas es cosa de `/amigos`.
+ * no van: no hay historial que mostrar (los pedidos van aparte,
+ * `pedidosRecibidos`). Con `amigos` ya leídos (`friendsOf`) no los vuelve a
+ * leer: Inicio los comparte con los pedidos.
  *
  * Un `historyWith` por amigo, en paralelo: cada uno son hasta diez consultas
  * acotadas por lo que jugaron esos dos. Crece con la cantidad de amigos, que
  * en un grupo es chica; si un día deja de serlo, esto pide una vista que
  * agregue del lado de la base.
  */
-export async function amigosDeInicio(supabase: Client): Promise<AmigoInicio[]> {
-  const amigos = (await friendsOf(supabase)).filter((amigo) => amigo.accepted)
+export async function amigosDeInicio(supabase: Client, todos?: readonly Friend[]): Promise<AmigoInicio[]> {
+  const amigos = (todos ?? (await friendsOf(supabase))).filter((amigo) => amigo.accepted)
   const resumenes = await Promise.all(
     amigos.map(async (amigo) => resumenAmigo(amigo, await historyWith(supabase, amigo.playerId))),
   )
   return ordenarAmigos(resumenes)
+}
+
+/** Un pedido de amistad que me hicieron, con los torneos que compartimos (S4): "De Los Pibes del Martes". */
+export interface PedidoRecibido {
+  playerId: string
+  displayName: string
+  /** Ordenados por nombre; vacío si no compartimos ninguno. */
+  torneos: string[]
+}
+
+/**
+ * Los pedidos pendientes que me hicieron, de las amistades ya leídas
+ * (`friendsOf`), con de dónde lo conozco (`torneosCompartidosCon`). Sin
+ * pedidos no lee nada más: Inicio y Amigos sin pedidos quedan como estaban.
+ */
+export async function pedidosRecibidos(supabase: Client, amigos: readonly Friend[]): Promise<PedidoRecibido[]> {
+  const recibidos = amigos.filter((amigo) => !amigo.accepted && amigo.theyAsked)
+  if (recibidos.length === 0) return []
+  const torneos = await torneosCompartidosCon(
+    supabase,
+    recibidos.map((amigo) => amigo.playerId),
+  )
+  return recibidos.map((amigo) => ({
+    playerId: amigo.playerId,
+    displayName: amigo.displayName,
+    torneos: torneos.get(amigo.playerId) ?? [],
+  }))
 }

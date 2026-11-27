@@ -30,7 +30,7 @@ describe('haceCuanto: "Hace 2 días" desde que llegó el pedido', () => {
 })
 
 describe('amigosHref: "Amigos ›" lleva al historial entre los dos', () => {
-  it('al perfil del amigo, con Volver a la lista de Amigos', () => {
-    expect(amigosHref('p2')).toBe('/amigos/p2?desde=amigos')
+  it('al perfil del amigo, marcado como venido del torneo: su Volver desanda al perfil', () => {
+    expect(amigosHref('p2')).toBe('/amigos/p2?desde=torneo')
   })
 })

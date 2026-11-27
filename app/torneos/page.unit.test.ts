@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { defaultConfig, type Award, type DisciplineId, type EntryId } from '@/core'
 import type { AmigoInicio } from '@/db/inicio'
-import { amigosDeInicio } from '@/db/inicio'
+import { amigosDeInicio, pedidosRecibidos } from '@/db/inicio'
 import { genteDeTusTorneos, type GenteDeTorneo } from '@/db/friends'
 import {
   attendancesOf,
@@ -125,14 +125,20 @@ vi.mock('@/db/server', () => ({
   }),
 }))
 
-vi.mock('@/db/inicio', () => ({ amigosDeInicio: vi.fn(async () => []) }))
+vi.mock('@/db/inicio', () => ({ amigosDeInicio: vi.fn(async () => []), pedidosRecibidos: vi.fn(async () => []) }))
 
 vi.mock('@/db/friends', async (importOriginal) => {
   const real = await importOriginal<typeof import('@/db/friends')>()
-  return { ...real, genteDeTusTorneos: vi.fn(async () => []) }
+  return { ...real, genteDeTusTorneos: vi.fn(async () => []), friendsOf: vi.fn(async () => []) }
 })
 
-vi.mock('@/app/amigos/actions', () => ({ agregarAmigo: vi.fn() }))
+vi.mock('@/app/amigos/actions', () => ({
+  agregarAmigo: vi.fn(),
+  aceptarPedidoDe: vi.fn(),
+  rechazarPedidoDe: vi.fn(),
+}))
+
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }))
 
 vi.mock('@/db/read', async (importOriginal) => {
   const real = await importOriginal<typeof import('@/db/read')>()
@@ -155,6 +161,7 @@ beforeEach(() => {
   vi.mocked(seasonMatchdaysOf).mockResolvedValue([matchday()])
   vi.mocked(amigosDeInicio).mockResolvedValue([])
   vi.mocked(genteDeTusTorneos).mockClear().mockResolvedValue([])
+  vi.mocked(pedidosRecibidos).mockClear().mockResolvedValue([])
 })
 
 async function render(): Promise<string> {
@@ -321,8 +328,51 @@ describe('Inicio, amigos', () => {
     const html = await render()
     expect(genteDeTusTorneos).not.toHaveBeenCalled()
     expect(html).not.toContain('Empezá por la gente de tus torneos')
+    // Sin pedidos, la sección queda como antes: ningún pedido resaltado.
+    expect(html).not.toContain('Te pidió ser amigos')
+    expect(html).not.toContain('bg-sport-tint px-4')
     expect(linkA(html, '/amigos')).toContain('Ver todos')
     expect(linkA(html, '/amigos/p-nico')).toContain('Nico Arias')
+  })
+})
+
+// odd/tasks/amigos-faciles.md, T3, S4: los pedidos que te hicieron, arriba de tus amigos.
+describe('Inicio, pedidos de amistad', () => {
+  const JUAMPI = { playerId: 'p-juampi', displayName: 'Juampi Ledesma', torneos: ['Los Pibes del Martes'] }
+  const amigosDe = (html: string) => html.slice(html.search(/<h2[^>]*>Amigos<\/h2>/))
+
+  it('con amigos: el pedido va primero, resaltado, con de dónde, Aceptar y ✕', async () => {
+    vi.mocked(amigosDeInicio).mockResolvedValueOnce([NICO])
+    vi.mocked(pedidosRecibidos).mockResolvedValueOnce([JUAMPI])
+    const amigos = amigosDe(await render())
+    expect(amigos.indexOf('Juampi Ledesma')).toBeGreaterThan(-1)
+    expect(amigos.indexOf('Juampi Ledesma')).toBeLessThan(amigos.indexOf('Nico Arias'))
+    expect(amigos).toContain('Te pidió ser amigos · Los Pibes del Martes')
+    expect(amigos).toMatch(/<li[^>]*bg-sport-tint[^>]*>/)
+    expect(amigos).toMatch(/<button[^>]*>Aceptar<\/button>/)
+    expect(amigos).toContain('aria-label="Rechazar el pedido de Juampi"')
+  })
+
+  it('sin amigos: el pedido igual se ve, antes de la gente de tus torneos', async () => {
+    vi.mocked(pedidosRecibidos).mockResolvedValueOnce([{ ...JUAMPI, torneos: [] }])
+    vi.mocked(genteDeTusTorneos).mockResolvedValueOnce([
+      { playerId: 'p-seba', displayName: 'Seba Molina', torneos: ['A'], fechasJuntos: 2 },
+    ])
+    const amigos = amigosDe(await render())
+    expect(amigos).toContain('Te pidió ser amigos')
+    expect(amigos).not.toContain('Te pidió ser amigos ·')
+    expect(amigos.indexOf('Juampi Ledesma')).toBeLessThan(amigos.indexOf('Empezá por la gente de tus torneos'))
+    expect(amigos).toContain('Seba Molina')
+  })
+
+  it('las amistades se leen una vez y se comparten entre amigos y pedidos', async () => {
+    const { friendsOf } = await import('@/db/friends')
+    vi.mocked(friendsOf).mockClear()
+    await render()
+    expect(friendsOf).toHaveBeenCalledTimes(1)
+    const leidas = await vi.mocked(friendsOf).mock.results[0]?.value
+    expect(vi.mocked(amigosDeInicio).mock.lastCall?.[1]).toBe(leidas)
+    expect(vi.mocked(pedidosRecibidos).mock.lastCall?.[1]).toBe(leidas)
   })
 })
 

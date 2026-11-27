@@ -1,6 +1,13 @@
 import { renderToStaticMarkup } from 'react-dom/server'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { friendsOf, genteDeTusTorneos, historyWith, type Friend, type GenteDeTorneo } from '@/db/friends'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  friendsOf,
+  genteDeTusTorneos,
+  historyWith,
+  torneosCompartidosCon,
+  type Friend,
+  type GenteDeTorneo,
+} from '@/db/friends'
 
 /**
  * `/amigos` con "Gente de tus torneos" (odd/tasks/amigos-faciles.md, S3): la sección va abajo de
@@ -13,10 +20,14 @@ vi.mock('@/db/server', () => ({
 }))
 
 vi.mock('@/app/amigos/actions', () => ({
-  accept: vi.fn(),
   sendFriendRequest: vi.fn(),
   agregarAmigo: vi.fn(),
+  aceptarPedidoDe: vi.fn(),
+  rechazarPedidoDe: vi.fn(),
+  deshacerPedido: vi.fn(),
 }))
+
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }))
 
 vi.mock('@/db/friends', async (importOriginal) => {
   const real = await importOriginal<typeof import('@/db/friends')>()
@@ -25,6 +36,7 @@ vi.mock('@/db/friends', async (importOriginal) => {
     friendsOf: vi.fn(async () => []),
     historyWith: vi.fn(async () => []),
     genteDeTusTorneos: vi.fn(async () => []),
+    torneosCompartidosCon: vi.fn(async () => new Map()),
   }
 })
 
@@ -34,6 +46,7 @@ const amigo = (over: Partial<Friend>): Friend => ({
   displayName: 'Alguien',
   accepted: true,
   theyAsked: false,
+  createdAt: '2026-11-24T12:00:00Z',
   ...over,
 })
 
@@ -47,6 +60,13 @@ beforeEach(() => {
   ])
   vi.mocked(historyWith).mockResolvedValue([])
   vi.mocked(genteDeTusTorneos).mockResolvedValue([SEBA])
+  vi.mocked(torneosCompartidosCon).mockClear().mockResolvedValue(new Map([['p-juampi', ['Los Pibes del Martes']]]))
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-11-27T12:00:00Z'))
+})
+
+afterEach(() => {
+  vi.useRealTimers()
 })
 
 async function render(): Promise<string> {
@@ -72,8 +92,38 @@ describe('/amigos', () => {
     expect(titulos(html)).toEqual(['Te pidieron', 'Tus amigos', 'Pedidos enviados', 'Sumar un amigo'])
     expect(html).toContain('Nico Arias')
     expect(html).toContain('Juampi Ledesma')
-    expect(html).toContain('Pendiente')
+    expect(html).toContain('Tomi Sosa')
     expect(html).toContain('1 amigo')
+  })
+
+  // odd/tasks/amigos-faciles.md, T3, S4.
+  it('"Te pidieron" dice de dónde lo conocés, con Aceptar y ✕; ya no manda el id de la fila', async () => {
+    const html = await render()
+    const pidieron = html.slice(html.search(/<h2[^>]*>Te pidieron<\/h2>/), html.search(/<h2[^>]*>Tus amigos<\/h2>/))
+    expect(pidieron).toContain('Juampi Ledesma')
+    expect(pidieron).toContain('De Los Pibes del Martes')
+    expect(pidieron).toMatch(/<button[^>]*>Aceptar<\/button>/)
+    expect(pidieron).toContain('aria-label="Rechazar el pedido de Juampi"')
+    expect(html).not.toContain('name="friendshipId"')
+    // Sólo se busca de dónde conocés a quien te pidió.
+    expect(torneosCompartidosCon).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(torneosCompartidosCon).mock.calls[0]?.[1]).toEqual(['p-juampi'])
+  })
+
+  it('"Pedidos enviados": "Sin respuesta · hace 3 días" y "Cancelar", sin el viejo "Pendiente"', async () => {
+    const html = await render()
+    const enviados = html.slice(html.search(/<h2[^>]*>Pedidos enviados<\/h2>/), html.search(/<h2[^>]*>Sumar un amigo<\/h2>/))
+    expect(enviados).toContain('Tomi Sosa')
+    expect(enviados).toContain('Sin respuesta · hace 3 días')
+    expect(enviados).toMatch(/aria-label="Cancelar el pedido a Tomi"[^>]*>Cancelar<\/button>/)
+    expect(html).not.toContain('Pendiente')
+  })
+
+  it('sin pedidos, ni las secciones ni la lectura de torneos compartidos', async () => {
+    vi.mocked(friendsOf).mockResolvedValueOnce([amigo({ playerId: 'p-nico', displayName: 'Nico Arias' })])
+    const html = await render()
+    expect(titulos(html)).toEqual(['Tus amigos', 'Gente de tus torneos', 'Sumar un amigo'])
+    expect(torneosCompartidosCon).not.toHaveBeenCalled()
   })
 
   it('si la lectura falla, la pantalla no se arma con datos a medias', async () => {

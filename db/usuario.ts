@@ -147,14 +147,18 @@ export async function firstFreeUsername(supabase: Client, displayName: string): 
 /**
  * Elige tu @usuario, una sola vez (`choose_my_username`, 0121). Devuelve el
  * guardado. Los motivos de la base ("Ese @usuario ya está en uso.", "Ya
- * elegiste tu @usuario.") salen tal cual.
+ * elegiste tu @usuario.") salen tal cual: los levanta la función con
+ * `raise exception`, que es P0001. Cualquier otro error (la red, la base) no
+ * se muestra crudo: ese texto es de Postgres y en inglés.
  */
 export async function chooseMyUsername(supabase: Client, raw: string): Promise<string> {
   const username = normalizeUsername(raw)
   const problem = usernameError(username)
   if (problem !== null) throw new EdgeError(problem)
   const { data, error } = await supabase.rpc('choose_my_username', { p_username: username })
-  if (error !== null) throw new EdgeError(error.message)
+  if (error !== null) {
+    throw new EdgeError(error.code === 'P0001' ? error.message : 'No se pudo guardar tu @usuario. Probá de nuevo.')
+  }
   return data
 }
 

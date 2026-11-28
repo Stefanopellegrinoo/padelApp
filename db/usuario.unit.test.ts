@@ -174,7 +174,8 @@ describe('chooseMyUsername y myUsername', () => {
 
   it('el motivo de la base sale como EdgeError, tal cual', async () => {
     const client = {
-      rpc: vi.fn(async () => ({ data: null, error: { message: 'Ese @usuario ya está en uso.' } })),
+      // P0001: así llega un `raise exception` de choose_my_username (0121).
+      rpc: vi.fn(async () => ({ data: null, error: { code: 'P0001', message: 'Ese @usuario ya está en uso.' } })),
     } as unknown as Client
     await expect(chooseMyUsername(client, 'nico.arias')).rejects.toThrow(new EdgeError('Ese @usuario ya está en uso.'))
   })
@@ -190,5 +191,24 @@ describe('chooseMyUsername y myUsername', () => {
   it('si no se puede leer el tuyo, lo dice', async () => {
     const client = { rpc: vi.fn(async () => ({ data: null, error: { message: 'x' } })) } as unknown as Client
     await expect(myUsername(client)).rejects.toThrow(new EdgeError('No se pudo leer tu @usuario.'))
+  })
+})
+
+describe('chooseMyUsername', () => {
+  const clientCon = (error: { code: string; message: string } | null) =>
+    ({ rpc: vi.fn(async () => ({ data: error === null ? 'nico.arias' : null, error })) }) as unknown as Client
+
+  it('devuelve el @usuario guardado', async () => {
+    await expect(chooseMyUsername(clientCon(null), 'Nico.Arias')).resolves.toBe('nico.arias')
+  })
+
+  it('los motivos de la base (P0001) salen tal cual', async () => {
+    const client = clientCon({ code: 'P0001', message: 'Ese @usuario ya está en uso.' })
+    await expect(chooseMyUsername(client, 'nico.arias')).rejects.toThrow('Ese @usuario ya está en uso.')
+  })
+
+  it('cualquier otro error no muestra el mensaje crudo de Postgres', async () => {
+    const client = clientCon({ code: '08006', message: 'connection failure during authentication' })
+    await expect(chooseMyUsername(client, 'nico.arias')).rejects.toThrow('No se pudo guardar tu @usuario. Probá de nuevo.')
   })
 })

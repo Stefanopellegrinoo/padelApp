@@ -298,7 +298,10 @@ describe('Inicio, amigos', () => {
   it('sin amigos ni nadie para sugerir, la sección invita a sumar uno', async () => {
     const html = await render()
     expect(html).toMatch(/<h2[^>]*>Amigos<\/h2>/)
-    expect(linkA(html, '/amigos')).toContain('Sumá un amigo')
+    const amigos = html.slice(html.search(/<h2[^>]*>Amigos<\/h2>/))
+    // El título siempre lleva a Amigos (L31): ahí están el buscador, tu link y los pedidos.
+    expect(linkA(amigos, '/amigos')).toContain('Buscar')
+    expect(amigos).toMatch(/href="\/amigos"[^>]*>(?:(?!<\/a>)[\s\S])*Sumá un amigo/)
   })
 
   const gente = (n: number): GenteDeTorneo[] =>
@@ -323,7 +326,8 @@ describe('Inicio, amigos', () => {
     expect(amigos).not.toContain('Persona 2')
     expect(amigos).toContain('aria-label="Agregar a Persona 0"')
     expect(linkA(amigos, '/amigos/gente')).toContain('Ver más gente')
-    expect(linkA(amigos, '/amigos')).toBeNull()
+    // Sin amigos, Inicio no se queda sin acceso a Amigos (L31): el título lleva ahí.
+    expect(linkA(amigos, '/amigos')).toContain('Buscar')
     expect(html).not.toContain('Sumá un amigo')
   })
 

@@ -263,11 +263,11 @@ export default async function InicioPage() {
       <Section
         title="Amigos"
         action={
-          amigos.length > 0 ? (
-            <Link href="/amigos" className="press -my-2 flex min-h-[44px] items-center px-1 text-[16px] font-bold text-accent-link">
-              Ver todos
-            </Link>
-          ) : undefined
+          // Siempre lleva a Amigos, también sin amigos: ahí están el buscador, tu link y
+          // los pedidos, y las sugerencias de abajo no llevan ahí (odd/tasks/amigos-faciles.md, L31).
+          <Link href="/amigos" className="press -my-2 flex min-h-[44px] items-center px-1 text-[16px] font-bold text-accent-link">
+            {amigos.length > 0 ? 'Ver todos' : 'Buscar'}
+          </Link>
         }
       >
         {/* Los pedidos que te hicieron, arriba de todo (S4), con y sin amigos. Va siempre en el

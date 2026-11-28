@@ -90,7 +90,7 @@ export function CampoUsuario({
           maxLength={20}
           aria-invalid={malo}
           aria-describedby="username-aviso username-regla"
-          className="h-12 min-w-0 flex-1 bg-transparent outline-none focus-visible:outline-none"
+          className="h-12 min-w-0 flex-1 bg-transparent outline-none [--color-focus:transparent]"
         />
       </div>
       <p

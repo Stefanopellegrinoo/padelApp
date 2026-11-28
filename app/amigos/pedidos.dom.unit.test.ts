@@ -10,6 +10,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const push = vi.fn()
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push }) }))
 
+vi.mock('next/link', () => ({
+  default: ({ href, children, ...rest }: { href: string; children: unknown }) =>
+    createElement('a', { href, ...rest }, children as never),
+}))
+
 vi.mock('@/app/amigos/actions', () => ({
   aceptarPedidoDe: vi.fn(async () => ({ ok: true })),
   rechazarPedidoDe: vi.fn(async () => ({ ok: true })),
@@ -142,6 +147,30 @@ describe('TePidieron (Amigos)', () => {
     expect(aviso().textContent).toContain('No se pudo rechazar')
     await tocar(porLabel('Rechazar el pedido de Juampi'))
     expect(filas()).toHaveLength(0)
+  })
+})
+
+// T9, S9: en cada pedido, el nombre y el avatar llevan al perfil; los botones quedan afuera.
+describe('los pedidos llevan al perfil', () => {
+  const perfilDe = (playerId: string) => filas()[0]?.querySelector(`a[href="/perfil/${playerId}"]`)
+
+  it('en Inicio', () => {
+    act(() => root.render(createElement(PedidosEnInicio, { pedidos: [JUAMPI] })))
+    expect(perfilDe('p-juampi')?.textContent).toContain('Juampi Ledesma')
+    expect(perfilDe('p-juampi')?.textContent).toContain('JL')
+    expect(perfilDe('p-juampi')?.querySelector('button')).toBeNull()
+  })
+
+  it('en "Te pidieron"', () => {
+    act(() => root.render(createElement(TePidieron, { pedidos: [JUAMPI] })))
+    expect(perfilDe('p-juampi')?.textContent).toContain('De Los Pibes del Martes')
+    expect(perfilDe('p-juampi')?.querySelector('button')).toBeNull()
+  })
+
+  it('en "Pedidos enviados"', () => {
+    act(() => root.render(createElement(PedidosEnviados, { enviados: [TOMI] })))
+    expect(perfilDe('p-tomi')?.textContent).toContain('Tomi Sosa')
+    expect(perfilDe('p-tomi')?.querySelector('button')).toBeNull()
   })
 })
 

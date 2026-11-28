@@ -102,6 +102,21 @@ describe('Volver en el historial con un amigo', () => {
     expect(back).not.toHaveBeenCalled()
   })
 
+  // T9, S9: "Ver historial" del perfil llega con `?desde=perfil`.
+  it('desde el perfil (`?desde=perfil`): "Perfil", a /perfil/<id>', async () => {
+    const volver = await abrir('perfil')
+    expect(volver.textContent).toBe('Perfil')
+    expect(volver.getAttribute('href')).toBe('/perfil/p-nico')
+    await tocar(volver)
+    expect(back).not.toHaveBeenCalled()
+  })
+
+  it('un origen que no se conoce es como sin origen', async () => {
+    const volver = await abrir('cualquiera')
+    expect(volver.textContent).toBe('Inicio')
+    expect(volver.getAttribute('href')).toBe('/torneos')
+  })
+
   it('sin origen (Inicio o un link): "Inicio", a /torneos, como siempre', async () => {
     const volver = await abrir()
     expect(volver.textContent).toBe('Inicio')

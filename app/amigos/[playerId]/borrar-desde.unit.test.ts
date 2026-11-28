@@ -37,6 +37,7 @@ describe('removeCasualMatch: vuelve con el mismo origen', () => {
     ['torneo', '/amigos/p-nico?desde=torneo'],
     [undefined, '/amigos/p-nico'],
     ['cualquiera', '/amigos/p-nico'],
+    ['perfil', '/amigos/p-nico?desde=perfil'],
   ])('desde=%s → %s', async (desde, destino) => {
     await removeCasualMatch(form(desde))
     expect(redirect).toHaveBeenCalledWith(destino)

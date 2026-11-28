@@ -167,6 +167,9 @@ function isPrivatePath(pathname: string): boolean {
   // ("Entrá con tu cuenta...") y sin nadie que lo agarre es la misma página
   // blanca en inglés que motivó agregar `/torneos` acá arriba.
   if (path === '/amigos' || path.startsWith('/amigos/')) return true
+  // El perfil, el tuyo y el de otro (odd/tasks/amigos-faciles.md, S9): sin
+  // sesión no hay a quién mostrárselo, y `player_profile` no responde a `anon`.
+  if (path === '/perfil' || path.startsWith('/perfil/')) return true
   return path.startsWith('/torneo/') && !path.endsWith('/reglas')
 }
 

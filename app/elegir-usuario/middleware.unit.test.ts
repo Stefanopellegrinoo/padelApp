@@ -52,6 +52,21 @@ describe('middleware: sin sesión (como antes)', () => {
     expect(rpc).not.toHaveBeenCalled()
   })
 
+  // T9, S9: el perfil, el tuyo y el de otro, es privado.
+  it('el perfil, el tuyo y el de otro, manda al login con `next`', async () => {
+    user = null
+    for (const path of ['/perfil', '/perfil/p-1']) {
+      const response = await middleware(request(path))
+      expect(response.status, path).toBe(307)
+      expect(location(response), path).toBe(`http://app.test/login?next=${encodeURIComponent(path)}`)
+    }
+  })
+
+  it('lo que sólo empieza parecido a /perfil no es privado', async () => {
+    user = null
+    expect(location(await middleware(request('/perfiles')))).toBeNull()
+  })
+
   it('una pública sigue, y Reglas del torneo también', async () => {
     user = null
     for (const path of ['/', '/registro', '/torneo/s-1/reglas']) {
@@ -78,7 +93,7 @@ describe('middleware: la puerta del @usuario', () => {
 
   it('vale para todas las privadas: torneos, amigos y el torneo', async () => {
     username = { data: null, error: null }
-    for (const path of ['/torneos', '/amigos', '/amigos/gente', '/torneo/s-1/padel', '/torneo/s-1/fechas/3']) {
+    for (const path of ['/torneos', '/amigos', '/amigos/gente', '/torneo/s-1/padel', '/torneo/s-1/fechas/3', '/perfil', '/perfil/p-1']) {
       expect(location(await middleware(request(path))), path).toContain('/elegir-usuario?next=')
     }
   })

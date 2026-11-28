@@ -75,11 +75,14 @@ function FilaGente({
 }) {
   return (
     <li tabIndex={-1} className={`${row} min-h-[72px]`}>
-      <Avatar name={persona.displayName} />
-      <span className="min-w-0 flex-1">
-        <span className="line-clamp-2 block text-[17px] leading-tight font-bold break-words">{persona.displayName}</span>
-        <span className="mt-0.5 block text-[14px] leading-snug text-muted">{metaDeGente(persona)}</span>
-      </span>
+      {/* El nombre lleva a su perfil (S9); el chip queda afuera, como en el buscador. */}
+      <Link href={`/perfil/${persona.playerId}`} className="flex min-h-12 min-w-0 flex-1 items-center gap-3">
+        <Avatar name={persona.displayName} />
+        <span className="min-w-0 flex-1">
+          <span className="line-clamp-2 block text-[17px] leading-tight font-bold break-words">{persona.displayName}</span>
+          <span className="mt-0.5 block text-[14px] leading-snug text-muted">{metaDeGente(persona)}</span>
+        </span>
+      </Link>
       {estado === 'none' ? (
         <button
           type="button"

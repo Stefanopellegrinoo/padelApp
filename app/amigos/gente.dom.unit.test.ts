@@ -148,6 +148,17 @@ describe('GenteDeTusTorneos (Amigos)', () => {
     expect(boton('Agregar')).toBeDefined()
   })
 
+  // T9, S9: el nombre y el avatar llevan al perfil; el chip sigue igual.
+  it('el nombre y el avatar llevan a su perfil; "Agregar" queda afuera del link', () => {
+    act(() => root.render(createElement(GenteDeTusTorneos, { gente: [SEBA] })))
+    const perfil = filas()[0]?.querySelector('a[href="/perfil/p1"]')
+    expect(perfil?.textContent).toContain('SM')
+    expect(perfil?.textContent).toContain('Seba Molina')
+    expect(perfil?.textContent).toContain('Los Pibes del Martes y FIFA de los Viernes')
+    expect(perfil?.querySelector('button')).toBeNull()
+    expect(filas()[0]?.querySelector('button')?.getAttribute('aria-label')).toBe('Agregar a Seba Molina')
+  })
+
   it('el chip mide 34 a la vista y 44 para el dedo (S6)', () => {
     act(() => root.render(createElement(GenteDeTusTorneos, { gente: [SEBA] })))
     expect(boton('Agregar')?.className.split(' ')).toEqual(expect.arrayContaining(['min-h-[34px]', 'after:-inset-y-[5px]']))

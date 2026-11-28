@@ -85,8 +85,10 @@ async function enElPerfil<T extends object>(
   }
 
   // Todos los perfiles del torneo (el de esta persona, y el chip en cualquier
-  // otro lugar donde aparezca), la lista de Amigos e Inicio.
+  // otro lugar donde aparezca), su perfil (`/perfil/<id>`), la lista de Amigos
+  // e Inicio.
   revalidatePath('/torneo/[id]/[disciplina]/jugador/[entryId]', 'page')
+  revalidatePath('/perfil/[playerId]', 'page')
   revalidatePath('/amigos')
   revalidatePath('/torneos')
   return { ok: true, ...result }
@@ -215,9 +217,9 @@ export async function editCasualMatch(state: CasualFormState, formData: FormData
 export async function removeCasualMatch(formData: FormData): Promise<void> {
   const matchId = String(formData.get('matchId') ?? '')
   const submitted = String(formData.get('friendPlayerId') ?? '')
-  // De dónde se llegó al perfil (`?desde=amigos` o `?desde=torneo`): que Volver siga diciendo lo mismo.
+  // De dónde se llegó al perfil (`?desde=amigos`, `?desde=torneo` o `?desde=perfil`): que Volver siga diciendo lo mismo.
   const origen = formData.get('desde')
-  const desde = origen === 'amigos' || origen === 'torneo' ? `desde=${origen}` : null
+  const desde = origen === 'amigos' || origen === 'torneo' || origen === 'perfil' ? `desde=${origen}` : null
   let path = `/amigos/${submitted}`
   let problem: string | null = null
   try {

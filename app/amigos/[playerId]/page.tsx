@@ -22,6 +22,8 @@ interface PageProps {
    * `?desde=amigos`: se llegó desde la lista de Amigos, y Volver lleva ahí.
    * `?desde=torneo`: se llegó con "Amigos ›" desde el perfil del torneo, y
    * Volver desanda hasta ahí (`history.back()`; si no hay nada atrás, Inicio).
+   * `?desde=perfil`: se llegó con "Ver historial" desde su perfil
+   * (`/perfil/<id>`, odd/tasks/amigos-faciles.md, S9), y Volver lleva ahí.
    * Sin él (desde Inicio, o un link compartido) Volver va a Inicio.
    *
    * `?cargar=1`: el atajo de "Cargar partido" de Inicio. Llega con la hoja
@@ -95,7 +97,9 @@ export default async function AmigoPage({ params, searchParams }: PageProps) {
       ? { href: '/amigos', label: 'Amigos' }
       : desde === 'torneo'
         ? { href: '/torneos' }
-        : { href: '/torneos', label: 'Inicio' }
+        : desde === 'perfil'
+          ? { href: `/perfil/${playerId}`, label: 'Perfil' }
+          : { href: '/torneos', label: 'Inicio' }
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-bg pb-[calc(104px+env(safe-area-inset-bottom))] text-text">

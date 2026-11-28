@@ -66,6 +66,9 @@ export function Cuenta({ name }: { name: string }) {
           className="absolute right-0 z-50 mt-2 w-[240px] overflow-hidden rounded-tile border-[1.5px] border-line bg-surface-2 text-text [--color-focus:var(--color-text)]"
         >
           {name !== '' && <p className="truncate px-4 pt-3 pb-2.5 text-[14px] font-semibold text-muted">{name}</p>}
+          <Link href="/perfil" role="menuitem" className={`${item} press-fila`}>
+            Tu perfil
+          </Link>
           <Link href="/amigos" role="menuitem" className={`${item} press-fila`}>
             Amigos
           </Link>

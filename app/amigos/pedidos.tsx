@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState, useTransition } from 'react'
 import { Icono } from '@/app/torneos/inicio/iconos'
@@ -108,12 +109,16 @@ function Responder({
   )
 }
 
-function NombreYMeta({ nombre, meta }: { nombre: string; meta: string | null }) {
+/** El avatar, el nombre y la línea de abajo, que llevan a su perfil (S9). Los botones quedan afuera. */
+function NombreYMeta({ playerId, nombre, meta }: { playerId: string; nombre: string; meta: string | null }) {
   return (
-    <span className="min-w-0 flex-1">
-      <span className="line-clamp-2 block text-[17px] leading-tight font-bold break-words">{nombre}</span>
-      {meta !== null && <span className="mt-0.5 block text-[14px] leading-snug text-muted">{meta}</span>}
-    </span>
+    <Link href={`/perfil/${playerId}`} className="flex min-h-12 min-w-0 flex-1 items-center gap-3">
+      <Avatar name={nombre} />
+      <span className="min-w-0 flex-1">
+        <span className="line-clamp-2 block text-[17px] leading-tight font-bold break-words">{nombre}</span>
+        {meta !== null && <span className="mt-0.5 block text-[14px] leading-snug text-muted">{meta}</span>}
+      </span>
+    </Link>
   )
 }
 
@@ -133,8 +138,11 @@ export function PedidosEnInicio({ pedidos }: { pedidos: PedidoRecibido[] }) {
         <ul className="-mx-4 mb-1 flex flex-col gap-px">
           {visibles.map((pedido) => (
             <li key={pedido.playerId} className="flex min-h-[72px] items-center gap-3 bg-sport-tint px-4 py-3">
-              <Avatar name={pedido.displayName} />
-              <NombreYMeta nombre={pedido.displayName} meta={metaRecibidoEnInicio(pedido.torneos)} />
+              <NombreYMeta
+                playerId={pedido.playerId}
+                nombre={pedido.displayName}
+                meta={metaRecibidoEnInicio(pedido.torneos)}
+              />
               <Responder
                 nombre={pedido.displayName}
                 pending={pending}
@@ -163,8 +171,11 @@ export function TePidieron({ pedidos }: { pedidos: PedidoRecibido[] }) {
           <ul className="-mx-4">
             {visibles.map((pedido) => (
               <li key={pedido.playerId} className={`${row} min-h-[72px]`}>
-                <Avatar name={pedido.displayName} />
-                <NombreYMeta nombre={pedido.displayName} meta={metaRecibidoEnAmigos(pedido.torneos)} />
+                <NombreYMeta
+                  playerId={pedido.playerId}
+                  nombre={pedido.displayName}
+                  meta={metaRecibidoEnAmigos(pedido.torneos)}
+                />
                 <Responder
                   nombre={pedido.displayName}
                   pending={pending}
@@ -193,8 +204,7 @@ export function PedidosEnviados({ enviados }: { enviados: PedidoEnviado[] }) {
           <ul className="-mx-4">
             {visibles.map((pedido) => (
               <li key={pedido.playerId} className={`${row} min-h-[72px]`}>
-                <Avatar name={pedido.displayName} />
-                <NombreYMeta nombre={pedido.displayName} meta={pedido.meta} />
+                <NombreYMeta playerId={pedido.playerId} nombre={pedido.displayName} meta={pedido.meta} />
                 <button
                   type="button"
                   disabled={pending}

@@ -13,6 +13,7 @@ import {
   deleteCasualMatch,
   casualParticipantIds,
 } from '@/db/friends'
+import { searchByUsername, type UsernameMatch } from '@/db/buscar'
 import { EdgeError } from '@/db/errors'
 import { serverClient } from '@/db/server'
 import { playersFromJson } from './[playerId]/cargar-state'
@@ -36,6 +37,23 @@ export async function cambiarMiLink(): Promise<{ ok: true; token: string } | { o
 
   revalidatePath('/amigos')
   return { ok: true, token }
+}
+
+/**
+ * El buscador de Amigos por @usuario (`buscar.tsx`, S8): hasta 10 que empiezan
+ * con lo que escribiste, cada uno con su estado conmigo. Es una lectura: no
+ * revalida nada. Con menos de 3 letras, nada (lo mismo que hace la base).
+ */
+export async function buscarPorUsuario(
+  query: string,
+): Promise<{ ok: true; resultados: UsernameMatch[] } | { ok: false; error: string }> {
+  try {
+    const supabase = await serverClient()
+    return { ok: true, resultados: await searchByUsername(supabase, String(query)) }
+  } catch (error) {
+    if (!(error instanceof EdgeError)) throw error
+    return { ok: false, error: error.message }
+  }
 }
 
 // ── la amistad con una persona: el perfil del torneo (S2), Inicio y Amigos (S4) ──

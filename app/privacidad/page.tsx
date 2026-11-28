@@ -17,7 +17,7 @@ export const metadata: Metadata = { title: 'Política de privacidad · Padel Lig
 export default function PrivacidadPage() {
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-bg pb-[calc(40px+env(safe-area-inset-bottom))] text-text">
-      <Hero back={{ href: '/' }} title="Política de privacidad" subtitle="Actualizada el 23 de octubre de 2026" />
+      <Hero back={{ href: '/' }} title="Política de privacidad" subtitle="Actualizada el 27 de noviembre de 2026" />
 
       <div className="flex max-w-[36em] flex-col gap-7 px-4 pt-6">
         <Seccion titulo="Qué datos guardamos">
@@ -35,6 +35,10 @@ export default function PrivacidadPage() {
         <Seccion titulo="Quién los ve">
           <li>Los demás jugadores de un torneo ven tu nombre y tus resultados en ese torneo.</li>
           <li>Quien tenga tu link de amistad ve tu nombre. Si lo cambiás, el de antes deja de andar.</li>
+          <li>
+            Cualquiera con cuenta te puede encontrar en el buscador por tu @usuario, y ve sólo tu nombre y tu @usuario.
+            Si no querés, apagá «Que me encuentren por mi usuario» en tu perfil.
+          </li>
           <li>Tu mail no lo ve nadie más.</li>
           <li>
             Los datos se guardan en Supabase (base de datos) y la app corre en Vercel, los dos en San Pablo, Brasil.

@@ -25,6 +25,7 @@ vi.mock('@/app/amigos/actions', () => ({
   aceptarPedidoDe: vi.fn(),
   rechazarPedidoDe: vi.fn(),
   deshacerPedido: vi.fn(),
+  buscarPorUsuario: vi.fn(),
 }))
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }))
@@ -191,5 +192,17 @@ describe('/amigos', () => {
     const { EdgeError } = await import('@/db/errors')
     vi.mocked(genteDeTusTorneos).mockRejectedValueOnce(new EdgeError('No se pudo leer completa la gente de tus torneos (asientos). Recargá la pantalla.'))
     await expect(render()).rejects.toThrow('No se pudo leer completa la gente de tus torneos')
+  })
+
+  // odd/tasks/amigos-faciles.md, T8, S8: el buscador, justo abajo del encabezado y arriba de todo lo demás.
+  it('el buscador "Buscá por @usuario" va abajo del encabezado y arriba de las secciones, que siguen iguales', async () => {
+    const html = await render()
+    const despues = html.slice(html.indexOf('</header>'))
+    expect(despues).toMatch(/^<\/header><form[^>]*role="search"/)
+    expect(despues).toContain('placeholder="Buscá por @usuario"')
+    expect(despues.indexOf('placeholder="Buscá por @usuario"')).toBeLessThan(despues.search(/<h2[^>]*>Te pidieron<\/h2>/))
+    expect(titulos(html)).toEqual(['Te pidieron', 'Tus amigos', 'Gente de tus torneos', 'Pedidos enviados'])
+    // Sin búsqueda, las secciones se ven.
+    expect(html).not.toMatch(/<div hidden=""/)
   })
 })

@@ -8,6 +8,7 @@ import { Section } from '@/app/ui/section'
 import { friendsOf, genteDeTusTorneos, historyWith, myFriendInvite } from '@/db/friends'
 import { ordenarAmigos, pedidosRecibidos, resumenAmigo, type AmigoInicio } from '@/db/inicio'
 import { serverClient } from '@/db/server'
+import { BuscarPorUsuario } from './buscar'
 import { GenteDeTusTorneos } from './gente'
 import { CompartirMiLink } from './link'
 import { PedidosEnviados, TePidieron } from './pedidos'
@@ -23,10 +24,13 @@ import { metaEnviado } from './pedidos-texto'
  * distinto); la gente de tus torneos que todavía no agregaste (`gente.tsx`);
  * las solicitudes que mandaste, con cuánto hace y "Cancelar".
  *
- * No hay buscador de jugadores (la lista está cerrada a propósito, 0103):
- * para sumar a alguien que no está en tus torneos va "Compartir mi link", en
- * la línea del título (odd/tasks/amigos-faciles.md, S5). Quien lo abre queda
- * como tu amigo (`/amigo/[token]`). Reemplaza al ID que había que copiar.
+ * Para sumar a alguien que no está en tus torneos: "Compartir mi link", en
+ * la línea del título (odd/tasks/amigos-faciles.md, S5), y abajo el buscador
+ * por @usuario (`buscar.tsx`, S8). Quien abre el link queda como tu amigo
+ * (`/amigo/[token]`). El buscador no lista a todos los jugadores (0103 los
+ * cerró a propósito): sólo por el comienzo de un @usuario, desde 3 letras y
+ * hasta 10 (0124). Mientras hay búsqueda, los resultados reemplazan a las
+ * secciones de abajo.
  */
 export default async function AmigosPage() {
   const supabase = await serverClient()
@@ -67,29 +71,31 @@ export default async function AmigosPage() {
         }
       />
 
-      <TePidieron pedidos={recibidas} />
+      <BuscarPorUsuario token={token}>
+        <TePidieron pedidos={recibidas} />
 
-      <Section title="Tus amigos">
-        {aceptados.length === 0 ? (
-          <div className="flex items-center gap-3 rounded-tile bg-sport-tint px-4 py-4 text-sport">
-            <Icono name="amigos" className="h-8 w-8" />
-            <p className="min-w-0 flex-1">
-              <span className="block text-[17px] font-bold text-text">Sumá al primero</span>
-              <span className="block text-[15px] text-muted">Compartí tu link, acá arriba</span>
-            </p>
-          </div>
-        ) : (
-          <ul className="-mx-4">
-            {aceptados.map((amigo) => (
-              <FilaAmigo key={amigo.playerId} amigo={amigo} />
-            ))}
-          </ul>
-        )}
-      </Section>
+        <Section title="Tus amigos">
+          {aceptados.length === 0 ? (
+            <div className="flex items-center gap-3 rounded-tile bg-sport-tint px-4 py-4 text-sport">
+              <Icono name="amigos" className="h-8 w-8" />
+              <p className="min-w-0 flex-1">
+                <span className="block text-[17px] font-bold text-text">Sumá al primero</span>
+                <span className="block text-[15px] text-muted">Compartí tu link, acá arriba</span>
+              </p>
+            </div>
+          ) : (
+            <ul className="-mx-4">
+              {aceptados.map((amigo) => (
+                <FilaAmigo key={amigo.playerId} amigo={amigo} />
+              ))}
+            </ul>
+          )}
+        </Section>
 
-      <GenteDeTusTorneos gente={gente} />
+        <GenteDeTusTorneos gente={gente} />
 
-      <PedidosEnviados enviados={enviadas} />
+        <PedidosEnviados enviados={enviadas} />
+      </BuscarPorUsuario>
     </main>
   )
 }

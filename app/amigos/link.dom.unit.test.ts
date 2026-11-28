@@ -145,4 +145,24 @@ describe('CompartirMiLink', () => {
     expect(hoja().querySelector('code')?.textContent).toBe(URL_LINK)
     expect(hoja().querySelector('[role="alert"]')?.textContent).toBe('No se pudo cambiar el link.')
   })
+
+  // El buscador sin resultados (S8): el mismo "Compartir mi link", como botón de texto.
+  it('variant="ghost": un botón de texto que abre la misma hoja con el mismo link', async () => {
+    act(() => root.render(createElement(CompartirMiLink, { token: TOKEN, variant: 'ghost' })))
+    const compartir = boton('Compartir mi link')
+    expect(compartir?.className).toContain('text-accent-link')
+    expect(compartir?.className).not.toContain('bg-on-block')
+    await tocar(compartir)
+
+    expect(hoja().hasAttribute('open')).toBe(true)
+    expect(hoja().querySelector('h2')?.textContent).toBe('Tu link de amistad')
+    expect(hoja().querySelector('code')?.textContent).toBe(URL_LINK)
+    await tocar(boton('Copiar'))
+    expect(writeText).toHaveBeenCalledWith(URL_LINK)
+  })
+
+  it('sin variant, el botón del encabezado de siempre', () => {
+    act(() => root.render(createElement(CompartirMiLink, { token: TOKEN })))
+    expect(boton('Compartir mi link')?.className).toContain('bg-on-block')
+  })
 })

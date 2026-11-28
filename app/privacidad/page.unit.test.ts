@@ -39,4 +39,11 @@ describe('/privacidad', () => {
       'Quien tenga tu link de amistad ve tu nombre. Si lo cambiás, el de antes deja de andar.',
     )
   })
+
+  // odd/tasks/amigos-faciles.md, T8, S8: el buscador por @usuario y cómo salir de él.
+  it('te encuentran por tu @usuario, ven sólo tu nombre y tu @usuario, y lo podés apagar', () => {
+    expect(pantalla().textContent).toContain(
+      'Cualquiera con cuenta te puede encontrar en el buscador por tu @usuario, y ve sólo tu nombre y tu @usuario. Si no querés, apagá «Que me encuentren por mi usuario» en tu perfil.',
+    )
+  })
 })

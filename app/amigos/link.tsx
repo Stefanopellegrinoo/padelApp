@@ -20,11 +20,14 @@ import { IconoLink } from './link-iconos'
  * (`cambiarMiLink`): el de ahora deja de andar y las amistades ya hechas
  * siguen. Lo que pasó se anuncia en la región viva de la hoja.
  *
+ * `variant="ghost"`: el mismo botón como texto azul, para el buscador sin
+ * resultados (S8). Abre la misma hoja, con el mismo link.
+ *
  * Sólo el token y la acción, nunca un import de `db/server` ni de
  * `@/db/friends`: un componente `'use client'` que se arrastre `next/headers`
  * rompe el build de producción sin que `tsc` ni los tests lo vean.
  */
-export function CompartirMiLink({ token: inicial }: { token: string }) {
+export function CompartirMiLink({ token: inicial, variant = 'hero' }: { token: string; variant?: 'hero' | 'ghost' }) {
   const [abierta, setAbierta] = useState(false)
   const [token, setToken] = useState(inicial)
   const [origen, setOrigen] = useState('')
@@ -88,7 +91,7 @@ export function CompartirMiLink({ token: inicial }: { token: string }) {
           setError(null)
           setAbierta(true)
         }}
-        className={`${button('onBlock')} shrink-0 whitespace-nowrap`}
+        className={`${button(variant === 'ghost' ? 'ghost' : 'onBlock')} shrink-0 whitespace-nowrap`}
       >
         <IconoLink name="compartir" />
         Compartir mi link

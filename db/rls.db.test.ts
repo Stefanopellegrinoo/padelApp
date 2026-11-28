@@ -698,6 +698,21 @@ describe('RLS — funciones', () => {
     expect(typeof libre.data).toBe('boolean')
   })
 
+  // El buscador y "Que me encuentren por mi usuario" (0124-0126, amigos-faciles
+  // T8) piden sesión: sin ella no se busca ni se lee o cambia nada.
+  it('anon no puede buscar por @usuario ni leer o cambiar si lo encuentran', async () => {
+    const anon = anonClient()
+    const results = await Promise.all([
+      anon.rpc('search_players_by_username', { p_query: 'nicolas' }),
+      anon.rpc('set_my_discoverable', { p_discoverable: false }),
+      anon.rpc('my_discoverable'),
+    ])
+    for (const { data, error } of results) {
+      expect(error?.code).toBe('42501')
+      expect(data).toBeNull()
+    }
+  })
+
   it('nadie con sesión escribe players directo', async () => {
     const yo = await createTestUser()
     const update = await yo.client.from('players').update({ display_name: 'Otro nombre' }).eq('id', yo.playerId)

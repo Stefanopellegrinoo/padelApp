@@ -944,6 +944,7 @@ export type Database = {
       players: {
         Row: {
           created_at: string
+          discoverable: boolean
           display_name: string
           id: string
           user_id: string | null
@@ -951,6 +952,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          discoverable?: boolean
           display_name: string
           id?: string
           user_id?: string | null
@@ -958,6 +960,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          discoverable?: boolean
           display_name?: string
           id?: string
           user_id?: string | null
@@ -1125,6 +1128,7 @@ export type Database = {
         Returns: boolean
       }
       matchday_season: { Args: { p_matchday: string }; Returns: string }
+      my_discoverable: { Args: never; Returns: boolean }
       my_friend_invite: { Args: never; Returns: string }
       my_player_id: { Args: never; Returns: string }
       my_username: { Args: never; Returns: string }
@@ -1167,6 +1171,14 @@ export type Database = {
         }
         Returns: string
       }
+      search_players_by_username: {
+        Args: { p_query: string }
+        Returns: {
+          display_name: string
+          id: string
+          username: string
+        }[]
+      }
       season_invite: {
         Args: { p_token: string }
         Returns: {
@@ -1208,6 +1220,10 @@ export type Database = {
       set_my_attendance: {
         Args: { p_matchday: string; p_status: string }
         Returns: undefined
+      }
+      set_my_discoverable: {
+        Args: { p_discoverable: boolean }
+        Returns: boolean
       }
       shift_season_seeds_up: {
         Args: { p_from: number; p_season: string }

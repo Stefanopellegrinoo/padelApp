@@ -24,6 +24,13 @@ export function normalizeUsername(raw: string): string {
   return raw.trim().replace(/^@/, '').trim().toLowerCase()
 }
 
+/**
+ * Desde cuántas letras busca el buscador de Amigos (S8): las mismas que pide
+ * `search_players_by_username` (0124). Vive acá y no en `db/buscar.ts` porque
+ * la pantalla también lo usa, y este archivo se puede importar desde el cliente.
+ */
+export const SEARCH_MIN_LENGTH = 3
+
 /** El problema de formato de un @usuario, o `null` si se puede usar. */
 export function usernameError(raw: string): string | null {
   const username = normalizeUsername(raw)

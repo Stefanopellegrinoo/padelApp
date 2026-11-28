@@ -713,6 +713,14 @@ describe('RLS — funciones', () => {
     }
   })
 
+  // El perfil (0127, amigos-faciles T9) pide sesión: sin ella no se ve el de nadie.
+  it('anon no puede leer el perfil de un jugador', async () => {
+    const otro = await createTestUser()
+    const { data, error } = await anonClient().rpc('player_profile', { p_player: otro.playerId })
+    expect(error?.code).toBe('42501')
+    expect(data).toBeNull()
+  })
+
   it('nadie con sesión escribe players directo', async () => {
     const yo = await createTestUser()
     const update = await yo.client.from('players').update({ display_name: 'Otro nombre' }).eq('id', yo.playerId)

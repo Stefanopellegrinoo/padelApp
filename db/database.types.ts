@@ -1140,6 +1140,15 @@ export type Database = {
           id: string
         }[]
       }
+      player_profile: {
+        Args: { p_player: string }
+        Returns: {
+          display_name: string
+          has_account: boolean
+          id: string
+          username: string
+        }[]
+      }
       players_can_score: { Args: { p_season: string }; Returns: boolean }
       players_with_account: {
         Args: { p_ids: string[] }
